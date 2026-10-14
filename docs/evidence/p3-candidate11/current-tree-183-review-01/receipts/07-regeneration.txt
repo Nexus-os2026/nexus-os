@@ -1,0 +1,45 @@
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/gen-ct1.py --repo /home/nexus/NEXUS/nexus-os --commit d5964ee5326c2733177307db6f507328023d361a --out /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-1.json 
+GEN-CT1 OK bytes=687381 sha256=20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+
+exit=0
+
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/gen-ct1.py --repo /home/nexus/NEXUS/nexus-os --commit 71264aa81a40b86189783facc8437e0427887c16 --out /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-1.json 
+GEN-CT1 OK bytes=687381 sha256=20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+
+exit=0
+
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/gen-ct1.py --repo /home/nexus/NEXUS/nexus-os --commit d5964ee5326c2733177307db6f507328023d361a --out /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-2.json 
+GEN-CT1 OK bytes=687381 sha256=20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+
+exit=0
+
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/gen-ct1.py --repo /home/nexus/NEXUS/nexus-os --commit 71264aa81a40b86189783facc8437e0427887c16 --out /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-2.json 
+GEN-CT1 OK bytes=687381 sha256=20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-1.json 
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-2.json 
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-1.json 
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-2.json 
+
+exit=0
+
+$ sha256sum /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-1.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-2.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-1.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-2.json 
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-1.json
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-C-2.json
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-1.json
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/regen-R4-2.json
+
+exit=0
+

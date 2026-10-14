@@ -1,0 +1,26 @@
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/negative-controls.py --repo /home/nexus/NEXUS/nexus-os --commit d5964ee5326c2733177307db6f507328023d361a --manifest-file /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/committed.json --checker /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/check-ct1.py --work /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/negative 
+DETECTED N01 changed anchor :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M32 files=1 anchors=1 hash=DIFFERS]
+DETECTED N02 changed count :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M01 files=1 anchors=2 hash=EQUAL]
+DETECTED N03 changed replacement :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M18 files=1 anchors=1 hash=DIFFERS]
+DETECTED N04 changed command :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M05 files=1 anchors=1 hash=DIFFERS]
+DETECTED N05 added expected test :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M84 files=1 anchors=1 hash=DIFFERS]
+DETECTED N06 changed cwd :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; A M100 files=1 anchors=1 hash=EQUAL]
+DETECTED N07 changed historical review status :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident]
+DETECTED N08 changed historical recorded hash :: exit=1 expected=C09 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident]
+DETECTED N09 current review status not pending :: exit=1 expected=C17 failing=[A M19 files=1 anchors=1 hash=DIFFERS; C17 every current review status is pending]
+DETECTED N10 final_tree field :: exit=1 expected=C14 failing=[A M02 files=1 anchors=1 hash=EQUAL; C14 no final_tree or commit/tree field in any generated]
+DETECTED N11 self-reference to the validated commit :: exit=1 expected=C13 failing=[C13 no identity of the validated commit or its tree any; C15 every 40-hex token in generated fields is a content]
+DETECTED N12 control order :: exit=1 expected=C10 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; C10 183 controls, ids M01..M183 in historical order]
+DETECTED N13 wrong current source hash :: exit=1 expected=A M150 failing=[A M150 files=1 anchors=1 hash=EQUAL]
+DETECTED N14 wrong git blob :: exit=1 expected=A M151 failing=[A M151 files=1 anchors=1 hash=EQUAL]
+DETECTED N15 wrong anchor line :: exit=1 expected=A M152 failing=[A M152 files=1 anchors=1 hash=EQUAL]
+DETECTED N16 stale pair marked equal :: exit=1 expected=A M141 failing=[A M141 files=1 anchors=1 hash=DIFFERS]
+DETECTED N17 approval wording :: exit=1 expected=C16 failing=[A M129 files=1 anchors=1 hash=DIFFERS; C16 no approval wording in generated fields (SAME PROPE]
+DETECTED N18 control removed :: exit=1 expected=C10 failing=[C09 historical manifest rebuilt from ct-1 is byte-ident; C10 183 controls, ids M01..M183 in historical order; C12 summary agrees with the controls]
+DETECTED N19 credential-like token :: exit=1 expected=C18 failing=[C18 no credential-like material in ct-1]
+DETECTED N20 non-canonical rendering :: exit=1 expected=C04 failing=[C04 ct-1 is in canonical rendering (parse then render i]
+DETECTED N21 duplicate key :: exit=1 expected=C03 failing=[C03 ct-1 parses as UTF-8 JSON without duplicate keys]
+NEGATIVE-CONTROLS 21/21 detected
+
+exit=0
+

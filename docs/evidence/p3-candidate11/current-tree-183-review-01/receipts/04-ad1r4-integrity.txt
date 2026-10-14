@@ -1,0 +1,12 @@
+$ git -C /home/nexus/NEXUS/nexus-os rev-parse 71264aa81a40b86189783facc8437e0427887c16:docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md 
+35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os rev-parse d5964ee5326c2733177307db6f507328023d361a:docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md 
+35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1
+
+exit=0
+
+PASS AD-1-R4 sha256 at C is 00ced6d5...b693
+PASS AD-1-R4 blob at C is 35d5074c...b6c1

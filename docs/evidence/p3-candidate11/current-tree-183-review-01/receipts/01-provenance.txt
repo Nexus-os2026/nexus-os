@@ -1,0 +1,26 @@
+$ git -C /home/nexus/NEXUS/nexus-os cat-file -t 71264aa81a40b86189783facc8437e0427887c16 
+commit
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os rev-list --parents -n1 71264aa81a40b86189783facc8437e0427887c16 
+71264aa81a40b86189783facc8437e0427887c16 a464a36621523f539d2554a6b176d678c7f885ea
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os rev-list --parents -n1 d5964ee5326c2733177307db6f507328023d361a 
+d5964ee5326c2733177307db6f507328023d361a 71264aa81a40b86189783facc8437e0427887c16
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os log -1 --format=commit\ %H%ntree\ %T%nparents\ %P%nauthor\ %an\ \<%ae\>\ %ad%nsubject\ %s d5964ee5326c2733177307db6f507328023d361a 
+commit d5964ee5326c2733177307db6f507328023d361a
+tree 51bac5fd335999cc995c0ab9f582a30244973ef0
+parents 71264aa81a40b86189783facc8437e0427887c16
+author Suresh Karicheti <nexaiceo@gmail.com> Wed Oct 14 11:20:57 2026 +0100
+subject docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record
+
+exit=0
+
+PASS R4 has the single parent a464a36621523f539d2554a6b176d678c7f885ea
+PASS C has the single parent R4

@@ -1,0 +1,5 @@
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/render-reconciliation.py --facts /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/receipts/09-reconcile-22-facts.txt --analysis /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/analysis-22.json --out /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/review/RECONCILIATION-22.md 
+RENDERED 22 entries; labels {'EXECUTOR_ANALYSIS_MATCH': 21, 'EXECUTOR_ANALYSIS_DIFFERENCE': 1}
+
+exit=0
+

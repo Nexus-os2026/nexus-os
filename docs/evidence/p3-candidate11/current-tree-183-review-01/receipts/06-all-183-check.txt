@@ -1,0 +1,208 @@
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/check-ct1.py --repo /home/nexus/NEXUS/nexus-os --commit d5964ee5326c2733177307db6f507328023d361a --extract-dir /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/gate-scratch/extract-C 
+checking commit d5964ee5326c2733177307db6f507328023d361a tree 51bac5fd335999cc995c0ab9f582a30244973ef0
+PASS C01 historical manifest sha256 and blob unchanged :: 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+PASS C02 AD-1-R4 sha256 and blob unchanged :: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+ct-1 bytes 687381 sha256 20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279 blob 5d31cb45123403626f06c521dd2d53103676250e
+PASS C03 ct-1 parses as UTF-8 JSON without duplicate keys
+PASS C04 ct-1 is in canonical rendering (parse then render is byte-identical)
+PASS C05 top-level keys and order :: ['name', 'version', 'status', 'authority', 'derived_from', 'contract_basis', 'derivation', 'historical_header', 'current_tree_summary', 'controls']
+PASS C06 name and version
+PASS C07 derived_from binds the historical manifest
+PASS C08 contract_basis binds AD-1-R4
+PASS C09 historical manifest rebuilt from ct-1 is byte-identical to the original (every id, category, meaning, edit, file, anchor, replacement, count, command, cwd, expected test, lineage and review field, in order) :: rebuilt sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+PASS C10 183 controls, ids M01..M183 in historical order
+PASS A M01 files=1 anchors=2 hash=EQUAL
+PASS A M02 files=1 anchors=1 hash=EQUAL
+PASS A M03 files=1 anchors=1 hash=EQUAL
+PASS A M04 files=1 anchors=1 hash=EQUAL
+PASS A M05 files=1 anchors=1 hash=DIFFERS
+PASS A M06 files=1 anchors=1 hash=EQUAL
+PASS A M07 files=1 anchors=1 hash=EQUAL
+PASS A M08 files=1 anchors=1 hash=EQUAL
+PASS A M09 files=1 anchors=1 hash=EQUAL
+PASS A M10 files=1 anchors=1 hash=EQUAL
+PASS A M11 files=1 anchors=1 hash=EQUAL
+PASS A M12 files=1 anchors=2 hash=EQUAL
+PASS A M13 files=1 anchors=1 hash=EQUAL
+PASS A M14 files=1 anchors=1 hash=EQUAL
+PASS A M15 files=1 anchors=2 hash=EQUAL
+PASS A M16 files=1 anchors=1 hash=EQUAL
+PASS A M17 files=1 anchors=2 hash=EQUAL
+PASS A M18 files=1 anchors=1 hash=DIFFERS
+PASS A M19 files=1 anchors=1 hash=DIFFERS
+PASS A M20 files=1 anchors=1 hash=EQUAL
+PASS A M21 files=1 anchors=1 hash=EQUAL
+PASS A M22 files=1 anchors=1 hash=EQUAL
+PASS A M23 files=1 anchors=1 hash=EQUAL
+PASS A M24 files=1 anchors=1 hash=EQUAL
+PASS A M25 files=1 anchors=1 hash=EQUAL
+PASS A M26 files=1 anchors=1 hash=EQUAL
+PASS A M27 files=1 anchors=1 hash=EQUAL
+PASS A M28 files=1 anchors=1 hash=EQUAL
+PASS A M29 files=1 anchors=1 hash=EQUAL
+PASS A M30 files=1 anchors=1 hash=EQUAL
+PASS A M31 files=1 anchors=1 hash=EQUAL
+PASS A M32 files=1 anchors=1 hash=DIFFERS
+PASS A M33 files=1 anchors=1 hash=EQUAL
+PASS A M34 files=1 anchors=1 hash=EQUAL
+PASS A M35 files=1 anchors=1 hash=EQUAL
+PASS A M36 files=1 anchors=1 hash=EQUAL
+PASS A M37 files=1 anchors=1 hash=EQUAL
+PASS A M38 files=1 anchors=1 hash=EQUAL
+PASS A M39 files=1 anchors=1 hash=DIFFERS
+PASS A M40 files=1 anchors=1 hash=EQUAL
+PASS A M41 files=1 anchors=1 hash=EQUAL
+PASS A M42 files=1 anchors=1 hash=EQUAL
+PASS A M43 files=1 anchors=1 hash=EQUAL
+PASS A M44 files=1 anchors=1 hash=EQUAL
+PASS A M45 files=1 anchors=1 hash=DIFFERS
+PASS A M46 files=1 anchors=1 hash=EQUAL
+PASS A M47 files=1 anchors=1 hash=EQUAL
+PASS A M48 files=1 anchors=1 hash=EQUAL
+PASS A M49 files=1 anchors=1 hash=EQUAL
+PASS A M50 files=1 anchors=1 hash=EQUAL
+PASS A M51 files=1 anchors=1 hash=EQUAL
+PASS A M52 files=1 anchors=1 hash=EQUAL
+PASS A M53 files=1 anchors=1 hash=EQUAL
+PASS A M54 files=1 anchors=1 hash=EQUAL
+PASS A M55 files=1 anchors=1 hash=EQUAL
+PASS A M56 files=1 anchors=1 hash=EQUAL
+PASS A M57 files=1 anchors=1 hash=EQUAL
+PASS A M58 files=1 anchors=1 hash=EQUAL
+PASS A M59 files=1 anchors=1 hash=EQUAL
+PASS A M60 files=1 anchors=1 hash=EQUAL
+PASS A M61 files=1 anchors=1 hash=EQUAL
+PASS A M62 files=1 anchors=1 hash=EQUAL
+PASS A M63 files=1 anchors=1 hash=EQUAL
+PASS A M64 files=1 anchors=1 hash=EQUAL
+PASS A M65 files=1 anchors=1 hash=EQUAL
+PASS A M66 files=1 anchors=1 hash=EQUAL
+PASS A M67 files=1 anchors=1 hash=EQUAL
+PASS A M68 files=1 anchors=1 hash=EQUAL
+PASS A M69 files=1 anchors=1 hash=EQUAL
+PASS A M70 files=1 anchors=2 hash=EQUAL
+PASS A M71 files=1 anchors=1 hash=EQUAL
+PASS A M72 files=1 anchors=1 hash=EQUAL
+PASS A M73 files=1 anchors=1 hash=EQUAL
+PASS A M74 files=1 anchors=1 hash=EQUAL
+PASS A M75 files=1 anchors=1 hash=EQUAL
+PASS A M76 files=1 anchors=1 hash=EQUAL
+PASS A M77 files=1 anchors=1 hash=EQUAL
+PASS A M78 files=1 anchors=1 hash=DIFFERS
+PASS A M79 files=1 anchors=1 hash=DIFFERS
+PASS A M80 files=1 anchors=1 hash=DIFFERS
+PASS A M81 files=1 anchors=1 hash=EQUAL
+PASS A M82 files=1 anchors=1 hash=EQUAL
+PASS A M83 files=1 anchors=1 hash=EQUAL
+PASS A M84 files=1 anchors=1 hash=DIFFERS
+PASS A M85 files=1 anchors=1 hash=EQUAL
+PASS A M86 files=1 anchors=1 hash=EQUAL
+PASS A M87 files=1 anchors=1 hash=DIFFERS
+PASS A M88 files=1 anchors=1 hash=EQUAL
+PASS A M89 files=1 anchors=1 hash=DIFFERS
+PASS A M90 files=1 anchors=1 hash=EQUAL
+PASS A M91 files=1 anchors=1 hash=EQUAL
+PASS A M92 files=1 anchors=1 hash=EQUAL
+PASS A M93 files=1 anchors=1 hash=EQUAL
+PASS A M94 files=1 anchors=1 hash=EQUAL
+PASS A M95 files=1 anchors=2 hash=EQUAL
+PASS A M96 files=1 anchors=1 hash=EQUAL
+PASS A M97 files=1 anchors=1 hash=EQUAL
+PASS A M98 files=1 anchors=1 hash=EQUAL
+PASS A M99 files=1 anchors=1 hash=EQUAL
+PASS A M100 files=1 anchors=1 hash=EQUAL
+PASS A M101 files=1 anchors=1 hash=EQUAL
+PASS A M102 files=1 anchors=1 hash=EQUAL
+PASS A M103 files=1 anchors=1 hash=EQUAL
+PASS A M104 files=1 anchors=1 hash=EQUAL
+PASS A M105 files=1 anchors=1 hash=EQUAL
+PASS A M106 files=1 anchors=1 hash=EQUAL
+PASS A M107 files=1 anchors=1 hash=EQUAL
+PASS A M108 files=1 anchors=1 hash=EQUAL
+PASS A M109 files=1 anchors=1 hash=EQUAL
+PASS A M110 files=1 anchors=1 hash=EQUAL
+PASS A M111 files=1 anchors=1 hash=EQUAL
+PASS A M112 files=1 anchors=1 hash=DIFFERS
+PASS A M113 files=1 anchors=1 hash=DIFFERS
+PASS A M114 files=1 anchors=1 hash=EQUAL
+PASS A M115 files=1 anchors=1 hash=EQUAL
+PASS A M116 files=1 anchors=1 hash=EQUAL
+PASS A M117 files=1 anchors=1 hash=EQUAL
+PASS A M118 files=1 anchors=1 hash=EQUAL
+PASS A M119 files=1 anchors=1 hash=EQUAL
+PASS A M120 files=1 anchors=1 hash=EQUAL
+PASS A M121 files=1 anchors=1 hash=EQUAL
+PASS A M122 files=1 anchors=1 hash=EQUAL
+PASS A M123 files=1 anchors=1 hash=EQUAL
+PASS A M124 files=1 anchors=1 hash=EQUAL
+PASS A M125 files=1 anchors=1 hash=EQUAL
+PASS A M126 files=1 anchors=1 hash=EQUAL
+PASS A M127 files=1 anchors=1 hash=EQUAL
+PASS A M128 files=1 anchors=1 hash=EQUAL
+PASS A M129 files=1 anchors=1 hash=DIFFERS
+PASS A M130 files=1 anchors=1 hash=EQUAL
+PASS A M131 files=1 anchors=1 hash=EQUAL
+PASS A M132 files=1 anchors=1 hash=EQUAL
+PASS A M133 files=1 anchors=1 hash=EQUAL
+PASS A M134 files=1 anchors=1 hash=EQUAL
+PASS A M135 files=1 anchors=1 hash=EQUAL
+PASS A M136 files=1 anchors=1 hash=EQUAL
+PASS A M137 files=1 anchors=1 hash=EQUAL
+PASS A M138 files=1 anchors=1 hash=EQUAL
+PASS A M139 files=1 anchors=1 hash=EQUAL
+PASS A M140 files=1 anchors=1 hash=EQUAL
+PASS A M141 files=1 anchors=1 hash=DIFFERS
+PASS A M142 files=1 anchors=1 hash=EQUAL
+PASS A M143 files=1 anchors=1 hash=DIFFERS
+PASS A M144 files=1 anchors=1 hash=EQUAL
+PASS A M145 files=1 anchors=1 hash=EQUAL
+PASS A M146 files=1 anchors=1 hash=EQUAL
+PASS A M147 files=1 anchors=1 hash=EQUAL
+PASS A M148 files=1 anchors=1 hash=EQUAL
+PASS A M149 files=1 anchors=1 hash=EQUAL
+PASS A M150 files=1 anchors=1 hash=EQUAL
+PASS A M151 files=1 anchors=1 hash=EQUAL
+PASS A M152 files=1 anchors=1 hash=EQUAL
+PASS A M153 files=1 anchors=1 hash=DIFFERS
+PASS A M154 files=1 anchors=1 hash=EQUAL
+PASS A M155 files=1 anchors=1 hash=EQUAL
+PASS A M156 files=1 anchors=1 hash=EQUAL
+PASS A M157 files=1 anchors=1 hash=EQUAL
+PASS A M158 files=1 anchors=1 hash=EQUAL
+PASS A M159 files=1 anchors=1 hash=EQUAL
+PASS A M160 files=1 anchors=2 hash=EQUAL
+PASS A M161 files=1 anchors=1 hash=EQUAL
+PASS A M162 files=1 anchors=1 hash=EQUAL
+PASS A M163 files=1 anchors=1 hash=EQUAL
+PASS A M164 files=1 anchors=1 hash=EQUAL
+PASS A M165 files=1 anchors=1 hash=EQUAL
+PASS A M166 files=2 anchors=2 hash=EQUAL
+PASS A M167 files=1 anchors=1 hash=EQUAL
+PASS A M168 files=1 anchors=1 hash=EQUAL
+PASS A M169 files=1 anchors=1 hash=EQUAL
+PASS A M170 files=1 anchors=1 hash=EQUAL
+PASS A M171 files=1 anchors=1 hash=EQUAL
+PASS A M172 files=1 anchors=1 hash=EQUAL
+PASS A M173 files=1 anchors=1 hash=EQUAL
+PASS A M174 files=1 anchors=1 hash=EQUAL
+PASS A M175 files=1 anchors=1 hash=EQUAL
+PASS A M176 files=1 anchors=1 hash=EQUAL
+PASS A M177 files=1 anchors=1 hash=DIFFERS
+PASS A M178 files=1 anchors=1 hash=DIFFERS
+PASS A M179 files=1 anchors=1 hash=DIFFERS
+PASS A M180 files=1 anchors=1 hash=DIFFERS
+PASS A M181 files=1 anchors=1 hash=EQUAL
+PASS A M182 files=1 anchors=1 hash=EQUAL
+PASS A M183 files=1 anchors=1 hash=EQUAL
+PASS C11 the differing pairs are exactly the 22 previously identified stale pairs :: 22 found
+PASS C12 summary agrees with the controls
+PASS C13 no identity of the validated commit or its tree anywhere in ct-1
+PASS C14 no final_tree or commit/tree field in any generated (non-historical) field
+PASS C15 every 40-hex token in generated fields is a content (blob) address
+PASS C16 no approval wording in generated fields (SAME PROPERTY, TEXT UPDATE, ACCEPTED, APPROVED)
+PASS C17 every current review status is pending :: {'pending'}
+PASS C18 no credential-like material in ct-1
+SUMMARY checks=201 passed=201 failed=0
+
+exit=0
+

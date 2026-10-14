@@ -1,0 +1,1445 @@
+validated commit d5964ee5326c2733177307db6f507328023d361a; ct-1 sha256 20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279; first-known-stale receipt 8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-campaign-01/receipts/final/01-mutation-manifest-stale-hashes.txt (blob 8b0654b448f69a8a8ef84f60f664934b6c4e5170)
+[
+ {
+  "control": "M05",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/authority/mod.rs",
+  "category": "commitment",
+  "meaning": "an emergency stop is lifted without the owner",
+  "historical_recorded_sha256": "f4eca418d66a239148087efba96b88c41547699c60a8929bafcbc89f88e7ae32",
+  "current_sha256": "ae99b2f59794470c4899396861c4942ba5db2e2e338fb3aeab8712be6c217013",
+  "current_git_blob": "c1dfe9f5af9f50b84c5400df0306d4c6f577fb48",
+  "first_known_stale_from_existing_evidence": "Candidate 11 b1d535f1bb63",
+  "derived_transition_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+  "derived_historical_commit_H": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "path_history_states": [
+   "da1df3dca68f other",
+   "8dd5db7446e4 REC",
+   "6be32bf43ceb other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 50 insertions(+), 10 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     312
+    ],
+    "count_now": 1,
+    "lines_now": [
+     335
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "resume",
+    "enclosing_fn_at_H": "resume",
+    "enclosing_fn_text_identical": false,
+    "context_pm20_identical": false
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "authority::tests::an_emergency_stop_cancels_every_run_and_refuses_new_ones",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/authority/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/authority/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   },
+   {
+    "test": "governed::tests::the_emergency_stop_ends_everything_until_the_owner_resumes",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/governed/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/governed/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M18",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/broker.rs",
+  "category": "broker",
+  "meaning": "a commitment releases a lease it does not list",
+  "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+  "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+  "current_git_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+  "first_known_stale_from_existing_evidence": "D2A-1 contract base 862a11cef284",
+  "derived_transition_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "derived_historical_commit_H": "f5f2f3da8002bbcf8a6a3e049f0e93c8703c7670",
+  "path_history_states": [
+   "e111c7c51fd6 other",
+   "089e1838a4e4 REC",
+   "862a11cef284 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 66 insertions(+), 5 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     350
+    ],
+    "count_now": 1,
+    "lines_now": [
+     403
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "release",
+    "enclosing_fn_at_H": "release",
+    "enclosing_fn_text_identical": false,
+    "context_pm20_identical": false
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "broker::tests::a_commitment_cannot_release_a_lease_it_does_not_list",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M19",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/broker.rs",
+  "category": "broker",
+  "meaning": "a lease releases its secret more than once",
+  "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+  "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+  "current_git_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+  "first_known_stale_from_existing_evidence": "D2A-1 contract base 862a11cef284",
+  "derived_transition_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "derived_historical_commit_H": "f5f2f3da8002bbcf8a6a3e049f0e93c8703c7670",
+  "path_history_states": [
+   "e111c7c51fd6 other",
+   "089e1838a4e4 REC",
+   "862a11cef284 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 66 insertions(+), 5 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     372
+    ],
+    "count_now": 1,
+    "lines_now": [
+     425
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "release",
+    "enclosing_fn_at_H": "release",
+    "enclosing_fn_text_identical": false,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "broker::tests::a_lease_releases_its_secret_once_to_its_commitment_only",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M32",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a raw system call is not a mechanism",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4665
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4665
+    ],
+    "replacement_is_deletion": true,
+    "replacement_occurrences_now": null,
+    "enclosing_fn_now": "effect_kinds",
+    "enclosing_fn_at_H": "effect_kinds",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M39",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/broker.rs",
+  "category": "broker",
+  "meaning": "a credential is taken from the process environment",
+  "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+  "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+  "current_git_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+  "first_known_stale_from_existing_evidence": "D2A-1 contract base 862a11cef284",
+  "derived_transition_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "derived_historical_commit_H": "f5f2f3da8002bbcf8a6a3e049f0e93c8703c7670",
+  "path_history_states": [
+   "e111c7c51fd6 other",
+   "089e1838a4e4 REC",
+   "862a11cef284 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 66 insertions(+), 5 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     108
+    ],
+    "count_now": 1,
+    "lines_now": [
+     120
+    ],
+    "replacement_is_deletion": true,
+    "replacement_occurrences_now": null,
+    "enclosing_fn_now": "from_vault",
+    "enclosing_fn_at_H": "from_vault",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "broker::tests::a_credential_from_the_environment_is_refused",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/broker/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M45",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/authority/run.rs",
+  "category": "commitment",
+  "meaning": "finishing a run does not set its token",
+  "historical_recorded_sha256": "33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725",
+  "current_sha256": "394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6",
+  "current_git_blob": "83e2c42e306872fe35d2674dc3e1bc4ce52b05f1",
+  "first_known_stale_from_existing_evidence": "Candidate 11 b1d535f1bb63",
+  "derived_transition_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+  "derived_historical_commit_H": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "path_history_states": [
+   "da1df3dca68f other",
+   "8dd5db7446e4 REC",
+   "6be32bf43ceb other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 216 insertions(+), 12 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     190
+    ],
+    "count_now": 1,
+    "lines_now": [
+     376
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 1,
+    "enclosing_fn_now": "finish",
+    "enclosing_fn_at_H": "finish",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": false
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "authority::tests::finishing_a_run_ends_what_it_left_and_releases_what_it_owns",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/authority/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/authority/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M78",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a shadowed mechanism is invisible to the inventory",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     5025
+    ],
+    "count_now": 1,
+    "lines_now": [
+     5025
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "file_effect_sites",
+    "enclosing_fn_at_H": "file_effect_sites",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M79",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a latent class names no entries",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     5123
+    ],
+    "count_now": 1,
+    "lines_now": [
+     5123
+    ],
+    "replacement_is_deletion": true,
+    "replacement_occurrences_now": null,
+    "enclosing_fn_now": null,
+    "enclosing_fn_at_H": null,
+    "enclosing_fn_text_identical": null,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M80",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "the kernel's unsealed spawn is not a process",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4697
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4697
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "effect_kinds",
+    "enclosing_fn_at_H": "effect_kinds",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   },
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M84",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/authority/approval.rs",
+  "category": "native approval",
+  "meaning": "an R2 approval becomes cloneable",
+  "historical_recorded_sha256": "f34be06d927e59884f219e3b31bc57916ad3da6bc3bc65120d8e8c9fd2252c6c",
+  "current_sha256": "34f849b502782f0c6a046c9fd2d5ceb50bf497a54e52e591339630670db49202",
+  "current_git_blob": "19e3ace99a7f24c9d182354c2cfcdc388729af4d",
+  "first_known_stale_from_existing_evidence": "Candidate 11 b1d535f1bb63",
+  "derived_transition_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+  "derived_historical_commit_H": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "path_history_states": [
+   "da1df3dca68f other",
+   "73d1a65ac2e7 REC",
+   "6be32bf43ceb other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 5 insertions(+), 2 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     191
+    ],
+    "count_now": 1,
+    "lines_now": [
+     194
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": null,
+    "enclosing_fn_at_H": null,
+    "enclosing_fn_text_identical": null,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M87",
+  "set": "D2A-1",
+  "file": "crates/nexus-governed-control/src/lib.rs",
+  "category": "native approval",
+  "meaning": "a compile-fail doctest loses its error code",
+  "historical_recorded_sha256": "53c37d97f90ede471aff8cf6da93f9323c6915120626e94554788f45cd5b7f46",
+  "current_sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d",
+  "current_git_blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "da1df3dca68f other",
+   "7e2fda296369 REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 1 insertion(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     50
+    ],
+    "count_now": 1,
+    "lines_now": [
+     50
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": null,
+    "enclosing_fn_at_H": null,
+    "enclosing_fn_text_identical": null,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_15_the_compile_fail_doctests_are_pinned_with_their_errors",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M89",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "the scanners treat another feature as test-only",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     2874
+    ],
+    "count_now": 1,
+    "lines_now": [
+     2874
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "cfg_requires_test",
+    "enclosing_fn_at_H": "cfg_requires_test",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_16_test_only_features_are_enabled_only_by_tests",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M112",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a resolver method call is not a network site",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4591
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4591
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": null,
+    "enclosing_fn_at_H": null,
+    "enclosing_fn_text_identical": null,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_04_the_mechanisms_are_confined_to_their_modules",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   },
+   {
+    "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   },
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M113",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "libc's resolver and the DNS crates are not network kinds",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4653
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4653
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 1,
+    "enclosing_fn_now": "effect_kinds",
+    "enclosing_fn_at_H": "effect_kinds",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M129",
+  "set": "earlier Candidate 11",
+  "file": "crates/nexus-governed-control/src/authority/run.rs",
+  "category": "unified command",
+  "meaning": "quitting lets new runs open",
+  "historical_recorded_sha256": "33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725",
+  "current_sha256": "394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6",
+  "current_git_blob": "83e2c42e306872fe35d2674dc3e1bc4ce52b05f1",
+  "first_known_stale_from_existing_evidence": "Candidate 11 b1d535f1bb63",
+  "derived_transition_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+  "derived_historical_commit_H": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+  "path_history_states": [
+   "da1df3dca68f other",
+   "8dd5db7446e4 REC",
+   "6be32bf43ceb other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 216 insertions(+), 12 deletions(-)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     151
+    ],
+    "count_now": 1,
+    "lines_now": [
+     229
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 2,
+    "enclosing_fn_now": "close",
+    "enclosing_fn_at_H": "close",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": false
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "governed::tests::quitting_cancels_every_run_and_opens_no_more",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "crates/nexus-governed-control/src/governed/tests.rs"
+    ],
+    "defined_in_at_H": [
+     "crates/nexus-governed-control/src/governed/tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M141",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a resolver call through a path is not a network site",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     5048
+    ],
+    "count_now": 1,
+    "lines_now": [
+     5048
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "file_effect_sites",
+    "enclosing_fn_at_H": "file_effect_sites",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M143",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "the Prometheus exporter is not a network kind",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4562
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4562
+    ],
+    "replacement_is_deletion": true,
+    "replacement_occurrences_now": null,
+    "enclosing_fn_now": "network_beyond_sockets",
+    "enclosing_fn_at_H": "network_beyond_sockets",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   },
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M153",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "the Prometheus exporter's listener and gateway are not network sites",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     4596
+    ],
+    "count_now": 1,
+    "lines_now": [
+     4596
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": null,
+    "enclosing_fn_at_H": null,
+    "enclosing_fn_text_identical": null,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M177",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a doc string can spell the async attribute of a command",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     8908
+    ],
+    "count_now": 1,
+    "lines_now": [
+     8908
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "command_runs_off_thread",
+    "enclosing_fn_at_H": "command_runs_off_thread",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M178",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a cfg_attr command is not read as a command",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     8910
+    ],
+    "count_now": 1,
+    "lines_now": [
+     8910
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "command_runs_off_thread",
+    "enclosing_fn_at_H": "command_runs_off_thread",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M179",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a function taken as a value is not followed",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     8991
+    ],
+    "count_now": 1,
+    "lines_now": [
+     8991
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "uses",
+    "enclosing_fn_at_H": "uses",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": false
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ },
+ {
+  "control": "M180",
+  "set": "D2A-1",
+  "file": "app/src-tauri/src/phase3_tests.rs",
+  "category": "bypass guard",
+  "meaning": "a joined thread's body is not read as the caller's",
+  "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+  "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+  "current_git_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+  "first_known_stale_from_existing_evidence": "D2A-1 commit 22ebf9a5c5b1",
+  "derived_transition_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+  "derived_historical_commit_H": "b1d535f1bb634f2075f12a36ace89a595cdb13ba",
+  "path_history_states": [
+   "5d9a2cafe4de other",
+   "8cd813a3f4ef REC",
+   "22ebf9a5c5b1 other"
+  ],
+  "file_diff_H_to_current": "1 file changed, 239 insertions(+)",
+  "definition_byte_equal": {
+   "id": true,
+   "category": true,
+   "historical_meaning": true,
+   "candidate10_meaning": true,
+   "historical": true,
+   "edits": true,
+   "command": true,
+   "cwd": true,
+   "expected_failure_tests": true
+  },
+  "anchors": [
+   {
+    "edit": 1,
+    "expected_count": 1,
+    "count_at_H": 1,
+    "lines_at_H": [
+     8919
+    ],
+    "count_now": 1,
+    "lines_now": [
+     8919
+    ],
+    "replacement_is_deletion": false,
+    "replacement_occurrences_now": 0,
+    "enclosing_fn_now": "outside_spawned",
+    "enclosing_fn_at_H": "outside_spawned",
+    "enclosing_fn_text_identical": true,
+    "context_pm20_identical": true
+   }
+  ],
+  "expected_tests": [
+   {
+    "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+    "selected_by_command_filter": true,
+    "defined_in_now": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "defined_in_at_H": [
+     "app/src-tauri/src/phase3_tests.rs"
+    ],
+    "test_fn_text_identical_H_to_now": true
+   }
+  ]
+ }
+]
+PAIRS 22

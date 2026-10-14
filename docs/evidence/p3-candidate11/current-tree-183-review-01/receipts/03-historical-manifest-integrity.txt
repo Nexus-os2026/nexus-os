@@ -1,0 +1,12 @@
+$ git -C /home/nexus/NEXUS/nexus-os rev-parse 71264aa81a40b86189783facc8437e0427887c16:docs/evidence/p3-candidate10/original-183/manifest.json 
+65fa69dcc0742e04658a3360c42e051e38ebbf5b
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os rev-parse d5964ee5326c2733177307db6f507328023d361a:docs/evidence/p3-candidate10/original-183/manifest.json 
+65fa69dcc0742e04658a3360c42e051e38ebbf5b
+
+exit=0
+
+PASS historical manifest sha256 at C is 2c4adc84...2e14
+PASS historical manifest blob at C equals R4's (65fa69dc...)

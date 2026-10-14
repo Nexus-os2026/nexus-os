@@ -1,0 +1,13 @@
+FREEZE: the files below are the exact tools and inputs this gate ran.
+date_utc=2026-10-14T10:29:10Z
+python=Python 3.12.3 git=git version 2.43.0
+52d385f41d894076ea1d5630f12ed378724b1d5745ea464a1ac0322eb209142c  ./analysis-22.json
+15afe773d6582b84455748385600e7ebe871651c8467639724dcaec2259eeabd  ./c-series-check.py
+135d800c3a8eccaada5a7af3d2f46f318585d883d52f90ffe4fdeb6d05892cf4  ./check-ct1.py
+d75c5c3086c3fa31006fa233ec2077c28a2349fd998d29fd6d82c4d9a90eb1ed  ./final-gate.sh
+caa57b22b76e6618802b248f9a90125fc1f52846a46d80e8849241b1bedea68e  ./gen-ct1.py
+d63d28a86494de1ac8c4e158b37d33d7d79c838bcdd343111a35b8302bb8f83b  ./negative-controls.py
+4313d64b7ee187d27e1c3cc7ef46bc27c88a249703878e850dcbc004a2480627  ./reconcile-22.py
+748a66112697243afa78800d53f5d091691f12768bb97a5fec4103ce02782d34  ./render-reconciliation.py
+c1ca955cf651e32a43a366673e88a275d9ca428ad2cd1dc45d932c037ea9aa80  ./revisions/check-ct1.v1-to-final.diff
+7c7c26f945cd9912bfd8ef548e41f3c9a047f03223bb9334f5bcc73bcb6b2795  ./revisions/final-gate.v1-to-final.diff

@@ -1,0 +1,794 @@
+### transition 22ebf9a5c5b16bb6f5169daf3731a3417c5289d3; H = 22ebf9a5c5b16bb6f5169daf3731a3417c5289d3^; file app/src-tauri/src/phase3_tests.rs
+diff --git a/app/src-tauri/src/phase3_tests.rs b/app/src-tauri/src/phase3_tests.rs
+index 3df737c2..5d79c7c3 100644
+--- a/app/src-tauri/src/phase3_tests.rs
++++ b/app/src-tauri/src/phase3_tests.rs
+@@ -8997,3 +8997,242 @@ fn uses(text: &str, name: &str) -> bool {
+                 && matches!(after, Some(';' | ',' | ')'))
+         })
+ }
++
++/// D2A-1 (contract P3-C11-D2A1-CONTRACT-02-R1, section 9.1): the ledger's
++/// protocol core is confined. Nothing in the control crate names the
++/// ledger but its one `mod` line; the stub is exactly its two lines; the
++/// core names nothing outside itself but `std::sync::atomic`,
++/// `std::sync::Arc` and `std::collections::BTreeMap`, holds no panicking
++/// construct, orders every atomic operation `SeqCst`, declares one atomic
++/// (the word) and no `static`, loads it once and exchanges it once, keeps
++/// every item private or `pub(super)`, and begins with its lint denials.
++/// Read from production text: comments and test-only items are left out.
++#[test]
++fn p3_c11_d2a1_the_ledger_protocol_core_is_confined() {
++    const LIB: &str = "crates/nexus-governed-control/src/lib.rs";
++    const STUB: &str = "crates/nexus-governed-control/src/ledger.rs";
++    const CORE: &str = "crates/nexus-governed-control/src/ledger/protocol.rs";
++    const LEDGER: &str = "crates/nexus-governed-control/src/ledger/";
++
++    // 1. The word `ledger`, in any case, occurs in the crate's production
++    //    sources only in lib.rs, once, in its `mod` line, and inside the
++    //    ledger; the ledger's production sources are the stub and the core
++    //    (no `ledger/mod.rs`, no `ledger/protocol/mod.rs`).
++    for (path, text) in workspace_sources() {
++        if !path.starts_with(P3_CRATE) || path == STUB || path.starts_with(LEDGER) {
++            continue;
++        }
++        let naming: Vec<&str> = text
++            .lines()
++            .filter(|line| line.to_ascii_lowercase().contains("ledger"))
++            .map(str::trim)
++            .collect();
++        let expected: &[&str] = if path == LIB {
++            &["pub(crate) mod ledger;"]
++        } else {
++            &[]
++        };
++        assert_eq!(naming, expected, "{path} names the ledger");
++        assert_eq!(
++            text.to_ascii_lowercase().matches("ledger").count(),
++            expected.len(),
++            "{path}"
++        );
++    }
++    let ledger_files: BTreeSet<&str> = workspace_sources()
++        .iter()
++        .map(|(path, _)| path.as_str())
++        .filter(|path| *path == STUB || path.starts_with(LEDGER))
++        .collect();
++    assert_eq!(ledger_files, [STUB, CORE].into());
++
++    // 2. The stub's production text is exactly its two lines.
++    assert_eq!(
++        without_whitespace(production_source(STUB)),
++        "#[cfg_attr(not(test),allow(dead_code))]modprotocol;"
++    );
++
++    let core = production_source(CORE);
++    let m = masked(core);
++
++    // 8. It begins with the lint denials of section 9.2.
++    assert!(
++        without_whitespace(core).starts_with(
++            "#![cfg_attr(not(test),deny(clippy::indexing_slicing,clippy::arithmetic_side_effects,\
++             clippy::unwrap_used,clippy::expect_used,clippy::panic))]"
++        ),
++        "the core does not begin with its lint denials"
++    );
++
++    // 3. It names nothing outside itself but the three paths: its imports
++    //    are exactly those; `std` appears in no other place; no `core::`,
++    //    `alloc::`, `crate::`, `super::`, `self::` or other crate heads a
++    //    path; no macro is invoked; nothing is `extern`. Attributes are
++    //    left out of the path scan (they name lints, not items).
++    let imports: Vec<String> = use_spans(&m)
++        .into_iter()
++        .map(|(start, end)| without_whitespace(&core[start..end]))
++        .collect();
++    assert_eq!(
++        imports,
++        [
++            "usestd::collections::BTreeMap",
++            "usestd::sync::atomic::{AtomicU64,Ordering}",
++            "usestd::sync::Arc",
++        ]
++    );
++    let spans = use_spans(&m);
++    for at in words(&m, "std") {
++        assert!(
++            spans.iter().any(|&(start, end)| start < at && at < end),
++            "a std path outside the imports, at {at}"
++        );
++    }
++    let mut code = m.clone();
++    let mut i = 0;
++    while i < code.len() {
++        if code[i..].starts_with(b"#[") || code[i..].starts_with(b"#![") {
++            let open = i + code[i..]
++                .iter()
++                .position(|&c| c == b'[')
++                .expect("an attribute");
++            let close = close_of(&code, open);
++            code[i..close].fill(b' ');
++            i = close;
++        } else {
++            i += 1;
++        }
++    }
++    let mut local: BTreeSet<&str> = ["Self", "Ordering", "Arc", "BTreeMap", "AtomicU64"].into();
++    for keyword in ["struct", "enum", "trait", "type"] {
++        for at in words(&code, keyword) {
++            local.insert(ident_at(&code, skip_ws(&code, at + keyword.len())));
++        }
++    }
++    const PRIMITIVES: [&str; 6] = ["u8", "u16", "u32", "u64", "usize", "bool"];
++    let mut i = 0;
++    while i < code.len() {
++        if !is_ident_byte(code[i]) || (i > 0 && is_ident_byte(code[i - 1])) {
++            i += 1;
++            continue;
++        }
++        let ident = ident_at(&code, i);
++        let after = skip_ws(&code, i + ident.len());
++        let heads_a_path =
++            code[after..].starts_with(b"::") && previous_byte(&code, i) != Some(b':');
++        if heads_a_path && ident != "std" {
++            assert!(
++                local.contains(ident) || PRIMITIVES.contains(&ident),
++                "the core names a path outside itself: {ident}::"
++            );
++        }
++        let invoked = code.get(i + ident.len()) == Some(&b'!')
++            && matches!(code.get(i + ident.len() + 1), Some(b'(' | b'[' | b'{'));
++        assert!(!invoked, "the core invokes a macro: {ident}!");
++        i += ident.len();
++    }
++    assert!(
++        words(&code, "extern").is_empty(),
++        "the core declares something extern"
++    );
++
++    // 4. No panicking construct.
++    for name in ["unwrap", "expect"] {
++        for at in words(&m, name) {
++            assert_ne!(m.get(at + name.len()), Some(&b'('), "the core calls {name}");
++        }
++    }
++    for name in [
++        "panic",
++        "unreachable",
++        "todo",
++        "unimplemented",
++        "assert",
++        "assert_eq",
++        "assert_ne",
++    ] {
++        for at in words(&m, name) {
++            assert_ne!(
++                m.get(at + name.len()),
++                Some(&b'!'),
++                "the core invokes {name}!"
++            );
++        }
++    }
++    assert!(
++        !core.contains("debug_assert"),
++        "the core holds a debug assertion"
++    );
++
++    // 5. Every atomic ordering it names is `SeqCst`.
++    for weaker in ["Relaxed", "Acquire", "Release", "AcqRel"] {
++        assert!(
++            words(&m, weaker).is_empty(),
++            "the core names the ordering {weaker}"
++        );
++    }
++    let orderings: Vec<usize> = words(&code, "Ordering")
++        .into_iter()
++        .filter(|&at| code[at + "Ordering".len()..].starts_with(b"::"))
++        .collect();
++    assert!(!orderings.is_empty());
++    for at in orderings {
++        assert_eq!(
++            ident_at(&code, at + "Ordering::".len()),
++            "SeqCst",
++            "an ordering other than SeqCst"
++        );
++    }
++
++    // 6. One atomic, the word, and no `static`; on it only `load`, once,
++    //    and `compare_exchange`, once.
++    let compact_core = without_whitespace(&String::from_utf8(code.clone()).expect("masked text"));
++    let atomic_types: BTreeSet<&str> = (0..code.len())
++        .filter(|&at| {
++            word_at(&code, at, ident_at(&code, at)) && ident_at(&code, at).starts_with("Atomic")
++        })
++        .map(|at| ident_at(&code, at))
++        .collect();
++    assert_eq!(
++        atomic_types,
++        ["AtomicU64"].into(),
++        "an atomic type other than the word's"
++    );
++    let declared = compact_core
++        .match_indices(":AtomicU64")
++        .filter(|(at, found)| !compact_core[at + found.len()..].starts_with("::"))
++        .count();
++    assert_eq!(declared, 1, "more than one atomic declared");
++    assert!(
++        compact_core.contains("word:AtomicU64"),
++        "the one atomic is the word"
++    );
++    assert!(
++        words(&code, "static").is_empty(),
++        "the core declares a static"
++    );
++    assert_eq!(
++        compact_core.matches(".load(").count(),
++        1,
++        "the word is loaded once"
++    );
++    assert_eq!(
++        compact_core.matches(".compare_exchange(").count(),
++        1,
++        "the word is exchanged once"
++    );
++    for forbidden in [".store(", ".swap(", "compare_exchange_weak", ".fetch_"] {
++        assert!(
++            !compact_core.contains(forbidden),
++            "the core calls {forbidden}"
++        );
++    }
++
++    // 7. Every item in it is private or `pub(super)`.
++    for at in words(&m, "pub") {
++        assert!(
++            m[skip_ws(&m, at + "pub".len())..].starts_with(b"(super)"),
++            "an item more visible than pub(super), at {at}"
++        );
++    }
++}
+### transition 22ebf9a5c5b16bb6f5169daf3731a3417c5289d3; H = 22ebf9a5c5b16bb6f5169daf3731a3417c5289d3^; file crates/nexus-governed-control/src/lib.rs
+diff --git a/crates/nexus-governed-control/src/lib.rs b/crates/nexus-governed-control/src/lib.rs
+index 5f978d52..b806ed57 100644
+--- a/crates/nexus-governed-control/src/lib.rs
++++ b/crates/nexus-governed-control/src/lib.rs
+@@ -109,6 +109,7 @@ pub mod executable;
+ pub mod governed;
+ pub mod ingress;
+ mod launcher;
++pub(crate) mod ledger;
+ pub mod planned;
+ pub mod runtime_root;
+ pub mod tool;
+### transition 862a11cef284c5e3c34234dfd2677a5462c86d5d; H = 862a11cef284c5e3c34234dfd2677a5462c86d5d^; file crates/nexus-governed-control/src/broker.rs
+diff --git a/crates/nexus-governed-control/src/broker.rs b/crates/nexus-governed-control/src/broker.rs
+index d858f890..eaa469d9 100644
+--- a/crates/nexus-governed-control/src/broker.rs
++++ b/crates/nexus-governed-control/src/broker.rs
+@@ -9,6 +9,18 @@
+ //! the transport sends it marked sensitive and redacts it from whatever comes
+ //! back. A lease ends with its commitment, its run, or its expiry.
+ //!
++//! A release consumes its lease and records that before the vault is read,
++//! with no lock held while it records. Then it asks again: the run registry
++//! whether the run is still live (not cancelled, finished or stopped), the
++//! commitment registry whether the commitment still executes under its
++//! guard and lists the lease, and the lease table whether the lease is still
++//! the one this release consumed and has not expired. It asks before the
++//! vault is read and once more after; a refusal reads nothing, or drops the
++//! secret read, builds no header, and ends the lease. A cancellation that
++//! arrives after that last look is not the broker's to see: egress looks at
++//! the run again before every exchange, and the transport watches the run's
++//! cancel token.
++//!
+ //! No secret ever reaches a model prompt, a model-visible argument, a
+ //! frontend payload, the evidence, a URL, a shell string or a process
+ //! environment: it exists in memory between the vault read and the request
+@@ -18,7 +30,7 @@
+ //! environment is refused: governed credentials come from the vault.
+ 
+ use crate::authority::clock::Clock;
+-use crate::authority::commitment::{CommitmentRegistry, ExecutionGuard, LeaseEnd};
++use crate::authority::commitment::{CommitmentRegistry, CommitmentView, ExecutionGuard, LeaseEnd};
+ use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
+ use crate::authority::ids::{AgentId, LeaseId, RunId};
+ use crate::authority::policy::PolicyGeneration;
+@@ -333,6 +345,47 @@ impl CredentialBroker {
+             .get(&lease)
+             .is_some_and(|l| l.state == LeaseState::Issued && l.deadline_ms > now)
+     }
++
++    /// Whether the release that consumed `lease_id` under `guard` may still
++    /// go on, asked again after a step taken with no lock held (its record,
++    /// the vault read): the run is live, by the run registry's own answer;
++    /// the commitment still executes under `guard` and lists the lease; and
++    /// the lease is still this release's (its agent and run, `Released`), its
++    /// deadline not passed. Each lock is taken alone and released before the
++    /// next. A refusal ends the lease and is returned as the authority gave
++    /// it.
++    fn still_releasing(
++        &self,
++        lease_id: LeaseId,
++        guard: &ExecutionGuard,
++        view: &CommitmentView,
++    ) -> Result<(), AuthorityError> {
++        let live = self.runs.check(view.run, &view.agent).and_then(|_| {
++            match self.commitments.prepared_for(guard) {
++                Some(prepared) if prepared.leases.contains(&lease_id) => Ok(()),
++                Some(_) => Err(AuthorityError::Closed(
++                    "the lease is not bound to this commitment",
++                )),
++                None => Err(AuthorityError::NotAuthorized),
++            }
++        });
++        let now = self.clock.monotonic_ms();
++        let mut leases = self.table.leases.lock().expect("leases");
++        let lease = leases.map.get_mut(&lease_id);
++        let verdict = live.and_then(|()| match lease.as_deref() {
++            None => Err(AuthorityError::UnknownLease),
++            Some(held) if held.agent != view.agent => Err(AuthorityError::WrongAgent),
++            Some(held) if held.run != view.run => Err(AuthorityError::WrongRun),
++            Some(held) if held.state != LeaseState::Released => Err(AuthorityError::NotPending),
++            Some(held) if now >= held.deadline_ms => Err(AuthorityError::Expired),
++            Some(_) => Ok(()),
++        });
++        if let (Err(_), Some(lease)) = (&verdict, lease) {
++            // Ended, never issued again: no later release reads the vault.
++            lease.state = LeaseState::Ended;
++        }
++        verdict
++    }
+ }
+ 
+ impl ReleaseCredential for CredentialBroker {
+@@ -394,11 +447,19 @@ impl ReleaseCredential for CredentialBroker {
+         record.target = Some(destination.origin_text());
+         record.detail.push(("lease".into(), lease_id.to_string()));
+         record.detail.push(("service".into(), spec.service.into()));
++        // Recorded with no lock held: whatever arrived meanwhile (a
++        // cancellation, a stop, the lease's expiry) is asked about now,
++        // before the vault is read.
+         self.record(record)?;
+-        let secret = self
+-            .source
+-            .read(spec.scope, spec.name)
+-            .map_err(|_| AuthorityError::Unavailable("the credential is not available"))?;
++        self.still_releasing(lease_id, guard, &view)?;
++        let secret = self.source.read(spec.scope, spec.name);
++        // And once more now that the vault has answered: refused, the secret
++        // read is dropped (zeroized) and no header is built. Later than
++        // this, egress's own look before the exchange and the transport's
++        // cancel token are what stop the request.
++        self.still_releasing(lease_id, guard, &view)?;
++        let secret =
++            secret.map_err(|_| AuthorityError::Unavailable("the credential is not available"))?;
+         // A token is visible ASCII; anything else could break the header.
+         if secret.is_empty() || !secret.bytes().all(|b| (0x21..0x7f).contains(&b)) {
+             return Err(AuthorityError::Unavailable(
+### transition 6be32bf43cebce623681f2d1e82965ba784a7f04; H = 6be32bf43cebce623681f2d1e82965ba784a7f04^; file crates/nexus-governed-control/src/authority/approval.rs
+diff --git a/crates/nexus-governed-control/src/authority/approval.rs b/crates/nexus-governed-control/src/authority/approval.rs
+index 387392a8..19e3ace9 100644
+--- a/crates/nexus-governed-control/src/authority/approval.rs
++++ b/crates/nexus-governed-control/src/authority/approval.rs
+@@ -150,9 +150,12 @@ pub trait ControlConfirmer {
+     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool;
+ }
+ 
+-/// What the owner is asked before an emergency stop is lifted.
++/// What the owner is asked before an emergency stop is lifted: which stop,
++/// by its number in this run of the desktop, and the runs cancelled by
++/// emergency stops since the last lift. A resume lifts only that stop.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub struct ResumeConfirmation {
++    pub stop_number: u64,
+     pub runs_cancelled_by_the_stop: usize,
+ }
+ 
+@@ -164,7 +167,7 @@ impl ResumeConfirmation {
+     pub fn text(&self) -> ConfirmationText {
+         ConfirmationText {
+             header: vec![
+-                ("Lifts", "the emergency stop".to_string()),
++                ("Lifts", format!("emergency stop {}", self.stop_number)),
+                 (
+                     "Runs it cancelled",
+                     format!("{} (they stay cancelled)", self.runs_cancelled_by_the_stop),
+### transition 6be32bf43cebce623681f2d1e82965ba784a7f04; H = 6be32bf43cebce623681f2d1e82965ba784a7f04^; file crates/nexus-governed-control/src/authority/mod.rs
+diff --git a/crates/nexus-governed-control/src/authority/mod.rs b/crates/nexus-governed-control/src/authority/mod.rs
+index bc3c45f8..c1dfe9f5 100644
+--- a/crates/nexus-governed-control/src/authority/mod.rs
++++ b/crates/nexus-governed-control/src/authority/mod.rs
+@@ -23,7 +23,7 @@ use self::commitment::CommitmentRegistry;
+ use self::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
+ use self::ids::{AgentId, RunId};
+ use self::policy::{GrantStore, PolicyGeneration};
+-use self::run::{RunClass, RunOrigin, RunRegistry};
++use self::run::{Lift, Refusal, RunClass, RunOrigin, RunRegistry};
+ use std::fmt;
+ use std::sync::Arc;
+ 
+@@ -45,6 +45,9 @@ pub enum AuthorityError {
+     RunCancelled,
+     RunNotActive,
+     EmergencyStopped,
++    /// A newer emergency stop came after the stop the owner confirmed
++    /// lifting: the resume lifted nothing.
++    ResumeSuperseded,
+     ApprovalRequired,
+     ApprovalNotApplicable,
+     ApprovalMismatch,
+@@ -77,6 +80,7 @@ impl AuthorityError {
+             AuthorityError::RunCancelled => "run_cancelled",
+             AuthorityError::RunNotActive => "run_not_active",
+             AuthorityError::EmergencyStopped => "emergency_stopped",
++            AuthorityError::ResumeSuperseded => "resume_superseded",
+             AuthorityError::ApprovalRequired => "approval_required",
+             AuthorityError::ApprovalNotApplicable => "approval_not_applicable",
+             AuthorityError::ApprovalMismatch => "approval_mismatch",
+@@ -283,9 +287,10 @@ impl Authority {
+ 
+     /// The owner's emergency stop: cancel every run, end every unconsumed
+     /// commitment, move the policy generation, and refuse new runs until the
+-    /// owner resumes.
++    /// owner resumes. Its record carries its stop number, whether that
++    /// number is exhausted, and whether the stop before it was lifted.
+     pub fn emergency_stop(&self) -> usize {
+-        let cancelled = self.runs.stop_all();
++        let stop = self.runs.stop_all();
+         self.commitments.revoke_all();
+         self.generation.bump();
+         let mut record = EvidenceRecord::new(
+@@ -296,34 +301,69 @@ impl Authority {
+         record.cancelled = true;
+         record
+             .detail
+-            .push(("runs_cancelled".into(), cancelled.to_string()));
++            .push(("runs_cancelled".into(), stop.cancelled.to_string()));
++        record
++            .detail
++            .push(("stop_number".into(), stop.number.to_string()));
++        if stop.exhausted {
++            record.detail.push(("exhausted".into(), "yes".into()));
++        }
++        record
++            .detail
++            .push(("previous_stop_lifted".into(), stop.previous.as_str().into()));
+         let _ = self.record(&record);
+-        cancelled
++        stop.cancelled
+     }
+ 
+-    /// Lift an emergency stop: only after the owner's native confirmation.
++    /// Lift an emergency stop: only after the owner's native confirmation,
++    /// and only the stop the owner confirmed. The stop's number and count
++    /// are read once under the runs lock and shown; after the answer a
++    /// read-only check refuses, before any record, a resume that a newer
++    /// stop, an exhausted stop number or quitting has overtaken; the record
++    /// is written; and the registry lifts the stop only if it is still that
++    /// stop. A Resumed record is therefore not proof that the stop was
++    /// lifted.
+     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+-        if !self.runs.is_stopped() {
++        let Some(stop) = self.runs.stop_to_lift().map_err(refused)? else {
++            // Nothing is stopped: nothing to resume.
+             return Ok(());
+-        }
++        };
+         let request = ResumeConfirmation {
+-            runs_cancelled_by_the_stop: self.runs.cancelled_by_stop(),
++            stop_number: stop.number,
++            runs_cancelled_by_the_stop: stop.cancelled,
+         };
+         if !confirmer.confirm_resume(&request) {
+             return Err(AuthorityError::Declined);
+         }
++        if self.runs.check_lift(request.stop_number).map_err(refused)? == Lift::AlreadyLifted {
++            // Another resume lifted this stop, and recorded it.
++            return Ok(());
++        }
+         let mut record = EvidenceRecord::new(
+             EvidencePhase::Resumed,
+             self.clock.wall_ms(),
+             self.generation.current(),
+         );
++        record
++            .detail
++            .push(("stop_number".into(), request.stop_number.to_string()));
+         record.detail.push((
+             "runs_cancelled_by_the_stop".into(),
+             request.runs_cancelled_by_the_stop.to_string(),
+         ));
+         // Evidence first: an unrecorded resume does not happen.
+         self.record(&record)?;
+-        self.runs.resume();
++        self.runs.lift(request.stop_number).map_err(refused)?;
+         Ok(())
+     }
+ }
++
++/// What a resume the run registry refused returns.
++fn refused(refusal: Refusal) -> AuthorityError {
++    match refusal {
++        Refusal::Superseded => AuthorityError::ResumeSuperseded,
++        Refusal::Exhausted => AuthorityError::EmergencyStopped,
++        Refusal::TooLate => AuthorityError::Closed("the desktop is quitting"),
++        Refusal::Unavailable => AuthorityError::Unavailable("the run registry is poisoned"),
++    }
++}
+### transition 6be32bf43cebce623681f2d1e82965ba784a7f04; H = 6be32bf43cebce623681f2d1e82965ba784a7f04^; file crates/nexus-governed-control/src/authority/run.rs
+diff --git a/crates/nexus-governed-control/src/authority/run.rs b/crates/nexus-governed-control/src/authority/run.rs
+index 500402ec..83e2c42e 100644
+--- a/crates/nexus-governed-control/src/authority/run.rs
++++ b/crates/nexus-governed-control/src/authority/run.rs
+@@ -11,8 +11,8 @@
+ use super::ids::{AgentId, RunId};
+ use super::AuthorityError;
+ use std::collections::HashMap;
+-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+-use std::sync::{Arc, Mutex};
++use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
++use std::sync::{Arc, Mutex, PoisonError};
+ 
+ /// A run's cancellation flag, observed by actuators between bounded steps.
+ #[derive(Clone, Debug)]
+@@ -61,18 +61,96 @@ struct RunEntry {
+ }
+ 
+ /// Every run.
++///
++/// `stopped`, `stop_number`, `exhausted`, `last_lifted`, `closed` and
++/// `cancelled_by_stop` are written only while `runs` is held, and every
++/// decision that must be atomic with another is made under it. While it is
++/// held the registry takes no other lock, writes no record, raises no
++/// dialog and calls nothing outside itself, and its arithmetic is checked
++/// or saturating. A read of a flag without the lock is advisory: an early
++/// refusal or a status.
+ #[derive(Default)]
+ pub struct RunRegistry {
+     runs: Mutex<HashMap<RunId, RunEntry>>,
+     stopped: AtomicBool,
++    /// Runs cancelled by emergency stops since the last lift (it can span
++    /// more than one stop).
+     cancelled_by_stop: AtomicUsize,
+     /// The desktop is quitting: no run opens any more, and nothing resumes.
+     closed: AtomicBool,
++    /// The emergency stops of this process, from 0. It never wraps.
++    stop_number: AtomicU64,
++    /// A stop came with `stop_number` at its maximum: stopped for the rest
++    /// of the process, and no resume lifts it. Never cleared.
++    exhausted: AtomicBool,
++    /// The number of the last stop a resume lifted (0: none).
++    last_lifted: AtomicU64,
+ }
+ 
+ /// Most runs kept (ended ones are pruned first).
+ const RUN_CAPACITY: usize = 4096;
+ 
++/// What became of the stop before an emergency stop, as that stop found it.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) enum PreviousStop {
++    /// This is the process's first stop.
++    First,
++    Lifted,
++    /// Not lifted, or the stop number is exhausted.
++    NotLifted,
++}
++
++impl PreviousStop {
++    /// As the stop's record says it: `none`, `yes` or `no`.
++    pub(crate) fn as_str(self) -> &'static str {
++        match self {
++            PreviousStop::First => "none",
++            PreviousStop::Lifted => "yes",
++            PreviousStop::NotLifted => "no",
++        }
++    }
++}
++
++/// What an emergency stop did, in its one hold of the runs lock.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) struct Stop {
++    /// The runs it cancelled (those that were active).
++    pub(crate) cancelled: usize,
++    /// Its stop number (once exhausted, the same as the stop's before it).
++    pub(crate) number: u64,
++    pub(crate) exhausted: bool,
++    pub(crate) previous: PreviousStop,
++}
++
++/// The stop a resume asks the owner to lift, read in one hold of the runs
++/// lock: its number, and the runs cancelled since the last lift.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) struct StopToLift {
++    pub(crate) number: u64,
++    pub(crate) cancelled: usize,
++}
++
++/// A resume the registry lets through: the stop the owner confirmed is
++/// lifted now, or was already lifted by another resume.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) enum Lift {
++    Lifted,
++    AlreadyLifted,
++}
++
++/// Why the registry refuses a resume. Only a lift changes anything.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) enum Refusal {
++    /// A newer emergency stop came after the stop the owner confirmed.
++    Superseded,
++    /// The stop number is exhausted: the registry stays stopped.
++    Exhausted,
++    /// The desktop is quitting.
++    TooLate,
++    /// The runs lock is poisoned.
++    Unavailable,
++}
++
+ impl RunRegistry {
+     pub(crate) fn open(
+         &self,
+@@ -157,21 +235,129 @@ impl RunRegistry {
+         self.closed.load(Ordering::SeqCst)
+     }
+ 
+-    /// Cancel every run and refuse new work until `resume`.
+-    pub(crate) fn stop_all(&self) -> usize {
++    /// The emergency stop: cancel every run and refuse new work until a
++    /// resume lifts this stop, in one hold of the runs lock. In order: what
++    /// became of the stop before; the next stop number, or `exhausted` at
++    /// the maximum; the flag; every run cancelled as `cancel` cancels one;
++    /// the count. The flag is set only once the lock is held. A poisoned
++    /// lock does not prevent the stop: it goes on with what the lock holds,
++    /// treats nothing as repaired, and leaves the poison.
++    pub(crate) fn stop_all(&self) -> Stop {
++        let mut runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
++        let current = self.stop_number.load(Ordering::SeqCst);
++        let previous = if current == 0 {
++            PreviousStop::First
++        } else if self.exhausted.load(Ordering::SeqCst)
++            || self.last_lifted.load(Ordering::SeqCst) != current
++        {
++            PreviousStop::NotLifted
++        } else {
++            PreviousStop::Lifted
++        };
++        let (number, exhausted) = match current.checked_add(1) {
++            Some(next) => {
++                self.stop_number.store(next, Ordering::SeqCst);
++                (next, false)
++            }
++            None => {
++                self.exhausted.store(true, Ordering::SeqCst);
++                (current, true)
++            }
++        };
+         self.stopped.store(true, Ordering::SeqCst);
+-        let ids: Vec<RunId> = self.runs.lock().expect("runs").keys().copied().collect();
+-        let cancelled = ids.into_iter().filter(|id| self.cancel(*id)).count();
++        let mut cancelled = 0usize;
++        for entry in runs.values_mut() {
++            let was_active = !entry.view.cancelled && !entry.view.finished;
++            entry.view.cancelled = true;
++            entry.cancelled.store(true, Ordering::SeqCst);
++            if was_active {
++                cancelled = cancelled.saturating_add(1);
++            }
++        }
++        let since_the_last_lift = self
++            .cancelled_by_stop
++            .load(Ordering::SeqCst)
++            .saturating_add(cancelled);
+         self.cancelled_by_stop
+-            .fetch_add(cancelled, Ordering::SeqCst);
+-        cancelled
++            .store(since_the_last_lift, Ordering::SeqCst);
++        Stop {
++            cancelled,
++            number,
++            exhausted,
++            previous,
++        }
++    }
++
++    /// A resume's first step, in one hold of the runs lock: the stop it
++    /// will ask the owner to lift. Poison first; then quitting refuses,
++    /// nothing stopped is nothing to lift (`None`), and an exhausted stop
++    /// number refuses.
++    pub(crate) fn stop_to_lift(&self) -> Result<Option<StopToLift>, Refusal> {
++        let Ok(_runs) = self.runs.lock() else {
++            return Err(Refusal::Unavailable);
++        };
++        if self.closed.load(Ordering::SeqCst) {
++            return Err(Refusal::TooLate);
++        }
++        if !self.stopped.load(Ordering::SeqCst) {
++            return Ok(None);
++        }
++        if self.exhausted.load(Ordering::SeqCst) {
++            return Err(Refusal::Exhausted);
++        }
++        Ok(Some(StopToLift {
++            number: self.stop_number.load(Ordering::SeqCst),
++            cancelled: self.cancelled_by_stop(),
++        }))
++    }
++
++    /// A resume's early check, once the owner has confirmed lifting stop
++    /// `number`: what `lift` would answer now, read under the runs lock,
++    /// with the same tests in the same order, changing nothing.
++    pub(crate) fn check_lift(&self, number: u64) -> Result<Lift, Refusal> {
++        let Ok(_runs) = self.runs.lock() else {
++            return Err(Refusal::Unavailable);
++        };
++        if self.closed.load(Ordering::SeqCst) {
++            return Err(Refusal::TooLate);
++        }
++        if self.exhausted.load(Ordering::SeqCst) {
++            return Err(Refusal::Exhausted);
++        }
++        if self.stop_number.load(Ordering::SeqCst) != number {
++            return Err(Refusal::Superseded);
++        }
++        if !self.stopped.load(Ordering::SeqCst) {
++            return Ok(Lift::AlreadyLifted);
++        }
++        Ok(Lift::Lifted)
+     }
+ 
+-    /// Allow new runs again after an emergency stop (owner action). Returns
+-    /// how many runs the stop cancelled.
+-    pub(crate) fn resume(&self) -> usize {
++    /// A resume's compare-and-clear, in one hold of the runs lock: lift
++    /// stop `number` only if it is still the stop in force. Poison first;
++    /// then quitting, exhaustion and a newer stop refuse, and a stop already
++    /// lifted is left as it is. Only a lift changes anything: the flag, the
++    /// last lifted stop, the count.
++    pub(crate) fn lift(&self, number: u64) -> Result<Lift, Refusal> {
++        let Ok(_runs) = self.runs.lock() else {
++            return Err(Refusal::Unavailable);
++        };
++        if self.closed.load(Ordering::SeqCst) {
++            return Err(Refusal::TooLate);
++        }
++        if self.exhausted.load(Ordering::SeqCst) {
++            return Err(Refusal::Exhausted);
++        }
++        if self.stop_number.load(Ordering::SeqCst) != number {
++            return Err(Refusal::Superseded);
++        }
++        if !self.stopped.load(Ordering::SeqCst) {
++            return Ok(Lift::AlreadyLifted);
++        }
+         self.stopped.store(false, Ordering::SeqCst);
+-        self.cancelled_by_stop.swap(0, Ordering::SeqCst)
++        self.last_lifted.store(number, Ordering::SeqCst);
++        self.cancelled_by_stop.store(0, Ordering::SeqCst);
++        Ok(Lift::Lifted)
+     }
+ 
+     pub(crate) fn cancelled_by_stop(&self) -> usize {
+@@ -199,6 +385,24 @@ impl RunRegistry {
+         drop(self.runs.lock().expect("runs"));
+     }
+ 
++    /// Put the registry in the state "stop `number` was lifted": the stop
++    /// number and the last lifted stop, set together (tests near the stop
++    /// number's maximum).
++    #[cfg(test)]
++    pub(crate) fn set_lifted_stop(&self, number: u64) {
++        let _runs = self.runs.lock().expect("runs");
++        self.stop_number.store(number, Ordering::SeqCst);
++        self.last_lifted.store(number, Ordering::SeqCst);
++    }
++
++    /// Take the runs lock and panic while holding it, which poisons it
++    /// (tests, on a thread the test joins; not a state production reaches).
++    #[cfg(test)]
++    pub(crate) fn panic_holding_the_runs_lock(&self) {
++        let _runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
++        panic!("the runs lock is poisoned on purpose (test)");
++    }
++
+     /// Whose run it is (`None`: no such run).
+     pub fn class(&self, run: RunId) -> Option<RunClass> {
+         self.runs.lock().expect("runs").get(&run).map(|e| e.class)

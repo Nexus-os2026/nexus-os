@@ -1,0 +1,15 @@
+$ python3 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/packet/tools/c-series-check.py --repo /home/nexus/NEXUS/nexus-os --commit d5964ee5326c2733177307db6f507328023d361a 
+historical manifest: 183 controls, ids M01..M183; all M-numbered: True
+controls editing a ledger file: none
+controls containing a C-series anchor or identifier term: none
+controls mentioning an identifier C1..C29: none
+AD-1-R4 states C9: 'inside the arm `Rollback::Unknown`, `self.failed();` is kept and only': found
+AD-1-R4 states C9: '`Persistence::Uncertain` (line 1294) is replaced with `Persistence::No': found
+AD-1-R4 states C4: "the complete removal of Test 1's five checks, exactly as the authentic": found
+AD-1-R4 states C4: 'Both P4 AND P8 remain required': found
+AD-1-R4 states C25: '`self.failed();`, `self.rolled(io.rollback());` and `self.keep = true;': found
+AD-1-R4 states C25: '`return GatingOutcome::Committed(seq);`': found
+RESULT NO CONFLICT: the historical 183-control manifest defines no C-series (D2A-1 contract 7.5) control; none of its controls edits the ledger or carries a C-series anchor or identifier. C1, C4, C9, C10, C24 and C25 are defined only by AD-1-R4 G.2 (C10 and C24 by the sealed controls_defs.py it quotes), outside the 183.
+
+exit=0
+

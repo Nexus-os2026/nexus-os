@@ -1,0 +1,19 @@
+--- /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/revisions/final-gate.v1.sh	2026-10-14 11:29:03.252737235 +0100
++++ /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6c21d896-5c12-45d6-bdf0-4092f10c1813/scratchpad/ct1/tools/final-gate.sh	2026-10-14 11:29:03.271707758 +0100
+@@ -19,11 +19,13 @@
+ FAILED=0
+ 
+ # run <receipt> <expected-exit> <command...>: log the exact command, its output and exit code.
++# The exit status is taken from the command itself, never parsed back from the receipt.
+ run() {
+   local out=$1 want=$2; shift 2
+-  local cmd; cmd=$(printf '%q ' "$@")
+-  { echo "\$ $cmd"; "$@" 2>&1; local rc=$?; echo "exit=$rc"; echo; } >> "$RC/$out"
+-  local rc; rc=$(tail -2 "$RC/$out" | head -1 | sed 's/exit=//')
++  local cmd rc; cmd=$(printf '%q ' "$@")
++  echo "\$ $cmd" >> "$RC/$out"
++  "$@" >> "$RC/$out" 2>&1; rc=$?
++  printf '\nexit=%s\n\n' "$rc" >> "$RC/$out"
+   local verdict=OK; [ "$rc" = "$want" ] || { verdict=FAIL; FAILED=$((FAILED+1)); }
+   echo "$verdict exit=$rc want=$want :: $out :: $cmd" >> "$LOG"
+ }

@@ -1,0 +1,15 @@
+CANDIDATE BASELINE C — D2A-1 CANDIDATE FINAL BASELINE — REVIEW PENDING (not frozen, not accepted, not integrated)
+commit  d5964ee5326c2733177307db6f507328023d361a
+tree    51bac5fd335999cc995c0ab9f582a30244973ef0
+parent  71264aa81a40b86189783facc8437e0427887c16
+manifest docs/evidence/p3-candidate11/current-tree-183/manifest.json
+  blob   5d31cb45123403626f06c521dd2d53103676250e
+  sha256 20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+  bytes  687381
+  version ct-1
+adoption record docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md
+  blob   54c956bc1324dd3a8fd97439faa815f0865b404d
+  sha256 105e087137fed4ed7bf2baaab50b06812a1847ddbe9549809b85eecbdae379c6
+changed paths (C^..C):
+A	docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md
+A	docs/evidence/p3-candidate11/current-tree-183/manifest.json

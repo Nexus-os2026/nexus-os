@@ -1,0 +1,13 @@
+--- revisions/check-ct1.v1.py	2026-10-14 11:13:04.029537311 +0100
++++ tools/check-ct1.py	2026-10-14 11:13:04.041872218 +0100
+@@ -314,8 +314,8 @@
+         elif isinstance(node, list):
+             for v in node:
+                 walk(v)
+-    walk(ct)
+-    record('C14 no final_tree or commit/tree field anywhere',
++    walk(strip_historical(ct))
++    record('C14 no final_tree or commit/tree field in any generated (non-historical) field',
+            not ({'final_tree', 'commit', 'tree', 'final_commit', 'containing_commit'} & keys),
+            ','.join(sorted({'final_tree', 'commit', 'tree'} & keys)))
+     allowed = {HIST_BLOB, R4_BLOB}

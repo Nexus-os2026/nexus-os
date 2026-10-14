@@ -1,0 +1,18 @@
+$ git -C /home/nexus/NEXUS/nexus-os fsck --connectivity-only --no-dangling --no-progress 
+
+exit=0
+
+$ python3 -c $'\nimport subprocess,sys,hashlib\nrepo,base,head=sys.argv[1:4]\nobjs=[l.split()[0] for l in subprocess.run(["git","-C",repo,"rev-list","--objects",base+".."+head],capture_output=True,text=True,check=True).stdout.splitlines()]\nbad=0\nfor o in objs:\n    kind=subprocess.run(["git","-C",repo,"cat-file","-t",o],capture_output=True,text=True,check=True).stdout.strip()\n    data=subprocess.run(["git","-C",repo,"cat-file",kind,o],capture_output=True,check=True).stdout\n    h=hashlib.sha1(kind.encode()+b" "+str(len(data)).encode()+b"\\0"+data).hexdigest()\n    print(kind,o,"OK" if h==o else "MISMATCH "+h); bad+=h!=o\nprint("objects new in C:",len(objs),"hash mismatches:",bad); sys.exit(1 if bad or not objs else 0)\n' /home/nexus/NEXUS/nexus-os 71264aa81a40b86189783facc8437e0427887c16 d5964ee5326c2733177307db6f507328023d361a 
+commit d5964ee5326c2733177307db6f507328023d361a OK
+tree 51bac5fd335999cc995c0ab9f582a30244973ef0 OK
+tree 174a997dbd34fdf8affd30ccd00f11e9eb453ccc OK
+tree afcfc6b14915b45840e9f7a37a9e4519a890e1b8 OK
+tree db061781e4986c70c0f4f472d85268c555088dce OK
+tree 439dea39590a6ae2b8120b24dbfa56aeb781bb99 OK
+blob 54c956bc1324dd3a8fd97439faa815f0865b404d OK
+tree a1364640e6f1d5de8b04cf0990c2ab70622803f6 OK
+blob 5d31cb45123403626f06c521dd2d53103676250e OK
+objects new in C: 9 hash mismatches: 0
+
+exit=0
+

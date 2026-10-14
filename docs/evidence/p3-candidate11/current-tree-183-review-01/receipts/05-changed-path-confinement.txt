@@ -1,0 +1,15 @@
+$ git -C /home/nexus/NEXUS/nexus-os diff-tree -r --no-commit-id --name-status --no-renames d5964ee5326c2733177307db6f507328023d361a\^ d5964ee5326c2733177307db6f507328023d361a 
+A	docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md
+A	docs/evidence/p3-candidate11/current-tree-183/manifest.json
+
+exit=0
+
+PASS every changed path is an addition under the two allowed directories
+$ python3 -c $'\nimport subprocess,sys\nrepo,c=sys.argv[1:3]\nallowed=("docs/evidence/p3-candidate11/ad1r4-adoption/","docs/evidence/p3-candidate11/current-tree-183/")\ndef tree(rev):\n    out=subprocess.run(["git","-C",repo,"ls-tree","-r","-z",rev],capture_output=True,check=True).stdout.split(b"\\0")\n    return {e.split(b"\\t",1)[1].decode():e.split(b"\\t",1)[0].decode() for e in out if e}\na,b=tree(c+"^"),tree(c)\noutside_a={k:v for k,v in a.items() if not k.startswith(allowed)}\noutside_b={k:v for k,v in b.items() if not k.startswith(allowed)}\nprint("paths outside the allowed directories: parent",len(outside_a),"C",len(outside_b))\nprint("identical (path, mode, type, blob) outside the allowed directories:",outside_a==outside_b)\nprint("allowed-directory paths at parent:",sorted(k for k in a if k.startswith(allowed)))\nprint("allowed-directory paths at C:",sorted(k for k in b if k.startswith(allowed)))\nsys.exit(0 if outside_a==outside_b else 1)' /home/nexus/NEXUS/nexus-os d5964ee5326c2733177307db6f507328023d361a 
+paths outside the allowed directories: parent 5362 C 5362
+identical (path, mode, type, blob) outside the allowed directories: True
+allowed-directory paths at parent: []
+allowed-directory paths at C: ['docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'docs/evidence/p3-candidate11/current-tree-183/manifest.json']
+
+exit=0
+
