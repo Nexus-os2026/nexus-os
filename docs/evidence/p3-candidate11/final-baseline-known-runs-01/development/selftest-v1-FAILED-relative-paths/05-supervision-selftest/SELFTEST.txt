@@ -1,0 +1,51 @@
+SUPERVISION SELF-TEST 2026-10-14T13:07:12+0100 (non-Nexus processes only)
+systemd: systemd 255 (255.4-1ubuntu8.17)
+kernel: 6.17.0-35-generic; timeout: timeout (GNU coreutils) 9.4
+1. the 16 GiB, zero-swap scope's limits read back from inside it (a 10 MiB allocation), full chain
+scope unit: p3c11-fbk01-selftest-1-1791979632.scope; cwd: receipts/05-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-fbk01-selftest-1-1791979632 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh receipts/05-supervision-selftest/1/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o receipts/05-supervision-selftest/1/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'b = b'"'"'x'"'"' * (10 << 20); print('"'"'allocated'"'"', len(b))'
+launched: 2026-10-14T13:07:12+0100
+returned: 2026-10-14T13:07:12+0100
+supervisor return code 125; /usr/bin/time: exit status None, signal None, wall None s, max RSS (largest single process) None KiB
+scope (scope-wrap.sh record): memory.max None, memory.swap.max None, memory.peak None B, memory.swap.peak None B, oom None, oom_kill None, completed False, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  RESULT FAILED
+
+2. memory cap enforced: a 64 MiB zero-swap scope, the process writes 256 MiB
+  supervisor rc -15; stdout ''; scope after: ['Result=oom-kill', 'ActiveState=failed']; wrapper record keys ['cgroup', 'memory.high', 'memory.max', 'memory.oom.group', 'memory.swap.max', 'processes at start', 'started']; complete record: False; command status recorded: None
+  RESULT OK
+
+3. time limit enforced through the full chain: timeout -s KILL 3 around a 30 s sleep
+scope unit: p3c11-fbk01-selftest-3-1791979632.scope; cwd: receipts/05-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-fbk01-selftest-3-1791979632 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=13 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh receipts/05-supervision-selftest/3/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o receipts/05-supervision-selftest/3/time-v.txt timeout -s KILL 3 nice -n 10 /bin/sleep 30
+launched: 2026-10-14T13:07:12+0100
+returned: 2026-10-14T13:07:12+0100
+supervisor return code 125; /usr/bin/time: exit status None, signal None, wall None s, max RSS (largest single process) None KiB
+scope (scope-wrap.sh record): memory.max None, memory.swap.max None, memory.peak None B, memory.swap.peak None B, oom None, oom_kill None, completed False, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': None, 'supervisor_rc': 125, 'wrapper_recorded_status': None}; timed_out False
+  RESULT FAILED
+
+4. backstop enforced: RuntimeMaxSec=2 around a 30 s sleep
+  rc -15; elapsed 2.06 s
+  RESULT OK
+
+5. a normal exit 101 through the run chain
+scope unit: p3c11-fbk01-selftest-5-1791979634.scope; cwd: receipts/05-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-fbk01-selftest-5-1791979634 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh receipts/05-supervision-selftest/5/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o receipts/05-supervision-selftest/5/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'import sys; sys.exit(101)'
+launched: 2026-10-14T13:07:14+0100
+returned: 2026-10-14T13:07:14+0100
+supervisor return code 125; /usr/bin/time: exit status None, signal None, wall None s, max RSS (largest single process) None KiB
+scope (scope-wrap.sh record): memory.max None, memory.swap.max None, memory.peak None B, memory.swap.peak None B, oom None, oom_kill None, completed False, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': None, 'supervisor_rc': 125, 'wrapper_recorded_status': None}
+  RESULT FAILED
+
+6. a process ended by SIGABRT through the run chain
+scope unit: p3c11-fbk01-selftest-6-1791979634.scope; cwd: receipts/05-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-fbk01-selftest-6-1791979634 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh receipts/05-supervision-selftest/6/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o receipts/05-supervision-selftest/6/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'import os; os.abort()'
+launched: 2026-10-14T13:07:14+0100
+returned: 2026-10-14T13:07:14+0100
+supervisor return code 125; /usr/bin/time: exit status None, signal None, wall None s, max RSS (largest single process) None KiB
+scope (scope-wrap.sh record): memory.max None, memory.swap.max None, memory.peak None B, memory.swap.peak None B, oom None, oom_kill None, completed False, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': None, 'supervisor_rc': 125, 'wrapper_recorded_status': None}
+  RESULT FAILED
+
+SELF-TEST RESULT: FAILED

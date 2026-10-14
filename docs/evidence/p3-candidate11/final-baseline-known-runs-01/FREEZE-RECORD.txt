@@ -1,0 +1,44 @@
+FINAL SOURCE FREEZE RECORD — D2A-1 EXACT FINAL SOURCE BASELINE (Candidate C)
+Mission: P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE1-01
+Executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5), effort High
+Written: 2026-10-14, after authentication (00-authentication.txt: ALL CHECKS HOLD) and worktree verification
+(01-worktree.txt, 02-tree-before-build.json: EXACTLY_C), before any build.
+
+What this record is
+  Evidence that the Sole Architect's ruling, as relayed in the mission text, selected and froze Candidate C as:
+      D2A-1 EXACT FINAL SOURCE BASELINE — SOURCE FROZEN — EXECUTION EVIDENCE PENDING
+  This record is evidence of that ruling. It is not authority itself, and it confers none. It is not committed into
+  C; it lives in the mission's evidence packet only.
+
+The frozen source
+  Commit                    d5964ee5326c2733177307db6f507328023d361a
+  Tree                      51bac5fd335999cc995c0ab9f582a30244973ef0
+  Single parent             71264aa81a40b86189783facc8437e0427887c16
+  protocol.rs blob          a2df2841b99cad5d452008a6d4150e9369d07e66
+  model_tests.rs blob       28085ce232827301104b5d757af042ec933976f8
+  unit_tests.rs blob        55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+  Current-tree manifest     docs/evidence/p3-candidate11/current-tree-183/manifest.json, version ct-1
+                            blob 5d31cb45123403626f06c521dd2d53103676250e
+                            sha256 20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279
+  AD-1-R4                   sha256 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+  Build inputs              Cargo.lock 1af53a60, rust-toolchain.toml 726005b2, Cargo.toml 2c558a44,
+                            crates/nexus-governed-control/Cargo.toml 2543c745, .cargo/config.toml 05a42b50,
+                            lib.rs b806ed57, ledger.rs d872b908 (each also by sha256 in 00-authentication.txt)
+
+The ruling as relayed (mission section 1; recorded, not re-decided)
+  - The exact-source proof audit PASSED. Accepted for Candidate C: Admission Theorem 1, L-A, L-B, Q1–Q15, AQ1–AQ5;
+    AQ6 as a binding model-scope limitation; G1/G2 Lemma E, S1–S15, AS1–AS4; ASYM-1..6 as binding exclusions;
+    E-PT and E-B; the composition of the admission quotient with G1/G2 symmetry; static non-interference of the
+    C1/C25/C4 witness additions; AD-1-R4 N.15(a).
+  - All 22 stale M-control mappings: SAME PROPERTY.
+  - No source or proof-relevant build-input change is allowed. A source change voids the freeze.
+
+Freeze rules this mission keeps
+  - No source change is permitted. The worktree is checked byte for byte against C before the build, after the build,
+    and before and after every invocation (tools/verify_tree.py).
+  - No commit is made on C. The only commit of this mission is the evidence-only commit whose parent is
+    0622a4d042b1dfd3160f06fc5d333e131e2a60c8.
+
+Status that remains
+  D2A-1 remains UNACCEPTED and UNINTEGRATED. Nothing in this mission accepts, integrates or completes D2A-1 or Phase
+  Three. Every execution result of this mission is evidence for the Sole Architect's review.

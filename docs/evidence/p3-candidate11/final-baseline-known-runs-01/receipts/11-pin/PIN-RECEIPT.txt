@@ -1,0 +1,21 @@
+PIN — the executable of the one fresh optimised build, from the build's unedited output
+build receipt: receipts/10-build (build.stderr sha256 f266c2927ea53f4948c31d8d834407f3c4da77525fb9131d8089b31d6a7a588f, 641 lines; descriptor.json sha256 15a24176354c9d794db7a4e62698096906041efaf489c3864efd5f747233eb91)
+OK   build process: exit status 0, signal None, supervisor rc 0
+OK   supervision: memory.max 17179869184, memory.swap.max 0, memory.peak 2945003520 B, memory.swap.peak 0 B, oom_kill 0, wall 91.86 s of 900 s, completed True
+OK   source before and after the build: EXACTLY_C / EXACTLY_C
+OK   cargo's Finished line: [('release', 'optimized', '1m 31s')]
+OK   executables cargo named (both line forms): verbose form ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; non-verbose form []
+OK   library-test executables in the fresh target equal the one cargo named: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']
+OK   no other nexus_governed_control artifact in release/deps: ['nexus_governed_control-2faa0b9718d3e6a3']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+effective rustc flags of the test unit (from the build's own verbose message): {"-C": ["opt-level=3", "lto=thin", "codegen-units=16", "metadata=39c9cf5f26ad991f", "extra-filename=-2faa0b9718d3e6a3", "strip=symbols"], "--cfg": [], "--check-cfg": ["'cfg(docsrs,test)'", "'cfg(feature, values())'"], "--test": true, "--edition": ["2021"]}
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols; no debuginfo, debug-assertions, overflow-checks or panic flag, so rustc's defaults hold: debuginfo 0, debug assertions off and overflow checks off at opt-level 3, panic unwind
+OK   features and cfg: no --cfg flag (no feature enabled, no extra cfg); the declared feature set is empty
+fingerprint test-lib-nexus_governed_control.json: rustc 18276270781310494267, features [], declared_features [], rustflags [], profile hash 16029198466671918258, config 8247474407144887393, compile_kind 0
+OK   fingerprint test-lib-nexus_governed_control.json: no rustflags, no features: rustflags [], features []
+dep-info nexus_governed_control-2faa0b9718d3e6a3.d: 49 distinct .rs sources, all under crates/nexus-governed-control/src/: False; other inputs listed: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/crates/nexus-governed-control\n', '/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d', '/nexus-governed-control/src/harness_tests.rs\n\n/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']
+OK   dep-info names no docs/ path: no path under docs/ is an input of the test executable
+PINNED: executable /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+        sha256 cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+        size 8984464 bytes
+OUTCOME: PINNED

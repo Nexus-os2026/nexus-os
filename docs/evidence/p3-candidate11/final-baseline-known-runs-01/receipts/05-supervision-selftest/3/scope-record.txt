@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-fbk01-selftest-3-1791979666.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 3198577 3198584 
+started: 2026-10-14T13:07:46+01:00
+finished: 2026-10-14T13:07:49+01:00
+command exit status: 137
+memory.peak: 2850816
+memory.swap.peak: 0
+memory.current: 1785856
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

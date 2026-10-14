@@ -1,0 +1,55 @@
+DEP-INFO of the pinned test executable (rustc's own record of its source inputs)
+file: /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d
+sha256: 591e0f22720d65aee93cd391f094362aca110f51021987f5cee221fe80b618e6
+inputs: 49; every one under crates/nexus-governed-control/src/: True; any under docs/: False
+environment dependencies recorded by rustc: ['CARGO_MANIFEST_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/crates/nexus-governed-control']
+  OK  crates/nexus-governed-control/src/lib.rs  blob at C b806ed577f8d3472b7187d161246e08d2f1ccd3d  on disk b806ed577f8d3472b7187d161246e08d2f1ccd3d
+  OK  crates/nexus-governed-control/src/authority/mod.rs  blob at C c1dfe9f5af9f50b84c5400df0306d4c6f577fb48  on disk c1dfe9f5af9f50b84c5400df0306d4c6f577fb48
+  OK  crates/nexus-governed-control/src/authority/approval.rs  blob at C 19e3ace99a7f24c9d182354c2cfcdc388729af4d  on disk 19e3ace99a7f24c9d182354c2cfcdc388729af4d
+  OK  crates/nexus-governed-control/src/authority/clock.rs  blob at C 9d7e35c5c41d163e97f351888bade66ebd6b7e31  on disk 9d7e35c5c41d163e97f351888bade66ebd6b7e31
+  OK  crates/nexus-governed-control/src/authority/commitment.rs  blob at C 3127103dd9869e1e9144d1ee87c4240fc637a9ab  on disk 3127103dd9869e1e9144d1ee87c4240fc637a9ab
+  OK  crates/nexus-governed-control/src/authority/effect.rs  blob at C fb09f7901a75be2b3c07119f8bf90c5aeddb5e09  on disk fb09f7901a75be2b3c07119f8bf90c5aeddb5e09
+  OK  crates/nexus-governed-control/src/authority/evidence.rs  blob at C e1c380b412d019139529be15b6a4bd382bc2507b  on disk e1c380b412d019139529be15b6a4bd382bc2507b
+  OK  crates/nexus-governed-control/src/authority/ids.rs  blob at C abdfbabd8930034bbf76504741d59dfaff279fe8  on disk abdfbabd8930034bbf76504741d59dfaff279fe8
+  OK  crates/nexus-governed-control/src/authority/policy.rs  blob at C 3d5c800ff39281e101cb4302f456605e1bd7bff7  on disk 3d5c800ff39281e101cb4302f456605e1bd7bff7
+  OK  crates/nexus-governed-control/src/authority/run.rs  blob at C 83e2c42e306872fe35d2674dc3e1bc4ce52b05f1  on disk 83e2c42e306872fe35d2674dc3e1bc4ce52b05f1
+  OK  crates/nexus-governed-control/src/authority/scripted.rs  blob at C 7c91bf6151791dba6f753c31509f12cfd763bdb7  on disk 7c91bf6151791dba6f753c31509f12cfd763bdb7
+  OK  crates/nexus-governed-control/src/authority/tests.rs  blob at C 8127014c68f6a4c018f72c53e0ce4782556bd201  on disk 8127014c68f6a4c018f72c53e0ce4782556bd201
+  OK  crates/nexus-governed-control/src/broker.rs  blob at C eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2  on disk eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2
+  OK  crates/nexus-governed-control/src/broker/tests.rs  blob at C 8a64fb7def0a704072df1de6511cafb7722ee16e  on disk 8a64fb7def0a704072df1de6511cafb7722ee16e
+  OK  crates/nexus-governed-control/src/browser/mod.rs  blob at C 821fba2224f3910593ace0ed8f30d60ba44df944  on disk 821fba2224f3910593ace0ed8f30d60ba44df944
+  OK  crates/nexus-governed-control/src/browser/cdp.rs  blob at C a346c75a1a5dfdb9a5280060f19af05e4fb0c7a6  on disk a346c75a1a5dfdb9a5280060f19af05e4fb0c7a6
+  OK  crates/nexus-governed-control/src/browser/cdp/tests.rs  blob at C 03f9ebda4799078ea0fcf456bbf3b6f485f644f1  on disk 03f9ebda4799078ea0fcf456bbf3b6f485f644f1
+  OK  crates/nexus-governed-control/src/browser/proxy.rs  blob at C 1974afd3d15f92f23baa25ada22719a90feabda4  on disk 1974afd3d15f92f23baa25ada22719a90feabda4
+  OK  crates/nexus-governed-control/src/browser/tests.rs  blob at C 30a6871ea834097dbbfcf03a4082f40bb3755c1d  on disk 30a6871ea834097dbbfcf03a4082f40bb3755c1d
+  OK  crates/nexus-governed-control/src/connector/mod.rs  blob at C fd03102ff69c08e98b46bf07d9927b0d1629fa70  on disk fd03102ff69c08e98b46bf07d9927b0d1629fa70
+  OK  crates/nexus-governed-control/src/connector/catalog.rs  blob at C 4b9b76c6769afe4ed8c9abbe47045ecdbed35df8  on disk 4b9b76c6769afe4ed8c9abbe47045ecdbed35df8
+  OK  crates/nexus-governed-control/src/connector/tests.rs  blob at C 02707f4ae06fd06e1e6404f70883b391f4b807e1  on disk 02707f4ae06fd06e1e6404f70883b391f4b807e1
+  OK  crates/nexus-governed-control/src/control.rs  blob at C 7d4585c008f90364fd727a1e2a8959cc552c7404  on disk 7d4585c008f90364fd727a1e2a8959cc552c7404
+  OK  crates/nexus-governed-control/src/control/tests.rs  blob at C 23b9250ca4d28138504877c84fdefe8d9b0ab59a  on disk 23b9250ca4d28138504877c84fdefe8d9b0ab59a
+  OK  crates/nexus-governed-control/src/display/mod.rs  blob at C f8613d680fb50e01b7ddca710498d2f6eab6da8c  on disk f8613d680fb50e01b7ddca710498d2f6eab6da8c
+  OK  crates/nexus-governed-control/src/display/server.rs  blob at C f39c257d9af7773f1b082a87fae9d0eddcb7614e  on disk f39c257d9af7773f1b082a87fae9d0eddcb7614e
+  OK  crates/nexus-governed-control/src/display/tests.rs  blob at C 12fd2c9091360525a48a66747e1cd79c02d2585b  on disk 12fd2c9091360525a48a66747e1cd79c02d2585b
+  OK  crates/nexus-governed-control/src/egress/mod.rs  blob at C 9590617b72ae32683fa18102958ba841fdfbc282  on disk 9590617b72ae32683fa18102958ba841fdfbc282
+  OK  crates/nexus-governed-control/src/egress/destination.rs  blob at C 5f2d59ebf6b2e19fcb644ccf9bc8386b120a5b56  on disk 5f2d59ebf6b2e19fcb644ccf9bc8386b120a5b56
+  OK  crates/nexus-governed-control/src/egress/interfaces.rs  blob at C 0530b05d57cabc8f737fc67775ea4aaa2a61bcb5  on disk 0530b05d57cabc8f737fc67775ea4aaa2a61bcb5
+  OK  crates/nexus-governed-control/src/egress/transport.rs  blob at C 5ef50ac3c3fa06dd1b7902c2dfb9a1de52be20f6  on disk 5ef50ac3c3fa06dd1b7902c2dfb9a1de52be20f6
+  OK  crates/nexus-governed-control/src/egress/tests.rs  blob at C c250a073ac4b407a16fba707346d0269bf07e70d  on disk c250a073ac4b407a16fba707346d0269bf07e70d
+  OK  crates/nexus-governed-control/src/executable.rs  blob at C abbc6df0b5e8b7b48b82c43061f3f714ec2df8f4  on disk abbc6df0b5e8b7b48b82c43061f3f714ec2df8f4
+  OK  crates/nexus-governed-control/src/executable/tests.rs  blob at C 65b6f4da88e2a5c7a01953e268154c8ed57eb5a3  on disk 65b6f4da88e2a5c7a01953e268154c8ed57eb5a3
+  OK  crates/nexus-governed-control/src/governed.rs  blob at C e07be75e19cb03b4d1f166af232a15862531470f  on disk e07be75e19cb03b4d1f166af232a15862531470f
+  OK  crates/nexus-governed-control/src/governed/tests.rs  blob at C 8de1301eb4709e4a72b7b6fa4f924a1525417a4d  on disk 8de1301eb4709e4a72b7b6fa4f924a1525417a4d
+  OK  crates/nexus-governed-control/src/ingress.rs  blob at C f6976093d0dee9672467bb79aa775209993e1d22  on disk f6976093d0dee9672467bb79aa775209993e1d22
+  OK  crates/nexus-governed-control/src/launcher.rs  blob at C 9ffaaa9fa2f9b6f63a72b09bd1de25b0b39b2ab3  on disk 9ffaaa9fa2f9b6f63a72b09bd1de25b0b39b2ab3
+  OK  crates/nexus-governed-control/src/launcher/tests.rs  blob at C fb185df381be02d85142fd5b27e36cd11a5f35f0  on disk fb185df381be02d85142fd5b27e36cd11a5f35f0
+  OK  crates/nexus-governed-control/src/ledger.rs  blob at C d872b90816fdd18cca8e5d1a0005bb49434aaf2a  on disk d872b90816fdd18cca8e5d1a0005bb49434aaf2a
+  OK  crates/nexus-governed-control/src/ledger/protocol.rs  blob at C a2df2841b99cad5d452008a6d4150e9369d07e66  on disk a2df2841b99cad5d452008a6d4150e9369d07e66
+  OK  crates/nexus-governed-control/src/ledger/protocol/model_tests.rs  blob at C 28085ce232827301104b5d757af042ec933976f8  on disk 28085ce232827301104b5d757af042ec933976f8
+  OK  crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs  blob at C 55dc66409eaccdaa93e8f0a56f2ccb14be81e114  on disk 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+  OK  crates/nexus-governed-control/src/planned.rs  blob at C 1d445fd2f150b4c4e7ba15cd9532aa1104544986  on disk 1d445fd2f150b4c4e7ba15cd9532aa1104544986
+  OK  crates/nexus-governed-control/src/runtime_root.rs  blob at C 6d8e9ede41f6ac59f92afcb2e65c1bb656dd5562  on disk 6d8e9ede41f6ac59f92afcb2e65c1bb656dd5562
+  OK  crates/nexus-governed-control/src/tool/mod.rs  blob at C 6e069f2619709997d209ea6ebc67a8f88b6fc42b  on disk 6e069f2619709997d209ea6ebc67a8f88b6fc42b
+  OK  crates/nexus-governed-control/src/tool/catalog.rs  blob at C 4129c7b3d958e2421f82c0dea3b5d5283a7edc50  on disk 4129c7b3d958e2421f82c0dea3b5d5283a7edc50
+  OK  crates/nexus-governed-control/src/tool/tests.rs  blob at C fb6fda73c003c083efd27e50b6c483f1189de46f  on disk fb6fda73c003c083efd27e50b6c483f1189de46f
+  OK  crates/nexus-governed-control/src/harness_tests.rs  blob at C dbd7142d5edf506c67422e09591c7c8f27b75292  on disk dbd7142d5edf506c67422e09591c7c8f27b75292
+RESULT: every input is C’s blob

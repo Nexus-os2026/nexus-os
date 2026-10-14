@@ -1,0 +1,11 @@
+--- development/check_full.v1.py	2026-10-14 13:19:10.671426842 +0100
++++ tools/check_full.py	2026-10-14 13:19:10.690286479 +0100
+@@ -104,7 +104,7 @@
+     check("launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record",
+           sup["completed"] and sup["memory_max"] == "17179869184" and sup["swap_max"] == "0" and sup["oom_kill"] == 0
+           and sup["swap_peak_bytes"] == "0" and not sup["timed_out"] and sup["time_limit_seconds"] == 2700
+-          and (sup["wall_seconds"] or 2700) < 2700,
++          and sup["wall_seconds"] is not None and sup["wall_seconds"] < 2700,
+           f"memory.peak {sup['memory_peak_bytes']} B, swap.peak {sup['swap_peak_bytes']} B, oom {sup['oom']}, oom_kill "
+           f"{sup['oom_kill']}, wall {sup['wall_seconds']} s of 2700 s, scope {sup['scope_result']}")
+     # Refusals and panics.

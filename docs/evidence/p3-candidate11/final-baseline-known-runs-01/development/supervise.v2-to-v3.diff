@@ -1,0 +1,14 @@
+--- development/supervise.v2.py	2026-10-14 13:07:46.161819824 +0100
++++ tools/supervise.py	2026-10-14 13:07:46.180793184 +0100
+@@ -297,7 +297,10 @@
+     r = ["3. time limit enforced through the full chain: timeout -s KILL 3 around a 30 s sleep"]
+     sup, proc = supervised("list", d, f"{UNIT_PREFIX}-selftest-3-{int(time.time())}", outdir, ["/bin/sleep", "30"],
+                            [("PATH", "/usr/bin:/bin")], os.path.join(d, "out.txt"), None, r, limit=3)
+-    good = sup["timed_out"] and proc["exit_status"] == 137 and (sup["wall_seconds"] or 99) < 10
++    # timeout -s KILL signals its own process group, so it is killed too: /usr/bin/time sees signal 9 (v2 defect:
++    # the predicate expected exit status 137).
++    good = (sup["timed_out"] and (proc["signal"] == 9 or proc["exit_status"] == 137)
++            and (sup["wall_seconds"] or 99) < 10)
+     ok &= good
+     rec += r + [f"  process {proc}; timed_out {sup['timed_out']}", f"  RESULT {'OK' if good else 'FAILED'}", ""]
+     # 4. backstop: RuntimeMaxSec=2 around a 30 s sleep.

@@ -1,0 +1,31 @@
+--- development/check_suite.v1.py	2026-10-14 13:19:10.669580464 +0100
++++ tools/check_suite.py	2026-10-14 13:19:10.690048781 +0100
+@@ -73,7 +73,8 @@
+ START = re.compile(r"^test (\S+)( - should panic)? \.\.\. ?(.*)$")
+ RESULT = re.compile(r"^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; "
+                     r"(\d+) filtered out; finished in ([0-9.]+)s$")
+-PANIC = re.compile(r"^thread '([^']*)' panicked at ")
++# rustc 1.94 prints "thread '<name>' (<thread id>) panicked at"; v1 required the older form and so matched none.
++PANIC = re.compile(r"^thread '([^']*)'(?: \(\d+\))? panicked at ")
+ STEP = re.compile(r"^C4 WITNESS F-8 (P\d) step +(\d+)/(\d+) (\S+) offered (\[[^\]]*\]) consumed (\[[^\]]*\]) "
+                   r"unused (\[[^\]]*\]) faults left (\d+): (.*)$")
+ BRANCHES_LINE = re.compile(r"^    branches (\[.*\]); word after (0x[0-9a-f]+) ")
+@@ -117,7 +118,7 @@
+     check(f"{label}: supervision complete; 16 GiB, zero swap; no OOM, no timeout",
+           sup["completed"] and sup["memory_max"] == "17179869184" and sup["swap_max"] == "0" and sup["oom_kill"] == 0
+           and sup["swap_peak_bytes"] == "0" and not sup["timed_out"] and sup["time_limit_seconds"] == limit
+-          and (sup["wall_seconds"] or limit) < limit,
++          and sup["wall_seconds"] is not None and sup["wall_seconds"] < limit,  # v1: 0.0 s was read as missing
+           f"memory.peak {sup['memory_peak_bytes']} B, swap.peak {sup['swap_peak_bytes']} B, oom_kill {sup['oom_kill']}, "
+           f"wall {sup['wall_seconds']} s of {limit} s")
+ 
+@@ -305,6 +306,9 @@
+         src = idx.get(t[len(P):], "") if t and t.startswith(P) else None
+         if src is not None and not any(k in src for k in ("should_panic", "catch_unwind", "inapplicable")):
+             unexpected_panics.append((thread, seg))
++    check("suite: every panic message is attributed to a listed test", all((t if t in listed else s) in listed
++                                                                           for t, s in panic_hits),
++          f"{[(t, s) for t, s in panic_hits if (t if t in listed else s) not in listed]}")
+     check("suite: every panic in a model test is in a should_panic or catch_unwind test", not unexpected_panics,
+           f"{len(panic_hits)} panic messages; unexpected {unexpected_panics}")
+     check("suite: panic messages from other modules: recorded (the tests passed)", True,

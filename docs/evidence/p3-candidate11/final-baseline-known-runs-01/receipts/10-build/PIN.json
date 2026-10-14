@@ -1,0 +1,30 @@
+{
+ "executable": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+ "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+ "size": 8984464,
+ "commit": "d5964ee5326c2733177307db6f507328023d361a",
+ "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+ "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+ "rustc_path": "/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc",
+ "build_receipt": "receipts/10-build/RECEIPT.txt",
+ "pinned_by": "tools/pin.py from receipts/10-build/build.stderr",
+ "effective_rustc_flags": {
+  "-C": [
+   "opt-level=3",
+   "lto=thin",
+   "codegen-units=16",
+   "metadata=39c9cf5f26ad991f",
+   "extra-filename=-2faa0b9718d3e6a3",
+   "strip=symbols"
+  ],
+  "--cfg": [],
+  "--check-cfg": [
+   "'cfg(docsrs,test)'",
+   "'cfg(feature, values())'"
+  ],
+  "--test": true,
+  "--edition": [
+   "2021"
+  ]
+ }
+}

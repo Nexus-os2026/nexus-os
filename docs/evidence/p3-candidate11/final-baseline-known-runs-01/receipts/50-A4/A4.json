@@ -1,0 +1,441 @@
+{
+ "rows": [
+  {
+   "item": "source commit (worktree HEAD, before)",
+   "F-3": "d5964ee5326c2733177307db6f507328023d361a",
+   "F-PT": "d5964ee5326c2733177307db6f507328023d361a",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "source tree (before)",
+   "F-3": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "F-PT": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "source verdict before / after",
+   "F-3": [
+    "EXACTLY_C",
+    "EXACTLY_C"
+   ],
+   "F-PT": [
+    "EXACTLY_C",
+    "EXACTLY_C"
+   ],
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "executable sha256 before",
+   "F-3": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "F-PT": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "executable sha256 after",
+   "F-3": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "F-PT": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "test selected (--exact --ignored)",
+   "F-3": "ledger::protocol::model_tests::gc_symmetry_f3",
+   "F-PT": "ledger::protocol::model_tests::gc_symmetry_fpt",
+   "equal": false,
+   "note": "the configuration's own test"
+  },
+  {
+   "item": "header",
+   "F-3": "EXPLORATION F-3 (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+   "F-PT": "EXPLORATION F-PT (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "bounds",
+   "F-3": "facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "F-PT": "facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "equal": false,
+   "note": "A4 is the only difference: blanket_uncertain"
+  },
+  {
+   "item": "actors",
+   "F-3": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+   "F-PT": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "caps (keys, seconds)",
+   "F-3": [
+    30000000,
+    2700
+   ],
+   "F-PT": [
+    30000000,
+    2700
+   ],
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "explorer outcome (raw)",
+   "F-3": "PASS",
+   "F-PT": "PASS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "harness result (raw)",
+   "F-3": [
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 338.97s"
+   ],
+   "F-PT": [
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 487.53s"
+   ],
+   "equal": false,
+   "note": "finish times differ"
+  },
+  {
+   "item": "outer classification (K.2)",
+   "F-3": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core composed-quotient PASS",
+   "F-PT": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core composed-quotient PASS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "MEASURED quotient keys",
+   "F-3": 20431851,
+   "F-PT": 29751473,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED expanded keys",
+   "F-3": 20431851,
+   "F-PT": 29751473,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED unexpanded keys",
+   "F-3": 0,
+   "F-PT": 0,
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "MEASURED transitions",
+   "F-3": 77342551,
+   "F-PT": 113252841,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED fault edges",
+   "F-3": 6034170,
+   "F-PT": 7396731,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED non-fault edges (L1's line)",
+   "F-3": 71308381,
+   "F-PT": 105856110,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED no-step keys",
+   "F-3": 13996,
+   "F-PT": 16131,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED admission evaluations",
+   "F-3": 20431851,
+   "F-PT": 29751473,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "MEASURED admitted",
+   "F-3": 3182,
+   "F-PT": 3182,
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "MEASURED self-mirrored keys (Kf)",
+   "F-3": 880778,
+   "F-PT": 1698028,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "DERIVED original states (N+1)(2K-Kf), conditional on B(1)",
+   "F-3": 119948772,
+   "F-PT": 173414754,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "explorer elapsed (s, as printed)",
+   "F-3": 338.7,
+   "F-PT": 487.1,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "explorer tables (MiB, as printed)",
+   "F-3": 3264,
+   "F-PT": 3264,
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "process wall (s, /usr/bin/time)",
+   "F-3": 338.97,
+   "F-PT": 487.53,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "scope memory.peak (bytes)",
+   "F-3": "2930540544",
+   "F-PT": "4132057088",
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "largest process max RSS (KiB)",
+   "F-3": 2858516,
+   "F-PT": 4030560,
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "scope memory.swap.peak (bytes)",
+   "F-3": "0",
+   "F-PT": "0",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "cgroup oom_kill",
+   "F-3": 0,
+   "F-PT": 0,
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P1",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P2",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P4",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P5",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P6",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P7",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P8",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P9",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P12",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P13",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property P15",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property D1",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property L1",
+   "F-3": "HOLDS: 71308381 non-fault edges, no cycle; 13996 end states, each terminal (D1)",
+   "F-PT": "HOLDS: 105856110 non-fault edges, no cycle; 16131 end states, each terminal (D1)",
+   "equal": false,
+   "note": ""
+  },
+  {
+   "item": "property E1",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E2",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E3",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E4",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E5",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E6",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E7",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E8",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E9",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E10",
+   "F-3": "not applicable here (worker verbs do not unwind)",
+   "F-PT": "not applicable here (worker verbs do not unwind)",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property E11",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  },
+  {
+   "item": "property KEY",
+   "F-3": "HOLDS",
+   "F-PT": "HOLDS",
+   "equal": true,
+   "note": ""
+  }
+ ],
+ "differences": [
+  "test selected (--exact --ignored)",
+  "header",
+  "bounds",
+  "harness result (raw)",
+  "MEASURED quotient keys",
+  "MEASURED expanded keys",
+  "MEASURED transitions",
+  "MEASURED fault edges",
+  "MEASURED non-fault edges (L1's line)",
+  "MEASURED no-step keys",
+  "MEASURED admission evaluations",
+  "MEASURED self-mirrored keys (Kf)",
+  "DERIVED original states (N+1)(2K-Kf), conditional on B(1)",
+  "explorer elapsed (s, as printed)",
+  "process wall (s, /usr/bin/time)",
+  "scope memory.peak (bytes)",
+  "largest process max RSS (KiB)",
+  "property L1",
+  "branch sets"
+ ],
+ "taken_only_in_F-3": [
+  "append_facts: Committed (already present)"
+ ],
+ "taken_only_in_F-PT": [],
+ "satisfied": true,
+ "F-3_pass": true,
+ "F-PT_pass": true,
+ "F-PT_applicable_property_failures": []
+}

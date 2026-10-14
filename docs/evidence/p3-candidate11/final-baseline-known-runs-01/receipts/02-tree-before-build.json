@@ -1,0 +1,16 @@
+{
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01",
+ "head": "d5964ee5326c2733177307db6f507328023d361a",
+ "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+ "detached": true,
+ "tracked_blobs_compared": 5364,
+ "bytes_compared": 97246341,
+ "gitlinks": [],
+ "index_differs_from_head": [],
+ "status_entries": [],
+ "unexpected_status": [],
+ "content_mismatches": [],
+ "missing": [],
+ "mode_mismatches": [],
+ "verdict": "EXACTLY_C"
+}

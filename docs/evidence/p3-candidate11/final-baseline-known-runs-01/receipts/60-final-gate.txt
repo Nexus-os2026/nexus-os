@@ -1,0 +1,28 @@
+FINAL GATE — P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE1-01
+OK   authentication re-run (authenticate.py): RESULT: ALL CHECKS HOLD
+OK   mission worktree still exactly C (byte for byte); only the target directory untracked: EXACTLY_C ['!! target/']
+OK   pinned executable preserved, digest and size unchanged: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   still exactly one library-test executable in the mission target: ['nexus_governed_control-2faa0b9718d3e6a3']
+OK   receipts/20-list-all: executable before/after equal the pin
+OK   receipts/43-full-F-3: executable before/after equal the pin
+OK   receipts/41-full-F-2: executable before/after equal the pin
+OK   receipts/42-full-F-B: executable before/after equal the pin
+OK   receipts/21-list-ignored: executable before/after equal the pin
+OK   receipts/45-full-F-1: executable before/after equal the pin
+OK   receipts/30-suite: executable before/after equal the pin
+OK   receipts/44-full-F-PT: executable before/after equal the pin
+OK   receipts/30-suite: CLASSIFICATION: PASS: raw outcome: test result: ok. 313 passed; 0 failed; 35 ignored; 0 measured; 0 filtered out; finished in 63.31s; exit 0, signal None
+OK   receipts/41-full-F-2: CLASSIFICATION: PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+OK   receipts/42-full-F-B: CLASSIFICATION: PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS
+OK   receipts/43-full-F-3: CLASSIFICATION: PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS
+OK   receipts/44-full-F-PT: CLASSIFICATION: PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS
+OK   receipts/45-full-F-1: CLASSIFICATION: PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+OK   one at a time, in the mission's order: each launched after its predecessor finished: [('2026-10-14T13:17:39+0100', '2026-10-14T13:18:43+0100'), ('2026-10-14T13:19:29+0100', '2026-10-14T13:20:37+0100'), ('2026-10-14T13:20:53+0100', '2026-10-14T13:21:45+0100'), ('2026-10-14T13:21:57+0100', '2026-10-14T13:27:37+0100'), ('2026-10-14T13:27:47+0100', '2026-10-14T13:35:56+0100'), ('2026-10-14T13:36:10+0100', '2026-10-14T13:40:16+0100')]
+OK   A4 comparison satisfied
+OK   receipts/42-full-F-B: K 3,775,373, Kf 156,463, derived 22,182,849, 0 unexpanded
+OK   receipts/43-full-F-3: K 20,431,851, Kf 880,778, derived 119,948,772, 0 unexpanded
+OK   receipts/44-full-F-PT: K 29,751,473, Kf 1,698,028, derived 173,414,754, 0 unexpanded
+OK   receipts/41-full-F-2: original states 12,602,670, expanded equal
+OK   receipts/45-full-F-1: original states 46,524,336, expanded equal
+OK   no secret-like text in receipts, tools or development records: []
+GATE RESULT: ALL CHECKS HOLD

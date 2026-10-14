@@ -1,0 +1,2 @@
+TOOLS ADDITION — written 2026-10-14T13:20:26+01:00, while F-2 ran and before F-3 and F-PT: the A4 comparison tool, frozen before either input exists.
+4d5a8b749e05dfb667b9a26bd7c14b78e10e0acf0b1d2bb976792717a3151eba  a4.py

@@ -1,0 +1,569 @@
+{
+ "key": "fb",
+ "configuration": "F-B",
+ "test": "ledger::protocol::model_tests::gc_symmetry_fb",
+ "explorer": "composed",
+ "expected": {
+  "test": "ledger::protocol::model_tests::gc_symmetry_fb",
+  "cfg": "F-B",
+  "explorer": "composed",
+  "header": "EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+  "cap": 30000000,
+  "keys": 3775373,
+  "kf": 156463,
+  "derived": 22182849,
+  "actors": "[Fw(0), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+  "bounds": "facts 2 conflicting [true, true] ENV true batch true faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s"
+ },
+ "report": {
+  "header": "EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+  "outcome": "PASS",
+  "bounds": "facts 2 conflicting [true, true] ENV true batch true faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+  "quotient_line": "quotient: ADM is not scheduled; its one step is evaluated at every expanded state (3775373 evaluations, 310 admitted) and its successor discarded; every key holds 2 admissions left; D1 is judged with them spent. The states and transitions below are the quotient's, not the original graph's, and the state cap counts quotient states.",
+  "evaluations": 3775373,
+  "admitted": 310,
+  "symmetry_line": "symmetry: G1 and G2 exchanged; each key stands for itself and its mirror, the smaller kept; every expanded key's mirror was expanded and held to the exchange; 156463 expanded keys are their own mirror. The states and transitions below are the symmetry quotient's, and the state cap counts them.",
+  "self_mirrored": 156463,
+  "states": 3775373,
+  "expanded": 3775373,
+  "transitions": 11404590,
+  "fault_edges": 954390,
+  "no_step": 10821,
+  "elapsed_s": 51.5,
+  "tables_mib": 392,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "incomplete": null,
+  "fail": null,
+  "trace_steps": null,
+  "properties": [
+   [
+    "P1",
+    "HOLDS"
+   ],
+   [
+    "P2",
+    "HOLDS"
+   ],
+   [
+    "P4",
+    "HOLDS"
+   ],
+   [
+    "P5",
+    "HOLDS"
+   ],
+   [
+    "P6",
+    "HOLDS"
+   ],
+   [
+    "P7",
+    "HOLDS"
+   ],
+   [
+    "P8",
+    "HOLDS"
+   ],
+   [
+    "P9",
+    "HOLDS"
+   ],
+   [
+    "P12",
+    "HOLDS"
+   ],
+   [
+    "P13",
+    "HOLDS"
+   ],
+   [
+    "P15",
+    "HOLDS"
+   ],
+   [
+    "D1",
+    "HOLDS"
+   ],
+   [
+    "L1",
+    "HOLDS: 10450200 non-fault edges, no cycle; 10821 end states, each terminal (D1)"
+   ],
+   [
+    "E1",
+    "HOLDS"
+   ],
+   [
+    "E2",
+    "HOLDS"
+   ],
+   [
+    "E3",
+    "HOLDS"
+   ],
+   [
+    "E4",
+    "HOLDS"
+   ],
+   [
+    "E5",
+    "HOLDS"
+   ],
+   [
+    "E6",
+    "HOLDS"
+   ],
+   [
+    "E7",
+    "HOLDS"
+   ],
+   [
+    "E8",
+    "HOLDS"
+   ],
+   [
+    "E9",
+    "HOLDS"
+   ],
+   [
+    "E10",
+    "not applicable here (worker verbs do not unwind)"
+   ],
+   [
+    "E11",
+    "HOLDS"
+   ],
+   [
+    "KEY",
+    "HOLDS"
+   ]
+  ],
+  "branches": [
+   [
+    "taken    ",
+    "append_facts: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_facts: Committed (already present)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(Latched)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Storage"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Constraint"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied Uncertain Constraint"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied Uncertain Storage"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Conflict(explained)"
+   ],
+   [
+    "taken    ",
+    "append_facts: unwound before any insert"
+   ],
+   [
+    "taken    ",
+    "append_facts: unwound after an insert was issued"
+   ],
+   [
+    "taken    ",
+    "expire: Armed -> Counted"
+   ],
+   [
+    "taken    ",
+    "append_gating: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused NotWritten Entry(CellsBusy)"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused NotWritten Entry(Latched)"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused NotWritten Storage"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused NotWritten Constraint"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused Uncertain Storage"
+   ],
+   [
+    "taken    ",
+    "append_gating: Refused Uncertain Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)"
+   ],
+   [
+    "taken    ",
+    "append_gating: unwound after an insert (U kept, Unwound)"
+   ],
+   [
+    "taken    ",
+    "append_gating: unwound before any insert (U emptied)"
+   ],
+   [
+    "taken    ",
+    "lookup: Present"
+   ],
+   [
+    "taken    ",
+    "lookup: Absent"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(cause)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(explained)"
+   ],
+   [
+    "taken    ",
+    "lookup: Refused(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "lookup: Refused(Latched)"
+   ],
+   [
+    "taken    ",
+    "lookup: Failed"
+   ],
+   [
+    "taken    ",
+    "lookup: unwound"
+   ],
+   [
+    "taken    ",
+    "explain: Explained"
+   ],
+   [
+    "taken    ",
+    "explain: Pending"
+   ],
+   [
+    "taken    ",
+    "explain: Busy"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Unknown"
+   ],
+   [
+    "taken    ",
+    "explain: Refused(Latched)"
+   ],
+   [
+    "taken    ",
+    "explain: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Taken"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Nothing"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: NotNow(NotHealthy)"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: NotNow(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Committed"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Stale)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Empty)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Future)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Set)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(NotHealthy))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(CellsBusy))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(Latched))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: NotApplied(NotWritten)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: NotApplied(Uncertain)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: unwound after an insert (U kept)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: unwound before any insert (U emptied)"
+   ],
+   [
+    "taken    ",
+    "barrier: Passed"
+   ],
+   [
+    "taken    ",
+    "barrier: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "barrier: unwound"
+   ],
+   [
+    "taken    ",
+    "resolve: Absent"
+   ],
+   [
+    "taken    ",
+    "resolve: Corrected"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: ConflictPlaced"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Acknowledged"
+   ],
+   [
+    "taken    ",
+    "resolve: Retained"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Inconsistent"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Stale"
+   ],
+   [
+    "taken    ",
+    "resolve: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: unwound"
+   ],
+   [
+    "taken    ",
+    "append_cell C: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_cell C: Committed (present)"
+   ],
+   [
+    "taken    ",
+    "append_cell C: NotWritten"
+   ],
+   [
+    "taken    ",
+    "append_cell C: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: unwound"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Committed (present)"
+   ],
+   [
+    "taken    ",
+    "append_cell X: NotWritten"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Stale"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: unwound"
+   ],
+   [
+    "taken    ",
+    "empty: Done"
+   ],
+   [
+    "NOT TAKEN",
+    "empty: Stale"
+   ],
+   [
+    "taken    ",
+    "admission: admitted"
+   ],
+   [
+    "taken    ",
+    "admission: refused"
+   ],
+   [
+    "NOT TAKEN",
+    "DROP: a Counted ticket dropped"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: future"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: set"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: empty"
+   ]
+  ],
+  "extra_branches": [
+   "append_cell C: Refused(Latched) (not in the listed set)",
+   "append_cell C: Refused(NotHealthy) (not in the listed set)",
+   "append_cell X: Refused(NotHealthy) (not in the listed set)"
+  ],
+  "derived_original_states": 22182849,
+  "nonfault_edges": 10450200
+ },
+ "harness_result": [
+  "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 51.57s"
+ ],
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "497336320",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 51.57,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 51.609,
+  "max_rss_kib_largest_process": 488200
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "sha256_before": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "sha256_after": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464
+ },
+ "selection": {
+  "argv": [
+   "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "ledger::protocol::model_tests::gc_symmetry_fb",
+   "--exact",
+   "--ignored",
+   "--list"
+  ],
+  "exit": 0,
+  "stdout": "ledger::protocol::model_tests::gc_symmetry_fb: test\n\n1 test, 0 benchmarks\n",
+  "listed": [
+   "ledger::protocol::model_tests::gc_symmetry_fb: test"
+  ],
+  "sha256_after": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+ },
+ "raw_output_sha256": "c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7",
+ "outer_classification": "PASS \u2014 admissible unchanged-core composed-quotient PASS",
+ "original_graph_explored": false
+}

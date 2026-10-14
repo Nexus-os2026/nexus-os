@@ -1,0 +1,53 @@
+THE 51 DIAGNOSTIC TESTS OF AD-1-R4 D (N.8) ON THE PINNED EXECUTABLE (from the suite's own output)
+admission-quotient differentials                     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_x1_matches_the_original
+admission-quotient differentials                     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_x2_matches_the_original
+admission-quotient differentials                     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_x3_matches_the_original
+admission-quotient differentials                     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_x4_matches_the_original
+admission-quotient differentials                     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_x5_matches_the_original
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_negative_e2_admission_views_twice
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_negative_e9_admission_ignores_the_latch
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_negative_p12_admission_ignores_recovery
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_negative_p1_admission_ignores_unapplied
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_observer_reports_the_admission_properties
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_refuses_an_admission_that_keeps_bits
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_refuses_an_admission_that_keeps_its_counter
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::quotient_refuses_an_admission_that_writes_the_table
+admission-quotient negatives, observer, refusals     | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::an_admission_that_keeps_its_counter_fails_l1_in_the_original
+symmetry differentials                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_x2_matches_the_original
+symmetry differentials                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym1_matches_the_original
+symmetry differentials                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_pt_matches_the_original
+symmetry differentials                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_b_matches_the_original
+symmetry differentials                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_bi_matches_the_original
+configuration exercise                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_pt_takes_the_a4_steps
+configuration exercise                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_b_takes_the_batch_steps
+configuration exercise                               | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_sym_bi_takes_the_batch_inserts
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_p1_on_sym_pt
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_p12_on_sym_b
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_p1_on_sym_bi
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_e2_admission_views_twice
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_e9_admission_ignores_the_latch
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_negative_p1_admission_ignores_unapplied
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_allow_list_is_exact
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_a_batch_under_f3s_name
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_pt
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_b
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_bi
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_f_pt_with_a_lower_fault_budget
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_f_pt_with_a_raised_cap
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_f_b_with_another_actor_change
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_f_b_with_a_raised_time_cap
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_acknowledgements
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_a_configuration_not_shown_symmetric
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_an_acknowledgement_row
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_another_shape_under_a_known_name
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_a_raised_cap
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_f_g
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_kept_bits
+negatives and fail-closed (gate 36)                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_refuses_other_callers
+symmetry supporting                                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_finds_the_original_l1_cycle
+symmetry supporting                                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_initial_states
+symmetry supporting                                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_l1_on_finite_graphs
+symmetry supporting                                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_properties_follow_the_exchange
+symmetry supporting                                  | listed True | ignored False | occurrences 1 | ok     | ledger::protocol::model_tests::gc_symmetry_renames_consistently
+total 51; ok 51

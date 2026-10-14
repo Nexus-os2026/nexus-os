@@ -1,0 +1,169 @@
+A4 COMPARISON — F-3 and F-PT, each by the admitted composed quotient, on the pinned baseline executable
+Not a mutation kill. Counts and branch sets are not required to be equal; every difference is listed.
+
+item                                                       |                                          F-3 |                                         F-PT | comparison
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+source commit (worktree HEAD, before)                      |     d5964ee5326c2733177307db6f507328023d361a |     d5964ee5326c2733177307db6f507328023d361a | =
+source tree (before)                                       |     51bac5fd335999cc995c0ab9f582a30244973ef0 |     51bac5fd335999cc995c0ab9f582a30244973ef0 | =
+source verdict before / after                              |                   ('EXACTLY_C', 'EXACTLY_C') |                   ('EXACTLY_C', 'EXACTLY_C') | =
+executable sha256 before                                   | cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c | cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c | =
+executable sha256 after                                    | cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c | cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c | =
+test selected (--exact --ignored)                          | ledger::protocol::model_tests::gc_symmetry_f3 | ledger::protocol::model_tests::gc_symmetry_fpt | DIFFERS — the configuration's own test
+header                                                     | EXPLORATION F-3 (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer) | EXPLORATION F-PT (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer) | DIFFERS
+bounds                                                     | facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s | facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s | DIFFERS — A4 is the only difference: blanket_uncertain
+actors                                                     | [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env] | [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env] | =
+caps (keys, seconds)                                       |                             (30000000, 2700) |                             (30000000, 2700) | =
+explorer outcome (raw)                                     |                                         PASS |                                         PASS | =
+harness result (raw)                                       | ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 338.97s'] | ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 487.53s'] | DIFFERS — finish times differ
+outer classification (K.2)                                 | outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS | outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS | =
+MEASURED quotient keys                                     |                                     20431851 |                                     29751473 | DIFFERS
+MEASURED expanded keys                                     |                                     20431851 |                                     29751473 | DIFFERS
+MEASURED unexpanded keys                                   |                                            0 |                                            0 | =
+MEASURED transitions                                       |                                     77342551 |                                    113252841 | DIFFERS
+MEASURED fault edges                                       |                                      6034170 |                                      7396731 | DIFFERS
+MEASURED non-fault edges (L1's line)                       |                                     71308381 |                                    105856110 | DIFFERS
+MEASURED no-step keys                                      |                                        13996 |                                        16131 | DIFFERS
+MEASURED admission evaluations                             |                                     20431851 |                                     29751473 | DIFFERS
+MEASURED admitted                                          |                                         3182 |                                         3182 | =
+MEASURED self-mirrored keys (Kf)                           |                                       880778 |                                      1698028 | DIFFERS
+DERIVED original states (N+1)(2K-Kf), conditional on B(1)  |                                    119948772 |                                    173414754 | DIFFERS
+explorer elapsed (s, as printed)                           |                                        338.7 |                                        487.1 | DIFFERS
+explorer tables (MiB, as printed)                          |                                         3264 |                                         3264 | =
+process wall (s, /usr/bin/time)                            |                                       338.97 |                                       487.53 | DIFFERS
+scope memory.peak (bytes)                                  |                                   2930540544 |                                   4132057088 | DIFFERS
+largest process max RSS (KiB)                              |                                      2858516 |                                      4030560 | DIFFERS
+scope memory.swap.peak (bytes)                             |                                            0 |                                            0 | =
+cgroup oom_kill                                            |                                            0 |                                            0 | =
+
+PROPERTY LINES (each as printed)
+property P1                                                |                                        HOLDS |                                        HOLDS | =
+property P2                                                |                                        HOLDS |                                        HOLDS | =
+property P4                                                |                                        HOLDS |                                        HOLDS | =
+property P5                                                |                                        HOLDS |                                        HOLDS | =
+property P6                                                |                                        HOLDS |                                        HOLDS | =
+property P7                                                |                                        HOLDS |                                        HOLDS | =
+property P8                                                |                                        HOLDS |                                        HOLDS | =
+property P9                                                |                                        HOLDS |                                        HOLDS | =
+property P12                                               |                                        HOLDS |                                        HOLDS | =
+property P13                                               |                                        HOLDS |                                        HOLDS | =
+property P15                                               |                                        HOLDS |                                        HOLDS | =
+property D1                                                |                                        HOLDS |                                        HOLDS | =
+property L1                                                | HOLDS: 71308381 non-fault edges, no cycle; 13996 end states, each terminal (D1) | HOLDS: 105856110 non-fault edges, no cycle; 16131 end states, each terminal (D1) | DIFFERS
+property E1                                                |                                        HOLDS |                                        HOLDS | =
+property E2                                                |                                        HOLDS |                                        HOLDS | =
+property E3                                                |                                        HOLDS |                                        HOLDS | =
+property E4                                                |                                        HOLDS |                                        HOLDS | =
+property E5                                                |                                        HOLDS |                                        HOLDS | =
+property E6                                                |                                        HOLDS |                                        HOLDS | =
+property E7                                                |                                        HOLDS |                                        HOLDS | =
+property E8                                                |                                        HOLDS |                                        HOLDS | =
+property E9                                                |                                        HOLDS |                                        HOLDS | =
+property E10                                               | not applicable here (worker verbs do not unwind) | not applicable here (worker verbs do not unwind) | =
+property E11                                               |                                        HOLDS |                                        HOLDS | =
+property KEY                                               |                                        HOLDS |                                        HOLDS | =
+
+BRANCH SETS (taken / NOT TAKEN for every listed label; extra labels as printed)
+listed labels: F-3 90, F-PT 90; same label list: True
+taken: F-3 53, F-PT 52
+taken in F-3 only: ['append_facts: Committed (already present)']
+taken in F-PT only: none
+extra labels F-3: ['append_cell C: Refused(Latched) (not in the listed set)', 'append_cell C: Refused(NotHealthy) (not in the listed set)', 'append_cell X: Refused(NotHealthy) (not in the listed set)']
+extra labels F-PT: ['append_cell C: Refused(Latched) (not in the listed set)', 'append_cell C: Refused(NotHealthy) (not in the listed set)', 'append_cell X: Refused(NotHealthy) (not in the listed set)']
+  [taken    ] [taken    ] append_facts: Committed (inserted)
+  [taken    ] [NOT TAKEN] append_facts: Committed (already present)
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Entry(NotHealthy)
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Entry(Latched)
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Storage
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Constraint
+  [taken    ] [taken    ] append_facts: NotApplied Uncertain Constraint
+  [taken    ] [taken    ] append_facts: NotApplied Uncertain Storage
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)
+  [taken    ] [taken    ] append_facts: NotApplied NotWritten Conflict(explained)
+  [taken    ] [taken    ] append_facts: unwound before any insert
+  [taken    ] [taken    ] append_facts: unwound after an insert was issued
+  [taken    ] [taken    ] expire: Armed -> Counted
+  [taken    ] [taken    ] append_gating: Committed (inserted)
+  [taken    ] [taken    ] append_gating: Refused NotWritten Entry(NotHealthy)
+  [taken    ] [taken    ] append_gating: Refused NotWritten Entry(CellsBusy)
+  [taken    ] [taken    ] append_gating: Refused NotWritten Entry(Latched)
+  [taken    ] [taken    ] append_gating: Refused NotWritten Storage
+  [taken    ] [taken    ] append_gating: Refused NotWritten Constraint
+  [taken    ] [taken    ] append_gating: Refused Uncertain Storage
+  [taken    ] [taken    ] append_gating: Refused Uncertain Constraint
+  [NOT TAKEN] [NOT TAKEN] append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)
+  [taken    ] [taken    ] append_gating: unwound after an insert (U kept, Unwound)
+  [taken    ] [taken    ] append_gating: unwound before any insert (U emptied)
+  [taken    ] [taken    ] lookup: Present
+  [taken    ] [taken    ] lookup: Absent
+  [NOT TAKEN] [NOT TAKEN] lookup: Conflict(cause)
+  [NOT TAKEN] [NOT TAKEN] lookup: Conflict(explained)
+  [taken    ] [taken    ] lookup: Refused(NotHealthy)
+  [taken    ] [taken    ] lookup: Refused(Latched)
+  [taken    ] [taken    ] lookup: Failed
+  [taken    ] [taken    ] lookup: unwound
+  [taken    ] [taken    ] explain: Explained
+  [taken    ] [taken    ] explain: Pending
+  [taken    ] [taken    ] explain: Busy
+  [NOT TAKEN] [NOT TAKEN] explain: Unknown
+  [taken    ] [taken    ] explain: Refused(Latched)
+  [taken    ] [taken    ] explain: unwound
+  [NOT TAKEN] [NOT TAKEN] snapshot: Taken
+  [NOT TAKEN] [NOT TAKEN] snapshot: Nothing
+  [NOT TAKEN] [NOT TAKEN] snapshot: NotNow(NotHealthy)
+  [NOT TAKEN] [NOT TAKEN] snapshot: NotNow(Latched)
+  [NOT TAKEN] [NOT TAKEN] snapshot: Failed
+  [NOT TAKEN] [NOT TAKEN] snapshot: unwound
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Committed
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(Stale)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(Empty)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(Future)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(Set)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(NotNow(NotHealthy))
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(NotNow(CellsBusy))
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: Refused(NotNow(Latched))
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: NotApplied(NotWritten)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: NotApplied(Uncertain)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: unwound after an insert (U kept)
+  [NOT TAKEN] [NOT TAKEN] append_acknowledgement: unwound before any insert (U emptied)
+  [taken    ] [taken    ] barrier: Passed
+  [taken    ] [taken    ] barrier: Failed
+  [NOT TAKEN] [NOT TAKEN] barrier: unwound
+  [taken    ] [taken    ] resolve: Absent
+  [taken    ] [taken    ] resolve: Corrected
+  [NOT TAKEN] [NOT TAKEN] resolve: ConflictPlaced
+  [NOT TAKEN] [NOT TAKEN] resolve: Acknowledged
+  [taken    ] [taken    ] resolve: Retained
+  [NOT TAKEN] [NOT TAKEN] resolve: Inconsistent
+  [NOT TAKEN] [NOT TAKEN] resolve: Stale
+  [taken    ] [taken    ] resolve: Refused(Latched)
+  [NOT TAKEN] [NOT TAKEN] resolve: unwound
+  [taken    ] [taken    ] append_cell C: Committed (inserted)
+  [taken    ] [taken    ] append_cell C: Committed (present)
+  [taken    ] [taken    ] append_cell C: NotWritten
+  [taken    ] [taken    ] append_cell C: Uncertain
+  [NOT TAKEN] [NOT TAKEN] append_cell C: Stale
+  [NOT TAKEN] [NOT TAKEN] append_cell C: unwound
+  [taken    ] [taken    ] append_cell X: Committed (inserted)
+  [taken    ] [taken    ] append_cell X: Committed (present)
+  [taken    ] [taken    ] append_cell X: NotWritten
+  [taken    ] [taken    ] append_cell X: Uncertain
+  [NOT TAKEN] [NOT TAKEN] append_cell X: Stale
+  [taken    ] [taken    ] append_cell X: Refused(Latched)
+  [NOT TAKEN] [NOT TAKEN] append_cell X: unwound
+  [taken    ] [taken    ] empty: Done
+  [NOT TAKEN] [NOT TAKEN] empty: Stale
+  [taken    ] [taken    ] admission: admitted
+  [taken    ] [taken    ] admission: refused
+  [NOT TAKEN] [NOT TAKEN] DROP: a Counted ticket dropped
+  [NOT TAKEN] [NOT TAKEN] malformed snapshot: future
+  [NOT TAKEN] [NOT TAKEN] malformed snapshot: set
+  [NOT TAKEN] [NOT TAKEN] malformed snapshot: empty
+
+A4 CRITERION (mission section 13)
+  F-3 PASSes (admissible, K.2): True
+  F-PT PASSes (admissible, K.2): True
+  no applicable property fails in F-PT: True 
+  both receipts admissible under AD-1-R4: True
+differences recorded: ['test selected (--exact --ignored)', 'header', 'bounds', 'harness result (raw)', 'MEASURED quotient keys', 'MEASURED expanded keys', 'MEASURED transitions', 'MEASURED fault edges', "MEASURED non-fault edges (L1's line)", 'MEASURED no-step keys', 'MEASURED admission evaluations', 'MEASURED self-mirrored keys (Kf)', 'DERIVED original states (N+1)(2K-Kf), conditional on B(1)', 'explorer elapsed (s, as printed)', 'process wall (s, /usr/bin/time)', 'scope memory.peak (bytes)', 'largest process max RSS (KiB)', 'property L1', 'branch sets']
+A4: SATISFIED (comparison record; not a mutation kill)

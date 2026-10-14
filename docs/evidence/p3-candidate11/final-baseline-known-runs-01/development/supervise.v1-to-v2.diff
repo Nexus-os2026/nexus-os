@@ -1,0 +1,12 @@
+--- development/supervise.v1.py	2026-10-14 13:07:24.973724969 +0100
++++ tools/supervise.py	2026-10-14 13:07:28.308988822 +0100
+@@ -495,7 +495,8 @@
+ 
+ 
+ if __name__ == "__main__":
+-    mode, out = sys.argv[1], sys.argv[2]
++    # Absolute: the scope's cwd is not the launcher's, and every record path is passed into the scope (v1 defect).
++    mode, out = sys.argv[1], os.path.abspath(sys.argv[2])
+     if os.path.exists(out):
+         raise SystemExit(f"REFUSED: {out} exists (one call, one receipt; nothing is retried)")
+     if mode == "selftest":

@@ -1,0 +1,5 @@
+CLASSIFICATION: NOT PASS
+raw outcome: test result: ok. 313 passed; 0 failed; 35 ignored; 0 measured; 0 filtered out; finished in 63.31s; exit 0, signal None
+checks: 45 of 47 hold
+FAILED CHECK: listing (all): supervision complete; 16 GiB, zero swap; no OOM, no timeout: memory.peak 2957312 B, swap.peak 0 B, oom_kill 0, wall 0.0 s of 60 s
+FAILED CHECK: listing (ignored): supervision complete; 16 GiB, zero swap; no OOM, no timeout: memory.peak 3305472 B, swap.peak 0 B, oom_kill 0, wall 0.0 s of 60 s

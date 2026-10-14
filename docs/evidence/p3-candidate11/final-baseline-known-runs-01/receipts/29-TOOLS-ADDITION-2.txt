@@ -1,0 +1,4 @@
+TOOLS ADDITION — written 2026-10-14T13:23:03+01:00, while F-3 ran: the packet builder, the final gate and the publication checks, frozen before any of them is used.
+119d5788d01ba0cc1fe153d3e91f9fc8386890cae38b60907cdcc0cfe242daba  build_packet.py
+2c0c7f37a791f2b9e53dcc35f640ac1ab79fbd7842a3f6cbcf93a6f832595f8e  final_gate.py
+6f671303e11b308006d493a7b624a729ebd3019e1eff79ab82efbbb2fcc55582  publish_checks.py

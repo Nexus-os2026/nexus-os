@@ -1,0 +1,14 @@
+OK   positive: F-B historical PASS text: rc 0; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS
+OK   positive: F-2 historical PASS text: rc 0; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+OK   negative: F-B key count off by one: rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (admission observer evaluated at every expanded key; COUNT: quotient keys exactly 3,775,373, 0 unexpanded, 156,463 self-mirrored; DERIVED original states (N+1)(2K-Kf) = 22,182,849)
+OK   negative: F-2 state count off by one: rc 1; outer class (AD-1-R4 K.2): COUNT DIVERGENCE (otherwise a complete PASS; not silently accepted)
+OK   negative: a symmetry refusal line: rc 1; outer class (AD-1-R4 K.2): INCOMPLETE — VERIFICATION INVALID (quotient or symmetry refusal)
+OK   negative: PASS printed, then killed by signal 9: rc 1; outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination; never PASS)
+OK   negative: timeout: rc 1; outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination; never PASS)
+OK   negative: OOM kill recorded: rc 1; outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination; never PASS)
+OK   negative: executable sha256 changed after: rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (executable is the pinned one before, at selection and after)
+OK   negative: E10 line altered: rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (E10: not applicable; 24 lines HOLD, E10 not applicable, no other line)
+OK   negative: a branch line removed: rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (branch list: every BRANCHES label once, in order, each marked taken or NOT TAKEN)
+OK   negative: two tests selected: rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (pre-run listing selects exactly that one test)
+OK   negative: wrong bounds (cap raised): rc 1; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (printed bounds equal the configuration; cap printed equals the authorised ceiling)
+CHECKER CONTROLS: ALL AS EXPECTED

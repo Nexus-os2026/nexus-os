@@ -1,0 +1,4 @@
+TOOLS REVISION — written 2026-10-14T13:19:19+01:00, after the suite ran and before its classification was accepted and before any full run.
+check_suite.py v1 -> v2 and check_full.py v1 -> v2 (development/*.v1-to-v2.diff): two checker defects found when v1 classified the suite: (1) the panic regex did not accept rustc 1.94's 'thread <name> (<id>) panicked at' form, so it matched none of the 38 panic lines and its panic checks passed vacuously; (2) a 0.0 s wall time was read as missing, failing the two listings' supervision check. No test was re-run; v2 classifies the same unedited outputs.
+12c6e418fcff5dd177823296aa811baa5962a5cc01e8d32a85781836abfa5e32  check_suite.py
+d5ca21f54915f3bce35978581d6c9fee97eb041fb85702beb1b3f57a21b56fa5  check_full.py

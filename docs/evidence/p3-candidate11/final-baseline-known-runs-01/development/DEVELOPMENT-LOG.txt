@@ -1,0 +1,40 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE1-01 (Claude Code, Claude Opus 5.5, effort High)
+All times 2026-10-14, Europe/London (+01:00). Every step below has its receipt under receipts/.
+
+ 1. 13:01  Read the mission; AD-1-R4 (sha256 00ced6d5…) sections A–E, I, K, N, O–Q; the proof-readiness packet
+           0622a4d0; the gate-36 receipt; the C4 frozen schedule; the earlier missions' supervision tools.
+ 2. 13:02  tools/authenticate.py: C, its tree and parent, the three source blobs, the manifest blob and sha256, every
+           build input, AD-1-R4 at R4, C and 0622a4d0 and in the sealed root, the three proof documents and their
+           transported copies, the proof-readiness packet's 67 SHA256SUMS entries, refs and destination absence:
+           ALL CHECKS HOLD (receipts/00-authentication.txt). Only then was any worktree or target created.
+ 3. 13:03  Worktree created detached at C (receipts/01-worktree.txt); tools/verify_tree.py: 5,364 tracked blobs
+           byte-equal to C (receipts/02-tree-before-build.json). Freeze record written (receipts/03).
+ 4. 13:06  Registry cache covers all 1,027 locked crates, so the build can run with CARGO_NET_OFFLINE=true.
+ 5. 13:07  Supervision self-test v1 FAILED: tool defect, relative record paths passed into a scope with another cwd
+           (development/selftest-v1-FAILED-relative-paths). Fixed (development/supervise.v1-to-v2.diff).
+ 6. 13:07  Self-test v2 FAILED: predicate defect, the time-limit case is seen as signal 9, not exit 137; enforcement
+           itself worked (development/selftest-v2-FAILED-predicate). Fixed (supervise.v2-to-v3.diff).
+ 7. 13:07  Self-test v3: ALL OK (receipts/05-supervision-selftest).
+ 8. 13:08  The one build (receipts/10-build): exit 0, 91.9 s, peak 2.74 GiB, no OOM, source exactly C before and
+           after. The launcher's post-processing did not recognise cargo's verbose `Executable `…`` line and wrote
+           BUILD NOT OK with no pin. The build was not repeated.
+ 9. 13:10  tools/pin.py pinned from the same unedited output (receipts/11-pin/PIN-RECEIPT.txt): sha256 cde9f9d2…,
+           8,984,464 bytes; effective flags from the build's own message. Its informational dep-info line was garbled
+           (a regex crossing line breaks); tools/depinfo.py wrote DEP-INFO.txt (49 inputs, all C's blobs).
+10. 13:11  Listings (receipts/20, 21): 348 tests, 35 ignored.
+11. 13:13–13:17  Wrote report.py, check_suite.py, check_full.py; checker_controls.py: 13 controls as expected
+           (receipts/24). Tools frozen (receipts/25-TOOLS-FREEZE.txt).
+12. 13:17  Nonignored suite (receipts/30-suite): 313 passed, 0 failed, 35 ignored, 63.3 s.
+13. 13:19  check_suite.py v1: 45/47, two failures that were checker defects (0.0 s wall read as missing; panic pattern
+           without rustc 1.94's thread id, so its panic checks were vacuous). v1 outputs kept
+           (development/suite-check-v1-checker-defects); v2 (receipts/27-TOOLS-REVISION.txt) — controls re-run
+           (receipts/26) — classified the same outputs: 48/48, PASS. No test re-run.
+14. 13:19–13:20  F-2: PASS, 12,602,670 states (receipts/41). A4 tool frozen during the run (receipts/28).
+15. 13:20–13:21  F-B: PASS, 3,775,373 keys, Kf 156,463 (receipts/42).
+16. 13:21–13:27  F-3: PASS, 20,431,851 keys, Kf 880,778 (receipts/43). Packaging tools frozen during the run (receipts/29).
+17. 13:27–13:35  F-PT: PASS, 29,751,473 keys, Kf 1,698,028 (receipts/44). A4 record at 13:36: SATISFIED (receipts/50-A4).
+18. 13:36–13:40  F-1: PASS, 46,524,336 states under the 60,000,000 ceiling (receipts/45).
+19. 13:41  Final gate: ALL CHECKS HOLD (receipts/60-final-gate.txt). INDEX.md rendered from the receipts.
+No Nexus test, build or exploration was retried. No source, manifest or proof document was changed. No Owner
+workload or worktree was touched: a stale shell loop from an earlier session (a `pgrep` wait whose own command line
+matches its pattern) was observed running and left alone; it is not a Nexus process.

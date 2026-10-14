@@ -1,0 +1,32 @@
+SUPERVISED FULL EXPLORATION f3 — ledger::protocol::model_tests::gc_symmetry_f3
+started: 2026-10-14T13:21:56+0100
+source freeze (before): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+executable /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: sha256 before cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c (8984464 bytes); pinned cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c MATCH
+test environment (env -i; exactly these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+pre-flight 2026-10-14T13:21:57+0100:
+  MemTotal 65077588 KiB; MemAvailable 54290568 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7673492 KiB (the scope has swap disabled)
+  load average ['1.57', '1.29', '1.21']; online CPUs 16
+  disk free on the worktree filesystem: 52 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active scopes of this mission: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    836008 brave
+    728520 2.1.281
+    669364 chrome
+    641724 brave
+    605324 python
+    604392 claude
+    499628 chrome
+    456536 chrome
+selection check: /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_f3 --exact --ignored --list -> exit 0; listed ['ledger::protocol::model_tests::gc_symmetry_f3: test']; summary []; executable sha256 after the listing cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+scope unit: p3c11-fbk01-43-full-F-3-1791980517.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-fbk01-43-full-F-3-1791980517 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/43-full-F-3/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/43-full-F-3/time-v.txt timeout -s KILL 2700 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_f3 --exact --ignored --nocapture --test-threads=1
+launched: 2026-10-14T13:21:57+0100
+returned: 2026-10-14T13:27:36+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 338.97 s, max RSS (largest single process) 2858516 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 2930540544 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source freeze (after): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+executable sha256 after: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c MATCH
+raw output: raw-output.txt sha256 6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562 bytes 7580
+finished: 2026-10-14T13:27:37+0100
+launcher rc=0

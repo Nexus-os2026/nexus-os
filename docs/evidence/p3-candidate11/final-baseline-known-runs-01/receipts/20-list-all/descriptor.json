@@ -1,0 +1,89 @@
+{
+ "id": "20-list-all",
+ "type": "list",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01",
+ "argv": [
+  "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "--list"
+ ],
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "cwd": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/crates/nexus-governed-control",
+ "source_before": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "!! target/"
+  ],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C"
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "sha256_before": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "sha256_after": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464
+ },
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "2957312",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 60,
+  "backstop_runtime_max_seconds": 70,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.039,
+  "max_rss_kib_largest_process": 3532
+ },
+ "output_path": "raw-output.txt",
+ "raw_output_sha256": "fe5126990e77f9715ca46be82e7cdbc375eb0f3c3b4f9e5a63ef36ae570435a5",
+ "source_after": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "!! target/"
+  ],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C"
+ }
+}

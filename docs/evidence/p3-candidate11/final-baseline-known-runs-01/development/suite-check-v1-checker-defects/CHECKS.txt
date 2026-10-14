@@ -1,0 +1,47 @@
+OK   listing (all): executable is the pinned one before and after: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c / cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   listing (all): source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   listing (all): normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+FAIL listing (all): supervision complete; 16 GiB, zero swap; no OOM, no timeout: memory.peak 2957312 B, swap.peak 0 B, oom_kill 0, wall 0.0 s of 60 s
+OK   listing (ignored): executable is the pinned one before and after: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c / cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   listing (ignored): source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   listing (ignored): normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+FAIL listing (ignored): supervision complete; 16 GiB, zero swap; no OOM, no timeout: memory.peak 3305472 B, swap.peak 0 B, oom_kill 0, wall 0.0 s of 60 s
+OK   listing (all): names unique, count equals its summary: 348 names; summary (348, 0)
+OK   listing (ignored): names unique, count equals its summary, a subset of all: 35; summary (35, 0)
+OK   ignored tests of model_tests.rs at C equal AD-1-R4 E.3's 34: E.3 34; source 34
+OK   the executable's ignored model tests equal the source's: 34 listed
+OK   ignored outside model_tests: recorded: ['authority::tests::stop_measurement::rs01_t10_the_registry_stop_seen_from_outside_its_lock']
+OK   suite: executable is the pinned one before and after: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c / cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   suite: source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   suite: normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   suite: supervision complete; 16 GiB, zero swap; no OOM, no timeout: memory.peak 239153152 B, swap.peak 0 B, oom_kill 0, wall 63.31 s of 180 s
+OK   suite: no name filter; --nocapture --test-threads=1; pinned executable: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', '--nocapture', '--test-threads=1']
+OK   suite: raw output sha256 equals the launcher's record: d6f58742ea483dbb95452b186dcf72f729538e672ae60741d978b0eddc6ca3b3
+OK   suite: one 'running N tests' line, N = every listed test: ['348']
+OK   suite: one harness result line: ['test result: ok. 313 passed; 0 failed; 35 ignored; 0 measured; 0 filtered out; finished in 63.31s']
+OK   suite: test result ok; passed = nonignored; 0 failed; ignored = listed ignored; 0 filtered: test result: ok. 313 passed; 0 failed; 35 ignored; 0 measured; 0 filtered out; finished in 63.31s
+OK   suite: every listed test appears exactly once: duplicates []; missing []
+OK   suite: every ignored test reported 'ignored' (none executed): []
+OK   suite: executed set equals the nonignored set: listed-not-executed []; executed-not-listed-nonignored []
+OK   suite: every executed test ok (0 failed, none unparsed): []
+OK   suite: no 'failures:' section
+OK   suite: every quotient/symmetry refusal is inside a test written to provoke it (should_panic, catch_unwind or an expected refusal in its own text): 20 refusal lines; stray []
+OK   suite: no WITNESS FIXTURE FAILURE anywhere
+OK   suite: every panic in a model test is in a should_panic or catch_unwind test: 0 panic messages; unexpected []
+OK   suite: panic messages from other modules: recorded (the tests passed): []
+OK   default exploration X-1 (x1_two_facts_two_writers_one_admission): ok, PASS, 24 HOLD, E10 not applicable, complete, branches complete: states 59104, expanded 59104, cap 250000; failed []
+OK   default exploration X-2 (x2_one_fact_two_gating_callers): ok, PASS, 24 HOLD, E10 not applicable, complete, branches complete: states 10020, expanded 10020, cap 250000; failed []
+OK   default exploration X-3 (x3_one_conflicting_fact_with_env): ok, PASS, 24 HOLD, E10 not applicable, complete, branches complete: states 25617, expanded 25617, cap 250000; failed []
+OK   default exploration X-4 (x4_one_conflicting_fact_one_acknowledgement): ok, PASS, 24 HOLD, E10 not applicable, complete, branches complete: states 3106, expanded 3106, cap 250000; failed []
+OK   default exploration X-5 (x5_one_clean_batch_of_two): ok, PASS, 24 HOLD, E10 not applicable, complete, branches complete: states 3311, expanded 3311, cap 250000; failed []
+OK   gate 36 receipt sha256: 2c517f358002e4e99449b554ec8242952640f177269ae89e9430984a4257f1e6
+OK   gate 36 names 24 tests: 24
+OK   every explicitly named diagnostic appears in AD-1-R4 D's text
+OK   51 distinct diagnostic tests: 51
+OK   51 diagnostics: each listed once, nonignored, executed once: []
+OK   51 diagnostics: each ok: []
+OK   C4 frozen schedule (evidence commit B) sha256: d616492ff708a1a836f114424a2cce8ed6c0771d22d3f59e984322b7fa3f536b
+OK   healthy witness c1_witness_p1_at_a_successful_admission: ok; the exact healthy line(s) of G.3(d)/G.5(C), once each; no positive marker, violation, fixture failure or panic: result ok; healthy lines 1/1; markers []
+OK   healthy witness c25_witness_p7_on_the_resulting_world: ok; the exact healthy line(s) of G.3(d)/G.5(C), once each; no positive marker, violation, fixture failure or panic: result ok; healthy lines 1/1; markers []
+OK   healthy witness c4_witness_p4_and_p8_on_f8: ok; the exact healthy line(s) of G.3(d)/G.5(C), once each; no positive marker, violation, fixture failure or panic: result ok; healthy lines 3/3; markers []
+OK   healthy C4 witness: G.6 offered/consumed for every step, against the frozen schedule: step records {'P4': 8, 'P8': 12}; problems []
