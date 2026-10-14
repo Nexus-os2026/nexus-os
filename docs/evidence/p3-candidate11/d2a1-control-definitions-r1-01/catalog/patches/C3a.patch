@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..5c74cfbd8124a78c616526ae1d461895b1a16b82 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1661,9 +1661,7 @@ impl<'a> Publish<'a> {
+                 return AckOutcome::NotApplied(Persistence::NotWritten);
+             }
+         };
+-        let refusal = if set.frontier != now.frontier {
+-            Some(AckRefusal::Stale)
+-        } else if set.top <= set.frontier || set.count < 1 {
++        let refusal = if set.top <= set.frontier || set.count < 1 {
+             Some(AckRefusal::Empty)
+         } else if set.top > set.head || set.head > now.head {
+             Some(AckRefusal::Future)

@@ -1,0 +1,14 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1426,9 +1426,6 @@ impl<'a> Publish<'a> {
+         if core.phase != Phase::Healthy {
+             return entry(Entry::NotHealthy);
+         }
+-        if core.c.is_some() || core.x.is_some() {
+-            return entry(Entry::CellsBusy);
+-        }
+         if core.u.is_some() {
+             core.latch(LatchCause::CellInvariant);
+             return entry(Entry::Latched);

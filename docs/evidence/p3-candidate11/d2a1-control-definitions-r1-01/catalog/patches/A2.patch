@@ -1,0 +1,32 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce232827301104b5d757af042ec933976f8..c0ac428f58497d8cf42458d51f86db0f2e4b84ba 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -3248,12 +3248,23 @@ fn step_ack(config: &Config, w: &mut World, k: u8, o: &mut Oracle, obs: &mut Obs
+ 
+ /// ADM: [T] one view; admit if `admits`, no debt, and H is not above A.
+ fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+-    if w.adm == 0 {
+-        return false;
+-    }
++    let Some(kept) = w.adm_kept else {
++        if w.adm == 0 {
++            return false;
++        }
++        obs.views += 1;
++        let first = w.health.view();
++        w.adm_kept = Some(first.word & FLAGS);
++        obs.note(|| "[T] admission step one: the low 16 bits kept".into());
++        return true;
++    };
+     obs.views += 1;
+-    let view = w.health.view();
++    let second = w.health.view();
++    let view = HealthView {
++        word: kept | with_field(0, UNAPPLIED_SHIFT, field(second.word, UNAPPLIED_SHIFT)),
++    };
+     let admitted = view.admits() && w.table.debt == 0 && w.table.h <= w.table.a;
++    w.adm_kept = None;
+     w.adm -= 1;
+     obs.branch(format!(
+         "admission: {}",

@@ -1,0 +1,141 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01 — INPUT AUTHENTICATION (read-only)
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); mission effort: High
+
+[1] frozen baseline Candidate C (mission 3)
+    OK        type: commit
+    OK        tree: 51bac5fd335999cc995c0ab9f582a30244973ef0
+    OK        parents (single): 71264aa81a40b86189783facc8437e0427887c16
+    OK        protocol.rs blob at C: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        protocol.rs at the evidence parent equals C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        protocol/model_tests.rs blob at C: 28085ce232827301104b5d757af042ec933976f8
+    OK        protocol/model_tests.rs at the evidence parent equals C's: 28085ce232827301104b5d757af042ec933976f8
+    OK        protocol/unit_tests.rs blob at C: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        protocol/unit_tests.rs at the evidence parent equals C's: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        input copy inputs/C-protocol.rs sha256: a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+    OK        input copy inputs/C-protocol-model_tests.rs sha256: 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972
+    OK        input copy inputs/C-protocol-unit_tests.rs sha256: 841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159
+
+[2] the blocked catalog's evidence commit, the required evidence parent (mission 1, 14)
+    OK        type: commit
+    OK        tree: 12d5dd2405c59ce9a83c225c0e42b6585d8da107
+    OK        single parent: c1e46fc404a74ed76b848b709a7a246b59f3347f
+    OK        Candidate C is an ancestor: 0
+    OK        Stage-1 evidence commit is an ancestor: 0
+    OK        Stage-2 evidence commit is an ancestor: 0
+    OK        paths outside docs/evidence/ differing between C and the evidence parent: []
+    OK        the blocked commit adds only its packet and the R5 adoption record: True
+    OK        blocked catalog.json sha256: a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747
+    OK        input copy inputs/blocked/catalog.json sha256: a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747
+    OK        blocked catalog version: d2a1-controls-v1
+    OK        blocked catalog status: CONTROL_CATALOG_BLOCKED
+    OK        blocked catalog READY set equals the mission's 14 (mission 5): ['C1', 'C10', 'C12', 'C14', 'C19', 'C2', 'C21', 'C22', 'C24', 'C25', 'C27', 'C28', 'C4', 'C9']
+    OK        blocked catalog BLOCKED count: 21
+    OK        blocked packet SHA256SUMS: all 43 listed files verify at 59df2103: []
+    OK        blocked patch C1.patch sha256 equals its catalog record: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        blocked patch C1.patch equals its catalog patch text: True
+    OK        blocked C1 listed in SHA256SUMS: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        input copy inputs/blocked/patches/C1.patch sha256: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        blocked patch C2.patch sha256 equals its catalog record: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        blocked patch C2.patch equals its catalog patch text: True
+    OK        blocked C2 listed in SHA256SUMS: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        input copy inputs/blocked/patches/C2.patch sha256: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        blocked patch C4.patch sha256 equals its catalog record: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        blocked patch C4.patch equals its catalog patch text: True
+    OK        blocked C4 listed in SHA256SUMS: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        input copy inputs/blocked/patches/C4.patch sha256: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        blocked patch C9.patch sha256 equals its catalog record: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        blocked patch C9.patch equals its catalog patch text: True
+    OK        blocked C9 listed in SHA256SUMS: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        input copy inputs/blocked/patches/C9.patch sha256: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        blocked patch C10.patch sha256 equals its catalog record: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        blocked patch C10.patch equals its catalog patch text: True
+    OK        blocked C10 listed in SHA256SUMS: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        input copy inputs/blocked/patches/C10.patch sha256: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        blocked patch C12.patch sha256 equals its catalog record: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        blocked patch C12.patch equals its catalog patch text: True
+    OK        blocked C12 listed in SHA256SUMS: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        input copy inputs/blocked/patches/C12.patch sha256: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        blocked patch C14.patch sha256 equals its catalog record: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        blocked patch C14.patch equals its catalog patch text: True
+    OK        blocked C14 listed in SHA256SUMS: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        input copy inputs/blocked/patches/C14.patch sha256: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        blocked patch C19.patch sha256 equals its catalog record: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        blocked patch C19.patch equals its catalog patch text: True
+    OK        blocked C19 listed in SHA256SUMS: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        input copy inputs/blocked/patches/C19.patch sha256: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        blocked patch C21.patch sha256 equals its catalog record: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        blocked patch C21.patch equals its catalog patch text: True
+    OK        blocked C21 listed in SHA256SUMS: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        input copy inputs/blocked/patches/C21.patch sha256: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        blocked patch C22.patch sha256 equals its catalog record: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        blocked patch C22.patch equals its catalog patch text: True
+    OK        blocked C22 listed in SHA256SUMS: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        input copy inputs/blocked/patches/C22.patch sha256: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        blocked patch C24.patch sha256 equals its catalog record: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        blocked patch C24.patch equals its catalog patch text: True
+    OK        blocked C24 listed in SHA256SUMS: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        input copy inputs/blocked/patches/C24.patch sha256: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        blocked patch C25.patch sha256 equals its catalog record: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        blocked patch C25.patch equals its catalog patch text: True
+    OK        blocked C25 listed in SHA256SUMS: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        input copy inputs/blocked/patches/C25.patch sha256: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        blocked patch C27.patch sha256 equals its catalog record: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        blocked patch C27.patch equals its catalog patch text: True
+    OK        blocked C27 listed in SHA256SUMS: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        input copy inputs/blocked/patches/C27.patch sha256: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        blocked patch C28.patch sha256 equals its catalog record: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+    OK        blocked patch C28.patch equals its catalog patch text: True
+    OK        blocked C28 listed in SHA256SUMS: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+    OK        input copy inputs/blocked/patches/C28.patch sha256: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+
+[3] contract, AD-1-R4, AD-1-R5 and its Owner-adoption record, the F-R proof (mission 4)
+    OK        contract sha256 (git, at c2c69e3a): cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        contract sha256 (sealed local copy): cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        input copy inputs/CONTRACT-02-R1.md sha256: cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        AD-1-R4 blob (at the evidence parent): 35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1
+    OK        AD-1-R4 sha256: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    OK        AD-1-R4 Owner-adoption record blob: 54c956bc1324dd3a8fd97439faa815f0865b404d
+    OK        input copy inputs/AD1-R4.md sha256: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    OK        AD-1-R5 blob (at the evidence parent): ae3cabdb45627f9b3179a098c50d27e50c55101f
+    OK        AD-1-R5 sha256: 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        input copy inputs/AD1-R5.md sha256: 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        R5 Owner-adoption record blob: 1492e185cb475bd32d95079a39b49078c0e23ddc
+    OK        R5 Owner-adoption record sha256: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        R5 adoption record names AD-1-R5's sha256, AD-1-R4's sha256 and the F-R proof's sha256: True
+    OK        R5 adoption record: 'approved and adopted AD-1-R5 in full': True
+    OK        input copy inputs/R5-OWNER-ADOPTION.md sha256: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        accepted supporting F-R proof sha256: c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b
+
+[4] the historical partial controls file (mission 4)
+    OK        controls_defs.py sha256: ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f
+    OK        controls_defs.py listed in CAMPAIGN-01's seal: 1
+    OK        CAMPAIGN-01 seal verifies (sha256sum -c): 0
+    OK        input copy inputs/controls_defs.py.txt sha256: ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f
+
+[5] documentary patches cited by AD-1-R4 G.2 (C1, C25, C4)
+    OK        C1-mutation.patch sha256 (at 8693e3a7): 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        input copy inputs/C1-mutation.patch sha256: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        C25-narrow-mutation.patch sha256 (at 8693e3a7): 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        input copy inputs/C25-narrow-mutation.patch sha256: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        C4-test1-removed.patch sha256 (at a464a366): 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        input copy inputs/C4-test1-removed.patch sha256: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        blocked C1.patch is the documentary C1-mutation.patch: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        blocked C25.patch is the documentary C25-narrow-mutation.patch: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        blocked C4.patch is the documentary C4-test1-removed.patch: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+
+[6] pinned unchanged-baseline executable (hashed and sized only; never run)
+    OK        executable sha256: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+    OK        executable size: 8984464
+
+[7] remote and local refs (git ls-remote github; read-only)
+    info      remote refs 193
+    OK        remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-01: 59df21036f7c0183fa17d76b6e0886f8f5784685
+    OK        remote refs/heads/review/p3-c11-d2a1-fr-stutter-r5-01: c1e46fc404a74ed76b848b709a7a246b59f3347f
+    OK        remote refs/heads/review/p3-c11-d2a1-final-baseline-known-runs-01: f023cc3d031a2a89e5ecbd4086e15f2e50869acd
+    OK        remote refs/heads/review/p3-c11-d2a1-final-baseline-remaining-configs-01: 89326b859792a442c1853c3d35d30a48301c009e
+    OK        destination refs/heads/review/p3-c11-d2a1-control-definitions-r1-01 absent on the remote: False
+    OK        destination refs/heads/review/p3-c11-d2a1-control-definitions-r1-01 absent locally: None
+    info      remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+    info      remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+
+RESULT: ALL CHECKS OK

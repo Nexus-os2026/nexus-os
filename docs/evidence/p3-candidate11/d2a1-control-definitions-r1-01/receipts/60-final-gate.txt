@@ -1,0 +1,27 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01 — FINAL GATE (before staging; no build, no test)
+OK   G0 every packet file equals the freeze record: 68 files
+OK   G1 input authentication re-run: ALL CHECKS OK
+OK   G2 two fresh derivations are byte-identical: 38 files
+OK   G2 the derivation equals the catalog to be published
+OK   G3 checker A re-run: exit 0 and output byte-identical to receipts/20-checker-a.txt
+OK   G3 checker B re-run: exit 0 and output byte-identical to receipts/21-checker-b.txt
+OK   G3 syntax check re-run: exit 0 and output byte-identical to receipts/30-syntax-check.txt
+OK   G3 the two checkers' per-id verdict maps are identical and all PASS
+OK   G3 all 21 SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   G4 negative controls re-run: exit 0 and output byte-identical to receipts/40-negative-controls.txt
+OK   G4 29 seeds, each detected by both checkers; positive control agrees
+OK   G5 documents re-rendered byte-identical
+[baseline, repository and executable]
+OK   G6 Candidate C unchanged (commit, tree)
+OK   G6 the owner checkout is untouched: HEAD, branch and a clean status
+OK   G6 the owner checkout's index has nothing staged
+OK   G7 none of the 21 new mutant blobs exists in the object store (never written, staged or committed): []
+     info: carried-forward mutant blobs already in the object store from earlier missions: none
+OK   G8 pinned baseline executable untouched (sha256, size, inode, mtime as Stage 2 recorded)
+[wording and cited values]
+OK   G9 no forbidden status wording; 'architect accepted' only for A4: []
+OK   G10 INDEX.md cites the catalog's and the definitions record's sha256 and blob, the version, the status and C22's status: []
+OK   G10 INDEX.md cites all 35 patch sha256 values
+
+failing 0
+FINAL GATE: PASS

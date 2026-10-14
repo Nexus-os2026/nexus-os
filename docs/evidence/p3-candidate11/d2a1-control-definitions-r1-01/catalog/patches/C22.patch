@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..694b744de3b70a3a092c633b934262bd510d41aa 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -331,7 +331,7 @@ enum TicketState {
+ 
+ /// One attempt in flight or one handover not yet confirmed. It cannot be
+ /// cloned or copied.
+-#[derive(Debug)]
++#[derive(Debug, Clone)]
+ pub(super) struct Ticket {
+     shared: Arc<Shared>,
+     state: TicketState,

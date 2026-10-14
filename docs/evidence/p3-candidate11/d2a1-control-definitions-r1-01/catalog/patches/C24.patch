@@ -1,0 +1,25 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..3e1bfbe746851b6c63811343cde9dd3b83ad0fa9 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1772,18 +1772,8 @@ impl<'a> Publish<'a> {
+         let resolved = match io.row(&key.id) {
+             Read::Got(None) => Resolve::Absent,
+             Read::Got(Some(row)) if row.digest == key.digest => {
+-                let correction = Occupant::Correction {
+-                    about: key,
+-                    seq: row.seq,
+-                    exit,
+-                };
+-                if !self.core.place(Cell::C, correction) {
+-                    return Resolve::Refused(Entry::Latched);
+-                }
+-                let Some(n) = self.core.occupancy(Cell::C) else {
+-                    return Resolve::Refused(Entry::Latched);
+-                };
+-                Resolve::Corrected(self.core.token(Cell::C, n))
++                let _ = (row, exit);
++                Resolve::Absent
+             }
+             Read::Got(Some(existing)) => {
+                 let cause = Cause {

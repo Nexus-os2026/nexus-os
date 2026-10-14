@@ -1,0 +1,865 @@
+============================================================
+6. ARCHITECT DEFINITIONS FOR THE 21 MISSING CONTROLS
+============================================================
+
+All controls below are applied one at a time.
+
+Every unmentioned byte and behavior remains unchanged.
+
+------------------------------------------------------------
+6.1 C3a — acknowledgement test 2 removed
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::acknowledgement
+
+Healthy Test 2:
+
+set.frontier != now.frontier
+  -> AckRefusal::Stale
+
+Mutation:
+
+Remove the complete Test-2 clause.
+
+The refusal chain must begin directly with healthy Test 3:
+
+set.top <= set.frontier || set.count < 1
+  -> AckRefusal::Empty
+
+Do not remove or alter:
+
+- the recheck verb;
+- Test 3;
+- Test 4;
+- Test 5;
+- rollback;
+- insertion;
+- commit handling.
+
+The whole frontier-equality test is removed.
+
+Named properties:
+P13 or P15
+
+Configuration:
+F-7
+
+------------------------------------------------------------
+6.2 C3b — acknowledgement test 4 removed
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::acknowledgement
+
+Mutation:
+
+Remove the complete Test-4 clause:
+
+set.top > set.head || set.head > now.head
+  -> AckRefusal::Future
+
+Both comparisons are removed together.
+
+Connect Test 3 directly to Test 5.
+
+Do not remove only one side of the disjunction.
+
+Named properties:
+P13 or P12
+
+Configuration:
+F-6
+
+------------------------------------------------------------
+6.3 C3c — acknowledgement test 5 removed
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::acknowledgement
+
+Mutation:
+
+Remove the complete Test-5 clause:
+
+now.count != set.count || now.digest != set.digest
+  -> AckRefusal::Set
+
+After Test 4, the refusal chain falls directly to None.
+
+Both the count and digest comparisons are removed together.
+
+Named property:
+P12
+
+Configuration:
+F-6
+
+------------------------------------------------------------
+6.4 C5 — acknowledgement resolve raises frontier without reads
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::resolve_ack
+
+Mutation:
+
+Replace the function body with this semantic sequence:
+
+1. Issue NO acknowledgement read.
+2. Issue NO frontier read.
+3. If set.top is above core.frontier, assign core.frontier = set.top.
+4. Empty U.
+5. Set phase Healthy.
+6. Return Resolve::Acknowledged(set.top).
+
+Keep the existing function signature.
+
+The nonce and io parameters become unused; do not alter a trait or
+caller's signature to remove them.
+
+Do not preserve any branch of the healthy match.
+
+Named property:
+P13
+
+Configuration:
+F-5
+
+------------------------------------------------------------
+6.5 C6 — classification row b ignores refusal table
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Core::classify
+
+Mutation scope:
+row b inside Core::classify only.
+
+Do NOT modify Core::known.
+Do NOT modify lookup.
+Do NOT modify the refusal table itself.
+
+For classification row b, determine Known using only:
+
+1. X holding this original's explanation:
+   - Stage::Built -> Known::Cause
+   - Stage::Committed(seq) -> Known::Explained(seq)
+
+2. facts.explained:
+   - Some(seq) -> Known::Explained(seq)
+
+Ignore self.refusals.get(&member.key) entirely for this one
+classification decision.
+
+Preserve precedence:
+
+X explanation before facts.explained.
+
+If neither exists, continue to rows c–e.
+
+Named property:
+P6
+
+Configuration:
+F-PT, with A4 as already defined by the configuration.
+
+------------------------------------------------------------
+6.6 C7 — Explained clears every refusal-table entry
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::explain
+
+Mutation:
+
+Only in:
+
+Read::Got(Some(seq))
+
+replace removal of the one key with clearing the entire refusal table.
+
+Healthy:
+self.core.refusals.remove(key);
+
+Mutant semantic:
+self.core.refusals.clear();
+
+Return Explain::Explained(seq) unchanged.
+
+Do NOT alter:
+
+- Publish::settle;
+- X's committed path;
+- any other table-removal site.
+
+Named property:
+P6
+
+Configuration:
+F-PT, with A4.
+
+Additional required comparison:
+C7 without A4 remains the separate original-explorer F-3 comparison
+defined by AD-1-R4. This patch is the same in both executions.
+
+------------------------------------------------------------
+6.7 C8 — classify and insert each member immediately
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::facts
+
+Mutation:
+
+Replace the healthy two-phase Step-3/Step-5 structure with one
+member-order loop.
+
+Exact algorithm:
+
+1. Keep Steps 0, 1 and 2 unchanged.
+2. Start any_inserted = false.
+3. For each member in order:
+   a. issue facts;
+   b. classify using the same classify call and earlier-member input;
+   c. Present:
+      continue;
+   d. Insert:
+      - set self.issued = true;
+      - set any_inserted = true;
+      - issue insert immediately for this member;
+      - Inserted: continue to the next member;
+      - Constraint:
+        latch Constraint;
+        self.failed();
+        issue exactly one rollback;
+        use the rollback-derived persistence exactly as healthy Step 5;
+        return NotApplied with Reason::Constraint;
+      - Failed:
+        self.failed();
+        issue exactly one rollback;
+        use the rollback-derived persistence;
+        return NotApplied with Reason::Storage;
+   e. Refused:
+      - set self.conflict from the classification result;
+      - issue exactly one rollback;
+      - return NotApplied(NotWritten, the classification reason),
+        even when an earlier member has already been inserted.
+4. After the loop:
+   - if no insert was issued:
+     issue the healthy empty-transaction rollback and return Committed;
+   - otherwise run the unchanged healthy Step-6 commit handling.
+
+Remove the pending array and the later insertion loop.
+
+The fault is the interleaving of classification and insertion.
+Do not add a second fault.
+
+Named property:
+E5
+
+Configuration:
+F-B
+
+------------------------------------------------------------
+6.8 C11 — constraint insertion failure always Not written
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::facts
+
+Scope:
+fact-append Step 5 only.
+
+Do NOT modify:
+
+- gating insert constraint;
+- acknowledgement insert constraint;
+- cell insert constraint;
+- another operation's rollback handling.
+
+Mutation of the fact Step-5 Insert::Constraint arm:
+
+1. Latch Constraint.
+2. Set phase through self.failed().
+3. Issue exactly one rollback.
+4. Ignore the rollback's persistence result.
+5. Return NotApplied:
+   persistence = NotWritten
+   reason = Constraint.
+
+Insert::Failed keeps the healthy rollback-derived persistence.
+
+Named property:
+E4
+
+Configuration:
+F-B2
+
+------------------------------------------------------------
+6.9 C15 — occupancy number ignored
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Core::names
+
+Healthy conditions:
+
+- same ledger allocation;
+- token.cell equals requested cell;
+- current occupancy equals token.occupancy.
+
+Mutation:
+
+Remove only the occupancy-equality condition.
+
+Mutant Core::names returns true when:
+
+- the ledger allocation is the same; and
+- token.cell equals the requested cell.
+
+Do NOT replace the occupancy comparison with is_some().
+A token for an empty cell is also accepted if ledger and cell match.
+
+Named property:
+E8
+
+Configuration:
+F-R
+
+C15's run/restoration policy remains exactly AD-1-R5:
+
+- mutant failing receipt: original full_fr, 30M;
+- restored side may cite the adopted F-R proof discharge only after
+  verified restoration.
+
+------------------------------------------------------------
+6.10 C16 — Counted drop lowers unapplied
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Drop for Ticket
+
+Scope:
+TicketState::Counted only.
+
+Healthy:
+
+the handover fault is set;
+live and unapplied remain unchanged.
+
+Mutation:
+
+- preserve setting HANDOVER_FAULT;
+- lower unapplied exactly once with count_step;
+- leave live unchanged.
+
+Required resulting semantic expression:
+
+count_step(word | HANDOVER_FAULT, UNAPPLIED_SHIFT, false)
+
+Do not call the full Counted confirm path.
+Do not lower live.
+Do not remove the handover fault.
+
+Named property:
+E3
+
+Configuration:
+F-D
+
+------------------------------------------------------------
+6.11 C17 — unwind guard reports Not written after insert
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Drop for Publish
+
+Scope:
+the !self.done ticket-counting persistence calculation only.
+
+Healthy:
+
+issued with no conflict -> Uncertain
+otherwise -> NotWritten
+
+Mutation:
+
+Always use Persistence::NotWritten for the Counted ticket created
+during unwind.
+
+Preserve unchanged:
+
+- phase = NeedBarrier;
+- self.conflict and conflict_member;
+- self.issued;
+- self.keep = self.issued;
+- U retention and exit marking;
+- the publication;
+- ticket-state assignment.
+
+Named property:
+E4
+
+Configuration:
+F-B2
+
+------------------------------------------------------------
+6.12 C18a — classification-refused gating attempt keeps U
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::gating
+
+Scope only:
+
+Verdict::Refused(reason, _) returned by Core::classify after the
+gating record has been placed in U.
+
+Mutation:
+
+Before the existing rollback and refused return, set:
+
+self.keep = true;
+
+Preserve:
+
+- the rollback;
+- persistence = NotWritten;
+- the refusal reason;
+- all open/read/insert/commit failure paths;
+- the guard's normal exit marking.
+
+Do not set keep on every storage failure.
+Do not change entry refusals before U is placed.
+
+Named property:
+E7
+
+Configuration:
+F-G
+
+------------------------------------------------------------
+6.13 C18b — gating new cause also enters refusal table
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Core::classify
+
+Scope:
+the gating == true new-cause branch after row d creates cause.
+
+Healthy gating behavior:
+
+- build X explanation when X is empty;
+- create no refusal-table entry;
+- return the conflict.
+
+Mutation:
+
+- preserve the X explanation behavior;
+- additionally insert:
+  member.key -> cause
+  into self.refusals;
+- then return the same conflict.
+
+Do not fall through to the fact-classification branch.
+Do not apply the fact table-full check.
+Do not change already-known conflict handling.
+
+Named property:
+E7
+
+Configuration:
+F-G
+
+------------------------------------------------------------
+6.14 C20 — present X occupant is not marked committed
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::cell
+
+Scope:
+
+io.present(&occupant) -> Read::Got(Some(seq))
+
+Mutation:
+
+- preserve rollback;
+- if cell == C:
+  keep the healthy self.settle(Cell::C, seq);
+- if cell == X:
+  do NOT call settle;
+  do NOT mark Stage::Committed;
+  do NOT remove the original's refusal-table entry;
+- return CellAppend::Committed(seq) for both cells.
+
+The inserted-and-Durable path remains healthy.
+
+Named property:
+L1
+
+Configuration:
+F-2
+
+------------------------------------------------------------
+6.15 C23 — X publication bit omitted
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Core::flags
+
+Mutation:
+
+Remove only:
+
+bit(self.x.is_some(), X_OCCUPIED)
+
+from the returned flags expression.
+
+Do not remove the C or U bits.
+Do not change expected_flags in the model.
+Do not change the word layout constants.
+
+Named property:
+E1
+
+Configuration:
+F-2
+
+------------------------------------------------------------
+6.16 C26 — successful barrier clears latch
+------------------------------------------------------------
+
+File:
+protocol.rs
+
+Item:
+Publish::barrier
+
+Mutation:
+
+After io.run() returns true and before assigning the resulting phase:
+
+self.core.latch = None;
+
+Then execute the existing healthy phase assignment and return Passed.
+
+Do not clear the latch on:
+
+- OtherLedger;
+- NotNeeded;
+- failed barrier.
+
+Named property:
+E9
+
+Configuration:
+F-4
+
+------------------------------------------------------------
+6.17 A1 — first writer confirms before recording
+------------------------------------------------------------
+
+File:
+model_tests.rs
+
+Item:
+step_fw
+
+Scope:
+first-writer actor only.
+
+Do not modify settlement.
+
+Use the existing FwPos::Got(Held) state and ticket presence to create
+two separate actor steps without adding an enum variant.
+
+Exact behavior:
+
+A. FwPos::Got(held), ticket is Some:
+
+- retain the healthy Oracle option structure, including DROP where
+  applicable;
+- normal option 0:
+  - take and confirm the ticket;
+  - leave position as FwPos::Got(held);
+  - do NOT record the class in this step;
+- unwind/drop choices retain their healthy meanings.
+
+B. FwPos::Got(held), ticket is None:
+
+- this is the post-confirm recording step;
+- record held exactly as healthy FwPos::Got option 0 records it:
+  - Committed -> Paid;
+  - Counted -> record_counted;
+  - Rejected -> Uncertain and clear the unrecorded bit as healthy;
+- set position Done;
+- consume no Oracle choice;
+- perform no ticket operation.
+
+The healthy FwPos::Recorded branch may remain in the enum/source but
+must be unreachable from the mutant's normal option-0 path.
+
+Do not reorder settlement's record/confirm path.
+
+Named property:
+P1
+
+Configuration:
+F-1
+
+------------------------------------------------------------
+6.18 A2 — split-view admission
+------------------------------------------------------------
+
+File:
+model_tests.rs
+
+Item:
+step_adm
+
+Use the existing World.adm_kept field and its existing key encoding.
+
+No new world field is allowed.
+
+Step 1, when adm_kept is None:
+
+1. If adm == 0, disabled as healthy.
+2. Increment obs.views.
+3. Take one health view.
+4. Store exactly:
+   view.word & FLAGS
+   into adm_kept.
+5. Do not decrement adm.
+6. Emit no admission branch.
+7. Run no admission property.
+8. Return enabled.
+
+Other actors may run before the next Adm step because adm_kept is in
+the state key.
+
+Step 2, when adm_kept is Some(kept):
+
+1. Increment obs.views.
+2. Take a second health view.
+3. From the second view keep only the unapplied field.
+4. Construct the decision word from:
+   - low 16 bits = kept;
+   - unapplied = second view's unapplied;
+   - all other word fields zero.
+5. Decide admission using:
+   - the constructed split HealthView.admits();
+   - current debt == 0;
+   - current H <= current A.
+6. Clear adm_kept.
+7. Decrement adm exactly once.
+8. Emit the healthy admission branch/note.
+9. On admitted, run healthy admission_properties.
+
+The second step must not use the second view's low 16 bits.
+The first step must not retain live or unapplied.
+The two loads remain separately counted by E2.
+
+Named property:
+P1
+
+Configuration:
+F-1
+
+------------------------------------------------------------
+6.19 A3 — EmptyX before H
+------------------------------------------------------------
+
+File:
+model_tests.rs
+
+Items:
+step_wk and existing WkPos::RaiseH
+
+Do not add a new enum variant.
+
+Mutation:
+
+1. In WkPos::Seen:
+   - retain the A update from the agenda frontier;
+   - for Action::EmptyX, do NOT raise H;
+   - proceed to WkPos::Act(action) as for another real action.
+
+2. In WkPos::Act:
+   - run worker_op first;
+   - retain the healthy replay-history save where applicable;
+   - if action is EmptyX(_, seq), set position WkPos::RaiseH(seq);
+   - otherwise set position Idle.
+
+3. In WkPos::RaiseH:
+   retain the existing behavior:
+   - H = max(H, seq);
+   - position Idle.
+
+The intermediate state after EmptyX and before RaiseH is the named
+fault.
+
+Named property:
+P12
+
+Configuration:
+F-5
+
+------------------------------------------------------------
+6.20 A5 — Conflict claimed without Healthy
+------------------------------------------------------------
+
+File:
+model_tests.rs
+
+Item:
+claimable
+
+Scope:
+Class::Conflict arm only.
+
+Healthy condition:
+
+view.phase() == Phase::Healthy && !view.x_occupied()
+
+Mutation:
+
+Remove only the Healthy-phase conjunct.
+
+Mutant condition:
+
+!view.x_occupied()
+
+Preserve:
+
+- handover-fault and latch rejection before the match;
+- Refused behavior;
+- Uncertain behavior;
+- X-empty requirement;
+- claim type Explain.
+
+Named property:
+L1
+
+Configuration:
+F-2
+
+------------------------------------------------------------
+6.21 A6 — recovery-required event flag
+------------------------------------------------------------
+
+File:
+model_tests.rs
+
+This is one actor/model mutation.
+
+Add to Table:
+
+recovery_required: bool
+
+Preserve numeric H and A unchanged for property evaluation and
+reporting.
+
+Initial value:
+
+false
+
+State identity:
+
+- encode the boolean after A;
+- decode it at the matching location;
+- include it in every Table construction required for compilation;
+- do not omit it from the state key.
+
+Flag update rules:
+
+A. Whenever H actually increases:
+
+- assign the new H;
+- set recovery_required = true.
+
+This applies to:
+- the healthy EmptyX H update in WkPos::Seen;
+- WkPos::RaiseH.
+
+B. Whenever A actually increases:
+
+- assign the new A;
+- set recovery_required = false.
+
+This applies to:
+- the worker's agenda-frontier update in WkPos::Seen;
+- acknowledgement AckPos::Applying.
+
+Do not clear the flag when A is assigned the same or a smaller value.
+Do not compare A with H when setting or clearing the flag.
+
+Admission mutation:
+
+Replace:
+
+w.table.h <= w.table.a
+
+with:
+
+!w.table.recovery_required
+
+All other admission conditions remain healthy.
+
+Properties P12/P15 must continue reading the real ledger and numeric
+frontiers, not the flag.
+
+No production source is changed.
+
+Named properties:
+P12 or P15
+
+Configuration:
+F-5

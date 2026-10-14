@@ -1,0 +1,64 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01 — POSITIVE CONTROL, CHECKER AGREEMENT, NEGATIVE CONTROLS
+OK   positive control: checker A rc 0, checker B rc 0; per-id verdicts identical (38 ids, all PASS: True)
+
+OK   seed: omission of one of the 35 ids (C17 removed)
+       expected: catalog in ['ids']; A rc 1 detects ['ids'] (failing checks 5); B rc 1 detects ['ids'] (failing checks 4); both verdicts for catalog FAIL: True
+OK   seed: duplicate id (C18a twice)
+       expected: catalog in ['ids']; A rc 1 detects ['ids'] (failing checks 5); B rc 1 detects ['ids'] (failing checks 3); both verdicts for catalog FAIL: True
+OK   seed: A4 counted as a mutation
+       expected: A4 in ['a4']; A rc 1 detects ['a4'] (failing checks 1); B rc 1 detects ['a4'] (failing checks 1); both verdicts for A4 FAIL: True
+OK   seed: changed property (C11 names E5)
+       expected: C11 in ['property']; A rc 1 detects ['property'] (failing checks 2); B rc 1 detects ['property'] (failing checks 2); both verdicts for C11 FAIL: True
+OK   seed: changed configuration (C17 on F-B)
+       expected: C17 in ['property']; A rc 1 detects ['property'] (failing checks 4); B rc 1 detects ['property'] (failing checks 3); both verdicts for C17 FAIL: True
+OK   seed: anchor cardinality mismatch (C23's anchor shortened to a text occurring five times)
+       expected: C23 in ['anchor']; A rc 1 detects ['anchor'] (failing checks 3); B rc 1 detects ['anchor'] (failing checks 3); both verdicts for C23 FAIL: True
+OK   seed: patch touching a second source file (C23 also edits model_tests.rs)
+       expected: C23 in ['single-file']; A rc 1 detects ['single-file'] (failing checks 3); B rc 1 detects ['single-file'] (failing checks 2); both verdicts for C23 FAIL: True
+OK   seed: failed reverse restoration (C26's recorded mutant is not the patch's post-image)
+       expected: C26 in ['restoration']; A rc 1 detects ['restoration'] (failing checks 2); B rc 1 detects ['restoration'] (failing checks 2); both verdicts for C26 FAIL: True
+OK   seed: C3b removing only one comparison
+       expected: C3b in ['semantic']; A rc 1 detects ['semantic'] (failing checks 3); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C3b FAIL: True
+OK   seed: C6 changing Core::known globally
+       expected: C6 in ['confine-item', 'semantic']; A rc 1 detects ['confine-item', 'semantic'] (failing checks 6); B rc 1 detects ['confine-item', 'semantic'] (failing checks 4); both verdicts for C6 FAIL: True
+OK   seed: C7 changing Publish::settle
+       expected: C7 in ['confine-item', 'semantic']; A rc 1 detects ['confine-item', 'semantic'] (failing checks 2); B rc 1 detects ['confine-item', 'semantic'] (failing checks 3); both verdicts for C7 FAIL: True
+OK   seed: C8 retaining the separate insertion loop
+       expected: C8 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C8 FAIL: True
+OK   seed: C11 changing a non-fact insert path (gating's constraint arm too)
+       expected: C11 in ['confine-item', 'semantic']; A rc 1 detects ['confine-item', 'semantic'] (failing checks 2); B rc 1 detects ['confine-item', 'semantic'] (failing checks 3); both verdicts for C11 FAIL: True
+OK   seed: C15 replacing occupancy equality with is_some
+       expected: C15 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C15 FAIL: True
+OK   seed: C16 lowering live
+       expected: C16 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C16 FAIL: True
+OK   seed: C16 removing HANDOVER_FAULT
+       expected: C16 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C16 FAIL: True
+OK   seed: C17 changing self.keep
+       expected: C17 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 1); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C17 FAIL: True
+OK   seed: C18a changing all storage-failure paths
+       expected: C18a in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C18a FAIL: True
+OK   seed: C18b removing X explanation
+       expected: C18b in ['semantic']; A rc 1 detects ['semantic'] (failing checks 1); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C18b FAIL: True
+OK   seed: C20 changing the inserted-and-Durable X path
+       expected: C20 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 1); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for C20 FAIL: True
+OK   seed: A1 changing settlement
+       expected: A1 in ['confine-item', 'semantic']; A rc 1 detects ['confine-item', 'semantic'] (failing checks 2); B rc 1 detects ['confine-item', 'semantic'] (failing checks 3); both verdicts for A1 FAIL: True
+OK   seed: A2 using the second view's low bits
+       expected: A2 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 1); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for A2 FAIL: True
+OK   seed: A2 decrementing adm in step 1
+       expected: A2 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for A2 FAIL: True
+OK   seed: A3 raising H before worker_op
+       expected: A3 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 2); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for A3 FAIL: True
+OK   seed: A5 removing the X-empty check
+       expected: A5 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 1); B rc 1 detects ['semantic'] (failing checks 1); both verdicts for A5 FAIL: True
+OK   seed: A6 omitting its flag from encoding (and decoding)
+       expected: A6 in ['semantic']; A rc 1 detects ['semantic'] (failing checks 4); B rc 1 detects ['semantic'] (failing checks 2); both verdicts for A6 FAIL: True
+OK   seed: A6 replacing P12/P15's numeric checks
+       expected: A6 in ['confine-item', 'semantic']; A rc 1 detects ['confine-item', 'semantic'] (failing checks 3); B rc 1 detects ['confine-item', 'semantic'] (failing checks 3); both verdicts for A6 FAIL: True
+FAIL seed: C22 marked restored from the Stage-1 no -j 2 build
+       expected: C22 in ['c22']; A rc 1 detects ['c22'] (failing checks 1); B rc 1 detects ['c22'] (failing checks 1); both verdicts for C22 FAIL: False
+OK   seed: catalog as a whole called frozen
+       expected: catalog in ['wording']; A rc 1 detects ['wording'] (failing checks 1); B rc 1 detects ['wording'] (failing checks 1); both verdicts for catalog FAIL: True
+
+seeds 29; undetected or disagreeing 1
+NEGATIVE CONTROLS: FAIL

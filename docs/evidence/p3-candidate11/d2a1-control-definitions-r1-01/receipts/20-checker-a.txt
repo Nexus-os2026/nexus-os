@@ -1,0 +1,812 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01 — STATIC CHECKER A (bytes/text; no build, no test)
+OK   [inputs] inputs: CONTRACT-02-R1.md authenticated
+OK   [inputs] inputs: AD1-R4.md authenticated
+OK   [inputs] inputs: AD1-R5.md authenticated
+OK   [inputs] inputs: R5-OWNER-ADOPTION.md authenticated
+OK   [inputs] inputs: blocked/catalog.json authenticated
+OK   [inputs] inputs: C:crates/nexus-governed-control/src/ledger/protocol.rs is blob a2df2841
+OK   [inputs] inputs: C:crates/nexus-governed-control/src/ledger/protocol/model_tests.rs is blob 28085ce2
+OK   [inputs] inputs: C:crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs is blob 55dc6640
+[catalog identity and counts]
+OK   [ids] catalog: contract 7.5: 36 ids, each once
+OK   [ids] catalog: catalog ids equal the contract's, in order — []
+OK   [ids] catalog: every id exactly once
+OK   [ids] catalog: exactly 35 kill-required controls — 35
+OK   [a4] A4: A4 once, separate, not a mutation, SATISFIED — ARCHITECT ACCEPTED, no definition or patch
+OK   [counts] catalog: version and counts
+OK   [counts] catalog: 35 patch files and no other
+OK   [wording] catalog: no FROZEN / READY FOR EXECUTION; 'ARCHITECT ACCEPTED' only as A4's status
+[status, property and configuration]
+OK   [status] C1: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C1: named property ['P1'] and configuration F-1 equal the contract row
+OK   [status] C1: definition source CARRIED_FORWARD
+OK   [status] C2: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C2: named property ['P4'] and configuration F-1 equal the contract row
+OK   [status] C2: definition source CARRIED_FORWARD
+OK   [status] C3a: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C3a: named property ['P13', 'P15'] and configuration F-7 equal the contract row
+OK   [property] C3a: property, configuration and file equal mission section 6
+OK   [status] C3a: definition source ARCHITECT_DEFINED
+OK   [status] C3b: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C3b: named property ['P13', 'P12'] and configuration F-6 equal the contract row
+OK   [property] C3b: property, configuration and file equal mission section 6
+OK   [status] C3b: definition source ARCHITECT_DEFINED
+OK   [status] C3c: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C3c: named property ['P12'] and configuration F-6 equal the contract row
+OK   [property] C3c: property, configuration and file equal mission section 6
+OK   [status] C3c: definition source ARCHITECT_DEFINED
+OK   [status] C4: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C4: named property ['P4', 'P8'] and configuration F-8 equal the contract row
+OK   [status] C4: definition source CARRIED_FORWARD
+OK   [status] C5: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C5: named property ['P13'] and configuration F-5 equal the contract row
+OK   [property] C5: property, configuration and file equal mission section 6
+OK   [status] C5: definition source ARCHITECT_DEFINED
+OK   [status] C6: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C6: named property ['P6'] and configuration F-PT equal the contract row
+OK   [property] C6: property, configuration and file equal mission section 6
+OK   [status] C6: definition source ARCHITECT_DEFINED
+OK   [status] C7: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C7: named property ['P6'] and configuration F-PT equal the contract row
+OK   [property] C7: property, configuration and file equal mission section 6
+OK   [status] C7: definition source ARCHITECT_DEFINED
+OK   [status] C8: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C8: named property ['E5'] and configuration F-B equal the contract row
+OK   [property] C8: property, configuration and file equal mission section 6
+OK   [status] C8: definition source ARCHITECT_DEFINED
+OK   [status] C9: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C9: named property ['E4'] and configuration F-B2 equal the contract row
+OK   [status] C9: definition source CARRIED_FORWARD
+OK   [status] C10: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C10: named property ['E4'] and configuration F-1 equal the contract row
+OK   [status] C10: definition source CARRIED_FORWARD
+OK   [status] C11: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C11: named property ['E4'] and configuration F-B2 equal the contract row
+OK   [property] C11: property, configuration and file equal mission section 6
+OK   [status] C11: definition source ARCHITECT_DEFINED
+OK   [status] C12: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C12: named property ['E2'] and configuration X-1 equal the contract row
+OK   [status] C12: definition source CARRIED_FORWARD
+OK   [status] C15: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C15: named property ['E8'] and configuration F-R equal the contract row
+OK   [property] C15: property, configuration and file equal mission section 6
+OK   [status] C15: definition source ARCHITECT_DEFINED
+OK   [status] C16: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C16: named property ['E3'] and configuration F-D equal the contract row
+OK   [property] C16: property, configuration and file equal mission section 6
+OK   [status] C16: definition source ARCHITECT_DEFINED
+OK   [status] C17: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C17: named property ['E4'] and configuration F-B2 equal the contract row
+OK   [property] C17: property, configuration and file equal mission section 6
+OK   [status] C17: definition source ARCHITECT_DEFINED
+OK   [status] C18a: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C18a: named property ['E7'] and configuration F-G equal the contract row
+OK   [property] C18a: property, configuration and file equal mission section 6
+OK   [status] C18a: definition source ARCHITECT_DEFINED
+OK   [status] C18b: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C18b: named property ['E7'] and configuration F-G equal the contract row
+OK   [property] C18b: property, configuration and file equal mission section 6
+OK   [status] C18b: definition source ARCHITECT_DEFINED
+OK   [status] C20: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C20: named property ['L1'] and configuration F-2 equal the contract row
+OK   [property] C20: property, configuration and file equal mission section 6
+OK   [status] C20: definition source ARCHITECT_DEFINED
+OK   [status] C23: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C23: named property ['E1'] and configuration F-2 equal the contract row
+OK   [property] C23: property, configuration and file equal mission section 6
+OK   [status] C23: definition source ARCHITECT_DEFINED
+OK   [status] C24: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C24: named property ['P8'] and configuration F-1 equal the contract row
+OK   [status] C24: definition source CARRIED_FORWARD
+OK   [status] C25: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C25: named property ['P7'] and configuration F-1 equal the contract row
+OK   [status] C25: definition source CARRIED_FORWARD
+OK   [status] C26: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] C26: named property ['E9'] and configuration F-4 equal the contract row
+OK   [property] C26: property, configuration and file equal mission section 6
+OK   [status] C26: definition source ARCHITECT_DEFINED
+OK   [status] C14: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C14: definition source CARRIED_FORWARD
+OK   [status] C19: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C19: definition source CARRIED_FORWARD
+OK   [status] C21: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C21: definition source CARRIED_FORWARD
+OK   [status] C22: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C22: definition source CARRIED_FORWARD
+OK   [status] C27: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C27: definition source CARRIED_FORWARD
+OK   [status] C28: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [status] C28: definition source CARRIED_FORWARD
+OK   [status] A1: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] A1: named property ['P1'] and configuration F-1 equal the contract row
+OK   [property] A1: property, configuration and file equal mission section 6
+OK   [status] A1: definition source ARCHITECT_DEFINED
+OK   [status] A2: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] A2: named property ['P1'] and configuration F-1 equal the contract row
+OK   [property] A2: property, configuration and file equal mission section 6
+OK   [status] A2: definition source ARCHITECT_DEFINED
+OK   [status] A3: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] A3: named property ['P12'] and configuration F-5 equal the contract row
+OK   [property] A3: property, configuration and file equal mission section 6
+OK   [status] A3: definition source ARCHITECT_DEFINED
+OK   [status] A5: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] A5: named property ['L1'] and configuration F-2 equal the contract row
+OK   [property] A5: property, configuration and file equal mission section 6
+OK   [status] A5: definition source ARCHITECT_DEFINED
+OK   [status] A6: CANDIDATE_READY / review pending / NOT_ATTEMPTED
+OK   [property] A6: named property ['P12', 'P15'] and configuration F-5 equal the contract row
+OK   [property] A6: property, configuration and file equal mission section 6
+OK   [status] A6: definition source ARCHITECT_DEFINED
+[anchors, patches, application, restoration]
+OK   [source] C1: baseline blob recorded is C's
+OK   [anchor] C1: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C1: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C1: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C1: patch names exactly one file, the named source file
+OK   [apply] C1: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C1: both applications give the same bytes, equal to the edits' result
+OK   [confine] C1: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C1: mutant git blob and sha256 as recorded
+OK   [identity] C1: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C1: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C2: baseline blob recorded is C's
+OK   [anchor] C2: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C2: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C2: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C2: patch names exactly one file, the named source file
+OK   [apply] C2: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C2: both applications give the same bytes, equal to the edits' result
+OK   [confine] C2: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C2: mutant git blob and sha256 as recorded
+OK   [identity] C2: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C2: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C3a: baseline blob recorded is C's
+OK   [anchor] C3a: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C3a: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C3a: patch names exactly one file, the named source file
+OK   [apply] C3a: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C3a: both applications give the same bytes, equal to the edits' result
+OK   [confine] C3a: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C3a: mutant git blob and sha256 as recorded
+OK   [identity] C3a: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C3a: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C3b: baseline blob recorded is C's
+OK   [anchor] C3b: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C3b: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C3b: patch names exactly one file, the named source file
+OK   [apply] C3b: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C3b: both applications give the same bytes, equal to the edits' result
+OK   [confine] C3b: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C3b: mutant git blob and sha256 as recorded
+OK   [identity] C3b: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C3b: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C3c: baseline blob recorded is C's
+OK   [anchor] C3c: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C3c: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C3c: patch names exactly one file, the named source file
+OK   [apply] C3c: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C3c: both applications give the same bytes, equal to the edits' result
+OK   [confine] C3c: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C3c: mutant git blob and sha256 as recorded
+OK   [identity] C3c: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C3c: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C4: baseline blob recorded is C's
+OK   [anchor] C4: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C4: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C4: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C4: patch names exactly one file, the named source file
+OK   [apply] C4: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C4: both applications give the same bytes, equal to the edits' result
+OK   [confine] C4: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C4: mutant git blob and sha256 as recorded
+OK   [identity] C4: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C4: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C5: baseline blob recorded is C's
+OK   [anchor] C5: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C5: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C5: patch names exactly one file, the named source file
+OK   [apply] C5: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C5: both applications give the same bytes, equal to the edits' result
+OK   [confine] C5: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C5: mutant git blob and sha256 as recorded
+OK   [identity] C5: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C5: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C6: baseline blob recorded is C's
+OK   [anchor] C6: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C6: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C6: patch names exactly one file, the named source file
+OK   [apply] C6: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C6: both applications give the same bytes, equal to the edits' result
+OK   [confine] C6: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C6: mutant git blob and sha256 as recorded
+OK   [identity] C6: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C6: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C7: baseline blob recorded is C's
+OK   [anchor] C7: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C7: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C7: patch names exactly one file, the named source file
+OK   [apply] C7: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C7: both applications give the same bytes, equal to the edits' result
+OK   [confine] C7: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C7: mutant git blob and sha256 as recorded
+OK   [identity] C7: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C7: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C8: baseline blob recorded is C's
+OK   [anchor] C8: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C8: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C8: patch names exactly one file, the named source file
+OK   [apply] C8: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C8: both applications give the same bytes, equal to the edits' result
+OK   [confine] C8: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C8: mutant git blob and sha256 as recorded
+OK   [identity] C8: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C8: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C9: baseline blob recorded is C's
+OK   [anchor] C9: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C9: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C9: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C9: patch names exactly one file, the named source file
+OK   [apply] C9: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C9: both applications give the same bytes, equal to the edits' result
+OK   [confine] C9: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C9: mutant git blob and sha256 as recorded
+OK   [identity] C9: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C9: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C10: baseline blob recorded is C's
+OK   [anchor] C10: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C10: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C10: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C10: patch names exactly one file, the named source file
+OK   [apply] C10: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C10: both applications give the same bytes, equal to the edits' result
+OK   [confine] C10: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C10: mutant git blob and sha256 as recorded
+OK   [identity] C10: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C10: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C11: baseline blob recorded is C's
+OK   [anchor] C11: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C11: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C11: patch names exactly one file, the named source file
+OK   [apply] C11: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C11: both applications give the same bytes, equal to the edits' result
+OK   [confine] C11: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C11: mutant git blob and sha256 as recorded
+OK   [identity] C11: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C11: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C12: baseline blob recorded is C's
+OK   [anchor] C12: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C12: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C12: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C12: patch names exactly one file, the named source file
+OK   [apply] C12: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C12: both applications give the same bytes, equal to the edits' result
+OK   [confine] C12: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C12: mutant git blob and sha256 as recorded
+OK   [identity] C12: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C12: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C15: baseline blob recorded is C's
+OK   [anchor] C15: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C15: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C15: patch names exactly one file, the named source file
+OK   [apply] C15: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C15: both applications give the same bytes, equal to the edits' result
+OK   [confine] C15: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C15: mutant git blob and sha256 as recorded
+OK   [identity] C15: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C15: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C16: baseline blob recorded is C's
+OK   [anchor] C16: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C16: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C16: patch names exactly one file, the named source file
+OK   [apply] C16: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C16: both applications give the same bytes, equal to the edits' result
+OK   [confine] C16: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C16: mutant git blob and sha256 as recorded
+OK   [identity] C16: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C16: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C17: baseline blob recorded is C's
+OK   [anchor] C17: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C17: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C17: patch names exactly one file, the named source file
+OK   [apply] C17: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C17: both applications give the same bytes, equal to the edits' result
+OK   [confine] C17: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C17: mutant git blob and sha256 as recorded
+OK   [identity] C17: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C17: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C18a: baseline blob recorded is C's
+OK   [anchor] C18a: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C18a: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C18a: patch names exactly one file, the named source file
+OK   [apply] C18a: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C18a: both applications give the same bytes, equal to the edits' result
+OK   [confine] C18a: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C18a: mutant git blob and sha256 as recorded
+OK   [identity] C18a: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C18a: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C18b: baseline blob recorded is C's
+OK   [anchor] C18b: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C18b: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C18b: patch names exactly one file, the named source file
+OK   [apply] C18b: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C18b: both applications give the same bytes, equal to the edits' result
+OK   [confine] C18b: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C18b: mutant git blob and sha256 as recorded
+OK   [identity] C18b: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C18b: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C20: baseline blob recorded is C's
+OK   [anchor] C20: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C20: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C20: patch names exactly one file, the named source file
+OK   [apply] C20: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C20: both applications give the same bytes, equal to the edits' result
+OK   [confine] C20: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C20: mutant git blob and sha256 as recorded
+OK   [identity] C20: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C20: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C23: baseline blob recorded is C's
+OK   [anchor] C23: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C23: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C23: patch names exactly one file, the named source file
+OK   [apply] C23: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C23: both applications give the same bytes, equal to the edits' result
+OK   [confine] C23: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C23: mutant git blob and sha256 as recorded
+OK   [identity] C23: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C23: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C24: baseline blob recorded is C's
+OK   [anchor] C24: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C24: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C24: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C24: patch names exactly one file, the named source file
+OK   [apply] C24: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C24: both applications give the same bytes, equal to the edits' result
+OK   [confine] C24: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C24: mutant git blob and sha256 as recorded
+OK   [identity] C24: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C24: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C25: baseline blob recorded is C's
+OK   [anchor] C25: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C25: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C25: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C25: patch names exactly one file, the named source file
+OK   [apply] C25: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C25: both applications give the same bytes, equal to the edits' result
+OK   [confine] C25: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C25: mutant git blob and sha256 as recorded
+OK   [identity] C25: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C25: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C26: baseline blob recorded is C's
+OK   [anchor] C26: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C26: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] C26: patch names exactly one file, the named source file
+OK   [apply] C26: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C26: both applications give the same bytes, equal to the edits' result
+OK   [confine] C26: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C26: mutant git blob and sha256 as recorded
+OK   [identity] C26: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C26: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C14: baseline blob recorded is C's
+OK   [anchor] C14: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C14: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C14: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C14: patch names exactly one file, the named source file
+OK   [apply] C14: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C14: both applications give the same bytes, equal to the edits' result
+OK   [confine] C14: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C14: mutant git blob and sha256 as recorded
+OK   [identity] C14: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C14: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C19: baseline blob recorded is C's
+OK   [anchor] C19: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C19: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C19: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C19: patch names exactly one file, the named source file
+OK   [apply] C19: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C19: both applications give the same bytes, equal to the edits' result
+OK   [confine] C19: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C19: mutant git blob and sha256 as recorded
+OK   [identity] C19: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C19: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C21: baseline blob recorded is C's
+OK   [anchor] C21: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C21: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C21: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C21: patch names exactly one file, the named source file
+OK   [apply] C21: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C21: both applications give the same bytes, equal to the edits' result
+OK   [confine] C21: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C21: mutant git blob and sha256 as recorded
+OK   [identity] C21: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C21: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C22: baseline blob recorded is C's
+OK   [anchor] C22: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C22: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C22: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C22: patch names exactly one file, the named source file
+OK   [apply] C22: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C22: both applications give the same bytes, equal to the edits' result
+OK   [confine] C22: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C22: mutant git blob and sha256 as recorded
+OK   [identity] C22: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C22: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C27: baseline blob recorded is C's
+OK   [anchor] C27: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C27: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C27: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C27: patch names exactly one file, the named source file
+OK   [apply] C27: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C27: both applications give the same bytes, equal to the edits' result
+OK   [confine] C27: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C27: mutant git blob and sha256 as recorded
+OK   [identity] C27: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C27: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] C28: baseline blob recorded is C's
+OK   [anchor] C28: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] C28: patch file = catalog patch text; sha256 as recorded
+OK   [carried] C28: patch byte for byte the blocked catalog's (mission 5)
+OK   [single-file] C28: patch names exactly one file, the named source file
+OK   [apply] C28: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] C28: both applications give the same bytes, equal to the edits' result
+OK   [confine] C28: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] C28: mutant git blob and sha256 as recorded
+OK   [identity] C28: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] C28: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] A1: baseline blob recorded is C's
+OK   [anchor] A1: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] A1: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] A1: patch names exactly one file, the named source file
+OK   [apply] A1: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] A1: both applications give the same bytes, equal to the edits' result
+OK   [confine] A1: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] A1: mutant git blob and sha256 as recorded
+OK   [identity] A1: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] A1: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] A2: baseline blob recorded is C's
+OK   [anchor] A2: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] A2: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] A2: patch names exactly one file, the named source file
+OK   [apply] A2: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] A2: both applications give the same bytes, equal to the edits' result
+OK   [confine] A2: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] A2: mutant git blob and sha256 as recorded
+OK   [identity] A2: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] A2: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] A3: baseline blob recorded is C's
+OK   [anchor] A3: 2 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] A3: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] A3: patch names exactly one file, the named source file
+OK   [apply] A3: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] A3: both applications give the same bytes, equal to the edits' result
+OK   [confine] A3: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] A3: mutant git blob and sha256 as recorded
+OK   [identity] A3: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] A3: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] A5: baseline blob recorded is C's
+OK   [anchor] A5: 1 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] A5: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] A5: patch names exactly one file, the named source file
+OK   [apply] A5: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] A5: both applications give the same bytes, equal to the edits' result
+OK   [confine] A5: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] A5: mutant git blob and sha256 as recorded
+OK   [identity] A5: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] A5: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [source] A6: baseline blob recorded is C's
+OK   [anchor] A6: 8 anchor(s): each exactly once in C's blob, at a line start, at the recorded line; spans disjoint
+OK   [patch] A6: patch file = catalog patch text; sha256 as recorded
+OK   [single-file] A6: patch names exactly one file, the named source file
+OK   [apply] A6: GNU patch --dry-run (fuzz 0) and git apply --check succeed on a disposable copy
+OK   [apply] A6: both applications give the same bytes, equal to the edits' result
+OK   [confine] A6: application changes only the named source file (the other two blobs unchanged; no file added)
+OK   [identity] A6: mutant git blob and sha256 as recorded
+OK   [identity] A6: patch index line names C's blob and the mutant blob (full, or abbreviated to at least 7 hex digits as in the documentary patches)
+OK   [restoration] A6: reverse application (patch -R, git apply -R) of the patch to the recorded mutant returns byte for byte to C
+OK   [distinct] catalog: 35 distinct patch sha256 and 35 distinct mutant blobs (no equivalence expected)
+[section-6 postconditions and preserved behaviour (the 21)]
+OK   [semantic] C3a: every reference item found once in C and in the mutant — []
+OK   [confine-item] C3a: outside the named item(s) acknowledgement the file is byte-identical
+OK   [confine-item] C3a: every named item actually changes
+OK   [semantic] C3a: recheck verb, refusal rollback, insertion, commit handling and the final None preserved
+OK   [semantic] C3a: Test 2 removed whole: no frontier-equality comparison, no Stale
+OK   [semantic] C3a: the chain begins directly with Test 3
+OK   [semantic] C3a: Tests 4 and 5 preserved
+OK   [semantic] C3a: item = healthy item with exactly the Test-2 clause removed
+OK   [semantic] C3b: every reference item found once in C and in the mutant — []
+OK   [confine-item] C3b: outside the named item(s) acknowledgement the file is byte-identical
+OK   [confine-item] C3b: every named item actually changes
+OK   [semantic] C3b: recheck verb, refusal rollback, insertion, commit handling and the final None preserved
+OK   [semantic] C3b: Test 4 removed whole: neither comparison remains, no Future
+OK   [semantic] C3b: Test 3 connects directly to Test 5
+OK   [semantic] C3b: Tests 2, 3 and 5 preserved
+OK   [semantic] C3b: item = healthy item with exactly the Test-4 clause removed
+OK   [semantic] C3c: every reference item found once in C and in the mutant — []
+OK   [confine-item] C3c: outside the named item(s) acknowledgement the file is byte-identical
+OK   [confine-item] C3c: every named item actually changes
+OK   [semantic] C3c: recheck verb, refusal rollback, insertion, commit handling and the final None preserved
+OK   [semantic] C3c: Test 5 removed whole: neither comparison remains, no Set
+OK   [semantic] C3c: after Test 4 the chain falls to None
+OK   [semantic] C3c: Tests 2, 3 and 4 preserved
+OK   [semantic] C3c: item = healthy item with exactly the Test-5 clause removed
+OK   [semantic] C5: every reference item found once in C and in the mutant — []
+OK   [confine-item] C5: outside the named item(s) resolve_ack the file is byte-identical
+OK   [confine-item] C5: every named item actually changes
+OK   [semantic] C5: signature unchanged byte for byte
+OK   [semantic] C5: no acknowledgement read, no frontier read, no storage verb at all
+OK   [semantic] C5: no branch of the healthy match preserved
+OK   [semantic] C5: raise, empty U, Healthy, Acknowledged(set.top), in that order
+OK   [semantic] C5: the caller resolve unchanged
+OK   [semantic] C6: every reference item found once in C and in the mutant — []
+OK   [confine-item] C6: outside the named item(s) classify the file is byte-identical
+OK   [confine-item] C6: every named item actually changes
+OK   [semantic] C6: row b no longer consults the refusal table or Core::known
+OK   [semantic] C6: X's explanation of this original, then facts.explained, in that precedence
+OK   [semantic] C6: row b stays between row a and row c
+OK   [semantic] C6: rows d and e unchanged (one table insertion, one table-full check)
+OK   [semantic] C6: Core::known unchanged
+OK   [semantic] C6: Publish::lookup unchanged
+OK   [semantic] C7: every reference item found once in C and in the mutant — []
+OK   [confine-item] C7: outside the named item(s) explain the file is byte-identical
+OK   [confine-item] C7: every named item actually changes
+OK   [semantic] C7: Explained arm clears the whole table and returns Explained(seq)
+OK   [semantic] C7: the one-key removal is gone from explain
+OK   [semantic] C7: Publish::settle unchanged (X's committed path keeps its one-key removal)
+OK   [semantic] C8: every reference item found once in C and in the mutant — []
+OK   [confine-item] C8: outside the named item(s) facts the file is byte-identical
+OK   [confine-item] C8: every named item actually changes
+OK   [semantic] C8: pending array and the separate insertion loop removed
+OK   [semantic] C8: Steps 0 to 2 unchanged
+OK   [semantic] C8: one member-order loop: facts, classify, then insert at once on Insert
+OK   [semantic] C8: insert outcomes as healthy Step 5: Constraint latches; one rollback; rollback-derived persistence
+OK   [semantic] C8: a refusal: conflict recorded, one rollback, Not written with the classification reason
+OK   [semantic] C8: no insert issued: the empty-transaction rollback and Committed, before Step 6
+OK   [semantic] C8: Step 6 unchanged
+OK   [semantic] C8: rollback count unchanged (5)
+OK   [semantic] C11: every reference item found once in C and in the mutant — []
+OK   [confine-item] C11: outside the named item(s) facts the file is byte-identical
+OK   [confine-item] C11: every named item actually changes
+OK   [semantic] C11: fact Step-5 Constraint arm: latch, failed, one rollback (answer ignored), Not written + Constraint
+OK   [semantic] C11: Insert::Failed keeps the healthy rollback-derived persistence
+OK   [semantic] C11: gating, acknowledgement and cell insert constraints unchanged
+OK   [semantic] C15: every reference item found once in C and in the mutant — []
+OK   [confine-item] C15: outside the named item(s) names the file is byte-identical
+OK   [confine-item] C15: every named item actually changes
+OK   [semantic] C15: same ledger and same cell kept; occupancy equality removed; no is_some()
+OK   [semantic] C15: exactly two conjuncts
+OK   [semantic] C16: every reference item found once in C and in the mutant — []
+OK   [confine-item] C16: outside the named item(s) drop_ticket the file is byte-identical
+OK   [confine-item] C16: every named item actually changes
+OK   [semantic] C16: Counted arm: count_step(word | HANDOVER_FAULT, UNAPPLIED_SHIFT, false), one step
+OK   [semantic] C16: live not lowered; handover fault kept; no confirm path
+OK   [semantic] C16: Armed and Settled arms unchanged
+OK   [semantic] C16: Ticket::confirm unchanged
+OK   [semantic] C17: every reference item found once in C and in the mutant — []
+OK   [confine-item] C17: outside the named item(s) drop_publish the file is byte-identical
+OK   [confine-item] C17: every named item actually changes
+OK   [semantic] C17: unwind persistence is always Not written
+OK   [semantic] C17: phase, conflict, issued, keep, U retention, exit marking, publication and ticket state preserved
+OK   [semantic] C18a: every reference item found once in C and in the mutant — []
+OK   [confine-item] C18a: outside the named item(s) gating the file is byte-identical
+OK   [confine-item] C18a: every named item actually changes
+OK   [semantic] C18a: classification refusal sets keep before its rollback and NotWritten return
+OK   [semantic] C18a: keep added there only (count +1)
+OK   [semantic] C18a: open, facts-read, insert and commit failure paths unchanged
+OK   [semantic] C18a: entry refusals before U is placed unchanged
+OK   [semantic] C18a: the guard's exit marking unchanged
+OK   [semantic] C18b: every reference item found once in C and in the mutant — []
+OK   [confine-item] C18b: outside the named item(s) classify the file is byte-identical
+OK   [confine-item] C18b: every named item actually changes
+OK   [semantic] C18b: gating new cause: X explanation kept, table entry added, same conflict returned
+OK   [semantic] C18b: no fall-through and no table-full check in the gating branch
+OK   [semantic] C18b: already-known handling and the gating correction test unchanged
+OK   [semantic] C20: every reference item found once in C and in the mutant — []
+OK   [confine-item] C20: outside the named item(s) cell the file is byte-identical
+OK   [confine-item] C20: every named item actually changes
+OK   [semantic] C20: present occupant: rollback; settle only for C; Committed(seq) for both
+OK   [semantic] C20: inserted-and-Durable path unchanged
+OK   [semantic] C20: Publish::settle unchanged
+OK   [semantic] C23: every reference item found once in C and in the mutant — []
+OK   [confine-item] C23: outside the named item(s) flags the file is byte-identical
+OK   [confine-item] C23: every named item actually changes
+OK   [semantic] C23: X bit removed; phase, session, latch, U and C bits kept
+OK   [semantic] C23: word layout constants unchanged
+OK   [semantic] C26: every reference item found once in C and in the mutant — []
+OK   [confine-item] C26: outside the named item(s) barrier the file is byte-identical
+OK   [confine-item] C26: every named item actually changes
+OK   [semantic] C26: latch cleared after io.run() returns true and before the phase assignment
+OK   [semantic] C26: not cleared on OtherLedger, NotNeeded or a failed barrier
+OK   [semantic] A1: every reference item found once in C and in the mutant — []
+OK   [confine-item] A1: outside the named item(s) step_fw the file is byte-identical
+OK   [confine-item] A1: every named item actually changes
+OK   [semantic] A1: post-confirm step (Got, no ticket) before the Got arm
+OK   [semantic] A1: post-confirm step records as healthy option 0, moves to Done, no Oracle choice, no ticket operation
+OK   [semantic] A1: option 0 takes and confirms the ticket, records nothing, leaves the position
+OK   [semantic] A1: Oracle option structure, option 1 and DROP unchanged
+OK   [semantic] A1: FwPos::Recorded's healthy branch remains
+OK   [semantic] A1: settlement unchanged
+OK   [semantic] A1: no new FwPos variant
+OK   [semantic] A2: every reference item found once in C and in the mutant — []
+OK   [confine-item] A2: outside the named item(s) step_adm the file is byte-identical
+OK   [confine-item] A2: every named item actually changes
+OK   [semantic] A2: step one: disabled at adm == 0; one view; keeps view & FLAGS; no decrement, branch or property; enabled
+OK   [semantic] A2: step two: one view; only its unapplied field; low bits from step one; other fields zero
+OK   [semantic] A2: decision: split view admits, debt 0, H <= A; then adm_kept cleared and adm decremented once
+OK   [semantic] A2: no new world field
+OK   [semantic] A3: every reference item found once in C and in the mutant — []
+OK   [confine-item] A3: outside the named item(s) step_wk the file is byte-identical
+OK   [confine-item] A3: every named item actually changes
+OK   [semantic] A3: Seen keeps the A update, raises no H, proceeds to Act for EmptyX
+OK   [semantic] A3: Act: worker_op first, replay save kept, EmptyX -> RaiseH(seq), otherwise Idle
+OK   [semantic] A3: RaiseH unchanged; H raised only there
+OK   [semantic] A3: no new WkPos variant
+OK   [semantic] A5: every reference item found once in C and in the mutant — []
+OK   [confine-item] A5: outside the named item(s) claimable the file is byte-identical
+OK   [confine-item] A5: every named item actually changes
+OK   [semantic] A5: Conflict arm: Healthy conjunct removed, X-empty kept, claim Explain
+OK   [semantic] A5: handover/latch rejection, Refused and Uncertain arms unchanged
+OK   [semantic] A6: every reference item found once in C and in the mutant — []
+OK   [confine-item] A6: outside the named item(s) Table, initial, encode, decode, step_wk, step_ack, step_adm the file is byte-identical
+OK   [confine-item] A6: every named item actually changes
+OK   [semantic] A6: Table gains recovery_required: bool after A
+OK   [semantic] A6: initial Table: false
+OK   [semantic] A6: encoded right after A
+OK   [semantic] A6: decoded at the matching place
+OK   [semantic] A6: Seen: A increase clears, H increase sets (no A-H comparison)
+OK   [semantic] A6: RaiseH: H increase sets
+OK   [semantic] A6: Applying: A increase clears
+OK   [semantic] A6: admission reads the flag instead of H <= A; other conditions unchanged
+OK   [semantic] A6: flag set only on an H increase and cleared only on an A increase; never from an A-H comparison
+OK   [semantic] A6: admission_properties (P12, P15) unchanged and flag-free
+OK   [semantic] A6: numeric H and A updates only on an actual increase (same values as max)
+OK   [semantic] A6: experimental admissions keep h <= a
+[named tests, receipt types, configurations]
+OK   [test] C1: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C1: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C1: failing receipt is never a quotient run; original explorer
+OK   [test] C2: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C2: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C2: failing receipt is never a quotient run; original explorer
+OK   [test] C3a: named test full_f7 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C3a: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C3a: failing receipt is never a quotient run; original explorer
+OK   [test] C3b: named test full_f6 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C3b: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C3b: failing receipt is never a quotient run; original explorer
+OK   [test] C3c: named test full_f6 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C3c: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C3c: failing receipt is never a quotient run; original explorer
+OK   [test] C4: named test full_f8 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C4: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C4: failing receipt is never a quotient run; original explorer
+OK   [test] C5: named test full_f5 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C5: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C5: failing receipt is never a quotient run; original explorer
+OK   [test] C6: named test full_fpt exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C6: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C6: failing receipt is never a quotient run; original explorer
+OK   [test] C7: named test full_fpt exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C7: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C7: failing receipt is never a quotient run; original explorer
+OK   [test] C8: named test full_fb exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C8: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C8: failing receipt is never a quotient run; original explorer
+OK   [test] C9: named test full_fb2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C9: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C9: failing receipt is never a quotient run; original explorer
+OK   [test] C10: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C10: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C10: failing receipt is never a quotient run; original explorer
+OK   [test] C11: named test full_fb2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C11: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C11: failing receipt is never a quotient run; original explorer
+OK   [test] C12: named test x1_two_facts_two_writers_one_admission exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C12: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C12: failing receipt is never a quotient run; original explorer
+OK   [test] C15: named test full_fr exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C15: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C15: failing receipt is never a quotient run; original explorer
+OK   [test] C16: named test full_fd exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C16: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C16: failing receipt is never a quotient run; original explorer
+OK   [test] C17: named test full_fb2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C17: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C17: failing receipt is never a quotient run; original explorer
+OK   [test] C18a: named test full_fg exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C18a: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C18a: failing receipt is never a quotient run; original explorer
+OK   [test] C18b: named test full_fg exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C18b: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C18b: failing receipt is never a quotient run; original explorer
+OK   [test] C20: named test full_f2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C20: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C20: failing receipt is never a quotient run; original explorer
+OK   [test] C23: named test full_f2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C23: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C23: failing receipt is never a quotient run; original explorer
+OK   [test] C24: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C24: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C24: failing receipt is never a quotient run; original explorer
+OK   [test] C25: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C25: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C25: failing receipt is never a quotient run; original explorer
+OK   [test] C26: named test full_f4 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] C26: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] C26: failing receipt is never a quotient run; original explorer
+OK   [test] C14: named test t_bind_every_bound_value_belongs_to_one_ledger exists at C, in the pinned executable's listing
+OK   [receipt] C14: receipt type (b) named non-explorer mutant-test FAIL per AD-1-R4 F/F.1
+OK   [quotient] C14: failing receipt is never a quotient run; original explorer
+OK   [test] C19: named test t_cell_worker_operations_and_cell_appends exists at C, in the pinned executable's listing
+OK   [receipt] C19: receipt type (b) named non-explorer mutant-test FAIL per AD-1-R4 F/F.1
+OK   [quotient] C19: failing receipt is never a quotient run; original explorer
+OK   [test] C21: named test w6_one_identity_under_two_contents exists at C, in the pinned executable's listing
+OK   [receipt] C21: receipt type (b) named non-explorer mutant-test FAIL per AD-1-R4 F/F.1
+OK   [quotient] C21: failing receipt is never a quotient run; original explorer
+OK   [test] C22: named test t_own_tickets_snapshots_and_the_worker_cannot_be_cloned exists at C, in the pinned executable's listing
+OK   [receipt] C22: receipt type (d) intentional mutant compile failure per AD-1-R4 F/F.1
+OK   [quotient] C22: failing receipt is never a quotient run; original explorer
+OK   [test] C27: named test t_prec_persistence_of_every_ending exists at C, in the pinned executable's listing
+OK   [receipt] C27: receipt type (b) named non-explorer mutant-test FAIL per AD-1-R4 F/F.1
+OK   [quotient] C27: failing receipt is never a quotient run; original explorer
+OK   [test] C28: named test t_res_every_resolve_row exists at C, in the pinned executable's listing
+OK   [receipt] C28: receipt type (b) named non-explorer mutant-test FAIL per AD-1-R4 F/F.1
+OK   [quotient] C28: failing receipt is never a quotient run; original explorer
+OK   [test] A1: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] A1: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] A1: failing receipt is never a quotient run; original explorer
+OK   [test] A2: named test full_f1 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] A2: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] A2: failing receipt is never a quotient run; original explorer
+OK   [test] A3: named test full_f5 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] A3: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] A3: failing receipt is never a quotient run; original explorer
+OK   [test] A5: named test full_f2 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] A5: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] A5: failing receipt is never a quotient run; original explorer
+OK   [test] A6: named test full_f5 exists at C, in the pinned executable's listing, runs the configuration's constant
+OK   [receipt] A6: receipt type (a) original-explorer mutant FAIL per AD-1-R4 F/F.1
+OK   [quotient] A6: failing receipt is never a quotient run; original explorer
+[special rules: C7, C15, C22]
+OK   [receipt] C7: the separate original-explorer F-3 comparison without A4 recorded, not required to kill, same patch
+OK   [receipt] C15: failing receipt original full_fr at 30,000,000; restored side the AD-1-R5 F discharge only after verified restoration
+OK   [c22] C22: Stage-1 healthy build's recorded command omits -j 2 — ['command: systemd-run --user --scope --unit=p3c11-fbk01-build-1791979682 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/10-build/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/10-build/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run']
+OK   [c22] C22: restored_receipt_status PENDING_EXACT_COMMAND_HEALTHY_BUILD; required command exact; Stage-1 build recorded only as historical, not as the (e4) receipt
+[restored-evidence links]
+OK   [restored] C1: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] C2: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] C3a: e1 link 67-full-F-7: PASS, its test, raw-output digest
+OK   [restored] C3b: e1 link 66-full-F-6: PASS, its test, raw-output digest
+OK   [restored] C3c: e1 link 66-full-F-6: PASS, its test, raw-output digest
+OK   [restored] C4: e1 link 64-full-F-8: PASS, its test, raw-output digest
+OK   [restored] C5: e1 link 65-full-F-5: PASS, its test, raw-output digest
+OK   [restored] C6: e1 link 44-full-F-PT: PASS, its test, raw-output digest
+OK   [restored] C7: e1 link 44-full-F-PT: PASS, its test, raw-output digest
+OK   [restored] C8: e1 link 42-full-F-B: PASS, its test, raw-output digest
+OK   [restored] C9: e1 link 61-full-F-B2: PASS, its test, raw-output digest
+OK   [restored] C10: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] C11: e1 link 61-full-F-B2: PASS, its test, raw-output digest
+OK   [restored] C12: restored side recorded (to be produced or by special rule)
+OK   [restored] C15: restored side recorded (to be produced or by special rule)
+OK   [restored] C16: e1 link 68-full-F-D: PASS, its test, raw-output digest
+OK   [restored] C17: e1 link 61-full-F-B2: PASS, its test, raw-output digest
+OK   [restored] C18a: e1 link 60-full-F-G: PASS, its test, raw-output digest
+OK   [restored] C18b: e1 link 60-full-F-G: PASS, its test, raw-output digest
+OK   [restored] C20: e1 link 41-full-F-2: PASS, its test, raw-output digest
+OK   [restored] C23: e1 link 41-full-F-2: PASS, its test, raw-output digest
+OK   [restored] C24: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] C25: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] C26: e1 link 62-full-F-4: PASS, its test, raw-output digest
+OK   [restored] C14: restored side recorded (to be produced or by special rule)
+OK   [restored] C19: restored side recorded (to be produced or by special rule)
+OK   [restored] C21: restored side recorded (to be produced or by special rule)
+OK   [restored] C22: restored side recorded (to be produced or by special rule)
+OK   [restored] C27: restored side recorded (to be produced or by special rule)
+OK   [restored] C28: restored side recorded (to be produced or by special rule)
+OK   [restored] A1: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] A2: e1 link 45-full-F-1: PASS, its test, raw-output digest
+OK   [restored] A3: e1 link 65-full-F-5: PASS, its test, raw-output digest
+OK   [restored] A5: e1 link 41-full-F-2: PASS, its test, raw-output digest
+OK   [restored] A6: e1 link 65-full-F-5: PASS, its test, raw-output digest
+
+checks 800; failing 0
+CHECKER A: PASS
+VERDICTS {"A1": "PASS", "A2": "PASS", "A3": "PASS", "A4": "PASS", "A5": "PASS", "A6": "PASS", "C1": "PASS", "C10": "PASS", "C11": "PASS", "C12": "PASS", "C14": "PASS", "C15": "PASS", "C16": "PASS", "C17": "PASS", "C18a": "PASS", "C18b": "PASS", "C19": "PASS", "C2": "PASS", "C20": "PASS", "C21": "PASS", "C22": "PASS", "C23": "PASS", "C24": "PASS", "C25": "PASS", "C26": "PASS", "C27": "PASS", "C28": "PASS", "C3a": "PASS", "C3b": "PASS", "C3c": "PASS", "C4": "PASS", "C5": "PASS", "C6": "PASS", "C7": "PASS", "C8": "PASS", "C9": "PASS", "catalog": "PASS", "inputs": "PASS"}

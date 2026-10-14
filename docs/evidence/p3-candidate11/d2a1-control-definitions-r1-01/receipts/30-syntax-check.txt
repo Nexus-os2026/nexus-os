@@ -1,0 +1,36 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01 — SYNTAX CHECK (rustfmt --check only; no Cargo, no rustc)
+rustfmt: ~/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustfmt; rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02); sha256 d1c6d8c0e2fae4fbb686d421415d2f471e409ade6babb3e491d9ac5d9c70c602
+invocation: rustfmt --check --edition 2021 --config-path <empty file> src/<patched file>
+edition 2021: crates/nexus-governed-control/Cargo.toml at C; no rustfmt.toml in the repository at C
+
+[controls]
+OK   baseline C ledger/protocol.rs: rustfmt --check rc 0 (must be 0)
+OK   baseline C ledger/protocol/model_tests.rs: rustfmt --check rc 0 (must be 0)
+OK   negative control (an extra '{' in Core::flags): rustfmt --check rc 1 with a parse error (must fail)
+      error: this file contains an unclosed delimiter
+
+[the 21 Architect-defined mutants]
+OK   C3a: ledger/protocol.rs mutant blob 5c74cfbd8124a78c616526ae1d461895b1a16b82 (catalogued 5c74cfbd8124a78c616526ae1d461895b1a16b82); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C3b: ledger/protocol.rs mutant blob e6aff1884a4b9b7f880eee8784c371648fb2c073 (catalogued e6aff1884a4b9b7f880eee8784c371648fb2c073); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C3c: ledger/protocol.rs mutant blob 5cc9c09ac96062c5d348e86ace8cb0ac2225e83d (catalogued 5cc9c09ac96062c5d348e86ace8cb0ac2225e83d); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C5: ledger/protocol.rs mutant blob e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495 (catalogued e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C6: ledger/protocol.rs mutant blob 6dde859cb243b9f4304cda61b0917b1fc555dde3 (catalogued 6dde859cb243b9f4304cda61b0917b1fc555dde3); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C7: ledger/protocol.rs mutant blob 0d4ab9929c0e15d910735a52b72a5f3855bef58a (catalogued 0d4ab9929c0e15d910735a52b72a5f3855bef58a); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C8: ledger/protocol.rs mutant blob fd6abbd8a80dc8a01620981c76427ca76a9e1f7d (catalogued fd6abbd8a80dc8a01620981c76427ca76a9e1f7d); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C11: ledger/protocol.rs mutant blob 6e039d9dad6415242884ceef97a54d3548658038 (catalogued 6e039d9dad6415242884ceef97a54d3548658038); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C15: ledger/protocol.rs mutant blob abdd7518e6d1202a3a7c756af9716dc66183fd21 (catalogued abdd7518e6d1202a3a7c756af9716dc66183fd21); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C16: ledger/protocol.rs mutant blob 33f0d257df3e126c589becd0b1c5760c57085be8 (catalogued 33f0d257df3e126c589becd0b1c5760c57085be8); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C17: ledger/protocol.rs mutant blob 4dfed9e1600a82b38f3326d26a47c4c41f513ac3 (catalogued 4dfed9e1600a82b38f3326d26a47c4c41f513ac3); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C18a: ledger/protocol.rs mutant blob 92034563e479d1d622b7625e6ff4ad075a32a16a (catalogued 92034563e479d1d622b7625e6ff4ad075a32a16a); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C18b: ledger/protocol.rs mutant blob c7f2b5ea99bb1676e3844b6c612d3393f97d50da (catalogued c7f2b5ea99bb1676e3844b6c612d3393f97d50da); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C20: ledger/protocol.rs mutant blob 7bb5aa2abbb52249efe76ab22dd921cb74dd337c (catalogued 7bb5aa2abbb52249efe76ab22dd921cb74dd337c); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C23: ledger/protocol.rs mutant blob cd50b40ce632d4edcb95fff89389246b0d75c51e (catalogued cd50b40ce632d4edcb95fff89389246b0d75c51e); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   C26: ledger/protocol.rs mutant blob 88f1783305f6418129671e77769fd4caf53e2a88 (catalogued 88f1783305f6418129671e77769fd4caf53e2a88); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   A1: ledger/protocol/model_tests.rs mutant blob 26c09e7ff93633095de8d7a15ee81f5f46728336 (catalogued 26c09e7ff93633095de8d7a15ee81f5f46728336); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   A2: ledger/protocol/model_tests.rs mutant blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba (catalogued c0ac428f58497d8cf42458d51f86db0f2e4b84ba); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   A3: ledger/protocol/model_tests.rs mutant blob 72bab79d71687a1c056afe18ab7a938edc20f4a9 (catalogued 72bab79d71687a1c056afe18ab7a938edc20f4a9); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   A5: ledger/protocol/model_tests.rs mutant blob cb08f5e8c62b3ce267f0688cc880261a28cc29a2 (catalogued cb08f5e8c62b3ce267f0688cc880261a28cc29a2); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+OK   A6: ledger/protocol/model_tests.rs mutant blob 85d262dbdc445569951ec43e914de4c192ea675d (catalogued 85d262dbdc445569951ec43e914de4c192ea675d); rustfmt --check rc 0 -> SYNTAX_CHECKED_NOT_TYPECHECKED
+
+failing 0: none
+SYNTAX CHECK: PASS — all 21 SYNTAX_CHECKED_NOT_TYPECHECKED

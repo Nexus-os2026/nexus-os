@@ -1,0 +1,87 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce232827301104b5d757af042ec933976f8..85d262dbdc445569951ec43e914de4c192ea675d 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -914,6 +914,7 @@ struct Table {
+     h: Seq,
+     /// The layer's copy of the acknowledgement frontier.
+     a: Seq,
++    recovery_required: bool,
+ }
+ 
+ /// What a writer holds after its call, before it records.
+@@ -1152,6 +1153,7 @@ fn initial(config: &Config) -> World {
+             debt: 0,
+             h: 0,
+             a: 0,
++            recovery_required: false,
+         },
+         faults: config.faults,
+         ghost: Ghost::default(),
+@@ -1705,6 +1707,7 @@ fn encode(config: &Config, w: &World) -> Vec<u8> {
+     e.byte(w.table.debt);
+     e.u(w.table.h);
+     e.u(w.table.a);
++    e.b(w.table.recovery_required);
+     e.byte(w.faults);
+     let g = &w.ghost;
+     for value in [
+@@ -2130,6 +2133,7 @@ fn decode(config: &Config, key: &[u8]) -> World {
+         debt: d.byte(),
+         h: d.u(),
+         a: d.u(),
++        recovery_required: d.b(),
+     };
+     let faults = d.byte();
+     let ghost = Ghost {
+@@ -2985,9 +2989,15 @@ fn step_wk(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> boo
+             w.wk.pos = WkPos::Seen(agenda.frontier, action);
+         }
+         WkPos::Seen(frontier, action) => {
+-            w.table.a = w.table.a.max(frontier);
++            if frontier > w.table.a {
++                w.table.a = frontier;
++                w.table.recovery_required = false;
++            }
+             if let Action::EmptyX(_, seq) = &action {
+-                w.table.h = w.table.h.max(*seq);
++                if *seq > w.table.h {
++                    w.table.h = *seq;
++                    w.table.recovery_required = true;
++                }
+             }
+             obs.note(|| {
+                 "[T] A becomes the larger of A and the agenda's frontier; H before X is emptied"
+@@ -3007,7 +3017,10 @@ fn step_wk(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> boo
+             w.wk.pos = WkPos::Idle;
+         }
+         WkPos::RaiseH(seq) => {
+-            w.table.h = w.table.h.max(seq);
++            if seq > w.table.h {
++                w.table.h = seq;
++                w.table.recovery_required = true;
++            }
+             obs.note(|| "[T] H raised".into());
+             w.wk.pos = WkPos::Idle;
+         }
+@@ -3238,7 +3251,10 @@ fn step_ack(config: &Config, w: &mut World, k: u8, o: &mut Oracle, obs: &mut Obs
+             }
+         }
+         AckPos::Applying(n) => {
+-            w.table.a = w.table.a.max(n);
++            if n > w.table.a {
++                w.table.a = n;
++                w.table.recovery_required = false;
++            }
+             w.ack[i].pos = AckPos::Idle;
+             obs.note(|| format!("[T] A becomes the larger of A and {n}"));
+         }
+@@ -3253,7 +3269,7 @@ fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+     }
+     obs.views += 1;
+     let view = w.health.view();
+-    let admitted = view.admits() && w.table.debt == 0 && w.table.h <= w.table.a;
++    let admitted = view.admits() && w.table.debt == 0 && !w.table.recovery_required;
+     w.adm -= 1;
+     obs.branch(format!(
+         "admission: {}",

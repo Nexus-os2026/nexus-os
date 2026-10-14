@@ -1,0 +1,128 @@
+--- catalog-dev1.json
++++ catalog-dev2.json
+@@ -85,7 +85,7 @@
+    "definition_origin": [
+     "AD-1-R4 G.2: C1's encoding; documentary patch C1-mutation.patch (the controls_defs.py anchor below is a cross-check)",
+     "controls_defs.py entry 'C1' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -237,7 +237,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C2' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the gating entry rule does not test C and X",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -739,7 +739,7 @@
+    "contract_table": "core",
+    "definition_origin": [
+     "AD-1-R4 G.2 (ARCHITECT-RULED): Test 1's five checks removed, lines 1627-1642, none added; documentary patch C4-test1-removed.patch (evidence commit B a464a366)",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -1408,7 +1408,7 @@
+    "contract_table": "core",
+    "definition_origin": [
+     "AD-1-R4 G.2 (ARCHITECT-RULED: C9-b only), line 1015: in `Publish::rolled`'s arm `Rollback::Unknown`, `self.failed();` kept, `Persistence::Uncertain` replaced with `Persistence::NotWritten`",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -1534,7 +1534,7 @@
+    "definition_origin": [
+     "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 37-47 quoted verbatim)",
+     "controls_defs.py entry 'C10' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -1776,7 +1776,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C12' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the publication is two exchanges: bits, then count",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -2769,7 +2769,7 @@
+    "definition_origin": [
+     "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 48-66 quoted verbatim)",
+     "controls_defs.py entry 'C24' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): resolve empties U for a present gating record without placing the correction",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -2887,7 +2887,7 @@
+    "definition_origin": [
+     "AD-1-R4 G.2: the narrow C25 (only `return refused(Persistence::Uncertain, Reason::Storage);` replaced; `self.failed();`, the rollback and `self.keep = true;` preserved); documentary patch C25-narrow-mutation.patch",
+     "controls_defs.py's compound C25 (which also drops `self.keep = true;`) is SUPERSEDED and not used",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3154,7 +3154,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C14' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the ticket check of step 0 is removed",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3243,7 +3243,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C19' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): X can be emptied before it is marked committed",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3332,7 +3332,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C21' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the well-formed test of step 1 is removed",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3424,7 +3424,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C22' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the ticket derives Clone",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3539,7 +3539,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C27' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the guard is created after the entry rule",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",
+@@ -3628,7 +3628,7 @@
+    },
+    "definition_origin": [
+     "controls_defs.py entry 'C28' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): resolve's 'present, frontier below N' check alone is removed",
+-    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there, not Architect accepted"
++    "carried forward byte for byte from the blocked catalog d2a1-controls-v1 (sha256 a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747, evidence commit 59df21036f7c0183fa17d76b6e0886f8f5784685); re-authenticated (mission 5); READY there; its Architect review is pending here"
+    ],
+    "definition_source": "CARRIED_FORWARD",
+    "definition_status": "CANDIDATE_READY",

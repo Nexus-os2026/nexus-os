@@ -1,0 +1,59 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce232827301104b5d757af042ec933976f8..26c09e7ff93633095de8d7a15ee81f5f46728336 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -2560,6 +2560,24 @@ fn step_fw(config: &Config, w: &mut World, i: usize, o: &mut Oracle, obs: &mut O
+             }
+             w.fw[i].ticket = Some(ticket);
+         }
++        FwPos::Got(held) if w.fw[i].ticket.is_none() => {
++            match held {
++                Held::Committed => {
++                    for &f in &members {
++                        set_class(&mut w.table, f, Class::Paid);
++                    }
++                }
++                Held::Counted(counted) => record_counted(w, &members, counted),
++                Held::Rejected => {
++                    for &f in &members {
++                        set_class(&mut w.table, f, Class::Uncertain);
++                        w.ghost.unrecorded &= !bit(f);
++                    }
++                }
++            }
++            w.fw[i].pos = FwPos::Done;
++            obs.note(|| format!("[T] records {held:?}"));
++        }
+         FwPos::Got(held) => {
+             let counted_ticket = matches!(held, Held::Counted(_));
+             let options: &[bool] = if config.drop && counted_ticket {
+@@ -2569,22 +2587,13 @@ fn step_fw(config: &Config, w: &mut World, i: usize, o: &mut Oracle, obs: &mut O
+             };
+             match o.choose(options) {
+                 0 => {
+-                    match held {
+-                        Held::Committed => {
+-                            for &f in &members {
+-                                set_class(&mut w.table, f, Class::Paid);
+-                            }
+-                        }
+-                        Held::Counted(counted) => record_counted(w, &members, counted),
+-                        Held::Rejected => {
+-                            for &f in &members {
+-                                set_class(&mut w.table, f, Class::Uncertain);
+-                                w.ghost.unrecorded &= !bit(f);
+-                            }
+-                        }
+-                    }
+-                    w.fw[i].pos = FwPos::Recorded;
+-                    obs.note(|| format!("[T] records {held:?}"));
++                    obs.ticket_steps += 1;
++                    w.fw[i]
++                        .ticket
++                        .take()
++                        .expect("a writer that has its result holds its ticket")
++                        .confirm();
++                    obs.note(|| "confirm".into());
+                 }
+                 1 => {
+                     w.fw[i].pos = FwPos::Dropping;

@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce232827301104b5d757af042ec933976f8..cb08f5e8c62b3ce267f0688cc880261a28cc29a2 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -2645,9 +2645,7 @@ fn claimable(view: HealthView, class: Class) -> Option<Claim> {
+     match class {
+         Class::Refused if view.phase() == Phase::Healthy => Some(Claim::Append),
+         Class::Uncertain if view.phase() != Phase::NeedBarrier => Some(Claim::Lookup),
+-        Class::Conflict if view.phase() == Phase::Healthy && !view.x_occupied() => {
+-            Some(Claim::Explain)
+-        }
++        Class::Conflict if !view.x_occupied() => Some(Claim::Explain),
+         _ => None,
+     }
+ }

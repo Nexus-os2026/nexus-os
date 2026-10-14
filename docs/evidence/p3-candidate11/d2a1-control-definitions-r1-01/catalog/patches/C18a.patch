@@ -1,0 +1,12 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..92034563e479d1d622b7625e6ff4ad075a32a16a 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1460,6 +1460,7 @@ impl<'a> Publish<'a> {
+                 return GatingOutcome::Committed(seq);
+             }
+             Verdict::Refused(reason, _) => {
++                self.keep = true;
+                 self.rolled(io.rollback());
+                 return refused(Persistence::NotWritten, reason);
+             }

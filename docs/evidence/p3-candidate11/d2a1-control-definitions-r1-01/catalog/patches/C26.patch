@@ -1,0 +1,12 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..88f1783305f6418129671e77769fd4caf53e2a88 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1720,6 +1720,7 @@ impl<'a> Publish<'a> {
+         if !io.run() {
+             return BarrierOutcome::Failed;
+         }
++        self.core.latch = None;
+         self.core.phase = if self.core.u.is_some() {
+             Phase::Resolving
+         } else {

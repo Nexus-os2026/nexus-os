@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..7bb5aa2abbb52249efe76ab22dd921cb74dd337c 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1892,7 +1892,9 @@ impl<'a> Publish<'a> {
+         match io.present(&occupant) {
+             Read::Got(Some(seq)) => {
+                 self.rolled(io.rollback());
+-                self.settle(cell, seq);
++                if cell == Cell::C {
++                    self.settle(cell, seq);
++                }
+                 return CellAppend::Committed(seq);
+             }
+             Read::Got(None) => {}

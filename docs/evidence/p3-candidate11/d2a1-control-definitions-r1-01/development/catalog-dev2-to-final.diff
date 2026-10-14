@@ -1,0 +1,108 @@
+--- catalog-dev2.json
++++ catalog-final.json
+@@ -1828,13 +1828,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C12.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e1: REQUIRED — standalone X-1 PASS on the pinned baseline executable (mission 10A); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e1: REQUIRED — standalone X-1 PASS on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e1",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone X-1 PASS on the pinned baseline executable (mission 10A); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone X-1 PASS on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (X-1 inside the accepted suite)",
+     "type": "e1"
+    },
+@@ -3203,13 +3203,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C14.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e2",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (the test inside the accepted suite)",
+     "type": "e2"
+    },
+@@ -3292,13 +3292,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C19.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e2",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (the test inside the accepted suite)",
+     "type": "e2"
+    },
+@@ -3381,13 +3381,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C21.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e2",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (the test inside the accepted suite)",
+     "type": "e2"
+    },
+@@ -3588,13 +3588,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C27.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e2",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (the test inside the accepted suite)",
+     "type": "e2"
+    },
+@@ -3677,13 +3677,13 @@
+    "requires_mutant_executable": true,
+    "restoration": {
+     "method": "reverse application of patches/C28.patch to the mutant bytes, in a disposable copy",
+-    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "restored_side": "e2: REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "restored_side_receipt_type": "e2",
+     "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+    },
+    "restored_receipt": {
+-    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked",
++    "status": "REQUIRED — standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+     "supporting_only": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite (the test inside the accepted suite)",
+     "type": "e2"
+    },
+@@ -3777,7 +3777,8 @@
+     "option 1 (unwind before recording -> Dropping) and the DROP choice unchanged",
+     "the recording rules (Committed -> Paid; Counted -> record_counted; Rejected -> Uncertain and the unrecorded bit cleared) carried verbatim into the post-confirm step",
+     "FwPos::Recorded stays in the enum and in its healthy branch, unreachable from option 0",
+-    "no new enum variant; the two steps are told apart by ticket presence, which is in the state key"
++    "no new enum variant; the two steps are told apart by ticket presence, which is in the state key",
++    "option 0's confirm keeps the healthy confirm's own accounting (obs.ticket_steps += 1, as in FwPos::Recorded), so E2 still accounts for the ticket's exchange"
+    ],
+    "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+    "replacement": "        FwPos::Got(held) if w.fw[i].ticket.is_none() => {\n            match held {\n                Held::Committed => {\n                    for &f in &members {\n                        set_class(&mut w.table, f, Class::Paid);\n                    }\n                }\n                Held::Counted(counted) => record_counted(w, &members, counted),\n                Held::Rejected => {\n                    for &f in &members {\n                        set_class(&mut w.table, f, Class::Uncertain);\n                        w.ghost.unrecorded &= !bit(f);\n                    }\n                }\n            }\n            w.fw[i].pos = FwPos::Done;\n            obs.note(|| format!(\"[T] records {held:?}\"));\n        }\n        FwPos::Got(held) => {\n            let counted_ticket = matches!(held, Held::Counted(_));\n            let options: &[bool] = if config.drop && counted_ticket {\n                &[false, true, false]\n            } else {\n                &[false, true]\n            };\n            match o.choose(options) {\n                0 => {\n                    obs.ticket_steps += 1;\n                    w.fw[i]\n                        .ticket\n                        .take()\n                        .expect(\"a writer that has its result holds its ticket\")\n                        .confirm();\n                    obs.note(|| \"confirm\".into());\n                }\n",

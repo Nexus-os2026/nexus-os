@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..abdd7518e6d1202a3a7c756af9716dc66183fd21 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1110,9 +1110,7 @@ impl Core {
+ 
+     /// Whether `token` names this ledger's `cell` at its present occupancy.
+     fn names(&self, token: &CellToken, cell: Cell) -> bool {
+-        Arc::ptr_eq(&token.ledger, &self.shared)
+-            && token.cell == cell
+-            && self.occupancy(cell) == Some(token.occupancy)
++        Arc::ptr_eq(&token.ledger, &self.shared) && token.cell == cell
+     }
+ 
+     /// A new occupancy number for `cell`. A number that would overflow

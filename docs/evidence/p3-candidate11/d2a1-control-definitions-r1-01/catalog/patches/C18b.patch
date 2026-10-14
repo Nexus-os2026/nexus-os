@@ -1,0 +1,12 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..c7f2b5ea99bb1676e3844b6c612d3393f97d50da 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1212,6 +1212,7 @@ impl Core {
+             if self.x.is_none() {
+                 self.explanation(member.key, cause);
+             }
++            self.refusals.insert(member.key, cause);
+             return Verdict::Refused(conflict, Some(at));
+         }
+         if self.table_full() {

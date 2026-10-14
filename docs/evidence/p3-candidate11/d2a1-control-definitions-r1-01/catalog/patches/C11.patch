@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..6e039d9dad6415242884ceef97a54d3548658038 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1390,7 +1390,9 @@ impl<'a> Publish<'a> {
+                 Insert::Inserted(_) => continue,
+                 Insert::Constraint => {
+                     self.core.latch(LatchCause::Constraint);
+-                    Reason::Constraint
++                    self.failed();
++                    self.rolled(io.rollback());
++                    return self.not_applied(Persistence::NotWritten, Reason::Constraint);
+                 }
+                 Insert::Failed => Reason::Storage,
+             };
