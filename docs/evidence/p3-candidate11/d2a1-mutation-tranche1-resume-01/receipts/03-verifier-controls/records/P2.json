@@ -1,0 +1,46 @@
+{
+ "verdict": "EXACTLY_C",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "!! target/"
+  ],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C"
+ },
+ "status_policy": {
+  "ok": true,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 240,
+  "target_entries": 240,
+  "status_sha256": "278303b97bcb6cd7d48c5d03e5db21579809142e72bc9d3e8053dd194dcba576",
+  "shown": [
+   "!! target/... (240 ignored entries, each beneath the worktree-local real target)"
+  ],
+  "rejected": [],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": true,
+   "is_symlink": false,
+   "is_dir": true,
+   "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "own_entry": true,
+   "mounts": [],
+   "ok": true
+  }
+ },
+ "line": "source (verifier control): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+}

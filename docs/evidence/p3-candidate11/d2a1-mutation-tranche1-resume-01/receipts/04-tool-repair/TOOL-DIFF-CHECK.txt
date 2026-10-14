@@ -1,0 +1,36 @@
+OK   D1 original-tools/ is exactly the EXEC-01 packet's tools/ (names and sha256 from its SHA256SUMS at 19eda8cc): 22 files
+OK   D2 no tool removed
+OK   D2 the changed tools are exactly the declared ones: ['authenticate.py', 'build_packet.py', 'common.py', 'control.py', 'final_gate.py', 'publish_checks.py', 'record_freeze.py', 'render.py', 'render_rehearsal.py', 'verify_mutant.py']
+OK   D2 the added tools are exactly the declared ones: ['pre_exec_gate.py', 'tool_diff.py', 'verifier_controls.py']
+OK   D3 classify.py byte-identical (sha256 53c3aa4f78698bfc…): UNCHANGED
+OK   D3 supervise.py byte-identical (sha256 662b969a901e0985…): UNCHANGED
+OK   D3 worktrees.py byte-identical (sha256 e356d4e86f8f1060…): UNCHANGED
+OK   D3 expectations.py byte-identical (sha256 96e4d77d525d12d0…): UNCHANGED
+OK   D3 configs.py byte-identical (sha256 011ba516ad9107b7…): UNCHANGED
+OK   D3 normalize.py byte-identical (sha256 ff13a99b25fa0fe6…): UNCHANGED
+OK   D3 report.py byte-identical (sha256 9accbeec8bac1dda…): UNCHANGED
+OK   D3 verify_tree.py byte-identical (sha256 8bf5724a7287b0b9…): UNCHANGED
+OK   D3 scope-wrap.sh byte-identical (sha256 e776ac8f2c6710d6…): UNCHANGED
+OK   D3 healthy.py byte-identical (sha256 7e29c41854883fb3…): UNCHANGED
+OK   D3 rehearsal.py byte-identical (sha256 c855711435d3f5c5…): UNCHANGED
+OK   D3 tool_controls.py byte-identical (sha256 101fc62cb7cf5500…): UNCHANGED
+OK   D4 control.py: unchanged functions ['git', 'apply_patch', 'link', 'finish'] (AST identity): []
+OK   D4 verify_mutant.py: unchanged functions ['blob_id'] (AST identity): []
+OK   D4 authenticate.py: unchanged functions ['git', 'gtext', 'chk', 'copy_in', 'packet_sums', 'patch_result'] (AST identity): []
+OK   D4 render.py: unchanged functions ['lines', 'jload', 'outer', 'res', 'control_row'] (AST identity): []
+OK   D4 build_packet.py: unchanged functions ['files_under'] (AST identity): []
+OK   D4 final_gate.py: unchanged functions ['check'] (AST identity): []
+OK   D4 publish_checks.py: unchanged functions ['git', 'check', 'tree_map', 'glob_re', 'push_matches', 'gh', 'mutant_blobs', 'remote_blob', 'actions'] (AST identity): []
+OK   D4 common.py: unchanged functions ['control_wt', 'build_env', 'git', 'blob', 'source', 'sha256_bytes', 'sha256_file', 'git_blob_id', 'inputs'] (AST identity): []
+OK   D4 verify_mutant.main: the byte comparison (ls-tree of C, every blob, mode, missing, mutant identity) is unchanged text
+OK   D4 verify_mutant.main `ok`: the original terms minus the two exact-string status terms, plus pol['ok']: old ['head == C', 'tree == C_TREE', 'detached', 'not diff_index', 'not unexpected_status', "' M ' + path in status", 'not mismatched', 'not missing', 'not mode_wrong', 'mutant is not None', "mutant['differs_from_baseline']", "mutant['git_blob'] == mutant_blob", "mutant['sha256'] == mutant_sha"]; new ['head == C', 'tree == C_TREE', 'detached', 'not diff_index', "pol['ok']", 'not mismatched', 'not missing', 'not mode_wrong', 'mutant is not None', "mutant['differs_from_baseline']", "mutant['git_blob'] == mutant_blob", "mutant['sha256'] == mutant_sha"]
+OK   D4 control.restore: every line not about the status predicate or its record is unchanged: []
+OK   D4 control.restore `ok`: the original terms (blob, sha256, verify_tree EXACTLY_C) minus the exact-string status term, plus pol['ok']: old ["rec['after']['git_blob'] == ctl['baseline_blob']", "rec['after']['sha256'] == ctl['baseline_sha256']", "v['verdict'] == 'EXACTLY_C'", "rec['status'].strip() in ('', '!! target/')"]; new ["rec['after']['git_blob'] == ctl['baseline_blob']", "rec['after']['sha256'] == ctl['baseline_sha256']", "v['verdict'] == 'EXACTLY_C'", "pol['ok']"]
+OK   D4 control.main: unchanged but for the leading refusal of C22 and any id outside RESUME_ORDER
+OK   D4 authenticate.main: sections [1]-[5] and the [6] ref checks unchanged (statement by statement): 81 statements
+OK   D5 common.py: no name removed: []
+OK   D5 common.py: changed values only for the declared mission/path/publication names: ['BRANCH', 'DEST', 'EV', 'EVIDENCE_WT', 'LOCAL_BRANCH', 'MISSION', 'PACKET']
+OK   D5 common.py: only declared names added: ['ACCEPTED', 'C22_RULING', 'C22_RULING_FIRST', 'CARRIED', 'CARRIED_DOCS', 'DEV_WT', 'PREV', 'PREV_DEV_WT', 'PREV_EVIDENCE_WT', 'PREV_MISSION', 'PREV_PACKET', 'PREV_PARENT', 'PREV_REF', 'PREV_TREE', 'RESUME_ORDER']
+OK   D5 common.py: commands, environments, limits, order and identities unchanged
+OK   D6 the carried-forward expectations equal the previous packet's: ['a1038fc29b559ba5ee3b188c9a7d30f9e8891fa8654f9a9a426c27a084f4f500']
+TOOL DIFF: ALL CHECKS HOLD

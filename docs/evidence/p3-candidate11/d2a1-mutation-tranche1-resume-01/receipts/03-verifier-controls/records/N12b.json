@@ -1,0 +1,68 @@
+{
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+ "head": "d5964ee5326c2733177307db6f507328023d361a",
+ "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+ "detached": true,
+ "tracked_blobs_compared": 5364,
+ "bytes_compared": 97246414,
+ "index_differs_from_head": [],
+ "status_entries": [
+  " M crates/nexus-governed-control/src/ledger/protocol.rs",
+  "!! target/release/escape-link",
+  "!! target/... (240 ignored entries, each beneath the worktree-local real target)"
+ ],
+ "unexpected_status": [
+  {
+   "record": "!! target/release/escape-link",
+   "why": "resolves outside the worktree-local target"
+  }
+ ],
+ "status_policy": {
+  "ok": false,
+  "mode": "mutant",
+  "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "modified_seen": [
+   "crates/nexus-governed-control/src/ledger/protocol.rs"
+  ],
+  "records": 242,
+  "target_entries": 240,
+  "status_sha256": "975da5e71f841787504df58a5f04d0c571a86e7e0e589425f843c87556e7fb0a",
+  "shown": [
+   " M crates/nexus-governed-control/src/ledger/protocol.rs",
+   "!! target/release/escape-link",
+   "!! target/... (240 ignored entries, each beneath the worktree-local real target)"
+  ],
+  "rejected": [
+   {
+    "record": "!! target/release/escape-link",
+    "why": "resolves outside the worktree-local target"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": true,
+   "is_symlink": false,
+   "is_dir": true,
+   "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "own_entry": true,
+   "mounts": [],
+   "ok": true
+  }
+ },
+ "other_content_mismatches": [],
+ "missing": [],
+ "mode_mismatches": [],
+ "mutant_file": {
+  "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+  "git_blob": "9196588374fd084de1f49df3adcf62670c7ff363",
+  "sha256": "4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87",
+  "bytes": 64619,
+  "differs_from_baseline": true
+ },
+ "expected_mutant_blob": "9196588374fd084de1f49df3adcf62670c7ff363",
+ "expected_mutant_sha256": "4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87",
+ "verdict": "NOT_THE_MUTANT",
+ "_rc": 1
+}

@@ -1,0 +1,12 @@
+STATUS: MUTATION_CONTROL_BLOCKED; new candidates 0 of 11; attempted [] 
+carried-forward copies not staged (referenced in CARRIED-FORWARD.md): 91
+OK   packet size at most 32 MiB: 1418452 bytes, 211 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob, present in C's crates/, copies no content and is not counted): 4 empty file(s)
+OK   no carried-forward path staged: []
+FAIL no staged file byte-equal to a carried-forward file of the previous packet (nothing duplicated): ['receipts/01-supervision-selftest/1/cgroup-samples.txt', 'receipts/01-supervision-selftest/5/cgroup-samples.txt', 'receipts/01-supervision-selftest/7/cgroup-samples.txt']
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 210 listed
+PACKET: FAILED: no staged file byte-equal to a carried-forward file of the previous packet (nothing duplicated)

@@ -1,0 +1,74 @@
+{
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+ "head": "71264aa81a40b86189783facc8437e0427887c16",
+ "tree": "f4499b070de59342a1ca89213199b4efa7fbf814",
+ "detached": true,
+ "tracked_blobs_compared": 5364,
+ "bytes_compared": 97246414,
+ "index_differs_from_head": [
+  "docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+  "docs/evidence/p3-candidate11/current-tree-183/manifest.json"
+ ],
+ "status_entries": [
+  " M crates/nexus-governed-control/src/ledger/protocol.rs",
+  "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+  "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json"
+ ],
+ "unexpected_status": [
+  {
+   "record": "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "why": "tracked change not allowed here"
+  },
+  {
+   "record": "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "why": "tracked change not allowed here"
+  }
+ ],
+ "status_policy": {
+  "ok": false,
+  "mode": "mutant",
+  "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "modified_seen": [
+   "crates/nexus-governed-control/src/ledger/protocol.rs"
+  ],
+  "records": 3,
+  "target_entries": 0,
+  "status_sha256": "9f7c7d0cbab5618fe4363ab49286ecfcd69d4c40d2d605feb8ea7ae6179e9410",
+  "shown": [
+   " M crates/nexus-governed-control/src/ledger/protocol.rs",
+   "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json"
+  ],
+  "rejected": [
+   {
+    "record": "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+    "why": "tracked change not allowed here"
+   },
+   {
+    "record": "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+    "why": "tracked change not allowed here"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": false,
+   "ok": true
+  }
+ },
+ "other_content_mismatches": [],
+ "missing": [],
+ "mode_mismatches": [],
+ "mutant_file": {
+  "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+  "git_blob": "9196588374fd084de1f49df3adcf62670c7ff363",
+  "sha256": "4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87",
+  "bytes": 64619,
+  "differs_from_baseline": true
+ },
+ "expected_mutant_blob": "9196588374fd084de1f49df3adcf62670c7ff363",
+ "expected_mutant_sha256": "4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87",
+ "verdict": "NOT_THE_MUTANT",
+ "_rc": 1
+}

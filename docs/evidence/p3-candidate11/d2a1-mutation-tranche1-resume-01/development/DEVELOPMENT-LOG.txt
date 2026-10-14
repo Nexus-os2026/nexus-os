@@ -1,0 +1,92 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-14, Europe/London (+01:00). Official receipts are under receipts/; local development runs are under
+dev-local/ (kept on the machine); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no Nexus build or test; development used git objects, the previous packet, a
+synthetic comment-only patch and manually created target sentinels only)
+
+ 1. 20:27  Read the mission, AGENTS.md and CLAUDE.md. Main worktree: clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Previous evidence commit 19eda8cc present locally (tree 1b313ec5, parent
+           9f22f890); its packet, its stop record and its development log read; its 22 tools read in full. Host:
+           MemAvailable 53.8 GB, 16 CPUs, 50 GB free disk; no p3c11-* scope, cargo or governed-control executable
+           running (a one-day-old bash `until pgrep …full_f3…` wait loop of an earlier session exists; it is not this
+           mission's and is not touched).
+ 2. 20:34  Mission evidence root created (absent before). The 22 EXEC-01 tools copied from the git objects of 19eda8cc
+           into original-tools/ (read-only) and tools/, each sha256 equal to the previous SHA256SUMS.
+ 3. 20:35  common.py: mission identity, evidence root, previous-evidence identities, carried-forward set, ACCEPTED and
+           RESUME_ORDER, publication paths. verify_mutant.py: the path-aware status policy of section 7 (status_records,
+           target_facts, target_entry_problem, mount_points, status_policy); main's three status lines and the two
+           exact-string terms of `ok` replaced by status_policy; read-only git (GIT_OPTIONAL_LOCKS=0). control.py: gate
+           over RESUME_ORDER with C14's prior = the frozen C22 ruling record + carried-forward baselines + healthy build;
+           restored_check(); restore's status predicate replaced by it; main refuses C22.
+ 4. 20:37  authenticate.py: [6] resume paths; [7] the complete previous packet (962 listed files verify), the C22 ruling
+           facts, the carried-forward copies (92 files written read-only). Development run before ANY worktree:
+           ALL CHECKS HOLD, every mission path absent (development/authentication-dev1-before-any-worktree.txt).
+           expectations.py (unchanged) re-derived: identical to the carried-forward expectations but for `mission`
+           (development/expectations-rederived-comparison.txt); the carried-forward byte copy stays the authority.
+ 5. 20:38  documents/ARCHITECT-RULING-C22-ACCEPTANCE.md written from the mission's section 1 and the previous packet.
+ 6. 20:39  Scratch experiment outside every repository: `git update-index --info-only` stages a file without writing
+           its object; `--cacheinfo` unstages; `update-ref --no-deref HEAD` in a linked worktree moves only that
+           worktree's HEAD. Used by negative controls N10 and N13.
+ 7. 20:42  verifier_controls.py written. Dev run 1 (it created the development worktree
+           nexus-os-p3-c11-mt1r-dev-verifier at C, locked with its role): 41 of 42 as expected. The one failure was the
+           harness's regression-replay predicate: text-mode `git status` C-quotes paths with a space or a non-ASCII
+           byte (`!! "target/\303\274…"`), so "every line starts with `!! target/`" was false although the EXEC-01
+           predicate did reject the exactly-C worktree (development/verifier-controls-dev1-FAILED-replay-predicate.txt;
+           verifier_controls.dev1-to-dev2.diff). The repaired verifier itself passed every control in dev run 1.
+ 8. 20:47  Dev run 2: 42 of 42 as expected (development/verifier-controls-dev2-SUMMARY.txt): P1-P6, N6-N16 with
+           sub-cases, replay R.vm/R.restore (the EXEC-01 tools reproduce the defect), sensitivity S (a blanket ignore
+           would accept N6, N11, N12b), 48 seeded worktree trials (16 accepted as expected, 32 rejected as expected, 0
+           false accept, 0 false reject), 20,000-path differential fuzz of the lexical rule (0 disagreements).
+ 9. 20:48  control.py: C14's gate also requires receipts/06-PRE-EXECUTION-GATE.txt. record_freeze.py, final_gate.py,
+           render.py, render_rehearsal.py, build_packet.py, publish_checks.py revised; pre_exec_gate.py and
+           tool_diff.py written.
+10. 20:53  tool_diff.py dev 1 crashed on a tuple assignment target (development/tool-diff-dev1-FAILED-ast-tuple-target.txt;
+           tool_diff.dev1-to-dev2.diff). Dev 2: ALL CHECKS HOLD. Review of the checker found that control.restore's `ok`
+           expression was hidden by the status-line filter; an explicit term check was added (tool_diff.dev2-to-dev3.diff):
+           ALL CHECKS HOLD.
+11. 20:54  authenticate.py: the development worktree (created in step 7, after the pre-worktree authentication of step
+           4) is required to carry this mission's development lock instead of being absent
+           (authenticate.dev2-to-dev3.diff). authenticate --gate (dev): ALL CHECKS HOLD.
+12. 20:54  Render rehearsal (dev) on synthetic fixtures (the previous packet's synthetic tool-control receipts, from git
+           objects) and the real carried-forward receipts: ALL AS EXPECTED. Packet staging rehearsal on the pre-freeze
+           state: STAGED — ALL CHECKS HOLD (91 carried-forward copies not staged; nothing duplicated).
+13. 20:55  Official pre-freeze receipts with the final tools: receipts/00-authentication.txt (ALL CHECKS HOLD, 421
+           checks; the development worktree accepted only as this mission's locked development worktree),
+           receipts/01-supervision-selftest (supervise.py unchanged; non-Nexus processes; ALL OK),
+           receipts/03-verifier-controls (42 of 42 as expected; the development worktree reused only after it
+           authenticated exactly C, clean and locked).
+14. 20:57  receipts/04-tool-repair and receipts/04b-render-rehearsal first produced; review of 04b found that the
+           rehearsal's synthetic evidence root sat inside the receipt directory with byte copies of the carried-forward
+           C22 and healthy-build receipts (3.5 MB): publishing it would duplicate previous-packet files. That receipt was
+           moved, not deleted, to dev-local/04b-render-rehearsal-superseded-1 (its summary:
+           development/render-rehearsal-superseded-1-SUMMARY.txt); render_rehearsal.py now keeps the synthetic root under
+           dev-local/ (render_rehearsal.dev1-to-dev2.diff); rerun: ALL AS EXPECTED (60 KB). The tool-diff receipt, stale
+           after that change, was moved to dev-local/04-tool-repair-superseded-1 and regenerated.
+15. 20:59  Packet rehearsal 2 FAILED its duplication check (development/packet-rehearsal-2-FAILED-constant-line-
+           coincidence.txt): three 95-byte self-test files hold the unchanged supervisor's constant line "sampler: the
+           scope's cgroup was not found while it ran …", byte-equal by coincidence to a carried-forward baseline's
+           sampler file. Not duplication. build_packet.py: path-based exclusion of every carried-forward copy stays
+           absolute; the content check now applies to files of 1 KiB or more and lists small coincidences
+           (build_packet.dev1-to-dev2.diff). Packet rehearsal 3: STAGED — ALL CHECKS HOLD. The tool-diff receipt was
+           regenerated again (stale one at dev-local/04-tool-repair-superseded-2): TOOL DIFF: ALL CHECKS HOLD.
+16. 21:00  Final read of verify_mutant.py and control.py before the freeze.
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file was changed after the freeze)
+
+17. 20:59:30  Freeze recorded: receipts/05-FREEZE.json (180 frozen files: every tool, the EXEC-01 tools, the inputs,
+              the vocabulary, the carried-forward expectations and receipts, the C22 ruling record, the catalog-freeze
+              ruling copy) and 05-FREEZE-RECORD.txt.
+18. 20:59:35  Static pre-execution gate (receipts/06-PRE-EXECUTION-GATE.txt): ALL CHECKS HOLD (E1-E8).
+19. 20:59:58–21:02:39  C14 (resume 1 of 11), once: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING (T-BIND failed at
+              unit_tests.rs:1119:5; restoration EXACTLY_C; T-BIND (e2) linked).
+20. 21:03:00–21:11:43  C19, C21, C27, once each, in order: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING (T-CELL at
+              1654:5, W6 at 2600:5, T-PREC at 799:9; each restored EXACTLY_C and linked to its (e2)).
+21. 21:11:43–21:14:34  C28, once: the mutant build exited 0 but emitted `warning: unreachable pattern` at
+              protocol.rs:1834:17; the frozen pin classifier requires no error or warning diagnostic: BUILD: NOT OK;
+              restoration EXACTLY_C; RESULT: MUTATION_CONTROL_BLOCKED. The loop stopped; C12, C9, C11, C17, C18a and
+              C18b were not attempted.
+22. After the stop, read-only: receipts/80-STOP-RECORD.md. No tool repaired, no receipt edited, no classification
+              changed, nothing rebuilt or rerun. Note on wording: the unchanged control.link() describes an (e2) link as
+              "standalone, this mission"; the linked receipts are the carried-forward EXEC-01 standalone baselines
+              (byte copies, frozen, equal to the previous packet; CARRIED-FORWARD.md), not new runs.

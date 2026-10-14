@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-BIND at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic at ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1119, 5)
+panic message: assertion `left == right` failed |   left: Committed |  right: Rejected(OtherLedger)
+named test: T-BIND (ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger)
+candidate: KILL_EVIDENCE_CANDIDATE — type (b) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 180 s; scope memory.peak 3932160 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4936 KiB; scope gone
+checks: 15 of 15 hold

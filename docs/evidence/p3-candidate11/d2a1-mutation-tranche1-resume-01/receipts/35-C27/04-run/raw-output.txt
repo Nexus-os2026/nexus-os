@@ -1,0 +1,17 @@
+
+running 1 test
+test ledger::protocol::unit_tests::t_prec_persistence_of_every_ending ... 
+thread 'ledger::protocol::unit_tests::t_prec_persistence_of_every_ending' (3825954) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799:9:
+assertion `left == right` failed: an append refused at entry is counted
+  left: None
+ right: Some(Counted { persistence: NotWritten, conflict_member: None })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::unit_tests::t_prec_persistence_of_every_ending
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

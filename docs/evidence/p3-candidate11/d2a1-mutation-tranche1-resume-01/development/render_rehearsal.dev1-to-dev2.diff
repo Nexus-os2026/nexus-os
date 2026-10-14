@@ -1,0 +1,26 @@
+--- development/revisions/render_rehearsal.dev1.py	2026-10-14 20:58:31.664485269 +0100
++++ tools/render_rehearsal.py	2026-10-14 20:58:31.677517391 +0100
+@@ -5,8 +5,9 @@
+     render_rehearsal.py OUTDIR TOOLCONTROLS     OUTDIR must not exist; TOOLCONTROLS: a copy of the synthetic tool-control
+                                                receipts of EXEC-01 (receipts/03-tool-controls of the previous packet)
+ 
+-A temporary evidence root under OUTDIR holds the carried-forward expectations, baselines, healthy build and C22
+-receipts and the C22 ruling record (byte copies from this mission's evidence root), and three SYNTHETIC control
++A temporary evidence root OUTSIDE OUTDIR (under dev-local/, never published, so no previous-packet file is
++republished) holds the carried-forward expectations, baselines, healthy build and C22 receipts and the C22 ruling
++record (byte copies from this mission's evidence root), and three SYNTHETIC control
+ directories in the layout of the real receipts: C14 (b) and C12 (a) as candidates, C9 (a) as a non-candidate whose
+ run is a synthetic overshoot. render.py's functions are pointed at it and must render every row without error, with
+ the derived status MUTATION_CONTROL_BLOCKED (two new candidates of eleven), C22 rendered as Architect-accepted with
+@@ -24,9 +25,9 @@
+ 
+ 
+ def main(outdir, tc):
+-    if os.path.exists(outdir):
++    root = os.path.join(K.EV, "dev-local", "render-rehearsal-root-" + os.path.basename(outdir))
++    if os.path.exists(outdir) or os.path.exists(root):
+         raise SystemExit("REFUSED: output exists")
+-    root = os.path.join(outdir, "ev")
+     r = os.path.join(root, "receipts")
+     os.makedirs(r)
+     for c in K.CARRIED:

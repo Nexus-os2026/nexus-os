@@ -1,0 +1,4 @@
+expectations.py (unchanged) re-run under the resume common.py into dev-local/EXPECTATIONS-rederived.json; compared with the carried-forward receipts/02-EXPECTATIONS.json (the execution authority, byte copy of the previous packet's):
+top-level keys that differ: ['mission']
+mission: P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 -> P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (the only difference)
+controls equal: True; baselines equal: True; build equal: True; run_env equal: True; order equal: True

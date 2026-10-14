@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C28: resolve's "present, frontier below N" check alone is removed
+patch: inputs/patches/C28.patch (the frozen R2 packet's catalog/patches/C28.patch), sha256 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868 (catalog 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 446d0365e1472efc40321d259a6f1171d3fe716c (expected 446d0365e1472efc40321d259a6f1171d3fe716c), sha256 1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8 (expected 1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

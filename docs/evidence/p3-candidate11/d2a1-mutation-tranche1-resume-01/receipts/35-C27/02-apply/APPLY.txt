@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C27: the guard is created after the entry rule
+patch: inputs/patches/C27.patch (the frozen R2 packet's catalog/patches/C27.patch), sha256 bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f (catalog bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '18\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf (expected bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf), sha256 bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7 (expected bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

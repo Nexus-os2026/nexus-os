@@ -1,0 +1,990 @@
+{
+ "ok": false,
+ "mode": "mutant",
+ "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol.rs",
+ "modified_seen": [
+  "crates/nexus-governed-control/src/ledger/protocol.rs"
+ ],
+ "records": 241,
+ "target_entries": 0,
+ "status_sha256": "cce64671bf26d4d39a7c4772a2ef7c208633e58f157988e74c1aa98724bab964",
+ "rejected": [
+  {
+   "record": "!! target/-z/deps/\u00fcn\u00ef/deps/build2/sentinel-0082.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z/release/x.y1/incremental/x.y5/deps/sentinel-0007.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z/release5/x.y/sentinel-0104.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z/sentinel-0012.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z/\u00fcn\u00ef3/a b2/sentinel-0003.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z0/a b/.../.fingerprint/debug3/x.y/sentinel-0032.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z0/deps8/debug0/debug/deps/release8/sentinel-0008.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z0/x.y/.fingerprint/incremental/\u00fcn\u00ef1/sentinel-0216.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z3/.fingerprint/debug2/deps1/sentinel-0110.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z3/debug4/.fingerprint/incremental/a b6/sentinel-0146.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z3/sentinel-0229.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z4/-z8/release6/deps/sentinel-0182.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z4/.fingerprint7/deps1/sentinel-0021.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/-z5/release0/.../sentinel-0224.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../.../deps1/deps8/deps8/release/sentinel-0160.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../.../incremental/x.y2/-z/.../sentinel-0099.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../.fingerprint/deps/sentinel-0143.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../.fingerprint2/sentinel-0067.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../build/a b0/.../release5/release/sentinel-0078.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../debug/a b6/sentinel-0136.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../debug0/debug/sentinel-0048.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../deps/.fingerprint6/sentinel-0230.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.../incremental5/build/release3/...5/sentinel-0161.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...1/-z/...7/sentinel-0036.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...2/deps/.fingerprint/sentinel-0005.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...4/deps/release/incremental/.fingerprint0/build4/sentinel-0208.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...4/sentinel-0170.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...7/release/a b/debug3/\u00fcn\u00ef/\u00fcn\u00ef8/sentinel-0076.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/...8/...6/sentinel-0070.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint/debug/release/release5/sentinel-0186.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint/debug/sentinel-0234.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint/debug1/sentinel-0033.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint/sentinel-0203.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint0/a b/...7/sentinel-0023.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint0/incremental5/x.y/\u00fcn\u00ef0/sentinel-0126.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint0/x.y2/build2/incremental/sentinel-0190.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint1/sentinel-0052.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint1/x.y/.fingerprint/debug6/sentinel-0181.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint2/sentinel-0071.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint3/debug/sentinel-0090.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint4/debug/.../sentinel-0227.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint4/x.y6/debug/sentinel-0087.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint5/-z/-z/sentinel-0150.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint5/release/-z4/x.y/sentinel-0187.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint6/a b8/sentinel-0004.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint7/release1/release7/\u00fcn\u00ef/sentinel-0157.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/.fingerprint8/-z/.../sentinel-0035.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/-z/release7/a b7/.fingerprint/sentinel-0072.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/.fingerprint/sentinel-0188.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/a b7/.../release/incremental4/deps/sentinel-0156.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/build/deps6/sentinel-0086.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/build/sentinel-0102.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/build1/.fingerprint0/-z3/sentinel-0042.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/debug2/-z5/incremental6/sentinel-0221.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/deps/-z8/\u00fcn\u00ef0/debug4/sentinel-0217.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/incremental/\u00fcn\u00ef6/build/a b8/-z4/sentinel-0164.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/sentinel-0047.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/sentinel-0120.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/x.y/sentinel-0235.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/x.y/\u00fcn\u00ef7/sentinel-0013.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b/x.y8/deps/deps/incremental/sentinel-0129.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b1/.../sentinel-0103.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b1/a b4/incremental4/sentinel-0142.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b2/x.y7/.fingerprint0/sentinel-0055.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b3/sentinel-0179.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b4/sentinel-0177.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b4/x.y4/deps8/release/sentinel-0010.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b5/-z6/a b7/x.y/-z6/.fingerprint1/sentinel-0002.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b6/deps4/.fingerprint0/-z1/...7/sentinel-0073.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b7/debug/release/incremental4/incremental7/sentinel-0019.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b8/-z/incremental/sentinel-0171.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/a b8/deps/sentinel-0128.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/.fingerprint0/sentinel-0074.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/.fingerprint5/a b/...4/sentinel-0223.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/build/deps/release/sentinel-0202.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/debug/incremental8/release/x.y/sentinel-0097.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/deps5/sentinel-0096.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/incremental5/.../\u00fcn\u00ef4/a b6/\u00fcn\u00ef2/sentinel-0046.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/release/incremental/debug/x.y/build8/sentinel-0037.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/release/x.y/release/release/sentinel-0060.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/x.y/debug7/incremental8/build8/sentinel-0006.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build/\u00fcn\u00ef/-z7/sentinel-0196.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build0/incremental4/deps/\u00fcn\u00ef/sentinel-0144.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build1/build7/.fingerprint7/release0/-z7/sentinel-0064.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build1/deps/incremental0/incremental3/deps/sentinel-0101.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build1/deps/release6/a b/\u00fcn\u00ef/debug/sentinel-0140.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build1/sentinel-0131.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build4/incremental/x.y6/sentinel-0062.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build4/\u00fcn\u00ef/build3/.fingerprint/debug1/sentinel-0204.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build8/-z6/build/\u00fcn\u00ef6/-z8/sentinel-0139.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build8/.fingerprint/x.y/x.y/sentinel-0137.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/build8/\u00fcn\u00ef7/build/sentinel-0050.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/.../deps1/sentinel-0218.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/a b5/.../sentinel-0158.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/build/-z3/sentinel-0034.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/incremental1/build/sentinel-0116.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/release/\u00fcn\u00ef/deps8/deps8/.../sentinel-0178.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug/release6/...6/\u00fcn\u00ef/a b/sentinel-0200.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug1/-z3/-z/build/a b/sentinel-0106.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug1/deps/a b/release6/sentinel-0172.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug1/x.y3/debug/sentinel-0215.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug4/sentinel-0197.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug6/...5/sentinel-0155.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug6/\u00fcn\u00ef/.fingerprint7/build/sentinel-0153.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug7/-z3/x.y/.fingerprint/sentinel-0056.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug7/build7/.fingerprint/sentinel-0041.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug7/release6/deps/a b/sentinel-0237.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/debug8/x.y5/\u00fcn\u00ef0/sentinel-0149.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/-z/a b/\u00fcn\u00ef3/.fingerprint4/sentinel-0198.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/.../deps8/.fingerprint/sentinel-0123.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/.fingerprint6/incremental/build0/a b8/sentinel-0094.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/a b/-z/incremental/\u00fcn\u00ef0/sentinel-0222.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/a b/sentinel-0025.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/build/sentinel-0168.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/debug2/.fingerprint7/sentinel-0207.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/incremental/debug3/sentinel-0231.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/sentinel-0015.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/sentinel-0135.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/sentinel-0212.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/sentinel-0225.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/x.y/-z/\u00fcn\u00ef6/-z5/sentinel-0176.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/\u00fcn\u00ef/release/sentinel-0175.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps/\u00fcn\u00ef/release7/deps1/x.y3/debug/sentinel-0166.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps0/sentinel-0113.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps1/-z/sentinel-0058.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps2/.fingerprint6/incremental6/sentinel-0091.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps3/a b/debug1/deps/.../sentinel-0030.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps3/sentinel-0233.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps4/debug8/deps8/release3/sentinel-0092.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps4/sentinel-0031.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps4/x.y0/release/-z/a b/build/sentinel-0084.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps5/a b6/sentinel-0112.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps5/deps/-z/sentinel-0167.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps5/deps6/sentinel-0017.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps5/\u00fcn\u00ef/debug6/-z/x.y/sentinel-0079.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps6/-z1/a b1/-z/build/sentinel-0069.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps7/.../.fingerprint/debug1/debug/sentinel-0038.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps7/incremental/deps4/.../incremental7/sentinel-0211.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps7/sentinel-0000.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps8/.../debug/release/sentinel-0063.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/deps8/build2/.fingerprint1/release/sentinel-0018.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/.fingerprint/...4/sentinel-0180.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/.fingerprint/sentinel-0093.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/a b/sentinel-0115.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/debug3/.fingerprint/sentinel-0098.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/debug4/.fingerprint/.fingerprint/.fingerprint5/sentinel-0162.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/deps/release/.../a b0/-z/sentinel-0238.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/sentinel-0095.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/x.y/sentinel-0189.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental/\u00fcn\u00ef8/debug/build/release7/sentinel-0016.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental0/build/x.y5/sentinel-0043.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental0/deps6/incremental3/sentinel-0145.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental1/a b8/-z8/deps1/sentinel-0148.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental2/-z3/sentinel-0214.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental3/a b/\u00fcn\u00ef/sentinel-0077.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental6/sentinel-0027.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental6/sentinel-0124.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental7/\u00fcn\u00ef4/sentinel-0236.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/incremental8/.fingerprint/release4/sentinel-0028.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/-z2/deps/incremental7/debug/sentinel-0111.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/.fingerprint/sentinel-0020.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/build3/x.y0/sentinel-0049.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/debug2/build7/x.y0/sentinel-0132.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/deps2/deps/x.y/sentinel-0210.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/sentinel-0193.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release/sentinel-0194.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release1/incremental/a b/deps/a b3/x.y/sentinel-0061.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release3/-z/release/deps/deps/sentinel-0059.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release3/.../\u00fcn\u00ef/sentinel-0165.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release3/\u00fcn\u00ef/incremental/release/sentinel-0232.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release4/.fingerprint/a b4/sentinel-0081.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release4/debug/release4/debug8/sentinel-0213.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release5/build8/.../sentinel-0105.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release5/deps3/debug5/sentinel-0228.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release5/incremental/incremental0/a b/sentinel-0219.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release6/...7/x.y5/...8/sentinel-0057.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release6/a b/sentinel-0134.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/release6/debug7/release/deps5/a b0/deps1/sentinel-0169.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0011.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0014.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0024.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0026.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0039.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0040.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0054.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0075.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0085.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0088.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0108.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0118.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0141.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0147.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0151.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0152.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0154.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0163.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0184.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0195.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0209.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/sentinel-0220.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/.fingerprint/deps1/incremental2/build/sentinel-0138.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/a b/debug/-z7/sentinel-0066.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/build/a b5/release6/sentinel-0183.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/build/x.y3/deps/sentinel-0117.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/sentinel-0174.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/sentinel-0205.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y/x.y0/a b1/sentinel-0122.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y0/.fingerprint4/...3/debug4/release/sentinel-0051.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y0/sentinel-0068.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y0/x.y/-z8/build2/build1/\u00fcn\u00ef8/sentinel-0119.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y1/build5/\u00fcn\u00ef0/.fingerprint/incremental/build4/sentinel-0199.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y3/-z/...5/.../release/deps/sentinel-0044.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y4/incremental/-z2/sentinel-0133.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y6/-z/release5/release/sentinel-0114.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y6/sentinel-0029.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y7/sentinel-0089.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y7/x.y/sentinel-0192.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y7/\u00fcn\u00ef/release7/.fingerprint4/sentinel-0001.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y8/debug/.fingerprint/sentinel-0053.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y8/debug/.fingerprint1/sentinel-0100.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/x.y8/incremental1/build8/release4/...5/sentinel-0125.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/.../-z/-z6/deps5/sentinel-0080.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/...1/incremental3/debug/release1/sentinel-0185.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/build/incremental/a b1/sentinel-0191.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/debug/sentinel-0009.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/deps/deps1/sentinel-0065.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/incremental6/.fingerprint3/.fingerprint0/build1/sentinel-0239.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/x.y/build2/incremental/sentinel-0130.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/x.y1/a b7/build/sentinel-0226.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef/x.y3/-z/incremental/sentinel-0045.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef0/incremental7/-z6/x.y/sentinel-0083.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef1/.fingerprint/sentinel-0173.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef1/debug8/build8/release/sentinel-0159.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef3/build2/a b7/x.y4/...1/sentinel-0107.txt",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef4/incremental/...3/\u00fcn\u00ef6/sentinel-0127.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef5/debug2/-z5/a b/sentinel-0121.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef6/release3/.fingerprint/\u00fcn\u00ef/incremental1/incremental8/sentinel-0109.o",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef6/sentinel-0206.rlib",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef7/-z8/build/sentinel-0201.json",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "!! target/\u00fcn\u00ef8/deps2/-z/x.y/release/sentinel-0022.d",
+   "why": "the worktree-local target is absent, a symlink, foreign, or not a real directory"
+  },
+  {
+   "record": "target",
+   "why": "the target entry is not the worktree's own real directory: {\"worktree_is_own_realpath\": true, \"exists\": true, \"is_symlink\": false, \"is_dir\": true, \"realpath\": \"/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target\", \"own_entry\": true, \"mounts\": [\"/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target/release\"], \"ok\": false}"
+  }
+ ],
+ "target": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+  "worktree_is_own_realpath": true,
+  "exists": true,
+  "is_symlink": false,
+  "is_dir": true,
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+  "own_entry": true,
+  "mounts": [
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target/release"
+  ],
+  "ok": false
+ }
+}

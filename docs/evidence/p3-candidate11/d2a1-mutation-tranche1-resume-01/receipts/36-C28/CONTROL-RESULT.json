@@ -1,0 +1,10 @@
+{
+ "control": "C28",
+ "status": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+ "facts": [
+  "apply: APPLY: EXACTLY_C_PLUS_PATCH",
+  "build: BUILD: NOT OK",
+  "restoration: RESTORE: EXACTLY_C",
+  "STOP: the mutant build did not succeed (kills nothing; no rebuild). No later control is executed."
+ ]
+}

@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (18 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

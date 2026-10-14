@@ -1,0 +1,20 @@
+PRE-EXECUTION GATE: ALL CHECKS HOLD
+started: 2026-10-14T20:59:35+0100; mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01
+OK   E1 authenticate.py --gate: ALL CHECKS HOLD (receipts/06-gate-authentication.txt): 409 checks OK
+OK   E2 the freeze holds: freeze check: 180 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   E2 the freeze covers every tool (25), the EXEC-01 tools, the expectations, the catalog and the twelve patches, the carried-forward receipts and the C22 ruling record (153 required paths): []
+OK   E2 the freeze record states the resume order and the Architect-accepted C22
+OK   E3 receipts/00-authentication.txt: RESULT: ALL CHECKS HOLD: RESULT: ALL CHECKS HOLD
+OK   E3 receipts/01-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK: SELF-TEST RESULT: ALL OK
+OK   E3 receipts/03-verifier-controls/SUMMARY.txt: VERIFIER CONTROLS: ALL AS EXPECTED: VERIFIER CONTROLS: ALL AS EXPECTED
+OK   E3 receipts/04-tool-repair/TOOL-DIFF-CHECK.txt: TOOL DIFF: ALL CHECKS HOLD: TOOL DIFF: ALL CHECKS HOLD
+OK   E3 receipts/04b-render-rehearsal/SUMMARY.txt: RENDER REHEARSAL: ALL AS EXPECTED: RENDER REHEARSAL: ALL AS EXPECTED
+OK   E4 only authorized tool differences (tool_diff.py --check against the frozen tools): TOOL DIFF: ALL CHECKS HOLD
+OK   E5 no receipt directory and no worktree for C14 or any later control: []
+OK   E5 no worktree for any control outside the tranche: []
+OK   E6 no conflicting mission process (governed-control test executable, cargo/rustc in a mission worktree, p3c11-* scope, control.py): [] [] [] []
+OK   E7 the development verifier-control worktree is exactly C (read-only restored check): EXACTLY_C; 0 target entries
+OK   E7 the preserved C22 (Architect-accepted) worktree is exactly C (read-only restored check): EXACTLY_C; 2549 target entries
+OK   E8 control order C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b; C22 accepted, not executed
+OK   E8 build command and environment template, run environment and limits are the expectations' (frozen)
+finished: 2026-10-14T20:59:40+0100

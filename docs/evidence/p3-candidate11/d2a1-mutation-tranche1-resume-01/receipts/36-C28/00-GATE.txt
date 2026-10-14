@@ -1,0 +1,3 @@
+GATE: OPEN
+prior step: receipts/35-C27/RESULT.txt: 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING' (required 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING')
+freeze check: 180 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL

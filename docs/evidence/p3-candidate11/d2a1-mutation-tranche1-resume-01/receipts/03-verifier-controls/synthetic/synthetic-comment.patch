@@ -1,0 +1,7 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1,2 +1,3 @@
+ //! The ledger's protocol core (D2A-1; contract P3-C11-D2A1-CONTRACT-02-R1).
++// SYNTHETIC VERIFIER-CONTROL COMMENT LINE (comment only; not a control)
+ //!

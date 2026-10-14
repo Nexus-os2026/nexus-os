@@ -1,0 +1,29 @@
+--- development/revisions/build_packet.dev1.py	2026-10-14 20:59:01.174349775 +0100
++++ tools/build_packet.py	2026-10-14 20:59:01.193700379 +0100
+@@ -12,7 +12,8 @@
+ 
+ Checks (exit 1 if any fails): at most 32 MiB; every file text (UTF-8, no NUL byte); no Rust source, no ELF; no file
+ equal to any of the twelve mutant blobs, to any crate source blob of C, or to the pinned executables; no carried-forward
+-path and no file of the previous packet's carried-forward set republished; every staged file byte-equal to its source;
++path and no file (of 1 KiB or more) of the previous packet's carried-forward set republished; every staged file
++byte-equal to its source;
+ SHA256SUMS lists every file but itself and verifies. Nothing is committed here.
+ """
+ import os
+@@ -108,9 +109,13 @@
+         if carried(rel) or rel in K.CARRIED_DOCS.values():
+             prev[h] = rel
+     check("no carried-forward path staged", not [f for f in allf if carried(f)], [f for f in allf if carried(f)][:3])
+-    dup = [f for f in allf if K.sha256_file(os.path.join(dest, f)) in prev and os.path.getsize(os.path.join(dest, f)) > 0]
+-    check("no staged file byte-equal to a carried-forward file of the previous packet (nothing duplicated)", not dup,
+-          dup[:3])
++    same = [f for f in allf if K.sha256_file(os.path.join(dest, f)) in prev and os.path.getsize(os.path.join(dest, f)) > 0]
++    dup = [f for f in same if os.path.getsize(os.path.join(dest, f)) >= 1024]
++    check("no staged file of 1 KiB or more byte-equal to a carried-forward file of the previous packet (nothing "
++          "duplicated)", not dup, dup[:3])
++    print(f"     info: {len(same) - len(dup)} small staged file(s) coincide with a carried-forward file's bytes (an "
++          f"independently produced constant record, e.g. the sampler's one-line note): "
++          f"{[(f, os.path.getsize(os.path.join(dest, f)), prev[K.sha256_file(os.path.join(dest, f))]) for f in same if f not in dup][:6]}")
+     check("every staged file byte-equal to its source", all(K.sha256_file(s) == K.sha256_file(os.path.join(dest, r))
+                                                            for s, r in pairs))
+     listed = [l.split("  ", 1) for l in open(os.path.join(dest, "SHA256SUMS")).read().splitlines()]

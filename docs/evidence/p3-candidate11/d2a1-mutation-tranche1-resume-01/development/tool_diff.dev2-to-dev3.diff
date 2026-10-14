@@ -1,0 +1,17 @@
+--- development/revisions/tool_diff.dev2.py	2026-10-14 20:54:01.407054930 +0100
++++ tools/tool_diff.py	2026-10-14 20:54:01.425361035 +0100
+@@ -146,6 +146,14 @@
+                       and "chk" not in l and "pol" not in l and "verify_tree" not in l]
+     check("D4 control.restore: every line not about the status predicate or its record is unchanged",
+           keep(ro) == keep(rn), [l for l in difflib.unified_diff(keep(ro), keep(rn), lineterm="")][:6])
++    rterms = lambda d: [ast.unparse(v) for v in next(
++        s for s in fn(ast.parse(open(os.path.join(d, "control.py")).read()), "restore").body
++        if isinstance(s, ast.Assign) and getattr(s.targets[0], "id", None) == "ok").value.values]
++    ro_t, rn_t = rterms(OLD), rterms(NEW)
++    check("D4 control.restore `ok`: the original terms (blob, sha256, verify_tree EXACTLY_C) minus the exact-string "
++          "status term, plus pol['ok']", [t for t in ro_t if t != "rec['status'].strip() in ('', '!! target/')"]
++          == [t for t in rn_t if t != "pol['ok']"] and rn_t.count("pol['ok']") == 1 and len(rn_t) == len(ro_t),
++          f"old {ro_t}; new {rn_t}")
+     mo, mn = (fn(ast.parse(open(os.path.join(d, "control.py")).read()), "main") for d in (OLD, NEW))
+     check("D4 control.main: unchanged but for the leading refusal of C22 and any id outside RESUME_ORDER",
+           [ast.dump(s) for s in mo.body] == [ast.dump(s) for s in mn.body[1:]]

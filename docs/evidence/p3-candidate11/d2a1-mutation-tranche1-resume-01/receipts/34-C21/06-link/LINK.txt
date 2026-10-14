@@ -1,0 +1,7 @@
+LINK: VERIFIED
+control C21: restored-side receipt receipts/13-baseline-W6 (type (e2), standalone, this mission)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the standalone baseline (e2) of this mission is classified PASS: CLASSIFICATION: PASS
+OK   the same test and flags as this control's run, on the pinned baseline executable: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::unit_tests::w6_one_identity_under_two_contents', '--exact', '--nocapture', '--test-threads=1']
+OK   exact Candidate C before and after
+OK   artifact identity at this control's restoration: the baseline receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c

@@ -1,0 +1,351 @@
+VERIFIER CONTROLS P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 2026-10-14T20:55:56+0100; seed 20261014
+OK  [W.1] (setup) the development worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier exists (created by an earlier run of this harness); it is reused only if it authenticates as exactly C, clean and locked with its role
+AUTHENTICATE /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+result: OK
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink: {'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 62673814, 'mode': '0o40775'}
+OK   owned by this user: 1000
+OK   the worktree's .git file points into the repository's worktree administration: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1r-dev-verifier
+OK   the administrative directory points back at this worktree: /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/.git
+OK   locked with this mission's reason (mission ownership): P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 development verifier controls (synthetic patch and target sentinels only; never used for a control): mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 development verifier controls (synthetic patch and target sentinels only; never used for a control): mission-owned; preserve until Architect review']
+OK   toplevel is the path; the common git directory is the repository's: /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier; /home/nexus/NEXUS/nexus-os/.git
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   clean: nothing modified, staged, untracked or ignored: 
+OK   every tracked file byte-equal to C (verify_tree.py): EXACTLY_C; 5364 blobs, 97246341 bytes
+OK   baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+OK  [W.2] (setup) authenticate the development worktree (exactly C, clean, locked, owned)
+OK  [P1] (positive) Candidate C, no target: restored verifier EXACTLY_C; 0 status records
+OK  [N13.r] (negative) wrong HEAD/tree (HEAD moved to C's parent, files and index exactly C): restored verifier NOT_C; head 71264aa81a40, tree f4499b070de5, index differs ['docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'docs/evidence/p3-candidate11/current-tree-183/manifest.json']
+OK  [N14.r] (negative) missing tracked file ROADMAP.md: restored verifier NOT_C; ['tracked change not allowed here:  D ROADMAP.md']
+OK  [N15.r] (negative) mode mismatch (CHANGELOG.md 100644 made executable): restored verifier NOT_C; modes ['CHANGELOG.md']; ['tracked change not allowed here:  M CHANGELOG.md']
+OK  [N6.r] (negative) ignored file outside target (crates/nexus-governed-control/sentinel.log, ignored by *.log): restored verifier NOT_C; ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/sentinel.log']
+OK  [N7.r] (negative) untracked Rust source outside target: restored verifier NOT_C; ['untracked: ?? crates/nexus-governed-control/src/verifier_overlay.rs']
+OK  [N11.r] (negative) target is a symlink to a directory outside the worktree: restored verifier NOT_C; target facts symlink True, own entry False; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\'s own real directory: {"worktree_is_own_realpath": true, "exists": true, "is_symlink": true, "is_dir": false, "realpath": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/dev-local/scratch-03-verifier-controls/elsewhere-target", "own_entry": false, "mounts": [], "ok": false}: target']
+OK  [N11b.r] (negative) target is a symlink to ANOTHER worktree's real target (/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target; nothing there is read or written): restored verifier NOT_C; realpath /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\'s own real directory: {"worktree_is_own_realpath": true, "exists": true, "is_symlink": true, "is_dir": false, "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target", "own_entry": false, "mounts": [], "ok": false}: target']
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+OK  [P3] (positive) C plus the synthetic comment-only patch, no target: control.apply_patch APPLY OK; mutant verifier EXACTLY_C_PLUS_PATCH; shown [' M crates/nexus-governed-control/src/ledger/protocol.rs']; mutant blob 9196588374fd084de1f49df3adcf62670c7ff363
+OK  [P3.obj] (positive) the synthetic mutant blob is absent from the repository object store
+OK  [N9a] (negative) mutant file correct, expected blob wrong: mutant verifier NOT_THE_MUTANT (status policy holds; the blob comparison rejects)
+OK  [N9b] (negative) mutant file with the wrong blob (95017c1bca2f for 9196588374fd): mutant verifier NOT_THE_MUTANT
+OK  [N10] (negative) mutant file correct but staged (update-index --info-only: no object written): mutant verifier NOT_THE_MUTANT; index differs ['crates/nexus-governed-control/src/ledger/protocol.rs']; ['tracked change not allowed here: M  crates/nexus-governed-control/src/ledger/protocol.rs']
+OK  [N10.obj] (negative) after staging and unstaging, the synthetic mutant blob is still absent from the object store
+OK  [N8] (negative) a second tracked file modified (README.md): mutant verifier NOT_THE_MUTANT; other mismatches ['README.md']; ['tracked change not allowed here:  M README.md']
+OK  [N7] (negative) untracked Rust source outside target (crates/nexus-governed-control/src/verifier_overlay.rs): mutant verifier NOT_THE_MUTANT; ['untracked: ?? crates/nexus-governed-control/src/verifier_overlay.rs']
+OK  [N6] (negative) ignored file outside target (crates/nexus-governed-control/sentinel.log): mutant verifier NOT_THE_MUTANT; ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/sentinel.log']
+OK  [N6b] (negative) a nested crate-level target (crates/nexus-governed-control/target/..., ignored by **/target), not the worktree's own: mutant verifier NOT_THE_MUTANT; 5 rejected, e.g. ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/target/.../sentinel-0003.o']
+OK  [N14] (negative) missing tracked file ROADMAP.md: mutant verifier NOT_THE_MUTANT; missing ['ROADMAP.md']; ['tracked change not allowed here:  D ROADMAP.md']
+OK  [N15] (negative) mode mismatch (CHANGELOG.md): mutant verifier NOT_THE_MUTANT; modes ['CHANGELOG.md']; ['tracked change not allowed here:  M CHANGELOG.md']
+OK  [N13] (negative) wrong HEAD and tree (C's parent; files exactly C plus the patch): mutant verifier NOT_THE_MUTANT; head 71264aa81a40, tree f4499b070de5, index differs ['docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'docs/evidence/p3-candidate11/current-tree-183/manifest.json']
+OK  [N11] (negative) mutant worktree whose target is a symlink: mutant verifier NOT_THE_MUTANT; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\'s own real directory: {"worktree_is_own_realpath": true, "exists": true, "is_symlink": true, "is_dir": false, "realpath": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/dev-local/scratch-03-verifier-controls/elsewhere-target", "own_entry": false, "mounts": [], "ok": false}: target']
+OK  [P4] (positive) C plus the synthetic patch with a populated nested target (240 sentinel files, depth up to 6): mutant verifier EXACTLY_C_PLUS_PATCH; 240 ignored entries beneath the real target; shown [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (240 ignored entries, each beneath the worktree-local real target)']
+OK  [R.vm] (replay) regression replay: the EXEC-01 verify_mutant.py on the P4 state reports NOT_THE_MUTANT with 240 unexpected entries, every one '!! target/...' (the defect reproduced)
+OK  [N12b] (negative) a target descendant that escapes by a symlink (target/release/escape-link -> outside): mutant verifier NOT_THE_MUTANT; ['resolves outside the worktree-local target: !! target/release/escape-link']
+OK  [N12c] (negative) a target descendant that escapes by a symlinked directory: mutant verifier NOT_THE_MUTANT; ['resolves outside the worktree-local target: !! target/release/escape-link']
+OK  [N12a] (negative) target paths with '..', '.', empty components or outside the target entry are rejected by the lexical rule: {'target/../crates/nexus-governed-control/src/ledger/protocol.rs': 'path traversal or non-normal component', 'target/./release/x': 'path traversal or non-normal component', 'target//x': 'path traversal or non-normal component', 'target/a/../../README.md': 'path traversal or non-normal component', 'target/..': 'path traversal or non-normal component', 'target/.': 'path traversal or non-normal component', 'target/a/./b': 'path traversal or non-normal component', '../target/x': 'ignored path outside the worktree-local target', '/target/x': 'ignored path outside the worktree-local target', 'targetx/y': 'ignored path outside the worktree-local target', 'target': 'ignored path outside the worktree-local target', 'target/a//': 'path traversal or non-normal component'}
+OK  [N12a.pol] (negative) the whole policy fed a crafted '..' record rejects it: ['path traversal or non-normal component: !! target/../README.md']
+OK  [N11m] (negative) a mount point beneath the target (simulated in the mount table) makes the target foreign: ['the worktree-local target is absent, a symlink, foreign, or not a real directory: !! target/-z/deps/ünï/deps/build2/sentinel-0082.txt']
+OK  [S] (sensitivity) a deliberately over-broad policy (any ignored entry, any target) would ACCEPT {'N6': True, 'N12b': True, 'N11': True}; the path-aware policy rejects each (N6, N11, N12b above): the controls discriminate
+RESTORE: FAILED
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): NOT_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246342 bytes compared; status entries [' M README.md', '!! target/']; mismatches ['README.md']; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): REJECTED; 241 records, 240 ignored entries beneath the worktree-local real target; shown [' M README.md', '!! target/... (240 ignored entries, each beneath the worktree-local real target)']; rejected [{'record': ' M README.md', 'why': 'tracked change not allowed here'}]
+RESTORATION NOT VERIFIED
+OK  [N16] (negative) restoration with one residual tracked-byte difference (README.md +1 byte; protocol.rs itself restored): control.restore RESTORE: FAILED; mismatches ['README.md']; ['tracked change not allowed here:  M README.md']
+OK  [P2] (positive) Candidate C with a real populated nested target (240 sentinels): restored verifier EXACTLY_C; 240 ignored entries beneath the real target; verify_tree status ['!! target/']
+OK  [R.restore] (replay) regression replay: the EXEC-01 restoration predicate (status in ('', '!! target/')) would reject this exactly-C worktree: 240 '!! target/...' lines, C-quoted where a path has a space or a non-ASCII byte (the defect reproduced)
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (240 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 240 records, 240 ignored entries beneath the worktree-local real target; shown ['!! target/... (240 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+OK  [P6] (positive) end to end with the populated target (the EXEC-01 failure case): apply_patch APPLY OK, control.restore RESTORE: EXACTLY_C
+OK  [N13.t] (negative) wrong HEAD with the populated target: restored verifier NOT_C
+OK  [P5] (positive) the preserved restored C22 worktree (read-only, GIT_OPTIONAL_LOCKS=0): restored verifier EXACTLY_C; 2549 ignored entries beneath its real target; protocol.rs sha256 a5454944368df70f…; admin files and target unchanged by the check: True
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (7 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 54 records, 54 ignored entries beneath the worktree-local real target; shown ['!! target/... (54 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (96 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 11 records, 11 ignored entries beneath the worktree-local real target; shown ['!! target/... (11 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (11 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 125 records, 125 ignored entries beneath the worktree-local real target; shown ['!! target/... (125 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (102 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 138 records, 138 ignored entries beneath the worktree-local real target; shown ['!! target/... (138 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (102 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 88 records, 88 ignored entries beneath the worktree-local real target; shown ['!! target/... (88 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (88 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 18 records, 18 ignored entries beneath the worktree-local real target; shown ['!! target/... (18 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (18 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 129 records, 129 ignored entries beneath the worktree-local real target; shown ['!! target/... (129 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (63 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 151 records, 151 ignored entries beneath the worktree-local real target; shown ['!! target/... (151 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (151 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 151 records, 151 ignored entries beneath the worktree-local real target; shown ['!! target/... (151 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (155 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 15 records, 15 ignored entries beneath the worktree-local real target; shown ['!! target/... (15 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (10 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 74 records, 74 ignored entries beneath the worktree-local real target; shown ['!! target/... (74 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (74 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 33 records, 33 ignored entries beneath the worktree-local real target; shown ['!! target/... (33 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (33 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 158 records, 158 ignored entries beneath the worktree-local real target; shown ['!! target/... (158 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (18 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 82 records, 82 ignored entries beneath the worktree-local real target; shown ['!! target/... (82 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (82 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 43 records, 43 ignored entries beneath the worktree-local real target; shown ['!! target/... (43 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (81 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 17 records, 17 ignored entries beneath the worktree-local real target; shown ['!! target/... (17 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (17 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 109 records, 109 ignored entries beneath the worktree-local real target; shown ['!! target/... (109 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYNTHETIC: one comment line (synthetic; not a control)
+patch: receipts/03-verifier-controls/synthetic/synthetic-comment.patch (the frozen R2 packet's (synthetic)), sha256 e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0 (catalog e4764b62a1ab054e4127548410ece02dad34915bf76881f88ddc3565d2053fc0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 9196588374fd084de1f49df3adcf62670c7ff363 (expected 9196588374fd084de1f49df3adcf62670c7ff363), sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87 (expected 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87); status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (40 ignored entries, each beneath the worktree-local real target)']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+RESTORE: EXACTLY_C
+control SYNTHETIC: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 9196588374fd084de1f49df3adcf62670c7ff363 sha256 4ada40008d23b05224e3d6c2d7e0b11c3198ecadda3b5d81fd604381773c5a87
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 56 records, 56 ignored entries beneath the worktree-local real target; shown ['!! target/... (56 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+OK  [T] (randomized) 48 seeded trials in the worktree (random target populations, at most one random perturbation): {'accept_expected_accepted': 16, 'reject_expected_rejected': 32, 'false_accept': 0, 'false_reject': 0}
+OK  [F] (randomized) 20000 random paths: the lexical target-path rule agrees with an independent posixpath.normpath oracle in every case (0 disagreements)
+AUTHENTICATE /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier at the end
+result: OK
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink: {'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 62673814, 'mode': '0o40775'}
+OK   owned by this user: 1000
+OK   the worktree's .git file points into the repository's worktree administration: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1r-dev-verifier
+OK   the administrative directory points back at this worktree: /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/.git
+OK   locked with this mission's reason (mission ownership): P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 development verifier controls (synthetic patch and target sentinels only; never used for a control): mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 development verifier controls (synthetic patch and target sentinels only; never used for a control): mission-owned; preserve until Architect review']
+OK   toplevel is the path; the common git directory is the repository's: /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier; /home/nexus/NEXUS/nexus-os/.git
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   clean: nothing modified, staged, untracked or ignored: 
+OK   every tracked file byte-equal to C (verify_tree.py): EXACTLY_C; 5364 blobs, 97246341 bytes
+OK   baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+OK  [W.3] (setup) end state: the development worktree is exactly C, clean, without target, locked (kept for review)
+OK  [W.4] (setup) the synthetic mutant blob was never written to the repository object store
+VERIFIER CONTROLS P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01: 42 checks; 42 as expected; elapsed 129.5 s; seed 20261014
+VERIFIER CONTROLS: ALL AS EXPECTED

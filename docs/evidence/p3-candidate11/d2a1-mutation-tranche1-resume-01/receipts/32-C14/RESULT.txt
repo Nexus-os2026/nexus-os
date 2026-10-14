@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C14: the ticket check of step 0 is removed
+receipt type: (b) named non-explorer mutant-test FAIL; restored (e2) PASS
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 bfb7b864ef21ec8db377907c8fbbd4910ff15b4e58f59b9a26e332c215bbd77d size 8988256
+run (type (b)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-BIND at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; receipts/11-baseline-T-BIND (type (e2), standalone, this mission)

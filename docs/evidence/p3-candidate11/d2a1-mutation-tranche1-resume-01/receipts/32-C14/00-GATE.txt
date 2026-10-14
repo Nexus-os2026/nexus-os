@@ -1,0 +1,12 @@
+GATE: OPEN
+the C22 ruling record and the carried-forward receipts are in the freeze: yes
+prior step: receipts/10-baseline-X-1/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/11-baseline-T-BIND/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/12-baseline-T-CELL/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/13-baseline-W6/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/14-baseline-T-PREC/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/15-baseline-T-RES/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/20-healthy-build/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: documents/ARCHITECT-RULING-C22-ACCEPTANCE.md: 'C22 — MUTATION CONTROL KILL ACCEPTED' (required 'C22 — MUTATION CONTROL KILL ACCEPTED')
+prior step: receipts/06-PRE-EXECUTION-GATE.txt: 'PRE-EXECUTION GATE: ALL CHECKS HOLD' (required 'PRE-EXECUTION GATE: ALL CHECKS HOLD')
+freeze check: 180 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL

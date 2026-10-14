@@ -1,0 +1,15 @@
+--- development/revisions/verifier_controls.dev1.py	2026-10-14 20:42:56.759551131 +0100
++++ tools/verifier_controls.py	2026-10-14 20:45:41.417918781 +0100
+@@ -480,9 +480,10 @@
+          f"{d['verify_tree']['status_entries']}", d)
+     st = git("status", "--porcelain", "--ignored", "--untracked-files=all").stdout
+     note("R.restore", "replay", st.strip() not in ("", "!! target/") and all(
+-        l.startswith("!! target/") for l in st.strip().splitlines()),
++        l.startswith(("!! target/", '!! "target/')) for l in st.strip().splitlines()),
+          f"regression replay: the EXEC-01 restoration predicate (status in ('', '!! target/')) would reject this exactly-C "
+-         f"worktree: {len(st.strip().splitlines())} '!! target/...' lines (the defect reproduced)")
++         f"worktree: {len(st.strip().splitlines())} '!! target/...' lines, C-quoted where a path has a space or a "
++         f"non-ASCII byte (the defect reproduced)")
+     ok, applied = control.apply_patch(WT, ctl, os.path.join(outdir, "P6-apply"))
+     rok = control.restore(WT, ctl, os.path.join(outdir, "P6-restore"), applied)
+     note("P6", "positive", ok and applied and rok and supervise.first_line(os.path.join(outdir, "P6-restore/RESTORE.txt"))

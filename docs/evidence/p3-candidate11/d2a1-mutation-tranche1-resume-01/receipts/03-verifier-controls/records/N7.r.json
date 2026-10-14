@@ -1,0 +1,48 @@
+{
+ "verdict": "NOT_C",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "?? crates/nexus-governed-control/src/verifier_overlay.rs"
+  ],
+  "unexpected_status": [
+   "?? crates/nexus-governed-control/src/verifier_overlay.rs"
+  ],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "NOT_C"
+ },
+ "status_policy": {
+  "ok": false,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 1,
+  "target_entries": 0,
+  "status_sha256": "92b8daef733ec3bbda16b84142fbe6a3ca3040f7667d1c65da4ffdfdf30115d3",
+  "shown": [
+   "?? crates/nexus-governed-control/src/verifier_overlay.rs"
+  ],
+  "rejected": [
+   {
+    "record": "?? crates/nexus-governed-control/src/verifier_overlay.rs",
+    "why": "untracked"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": false,
+   "ok": true
+  }
+ },
+ "line": "source (verifier control): NOT_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['?? crates/nexus-governed-control/src/verifier_overlay.rs']; mismatches []; missing []; modes []"
+}

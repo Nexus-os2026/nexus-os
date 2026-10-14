@@ -1,0 +1,14 @@
+{
+ "target/../crates/nexus-governed-control/src/ledger/protocol.rs": "path traversal or non-normal component",
+ "target/./release/x": "path traversal or non-normal component",
+ "target//x": "path traversal or non-normal component",
+ "target/a/../../README.md": "path traversal or non-normal component",
+ "target/..": "path traversal or non-normal component",
+ "target/.": "path traversal or non-normal component",
+ "target/a/./b": "path traversal or non-normal component",
+ "../target/x": "ignored path outside the worktree-local target",
+ "/target/x": "ignored path outside the worktree-local target",
+ "targetx/y": "ignored path outside the worktree-local target",
+ "target": "ignored path outside the worktree-local target",
+ "target/a//": "path traversal or non-normal component"
+}

@@ -1,0 +1,17 @@
+--- development/revisions/authenticate.dev1.py	2026-10-14 20:42:56.757902667 +0100
++++ tools/authenticate.py	2026-10-14 20:54:32.539544646 +0100
+@@ -317,7 +317,13 @@
+         chk(f"previous mission's preserved worktree present, locked with its reason: {p}",
+             reason is not None and reason.startswith(K.PREV_MISSION + " "), True)
+     chk(f"previous mission's evidence worktree present: {K.PREV_EVIDENCE_WT}", os.path.isdir(K.PREV_EVIDENCE_WT), True)
+-    paths = [K.EVIDENCE_WT, K.DEV_WT] + [K.control_wt(c) for c in K.RESUME_ORDER]
++    if os.path.isdir(K.DEV_WT):  # created by this mission's development verifier controls, after auth-dev1
++        locked = gtext("-C", K.DEV_WT, "rev-parse", "--git-path", "locked")
++        reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
++        chk(f"this mission's development worktree, if present, is locked with its development role: {K.DEV_WT}",
++            reason, f"{K.MISSION} development verifier controls (synthetic patch and target sentinels only; never used "
++                    f"for a control): mission-owned; preserve until Architect review")
++    paths = [K.EVIDENCE_WT] + [K.control_wt(c) for c in K.RESUME_ORDER]
+     for p in paths:
+         if GATE:
+             print(f"    info      mission-owned path {p}: present {os.path.lexists(p)}")

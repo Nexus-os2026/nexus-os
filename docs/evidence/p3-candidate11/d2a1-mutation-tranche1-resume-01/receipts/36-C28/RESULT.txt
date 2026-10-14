@@ -1,0 +1,7 @@
+CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+control C28: resolve's "present, frontier below N" check alone is removed
+receipt type: (b) named non-explorer mutant-test FAIL; restored (e2) PASS
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: NOT OK
+restoration: RESTORE: EXACTLY_C
+STOP: the mutant build did not succeed (kills nothing; no rebuild). No later control is executed.

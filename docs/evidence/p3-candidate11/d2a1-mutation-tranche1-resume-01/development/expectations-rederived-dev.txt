@@ -1,0 +1,508 @@
+{
+ "problems": [],
+ "controls": {
+  "C22": {
+   "dir": "receipts/31-C22",
+   "kind": "build",
+   "test": null,
+   "argv_tail": null,
+   "limit_seconds": null,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": null,
+   "diagnostic_line": 1089,
+   "linked": {
+    "type": "e4",
+    "dir": "receipts/20-healthy-build"
+   }
+  },
+  "C14": {
+   "dir": "receipts/32-C14",
+   "kind": "unit",
+   "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": [
+    1113,
+    1249
+   ],
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/11-baseline-T-BIND"
+   }
+  },
+  "C19": {
+   "dir": "receipts/33-C19",
+   "kind": "unit",
+   "test": "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": [
+    1467,
+    1656
+   ],
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/12-baseline-T-CELL"
+   }
+  },
+  "C21": {
+   "dir": "receipts/34-C21",
+   "kind": "unit",
+   "test": "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+   "argv_tail": [
+    "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": [
+    2591,
+    2639
+   ],
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/13-baseline-W6"
+   }
+  },
+  "C27": {
+   "dir": "receipts/35-C27",
+   "kind": "unit",
+   "test": "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": [
+    780,
+    1061
+   ],
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/14-baseline-T-PREC"
+   }
+  },
+  "C28": {
+   "dir": "receipts/36-C28",
+   "kind": "unit",
+   "test": "ledger::protocol::unit_tests::t_res_every_resolve_row",
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": null,
+   "named_property": null,
+   "verdict_assertion": null,
+   "test_span": [
+    1662,
+    1812
+   ],
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/15-baseline-T-RES"
+   }
+  },
+  "C12": {
+   "dir": "receipts/37-C12",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+   "argv_tail": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": 250000,
+   "named_property": "E2",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4121,
+    "col": 5,
+    "span": [
+     4115,
+     4128
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "dir": "receipts/10-baseline-X-1"
+   }
+  },
+  "C9": {
+   "dir": "receipts/38-C9",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C11": {
+   "dir": "receipts/39-C11",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C17": {
+   "dir": "receipts/40-C17",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C18a": {
+   "dir": "receipts/41-C18a",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::full_fg",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fg",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E7",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-G",
+    "input_dir": "inputs/linked/F-G",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G",
+    "classification_blob": "dace6c67fd98904e47b179cbba9b1a421c5971f6",
+    "raw_output_blob": "0b77294ef4eec4da1d911a5cf73f7124e42ebe57",
+    "raw_output_sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1"
+   }
+  },
+  "C18b": {
+   "dir": "receipts/42-C18b",
+   "kind": "explore",
+   "test": "ledger::protocol::model_tests::full_fg",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fg",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E7",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "test_span": null,
+   "diagnostic_line": null,
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-G",
+    "input_dir": "inputs/linked/F-G",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G",
+    "classification_blob": "dace6c67fd98904e47b179cbba9b1a421c5971f6",
+    "raw_output_blob": "0b77294ef4eec4da1d911a5cf73f7124e42ebe57",
+    "raw_output_sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1"
+   }
+  }
+ },
+ "baselines": [
+  {
+   "key": "X-1",
+   "type": "e1",
+   "control": "C12",
+   "dir": "receipts/10-baseline-X-1",
+   "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+   "configuration": "X-1",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": 250000,
+   "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Adm]",
+   "properties": {
+    "P1": "HOLDS",
+    "P2": "HOLDS",
+    "P4": "HOLDS",
+    "P5": "HOLDS",
+    "P6": "HOLDS",
+    "P7": "HOLDS",
+    "P8": "HOLDS",
+    "P9": "HOLDS",
+    "P12": "HOLDS",
+    "P13": "HOLDS",
+    "P15": "HOLDS",
+    "D1": "HOLDS",
+    "L1": "L1-HOLDS",
+    "E1": "HOLDS",
+    "E2": "HOLDS",
+    "E3": "HOLDS",
+    "E4": "HOLDS",
+    "E5": "HOLDS",
+    "E6": "HOLDS",
+    "E7": "HOLDS",
+    "E8": "HOLDS",
+    "E9": "HOLDS",
+    "E10": "not applicable here (worker verbs do not unwind)",
+    "E11": "HOLDS",
+    "KEY": "HOLDS"
+   },
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4121,
+    "col": 5,
+    "span": [
+     4115,
+     4128
+    ]
+   }
+  },
+  {
+   "key": "T-BIND",
+   "type": "e2",
+   "control": "C14",
+   "dir": "receipts/11-baseline-T-BIND",
+   "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1113,
+    1249
+   ]
+  },
+  {
+   "key": "T-CELL",
+   "type": "e2",
+   "control": "C19",
+   "dir": "receipts/12-baseline-T-CELL",
+   "test": "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1467,
+    1656
+   ]
+  },
+  {
+   "key": "W6",
+   "type": "e2",
+   "control": "C21",
+   "dir": "receipts/13-baseline-W6",
+   "test": "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    2591,
+    2639
+   ]
+  },
+  {
+   "key": "T-PREC",
+   "type": "e2",
+   "control": "C27",
+   "dir": "receipts/14-baseline-T-PREC",
+   "test": "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    780,
+    1061
+   ]
+  },
+  {
+   "key": "T-RES",
+   "type": "e2",
+   "control": "C28",
+   "dir": "receipts/15-baseline-T-RES",
+   "test": "ledger::protocol::unit_tests::t_res_every_resolve_row",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1662,
+    1812
+   ]
+  }
+ ]
+}
+EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD

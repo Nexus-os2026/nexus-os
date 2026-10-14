@@ -1,0 +1,17 @@
+
+running 1 test
+test ledger::protocol::unit_tests::w6_one_identity_under_two_contents ... 
+thread 'ledger::protocol::unit_tests::w6_one_identity_under_two_contents' (3816548) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:2600:5:
+assertion `left == right` failed
+  left: Committed
+ right: NotApplied { counted: Counted { persistence: NotWritten, conflict_member: None }, reason: Entry(Malformed) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::unit_tests::w6_one_identity_under_two_contents
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

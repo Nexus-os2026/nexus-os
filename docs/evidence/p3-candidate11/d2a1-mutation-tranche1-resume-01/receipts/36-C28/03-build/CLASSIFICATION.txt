@@ -1,0 +1,6 @@
+BUILD: NOT OK
+outer class (AD-1-R4 K.2): BUILD NOT OK (no error or warning diagnostic): kills nothing; the mission stops
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 46s')]
+resources: wall 166.4 s of 900 s; scope memory.peak 2611777536 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1969692 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']

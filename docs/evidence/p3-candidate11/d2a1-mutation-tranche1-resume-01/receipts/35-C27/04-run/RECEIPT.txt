@@ -1,0 +1,34 @@
+SUPERVISED MUTANT RUN — control C27: ledger::protocol::unit_tests::t_prec_persistence_of_every_ending on the pinned mutant executable (type (b))
+started: 2026-10-14T21:11:40+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+freeze check: 180 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+prior step: receipts/35-C27/03-build/CLASSIFICATION.txt: 'BUILD: PINNED' (required 'BUILD: PINNED')
+source (before): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246950 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol.rs: git blob bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf sha256 bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7 (expected bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf / bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7)
+executable before: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f", "size": 8986736, "mtime_ns": 1792008699878262316, "inode": 62946481, "symlink": false}; pinned sha256 8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f size 8986736: MATCH
+test environment (env -i; exactly these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+pre-flight 2026-10-14T21:11:41+0100:
+  MemTotal 65077588 KiB; MemAvailable 54187304 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7698984 KiB (the scope has swap disabled)
+  load average ['2.33', '2.24', '1.81']; online CPUs 16
+  disk free on the worktree filesystem: 45 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    839532 brave
+    729592 2.1.281
+    723488 chrome
+    664380 python
+    650744 brave
+    530300 claude
+    510948 chrome
+    471704 chrome
+selection: ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending', '--exact', '--list'] -> exit 0, listed ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending: test']; ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending', '--exact', '--ignored', '--list'] -> exit 0, listed [] (ignored test expected: False); executable after the listings 8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f 8986736
+scope unit: p3c11-mt1x-04-run-1792008701.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-mt1x-04-run-1792008701 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=190 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/time-v.txt timeout -s KILL 180 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::unit_tests::t_prec_persistence_of_every_ending --exact --nocapture --test-threads=1
+launched: 2026-10-14T21:11:41+0100
+returned: 2026-10-14T21:11:41+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.0 s, max RSS (largest single process) 5048 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3371008 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246950 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol.rs: git blob bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf sha256 bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7 (expected bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf / bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7)
+executable after: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f", "size": 8986736, "mtime_ns": 1792008699878262316, "inode": 62946481, "symlink": false}: MATCH
+raw output: raw-output.txt sha256 79b4d2e25fc32ff3ff4081a4fdf041d9cedaabf3b91d8cee737c27f0ffad6622 bytes 694
+finished: 2026-10-14T21:11:42+0100

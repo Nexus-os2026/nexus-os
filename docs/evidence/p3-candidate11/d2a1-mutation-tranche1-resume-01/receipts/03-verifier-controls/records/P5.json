@@ -1,0 +1,108 @@
+{
+ "verifier": {
+  "verdict": "EXACTLY_C",
+  "verify_tree": {
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22",
+   "head": "d5964ee5326c2733177307db6f507328023d361a",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "detached": true,
+   "tracked_blobs_compared": 5364,
+   "bytes_compared": 97246341,
+   "gitlinks": [],
+   "index_differs_from_head": [],
+   "status_entries": [
+    "!! target/"
+   ],
+   "unexpected_status": [],
+   "content_mismatches": [],
+   "missing": [],
+   "mode_mismatches": [],
+   "verdict": "EXACTLY_C"
+  },
+  "status_policy": {
+   "ok": true,
+   "mode": "restored",
+   "allowed_modified": null,
+   "modified_seen": [],
+   "records": 2549,
+   "target_entries": 2549,
+   "status_sha256": "cffce89e2e066cbc4c3e6e72e663652a24273a5c63327ffd24219c0cd5582f0e",
+   "shown": [
+    "!! target/... (2549 ignored entries, each beneath the worktree-local real target)"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target",
+    "worktree_is_own_realpath": true,
+    "exists": true,
+    "is_symlink": false,
+    "is_dir": true,
+    "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target",
+    "own_entry": true,
+    "mounts": [],
+    "ok": true
+   }
+  },
+  "line": "source (C22 preserved worktree, read-only): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+ },
+ "before": {
+  "admin": {
+   "admin": "/home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1x-C22",
+   "index": {
+    "sha256": "759cf29f0d038cd1875b23330e59035c519ce80d718504fbb83b5232b68d61f2",
+    "mtime_ns": 1792004918123631330,
+    "size": 694374
+   },
+   "HEAD": {
+    "sha256": "3080530d771bb849fd0404c54fc52305ab650abb9c7bf590dd417f24110b5852",
+    "mtime_ns": 1792004735581287112,
+    "size": 41
+   },
+   "locked": {
+    "sha256": "12c5ea51c39a2703a4c9d5f1bbb300215425b443ed9086bb9e88d83fa20469a4",
+    "mtime_ns": 1792004736169291408,
+    "size": 130
+   },
+   "gitdir": {
+    "sha256": "d75241fb5992de85d39ad6e4c5234478140a17cd83520fd35e83690ff52d954b",
+    "mtime_ns": 1792004735578468407,
+    "size": 48
+   }
+  },
+  "target": {
+   "files": 2549,
+   "listing_sha256": "5dec98ad96113e9c7f3d9285421601fc76872a121de9835607db7671ce1f39f2"
+  },
+  "protocol_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+ },
+ "after": {
+  "admin": {
+   "admin": "/home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1x-C22",
+   "index": {
+    "sha256": "759cf29f0d038cd1875b23330e59035c519ce80d718504fbb83b5232b68d61f2",
+    "mtime_ns": 1792004918123631330,
+    "size": 694374
+   },
+   "HEAD": {
+    "sha256": "3080530d771bb849fd0404c54fc52305ab650abb9c7bf590dd417f24110b5852",
+    "mtime_ns": 1792004735581287112,
+    "size": 41
+   },
+   "locked": {
+    "sha256": "12c5ea51c39a2703a4c9d5f1bbb300215425b443ed9086bb9e88d83fa20469a4",
+    "mtime_ns": 1792004736169291408,
+    "size": 130
+   },
+   "gitdir": {
+    "sha256": "d75241fb5992de85d39ad6e4c5234478140a17cd83520fd35e83690ff52d954b",
+    "mtime_ns": 1792004735578468407,
+    "size": 48
+   }
+  },
+  "target": {
+   "files": 2549,
+   "listing_sha256": "5dec98ad96113e9c7f3d9285421601fc76872a121de9835607db7671ce1f39f2"
+  },
+  "protocol_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+ }
+}

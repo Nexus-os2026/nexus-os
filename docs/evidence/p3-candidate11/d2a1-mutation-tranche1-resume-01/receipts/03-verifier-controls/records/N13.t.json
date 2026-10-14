@@ -1,0 +1,65 @@
+{
+ "verdict": "NOT_C",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+  "head": "71264aa81a40b86189783facc8437e0427887c16",
+  "tree": "f4499b070de59342a1ca89213199b4efa7fbf814",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [
+   "docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "docs/evidence/p3-candidate11/current-tree-183/manifest.json"
+  ],
+  "status_entries": [
+   "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "!! target/"
+  ],
+  "unexpected_status": [
+   "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json"
+  ],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "NOT_C"
+ },
+ "status_policy": {
+  "ok": false,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 242,
+  "target_entries": 240,
+  "status_sha256": "3a9e5f9c7a135d134ffd60ce0f8fa6b6459ab63d1cab387c5a8037982f84a302",
+  "shown": [
+   "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "!! target/... (240 ignored entries, each beneath the worktree-local real target)"
+  ],
+  "rejected": [
+   {
+    "record": "A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+    "why": "tracked change not allowed here"
+   },
+   {
+    "record": "A  docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+    "why": "tracked change not allowed here"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": true,
+   "is_symlink": false,
+   "is_dir": true,
+   "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "own_entry": true,
+   "mounts": [],
+   "ok": true
+  }
+ },
+ "line": "source (verifier control): NOT_C; HEAD 71264aa81a40b86189783facc8437e0427887c16; tree f4499b070de59342a1ca89213199b4efa7fbf814; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['A  docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'A  docs/evidence/p3-candidate11/current-tree-183/manifest.json', '!! target/']; mismatches []; missing []; modes []"
+}

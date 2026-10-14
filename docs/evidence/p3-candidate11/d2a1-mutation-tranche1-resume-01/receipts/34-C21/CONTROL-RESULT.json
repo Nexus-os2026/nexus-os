@@ -1,0 +1,12 @@
+{
+ "control": "C21",
+ "status": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+ "facts": [
+  "apply: APPLY: EXACTLY_C_PLUS_PATCH",
+  "build: BUILD: PINNED",
+  "pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 b4c2d0a60231bffdcb8b466446e171aa193dea0b34a5a249255cd8d24cf1eeb8 size 8957304",
+  "run (type (b)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL \u2014 admissible type-(b) named-test FAIL of W6 at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:2600",
+  "restoration: RESTORE: EXACTLY_C",
+  "linked restored-side receipt: LINK: VERIFIED; receipts/13-baseline-W6 (type (e2), standalone, this mission)"
+ ]
+}

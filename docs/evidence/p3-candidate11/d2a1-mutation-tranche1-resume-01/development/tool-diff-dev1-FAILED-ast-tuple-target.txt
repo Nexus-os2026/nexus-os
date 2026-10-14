@@ -1,0 +1,1 @@
+tool_diff.py dev1 --check: AttributeError: 'Tuple' object has no attribute 'id' (the `ok` finder assumed every Assign target is a Name; main also has tuple targets)

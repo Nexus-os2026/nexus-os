@@ -1,0 +1,15 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8711617881e34ca6… 8986736 / 8711617881e34ca6… 8986736 / 8711617881e34ca6… 8986736 (pinned 8711617881e34ca6… 8986736)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 79b4d2e25fc32ff3ff4081a4fdf041d9cedaabf3b91d8cee737c27f0ffad6622
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::unit_tests::t_prec_persistence_of_every_ending', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3371008 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::unit_tests::t_prec_persistence_of_every_ending' (3825954) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799:9:"]
+OK   the panic is at one of the named test's own checks: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs, inside fn t_prec_persistence_of_every_ending (lines 781-1061) — not in shared setup, a fixture or elsewhere: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799:9
+OK   the panic message is recorded (non-empty): ['assertion `left == right` failed: an append refused at entry is counted']
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))

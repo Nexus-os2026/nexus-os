@@ -1,0 +1,2289 @@
+--- EXEC-01/tools/authenticate.py
++++ RESUME-01/tools/authenticate.py
+@@ -1,15 +1,21 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission sections 1, 3, 4, 5 and 6: authenticate every input (read-only).
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (sections 2, 10 and 20): section [6] states the resume
++mission's paths (the previous mission's preserved worktrees present, this mission's absent before creation), and
++section [7] authenticates the complete previous evidence packet, the facts of the Architect's C22 ruling, and the
++carried-forward receipt copies. Sections [1]-[5] are unchanged.
+ 
+ Every identity is compared with the value the mission states, or with the value the frozen R2 catalog records; any
+ mismatch prints MISMATCH and the exit status is 1. Reads git objects, the remote's ref listing and the pinned baseline
+ executable (hashed and sized, never run). Writes only EV/inputs/ (byte copies of authenticated inputs, re-hashed after
+-writing) and a temporary patch-check directory outside every repository (removed again).
+-
+-    authenticate.py            prints the authentication record; exit 0 only if every check holds; the mission-owned
++writing), the carried-forward receipt copies under EV/receipts/ and EV/documents/ (read-only byte copies of the
++previous packet's files, each checked against its SHA256SUMS), and a temporary patch-check directory outside every
++repository (removed again).
++
++    authenticate.py            prints the authentication record; exit 0 only if every check holds; this mission's
+                                worktree paths must still be absent
+-    authenticate.py --gate     the same checks again at the final gate (mission-owned paths reported, not required
+-                               absent; input copies compared, not rewritten)
++    authenticate.py --gate     the same checks again at a gate (this mission's paths reported, not required absent;
++                               input and carried-forward copies compared, not rewritten)
+ """
+ import json
+ import os
+@@ -304,16 +310,147 @@
+                                                                "refs/heads/" + K.LOCAL_BRANCH), None)
+     for ref in ("refs/heads/main", "refs/heads/rebuild/phase0-trust-boundary"):
+         print(f"    info      remote {ref}: {rm.get(ref)}")
+-    paths = [K.HEALTHY_WT, K.EVIDENCE_WT] + [K.control_wt(c) for c in TRANCHE]
++    chk(f"previous review ref {K.PREV_REF}", rm.get(K.PREV_REF), K.PREV)
++    for p in [K.HEALTHY_WT, K.control_wt("C22"), K.PREV_DEV_WT]:
++        locked = gtext("-C", p, "rev-parse", "--git-path", "locked") if os.path.isdir(p) else None
++        reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
++        chk(f"previous mission's preserved worktree present, locked with its reason: {p}",
++            reason is not None and reason.startswith(K.PREV_MISSION + " "), True)
++    chk(f"previous mission's evidence worktree present: {K.PREV_EVIDENCE_WT}", os.path.isdir(K.PREV_EVIDENCE_WT), True)
++    if os.path.isdir(K.DEV_WT):  # created by this mission's development verifier controls, after auth-dev1
++        locked = gtext("-C", K.DEV_WT, "rev-parse", "--git-path", "locked")
++        reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
++        chk(f"this mission's development worktree, if present, is locked with its development role: {K.DEV_WT}",
++            reason, f"{K.MISSION} development verifier controls (synthetic patch and target sentinels only; never used "
++                    f"for a control): mission-owned; preserve until Architect review")
++    paths = [K.EVIDENCE_WT] + [K.control_wt(c) for c in K.RESUME_ORDER]
+     for p in paths:
+         if GATE:
+             print(f"    info      mission-owned path {p}: present {os.path.lexists(p)}")
+         else:
+             chk(f"mission-owned path absent before creation: {p}", os.path.lexists(p), False)
+     print()
++    previous()
++    print()
+     print("RESULT: " + ("ALL CHECKS HOLD" if not fail else "MISMATCH — STOP"))
+     return fail
+ 
+ 
++C22_RULING = {"patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
++              "mutant_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
++              "mutant_sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
++              "diagnostic": "error[E0283]", "location": [K.UNIT, 1089, 5],
++              "assertion": "<Ticket as NotClone<_>>::check();"}
++# The previous executor's classifications: immutable historical outputs of the defective frozen tool (ruling 1).
++HISTORICAL = {"receipts/31-C22/RESULT.txt": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
++              "receipts/31-C22/03-build/CLASSIFICATION.txt": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE",
++              "receipts/31-C22/05-restore/RESTORE.txt": "RESTORE: FAILED",
++              "receipts/31-C22/02-apply/APPLY.txt": "APPLY: EXACTLY_C_PLUS_PATCH",
++              "receipts/20-healthy-build/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/10-baseline-X-1/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/11-baseline-T-BIND/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/12-baseline-T-CELL/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/13-baseline-W6/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/14-baseline-T-PREC/CLASSIFICATION.txt": "CLASSIFICATION: PASS",
++              "receipts/15-baseline-T-RES/CLASSIFICATION.txt": "CLASSIFICATION: PASS"}
++
++
++def previous():
++    print("[7] the previous execution evidence, the C22 ruling's facts and the carried-forward copies (resume 1, 2)")
++    chk("previous evidence commit type", gtext("cat-file", "-t", K.PREV), "commit")
++    chk("previous evidence commit tree", gtext("rev-parse", K.PREV + "^{tree}"), K.PREV_TREE)
++    chk("previous evidence commit single parent (the R2 evidence commit)", gtext("log", "-1", "--format=%P", K.PREV),
++        K.PREV_PARENT)
++    ns = gtext("diff", "--name-status", "--no-renames", K.PREV_PARENT, K.PREV).splitlines()
++    chk("every path the previous evidence commit changes is added under its packet",
++        bool(ns) and all(l.startswith("A\t" + K.PREV_PACKET + "/") for l in ns), True)
++    sums = packet_sums(K.PREV, K.PREV_PACKET)
++    files = sorted(f[len(K.PREV_PACKET) + 1:] for f in
++                   gtext("ls-tree", "-r", "--name-only", K.PREV, K.PREV_PACKET + "/").splitlines())
++    chk("previous SHA256SUMS lists every packet file but itself", sorted(sums) == [f for f in files if f != "SHA256SUMS"],
++        True)
++    data = {}
++    proc = subprocess.Popen(["git", "-C", K.REPO, "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
++    for rel in files:
++        proc.stdin.write(f"{K.PREV}:{K.PREV_PACKET}/{rel}\n".encode())
++        proc.stdin.flush()
++        size = int(proc.stdout.readline().split()[2])
++        data[rel] = proc.stdout.read(size)
++        proc.stdout.read(1)
++    proc.stdin.close()
++    proc.wait()
++    bad = [p for p, d in sums.items() if K.sha256_bytes(data[p]) != d]
++    chk(f"previous packet SHA256SUMS: all {len(sums)} listed files verify at {K.PREV[:8]}", bad, [])
++    print(f"    info      previous packet: {len(files)} files, {sum(len(v) for v in data.values())} bytes; SHA256SUMS "
++          f"sha256 {K.sha256_bytes(data['SHA256SUMS'])}")
++    for rel, first in HISTORICAL.items():
++        chk(f"previous {rel} first line (immutable history)", data[rel].decode().splitlines()[0], first)
++    ap = json.loads(data["receipts/31-C22/02-apply/APPLY.json"])
++    mf = ap["verify_mutant"]["mutant_file"]
++    chk("C22 frozen patch sha256 (ruling)", (ap["patch_sha256"], ap["catalog_patch_sha256"]),
++        (C22_RULING["patch_sha256"],) * 2)
++    chk("C22 mutant protocol.rs blob and sha256 (ruling)", (mf["path"], mf["git_blob"], mf["sha256"]),
++        (K.PROTOCOL, C22_RULING["mutant_blob"], C22_RULING["mutant_sha256"]))
++    bd = json.loads(data["receipts/31-C22/03-build/descriptor.json"])
++    pr = json.loads(data["receipts/31-C22/03-build/PARSED-RECEIPT.json"])
++    chk("C22 build: the exact command", bd["argv"], K.BUILD_ARGV)
++    for when in ("source_before", "source_after"):
++        m = bd[when]["mutant_file"]
++        other = [x for x in bd[when]["unexpected_status"] if not x.startswith("!! target/")]
++        chk(f"C22 {when}: HEAD/tree C, detached, nothing staged, no other tracked difference, mutant bytes exact; "
++            f"every rejected status entry an ignored file under the worktree-local target/",
++            (bd[when]["head"], bd[when]["tree"], bd[when]["detached"], bd[when]["index_differs_from_head"],
++             bd[when]["other_content_mismatches"], bd[when]["missing"], bd[when]["mode_mismatches"], m["git_blob"],
++             m["sha256"], other),
++            (K.C, K.C_TREE, True, [], [], [], [], C22_RULING["mutant_blob"], C22_RULING["mutant_sha256"], []))
++    print(f"    info      C22 source_after: {len(bd['source_after']['unexpected_status'])} ignored entries under target/ "
++          f"listed one by one (the defect); source_before: {len(bd['source_before']['unexpected_status'])}")
++    chk("C22 diagnostics: exactly one coded error, E0283, and cargo's one summary",
++        [d.split(":")[0] for d in pr["diagnostics"]], [C22_RULING["diagnostic"], "error"])
++    chk("C22 primary location (ruling)", pr["primary_location"], C22_RULING["location"])
++    stderr = data["receipts/31-C22/03-build/build.stderr"].decode()
++    chk("C22 rendered assertion line at 1089 (ruling)", f"1089 |     {C22_RULING['assertion']}" in stderr.splitlines(),
++        True)
++    chk("C22 build process: exit 101 by a normal exit; no signal, OOM or timeout; completed record",
++        (pr["process"]["exit_status"], pr["process"]["signal"], pr["supervisor"]["oom_kill"], pr["supervisor"]["oom"],
++         pr["supervisor"]["timed_out"], pr["supervisor"]["completed"], pr["supervisor"]["swap_peak_bytes"]),
++        (101, None, 0, 0, False, True, "0"))
++    chk("C22: no compiler crash, no mutant executable (by design)",
++        ("internal compiler error" in stderr, pr["mutant_executable"], [a for a in pr["deps_artifacts"]
++                                                                       if a["test_executable_name"]]),
++        (False, "NOT PRODUCED BY DESIGN", []))
++    rs = json.loads(data["receipts/31-C22/05-restore/RESTORE.json"])
++    chk("C22 restoration: protocol.rs back to C's blob and sha256; verify_tree.py EXACTLY_C",
++        (rs["check"]["rc"], rs["reverse"]["rc"], rs["before"]["git_blob"], rs["after"]["git_blob"], rs["after"]["sha256"],
++         rs["verify_tree"]["verdict"]),
++        (0, 0, C22_RULING["mutant_blob"], K.BLOBS[K.PROTOCOL],
++         "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296", "EXACTLY_C"))
++    hd = json.loads(data["receipts/20-healthy-build/descriptor.json"])
++    chk("healthy build (e4): the same command; source exactly C before and after",
++        (hd["argv"], hd["source_before"]["verdict"], hd["source_after"]["verdict"]), (K.BUILD_ARGV, "EXACTLY_C", "EXACTLY_C"))
++    # The carried-forward copies: byte copies of the previous packet's files at the same relative path under EV.
++    carried = [f for f in files if any(f == c or f.startswith(c + "/") for c in K.CARRIED)]
++    chk("every carried-forward path is in the previous packet", all(any(f == c or f.startswith(c + "/") for f in files)
++                                                                     for c in K.CARRIED), True)
++    pairs = [(f, f) for f in carried] + [(src, dst) for dst, src in K.CARRIED_DOCS.items()]
++    wrong = []
++    for src, dst in pairs:
++        path = os.path.join(K.EV, dst)
++        if not GATE and not os.path.exists(path):
++            os.makedirs(os.path.dirname(path), exist_ok=True)
++            with open(path, "wb") as fh:
++                fh.write(data[src])
++            os.chmod(path, 0o444)
++        if not os.path.isfile(path) or os.path.islink(path) or K.sha256_file(path) != sums[src]:
++            wrong.append(dst)
++    chk(f"carried-forward copies under EV ({len(pairs)} files) equal the previous packet's SHA256SUMS", wrong, [])
++    for c in K.CARRIED:
++        d = os.path.join(K.EV, c)
++        if os.path.isdir(d):
++            extra = [os.path.relpath(os.path.join(a, f), K.EV) for a, _, fs in os.walk(d) for f in fs
++                     if os.path.relpath(os.path.join(a, f), K.EV) not in carried]
++            chk(f"carried-forward {c}: no file that is not the previous packet's", extra, [])
++
++
+ if __name__ == "__main__":
+     sys.exit(main())
+--- EXEC-01/tools/build_packet.py
++++ RESUME-01/tools/build_packet.py
+@@ -1,14 +1,20 @@
+ #!/usr/bin/env python3
+-"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 19: stage the evidence packet (text only).
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 19: stage the evidence packet (text only). Revised by
++P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 19): the C22 ruling record and CARRIED-FORWARD.md are staged; the
++carried-forward copies of the previous packet's files are NOT staged (they are referenced by previous commit, path,
++blob and sha256), and the staged packet is checked to republish none of them.
+ 
+     build_packet.py DEST        DEST: the packet directory (inside the evidence worktree, or a rehearsal directory);
+-                                must not exist. Copies INDEX.md and TRANCHE-SUMMARY.md (rendered by render.py into a
+-                                fresh directory), the catalog-freeze ruling record, receipts/, tools/ (no caches) and
+-                                development/; writes a self-excluding SHA256SUMS; then checks the staged packet.
++                                must not exist. Copies INDEX.md, TRANCHE-SUMMARY.md and CARRIED-FORWARD.md (rendered by
++                                render.py into a fresh directory), the C22 ruling record, receipts/ (without the
++                                carried-forward copies), tools/ (no caches) and development/; writes a self-excluding
++                                SHA256SUMS; then checks the staged packet.
+ 
+ Checks (exit 1 if any fails): at most 32 MiB; every file text (UTF-8, no NUL byte); no Rust source, no ELF; no file
+-equal to any of the twelve mutant blobs, to any crate source blob of C, or to the pinned executables; every staged file
+-byte-equal to its source; SHA256SUMS lists every file but itself and verifies. Nothing is committed here.
++equal to any of the twelve mutant blobs, to any crate source blob of C, or to the pinned executables; no carried-forward
++path and no file (of 1 KiB or more) of the previous packet's carried-forward set republished; every staged file
++byte-equal to its source;
++SHA256SUMS lists every file but itself and verifies. Nothing is committed here.
+ """
+ import os
+ import shutil
+@@ -19,8 +25,13 @@
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ import common as K  # noqa: E402
+ 
+-SOURCES = [("documents/ARCHITECT-RULING-CATALOG-FREEZE.md", "ARCHITECT-RULING-CATALOG-FREEZE.md"),
++SOURCES = [(K.C22_RULING, "ARCHITECT-RULING-C22-ACCEPTANCE.md"),
+            ("receipts", "receipts"), ("tools", "tools"), ("development", "development")]
++
++
++def carried(rel):
++    """Is EV-relative path rel a carried-forward copy (never republished)?"""
++    return any(rel == c or rel.startswith(c + "/") for c in K.CARRIED)
+ 
+ 
+ def files_under(root):
+@@ -35,17 +46,24 @@
+     if os.path.exists(dest):
+         raise SystemExit("REFUSED: destination exists")
+     os.makedirs(dest)
+-    rendered = tempfile.mkdtemp(prefix="mt1x-render-")
++    rendered = tempfile.mkdtemp(prefix="mt1r-render-")
+     r = subprocess.run([sys.executable, os.path.join(K.EV, "tools/render.py"), rendered], capture_output=True, text=True)
+     print(r.stdout.strip(), r.stderr.strip())
+     pairs = [(os.path.join(rendered, "INDEX.md"), "INDEX.md"),
+-             (os.path.join(rendered, "TRANCHE-SUMMARY.md"), "TRANCHE-SUMMARY.md")]
++             (os.path.join(rendered, "TRANCHE-SUMMARY.md"), "TRANCHE-SUMMARY.md"),
++             (os.path.join(rendered, "CARRIED-FORWARD.md"), "CARRIED-FORWARD.md")]
++    skipped = []
+     for src, rel in SOURCES:
+         p = os.path.join(K.EV, src)
+         if os.path.isdir(p):
+-            pairs += [(f, os.path.join(rel, os.path.relpath(f, p))) for f in files_under(p)]
++            for f in files_under(p):
++                if carried(os.path.relpath(f, K.EV)):
++                    skipped.append(os.path.relpath(f, K.EV))
++                else:
++                    pairs.append((f, os.path.join(rel, os.path.relpath(f, p))))
+         else:
+             pairs.append((p, rel))
++    print(f"carried-forward copies not staged (referenced in CARRIED-FORWARD.md): {len(skipped)}")
+     for src, rel in pairs:
+         os.makedirs(os.path.dirname(os.path.join(dest, rel)), exist_ok=True)
+         shutil.copyfile(src, os.path.join(dest, rel))
+@@ -85,6 +103,19 @@
+     check("no file equal to a crate source blob of C (the empty blob, present in C's crates/, copies no content and is "
+           "not counted)", not [f for f, b in blobs.items() if b in crate and b != empty],
+           f"{sum(b == empty for b in blobs.values())} empty file(s)")
++    prev = {}
++    for line in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines():
++        h, rel = line.split("  ", 1)
++        if carried(rel) or rel in K.CARRIED_DOCS.values():
++            prev[h] = rel
++    check("no carried-forward path staged", not [f for f in allf if carried(f)], [f for f in allf if carried(f)][:3])
++    same = [f for f in allf if K.sha256_file(os.path.join(dest, f)) in prev and os.path.getsize(os.path.join(dest, f)) > 0]
++    dup = [f for f in same if os.path.getsize(os.path.join(dest, f)) >= 1024]
++    check("no staged file of 1 KiB or more byte-equal to a carried-forward file of the previous packet (nothing "
++          "duplicated)", not dup, dup[:3])
++    print(f"     info: {len(same) - len(dup)} small staged file(s) coincide with a carried-forward file's bytes (an "
++          f"independently produced constant record, e.g. the sampler's one-line note): "
++          f"{[(f, os.path.getsize(os.path.join(dest, f)), prev[K.sha256_file(os.path.join(dest, f))]) for f in same if f not in dup][:6]}")
+     check("every staged file byte-equal to its source", all(K.sha256_file(s) == K.sha256_file(os.path.join(dest, r))
+                                                            for s, r in pairs))
+     listed = [l.split("  ", 1) for l in open(os.path.join(dest, "SHA256SUMS")).read().splitlines()]
+--- EXEC-01/tools/common.py
++++ RESUME-01/tools/common.py
+@@ -1,4 +1,4 @@
+-"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01: frozen identities and small shared helpers.
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (from EXEC-01's common.py): frozen identities and small shared helpers.
+ 
+ Identities only (no analysis logic). Every value here is the mission's (sections 3, 4, 9, 19, 20) or the frozen R2
+ catalog's. Sources are read from git objects of frozen Candidate C, never from a worktree.
+@@ -11,8 +11,8 @@
+ import os
+ import subprocess
+ 
+-MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01"
+-EV = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01"
++MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01"
++EV = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01"
+ REPO = "/home/nexus/NEXUS/nexus-os"
+ GIT_COMMON_DIR = REPO + "/.git"
+ NEXUS = "/home/nexus/NEXUS"
+@@ -67,7 +67,8 @@
+ 
+ # Mission-owned worktrees (created by this mission only; absent before).
+ HEALTHY_WT = NEXUS + "/nexus-os-p3-c11-mt1x-healthy"
+-EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-exec-01-evidence"
++EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-resume-01-evidence"
++DEV_WT = NEXUS + "/nexus-os-p3-c11-mt1r-dev-verifier"
+ 
+ 
+ def control_wt(cid):
+@@ -78,6 +79,12 @@
+ ORDER = ["C22", "C14", "C19", "C21", "C27", "C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
+ NOT_AUTHORIZED = ["C1", "C2", "C3a", "C3b", "C3c", "C4", "C5", "C6", "C7", "C8", "C10", "C15", "C16", "C20", "C23",
+                   "C24", "C25", "C26", "A1", "A2", "A3", "A5", "A6"]
++# Resume mission sections 1, 4 and 11: C22 is Architect-accepted and never executed again; the eleven remaining
++# controls run in this order. ORDER (above) is unchanged: it fixes every control's receipt directory and worktree.
++ACCEPTED = ["C22"]
++RESUME_ORDER = ["C14", "C19", "C21", "C27", "C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
++C22_RULING = "documents/ARCHITECT-RULING-C22-ACCEPTANCE.md"
++C22_RULING_FIRST = "C22 — MUTATION CONTROL KILL ACCEPTED"
+ NAMED = {"C14": "T-BIND", "C19": "T-CELL", "C21": "W6", "C27": "T-PREC", "C28": "T-RES"}
+ EXPLORE_CFG = {"C12": "X-1", "C9": "F-B2", "C11": "F-B2", "C17": "F-B2", "C18a": "F-G", "C18b": "F-G"}
+ 
+@@ -96,11 +103,26 @@
+             ("CARGO_TARGET_DIR", target), ("CARGO_TERM_VERBOSE", "true"), ("CARGO_NET_OFFLINE", "true")]
+ 
+ 
+-# Publication (mission section 20).
+-PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/"
+-BRANCH = "review/p3-c11-d2a1-mutation-tranche1-exec-01"
++# The previous execution evidence (resume mission section 2): immutable history; its accepted receipts are carried
++# forward (authenticated byte copies under EV, never republished) and referenced by commit, path, blob and sha256.
++PREV_MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01"
++PREV = "19eda8cc7f559054933fed4a93bdb0a18cc725d4"
++PREV_TREE = "1b313ec5c23b5bf76db90b5fa89758d9cd880a75"
++PREV_PARENT = R2
++PREV_REF = "refs/heads/review/p3-c11-d2a1-mutation-tranche1-exec-01"
++PREV_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01"
++PREV_EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-exec-01-evidence"
++PREV_DEV_WT = NEXUS + "/nexus-os-p3-c11-mt1x-dev-rehearsal"
++CARRIED = ["receipts/02-EXPECTATIONS.json", "receipts/10-baseline-X-1", "receipts/11-baseline-T-BIND",
++           "receipts/12-baseline-T-CELL", "receipts/13-baseline-W6", "receipts/14-baseline-T-PREC",
++           "receipts/15-baseline-T-RES", "receipts/20-healthy-build", "receipts/31-C22"]
++CARRIED_DOCS = {"documents/ARCHITECT-RULING-CATALOG-FREEZE.md": "ARCHITECT-RULING-CATALOG-FREEZE.md"}
++
++# Publication (resume mission section 20).
++PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/"
++BRANCH = "review/p3-c11-d2a1-mutation-tranche1-resume-01"
+ DEST = "refs/heads/" + BRANCH
+-LOCAL_BRANCH = "evidence/p3-c11-d2a1-mutation-tranche1-exec-01"
++LOCAL_BRANCH = "evidence/p3-c11-d2a1-mutation-tranche1-resume-01"
+ REMOTE = "github"
+ SLUG = "Nexus-os2026/nexus-os"
+ PACKET_LIMIT = 32 * 1024 * 1024
+--- EXEC-01/tools/control.py
++++ RESUME-01/tools/control.py
+@@ -1,13 +1,17 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission sections 9-16: execute ONE authorized control, once.
+-
+-    control.py <ID>      ID in the frozen order: C22 C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 6): the gate starts after the Architect-accepted C22
++record (C22 is never executed again), and the restoration status predicate is the path-aware policy of
++verify_mutant.status_policy (restored_check). Every other step is unchanged.
++
++    control.py <ID>      ID in the resume order: C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b (C22 is refused)
+ 
+ Steps (each writes its receipt under receipts/<n>-<ID>/; any failure stops the control, restores the source where the
+ patch was applied, writes RESULT.txt with MUTATION_CONTROL_BLOCKED, and no later control can start):
+ 
+-  gate       the freeze holds; the previous control's RESULT is a candidate (for C22: every baseline receipt and the
+-             healthy build are PASS); this control's receipt directory and worktree do not exist
++  gate       the freeze holds; the previous control's RESULT is a candidate (for C14: the frozen Architect ruling
++             record accepting C22, the carried-forward baseline receipts and healthy build are PASS, and the static
++             pre-execution gate holds); this control's receipt directory and worktree do not exist
+   01         a new mission-owned disposable worktree exactly at C, authenticated (worktrees.py)
+   02         the frozen catalog patch (authenticated copy, sha256 re-checked) applied with `git apply`; then
+              verify_mutant.py: only the catalog-named file changed, holding exactly the catalog's mutant blob and sha256;
+@@ -18,7 +22,8 @@
+   04         (not C22) one supervised invocation of the pinned mutant executable with exactly the catalog's selection;
+              classified type (a) or (b)
+   05         restoration: `git apply -R` of the same patch; the file's blob and sha256 equal C's; verify_tree.py: every
+-             tracked file byte-equal to C and the status clean but for the worktree-local target
++             tracked file byte-equal to C; the path-aware status policy: no tracked change, ignored entries only
++             beneath the worktree's own real target directory
+   06         (only after a candidate classification and a verified restoration) the restored-side receipt is linked:
+              C22 the healthy build (e4); C14/C19/C21/C27/C28 their standalone (e2); C12 the standalone X-1 (e1);
+              C9/C11/C17 the accepted Stage-2 F-B2 (e1); C18a/C18b the accepted Stage-2 F-G (e1)
+@@ -35,6 +40,7 @@
+ import classify  # noqa: E402
+ import common as K  # noqa: E402
+ import supervise  # noqa: E402
++import verify_mutant  # noqa: E402
+ import worktrees  # noqa: E402
+ 
+ RESULT_OK = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
+@@ -50,20 +56,33 @@
+ 
+ 
+ def gate(cid, exp):
+-    i = K.ORDER.index(cid)
++    if cid not in K.RESUME_ORDER:
++        return [f"{cid} is not in the resume order (C22 is Architect-accepted and never executed again)"], []
++    i = K.RESUME_ORDER.index(cid)
+     need = []
++    problems, lines = [], []
+     if i == 0:
++        # The carried-forward receipts and the ruling record are frozen byte copies (freeze_check below).
+         need += [(b["dir"] + "/CLASSIFICATION.txt", "CLASSIFICATION: PASS") for b in exp["baselines"]]
+         need += [("receipts/20-healthy-build/CLASSIFICATION.txt", "CLASSIFICATION: PASS")]
++        need += [(K.C22_RULING, K.C22_RULING_FIRST)]
++        need += [("receipts/06-PRE-EXECUTION-GATE.txt", "PRE-EXECUTION GATE: ALL CHECKS HOLD")]
++        fr = json.load(open(supervise.FREEZE)) if os.path.exists(supervise.FREEZE) else {"files": {}}
++        frozen = [r for r in [K.C22_RULING] + [b["dir"] + "/descriptor.json" for b in exp["baselines"]] +
++                  ["receipts/20-healthy-build/descriptor.json", "receipts/31-C22/03-build/descriptor.json"]
++                  if r not in fr["files"]]
++        lines.append(f"the C22 ruling record and the carried-forward receipts are in the freeze: "
++                     f"{'yes' if not frozen else 'NO: ' + str(frozen)}")
++        if frozen:
++            problems.append(f"not frozen: {frozen}")
+     else:
+-        need += [(exp["controls"][K.ORDER[i - 1]]["dir"] + "/RESULT.txt", RESULT_OK)]
+-    problems, lines = [], []
++        need += [(exp["controls"][K.RESUME_ORDER[i - 1]]["dir"] + "/RESULT.txt", RESULT_OK)]
+     for p, want in need:
+         got = supervise.first_line(os.path.join(K.EV, p))
+         lines.append(f"prior step: {p}: {got!r} (required {want!r})")
+         if got != want:
+             problems.append(f"{p} is not {want!r}")
+-    later = [c for c in K.ORDER[i + 1:] if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
++    later = [c for c in K.RESUME_ORDER[i + 1:] if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
+     if later:
+         problems.append(f"a later control's receipts exist: {later}")
+     rec = []
+@@ -114,6 +133,17 @@
+     return ok, applied
+ 
+ 
++def restored_check(wt, when):
++    """Read-only: is the worktree exactly C (resume mission section 7, restored worktree)? verify_tree.py (Stage 1's,
++    unchanged: HEAD, tree, detached, index, every tracked byte and mode) and the path-aware status policy (no tracked
++    change; ignored entries only beneath the worktree's own real target directory)."""
++    rv = []
++    v = supervise.tree_check(rv, wt, when)
++    pol = verify_mutant.status_policy(wt, None)
++    ok = v["verdict"] == "EXACTLY_C" and pol["ok"]
++    return {"verdict": "EXACTLY_C" if ok else "NOT_C", "verify_tree": v, "status_policy": pol, "line": rv[0]}
++
++
+ def restore(wt, ctl, outdir, applied):
+     os.makedirs(outdir)
+     patch = os.path.join(K.EV, ctl["patch"]["input"])
+@@ -126,19 +156,22 @@
+         rec["reverse"] = git(wt, "apply", "-R", "--whitespace=nowarn", patch) if rec["check"]["rc"] == 0 else None
+     after = open(path, "rb").read()
+     rec["after"] = {"git_blob": K.git_blob_id(after), "sha256": K.sha256_bytes(after)}
+-    rv = []
+-    v = supervise.tree_check(rv, wt, "after restoration")
++    chk = restored_check(wt, "after restoration")
++    v, pol = chk["verify_tree"], chk["status_policy"]
++    rv = [chk["line"]]
+     rec["verify_tree"] = v
+-    rec["status"] = git(wt, "status", "--porcelain", "--ignored", "--untracked-files=all")["stdout"]
++    rec["status_policy"] = pol
+     ok = (rec["after"]["git_blob"] == ctl["baseline_blob"] and rec["after"]["sha256"] == ctl["baseline_sha256"]
+-          and v["verdict"] == "EXACTLY_C" and rec["status"].strip() in ("", "!! target/"))
++          and v["verdict"] == "EXACTLY_C" and pol["ok"])
+     lines = [RESTORE_OK if ok else "RESTORE: FAILED",
+              f"control {ctl['id']}: method: reverse application of the same frozen patch (git apply -R) in the "
+              f"disposable worktree {wt}" if applied else f"control {ctl['id']}: the patch was not applied; state verified",
+              f"{ctl['source_file']}: before restoration git blob {rec['before']['git_blob']} sha256 {rec['before']['sha256']}",
+              f"{ctl['source_file']}: after restoration git blob {rec['after']['git_blob']} sha256 {rec['after']['sha256']} "
+              f"(C: {ctl['baseline_blob']} / {ctl['baseline_sha256']})",
+-             rv[0], f"status (--ignored --untracked-files=all): {rec['status'].strip()!r}",
++             rv[0], f"path-aware status policy (--ignored --untracked-files=all --no-renames -z): "
++             f"{'HOLDS' if pol['ok'] else 'REJECTED'}; {pol['records']} records, {pol['target_entries']} ignored entries "
++             f"beneath the worktree-local real target; shown {pol['shown']}; rejected {pol['rejected'][:5]}",
+              "every changed file is byte-equal to C; the worktree is clean but for its own target directory"
+              if ok else "RESTORATION NOT VERIFIED"]
+     json.dump(rec, open(os.path.join(outdir, "RESTORE.json"), "w"), indent=1)
+@@ -242,6 +275,9 @@
+ 
+ 
+ def main(cid):
++    if cid in K.ACCEPTED or cid not in K.RESUME_ORDER:
++        raise SystemExit(f"REFUSED: {cid} is not executed by {K.MISSION} (C22 is Architect-accepted; only "
++                         f"{' '.join(K.RESUME_ORDER)} run)")
+     exp = supervise.expectations()
+     ctl = exp["controls"][cid]
+     outdir = os.path.join(K.EV, ctl["dir"])
+--- EXEC-01/tools/final_gate.py
++++ RESUME-01/tools/final_gate.py
+@@ -1,16 +1,23 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission sections 17-22: the final gate over the mission's local state,
+-run once before the packet is staged. Read-only (it writes only its own output).
++run once before the packet is staged. Read-only (it writes only its own output). Revised by
++P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (sections 10, 15, 19): G3 reads the carried-forward baseline, healthy-build
++and C22 receipts as frozen copies and the Architect's C22 ruling record, and checks the attempted controls against the
++resume order; G4 also applies the path-aware restored check and re-checks the preserved C22 and development
++worktrees read-only.
+ 
+     final_gate.py            prints the gate; exit 0 only if every check holds
+ 
+ G1  authenticate.py --gate: every input identity again (C, the R2 catalog and patches, contract, AD-1-R4/R5, Stage-1
+     and Stage-2 evidence, the pinned baseline executable, refs, destination absence)
+ G2  the freeze: every frozen file equals its recorded sha256
+-G3  the receipt chain is consistent: each baseline and the healthy build classified once; each attempted control's
+-    RESULT agrees with its own sub-receipts; the controls attempted are a prefix of the frozen order and stop at the
+-    first non-candidate; no receipt or worktree exists for any control outside the tranche
+-G4  every attempted control's worktree is exactly C now (verify_tree.py), locked with this mission's reason
++G3  the receipt chain is consistent: the carried-forward baselines and healthy build are PASS and C22 is recorded as
++    Architect-accepted (frozen copies, equal to the previous packet: G1, G2); each attempted control's RESULT agrees
++    with its own sub-receipts; the controls attempted are a prefix of the resume order and stop at the first
++    non-candidate; no receipt or worktree exists for any control outside the tranche
++G4  every attempted control's worktree is exactly C now (verify_tree.py and the path-aware restored check), locked
++    with this mission's reason; the preserved C22 worktree is still exactly C (read-only) and the development worktree
++    exactly C
+ G5  no mutant blob is in the repository object store; nothing mutant is staged anywhere
+ G6  the pinned executables are preserved for review: the baseline executable, the healthy build's and every pinned
+     mutant executable still have their recorded sha256 and size
+@@ -24,6 +31,7 @@
+ 
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ import common as K  # noqa: E402
++import control  # noqa: E402
+ import supervise  # noqa: E402
+ import worktrees  # noqa: E402
+ 
+@@ -48,27 +56,22 @@
+     fz = supervise.freeze_check(rec)
+     check("G2 the freeze holds", fz is None, rec[0] if rec else fz)
+     exp = supervise.expectations()
+-    stopped = False
+     for b in exp["baselines"]:
+         cl = supervise.first_line(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))
+-        if stopped:
+-            check(f"G3 baseline {b['key']} not run after an earlier stop", not os.path.exists(os.path.join(K.EV, b["dir"])))
+-        else:
+-            check(f"G3 baseline {b['key']} run once and classified", cl in ("CLASSIFICATION: PASS",
+-                                                                             "CLASSIFICATION: NOT PASS"), cl)
+-            stopped = cl != "CLASSIFICATION: PASS"
++        check(f"G3 carried-forward baseline {b['key']} (previous packet, not rerun) is PASS", cl == "CLASSIFICATION: PASS",
++              cl)
+     hcl = supervise.first_line(os.path.join(K.EV, "receipts/20-healthy-build/CLASSIFICATION.txt"))
+-    if stopped:
+-        check("G3 healthy build not run after a baseline stop",
+-              not os.path.exists(os.path.join(K.EV, "receipts/20-healthy-build")))
+-    else:
+-        print(f"     healthy build: {hcl}")
+-    stopped = stopped or hcl != "CLASSIFICATION: PASS"
+-    if stopped:
+-        check("G3 no control attempted after a baseline or healthy-build stop",
+-              not any(os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"])) for c in K.ORDER))
+-    attempted = [c for c in K.ORDER if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
+-    check("G3 attempted controls are a prefix of the frozen order", attempted == K.ORDER[:len(attempted)], attempted)
++    check("G3 carried-forward healthy build (e4; previous packet, not rerun) is PASS", hcl == "CLASSIFICATION: PASS", hcl)
++    fr = json.load(open(supervise.FREEZE))
++    check("G3 C22: the Architect ruling record is frozen and states the acceptance (C22 is not executed here)",
++          supervise.first_line(os.path.join(K.EV, K.C22_RULING)) == K.C22_RULING_FIRST and K.C22_RULING in fr["files"]
++          and K.sha256_file(os.path.join(K.EV, K.C22_RULING)) == fr["files"][K.C22_RULING])
++    check("G3 C22: its original receipts are the frozen carried-forward copies (RESULT unchanged as history)",
++          supervise.first_line(os.path.join(K.EV, "receipts/31-C22/RESULT.txt")) == "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
++          and "receipts/31-C22/RESULT.txt" in fr["files"])
++    attempted = [c for c in K.RESUME_ORDER if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
++    check("G3 attempted controls are a prefix of the resume order", attempted == K.RESUME_ORDER[:len(attempted)],
++          attempted)
+     results = {c: supervise.first_line(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt")) for c in attempted}
+     ok_prefix = True
+     for n, c in enumerate(attempted):
+@@ -91,9 +94,10 @@
+                                                                "ARCHITECT REVIEW PENDING") == want_ok, f"{res}; {sub}")
+         wt = exp["controls"][c]["worktree"]
+         if os.path.exists(wt):
+-            v = json.loads(subprocess.run([sys.executable, os.path.join(K.EV, "tools/verify_tree.py"), wt],
+-                                          capture_output=True, text=True).stdout)
+-            check(f"G4 {c}: worktree exactly C now", v["verdict"] == "EXACTLY_C", f"{v['verdict']} {v['status_entries']}")
++            v = control.restored_check(wt, "final gate")
++            check(f"G4 {c}: worktree exactly C now (verify_tree.py and the path-aware status policy)",
++                  v["verdict"] == "EXACTLY_C", f"{v['verdict']} {v['verify_tree']['status_entries']}; "
++                                              f"{v['status_policy']['target_entries']} target entries")
+             entry = worktrees.worktree_entry(wt) or []
+             check(f"G4 {c}: worktree locked with this mission's reason",
+                   any(l.startswith("locked " + K.MISSION) for l in entry), entry[-1:] if entry else entry)
+@@ -105,10 +109,13 @@
+                   f"{p['path']} {p['sha256'][:16]}…")
+     for c in K.NOT_AUTHORIZED:
+         check(f"G3 {c}: not executed (no worktree)", not os.path.lexists(K.control_wt(c)))
+-    if os.path.exists(K.HEALTHY_WT):
+-        v = json.loads(subprocess.run([sys.executable, os.path.join(K.EV, "tools/verify_tree.py"), K.HEALTHY_WT],
+-                                      capture_output=True, text=True).stdout)
+-        check("G4 healthy-build worktree exactly C now", v["verdict"] == "EXACTLY_C", v["verdict"])
++    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # the previous mission's worktrees are read, never written
++    for label, wt in (("healthy-build", K.HEALTHY_WT), ("C22 (Architect-accepted; preserved)", K.control_wt("C22")),
++                      ("development verifier-control", K.DEV_WT)):
++        v = control.restored_check(wt, "final gate")
++        check(f"G4 {label} worktree exactly C now (read-only)", v["verdict"] == "EXACTLY_C",
++              f"{v['verdict']}; {v['status_policy']['target_entries']} target entries")
++    del os.environ["GIT_OPTIONAL_LOCKS"]
+     hx = os.path.join(K.EV, "receipts/20-healthy-build/EXECUTABLES.json")
+     if os.path.exists(hx):
+         p = json.load(open(hx))
+--- /dev/null
++++ RESUME-01/tools/pre_exec_gate.py
+@@ -0,0 +1,127 @@
++#!/usr/bin/env python3
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01, section 10: the static final pre-execution gate, run once after the
++freeze and before C14. Read-only (it writes only its own receipts). Nothing is built or run.
++
++    pre_exec_gate.py        writes receipts/06-PRE-EXECUTION-GATE.txt (first line `PRE-EXECUTION GATE: ALL CHECKS HOLD`
++                            or `PRE-EXECUTION GATE: FAILED`) and receipts/06-gate-authentication.txt; refuses if the
++                            gate receipt exists
++
++E1  authenticate.py --gate: C, the R2 catalog and the twelve patches, contract, AD-1-R4/R5, Stage-1/Stage-2 evidence,
++    the complete previous packet and its SHA256SUMS, the C22 ruling's facts, the carried-forward copies, the pinned
++    baseline executable, refs and destination absence
++E2  the freeze is recorded and holds (every frozen file equals its recorded sha256), and it covers the repaired tools,
++    every unchanged carried-forward tool, the EXEC-01 tools, the inputs, the expectations, the carried-forward receipts
++    and the C22 ruling record
++E3  every pre-freeze receipt records success (authentication, supervision self-test, verifier controls, tool diff,
++    render rehearsal)
++E4  only authorized tool differences exist (tool_diff.py --check, again, against the frozen tools)
++E5  no receipt directory and no worktree exists for C14 or any later control; nothing outside the tranche exists
++E6  no conflicting mission process: no governed-control test executable, no cargo/rustc in a mission worktree, no
++    p3c11-* scope, no other control.py
++E7  the development and preserved C22 worktrees are exactly C (read-only restored check)
++E8  the control order, the accepted C22 and the commands/environments are the frozen ones
++"""
++import json
++import os
++import subprocess
++import sys
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import common as K  # noqa: E402
++import control  # noqa: E402
++import supervise  # noqa: E402
++
++OUT = os.path.join(K.EV, "receipts/06-PRE-EXECUTION-GATE.txt")
++lines, fails = [], []
++
++
++def check(label, ok, detail=""):
++    lines.append(f"{'OK  ' if ok else 'FAIL'} {label}{(': ' + str(detail)) if detail != '' else ''}")
++    if not ok:
++        fails.append(label)
++
++
++def last(rel):
++    p = os.path.join(K.EV, rel)
++    return open(p).read().rstrip().splitlines()[-1] if os.path.exists(p) else None
++
++
++def main():
++    if os.path.exists(OUT):
++        raise SystemExit("REFUSED: the pre-execution gate receipt exists (run once)")
++    lines.append(f"started: {supervise.now()}; mission {K.MISSION}")
++    r = subprocess.run([sys.executable, os.path.join(K.EV, "tools/authenticate.py"), "--gate"], capture_output=True,
++                       text=True)
++    open(os.path.join(K.EV, "receipts/06-gate-authentication.txt"), "w").write(r.stdout + r.stderr)
++    check("E1 authenticate.py --gate: ALL CHECKS HOLD (receipts/06-gate-authentication.txt)",
++          r.returncode == 0 and r.stdout.rstrip().endswith("RESULT: ALL CHECKS HOLD"),
++          f"{sum(1 for l in r.stdout.splitlines() if l.startswith('    OK '))} checks OK")
++    rec = []
++    fz = supervise.freeze_check(rec)
++    check("E2 the freeze holds", fz is None, rec[0] if rec else fz)
++    fr = json.load(open(supervise.FREEZE)) if os.path.exists(supervise.FREEZE) else {"files": {}}
++    tools = sorted(f for f in os.listdir(os.path.join(K.EV, "tools")) if f.endswith((".py", ".sh")))
++    need = ([f"tools/{t}" for t in tools] + [f"original-tools/{t}" for t in os.listdir(os.path.join(K.EV,
++                                                                                               "original-tools"))]
++            + ["receipts/02-EXPECTATIONS.json", K.C22_RULING, "vocabulary/VOCABULARY.json", "inputs/catalog.json"]
++            + [f"inputs/patches/{c}.patch" for c in K.ORDER])
++    for c in K.CARRIED:
++        p = os.path.join(K.EV, c)
++        if os.path.isdir(p):
++            need += [os.path.relpath(os.path.join(a, f), K.EV) for a, _, fs in os.walk(p) for f in fs]
++    missing = [n for n in need if n not in fr["files"]]
++    check(f"E2 the freeze covers every tool ({len(tools)}), the EXEC-01 tools, the expectations, the catalog and the "
++          f"twelve patches, the carried-forward receipts and the C22 ruling record ({len(need)} required paths)",
++          not missing, missing[:5])
++    check("E2 the freeze record states the resume order and the Architect-accepted C22",
++          fr.get("policy", {}).get("control_order") == K.RESUME_ORDER
++          and fr.get("policy", {}).get("architect_accepted_not_executed") == K.ACCEPTED)
++    for rel, want in (("receipts/00-authentication.txt", "RESULT: ALL CHECKS HOLD"),
++                      ("receipts/01-supervision-selftest/SELFTEST.txt", "SELF-TEST RESULT: ALL OK"),
++                      ("receipts/03-verifier-controls/SUMMARY.txt", "VERIFIER CONTROLS: ALL AS EXPECTED"),
++                      ("receipts/04-tool-repair/TOOL-DIFF-CHECK.txt", "TOOL DIFF: ALL CHECKS HOLD"),
++                      ("receipts/04b-render-rehearsal/SUMMARY.txt", "RENDER REHEARSAL: ALL AS EXPECTED")):
++        check(f"E3 {rel}: {want}", last(rel) == want and fr.get("pre_freeze_receipts", {}).get(rel) ==
++              K.sha256_file(os.path.join(K.EV, rel)), last(rel))
++    r = subprocess.run([sys.executable, os.path.join(K.EV, "tools/tool_diff.py"), "--check"], capture_output=True,
++                       text=True)
++    check("E4 only authorized tool differences (tool_diff.py --check against the frozen tools)",
++          r.returncode == 0 and r.stdout.rstrip().endswith("TOOL DIFF: ALL CHECKS HOLD"),
++          r.stdout.rstrip().splitlines()[-1] if r.stdout else r.stderr[-200:])
++    exp = supervise.expectations()
++    later = [c for c in K.RESUME_ORDER if os.path.lexists(os.path.join(K.EV, exp["controls"][c]["dir"]))
++             or os.path.lexists(exp["controls"][c]["worktree"])]
++    check("E5 no receipt directory and no worktree for C14 or any later control", not later, later)
++    outside = [c for c in K.NOT_AUTHORIZED if os.path.lexists(K.control_wt(c))]
++    check("E5 no worktree for any control outside the tranche", not outside, outside)
++    exes, builds, scopes = supervise.conflicts(K.NEXUS + "/nexus-os-p3-c11-mt1x-")
++    others = [l for l in subprocess.run(["pgrep", "-af", "tools/control.py"], capture_output=True,
++                                        text=True).stdout.splitlines() if str(os.getpid()) not in l.split()[0]]
++    check("E6 no conflicting mission process (governed-control test executable, cargo/rustc in a mission worktree, "
++          "p3c11-* scope, control.py)", not exes and not builds and not scopes and not others,
++          f"{exes} {builds} {scopes} {others}")
++    os.environ["GIT_OPTIONAL_LOCKS"] = "0"
++    for label, wt in (("development verifier-control", K.DEV_WT), ("preserved C22 (Architect-accepted)",
++                                                                   K.control_wt("C22"))):
++        v = control.restored_check(wt, "pre-execution gate")
++        check(f"E7 the {label} worktree is exactly C (read-only restored check)", v["verdict"] == "EXACTLY_C",
++              f"{v['verdict']}; {v['status_policy']['target_entries']} target entries")
++    del os.environ["GIT_OPTIONAL_LOCKS"]
++    check("E8 control order C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b; C22 accepted, not executed",
++          K.RESUME_ORDER == ["C14", "C19", "C21", "C27", "C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
++          and K.ACCEPTED == ["C22"] and exp["order"] == K.ORDER and all(exp["controls"][c]["dir"].endswith("-" + c)
++                                                                         for c in K.RESUME_ORDER))
++    check("E8 build command and environment template, run environment and limits are the expectations' (frozen)",
++          exp["build"]["argv"] == K.BUILD_ARGV and exp["build"]["env_template"] == [list(x) for x in K.build_env(
++              "<worktree>/target")] and exp["run_env"] == dict(K.RUN_ENV) and exp["build"]["limit_seconds"] == 900
++          and exp["build"]["memory_max"] == K.MEMORY_MAX and exp["build"]["swap_max"] == "0")
++    lines.append(f"finished: {supervise.now()}")
++    head = "PRE-EXECUTION GATE: " + ("ALL CHECKS HOLD" if not fails else "FAILED: " + "; ".join(fails))
++    open(OUT, "w").write(head + "\n" + "\n".join(lines) + "\n")
++    print(head)
++    print("\n".join(lines))
++    return 0 if not fails else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+--- EXEC-01/tools/publish_checks.py
++++ RESUME-01/tools/publish_checks.py
+@@ -2,6 +2,8 @@
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 20: read-only checks before and after publication.
+ Adapted from CONTROL-DEFINITIONS-R2-01 tools/publish_checks.py (the same checks), with this mission's parent 9f22f890
+ (the R2 evidence commit), its one allowed path, the destination ref, the 32 MiB limit, and its key receipts read back.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 20): parent 19eda8cc (the EXEC-01 evidence commit),
++the resume packet path and review ref, the previous packet checked unchanged, and the resume receipts read back.
+ 
+   publish_checks.py pre     <evidence-commit>   confinement, lineage, C and the R2 packet unchanged, nothing mutant or
+                                                  executable staged, text only, hooks, workflow triggers, rulesets,
+@@ -23,15 +25,18 @@
+ SLUG = "Nexus-os2026/nexus-os"
+ C = "d5964ee5326c2733177307db6f507328023d361a"
+ C_TREE = "51bac5fd335999cc995c0ab9f582a30244973ef0"
+-PARENT = "9f22f890d8532df395f22cd8db8db2552bfdd14c"
+-PARENT_TREE = "435f242243907eb7fd3e745669926193f11c5dcf"
++PARENT = "19eda8cc7f559054933fed4a93bdb0a18cc725d4"
++PARENT_TREE = "1b313ec5c23b5bf76db90b5fa89758d9cd880a75"
++R2 = "9f22f890d8532df395f22cd8db8db2552bfdd14c"
++PREV_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/"
++PREV_BRANCH = "review/p3-c11-d2a1-mutation-tranche1-exec-01"
+ R2_PACKET = "docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/"
+ CATALOG = R2_PACKET + "catalog/catalog.json"
+ CATALOG_BLOB = "1918374263740d2f98640da00fc466737945975e"
+ EV = "docs/evidence/p3-candidate11/"
+-PACKET = EV + "d2a1-mutation-tranche1-exec-01/"
++PACKET = EV + "d2a1-mutation-tranche1-resume-01/"
+ ALLOWED = (PACKET,)
+-BRANCH = "review/p3-c11-d2a1-mutation-tranche1-exec-01"
++BRANCH = "review/p3-c11-d2a1-mutation-tranche1-resume-01"
+ DEST = "refs/heads/" + BRANCH
+ PROTECTED = ["refs/heads/main", "refs/heads/rebuild/phase0-trust-boundary"]
+ LIMIT = 32 * 1024 * 1024
+@@ -123,7 +128,7 @@
+     info = git("cat-file", "commit", e).decode()
+     head = info.partition("\n\n")[0].splitlines()
+     parents = [l[7:] for l in head if l.startswith("parent ")]
+-    check("evidence commit has the single parent 9f22f890 (the R2 evidence commit)", parents == [PARENT], parents)
++    check("evidence commit has the single parent 19eda8cc (the EXEC-01 evidence commit)", parents == [PARENT], parents)
+     check("the parent's tree is unchanged", git("rev-parse", PARENT + "^{tree}").decode().strip() == PARENT_TREE)
+     te, tp, tc = tree_map(e), tree_map(PARENT), tree_map(C)
+     changed = sorted(p for p in set(te) | set(tp) if te.get(p) != tp.get(p))
+@@ -133,6 +138,9 @@
+     check("the R2 packet is unchanged (every R2 packet path has the same mode and blob)",
+           len(r2) == 72 and all(te.get(p) == tp.get(p) for p in r2), f"{len(r2)} paths")
+     check("the frozen R2 catalog is unchanged", te.get(CATALOG, ("", "", ""))[2] == CATALOG_BLOB, te.get(CATALOG))
++    prev = [p for p in set(te) | set(tp) if p.startswith(PREV_PACKET)]
++    check("the previous (EXEC-01) packet is unchanged (every path has the same mode and blob)",
++          len(prev) == 963 and all(te.get(p) == tp.get(p) for p in prev), f"{len(prev)} paths")
+     outside = sorted(p for p in set(te) | set(tc) if te.get(p) != tc.get(p) and not p.startswith("docs/evidence/"))
+     check("no path outside docs/evidence/ differs from Candidate C", not outside, outside[:5])
+     check("Candidate C is unchanged", git("rev-parse", C + "^{tree}").decode().strip() == C_TREE)
+@@ -209,8 +217,9 @@
+     check("destination ref absent on the remote", DEST not in rm)
+     check("destination ref absent locally",
+           subprocess.run(["git", "-C", REPO, "show-ref", "--verify", "-q", DEST]).returncode == 1)
+-    check("the R2 review ref still points at the parent", rm.get("refs/heads/review/p3-c11-d2a1-control-definitions-r2-01")
+-          == PARENT)
++    check("the R2 review ref still points at the R2 evidence commit",
++          rm.get("refs/heads/review/p3-c11-d2a1-control-definitions-r2-01") == R2)
++    check("the previous (EXEC-01) review ref still points at the parent", rm.get("refs/heads/" + PREV_BRANCH) == PARENT)
+     for p in PROTECTED:
+         print(f"     remote {p}: {rm.get(p)}")
+     digest = hashlib.sha256("\n".join(sorted(remote)).encode()).hexdigest()
+@@ -240,7 +249,7 @@
+     check("GitHub commit object: sha", d.get("sha") == e)
+     check("GitHub commit object: tree", d.get("commit", {}).get("tree", {}).get("sha") ==
+           git("rev-parse", e + "^{tree}").decode().strip(), d.get("commit", {}).get("tree", {}).get("sha"))
+-    check("GitHub commit object: single parent 9f22f890", [p["sha"] for p in d.get("parents", [])] == [PARENT])
++    check("GitHub commit object: single parent 19eda8cc", [p["sha"] for p in d.get("parents", [])] == [PARENT])
+     rc, out = gh(f"repos/{SLUG}/compare/{PARENT}...{e}")
+     cmp = json.loads(out) if rc == 0 else {}
+     files = [f["filename"] for f in cmp.get("files", [])]
+@@ -251,17 +260,17 @@
+           files and all(f.startswith(ALLOWED) for f in files) and all(f["status"] == "added" for f in cmp.get("files", [])),
+           f"{len(files)} files listed (the compare API lists at most 300; {len(local)} local)")
+     check("GitHub compare: the listed files are local packet files", set(files) <= set(local))
+-    key = ["SHA256SUMS", "INDEX.md", "TRANCHE-SUMMARY.md", "ARCHITECT-RULING-CATALOG-FREEZE.md",
+-           "receipts/00-authentication.txt", "receipts/02-EXPECTATIONS.json", "receipts/05-FREEZE.json",
+-           "receipts/05-FREEZE-RECORD.txt", "receipts/90-final-gate.txt"]
++    key = ["SHA256SUMS", "INDEX.md", "TRANCHE-SUMMARY.md", "CARRIED-FORWARD.md", "ARCHITECT-RULING-C22-ACCEPTANCE.md",
++           "receipts/00-authentication.txt", "receipts/03-verifier-controls/SUMMARY.txt",
++           "receipts/04-tool-repair/TOOL-REPAIR.diff", "receipts/04-tool-repair/TOOL-DIFF-CHECK.txt",
++           "receipts/05-FREEZE.json", "receipts/05-FREEZE-RECORD.txt", "receipts/06-PRE-EXECUTION-GATE.txt",
++           "receipts/90-final-gate.txt"]
+     tm = tree_map(e)
+     for p in sorted(tm):
+         if not p.startswith(PACKET + "receipts/"):
+             continue
+         rel = p[len(PACKET):]
+-        if re.match(r"receipts/1[0-5]-baseline-[^/]+/(CLASSIFICATION\.txt|raw-output\.txt)$", rel) or \
+-                re.match(r"receipts/20-healthy-build/(CLASSIFICATION\.txt|EXECUTABLES\.json|build\.stderr)$", rel) or \
+-                re.match(r"receipts/\d\d-C[0-9a-z]+/(RESULT\.txt|02-apply/APPLY\.txt|03-build/CLASSIFICATION\.txt|"
++        if re.match(r"receipts/\d\d-C[0-9a-z]+/(RESULT\.txt|02-apply/APPLY\.txt|03-build/CLASSIFICATION\.txt|"
+                          r"03-build/build\.stderr|03-build/PIN\.json|04-run/CLASSIFICATION\.txt|04-run/raw-output\.txt|"
+                          r"05-restore/RESTORE\.txt|06-link/LINK\.txt)$", rel):
+             key.append(rel)
+--- EXEC-01/tools/record_freeze.py
++++ RESUME-01/tools/record_freeze.py
+@@ -1,15 +1,18 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 6: record the freeze, once, before the first baseline
+-invocation.
++invocation. Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 10): the freeze is recorded once before
++C14, and it also covers the EXEC-01 tools the repair starts from, the C22 Architect-ruling record and every
++carried-forward receipt copy; the pre-freeze receipts are this mission's.
+ 
+     record_freeze.py        writes receipts/05-FREEZE.json (sha256 of every frozen file) and receipts/05-FREEZE-RECORD.txt
+                             (first line `FREEZE: RECORDED`); refuses if either exists
+ 
+-Frozen: every tool (tools/*.py, tools/scope-wrap.sh), the reused vocabulary, every authenticated input copy (catalog,
+-definitions record, the twelve patches, contract, AD-1-R4, AD-1-R5, the Stage-2 tool copies, the linked Stage-2
+-receipts), the derived expectations (receipts/02-EXPECTATIONS.json: commands, environments, selections, named
+-properties, ceilings, limits, control order, restoration and link mappings) and the catalog-freeze ruling record.
+-supervise.py, healthy.py and control.py re-check every one of them before every supervised step.
++Frozen: every tool (tools/*.py, tools/scope-wrap.sh), the EXEC-01 tools (original-tools/), the reused vocabulary, every
++authenticated input copy (catalog, definitions record, the twelve patches, contract, AD-1-R4, AD-1-R5, the Stage-2 tool
++copies, the linked Stage-2 receipts), the carried-forward expectations (receipts/02-EXPECTATIONS.json: commands,
++environments, selections, named properties, ceilings, limits, control order, restoration and link mappings), the
++carried-forward baseline, healthy-build and C22 receipts, the C22 Architect-ruling record and the catalog-freeze ruling
++record. supervise.py and control.py re-check every one of them before every supervised step.
+ """
+ import json
+ import os
+@@ -20,7 +23,8 @@
+ import common as K  # noqa: E402
+ 
+ POLICY = {
+-    "control_order": K.ORDER,
++    "control_order": K.RESUME_ORDER,
++    "architect_accepted_not_executed": K.ACCEPTED,
+     "not_authorized": K.NOT_AUTHORIZED,
+     "supervision": "systemd user scope MemoryMax=16G MemorySwapMax=0, RuntimeMaxSec=limit+10 (backstop), timeout -s KILL "
+                    "<limit>, /usr/bin/time -v, nice -n 10; MemAvailable >= 18 GiB before each step; no conflicting test "
+@@ -31,8 +35,12 @@
+     "build_environment": K.build_env("<worktree>/target"),
+     "run_environment": K.RUN_ENV,
+     "restoration": "git apply -R of the same frozen patch in the disposable worktree; changed file byte-equal to C; "
+-                   "verify_tree.py EXACTLY_C; status clean but for the worktree-local target",
+-    "retries": "none: one baseline invocation each, one build per control, one run per control, no rebuild, no rerun",
++                   "verify_tree.py EXACTLY_C; the path-aware status policy (verify_mutant.status_policy): no tracked "
++                   "change, ignored entries only beneath the worktree's own real target directory",
++    "source_verification": "verify_mutant.py: HEAD/tree C, detached, index = HEAD, every tracked byte and mode compared, "
++                           "the named file exactly the catalog mutant; the path-aware status policy (resume section 7)",
++    "retries": "none: one build per control, one run per control, no rebuild, no rerun; C22 and the baselines are not "
++               "rerun",
+ }
+ 
+ 
+@@ -42,27 +50,30 @@
+     if os.path.exists(fj) or os.path.exists(ft):
+         raise SystemExit("REFUSED: the freeze is already recorded")
+     files = {}
+-    for sub in ("tools", "inputs", "vocabulary"):
++    for sub in ("tools", "original-tools", "inputs", "vocabulary") + tuple(c for c in K.CARRIED if c.count("/") == 1
++                                                                         and os.path.isdir(os.path.join(K.EV, c))):
+         for d, dirs, fs in os.walk(os.path.join(K.EV, sub)):
+             dirs[:] = sorted(x for x in dirs if x != "__pycache__")
+             for f in sorted(fs):
+                 if not f.endswith(".pyc"):
+                     p = os.path.join(d, f)
+                     files[os.path.relpath(p, K.EV)] = K.sha256_file(p)
+-    for rel in ("receipts/02-EXPECTATIONS.json", "documents/ARCHITECT-RULING-CATALOG-FREEZE.md"):
++    for rel in ("receipts/02-EXPECTATIONS.json", K.C22_RULING) + tuple(K.CARRIED_DOCS):
+         files[rel] = K.sha256_file(os.path.join(K.EV, rel))
+     prior = {rel: K.sha256_file(os.path.join(K.EV, rel)) for rel in (
+         "receipts/00-authentication.txt", "receipts/01-supervision-selftest/SELFTEST.txt",
+-        "receipts/03-tool-controls/SUMMARY.txt", "receipts/04-rehearsal/SUMMARY.txt",
++        "receipts/03-verifier-controls/SUMMARY.txt", "receipts/04-tool-repair/TOOL-DIFF-CHECK.txt",
+         "receipts/04b-render-rehearsal/SUMMARY.txt")}
+     for rel in prior:
+-        first = open(os.path.join(K.EV, rel)).read()
+-        if not any(x in first for x in ("ALL CHECKS HOLD", "SELF-TEST RESULT: ALL OK", "ALL AS EXPECTED")):
++        last = open(os.path.join(K.EV, rel)).read().rstrip().splitlines()[-1]
++        if last not in ("RESULT: ALL CHECKS HOLD", "SELF-TEST RESULT: ALL OK", "VERIFIER CONTROLS: ALL AS EXPECTED",
++                        "TOOL DIFF: ALL CHECKS HOLD", "RENDER REHEARSAL: ALL AS EXPECTED"):
+             raise SystemExit(f"REFUSED: {rel} does not record success")
+     rec = {"mission": K.MISSION, "recorded": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "files": files,
+            "pre_freeze_receipts": prior, "policy": POLICY,
+-           "statement": "No semantic patch repair, classifier repair, alternate control encoding or automatic rerun "
+-                        "after this point. A frozen-tool failure stops the mission and preserves its raw evidence."}
++           "statement": "No semantic tool repair, patch repair, classifier repair, alternate control encoding or "
++                        "automatic retry after this point. A frozen-tool failure stops the mission and preserves its raw "
++                        "evidence."}
+     json.dump(rec, open(fj, "w"), indent=1)
+     lines = ["FREEZE: RECORDED", f"recorded: {rec['recorded']}", f"frozen files: {len(files)}",
+              f"05-FREEZE.json sha256 {K.sha256_file(fj)}"]
+--- EXEC-01/tools/render.py
++++ RESUME-01/tools/render.py
+@@ -1,8 +1,12 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 19: render INDEX.md and TRANCHE-SUMMARY.md from the
+-receipts (read-only; deterministic; a missing receipt is rendered as not attempted, never invented).
+-
+-    render.py OUTDIR       writes OUTDIR/INDEX.md and OUTDIR/TRANCHE-SUMMARY.md; prints the derived tranche status
++receipts (read-only; deterministic; a missing receipt is rendered as not attempted, never invented). Revised by
++P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 19): the combined Tranche-1 summary (C22 Architect-accepted from
++the ruling record; the eleven resume controls from this mission's receipts), the carried-forward receipts referenced
++by previous commit, path, blob and sha256 (CARRIED-FORWARD.md), and this mission's index.
++
++    render.py OUTDIR       writes OUTDIR/INDEX.md, OUTDIR/TRANCHE-SUMMARY.md and OUTDIR/CARRIED-FORWARD.md; prints the
++                           derived status
+ """
+ import json
+ import os
+@@ -42,12 +46,20 @@
+     base_ok = all(lines(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))[:1] == ["CLASSIFICATION: PASS"]
+                   for b in exp["baselines"])
+     healthy_ok = lines(os.path.join(R, "20-healthy-build/CLASSIFICATION.txt"))[:1] == ["CLASSIFICATION: PASS"]
+-    results = [lines(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt"))[:1] for c in K.ORDER]
+-    if not (base_ok and healthy_ok):
+-        return "MUTATION_TRANCHE1_BLOCKED", base_ok, healthy_ok, results
++    ruling_ok = lines(os.path.join(K.EV, K.C22_RULING))[:1] == [K.C22_RULING_FIRST]
++    results = [lines(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt"))[:1] for c in K.RESUME_ORDER]
++    if not (base_ok and healthy_ok and ruling_ok):
++        return "BLOCKED", base_ok, healthy_ok, results
+     if all(r == [RESULT_OK] for r in results):
+-        return "READY_FOR_MUTATION_TRANCHE1_EXECUTION_REVIEW", base_ok, healthy_ok, results
++        return "READY_FOR_MUTATION_TRANCHE1_RESUME_ARCHITECT_REVIEW", base_ok, healthy_ok, results
+     return "MUTATION_CONTROL_BLOCKED", base_ok, healthy_ok, results
++
++
++def prev_ref(rel):
++    """(path in the previous packet, git blob at the previous evidence commit, sha256) of one carried-forward file."""
++    path = f"{K.PREV_PACKET}/{rel}"
++    b = K.git("rev-parse", f"{K.PREV}:{path}").decode().strip()
++    return path, b, K.sha256_bytes(K.git("cat-file", "blob", b))
+ 
+ 
+ def control_row(exp, cid):
+@@ -97,35 +109,41 @@
+ def main(outdir):
+     exp = json.load(open(os.path.join(R, "02-EXPECTATIONS.json")))
+     st, base_ok, healthy_ok, results = status(exp)
+-    rows = [r for r in (control_row(exp, c) for c in K.ORDER) if r]
++    rows = [r for r in (control_row(exp, c) for c in K.RESUME_ORDER) if r]
+     attempted = [r["id"] for r in rows]
+     candidates = [r["id"] for r in rows if r["result"] == RESULT_OK]
+-    s = [f"# Tranche summary — {K.MISSION}", "",
+-         f"Derived tranche status: **{st}** (from the receipts; publication and the final report follow).", "",
+-         f"KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING: **{len(candidates)}** of 12 authorized controls "
+-         f"({', '.join(candidates) or 'none'}). No control is called killed or accepted: acceptance belongs to the Sole "
+-         "Architect, receipt by receipt.", "",
+-         "## Baseline standalone receipts (mission section 7) and the healthy build (section 8)", "",
+-         "| Step | Type | Receipt | Classification | Facts | Resources |", "|---|---|---|---|---|---|"]
++    c22 = exp["controls"]["C22"]
++    s = [f"# Tranche-1 summary — {K.MISSION}", "",
++         f"Derived status: **{st}** (from the receipts; publication and the final report follow).", "",
++         "Combined Tranche 1 (12 controls):", "",
++         "- **C22 — MUTATION CONTROL KILL ACCEPTED** by the Sole Architect (ruling recorded in "
++         "`ARCHITECT-RULING-C22-ACCEPTANCE.md`; type (d), restored side the exact-command healthy build (e4)). Not "
++         "executed again here. Its original executor classifications remain as historical outputs of the defective "
++         "frozen tool.",
++         f"- new **KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING** results of this mission: **{len(candidates)}** "
++         f"of the 11 remaining controls ({', '.join(candidates) or 'none'}). No control is called killed or accepted "
++         "here: acceptance belongs to the Sole Architect, receipt by receipt.",
++         f"- attempted by this mission: {', '.join(attempted) or 'none'}; not attempted: "
++         f"{', '.join(c for c in K.RESUME_ORDER if c not in attempted) or 'none'}", "",
++         "## C22 (Architect-accepted; previous packet, not rerun)", "",
++         "| Receipt | Previous packet path | Blob at `" + K.PREV[:8] + "` | sha256 |", "|---|---|---|---|"]
++    for rel in ("receipts/31-C22/02-apply/APPLY.json", "receipts/31-C22/03-build/build.stderr",
++                "receipts/31-C22/03-build/PARSED-RECEIPT.json", "receipts/31-C22/03-build/CLASSIFICATION.txt",
++                "receipts/31-C22/05-restore/RESTORE.json", "receipts/31-C22/RESULT.txt",
++                "receipts/20-healthy-build/CLASSIFICATION.txt", "receipts/20-healthy-build/descriptor.json"):
++        path, b, h = prev_ref(rel)
++        s.append(f"| {rel.split('/', 1)[1]} | `{path}` | `{b}` | `{h}` |")
++    s += ["", f"- frozen patch sha256 `{c22['patch']['sha256']}`; mutant protocol.rs blob `{c22['mutant_blob']}`, sha256 "
++          f"`{c22['mutant_sha256']}`; E0283 at `{c22['diagnostic_file']}:{c22['diagnostic_line']}:5`, "
++          f"`{c22['diagnostic_source_line']}`; no mutant executable (by design)", "",
++          "## Baseline receipts linked by this mission (previous packet, not rerun)", "",
++          "| Baseline | Type | For | Previous packet CLASSIFICATION.txt | Blob | sha256 | Classification |",
++          "|---|---|---|---|---|---|---|"]
+     for b in exp["baselines"]:
+-        d = os.path.join(K.EV, b["dir"])
+-        cl = outer(os.path.join(d, "CLASSIFICATION.txt"))
+-        p = jload(os.path.join(d, "PARSED-RECEIPT.json")) or {}
+-        fact = ""
+-        if b["type"] == "e1" and p.get("report"):
+-            fact = (f"states {p['report'].get('states'):,} of {b['ceiling_states']:,}; branch accounting "
+-                    f"{(p.get('branch_accounting') or {}).get('verdict')}")
+-        elif p.get("harness_result"):
+-            fact = p["harness_result"][0]
+-        s.append(f"| {b['key']} (for {b['control']}) | ({b['type']}) | `{b['dir']}` | {cl[0]} — {cl[1]} | {fact} | "
+-                 f"{res(p.get('supervisor'))} |")
+-    hb = jload(os.path.join(R, "20-healthy-build/PARSED-RECEIPT.json")) or {}
+-    hcl = outer(os.path.join(R, "20-healthy-build/CLASSIFICATION.txt"))
+-    exe = hb.get("executable") or {}
+-    s.append(f"| healthy build (for C22) | (e4) | `receipts/20-healthy-build` | {hcl[0]} — {hcl[1]} | executable "
+-             f"{exe.get('path')} sha256 {exe.get('sha256')} size {exe.get('size')} (recorded, never run); "
+-             f"{(hb.get('target_manifest') or {}).get('files')} target files recorded | {res(hb.get('supervisor'))} |")
+-    s += ["", "## Controls (mission section 9 order)", ""]
++        path, bb, h = prev_ref(b["dir"] + "/CLASSIFICATION.txt")
++        cl = outer(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))
++        s.append(f"| {b['key']} | ({b['type']}) | {b['control']} | `{path}` | `{bb}` | `{h}` | {cl[0]} |")
++    s += ["", "## The eleven remaining controls (resume order)", ""]
+     for r in rows:
+         s += [f"### {r['id']} — `{r['dir']}`", "", f"- result: **{r['result']}**", f"- receipt type: {r['type']}",
+               f"- frozen patch sha256: `{r['patch_sha256']}`", f"- mutant source blob: `{r['mutant_blob']}` (sha256 "
+@@ -133,23 +151,39 @@
+               f"- build: {r['build']}", f"- build resources: {r['build_resources']}",
+               f"- mutant executable: {r['executable']}", f"- exact selection: `{r['selection']}`",
+               f"- raw outcome: {r['raw']}", f"- outer classification: {r['outer']}",
+-              f"- named property / test / diagnostic: {r['named']}", f"- discovered count: {r['count']}",
++              f"- named property / test: {r['named']}", f"- discovered count: {r['count']}",
+               f"- run resources: {r['run_resources']}", f"- restoration: {r['restore']}",
+               f"- linked restored-side receipt: {r['link']}", ""]
+-    not_attempted = [c for c in K.ORDER if c not in attempted]
++    not_attempted = [c for c in K.RESUME_ORDER if c not in attempted]
+     s += ["## Not attempted", "",
+           f"- authorized but not attempted (a stop ends the tranche): {', '.join(not_attempted) or 'none'}",
+-          f"- not authorized by this mission (never executed): {', '.join(K.NOT_AUTHORIZED)}; A4 not rerun; M01–M183 "
+-          "not executed; no unchanged-core full configuration run except the standalone X-1; F-B2 and F-G not rerun on "
+-          "unchanged source", ""]
++          f"- not authorized (never executed): {', '.join(K.NOT_AUTHORIZED)}; C22 not rerun; A4 not rerun; M01–M183 "
++          "not executed; no baseline receipt rerun", ""]
+     open(os.path.join(outdir, "TRANCHE-SUMMARY.md"), "w").write("\n".join(s) + "\n")
++    cf = [f"# Carried-forward files — {K.MISSION}", "",
++          f"Byte copies of files of the previous evidence packet (`{K.PREV_PACKET}/` at `{K.PREV}`), kept under this "
++          "mission's local evidence root for linking and gating, frozen, authenticated against the previous "
++          "SHA256SUMS, and NOT republished here. Each is identified by its previous path, git blob and sha256.", "",
++          "| Local path | Previous packet path | Blob | sha256 |", "|---|---|---|---|"]
++    for c in K.CARRIED:
++        p = os.path.join(K.EV, c)
++        rels = [c] if os.path.isfile(p) else sorted(os.path.relpath(os.path.join(a, f), K.EV)
++                                                    for a, _, fs in os.walk(p) for f in fs)
++        for rel in rels:
++            path, b, h = prev_ref(rel)
++            cf.append(f"| `{rel}` | `{path}` | `{b}` | `{h}` |")
++    for dst, src in K.CARRIED_DOCS.items():
++        path, b, h = prev_ref(src)
++        cf.append(f"| `{dst}` | `{path}` | `{b}` | `{h}` |")
++    open(os.path.join(outdir, "CARRIED-FORWARD.md"), "w").write("\n".join(cf) + "\n")
+     fr = jload(os.path.join(R, "05-FREEZE.json")) or {}
+     i = [f"# {K.MISSION} — evidence packet", "",
+          "Executor: Claude Code, Claude Opus 5.5 (`claude-opus-5-5`), effort High. Evidence only: no source, catalog, "
+          "patch, contract, amendment or manifest is changed; no mutant source, executable or target directory is "
+-         "committed.", "",
+-         f"Derived tranche status: **{st}**. Candidate kill evidence: {len(candidates)} of 12 "
+-         f"({', '.join(candidates) or 'none'}), each **KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING**.", "",
++         "committed; the previous packet is not modified or duplicated.", "",
++         f"Derived status: **{st}**. C22: Architect-accepted (ruling record). New candidate kill evidence: "
++         f"{len(candidates)} of 11 ({', '.join(candidates) or 'none'}), each **KILL_EVIDENCE_CANDIDATE — ARCHITECT "
++         "REVIEW PENDING**.", "",
+          "## Identities", "",
+          f"- Candidate C `{K.C}`, tree `{K.C_TREE}`, parent `{K.C_PARENT}`; protocol.rs `{K.BLOBS[K.PROTOCOL]}`, "
+          f"model_tests.rs `{K.BLOBS[K.MODEL]}`, unit_tests.rs `{K.BLOBS[K.UNIT]}`",
+@@ -158,53 +192,52 @@
+          f"- base contract sha256 `{K.CONTRACT_SHA}`; AD-1-R4 sha256 `{K.AD1R4_SHA}`; AD-1-R5 sha256 `{K.AD1R5_SHA}` "
+          f"(R5 evidence commit `{K.R5_COMMIT}`)",
+          f"- accepted unchanged-core evidence: Stage 1 `{K.STAGE1}`, Stage 2 `{K.STAGE2}`",
++         f"- previous execution evidence ({K.PREV_MISSION}): commit `{K.PREV}`, tree `{K.PREV_TREE}`, parent "
++         f"`{K.PREV_PARENT}`, packet `{K.PREV_PACKET}/`, ref `{K.PREV_REF}`",
+          f"- pinned unchanged-baseline executable `{K.EXE}` sha256 `{K.EXE_SHA256}` size {K.EXE_SIZE:,}",
+-         f"- evidence commit parent: `{K.R2}`; review ref `{K.DEST}`", "",
++         f"- evidence commit parent: `{K.PREV}`; review ref `{K.DEST}`", "",
+          "## Contents", "",
+          "| Path | What |", "|---|---|",
+          "| `INDEX.md` | this file |",
+-         "| `TRANCHE-SUMMARY.md` | every baseline, the healthy build and every attempted control, with identities, "
+-         "outcomes, classifications, resources, restoration and links |",
+-         "| `ARCHITECT-RULING-CATALOG-FREEZE.md` | the catalog-freeze Architect ruling, as received, and the frozen "
+-         "catalog's identity |",
+-         "| `receipts/00-authentication.txt` | full provenance: every input authenticated before any worktree or "
+-         "command |",
+-         "| `receipts/01-supervision-selftest/` | the enforcement chain proven on non-Nexus processes |",
+-         "| `receipts/02-EXPECTATIONS.json`, `02-expectations.txt` | every selection and expectation derived from the "
+-         "catalog and C's sources, cross-checked |",
+-         "| `receipts/03-tool-controls/` | classifiers and supervisor exercised on synthetic and historical evidence "
+-         "(positive and negative controls) |",
+-         "| `receipts/04-rehearsal/` | worktree, apply, verify, restore and link steps rehearsed with a synthetic patch "
+-         "in a development worktree (nothing built or run) |",
+-         "| `receipts/05-FREEZE.json`, `05-FREEZE-RECORD.txt` | the freeze: sha256 of every frozen tool, input and "
+-         "expectation, before the first baseline invocation |",
+-         "| `receipts/10-baseline-X-1/` … `15-baseline-T-RES/` | the standalone baseline receipts on the pinned "
+-         "executable: X-1 (e1), T-BIND, T-CELL, W6, T-PREC, T-RES (e2) |",
+-         "| `receipts/19-healthy-worktree/`, `20-healthy-build/` | the exact-command healthy build (e4) with its "
+-         "complete compiler output and target manifest |",
+-         "| `receipts/31-C22/` … `42-C18b/` | one directory per attempted control: gate, worktree, apply, build, run, "
++         "| `TRANCHE-SUMMARY.md` | the combined Tranche-1 summary: C22 Architect-accepted, the linked baselines, and every "
++         "attempted remaining control with identities, outcomes, classifications, resources, restoration and links |",
++         "| `ARCHITECT-RULING-C22-ACCEPTANCE.md` | the record of the Architect's C22 ruling (evidence of the ruling; a "
++         "string is not authority) |",
++         "| `CARRIED-FORWARD.md` | every previous-packet file this mission links or gates on, by previous commit, path, "
++         "blob and sha256 (not republished) |",
++         "| `receipts/00-authentication.txt` | provenance: every input, the complete previous packet and its "
++         "SHA256SUMS, the facts of the C22 ruling, the carried-forward copies |",
++         "| `receipts/01-supervision-selftest/` | the unchanged enforcement chain proven again on non-Nexus processes |",
++         "| `receipts/03-verifier-controls/` | the repaired verifier's positive, negative, replay, sensitivity and "
++         "randomized controls (no Cargo, no Nexus test) |",
++         "| `receipts/04-tool-repair/` | the exact old-to-new tooling diff, its authorization map, and the mechanical check "
++         "that only authorized differences exist |",
++         "| `receipts/04b-render-rehearsal/` | render.py on synthetic receipts |",
++         "| `receipts/05-FREEZE.json`, `05-FREEZE-RECORD.txt` | the freeze, before C14 |",
++         "| `receipts/06-PRE-EXECUTION-GATE.txt` (+ `06-gate-authentication.txt`) | the static final pre-execution gate |",
++         "| `receipts/32-C14/` … `42-C18b/` | one directory per attempted control: gate, worktree, apply, build, run, "
+          "restore, link, RESULT |",
+-         "| `receipts/90-final-gate.txt` | the final gate |",
+-         "| `tools/` | the minimal reproducible tooling (Stage-2's configs.py, normalize.py, report.py, verify_tree.py and "
+-         "scope-wrap.sh byte for byte; the frozen vocabulary is read from the Stage-2 evidence commit) |",
+-         "| `development/` | the development log, every defective tool version and its repair diff, failing "
+-         "development outputs |",
++         "| `receipts/90-final-gate.txt` (+ `90-gate-authentication.txt`) | the final gate |",
++         "| `tools/` | the tools this mission ran: the EXEC-01 tools, repaired only as authorized (see "
++         "`receipts/04-tool-repair/`) |",
++         "| `development/` | the development log, every failing development output, every revision and its diff |",
+          "| `SHA256SUMS` | every packet file but itself |", "",
+          "## Freeze", "",
+          f"Frozen files: {len(fr.get('files', {}))}; recorded {fr.get('recorded')}; freeze record sha256 "
+          f"`{K.sha256_file(os.path.join(R, '05-FREEZE.json')) if os.path.exists(os.path.join(R, '05-FREEZE.json')) else 'none'}`. "
+          "No frozen file was changed after the freeze; every supervised step re-checks it.", "",
+          "## Limitations", "",
+-         "- Classifications are executor candidates for Architect review; no kill is accepted here.",
++         "- Classifications are executor candidates for Architect review; no kill is accepted here. C22's acceptance is "
++         "the Sole Architect's ruling, recorded, not an executor finding.",
+          "- Results are the explored model's and the named tests' results on Candidate C and its mutants, under "
+          "AD-1-R4 J's storage assumptions; nothing here is a filesystem, network or OS-containment claim.",
+          "- Reproducible builds are not established (AD-1-R4 I); every identity is the sha256 of the executable "
+          "actually built and run.",
+-         "- The F-B2 and F-G restored-side receipts are the accepted Stage-2 receipts, linked (not rerun) under "
+-         "AD-1-R4 I's proposed receipt-linking clause S-5 as the mission's section 15 directs; each link is checked at "
+-         "its control's own verified restoration.", ""]
++         "- The restored-side receipts are linked, not rerun: the standalone baselines (X-1 e1; T-BIND, T-CELL, W6, "
++         "T-PREC, T-RES e2) of the previous packet and the accepted Stage-2 F-B2 and F-G receipts; each link is checked "
++         "at its control's own verified restoration.", ""]
+     open(os.path.join(outdir, "INDEX.md"), "w").write("\n".join(i) + "\n")
+-    print(f"TRANCHE STATUS: {st}; candidates {len(candidates)}; attempted {attempted}")
++    print(f"STATUS: {st}; new candidates {len(candidates)} of 11; attempted {attempted}")
+     return 0
+ 
+ 
+--- EXEC-01/tools/render_rehearsal.py
++++ RESUME-01/tools/render_rehearsal.py
+@@ -1,12 +1,17 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 6: rehearse render.py on SYNTHETIC receipts only.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 19) for the revised render.py.
+ 
+-    render_rehearsal.py OUTDIR TOOLCONTROLS     OUTDIR must not exist
++    render_rehearsal.py OUTDIR TOOLCONTROLS     OUTDIR must not exist; TOOLCONTROLS: a copy of the synthetic tool-control
++                                               receipts of EXEC-01 (receipts/03-tool-controls of the previous packet)
+ 
+-A temporary evidence root under OUTDIR is populated with tool_controls.py's synthetic receipts in the layout of the
+-real receipts (baselines, healthy build, and three control directories: C22 (d), C14 (b), C12 (a)); render.py's
+-functions are pointed at it and must render every row without error, with the derived status
+-MUTATION_CONTROL_BLOCKED (three of twelve). Nothing real is read but the expectations.
++A temporary evidence root OUTSIDE OUTDIR (under dev-local/, never published, so no previous-packet file is
++republished) holds the carried-forward expectations, baselines, healthy build and C22 receipts and the C22 ruling
++record (byte copies from this mission's evidence root), and three SYNTHETIC control
++directories in the layout of the real receipts: C14 (b) and C12 (a) as candidates, C9 (a) as a non-candidate whose
++run is a synthetic overshoot. render.py's functions are pointed at it and must render every row without error, with
++the derived status MUTATION_CONTROL_BLOCKED (two new candidates of eleven), C22 rendered as Architect-accepted with
++its previous-packet references, and every carried-forward file listed with its previous blob and sha256.
+ """
+ import os
+ import shutil
+@@ -16,32 +21,34 @@
+ import common as K  # noqa: E402
+ 
+ OK = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
++BLOCKED = "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+ 
+ 
+ def main(outdir, tc):
+-    if os.path.exists(outdir):
++    root = os.path.join(K.EV, "dev-local", "render-rehearsal-root-" + os.path.basename(outdir))
++    if os.path.exists(outdir) or os.path.exists(root):
+         raise SystemExit("REFUSED: output exists")
+-    root = os.path.join(outdir, "ev")
+     r = os.path.join(root, "receipts")
+     os.makedirs(r)
+-    shutil.copy(os.path.join(K.EV, "receipts/02-EXPECTATIONS.json"), r)
+-    shutil.copytree(os.path.join(tc, "run-e1-x1-pass"), os.path.join(r, "10-baseline-X-1"))
+-    for n, key in enumerate(["T-BIND", "T-CELL", "W6", "T-PREC", "T-RES"], start=11):
+-        shutil.copytree(os.path.join(tc, "run-e2-tbind-pass"), os.path.join(r, f"{n}-baseline-{key}"))
+-    shutil.copytree(os.path.join(tc, "build-healthy-as-e4"), os.path.join(r, "20-healthy-build"))
+-    layout = {"31-C22": ("build-c22", None), "32-C14": ("build-healthy-as-pin-ok", "run-b-c14-own-check"),
+-              "37-C12": ("build-healthy-as-pin-ok", "run-a-C12-x1-fail-E2")}
+-    for d, (b, run) in layout.items():
++    for c in K.CARRIED:
++        src = os.path.join(K.EV, c)
++        (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(root, c))
++    os.makedirs(os.path.join(root, "documents"))
++    shutil.copy(os.path.join(K.EV, K.C22_RULING), os.path.join(root, K.C22_RULING))
++    layout = {"32-C14": ("build-healthy-as-pin-ok", "run-b-c14-own-check", OK),
++              "37-C12": ("build-healthy-as-pin-ok", "run-a-C12-x1-fail-E2", OK),
++              "38-C9": ("build-healthy-as-pin-ok", "run-a-neg-fb2-overshoot", BLOCKED)}
++    for d, (b, run, result) in layout.items():
+         os.makedirs(os.path.join(r, d, "02-apply"))
+         open(os.path.join(r, d, "02-apply/APPLY.txt"), "w").write("APPLY: EXACTLY_C_PLUS_PATCH\n(synthetic)\n")
+         shutil.copytree(os.path.join(tc, b), os.path.join(r, d, "03-build"))
+-        if run:
+-            shutil.copytree(os.path.join(tc, run), os.path.join(r, d, "04-run"))
++        shutil.copytree(os.path.join(tc, run), os.path.join(r, d, "04-run"))
+         os.makedirs(os.path.join(r, d, "05-restore"))
+         open(os.path.join(r, d, "05-restore/RESTORE.txt"), "w").write("RESTORE: EXACTLY_C\n(synthetic)\n")
+-        os.makedirs(os.path.join(r, d, "06-link"))
+-        open(os.path.join(r, d, "06-link/LINK.txt"), "w").write("LINK: VERIFIED\ncontrol: synthetic link\n")
+-        open(os.path.join(r, d, "RESULT.txt"), "w").write(OK + "\n(synthetic)\n")
++        if result == OK:
++            os.makedirs(os.path.join(r, d, "06-link"))
++            open(os.path.join(r, d, "06-link/LINK.txt"), "w").write("LINK: VERIFIED\ncontrol: synthetic link\n")
++        open(os.path.join(r, d, "RESULT.txt"), "w").write(result + "\n(synthetic)\n")
+     K.EV = root
+     import render
+     render.R = r
+@@ -50,15 +57,20 @@
+     render.main(out)
+     s = open(os.path.join(out, "TRANCHE-SUMMARY.md")).read()
+     i = open(os.path.join(out, "INDEX.md")).read()
++    cf = open(os.path.join(out, "CARRIED-FORWARD.md")).read()
++    n_carried = sum(len(fs) for c in K.CARRIED if os.path.isdir(os.path.join(root, c))
++                    for _, _, fs in os.walk(os.path.join(root, c))) + 1 + len(K.CARRIED_DOCS)
+     checks = [("status MUTATION_CONTROL_BLOCKED", "**MUTATION_CONTROL_BLOCKED**" in s),
+-              ("three candidates rendered", "**3** of 12" in s),
+-              ("C22 row: NOT PRODUCED BY DESIGN executable and E0283 named", "### C22" in s
+-               and "mutant executable: NOT PRODUCED BY DESIGN" in s and "E0283 at" in s),
++              ("C22 rendered as Architect-accepted, with previous-packet blob references",
++               "**C22 — MUTATION CONTROL KILL ACCEPTED**" in s and K.PREV_PACKET + "/receipts/31-C22/03-build/build.stderr" in s),
++              ("two new candidates of the eleven rendered", "**2** of the 11 remaining controls (C14, C12)" in s),
+               ("C14 row: panic location rendered", "### C14" in s and "panic at" in s),
+               ("C12 row: discovered count of the 250,000 ceiling", "### C12" in s and "of 250,000" in s),
+-              ("not attempted listed", "C19, C21, C27, C28, C9, C11, C17, C18a, C18b" in s),
+-              ("X-1 baseline facts rendered", "branch accounting NORMALIZED" in s),
+-              ("INDEX names the status", "MUTATION_CONTROL_BLOCKED" in i)]
++              ("C9 row: non-candidate with its outer class", "### C9" in s and BLOCKED in s and "BUDGET EXCEEDED" in s),
++              ("not attempted listed", "C19, C21, C27, C28, C11, C17, C18a, C18b" in s),
++              ("baselines rendered as previous-packet references", s.count(K.PREV_PACKET + "/receipts/1") == 6),
++              ("every carried-forward file listed with blob and sha256", cf.count("\n| `") == n_carried),
++              ("INDEX names the status and the previous evidence commit", "MUTATION_CONTROL_BLOCKED" in i and K.PREV in i)]
+     lines = [f"{'OK ' if ok else 'BAD'} {n}" for n, ok in checks]
+     lines.append("RENDER REHEARSAL: " + ("ALL AS EXPECTED" if all(ok for _, ok in checks) else "FAILED"))
+     open(os.path.join(outdir, "SUMMARY.txt"), "w").write("\n".join(lines) + "\n")
+--- /dev/null
++++ RESUME-01/tools/tool_diff.py
+@@ -0,0 +1,219 @@
++#!/usr/bin/env python3
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01, section 6: the exact old-to-new tooling diff and the mechanical check
++that only authorized differences exist. Read-only but for OUTDIR.
++
++    tool_diff.py OUTDIR      writes OUTDIR/TOOL-REPAIR.diff, OUTDIR/AUTHORIZATION.md and OUTDIR/TOOL-DIFF-CHECK.txt
++    tool_diff.py --check     prints the checks only (the pre-execution gate runs this against the frozen tools)
++
++Old: the tools of the EXEC-01 evidence commit (original-tools/, each byte-checked against the previous packet's
++SHA256SUMS at the commit). New: tools/. Checks:
++  D1  original-tools/ is exactly the previous packet's tools/ (names and sha256)
++  D2  every tool is UNCHANGED, CHANGED or ADDED exactly as the authorization map below declares; none removed
++  D3  the tools the mission forbids changing are byte-identical: classify.py (semantic classifications), supervise.py
++      (resource enforcement), worktrees.py, expectations.py (catalog expectations), configs.py, normalize.py,
++      report.py, verify_tree.py, scope-wrap.sh, healthy.py, rehearsal.py, tool_controls.py
++  D4  inside changed files, every function the repair does not need is unchanged (AST identity), and the byte
++      comparison of verify_mutant.main and sections [1]-[5] of authenticate.main are unchanged
++  D5  common.py: every name keeps its value except the declared mission/path/publication names; only declared names
++      are added; build/test commands, environments, limits, order, identities unchanged
++  D6  the carried-forward expectations equal the previous packet's (commands, selections, properties, ceilings)
++"""
++import ast
++import difflib
++import json
++import os
++import sys
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import common as K  # noqa: E402
++
++NEW = os.path.join(K.EV, "tools")
++OLD = os.path.join(K.EV, "original-tools")
++I1 = "item 1 (verify_mutant.py: the path-aware status predicate of section 7)"
++I2 = "item 2 (control.py: the restoration status predicate, the same path-aware policy)"
++I3 = "item 3 (control gate/order: start after the Architect-accepted C22 record)"
++I4 = ("item 4 (tool controls, freeze/final-gate logic, packet/index rendering and publication paths required to "
++      "validate and document this repair)")
++CHANGED = {
++    "verify_mutant.py": [I1 + ": status_records/target_facts/target_entry_problem/mount_points/status_policy added; "
++                         "main's three status lines and two status terms of `ok` replaced by status_policy; read-only "
++                         "git (GIT_OPTIONAL_LOCKS=0); docstring"],
++    "control.py": [I2 + ": restored_check added; restore's status listing and its predicate replaced by it; the "
++                   "RESTORE.txt status line", I3 + ": gate() over RESUME_ORDER, C14's prior steps = the frozen C22 "
++                   "ruling record, the carried-forward baselines and healthy build, the pre-execution gate; main() "
++                   "refuses C22 and any id outside RESUME_ORDER; docstring"],
++    "common.py": [I3 + ": ACCEPTED, RESUME_ORDER, C22_RULING, C22_RULING_FIRST",
++                  I4 + ": MISSION, EV, EVIDENCE_WT, DEV_WT, PREV_*, CARRIED, CARRIED_DOCS, PACKET, BRANCH, LOCAL_BRANCH "
++                  "(DEST follows BRANCH)"],
++    "authenticate.py": [I4 + ": section [6] states the resume paths; section [7] authenticates the complete previous "
++                        "packet, the C22 ruling's facts and the carried-forward copies (section 2; pre-execution and "
++                        "final gates)"],
++    "record_freeze.py": [I4 + ": freeze logic (section 10): covers original-tools/, the carried-forward receipts and "
++                         "the C22 ruling record; this mission's pre-freeze receipts; policy text"],
++    "final_gate.py": [I4 + ": final-gate logic: carried-forward receipts, C22 accepted, RESUME_ORDER, path-aware "
++                      "restored checks"],
++    "render.py": [I4 + ": packet/index rendering: combined Tranche-1 summary, CARRIED-FORWARD.md, INDEX"],
++    "render_rehearsal.py": [I4 + ": the rendering's tool control, for the revised render.py"],
++    "build_packet.py": [I4 + ": packet: the ruling record and CARRIED-FORWARD.md staged; carried-forward copies "
++                        "excluded and checked not republished"],
++    "publish_checks.py": [I4 + ": publication paths: parent 19eda8cc, resume packet and ref, previous packet unchanged, "
++                          "key receipts"],
++}
++ADDED = {
++    "verifier_controls.py": [I4 + ": the tool controls of section 8 (plus replay, sensitivity, randomized trials)"],
++    "pre_exec_gate.py": [I4 + ": the static final pre-execution gate of section 10"],
++    "tool_diff.py": [I4 + ": this diff and its check (section 6)"],
++}
++FORBIDDEN = ["classify.py", "supervise.py", "worktrees.py", "expectations.py", "configs.py", "normalize.py", "report.py",
++             "verify_tree.py", "scope-wrap.sh", "healthy.py", "rehearsal.py", "tool_controls.py"]
++SAME_FUNCS = {"control.py": ["git", "apply_patch", "link", "finish"],
++              "verify_mutant.py": ["blob_id"],
++              "authenticate.py": ["git", "gtext", "chk", "copy_in", "packet_sums", "patch_result"],
++              "render.py": ["lines", "jload", "outer", "res", "control_row"],
++              "build_packet.py": ["files_under"],
++              "final_gate.py": ["check"],
++              "publish_checks.py": ["git", "check", "tree_map", "glob_re", "push_matches", "gh", "mutant_blobs",
++                                    "remote_blob", "actions"],
++              "common.py": ["control_wt", "build_env", "git", "blob", "source", "sha256_bytes", "sha256_file",
++                            "git_blob_id", "inputs"]}
++COMMON_CHANGED = {"MISSION", "EV", "EVIDENCE_WT", "PACKET", "BRANCH", "DEST", "LOCAL_BRANCH"}
++COMMON_ADDED = {"DEV_WT", "ACCEPTED", "RESUME_ORDER", "C22_RULING", "C22_RULING_FIRST", "PREV_MISSION", "PREV",
++                "PREV_TREE", "PREV_PARENT", "PREV_REF", "PREV_PACKET", "PREV_EVIDENCE_WT", "PREV_DEV_WT", "CARRIED",
++                "CARRIED_DOCS"}
++results = []
++
++
++def check(label, ok, detail=""):
++    results.append((label, bool(ok), str(detail)))
++
++
++def funcs(path):
++    tree = ast.parse(open(path).read())
++    return {n.name: ast.dump(n) for n in tree.body if isinstance(n, ast.FunctionDef)}, tree
++
++
++def fn(tree, name):
++    return next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
++
++
++def namespace(path):
++    ns = {}
++    exec(compile(open(path).read(), path, "exec"), ns)
++    return {k: v for k, v in ns.items() if not k.startswith("__") and not callable(v) and k not in ("hashlib", "os",
++                                                                                                    "subprocess")}
++
++
++def run():
++    prev = {}
++    for line in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines():
++        h, rel = line.split("  ", 1)
++        if rel.startswith("tools/"):
++            prev[rel[6:]] = h
++    old = {f: K.sha256_file(os.path.join(OLD, f)) for f in sorted(os.listdir(OLD))}
++    new = {f: K.sha256_file(os.path.join(NEW, f)) for f in sorted(os.listdir(NEW)) if f.endswith((".py", ".sh"))}
++    check("D1 original-tools/ is exactly the EXEC-01 packet's tools/ (names and sha256 from its SHA256SUMS at "
++          f"{K.PREV[:8]})", old == prev, f"{len(old)} files")
++    status = {f: ("UNCHANGED" if f in new and new[f] == old[f] else "CHANGED" if f in new else "REMOVED") for f in old}
++    status.update({f: "ADDED" for f in new if f not in old})
++    check("D2 no tool removed", not [f for f, s in status.items() if s == "REMOVED"])
++    check("D2 the changed tools are exactly the declared ones", sorted(f for f, s in status.items() if s == "CHANGED")
++          == sorted(CHANGED), sorted(f for f, s in status.items() if s == "CHANGED"))
++    check("D2 the added tools are exactly the declared ones", sorted(f for f, s in status.items() if s == "ADDED")
++          == sorted(ADDED), sorted(f for f, s in status.items() if s == "ADDED"))
++    for f in FORBIDDEN:
++        check(f"D3 {f} byte-identical (sha256 {old.get(f, '')[:16]}…)", status.get(f) == "UNCHANGED", status.get(f))
++    for f, names in SAME_FUNCS.items():
++        a, ta = funcs(os.path.join(OLD, f))
++        b, tb = funcs(os.path.join(NEW, f))
++        names = [n for n in names if n in a]
++        diff = [n for n in names if a.get(n) != b.get(n)]
++        check(f"D4 {f}: unchanged functions {names} (AST identity)", not diff, diff)
++    # verify_mutant.main: the byte comparison is unchanged; `ok` lost exactly the two status terms and gained pol['ok'].
++    src_old, src_new = open(os.path.join(OLD, "verify_mutant.py")).read(), open(os.path.join(NEW, "verify_mutant.py")).read()
++    seg = lambda s: s[s.index("    entries = []\n"):s.index("    proc.wait()\n")]
++    check("D4 verify_mutant.main: the byte comparison (ls-tree of C, every blob, mode, missing, mutant identity) is "
++          "unchanged text", seg(src_old) == seg(src_new))
++    terms = lambda t: [ast.unparse(v) for v in next(s for s in fn(t, "main").body if isinstance(s, ast.Assign) and
++                                                    getattr(s.targets[0], "id", None) == "ok").value.values]
++    to, tn = terms(ast.parse(src_old)), terms(ast.parse(src_new))
++    check("D4 verify_mutant.main `ok`: the original terms minus the two exact-string status terms, plus pol['ok']",
++          [t for t in to if t not in ("not unexpected_status", "' M ' + path in status")] == [t for t in tn if t !=
++                                                                                            "pol['ok']"]
++          and tn.count("pol['ok']") == 1 and len(tn) == len(to) - 1, f"old {to}; new {tn}")
++    # control.restore: only the status predicate changed.
++    ro, rn = (ast.unparse(fn(ast.parse(open(os.path.join(d, "control.py")).read()), "restore")) for d in (OLD, NEW))
++    keep = lambda s: [l for l in s.splitlines() if "status" not in l and "rv" not in l and "v = " not in l
++                      and "chk" not in l and "pol" not in l and "verify_tree" not in l]
++    check("D4 control.restore: every line not about the status predicate or its record is unchanged",
++          keep(ro) == keep(rn), [l for l in difflib.unified_diff(keep(ro), keep(rn), lineterm="")][:6])
++    rterms = lambda d: [ast.unparse(v) for v in next(
++        s for s in fn(ast.parse(open(os.path.join(d, "control.py")).read()), "restore").body
++        if isinstance(s, ast.Assign) and getattr(s.targets[0], "id", None) == "ok").value.values]
++    ro_t, rn_t = rterms(OLD), rterms(NEW)
++    check("D4 control.restore `ok`: the original terms (blob, sha256, verify_tree EXACTLY_C) minus the exact-string "
++          "status term, plus pol['ok']", [t for t in ro_t if t != "rec['status'].strip() in ('', '!! target/')"]
++          == [t for t in rn_t if t != "pol['ok']"] and rn_t.count("pol['ok']") == 1 and len(rn_t) == len(ro_t),
++          f"old {ro_t}; new {rn_t}")
++    mo, mn = (fn(ast.parse(open(os.path.join(d, "control.py")).read()), "main") for d in (OLD, NEW))
++    check("D4 control.main: unchanged but for the leading refusal of C22 and any id outside RESUME_ORDER",
++          [ast.dump(s) for s in mo.body] == [ast.dump(s) for s in mn.body[1:]]
++          and "RESUME_ORDER" in ast.unparse(mn.body[0]))
++    ao, an = (fn(ast.parse(open(os.path.join(d, "authenticate.py")).read()), "main") for d in (OLD, NEW))
++    cut = next(i for i, s in enumerate(ao.body) if isinstance(s, ast.Assign) and ast.unparse(s).startswith("paths ="))
++    check("D4 authenticate.main: sections [1]-[5] and the [6] ref checks unchanged (statement by statement)",
++          [ast.dump(s) for s in ao.body[:cut]] == [ast.dump(s) for s in an.body[:cut]], f"{cut} statements")
++    co, cn = namespace(os.path.join(OLD, "common.py")), namespace(os.path.join(NEW, "common.py"))
++    changed = {k for k in co if k in cn and co[k] != cn[k]}
++    check("D5 common.py: no name removed", not [k for k in co if k not in cn], [k for k in co if k not in cn])
++    check("D5 common.py: changed values only for the declared mission/path/publication names", changed <= COMMON_CHANGED,
++          sorted(changed))
++    check("D5 common.py: only declared names added", set(cn) - set(co) <= COMMON_ADDED, sorted(set(cn) - set(co)))
++    check("D5 common.py: commands, environments, limits, order and identities unchanged",
++          all(co[k] == cn[k] for k in ("C", "C_TREE", "BLOBS", "CATALOG_BLOB", "CATALOG_SHA", "BUILD_ARGV",
++                                        "BUILD_LIMIT", "RUN_ENV", "MEMORY_MAX", "NEED_KIB", "ORDER", "NOT_AUTHORIZED",
++                                        "NAMED", "EXPLORE_CFG", "EXE", "EXE_SHA256", "EXE_SIZE", "LISTED",
++                                        "UNIT_PREFIX", "HEALTHY_WT")))
++    e = os.path.join(K.EV, "receipts/02-EXPECTATIONS.json")
++    want = [l.split("  ")[0] for l in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines()
++            if l.endswith("  receipts/02-EXPECTATIONS.json")]
++    check("D6 the carried-forward expectations equal the previous packet's", [K.sha256_file(e)] == want, want)
++    return old, new, status
++
++
++def main(argv):
++    old, new, status = run()
++    bad = [r for r in results if not r[1]]
++    lines = [f"{'OK  ' if o else 'FAIL'} {l}{(': ' + d) if d else ''}" for l, o, d in results]
++    lines.append("TOOL DIFF: " + ("ALL CHECKS HOLD" if not bad else "FAILED"))
++    if argv[0] == "--check":
++        print("\n".join(lines))
++        return 0 if not bad else 1
++    out = os.path.abspath(argv[0])
++    if os.path.exists(out):
++        raise SystemExit("REFUSED: output exists")
++    os.makedirs(out)
++    diff = []
++    for f in sorted(status):
++        if status[f] in ("CHANGED", "ADDED"):
++            a = open(os.path.join(OLD, f)).read().splitlines(keepends=True) if status[f] == "CHANGED" else []
++            b = open(os.path.join(NEW, f)).read().splitlines(keepends=True)
++            diff += difflib.unified_diff(a, b, f"EXEC-01/tools/{f}" if a else "/dev/null", f"RESUME-01/tools/{f}")
++    open(os.path.join(out, "TOOL-REPAIR.diff"), "w").write("".join(diff))
++    md = [f"# Tool repair authorization map — {K.MISSION}", "",
++          f"Old: the tools of `{K.PREV_PACKET}/tools/` at `{K.PREV}`. New: this mission's `tools/`. The exact diff is "
++          "`TOOL-REPAIR.diff`; the mechanical checks are `TOOL-DIFF-CHECK.txt`.", "",
++          "| Tool | Status | Old sha256 | New sha256 | Authorization |", "|---|---|---|---|---|"]
++    for f in sorted(status):
++        why = "; ".join(CHANGED.get(f, ADDED.get(f, ["byte-identical (no change)"])))
++        md.append(f"| `{f}` | {status[f]} | `{old.get(f, '—')}` | `{new.get(f, '—')}` | {why} |")
++    md += ["", "Not changed (mission section 6): classify.py's semantic classifications, supervise.py's resource "
++           "enforcement, the catalog expectations, any patch, any source, the named-property logic, cardinality logic, "
++           "the build command and the test commands."]
++    open(os.path.join(out, "AUTHORIZATION.md"), "w").write("\n".join(md) + "\n")
++    open(os.path.join(out, "TOOL-DIFF-CHECK.txt"), "w").write("\n".join(lines) + "\n")
++    print("\n".join(lines))
++    return 0 if not bad else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+--- /dev/null
++++ RESUME-01/tools/verifier_controls.py
+@@ -0,0 +1,618 @@
++#!/usr/bin/env python3
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01, sections 4 B and 8: validate the repaired source/restoration verifier
++(verify_mutant.status_policy, control.restored_check, control.restore) before any control is executed.
++
++    verifier_controls.py OUTDIR      OUTDIR must not exist
++
++Nothing is built and no Cargo command or Nexus test runs; no catalog patch is applied. Everything happens in ONE
++mission-owned development worktree at C (K.DEV_WT, created and locked here with its role; never used for a control)
++with a SYNTHETIC comment-only patch and manually created target sentinels, plus one read-only check of the preserved
++restored C22 worktree. Every perturbation is undone by explicit file operations (bytes and modes rewritten from C's
++git objects, created files removed, `git update-index --cacheinfo` for the index, `git update-ref --no-deref HEAD`
++for HEAD); no reset, clean, checkout or stash. Each undo is verified before the next control.
++
++  P1-P5   the five positive controls of section 8 (and P6: apply and restore end to end with a populated target)
++  N6-N16  the negative controls of section 8 (some with sub-cases), each rejected FOR ITS OWN REASON
++  R       regression replay: the EXEC-01 verify_mutant.py and restoration predicate reproduce the defect on P4 and P2
++  S       sensitivity: a deliberately over-broad policy (any ignored entry allowed) would accept N6, N11 and N12, so
++          those controls discriminate the path-aware policy from a blanket ignore
++  T       randomized trials in the worktree (seeded): random target populations and at most one random perturbation;
++          the verdict must equal the expectation in every trial
++  F       randomized differential test of the lexical target-path rule against an independently written oracle
++"""
++import hashlib
++import json
++import os
++import posixpath
++import random
++import shutil
++import subprocess
++import sys
++import time
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import common as K  # noqa: E402
++import control  # noqa: E402
++import supervise  # noqa: E402
++import verify_mutant  # noqa: E402
++import worktrees  # noqa: E402
++
++os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # no git command here rewrites any index (the C22 check is read-only)
++WT = K.DEV_WT
++ROLE = "development verifier controls (synthetic patch and target sentinels only; never used for a control)"
++SEED = 20261014
++TRIALS = 48
++FUZZ = 20000
++SECOND, MISSING, MODE = "README.md", "ROADMAP.md", "CHANGELOG.md"
++ORIGINAL_VM = os.path.join(K.EV, "original-tools/verify_mutant.py")
++results = []
++OUT = None
++SCRATCH = None
++SYN = {}
++
++
++class Abort(Exception):
++    pass
++
++
++def note(cid, kind, ok, detail, data=None):
++    results.append({"id": cid, "kind": kind, "as_expected": bool(ok), "detail": detail})
++    print(f"{'OK ' if ok else 'BAD'} [{cid}] ({kind}) {detail}")
++    if data is not None:
++        json.dump(data, open(os.path.join(OUT, "records", cid + ".json"), "w"), indent=1, default=str)
++
++
++def git(*args, wt=WT, check=True):
++    r = subprocess.run(["git", "-C", wt, *args], capture_output=True, text=True)
++    if check and r.returncode != 0:
++        raise Abort(f"git {args}: rc {r.returncode} {r.stderr}")
++    return r
++
++
++def vm(blob=None, sha=None, tool=None):
++    r = subprocess.run([sys.executable, tool or supervise.VERIFY_MUTANT, WT, K.PROTOCOL, blob or SYN["blob"],
++                        sha or SYN["sha256"]], capture_output=True, text=True)
++    d = json.loads(r.stdout)
++    d["_rc"] = r.returncode
++    return d
++
++
++def rc(wt=WT, when="verifier control"):
++    return control.restored_check(wt, when)
++
++
++def why(pol):
++    return [x["why"] + ": " + x["record"][:90] for x in pol["rejected"]]
++
++
++def tracked_mode(path):
++    return git("ls-tree", K.C, "--", path).stdout.split()[0]
++
++
++def put_c(path):
++    """Rewrite one tracked file from C's git object (bytes and mode)."""
++    p = os.path.join(WT, path)
++    open(p, "wb").write(K.blob(K.C, path))
++    os.chmod(p, 0o755 if tracked_mode(path) == "100755" else 0o644)
++
++
++def must_mutant(after):
++    d = vm()
++    if d["verdict"] != "EXACTLY_C_PLUS_PATCH" or d["_rc"] != 0:
++        raise Abort(f"after {after}: the worktree is not back to exactly C plus the synthetic patch: {d['verdict']} "
++                    f"{d['unexpected_status'][:3]}")
++
++
++def must_restored(after):
++    d = rc()
++    if d["verdict"] != "EXACTLY_C":
++        raise Abort(f"after {after}: the worktree is not back to exactly C: {why(d['status_policy'])[:3]} "
++                    f"{d['verify_tree']['content_mismatches'][:3]}")
++
++
++def sentinels(root, n, rng, depth=5):
++    """n regular files at random depths under root (the manually created nested target)."""
++    made = []
++    for i in range(n):
++        parts = [rng.choice(["release", "debug", "deps", "build", ".fingerprint", "incremental", "a b", "x.y", "...",
++                             "-z", "ünï"]) + (str(rng.randrange(9)) if rng.random() < 0.5 else "")
++                 for _ in range(rng.randrange(depth))]
++        d = os.path.join(root, *parts)
++        os.makedirs(d, exist_ok=True)
++        f = os.path.join(d, f"sentinel-{i:04}.{rng.choice(['txt', 'rlib', 'd', 'json', 'o'])}")
++        open(f, "w").write(f"synthetic target sentinel {i} (verifier_controls.py; not a build product)\n")
++        made.append(f)
++    return made
++
++
++def synthetic_patch():
++    base = K.blob(K.C, K.PROTOCOL)
++    lines = base.split(b"\n")
++    line = b"// SYNTHETIC VERIFIER-CONTROL COMMENT LINE (comment only; not a control)"
++    mutant = b"\n".join(lines[:1] + [line] + lines[1:])
++    patch = (f"diff --git a/{K.PROTOCOL} b/{K.PROTOCOL}\n--- a/{K.PROTOCOL}\n+++ b/{K.PROTOCOL}\n@@ -1,2 +1,3 @@\n"
++             ).encode() + b" " + lines[0] + b"\n+" + line + b"\n " + lines[1] + b"\n"
++    os.makedirs(os.path.join(OUT, "synthetic"))
++    pp = os.path.join(OUT, "synthetic/synthetic-comment.patch")
++    open(pp, "wb").write(patch)
++    SYN.update({"blob": K.git_blob_id(mutant), "sha256": K.sha256_bytes(mutant), "patch": pp})
++    return {"id": "SYNTHETIC", "description": "one comment line (synthetic; not a control)",
++            "patch": {"input": os.path.relpath(pp, K.EV), "sha256": K.sha256_bytes(patch), "catalog_file": "(synthetic)"},
++            "source_file": K.PROTOCOL, "mutant_blob": SYN["blob"], "mutant_sha256": SYN["sha256"],
++            "baseline_blob": K.BLOBS[K.PROTOCOL], "baseline_sha256": K.sha256_bytes(base)}
++
++
++def tree_state(path):
++    """Read-only fingerprint of a directory tree (count, bytes, newest mtime, sha256 of the sorted listing)."""
++    rows = []
++    for d, dirs, fs in os.walk(path):
++        dirs.sort()
++        for f in sorted(fs):
++            st = os.lstat(os.path.join(d, f))
++            rows.append(f"{os.path.relpath(os.path.join(d, f), path)}\t{st.st_size}\t{st.st_mtime_ns}")
++    return {"files": len(rows), "listing_sha256": hashlib.sha256("\n".join(rows).encode()).hexdigest()}
++
++
++def admin_state(wt):
++    admin = git("rev-parse", "--path-format=absolute", "--git-dir", wt=wt).stdout.strip()
++    out = {"admin": admin}
++    for n in ("index", "HEAD", "locked", "gitdir"):
++        p = os.path.join(admin, n)
++        st = os.stat(p)
++        out[n] = {"sha256": K.sha256_file(p), "mtime_ns": st.st_mtime_ns, "size": st.st_size}
++    return out
++
++
++def main(outdir):
++    global OUT, SCRATCH
++    SCRATCH = os.path.join(K.EV, "dev-local", "scratch-" + os.path.basename(outdir))
++    if os.path.exists(outdir) or os.path.exists(SCRATCH):
++        raise SystemExit("REFUSED: output exists")
++    OUT = outdir
++    os.makedirs(os.path.join(outdir, "records"))
++    os.makedirs(SCRATCH)
++    t0 = time.time()
++    print(f"VERIFIER CONTROLS {K.MISSION} {time.strftime('%Y-%m-%dT%H:%M:%S%z')}; seed {SEED}")
++    try:
++        run(outdir)
++    except Abort as e:
++        note("ABORT", "harness", False, f"controls aborted: {e}")
++    bad = [r for r in results if not r["as_expected"]]
++    req = sorted({r["id"].split(".")[0] for r in results if r["id"][0] in "PN"})
++    summary = [f"VERIFIER CONTROLS {K.MISSION}: {len(results)} checks; {len(results) - len(bad)} as expected; "
++               f"elapsed {time.time() - t0:.1f} s; seed {SEED}",
++               f"required section-8 controls exercised: {req}"]
++    summary += [f"{'OK ' if r['as_expected'] else 'BAD'} [{r['id']}] ({r['kind']}) {r['detail']}" for r in results]
++    summary.append("VERIFIER CONTROLS: " + ("ALL AS EXPECTED" if not bad else "FAILED"))
++    open(os.path.join(outdir, "SUMMARY.txt"), "w").write("\n".join(summary) + "\n")
++    json.dump(results, open(os.path.join(outdir, "RESULTS.json"), "w"), indent=1)
++    print(summary[0])
++    print(summary[-1])
++    return 0 if not bad else 1
++
++
++def run(outdir):
++    # ---- the development worktree ----------------------------------------------------------------------------------
++    if os.path.lexists(WT):
++        note("W.1", "setup", True, f"the development worktree {WT} exists (created by an earlier run of this harness); "
++             "it is reused only if it authenticates as exactly C, clean and locked with its role")
++    else:
++        r, ok = worktrees.create(WT, ROLE)
++        worktrees.write(os.path.join(outdir, "00-worktree"), "CREATE", f"CREATE {WT} at C", r, ok)
++        note("W.1", "setup", ok, f"create the development worktree {WT} at C, locked with its role")
++    a, ok = worktrees.authenticate(WT, ROLE)
++    worktrees.write(os.path.join(outdir, "00-worktree"), "AUTHENTICATE", f"AUTHENTICATE {WT}", a, ok)
++    note("W.2", "setup", ok, "authenticate the development worktree (exactly C, clean, locked, owned)")
++    if not ok:
++        raise Abort("the development worktree is not exactly C")
++    target = os.path.join(WT, "target")
++    rng = random.Random(SEED)
++
++    # ---- P1: restored verifier, no target ----------------------------------------------------------------------------
++    d = rc()
++    note("P1", "positive", d["verdict"] == "EXACTLY_C" and not os.path.lexists(target),
++         f"Candidate C, no target: restored verifier {d['verdict']}; {d['status_policy']['records']} status records",
++         d)
++
++    # ---- N13r, N14r, N15r, N6r, N7r: restored-mode negatives (no target) ---------------------------------------------
++    git("update-ref", "--no-deref", "HEAD", K.C_PARENT)
++    d = rc()
++    note("N13.r", "negative", d["verdict"] == "NOT_C" and d["verify_tree"]["head"] == K.C_PARENT
++         and d["verify_tree"]["index_differs_from_head"], f"wrong HEAD/tree (HEAD moved to C's parent, files and index "
++         f"exactly C): restored verifier {d['verdict']}; head {d['verify_tree']['head'][:12]}, tree "
++         f"{d['verify_tree']['tree'][:12]}, index differs {d['verify_tree']['index_differs_from_head']}", d)
++    git("update-ref", "--no-deref", "HEAD", K.C)
++    must_restored("N13.r")
++    os.remove(os.path.join(WT, MISSING))
++    d = rc()
++    note("N14.r", "negative", d["verdict"] == "NOT_C" and MISSING in d["verify_tree"]["missing"]
++         and any(x["record"] == " D " + MISSING for x in d["status_policy"]["rejected"]),
++         f"missing tracked file {MISSING}: restored verifier {d['verdict']}; {why(d['status_policy'])}", d)
++    put_c(MISSING)
++    must_restored("N14.r")
++    os.chmod(os.path.join(WT, MODE), 0o755)
++    d = rc()
++    note("N15.r", "negative", d["verdict"] == "NOT_C" and MODE in d["verify_tree"]["mode_mismatches"],
++         f"mode mismatch ({MODE} 100644 made executable): restored verifier {d['verdict']}; modes "
++         f"{d['verify_tree']['mode_mismatches']}; {why(d['status_policy'])}", d)
++    put_c(MODE)
++    must_restored("N15.r")
++    log = os.path.join(WT, K.CRATE, "sentinel.log")
++    open(log, "w").write("synthetic ignored file outside target\n")
++    d = rc()
++    note("N6.r", "negative", d["verdict"] == "NOT_C" and any(x["why"] == "ignored path outside the worktree-local target"
++                                                           for x in d["status_policy"]["rejected"]),
++         f"ignored file outside target ({K.CRATE}/sentinel.log, ignored by *.log): restored verifier {d['verdict']}; "
++         f"{why(d['status_policy'])}", d)
++    os.remove(log)
++    must_restored("N6.r")
++    rs = os.path.join(WT, K.CRATE_SRC, "verifier_overlay.rs")
++    open(rs, "w").write("// synthetic untracked Rust source\n")
++    d = rc()
++    note("N7.r", "negative", d["verdict"] == "NOT_C" and any(x["why"] == "untracked" and x["record"].endswith(
++        "verifier_overlay.rs") for x in d["status_policy"]["rejected"]),
++         f"untracked Rust source outside target: restored verifier {d['verdict']}; {why(d['status_policy'])}", d)
++    os.remove(rs)
++    must_restored("N7.r")
++
++    # ---- N11: target is a symlink (restored and, later, mutant mode) -------------------------------------------------
++    elsewhere = os.path.join(SCRATCH, "elsewhere-target")
++    sentinels(elsewhere, 12, rng)
++    os.symlink(elsewhere, target)
++    d = rc()
++    t = d["status_policy"]["target"]
++    note("N11.r", "negative", d["verdict"] == "NOT_C" and t["is_symlink"] and not t["ok"],
++         f"target is a symlink to a directory outside the worktree: restored verifier {d['verdict']}; target facts "
++         f"symlink {t['is_symlink']}, own entry {t['own_entry']}; {why(d['status_policy'])}", d)
++    os.remove(target)
++    c22_target = os.path.join(K.control_wt("C22"), "target")
++    os.symlink(c22_target, target)
++    d = rc()
++    t = d["status_policy"]["target"]
++    note("N11b.r", "negative", d["verdict"] == "NOT_C" and t["is_symlink"] and not t["own_entry"],
++         f"target is a symlink to ANOTHER worktree's real target ({c22_target}; nothing there is read or written): "
++         f"restored verifier {d['verdict']}; realpath {t['realpath']}; {why(d['status_policy'])}", d)
++    os.remove(target)
++    must_restored("N11.r")
++
++    # ---- P3 and the mutant-mode negatives, no target ----------------------------------------------------------------
++    ctl = synthetic_patch()
++    ok, applied = control.apply_patch(WT, ctl, os.path.join(outdir, "P3-apply"))
++    d = vm()
++    note("P3", "positive", ok and applied and d["verdict"] == "EXACTLY_C_PLUS_PATCH" and d["_rc"] == 0
++         and d["status_policy"]["target_entries"] == 0,
++         f"C plus the synthetic comment-only patch, no target: control.apply_patch {'APPLY OK' if ok else 'FAILED'}; "
++         f"mutant verifier {d['verdict']}; shown {d['status_entries']}; mutant blob {d['mutant_file']['git_blob']}", d)
++    note("P3.obj", "positive", git("cat-file", "-e", SYN["blob"], wt=K.REPO, check=False).returncode != 0,
++         "the synthetic mutant blob is absent from the repository object store")
++    must_mutant("P3")
++    d = vm(blob="0" * 40)
++    note("N9a", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["status_policy"]["ok"]
++         and d["mutant_file"]["git_blob"] == SYN["blob"], "mutant file correct, expected blob wrong: mutant verifier "
++         f"{d['verdict']} (status policy holds; the blob comparison rejects)", d)
++    pp = os.path.join(WT, K.PROTOCOL)
++    good = open(pp, "rb").read()
++    open(pp, "ab").write(b"// one extra byte sequence\n")
++    d = vm()
++    note("N9b", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["mutant_file"]["git_blob"] != SYN["blob"],
++         f"mutant file with the wrong blob ({d['mutant_file']['git_blob'][:12]} for {SYN['blob'][:12]}): mutant verifier "
++         f"{d['verdict']}", d)
++    open(pp, "wb").write(good)
++    must_mutant("N9b")
++    git("update-index", "--info-only", K.PROTOCOL)
++    d = vm()
++    note("N10", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["index_differs_from_head"] == [K.PROTOCOL]
++         and any(x["record"] == "M  " + K.PROTOCOL for x in d["status_policy"]["rejected"]),
++         f"mutant file correct but staged (update-index --info-only: no object written): mutant verifier {d['verdict']}; "
++         f"index differs {d['index_differs_from_head']}; {why(d['status_policy'])}", d)
++    git("update-index", "--cacheinfo", f"100644,{K.BLOBS[K.PROTOCOL]},{K.PROTOCOL}")
++    note("N10.obj", "negative", git("cat-file", "-e", SYN["blob"], wt=K.REPO, check=False).returncode != 0,
++         "after staging and unstaging, the synthetic mutant blob is still absent from the object store")
++    must_mutant("N10")
++    sp = os.path.join(WT, SECOND)
++    open(sp, "ab").write(b"\n")
++    d = vm()
++    note("N8", "negative", d["verdict"] == "NOT_THE_MUTANT" and SECOND in d["other_content_mismatches"]
++         and any(x["record"] == " M " + SECOND for x in d["status_policy"]["rejected"]),
++         f"a second tracked file modified ({SECOND}): mutant verifier {d['verdict']}; other mismatches "
++         f"{d['other_content_mismatches']}; {why(d['status_policy'])}", d)
++    put_c(SECOND)
++    must_mutant("N8")
++    open(rs, "w").write("// synthetic untracked Rust source\n")
++    d = vm()
++    note("N7", "negative", d["verdict"] == "NOT_THE_MUTANT" and any(
++        x["why"] == "untracked" for x in d["status_policy"]["rejected"]),
++         f"untracked Rust source outside target ({os.path.relpath(rs, WT)}): mutant verifier {d['verdict']}; "
++         f"{why(d['status_policy'])}", d)
++    os.remove(rs)
++    must_mutant("N7")
++    open(log, "w").write("synthetic ignored file outside target\n")
++    d = vm()
++    note("N6", "negative", d["verdict"] == "NOT_THE_MUTANT" and any(
++        x["why"] == "ignored path outside the worktree-local target" for x in d["status_policy"]["rejected"]),
++         f"ignored file outside target ({os.path.relpath(log, WT)}): mutant verifier {d['verdict']}; "
++         f"{why(d['status_policy'])}", d)
++    os.remove(log)
++    must_mutant("N6")
++    crate_target = os.path.join(WT, K.CRATE, "target")
++    sentinels(crate_target, 5, rng, depth=2)
++    d = vm()
++    note("N6b", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["status_policy"]["rejected"] and all(
++        x["why"] == "ignored path outside the worktree-local target" for x in d["status_policy"]["rejected"]),
++         f"a nested crate-level target ({K.CRATE}/target/..., ignored by **/target), not the worktree's own: mutant "
++         f"verifier {d['verdict']}; {len(d['status_policy']['rejected'])} rejected, e.g. {why(d['status_policy'])[:1]}", d)
++    shutil.rmtree(crate_target)  # the five sentinels created just above, nothing else
++    must_mutant("N6b")
++    os.remove(os.path.join(WT, MISSING))
++    d = vm()
++    note("N14", "negative", d["verdict"] == "NOT_THE_MUTANT" and MISSING in d["missing"],
++         f"missing tracked file {MISSING}: mutant verifier {d['verdict']}; missing {d['missing']}; "
++         f"{why(d['status_policy'])}", d)
++    put_c(MISSING)
++    must_mutant("N14")
++    os.chmod(os.path.join(WT, MODE), 0o755)
++    d = vm()
++    note("N15", "negative", d["verdict"] == "NOT_THE_MUTANT" and MODE in d["mode_mismatches"],
++         f"mode mismatch ({MODE}): mutant verifier {d['verdict']}; modes {d['mode_mismatches']}; "
++         f"{why(d['status_policy'])}", d)
++    put_c(MODE)
++    must_mutant("N15")
++    git("update-ref", "--no-deref", "HEAD", K.C_PARENT)
++    d = vm()
++    note("N13", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["head"] == K.C_PARENT and d["tree"] != K.C_TREE,
++         f"wrong HEAD and tree (C's parent; files exactly C plus the patch): mutant verifier {d['verdict']}; head "
++         f"{d['head'][:12]}, tree {d['tree'][:12]}, index differs {d['index_differs_from_head']}", d)
++    git("update-ref", "--no-deref", "HEAD", K.C)
++    must_mutant("N13")
++    os.symlink(elsewhere, target)
++    d = vm()
++    note("N11", "negative", d["verdict"] == "NOT_THE_MUTANT" and d["status_policy"]["target"]["is_symlink"],
++         f"mutant worktree whose target is a symlink: mutant verifier {d['verdict']}; {why(d['status_policy'])}", d)
++    os.remove(target)
++    must_mutant("N11")
++
++    # ---- the populated nested target: P4, R (replay), N12, S --------------------------------------------------------
++    made = sentinels(target, 240, rng, depth=7)
++    d = vm()
++    note("P4", "positive", d["verdict"] == "EXACTLY_C_PLUS_PATCH" and d["_rc"] == 0
++         and d["status_policy"]["target_entries"] == len(made),
++         f"C plus the synthetic patch with a populated nested target ({len(made)} sentinel files, depth up to 6): "
++         f"mutant verifier {d['verdict']}; {d['status_policy']['target_entries']} ignored entries beneath the real "
++         f"target; shown {d['status_entries']}", d)
++    old = vm(tool=ORIGINAL_VM)
++    note("R.vm", "replay", old["verdict"] == "NOT_THE_MUTANT" and len(old["unexpected_status"]) == len(made) and all(
++        s.startswith("!! target/") for s in old["unexpected_status"]) and not old["other_content_mismatches"],
++         f"regression replay: the EXEC-01 verify_mutant.py on the P4 state reports {old['verdict']} with "
++         f"{len(old['unexpected_status'])} unexpected entries, every one '!! target/...' (the defect reproduced)", old)
++    escape_dir = os.path.join(SCRATCH, "escape-outside")
++    os.makedirs(escape_dir)
++    open(os.path.join(escape_dir, "outside.txt"), "w").write("outside the worktree\n")
++    inner = os.path.join(target, "release", "escape-link")
++    os.makedirs(os.path.dirname(inner), exist_ok=True)
++    os.symlink(os.path.join(escape_dir, "outside.txt"), inner)
++    d = vm()
++    note("N12b", "negative", d["verdict"] == "NOT_THE_MUTANT" and [x["why"] for x in d["status_policy"]["rejected"]]
++         == ["resolves outside the worktree-local target"],
++         f"a target descendant that escapes by a symlink (target/release/escape-link -> outside): mutant verifier "
++         f"{d['verdict']}; {why(d['status_policy'])}", d)
++    os.remove(inner)
++    os.symlink(escape_dir, inner)
++    d = vm()
++    note("N12c", "negative", d["verdict"] == "NOT_THE_MUTANT" and [x["why"] for x in d["status_policy"]["rejected"]]
++         == ["resolves outside the worktree-local target"],
++         f"a target descendant that escapes by a symlinked directory: mutant verifier {d['verdict']}; "
++         f"{why(d['status_policy'])}", d)
++    os.remove(inner)
++    must_mutant("N12c")
++    tf = verify_mutant.target_facts(WT)
++    lex = {p: verify_mutant.target_entry_problem(WT, p, tf) for p in (
++        "target/../" + K.PROTOCOL, "target/./release/x", "target//x", "target/a/../../README.md", "target/..",
++        "target/.", "target/a/./b", "../target/x", "/target/x", "targetx/y", "target", "target/a//")}
++    note("N12a", "negative", all(v is not None for v in lex.values()),
++         f"target paths with '..', '.', empty components or outside the target entry are rejected by the lexical rule: "
++         f"{lex}", lex)
++    saved = verify_mutant.status_records
++    verify_mutant.status_records = lambda wt: (b"!! target/../README.md\0", [("!!", "target/../README.md")], [])
++    try:
++        pol = verify_mutant.status_policy(WT, None)
++    finally:
++        verify_mutant.status_records = saved
++    note("N12a.pol", "negative", not pol["ok"] and why(pol)[0].startswith("path traversal"),
++         f"the whole policy fed a crafted '..' record rejects it: {why(pol)}", pol)
++    saved_m = verify_mutant.mount_points
++    verify_mutant.mount_points = lambda: [os.path.realpath(target) + "/release"]
++    try:
++        pol = verify_mutant.status_policy(WT, K.PROTOCOL)
++    finally:
++        verify_mutant.mount_points = saved_m
++    note("N11m", "negative", not pol["ok"] and pol["target"]["mounts"] and not pol["target"]["ok"],
++         f"a mount point beneath the target (simulated in the mount table) makes the target foreign: {why(pol)[:1]}",
++         {k: v for k, v in pol.items() if k != "shown"})
++    # S: an over-broad policy (every ignored entry allowed) would accept these negatives.
++    saved_p = verify_mutant.target_entry_problem
++    saved_f = verify_mutant.target_facts
++    accepted_by_broad = {}
++    try:
++        verify_mutant.target_entry_problem = lambda wt, p, tf: None
++        verify_mutant.target_facts = lambda wt: {"ok": True, "exists": True}
++        open(log, "w").write("synthetic ignored file outside target\n")
++        accepted_by_broad["N6"] = verify_mutant.status_policy(WT, K.PROTOCOL)["ok"]
++        os.remove(log)
++        os.symlink(os.path.join(escape_dir, "outside.txt"), inner)
++        accepted_by_broad["N12b"] = verify_mutant.status_policy(WT, K.PROTOCOL)["ok"]
++        os.remove(inner)
++    finally:
++        verify_mutant.target_entry_problem = saved_p
++        verify_mutant.target_facts = saved_f
++    aside = os.path.join(SCRATCH, "target-aside")  # outside the worktree, so nothing untracked appears
++    os.rename(target, aside)
++    os.symlink(elsewhere, target)
++    try:
++        verify_mutant.target_entry_problem = lambda wt, p, tf: None
++        verify_mutant.target_facts = lambda wt: {"ok": True, "exists": True}
++        accepted_by_broad["N11"] = verify_mutant.status_policy(WT, K.PROTOCOL)["ok"]
++    finally:
++        verify_mutant.target_entry_problem = saved_p
++        verify_mutant.target_facts = saved_f
++        os.remove(target)
++        os.rename(aside, target)
++    note("S", "sensitivity", all(accepted_by_broad.values()),
++         f"a deliberately over-broad policy (any ignored entry, any target) would ACCEPT {accepted_by_broad}; the "
++         "path-aware policy rejects each (N6, N11, N12b above): the controls discriminate", accepted_by_broad)
++    must_mutant("S")
++
++    # ---- P6 and N16: restoration through control.restore with the populated target ------------------------------------
++    open(os.path.join(WT, SECOND), "ab").write(b"\n")
++    rok = control.restore(WT, ctl, os.path.join(outdir, "N16-restore"), True)
++    first = supervise.first_line(os.path.join(outdir, "N16-restore/RESTORE.txt"))
++    rj = json.load(open(os.path.join(outdir, "N16-restore/RESTORE.json")))
++    note("N16", "negative", not rok and first == "RESTORE: FAILED" and rj["after"]["git_blob"] == K.BLOBS[K.PROTOCOL]
++         and SECOND in rj["verify_tree"]["content_mismatches"]
++         and any(x["record"] == " M " + SECOND for x in rj["status_policy"]["rejected"]),
++         f"restoration with one residual tracked-byte difference ({SECOND} +1 byte; protocol.rs itself restored): "
++         f"control.restore {first}; mismatches {rj['verify_tree']['content_mismatches']}; {why(rj['status_policy'])}")
++    put_c(SECOND)
++    d = rc()
++    note("P2", "positive", d["verdict"] == "EXACTLY_C" and d["status_policy"]["target_entries"] == len(made)
++         and d["verify_tree"]["status_entries"] == ["!! target/"],
++         f"Candidate C with a real populated nested target ({len(made)} sentinels): restored verifier {d['verdict']}; "
++         f"{d['status_policy']['target_entries']} ignored entries beneath the real target; verify_tree status "
++         f"{d['verify_tree']['status_entries']}", d)
++    st = git("status", "--porcelain", "--ignored", "--untracked-files=all").stdout
++    note("R.restore", "replay", st.strip() not in ("", "!! target/") and all(
++        l.startswith(("!! target/", '!! "target/')) for l in st.strip().splitlines()),
++         f"regression replay: the EXEC-01 restoration predicate (status in ('', '!! target/')) would reject this exactly-C "
++         f"worktree: {len(st.strip().splitlines())} '!! target/...' lines, C-quoted where a path has a space or a "
++         f"non-ASCII byte (the defect reproduced)")
++    ok, applied = control.apply_patch(WT, ctl, os.path.join(outdir, "P6-apply"))
++    rok = control.restore(WT, ctl, os.path.join(outdir, "P6-restore"), applied)
++    note("P6", "positive", ok and applied and rok and supervise.first_line(os.path.join(outdir, "P6-restore/RESTORE.txt"))
++         == "RESTORE: EXACTLY_C", f"end to end with the populated target (the EXEC-01 failure case): apply_patch "
++         f"{'APPLY OK' if ok else 'FAILED'}, control.restore "
++         f"{supervise.first_line(os.path.join(outdir, 'P6-restore/RESTORE.txt'))}")
++    must_restored("P6")
++    git("update-ref", "--no-deref", "HEAD", K.C_PARENT)
++    d = rc()
++    note("N13.t", "negative", d["verdict"] == "NOT_C" and d["verify_tree"]["head"] == K.C_PARENT,
++         f"wrong HEAD with the populated target: restored verifier {d['verdict']}", d)
++    git("update-ref", "--no-deref", "HEAD", K.C)
++    must_restored("N13.t")
++
++    # ---- P5: the preserved restored C22 worktree, read-only ----------------------------------------------------------
++    c22 = K.control_wt("C22")
++    before = {"admin": admin_state(c22), "target": tree_state(os.path.join(c22, "target")),
++              "protocol_sha256": K.sha256_file(os.path.join(c22, K.PROTOCOL))}
++    d = rc(c22, "C22 preserved worktree, read-only")
++    after = {"admin": admin_state(c22), "target": tree_state(os.path.join(c22, "target")),
++             "protocol_sha256": K.sha256_file(os.path.join(c22, K.PROTOCOL))}
++    note("P5", "positive", d["verdict"] == "EXACTLY_C" and before == after
++         and d["status_policy"]["target_entries"] > 2000,
++         f"the preserved restored C22 worktree (read-only, GIT_OPTIONAL_LOCKS=0): restored verifier {d['verdict']}; "
++         f"{d['status_policy']['target_entries']} ignored entries beneath its real target; protocol.rs sha256 "
++         f"{after['protocol_sha256'][:16]}…; admin files and target unchanged by the check: {before == after}",
++         {"verifier": d, "before": before, "after": after})
++
++    # ---- T: randomized trials in the worktree ------------------------------------------------------------------------
++    perturb = ["none", "untracked", "ignored_outside", "crate_target", "second_tracked", "mode", "missing",
++               "target_symlink", "inner_escape", "staged"]
++    tally = {"accept_expected_accepted": 0, "reject_expected_rejected": 0, "false_accept": 0, "false_reject": 0}
++    trow = []
++    for i in range(TRIALS):
++        mode = "mutant" if rng.random() < 0.5 else "restored"
++        if mode == "mutant":
++            ok, applied = control.apply_patch(WT, ctl, os.path.join(outdir, "trials", f"{i:03}-apply"))
++            if not ok:
++                raise Abort(f"trial {i}: apply")
++        shutil.rmtree(target)  # the sentinel directory this harness created, rebuilt per trial
++        os.makedirs(target)
++        made = sentinels(target, rng.randrange(0, 160), rng, depth=rng.randrange(1, 8))
++        kind = "none" if rng.random() < 0.4 else rng.choice(perturb[1:])
++        if kind == "staged" and mode == "restored":
++            kind = "none"
++        undo = None
++        if kind == "untracked":
++            p = os.path.join(WT, rng.choice([K.CRATE_SRC, "docs", "."]), f"trial-{i}.rs")
++            open(p, "w").write("x\n")
++            undo = lambda p=p: os.remove(p)
++        elif kind == "ignored_outside":
++            p = os.path.join(WT, rng.choice([K.CRATE, "docs", "."]), f"trial-{i}.log")
++            open(p, "w").write("x\n")
++            undo = lambda p=p: os.remove(p)
++        elif kind == "crate_target":
++            p = os.path.join(WT, K.CRATE, "target")
++            sentinels(p, 3, rng, depth=2)
++            undo = lambda p=p: shutil.rmtree(p)
++        elif kind == "second_tracked":
++            f = rng.choice([SECOND, K.UNIT, K.MODEL, "Cargo.toml"])
++            open(os.path.join(WT, f), "ab").write(b" ")
++            undo = lambda f=f: put_c(f)
++        elif kind == "mode":
++            f = rng.choice([SECOND, MODE, K.UNIT])
++            os.chmod(os.path.join(WT, f), 0o755)
++            undo = lambda f=f: put_c(f)
++        elif kind == "missing":
++            f = rng.choice([MISSING, K.MODEL])
++            os.remove(os.path.join(WT, f))
++            undo = lambda f=f: put_c(f)
++        elif kind == "target_symlink":
++            aside = os.path.join(SCRATCH, f"target-aside-{i}")
++            os.rename(target, aside)
++            os.symlink(elsewhere, target)
++            undo = lambda aside=aside: (os.remove(target), os.rename(aside, target))
++        elif kind == "inner_escape":
++            p = os.path.join(target, f"esc-{i}")
++            os.symlink(rng.choice([escape_dir, os.path.join(WT, K.PROTOCOL), "/etc"]), p)
++            undo = lambda p=p: os.remove(p)
++        elif kind == "staged":
++            git("update-index", "--info-only", K.PROTOCOL)
++            undo = lambda: git("update-index", "--cacheinfo", f"100644,{K.BLOBS[K.PROTOCOL]},{K.PROTOCOL}")
++        d = vm() if mode == "mutant" else rc()
++        accepted = d["verdict"] in ("EXACTLY_C_PLUS_PATCH", "EXACTLY_C")
++        want = kind == "none"
++        key = ("accept_expected_accepted" if accepted and want else "reject_expected_rejected" if not accepted and not
++               want else "false_accept" if accepted else "false_reject")
++        tally[key] += 1
++        trow.append(f"trial {i:03}: mode {mode}; {len(made)} sentinels; perturbation {kind}; verdict {d['verdict']}; "
++                    f"{key}")
++        if undo:
++            undo()
++        if mode == "mutant":
++            must_mutant(f"trial {i}")
++            rok = control.restore(WT, ctl, os.path.join(outdir, "trials", f"{i:03}-restore"), True)
++            if not rok:
++                raise Abort(f"trial {i}: restore")
++        must_restored(f"trial {i}")
++    open(os.path.join(outdir, "TRIALS.txt"), "w").write("\n".join(trow) + "\n" + json.dumps(tally) + "\n")
++    note("T", "randomized", tally["false_accept"] == 0 and tally["false_reject"] == 0
++         and tally["accept_expected_accepted"] > 0 and tally["reject_expected_rejected"] > 0,
++         f"{TRIALS} seeded trials in the worktree (random target populations, at most one random perturbation): {tally}")
++
++    # ---- F: lexical rule vs an independent oracle --------------------------------------------------------------------
++    alphabet = ["target", "target/", "/", "//", ".", "..", "...", "a", "b c", "ü", "release", "-", ".d", "x..",
++                "targetx", "TARGET"]
++    tf = verify_mutant.target_facts(WT)
++    dis = []
++    for _ in range(FUZZ):
++        p = "".join(rng.choice(alphabet) for _ in range(rng.randrange(1, 7)))
++        q = p[:-1] if p.endswith("/") else p
++        oracle = p.startswith("target/") and posixpath.normpath(q) == q
++        got = verify_mutant.target_entry_problem(WT, p, tf)
++        lexical_ok = got is None or got == "resolves outside the worktree-local target"
++        if lexical_ok != oracle:
++            dis.append((p, got, oracle))
++    note("F", "randomized", not dis, f"{FUZZ} random paths: the lexical target-path rule agrees with an independent "
++         f"posixpath.normpath oracle in every case ({len(dis)} disagreements){': ' + str(dis[:5]) if dis else ''}")
++
++    # ---- the end state ------------------------------------------------------------------------------------------------
++    shutil.rmtree(target)  # this harness's sentinels only
++    d = rc()
++    a, ok = worktrees.authenticate(WT, ROLE)
++    worktrees.write(os.path.join(outdir, "99-worktree"), "AUTHENTICATE", f"AUTHENTICATE {WT} at the end", a, ok)
++    note("W.3", "setup", d["verdict"] == "EXACTLY_C" and ok and not os.path.lexists(target),
++         "end state: the development worktree is exactly C, clean, without target, locked (kept for review)")
++    note("W.4", "setup", git("cat-file", "-e", SYN["blob"], wt=K.REPO, check=False).returncode != 0,
++         "the synthetic mutant blob was never written to the repository object store")
++
++
++if __name__ == "__main__":
++    sys.exit(main(os.path.abspath(sys.argv[1])))
+--- EXEC-01/tools/verify_mutant.py
++++ RESUME-01/tools/verify_mutant.py
+@@ -1,33 +1,155 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission sections 10 and 11: byte-level check that a disposable
+-worktree is exactly Candidate C plus one control's frozen patch.
++worktree is exactly Candidate C plus one control's frozen patch. Repaired by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-
++RESUME-01 (sections 5-7): the status predicate is the path-aware policy below; nothing else changed.
+ 
+   verify_mutant.py <worktree> <path> <mutant-blob> <mutant-sha256>
+       prints a JSON summary; exit 0 only if the worktree is exactly C with that one file replaced by the mutant bytes
+ 
+ The checks of verify_tree.py (Stage 1, reused unchanged in its own file) with one difference: the named file must hold
+ the mutant bytes (git blob id computed in-process, never written to any object store; and sha256), and `git status`
+-may show only that file as modified (plus the worktree-local target directory). HEAD must still be C, detached, the
+-index must match HEAD (nothing staged), and every other tracked file must be byte-equal to C's blob, mode included.
+-No second control, overlay or untracked source can pass: an extra file is reported by `git status`, and any other
+-changed file by the byte comparison.
++may show only that file as modified (plus ignored entries beneath the worktree's own target directory). HEAD must
++still be C, detached, the index must match HEAD (nothing staged), and every other tracked file must be byte-equal to
++C's blob, mode included. No second control, overlay or untracked source can pass: an extra file is reported by `git
++status`, and any other changed file by the byte comparison.
++
++Tracked-source identity is established by the byte comparison, never by status strings. The status policy
++(status_policy(), also used by control.py for restoration) reads `git status --porcelain --ignored
++--untracked-files=all --no-renames -z` as NUL-delimited records and accepts only:
++  - with a mutant file named: exactly one record ` M <that file>`; for a restored worktree: no tracked record;
++  - zero or more `!!` (ignored) records whose path is exactly `target/` or begins with `target/`, with no empty, `.`
++    or `..` component, each resolving (realpath) beneath the worktree's own `target`, which, when it exists, must be
++    a real directory (not a symlink), exactly the worktree's own `target` entry (realpath <worktree>/target), and
++    neither a mount point nor holding one (so it cannot be another worktree's target).
++Everything else is rejected: any `??` record, any ignored record outside target, any second modified file, any
++staged, deleted, renamed or type-changed record, a malformed record, a symlinked or foreign target, a path that
++escapes. git runs with GIT_OPTIONAL_LOCKS=0, so the status listing never rewrites the worktree's index.
+ """
+ import hashlib
+ import json
+ import os
++import stat
+ import subprocess
+ import sys
+ 
+ C = 'd5964ee5326c2733177307db6f507328023d361a'
+ C_TREE = '51bac5fd335999cc995c0ab9f582a30244973ef0'
++TARGET = 'target'
++ENV = dict(os.environ, GIT_OPTIONAL_LOCKS='0')
+ 
+ 
+ def git(wt, *args):
+-    return subprocess.run(['git', '-C', wt, *args], capture_output=True, check=True).stdout
++    return subprocess.run(['git', '-C', wt, *args], capture_output=True, check=True, env=ENV).stdout
+ 
+ 
+ def blob_id(data):
+     return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
++
++
++def status_records(wt):
++    """The NUL-delimited porcelain v1 records: (raw bytes, [(XY, path)], [malformed fields]). A rename or copy record
++    (impossible with --no-renames) carries its source path as the next field; both are kept as records, so they are
++    rejected, never mis-parsed."""
++    raw = git(wt, 'status', '--porcelain', '--ignored', '--untracked-files=all', '--no-renames', '-z')
++    fields = raw.split(b'\0')
++    malformed = []
++    if fields[-1] != b'':
++        malformed.append('listing not NUL-terminated: ' + fields[-1].decode(errors='replace'))
++    fields = fields[:-1]
++    records, i = [], 0
++    while i < len(fields):
++        f = fields[i]
++        i += 1
++        if len(f) < 4 or f[2:3] != b' ':
++            malformed.append(f.decode(errors='replace'))
++            continue
++        xy, p = f[:2].decode(errors='replace'), f[3:].decode(errors='surrogateescape')
++        records.append((xy, p))
++        if xy[0] in 'RC' or xy[1] in 'RC':
++            records.append(('<-', fields[i].decode(errors='surrogateescape') if i < len(fields) else ''))
++            i += 1
++    return raw, records, malformed
++
++
++def mount_points():
++    out = []
++    with open('/proc/self/mountinfo') as f:
++        for line in f:
++            mp = line.split()[4]
++            for esc, ch in (('\\040', ' '), ('\\011', '\t'), ('\\012', '\n'), ('\\134', '\\')):
++                mp = mp.replace(esc, ch)
++            out.append(mp)
++    return out
++
++
++def target_facts(wt):
++    """The worktree's own target entry: absent, or a real directory that is exactly <realpath worktree>/target."""
++    top = os.path.realpath(wt)
++    t = os.path.join(wt, TARGET)
++    f = {'path': t, 'worktree_is_own_realpath': top == os.path.abspath(wt), 'exists': os.path.lexists(t)}
++    if f['exists']:
++        st = os.lstat(t)
++        f['is_symlink'] = stat.S_ISLNK(st.st_mode)
++        f['is_dir'] = stat.S_ISDIR(st.st_mode)
++        f['realpath'] = os.path.realpath(t)
++        f['own_entry'] = f['realpath'] == os.path.join(top, TARGET)
++        f['mounts'] = [m for m in mount_points() if m == f['realpath'] or m.startswith(f['realpath'] + '/')]
++        f['ok'] = (f['worktree_is_own_realpath'] and f['is_dir'] and not f['is_symlink'] and f['own_entry']
++                   and not f['mounts'])
++    else:
++        f['ok'] = f['worktree_is_own_realpath']
++    return f
++
++
++def target_entry_problem(wt, p, tf):
++    """None if p is the worktree-local target or a normal path beneath it that resolves beneath it; else why not."""
++    if p == TARGET + '/':
++        rel = ''
++    elif p.startswith(TARGET + '/'):
++        rel = p[len(TARGET) + 1:]
++    else:
++        return 'ignored path outside the worktree-local target'
++    body = rel[:-1] if rel.endswith('/') else rel
++    if rel and any(c in ('', '.', '..') for c in body.split('/')):
++        return 'path traversal or non-normal component'
++    if not tf['exists'] or not tf['ok']:
++        return 'the worktree-local target is absent, a symlink, foreign, or not a real directory'
++    real = os.path.realpath(os.path.join(wt, p))
++    if not (real == tf['realpath'] or real.startswith(tf['realpath'] + '/')):
++        return 'resolves outside the worktree-local target'
++    return None
++
++
++def status_policy(wt, modified=None):
++    """Resume mission section 7. modified: the one tracked file a mutant worktree may show as ` M`; None for a
++    restored worktree (no tracked modification at all). Returns a JSON-able record with 'ok'."""
++    raw, records, malformed = status_records(wt)
++    tf = target_facts(wt)
++    modified_seen, target_entries, rejected = [], 0, []
++    for xy, p in records:
++        if xy == ' M' and modified is not None and p == modified:
++            modified_seen.append(p)
++        elif xy == '!!':
++            why = target_entry_problem(wt, p, tf)
++            if why:
++                rejected.append({'record': xy + ' ' + p, 'why': why})
++            else:
++                target_entries += 1
++        else:
++            rejected.append({'record': xy + ' ' + p, 'why': 'untracked' if xy == '??' else
++                             'rename/copy source' if xy == '<-' else 'tracked change not allowed here'})
++    rejected += [{'record': m, 'why': 'malformed status record'} for m in malformed]
++    if not tf['ok']:
++        rejected.append({'record': TARGET, 'why': 'the target entry is not the worktree\'s own real directory: '
++                         + json.dumps({k: v for k, v in tf.items() if k != 'path'})})
++    want = [modified] if modified is not None else []
++    ok = not rejected and modified_seen == want
++    shown = [xy + ' ' + p for xy, p in records if not (xy == '!!' and not target_entry_problem(wt, p, tf))]
++    if target_entries:
++        shown.append(f'!! target/... ({target_entries} ignored entries, each beneath the worktree-local real target)')
++    return {'ok': ok, 'mode': 'mutant' if modified is not None else 'restored', 'allowed_modified': modified,
++            'modified_seen': modified_seen, 'records': len(records), 'target_entries': target_entries,
++            'status_sha256': hashlib.sha256(raw).hexdigest(), 'shown': shown, 'rejected': rejected, 'target': tf}
+ 
+ 
+ def main(wt, path, mutant_blob, mutant_sha):
+@@ -35,10 +157,8 @@
+     tree = git(wt, 'rev-parse', 'HEAD^{tree}').decode().strip()
+     detached = subprocess.run(['git', '-C', wt, 'symbolic-ref', '-q', 'HEAD'], capture_output=True).returncode != 0
+     diff_index = git(wt, 'diff-index', '--cached', '--name-only', 'HEAD').decode().split()
+-    status = [l for l in git(wt, 'status', '--porcelain', '--ignored', '--untracked-files=all', '-z').decode().split('\0')
+-              if l]
+-    allowed = {' M ' + path, '!! target/'}
+-    unexpected_status = [s for s in status if s not in allowed]
++    pol = status_policy(wt, path)
++    status, unexpected_status = pol['shown'], pol['rejected']
+     entries = []
+     for e in git(wt, 'ls-tree', '-r', '-z', C).split(b'\0'):
+         if e:
+@@ -82,11 +202,11 @@
+         'worktree': wt, 'head': head, 'tree': tree, 'detached': detached,
+         'tracked_blobs_compared': len(blobs), 'bytes_compared': total,
+         'index_differs_from_head': diff_index, 'status_entries': status, 'unexpected_status': unexpected_status,
+-        'other_content_mismatches': mismatched, 'missing': missing, 'mode_mismatches': mode_wrong,
++        'status_policy': pol, 'other_content_mismatches': mismatched, 'missing': missing, 'mode_mismatches': mode_wrong,
+         'mutant_file': mutant, 'expected_mutant_blob': mutant_blob, 'expected_mutant_sha256': mutant_sha,
+     }
+-    ok = (head == C and tree == C_TREE and detached and not diff_index and not unexpected_status
+-          and ' M ' + path in status and not mismatched and not missing and not mode_wrong and mutant is not None
++    ok = (head == C and tree == C_TREE and detached and not diff_index and pol['ok']
++          and not mismatched and not missing and not mode_wrong and mutant is not None
+           and mutant['differs_from_baseline'] and mutant['git_blob'] == mutant_blob and mutant['sha256'] == mutant_sha)
+     result['verdict'] = 'EXACTLY_C_PLUS_PATCH' if ok else 'NOT_THE_MUTANT'
+     print(json.dumps(result, indent=1))

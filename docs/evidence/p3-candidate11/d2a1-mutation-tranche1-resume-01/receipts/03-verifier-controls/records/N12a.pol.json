@@ -1,0 +1,29 @@
+{
+ "ok": false,
+ "mode": "restored",
+ "allowed_modified": null,
+ "modified_seen": [],
+ "records": 1,
+ "target_entries": 0,
+ "status_sha256": "33ca3dee0cdf1fbe521a0c86c2e64e030107f6945a736ce208e5c3d10dd78103",
+ "shown": [
+  "!! target/../README.md"
+ ],
+ "rejected": [
+  {
+   "record": "!! target/../README.md",
+   "why": "path traversal or non-normal component"
+  }
+ ],
+ "target": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+  "worktree_is_own_realpath": true,
+  "exists": true,
+  "is_symlink": false,
+  "is_dir": true,
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+  "own_entry": true,
+  "mounts": [],
+  "ok": true
+ }
+}

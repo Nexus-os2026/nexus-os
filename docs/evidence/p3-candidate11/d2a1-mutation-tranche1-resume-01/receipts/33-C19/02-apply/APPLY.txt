@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C19: X can be emptied before it is marked committed
+patch: inputs/patches/C19.patch (the frozen R2 packet's catalog/patches/C19.patch), sha256 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f (catalog 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 899878323428eb34021f8dcf3cefc5ab041f98a2 (expected 899878323428eb34021f8dcf3cefc5ab041f98a2), sha256 a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113 (expected a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

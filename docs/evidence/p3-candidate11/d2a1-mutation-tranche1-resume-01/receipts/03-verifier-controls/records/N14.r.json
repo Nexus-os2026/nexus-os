@@ -1,0 +1,50 @@
+{
+ "verdict": "NOT_C",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97239664,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   " D ROADMAP.md"
+  ],
+  "unexpected_status": [
+   " D ROADMAP.md"
+  ],
+  "content_mismatches": [],
+  "missing": [
+   "ROADMAP.md"
+  ],
+  "mode_mismatches": [],
+  "verdict": "NOT_C"
+ },
+ "status_policy": {
+  "ok": false,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 1,
+  "target_entries": 0,
+  "status_sha256": "5c08e835276e3ea2b8cf54d3625d4b8b96e152703a968a6dd277f7710a6ece75",
+  "shown": [
+   " D ROADMAP.md"
+  ],
+  "rejected": [
+   {
+    "record": " D ROADMAP.md",
+    "why": "tracked change not allowed here"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": false,
+   "ok": true
+  }
+ },
+ "line": "source (verifier control): NOT_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97239664 bytes compared; status entries [' D ROADMAP.md']; mismatches []; missing ['ROADMAP.md']; modes []"
+}

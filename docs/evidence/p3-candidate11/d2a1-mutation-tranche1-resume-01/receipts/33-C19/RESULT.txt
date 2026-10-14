@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C19: X can be emptied before it is marked committed
+receipt type: (b) named non-explorer mutant-test FAIL; restored (e2) PASS
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 f564e177e8edcdcef6c5304ced8371d3bee88177bd72645977e6b61c382e89c5 size 8984720
+run (type (b)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-CELL at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1654
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; receipts/12-baseline-T-CELL (type (e2), standalone, this mission)

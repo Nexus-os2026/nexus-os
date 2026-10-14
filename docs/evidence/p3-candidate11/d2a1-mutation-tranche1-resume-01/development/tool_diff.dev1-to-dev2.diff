@@ -1,0 +1,11 @@
+--- development/revisions/tool_diff.dev1.py	2026-10-14 20:53:49.214371587 +0100
++++ tools/tool_diff.py	2026-10-14 20:53:49.232898428 +0100
+@@ -134,7 +134,7 @@
+     check("D4 verify_mutant.main: the byte comparison (ls-tree of C, every blob, mode, missing, mutant identity) is "
+           "unchanged text", seg(src_old) == seg(src_new))
+     terms = lambda t: [ast.unparse(v) for v in next(s for s in fn(t, "main").body if isinstance(s, ast.Assign) and
+-                                                    s.targets[0].id == "ok").value.values]
++                                                    getattr(s.targets[0], "id", None) == "ok").value.values]
+     to, tn = terms(ast.parse(src_old)), terms(ast.parse(src_new))
+     check("D4 verify_mutant.main `ok`: the original terms minus the two exact-string status terms, plus pol['ok']",
+           [t for t in to if t not in ("not unexpected_status", "' M ' + path in status")] == [t for t in tn if t !=

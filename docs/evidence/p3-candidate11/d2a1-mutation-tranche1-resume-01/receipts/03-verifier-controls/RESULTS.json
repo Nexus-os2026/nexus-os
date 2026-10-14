@@ -1,0 +1,254 @@
+[
+ {
+  "id": "W.1",
+  "kind": "setup",
+  "as_expected": true,
+  "detail": "the development worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier exists (created by an earlier run of this harness); it is reused only if it authenticates as exactly C, clean and locked with its role"
+ },
+ {
+  "id": "W.2",
+  "kind": "setup",
+  "as_expected": true,
+  "detail": "authenticate the development worktree (exactly C, clean, locked, owned)"
+ },
+ {
+  "id": "P1",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "Candidate C, no target: restored verifier EXACTLY_C; 0 status records"
+ },
+ {
+  "id": "N13.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "wrong HEAD/tree (HEAD moved to C's parent, files and index exactly C): restored verifier NOT_C; head 71264aa81a40, tree f4499b070de5, index differs ['docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'docs/evidence/p3-candidate11/current-tree-183/manifest.json']"
+ },
+ {
+  "id": "N14.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "missing tracked file ROADMAP.md: restored verifier NOT_C; ['tracked change not allowed here:  D ROADMAP.md']"
+ },
+ {
+  "id": "N15.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mode mismatch (CHANGELOG.md 100644 made executable): restored verifier NOT_C; modes ['CHANGELOG.md']; ['tracked change not allowed here:  M CHANGELOG.md']"
+ },
+ {
+  "id": "N6.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "ignored file outside target (crates/nexus-governed-control/sentinel.log, ignored by *.log): restored verifier NOT_C; ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/sentinel.log']"
+ },
+ {
+  "id": "N7.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "untracked Rust source outside target: restored verifier NOT_C; ['untracked: ?? crates/nexus-governed-control/src/verifier_overlay.rs']"
+ },
+ {
+  "id": "N11.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "target is a symlink to a directory outside the worktree: restored verifier NOT_C; target facts symlink True, own entry False; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\\'s own real directory: {\"worktree_is_own_realpath\": true, \"exists\": true, \"is_symlink\": true, \"is_dir\": false, \"realpath\": \"/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/dev-local/scratch-03-verifier-controls/elsewhere-target\", \"own_entry\": false, \"mounts\": [], \"ok\": false}: target']"
+ },
+ {
+  "id": "N11b.r",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "target is a symlink to ANOTHER worktree's real target (/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target; nothing there is read or written): restored verifier NOT_C; realpath /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\\'s own real directory: {\"worktree_is_own_realpath\": true, \"exists\": true, \"is_symlink\": true, \"is_dir\": false, \"realpath\": \"/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target\", \"own_entry\": false, \"mounts\": [], \"ok\": false}: target']"
+ },
+ {
+  "id": "P3",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "C plus the synthetic comment-only patch, no target: control.apply_patch APPLY OK; mutant verifier EXACTLY_C_PLUS_PATCH; shown [' M crates/nexus-governed-control/src/ledger/protocol.rs']; mutant blob 9196588374fd084de1f49df3adcf62670c7ff363"
+ },
+ {
+  "id": "P3.obj",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "the synthetic mutant blob is absent from the repository object store"
+ },
+ {
+  "id": "N9a",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mutant file correct, expected blob wrong: mutant verifier NOT_THE_MUTANT (status policy holds; the blob comparison rejects)"
+ },
+ {
+  "id": "N9b",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mutant file with the wrong blob (95017c1bca2f for 9196588374fd): mutant verifier NOT_THE_MUTANT"
+ },
+ {
+  "id": "N10",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mutant file correct but staged (update-index --info-only: no object written): mutant verifier NOT_THE_MUTANT; index differs ['crates/nexus-governed-control/src/ledger/protocol.rs']; ['tracked change not allowed here: M  crates/nexus-governed-control/src/ledger/protocol.rs']"
+ },
+ {
+  "id": "N10.obj",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "after staging and unstaging, the synthetic mutant blob is still absent from the object store"
+ },
+ {
+  "id": "N8",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "a second tracked file modified (README.md): mutant verifier NOT_THE_MUTANT; other mismatches ['README.md']; ['tracked change not allowed here:  M README.md']"
+ },
+ {
+  "id": "N7",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "untracked Rust source outside target (crates/nexus-governed-control/src/verifier_overlay.rs): mutant verifier NOT_THE_MUTANT; ['untracked: ?? crates/nexus-governed-control/src/verifier_overlay.rs']"
+ },
+ {
+  "id": "N6",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "ignored file outside target (crates/nexus-governed-control/sentinel.log): mutant verifier NOT_THE_MUTANT; ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/sentinel.log']"
+ },
+ {
+  "id": "N6b",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "a nested crate-level target (crates/nexus-governed-control/target/..., ignored by **/target), not the worktree's own: mutant verifier NOT_THE_MUTANT; 5 rejected, e.g. ['ignored path outside the worktree-local target: !! crates/nexus-governed-control/target/.../sentinel-0003.o']"
+ },
+ {
+  "id": "N14",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "missing tracked file ROADMAP.md: mutant verifier NOT_THE_MUTANT; missing ['ROADMAP.md']; ['tracked change not allowed here:  D ROADMAP.md']"
+ },
+ {
+  "id": "N15",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mode mismatch (CHANGELOG.md): mutant verifier NOT_THE_MUTANT; modes ['CHANGELOG.md']; ['tracked change not allowed here:  M CHANGELOG.md']"
+ },
+ {
+  "id": "N13",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "wrong HEAD and tree (C's parent; files exactly C plus the patch): mutant verifier NOT_THE_MUTANT; head 71264aa81a40, tree f4499b070de5, index differs ['docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md', 'docs/evidence/p3-candidate11/current-tree-183/manifest.json']"
+ },
+ {
+  "id": "N11",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "mutant worktree whose target is a symlink: mutant verifier NOT_THE_MUTANT; ['ignored path outside the worktree-local target: !! target', 'the target entry is not the worktree\\'s own real directory: {\"worktree_is_own_realpath\": true, \"exists\": true, \"is_symlink\": true, \"is_dir\": false, \"realpath\": \"/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01/dev-local/scratch-03-verifier-controls/elsewhere-target\", \"own_entry\": false, \"mounts\": [], \"ok\": false}: target']"
+ },
+ {
+  "id": "P4",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "C plus the synthetic patch with a populated nested target (240 sentinel files, depth up to 6): mutant verifier EXACTLY_C_PLUS_PATCH; 240 ignored entries beneath the real target; shown [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (240 ignored entries, each beneath the worktree-local real target)']"
+ },
+ {
+  "id": "R.vm",
+  "kind": "replay",
+  "as_expected": true,
+  "detail": "regression replay: the EXEC-01 verify_mutant.py on the P4 state reports NOT_THE_MUTANT with 240 unexpected entries, every one '!! target/...' (the defect reproduced)"
+ },
+ {
+  "id": "N12b",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "a target descendant that escapes by a symlink (target/release/escape-link -> outside): mutant verifier NOT_THE_MUTANT; ['resolves outside the worktree-local target: !! target/release/escape-link']"
+ },
+ {
+  "id": "N12c",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "a target descendant that escapes by a symlinked directory: mutant verifier NOT_THE_MUTANT; ['resolves outside the worktree-local target: !! target/release/escape-link']"
+ },
+ {
+  "id": "N12a",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "target paths with '..', '.', empty components or outside the target entry are rejected by the lexical rule: {'target/../crates/nexus-governed-control/src/ledger/protocol.rs': 'path traversal or non-normal component', 'target/./release/x': 'path traversal or non-normal component', 'target//x': 'path traversal or non-normal component', 'target/a/../../README.md': 'path traversal or non-normal component', 'target/..': 'path traversal or non-normal component', 'target/.': 'path traversal or non-normal component', 'target/a/./b': 'path traversal or non-normal component', '../target/x': 'ignored path outside the worktree-local target', '/target/x': 'ignored path outside the worktree-local target', 'targetx/y': 'ignored path outside the worktree-local target', 'target': 'ignored path outside the worktree-local target', 'target/a//': 'path traversal or non-normal component'}"
+ },
+ {
+  "id": "N12a.pol",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "the whole policy fed a crafted '..' record rejects it: ['path traversal or non-normal component: !! target/../README.md']"
+ },
+ {
+  "id": "N11m",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "a mount point beneath the target (simulated in the mount table) makes the target foreign: ['the worktree-local target is absent, a symlink, foreign, or not a real directory: !! target/-z/deps/\u00fcn\u00ef/deps/build2/sentinel-0082.txt']"
+ },
+ {
+  "id": "S",
+  "kind": "sensitivity",
+  "as_expected": true,
+  "detail": "a deliberately over-broad policy (any ignored entry, any target) would ACCEPT {'N6': True, 'N12b': True, 'N11': True}; the path-aware policy rejects each (N6, N11, N12b above): the controls discriminate"
+ },
+ {
+  "id": "N16",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "restoration with one residual tracked-byte difference (README.md +1 byte; protocol.rs itself restored): control.restore RESTORE: FAILED; mismatches ['README.md']; ['tracked change not allowed here:  M README.md']"
+ },
+ {
+  "id": "P2",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "Candidate C with a real populated nested target (240 sentinels): restored verifier EXACTLY_C; 240 ignored entries beneath the real target; verify_tree status ['!! target/']"
+ },
+ {
+  "id": "R.restore",
+  "kind": "replay",
+  "as_expected": true,
+  "detail": "regression replay: the EXEC-01 restoration predicate (status in ('', '!! target/')) would reject this exactly-C worktree: 240 '!! target/...' lines, C-quoted where a path has a space or a non-ASCII byte (the defect reproduced)"
+ },
+ {
+  "id": "P6",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "end to end with the populated target (the EXEC-01 failure case): apply_patch APPLY OK, control.restore RESTORE: EXACTLY_C"
+ },
+ {
+  "id": "N13.t",
+  "kind": "negative",
+  "as_expected": true,
+  "detail": "wrong HEAD with the populated target: restored verifier NOT_C"
+ },
+ {
+  "id": "P5",
+  "kind": "positive",
+  "as_expected": true,
+  "detail": "the preserved restored C22 worktree (read-only, GIT_OPTIONAL_LOCKS=0): restored verifier EXACTLY_C; 2549 ignored entries beneath its real target; protocol.rs sha256 a5454944368df70f\u2026; admin files and target unchanged by the check: True"
+ },
+ {
+  "id": "T",
+  "kind": "randomized",
+  "as_expected": true,
+  "detail": "48 seeded trials in the worktree (random target populations, at most one random perturbation): {'accept_expected_accepted': 16, 'reject_expected_rejected': 32, 'false_accept': 0, 'false_reject': 0}"
+ },
+ {
+  "id": "F",
+  "kind": "randomized",
+  "as_expected": true,
+  "detail": "20000 random paths: the lexical target-path rule agrees with an independent posixpath.normpath oracle in every case (0 disagreements)"
+ },
+ {
+  "id": "W.3",
+  "kind": "setup",
+  "as_expected": true,
+  "detail": "end state: the development worktree is exactly C, clean, without target, locked (kept for review)"
+ },
+ {
+  "id": "W.4",
+  "kind": "setup",
+  "as_expected": true,
+  "detail": "the synthetic mutant blob was never written to the repository object store"
+ }
+]

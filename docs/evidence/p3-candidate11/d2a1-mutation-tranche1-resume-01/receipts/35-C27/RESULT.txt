@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C27: the guard is created after the entry rule
+receipt type: (b) named non-explorer mutant-test FAIL; restored (e2) PASS
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f size 8986736
+run (type (b)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-PREC at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; receipts/14-baseline-T-PREC (type (e2), standalone, this mission)

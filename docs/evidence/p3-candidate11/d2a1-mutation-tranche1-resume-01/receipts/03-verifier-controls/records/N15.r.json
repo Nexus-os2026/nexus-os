@@ -1,0 +1,50 @@
+{
+ "verdict": "NOT_C",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M CHANGELOG.md"
+  ],
+  "unexpected_status": [
+   " M CHANGELOG.md"
+  ],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [
+   "CHANGELOG.md"
+  ],
+  "verdict": "NOT_C"
+ },
+ "status_policy": {
+  "ok": false,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 1,
+  "target_entries": 0,
+  "status_sha256": "22a358a5588a8fbdabccb5bfc9d49f870cd211b57bf52293c54e33b2b4646c51",
+  "shown": [
+   " M CHANGELOG.md"
+  ],
+  "rejected": [
+   {
+    "record": " M CHANGELOG.md",
+    "why": "tracked change not allowed here"
+   }
+  ],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1r-dev-verifier/target",
+   "worktree_is_own_realpath": true,
+   "exists": false,
+   "ok": true
+  }
+ },
+ "line": "source (verifier control): NOT_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries [' M CHANGELOG.md']; mismatches []; missing []; modes ['CHANGELOG.md']"
+}

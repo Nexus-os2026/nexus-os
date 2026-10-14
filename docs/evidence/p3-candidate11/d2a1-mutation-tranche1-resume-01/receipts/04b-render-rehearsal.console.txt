@@ -1,0 +1,12 @@
+STATUS: MUTATION_CONTROL_BLOCKED; new candidates 2 of 11; attempted ['C14', 'C12', 'C9']
+OK  status MUTATION_CONTROL_BLOCKED
+OK  C22 rendered as Architect-accepted, with previous-packet blob references
+OK  two new candidates of the eleven rendered
+OK  C14 row: panic location rendered
+OK  C12 row: discovered count of the 250,000 ceiling
+OK  C9 row: non-candidate with its outer class
+OK  not attempted listed
+OK  baselines rendered as previous-packet references
+OK  every carried-forward file listed with blob and sha256
+OK  INDEX names the status and the previous evidence commit
+RENDER REHEARSAL: ALL AS EXPECTED
