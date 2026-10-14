@@ -1,0 +1,29 @@
+AUTHENTICATION 2026-10-14T14:12:25+01:00 — mission P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE2-01 (before any analysis or invocation)
+OK   C is a commit
+OK   C's tree: 51bac5fd335999cc995c0ab9f582a30244973ef0
+OK   C has exactly one parent, the frozen one: ['71264aa81a40b86189783facc8437e0427887c16']
+OK   C:crates/nexus-governed-control/src/ledger/protocol.rs blob: a2df2841b99cad5d452008a6d4150e9369d07e66
+OK   C:crates/nexus-governed-control/src/ledger/protocol/model_tests.rs blob: 28085ce232827301104b5d757af042ec933976f8
+OK   C:crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs blob: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+OK   ct-1 blob at C: 5d31cb45123403626f06c521dd2d53103676250e
+OK   AD-1-R4 sha256 at C: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+OK   worktree exactly C (verify_tree.py: HEAD, tree, detached, index, status, every tracked byte and mode): EXACTLY_C; 5364 blobs, 97246341 bytes; status ['!! target/']
+OK   worktree HEAD is C: d5964ee5326c2733177307db6f507328023d361a
+OK   executable path is a regular file, not a symlink: /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+OK   executable sha256 equals the pin: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   executable size equals the pin: 8984464
+     executable mtime_ns 1791979773968059672, inode 62417761, mode 0o100775
+OK   Stage-1 evidence commit tree: 646c4fe9fa96bfee7b4f731a38f20ebfff14239e
+OK   Stage-1 evidence commit single parent: ['0622a4d042b1dfd3160f06fc5d333e131e2a60c8']
+OK   C is an ancestor of the Stage-1 evidence commit
+OK   C..Stage-1 changes only docs/evidence paths (no source): 286 paths
+OK   GitHub Stage-1 review ref equals the Stage-1 evidence commit: ['f023cc3d031a2a89e5ecbd4086e15f2e50869acd', 'refs/heads/review/p3-c11-d2a1-final-baseline-known-runs-01']
+OK   Stage-1 SHA256SUMS: every entry equals its committed blob: 179 entries; bad []
+OK   Stage-1 SHA256SUMS: self-excluding, every packet file listed, none missing: unlisted []; missing []
+OK   Stage-1 SHA256SUMS sha256: 9e1daf5f0299659a007d2a5a97017093d5b30fbd48a5219f28f6005bcb9bc4a6
+OK   Stage-1 PIN.json equals the pin (path, sha256, size, commit, tree): cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   destination review ref absent on GitHub
+OK   packet path absent at the Stage-1 evidence commit
+OK   destination ref absent locally
+AUTHENTICATION: ALL OK
+exit 0

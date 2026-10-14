@@ -1,0 +1,101 @@
+31c31
+< CHECKER_VERSION = "vocab_check_eval v1"
+---
+> CHECKER_VERSION = "vocab_check_eval v3"
+760a761,776
+>         self.impl_spans = getattr(self, "impl_spans", {})
+>         spans = []
+>         for j, tk in enumerate(toks):
+>             if tk.kind == "id" and tk.val == "impl" and (j == 0 or toks[j - 1].val in ("}", ";", "]", "{")):
+>                 p = Parser(toks, j + 1)
+>                 p.skip_generics()
+>                 name, k = None, p.i
+>                 while k < len(toks) and toks[k].val not in ("{", ";"):
+>                     if toks[k].kind == "id" and toks[k].val not in ("for", "dyn", "mut", "where"):
+>                         name = toks[k].val if (toks[k + 1].val in ("{", "<", "where")) else name
+>                     k += 1
+>                 if k < len(toks) and toks[k].val == "{":
+>                     q = Parser(toks, k)
+>                     q.skip_balanced()
+>                     spans.append((k, q.i, name))
+>         self.impl_spans[path] = spans
+834a851
+>             owner = [n for a, b, n in self.impl_spans.get(path, []) if a <= i < b]
+836c853,854
+<                                                        generics=generics, tok=i))
+---
+>                                                        generics=generics, tok=i,
+>                                                        impl=owner[-1] if owner else None))
+1056a1075,1078
+>         self.needed = None  # None: every let is evaluated (helper functions)
+> 
+>     def wanted(self, names):
+>         return self.needed is None or any(n in self.needed for n in names)
+1309c1331
+<                 if s.init is None:
+---
+>                 if s.init is None or not self.wanted(pat_names(s.pat)):
+1364,1365c1386,1388
+<             if len(defs) != 1 or d["generics"] != "<T>" or d["params"] != [("op", "impl FnOnce() -> T")] \
+<                     or d["ret"] != "Option<T>":
+---
+>             sig = lambda x: re.sub(r"\s+", "", x or "")
+>             if len(defs) != 1 or sig(d["generics"]) != "<T>" or [(a, sig(b)) for a, b in d["params"]] != \
+>                     [("op", "implFnOnce()->T")] or sig(d["ret"]) != "Option<T>":
+1421a1445,1446
+>                 if r != UNKNOWN and r[0] == "struct":
+>                     defs = [d for d in defs if d["impl"] == r[1]]
+1425,1426d1449
+<                 elif defs and len(rets) > 1:
+<                     raise Unresolved(f"method {name} has several return types {rets}")
+1428c1451
+<                     out.append(UNKNOWN)
+---
+>                     out.append(UNKNOWN)  # unresolved or ambiguous: fails closed if it reaches a label
+1450a1474,1513
+> def slice_names(body, path, call):
+>     """The names the label can depend on: those of the call's arguments and of every condition on the path to it
+>     (scrutinees, the guards of the arms taken, if conditions), closed over the initialisers of every `let` of the
+>     function that binds one of them (by name, so shadowing only adds names)."""
+>     need = set()
+>     for a in call.args:
+>         need |= idents(a)
+>     for node, key, idx, j in path:
+>         if node.kind == "match":
+>             need |= idents(node.scrut)
+>             if key == "arms" and node.arms[idx][1] is not None:
+>                 need |= idents(node.arms[idx][1])
+>         elif node.kind == "if":
+>             need |= idents(node.cond)
+>         elif node.kind == "iflet":
+>             need |= idents(node.scrut)
+>     lets = []
+> 
+>     def collect(n):
+>         if isinstance(n, N):
+>             if n.kind == "let":
+>                 lets.append(n)
+>             for key, val in n.__dict__.items():
+>                 items = val if isinstance(val, list) else [val]
+>                 for it in items:
+>                     for sub in (it if isinstance(it, tuple) else (it,)):
+>                         collect(sub)
+>     collect(body)
+>     changed = True
+>     while changed:
+>         changed = False
+>         for l in lets:
+>             if any(n in need for n in pat_names(l.pat)):
+>                 more = idents(l.init) if l.init is not None else set()
+>                 if not more <= need:
+>                     need |= more
+>                     changed = True
+>     return need
+> 
+> 
+1496a1560
+>     ev.needed = slice_names(body, path, call)
+1594c1658
+<             if not any(uses(blk, j, n) for j in range(i + 1, len(blk.stmts) + 1) for n in names):
+---
+>             if not ev.wanted(names):

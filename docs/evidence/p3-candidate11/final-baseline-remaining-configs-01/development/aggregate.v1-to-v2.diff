@@ -1,0 +1,31 @@
+13c13
+< body names every protocol outcome variant behind the row's label, with each test's result in the Stage-1 unfiltered
+---
+> body calls the row's protocol method and names every protocol outcome variant behind the row's label, with each test's result in the Stage-1 unfiltered
+30a31,36
+> # The protocol method each operation's label reports (the call the model makes), required in a cross-referenced test.
+> METHOD = {"append_facts": r"\.append_facts\(", "append_gating": r"\.append_gating\(", "lookup": r"\.lookup\(",
+>           "explain": r"\.explain\(", "snapshot": r"\.snapshot\(", "append_acknowledgement": r"\.append_acknowledgement\(",
+>           "barrier": r"\.barrier\(", "resolve": r"\.resolve\(", "append_cell C": r"\.append_cell\(",
+>           "append_cell X": r"\.append_cell\(", "append_cell U": r"\.append_cell\(", "empty": r"\.empty\(",
+>           "expire": r"\.expire\("}
+88c94,95
+<             if paths:
+---
+>             method = METHOD.get(r["operation"])
+>             if paths and method:
+90c97
+<                     if all(re.search(r"\b" + re.escape(pth) + r"\b", body) for pth in paths):
+---
+>                     if re.search(method, body) and all(re.search(r"\b" + re.escape(pth) + r"\b", body) for pth in paths):
+93a101
+>             row["cross_link_method"] = method
+101c109
+<     agg = dict(tool="aggregate v1", vocabulary_sha256=vsha, configurations=ORDER, sources=sources, rows=rows,
+---
+>     agg = dict(tool="aggregate v2", vocabulary_sha256=vsha, configurations=ORDER, sources=sources, rows=rows,
+131c139,140
+<            "A cross-reference is a suite test whose body names every protocol outcome variant behind the label; it "
+---
+>            "A cross-reference is a suite test whose body calls the operation's protocol method and names every protocol "
+>            "outcome variant behind the label; it "

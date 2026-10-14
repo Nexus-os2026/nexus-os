@@ -1,0 +1,35 @@
+31c31
+< CHECKER_VERSION = "vocab_check_eval v3"
+---
+> CHECKER_VERSION = "vocab_check_eval v4"
+250c250,261
+<             e = self.expr()
+---
+>             if self.peek().kind in ("id", "p") and self.peek().val in ("if", "match", "loop", "while", "for",
+>                                                                        "unsafe", "{"):
+>                 # A block-like expression statement ends at its closing brace; only `.method`, `.field` and `?`
+>                 # may continue it (Rust's statement rule). A following `(` begins a new expression.
+>                 e = self.primary(no_struct=False)
+>                 while self.at(".") or self.at("?"):
+>                     e = self.postfix_one(e)
+>                 if not (self.at(";") or self.at("}")):
+>                     stmts.append(N("expr_stmt", e=e))
+>                     continue
+>             else:
+>                 e = self.expr()
+496a508,522
+> 
+>     def postfix_one(self, e):
+>         """One `.name`, `.name(..)` or `?` step."""
+>         if self.at("?"):
+>             self.i += 1
+>             return N("unknown", why="try")
+>         self.eat(".")
+>         tk = self.peek()
+>         self.i += 1
+>         if self.at("::"):
+>             self.i += 1
+>             self.skip_generics()
+>         if self.at("("):
+>             return N("mcall", recv=e, name=tk.val, args=self.args(")"), pos=tk.pos)
+>         return N("field", e=e, name=tk.val)

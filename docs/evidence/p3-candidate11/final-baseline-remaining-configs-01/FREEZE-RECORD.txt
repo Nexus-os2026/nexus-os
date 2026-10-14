@@ -1,0 +1,49 @@
+FREEZE RECORD — P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE2-01 — 2026-10-14T14:48:46+0100
+
+After this freeze: no semantic checker repair, no source repair, no automatic rerun. A frozen-checker failure stops the mission and is reported with the raw evidence. Every invocation verifies these hashes first (supervise.py freeze_check).
+
+Frozen C d5964ee5326c2733177307db6f507328023d361a (tree 51bac5fd335999cc995c0ab9f582a30244973ef0, parent 71264aa81a40b86189783facc8437e0427887c16); protocol.rs a2df2841b99cad5d452008a6d4150e9369d07e66, model_tests.rs 28085ce232827301104b5d757af042ec933976f8, unit_tests.rs 55dc66409eaccdaa93e8f0a56f2ccb14be81e114.
+Pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: sha256 cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c, 8984464 bytes. No build in this mission.
+Stage-1 evidence f023cc3d031a2a89e5ecbd4086e15f2e50869acd (refs/heads/review/p3-c11-d2a1-final-baseline-known-runs-01); AD-1-R4 sha256 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693; C4 schedule a464a36621523f539d2554a6b176d678c7f885ea:docs/evidence/p3-candidate11/c4-witness-01/frozen/c4-schedule.json sha256 d616492ff708a1a836f114424a2cce8ed6c0771d22d3f59e984322b7fa3f536b.
+Vocabulary: vocabulary/VOCABULARY.json sha256 db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932: 193 rows, 11 sites, 90 static BRANCHES labels (all rows), 103 rows missing from BRANCHES, 0 unresolved collisions.
+Expectations: receipts/27-EXPECTATIONS.json (source-derived bounds, actors, property applicability and NOT APPLICABLE operations of all 20 configurations; witness tests and healthy lines; supervision policy).
+Supervision: systemd user scope MemoryMax=16G MemorySwapMax=0; timeout -s KILL 180 s (witness) / 2700 s (full); RuntimeMaxSec limit+10; MemAvailable >= 18 GiB; env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0; nice 10; order C1, C25, C4, F-G, F-B2, F-4, F-W, F-8, F-5, F-6, F-7, F-D, F-R; one call, one receipt.
+
+Gates passed before the freeze:
+  receipts/00-authentication.txt: exit 0 (sha256 2791915d2b95e88e7caab466d6e0284dd525b8686febd6eed2264694fc3fe37e)
+  receipts/05-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK (sha256 85b84ce5bb740c61257ac73215e2f5107bdd991c0084dbeb8591531b91993b51)
+  receipts/20-vocabulary-generate.txt: vocab_generate v4: 193 rows; 11 sites; static BRANCHES 90; not in static 103; collisions 2 (0 unresolved); problems 0 (sha256 40d3e17ae4c576ad5547b411ec100c6f76f4ed853840c9cdf2bd6c6a412b29e2)
+  receipts/21-vocabulary-compare.txt: COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: EQUAL (sha256 75c17c66d2c9c6ac15fb7703522f0ec1fa50e42b03672cc67d47fe1607c780bd)
+  receipts/22-check-A-sites.txt: CHECK A (vocab_check_sites v3): PASS (sha256 1c42b87dc92a0aa9f5007b8044ff019207cec38f94dff5ad79ea9f7112272e0a)
+  receipts/23-check-B-eval.txt: CHECK B (vocab_check_eval v4): PASS (sha256 0f0829102a1bffd1e298095fd85168ec0ef9e40cf197f4788987b20c33988dab)
+  receipts/24-vocabulary-controls.txt: CONTROLS: 19 of 19 behave as required — ALL OK (sha256 9d5cdd931307a5dbbd99d2e46fe69063d8f46d21deab8653b8649be039b1916b)
+  receipts/25-classifier-controls.txt: CLASSIFIER CONTROLS: 38 of 38 behave as required — ALL OK (sha256 a26aa05d13e51003ca4b4be96baef91e3e8e2535fc0a3d15c248d79a7a7589f3)
+  receipts/26-configs.txt: CONFIGS: OK (20 required configurations) (sha256 74ffd27a0d6cc91bb6572386034436222f28a84640a2c4489eb494f27863ece0)
+
+Frozen files (26):
+  6fdf29134934ca706f483793695a5efb9809ab0fce0105e4dc307501008b9a26  tools/aggregate.py
+  9dc5ce4d3f23f469a746442cb3e25e06f0644a33b7604cecccf59ade5e7fcfdf  tools/authenticate.py
+  78b1f79a68dcc86140be6841c86e42b95138f16a1cf95e09e592d01a204e2582  tools/build_packet.py
+  c36e93c7e0c624902e0e13c610fc139b6f1c69ac26ffb221415f13added00106  tools/check_full.py
+  8f79bb27a00b919c4627767a4696f625c7b4bfaed66b5edab0152b1e19e89837  tools/check_witness.py
+  509d56c3eabe133f75a34b0f0d7084f8cda5b7b455e95b1947ad6954cef8aa96  tools/checker_controls.py
+  d87994ee7d84f7da83c827b9b1ab8bb3de0d612ebacd585ad50bca74fa602f43  tools/common.py
+  011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744  tools/configs.py
+  a976b755a7aae90ae2c979a6fb66aecf0611f9359e8c0fe6bc03d85b097dcecc  tools/expectations.py
+  41efb8943b6896a787e86890ca356a1692cfd4b77234a601288b9dbf2e7eed70  tools/final_gate.py
+  ff13a99b25fa0fe64d8f629fb9b66bd1489e51655246093e0a839a0b74546ad1  tools/normalize.py
+  d8d5d7d2e4e4beb5c5dbb2fcb1f7c8b595e1443285347cb15afa0f27b9e182da  tools/publish_checks.py
+  85b34792e9f6d41c87de3675e795b1cf5de8b68a4dc1dbaa370f0a5cc90262d5  tools/render_vocab.py
+  9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa  tools/report.py
+  e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874  tools/scope-wrap.sh
+  23563b6fee6ed67fb81c5259dac79a335b41847ee86c341cfc1c3a2e564ad7dd  tools/supervise.py
+  8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  tools/verify_tree.py
+  e0cb948f112ecab0e264114c839b73a08c4b716edbb53fccc1603ec1f44bda79  tools/vocab_check_eval.py
+  156dd9835c03d271f1fa8ca789c326527135b470c08abeb225d5e70a9dfdac06  tools/vocab_check_sites.py
+  f6d1a7171cc2d9aa29c9911e1fe285e4b8c21ac449e1cee6b5ea811020945c19  tools/vocab_controls.py
+  1153fcbc75b87f7f9f1ba0d1c43d1c4c28f26aaaceaa9d7c394dfd1ae94360c0  tools/vocab_generate.py
+  6b6a0f452451c9bb87182412d990db38ff95ef2e3a7f423c2146d304b23487a3  vocabulary/SOURCE-AUDIT.md
+  8b82ba83f47a797ade7e046702c4b697f28772dd7afe471596a758a76a3f239f  vocabulary/STATIC-OMISSIONS.txt
+  db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932  vocabulary/VOCABULARY.json
+  a9fc64110c00dfbf37f5db67b5ab5c38719a098b11c0a0af29c1115914c653fe  vocabulary/VOCABULARY.tsv
+  84e3efb9381c81ad43de4856df811fcf4cbf6b4d95bc24b6665be10611cb3de9  receipts/27-EXPECTATIONS.json

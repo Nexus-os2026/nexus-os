@@ -1,0 +1,61 @@
+STATIC CHECK A 2026-10-14T14:47:02+01:00 — tools/vocab_check_sites.py on vocabulary/VOCABULARY.json
+OK   crate sources read: 49 .rs files under crates/nexus-governed-control/src at C
+OK   A1 every .branch( call's receiver resolves to Obs or Oracle: 11 Obs, 6 Oracle, unresolved []
+     Oracle::branch (a choice, emits no label): model_tests.rs:692 fn undecided: self.oracle.branch — field Io.oracle: &'a mut Oracle
+     Oracle::branch (a choice, emits no label): model_tests.rs:735 fn do_commit: self.oracle.branch — field Io.oracle: &'a mut Oracle
+     Oracle::branch (a choice, emits no label): model_tests.rs:2713 fn step_se: o.branch — parameter o: &mut Oracle of fn step_se
+     Oracle::branch (a choice, emits no label): model_tests.rs:2977 fn step_wk: o.branch — parameter o: &mut Oracle of fn step_wk
+     Oracle::branch (a choice, emits no label): model_tests.rs:3166 fn step_ack: o.branch — parameter o: &mut Oracle of fn step_ack
+     Oracle::branch (a choice, emits no label): model_tests.rs:4271 fn the_explorer_machinery_is_sound: oracle.branch — let oracle = Oracle… in fn the_explorer_machinery_is_sound
+OK   A2 Obs::branch call sites equal the vocabulary's sites (function, line, call text): 11 in source, 11 in the vocabulary; in the vocabulary only []; in the source only []
+     Obs::branch site S01: model_tests.rs:2489 fn fact_append — parameter obs: &mut Obs of fn fact_append
+     Obs::branch site S02: model_tests.rs:2548 fn step_fw — parameter obs: &mut Obs of fn step_fw
+     Obs::branch site S03: model_tests.rs:2600 fn step_fw — parameter obs: &mut Obs of fn step_fw
+     Obs::branch site S04: model_tests.rs:2688 fn settlement_read — parameter obs: &mut Obs of fn settlement_read
+     Obs::branch site S05: model_tests.rs:2939 fn worker_op — parameter obs: &mut Obs of fn worker_op
+     Obs::branch site S06: model_tests.rs:3055 fn step_gc — parameter obs: &mut Obs of fn step_gc
+     Obs::branch site S07: model_tests.rs:3153 fn step_ack — parameter obs: &mut Obs of fn step_ack
+     Obs::branch site S08: model_tests.rs:3180 fn step_ack — parameter obs: &mut Obs of fn step_ack
+     Obs::branch site S09: model_tests.rs:3216 fn step_ack — parameter obs: &mut Obs of fn step_ack
+     Obs::branch site S10: model_tests.rs:3258 fn step_adm — parameter obs: &mut Obs of fn step_adm
+     Obs::branch site S11: model_tests.rs:5798 fn admit_by — parameter obs: &mut Obs of fn admit_by
+OK   A2 Obs::branch sites lie only in model_tests.rs: ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']
+OK   A3 the only write to a branches field is Obs::branch's self.branches.push(label): Obs::branch writes 1; other writes []
+OK   A3 branches fields are declared only as Vec<String> (records) or &'static [&'static str] (witness expectations): []
+OK   A3 every record's branches field is initialised from an Obs's or another record's branches: 8 initialisers; others []
+     8 const witness expectations (static label lists), lines ['model_tests.rs:9042', 'model_tests.rs:9053', 'model_tests.rs:9065', 'model_tests.rs:9075', 'model_tests.rs:9084', 'model_tests.rs:9094', 'model_tests.rs:9103', 'model_tests.rs:9114']; their labels are checked next
+     initialiser: model_tests.rs:3836 fn successors: branches: obs.branches,
+     initialiser: model_tests.rs:4925 fn observe_admission: branches: obs.branches,
+     initialiser: model_tests.rs:4975 fn expand: branches: obs.branches,
+     initialiser: model_tests.rs:5469 fn items: branches: s.branches,
+     initialiser: model_tests.rs:6430 fn hold: branches: item.branches.clone(),
+     initialiser: model_tests.rs:6438 fn hold: branches: item.branches.clone(),
+     initialiser: model_tests.rs:8345 fn replay_schedule: branches: obs.branches,
+     initialiser: model_tests.rs:8701 fn c4_replay_step: branches: obs.branches,
+OK   A3 every label in a witness expectation (branches:/branch:) is a vocabulary label: 9 distinct; outside []
+OK   A4 report branch lines are printed only as '[{mark}] {label}' over BRANCHES or '[taken    ] {label} (not in the listed set)' over taken: 6 printing statements: [4096, 4102, 5310, 5316, 6888, 6894]
+OK   A4 printer at line 4096 iterates BRANCHES
+OK   A4 printer at line 4102 iterates taken minus BRANCHES
+OK   A4 printer at line 5310 iterates BRANCHES
+OK   A4 printer at line 5316 iterates taken minus BRANCHES
+OK   A4 printer at line 6888 iterates BRANCHES
+OK   A4 printer at line 6894 iterates taken minus BRANCHES
+OK   A4 the explorers' taken sets are extended only from .branches: 5 extensions at lines [3934, 5116, 5127, 6694, 6707]; others []
+OK   A5 every required test entry point exists in model_tests.rs: []
+     site S01 fn fact_append: REACHABLE from the required tests
+     site S02 fn step_fw: REACHABLE from the required tests
+     site S03 fn step_fw: REACHABLE from the required tests
+     site S04 fn settlement_read: REACHABLE from the required tests
+     site S05 fn worker_op: REACHABLE from the required tests
+     site S06 fn step_gc: REACHABLE from the required tests
+     site S07 fn step_ack: REACHABLE from the required tests
+     site S08 fn step_ack: REACHABLE from the required tests
+     site S09 fn step_ack: REACHABLE from the required tests
+     site S10 fn step_adm: REACHABLE from the required tests
+     site S11 fn admit_by: not reachable from the required tests
+OK   A5 a label emitted by two sites is emitted by at most one site any required test reaches: shared labels {'admission: admitted': ['S10', 'S11'], 'admission: refused': ['S10', 'S11']}; unresolved {}
+OK   A5 admit_by (S11) is not reachable from any required test
+OK   A6 all 18 label enums declared once with derived Debug and no hand-written Debug
+OK   A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary label: 90 distinct literals; 35 note calls excluded; outside []
+OK   A8 every vocabulary row names a site and starts with its operation: []
+CHECK A (vocab_check_sites v3): PASS

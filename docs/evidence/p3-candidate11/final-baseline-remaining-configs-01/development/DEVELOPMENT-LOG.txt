@@ -1,0 +1,66 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE2-01 (before the freeze; nothing executed the pinned executable)
+
+Development used only the source at C (git objects), the preserved Stage-1 outputs (git objects of f023cc3d), and
+synthetic inputs. Every defect below is in an executor-written tool; none is in Nexus. Each defective version is kept
+here with the diff of its repair. No frozen tool was edited after the freeze (receipts/40-FREEZE-RECORD.txt).
+
+vocab_generate.py (the generator)
+  v1 -> v2 (vocab_generate.v1-dev.py, vocab_generate.v1-to-v2.diff). The first run reported three problems, all in the
+    tool or its inventory: (a) "enum Verdict declared in both files": protocol.rs and model_tests.rs each declare a
+    private Verdict that no label uses; the duplicate check now applies to label enums only. (b) The inventory gave the
+    worker's outer match 6 arms; the source has 5 (`Action::AppendC(token) | Action::AppendX(token)` is one or-pattern
+    arm). (c) The MALFORMATIONS anchor is module-level, not inside step_ack; it became a module-level anchor.
+    The generated rows were the same before and after (193).
+  v2 -> v3 (vocab_generate.v2-to-v3.diff): added a guard that the number of `obs.branch(` calls in model_tests.rs
+    equals the inventory's site count, so method A also notices an added site. Output identical to v2 apart from the
+    version string (checked).
+  v3 -> v4 (vocab_generate.v3-to-v4.diff): added `--compare` (regenerate and compare row for row: the freeze check).
+
+vocab_check_sites.py (check A)
+  v1 -> v2 (vocab_check_sites.v1-dev.py, v1-to-v2.diff). (a) The C4 schedule's const initialisers `branches: &[…]`
+    were classified as struct field declarations (a false FAIL). Declarations are now recognised by the enclosing
+    `struct` block. (b) A7 found ZERO label literals — a vacuous pass — because a raw-text string regex desynchronises
+    on char literals such as '"'; literals are now located through the masked text's quote positions. (c) Hardening:
+    every `branch(` token (not only `.branch(`) must be classified (definition, method call, or path call such as
+    `Obs::branch(`).
+  v2 -> v3 (vocab_check_sites.v2-dev.py, v2-to-v3.diff): with (b) repaired, A7 flagged "DROP: drops its Counted
+    ticket", which is trace text passed to obs.note, not a label; literals inside obs.note(...) are excluded.
+
+vocab_check_eval.py (check B)
+  v1 -> v2 (vocab_check_eval.v1-dev.py, v1b-dev.py, v1-to-v2.diff). (a) The declaration scan crashed on a `const` with
+    no value; scanning now records unreadable declarations instead of aborting. (b) An executor patch error while
+    restructuring the scan loop (loop statements left in a function) was caught by a syntax check and rewritten (v1b).
+    (c) The body was parsed twice, so the call node found in the first parse was not in the second (identity lookup):
+    every multi-statement site failed closed with "call not found". (d) `if let` statements were not accepted as
+    block-like statements. Result after v2: 4 of 11 sites derived; the rest failed closed (never a false PASS).
+  v2 -> v3 (vocab_check_eval.v2-dev.py, v2-to-v3.diff). (a) The run_op signature assertion compared un-normalised
+    whitespace. (b) Liveness was too coarse: `let`s the label never depends on (e.g. known_before) were evaluated and hit
+    ambiguous method names; replaced by a backward slice from the call's argument and the path's conditions.
+    (c) Method calls are resolved by the receiver's struct impl; an unresolved or ambiguous call yields UNKNOWN, which
+    still fails if it reaches a label. Result: 10 of 11 sites derived exactly; worker_op failed closed (UNKNOWN label).
+  v3 -> v4 (vocab_check_eval.v3-dev.py, v3-to-v4.diff). A parser defect: in statement position, `if … { … }` followed
+    by a parenthesised tuple was parsed as a call on the if-expression. Rust ends such a statement at its closing
+    brace (only `.method`, `.field`, `?` continue it). Result: all 11 sites derive exactly the vocabulary's labels.
+
+vocab_controls.py (vocabulary controls)
+  v1 -> v2 (vocab_controls.v1-dev-VACUOUS.py, controls-v1-dev-VACUOUS-output.txt, v1-to-v2.diff). A VACUOUS harness:
+    `for _, rc, _ in outcomes if _ in expect` rebound `_` to the key lines, so no outcome was selected and every
+    control "passed". The defect was visible in its own output: NC9 printed "NOT DETECTED (expected)" and "CONTROL OK".
+    Also, the normalizer controls' text replacements were not asserted to apply; NC9's snippet did not occur in F-2, so
+    its input was unmutated. Both repaired: each expected tool is looked up by name; every replacement must occur
+    exactly once; an unmutated negative input is refused.
+  v2 -> v3 (vocab_controls.v2-dev.py, v2-to-v3.diff): meta-controls MC1 and MC2 require the harness to judge a wrong
+    expectation FAILED, so it cannot pass vacuously again.
+
+aggregate.py
+  v1 -> v2 (aggregate.v1-dev.py, v1-to-v2.diff): a cross-reference now also requires the row's protocol method in the
+    test body (e.g. `.append_facts(`), not only the outcome variants.
+
+supervise.py, check_witness.py (edited before their first use; no defective run)
+  supervise.py: a widened timeout predicate (signal 9 counted as a timeout) was reverted to Stage 1's exact predicate
+    before any use; a signal still prevents PASS through the exit/signal check.
+  check_witness.py: the healthy-line search was simplified before any use (the harness's `test <name> ... ` prefix is
+    split off once; each healthy line must occur exactly once as a whole line).
+
+Unchanged from Stage 1 (byte-identical copies of the Stage-1 evidence commit's blobs): tools/verify_tree.py,
+tools/scope-wrap.sh, tools/report.py (only its parse_report is used).

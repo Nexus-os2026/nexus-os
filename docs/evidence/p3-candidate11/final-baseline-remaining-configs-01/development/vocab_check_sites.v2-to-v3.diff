@@ -1,0 +1,25 @@
+37c37
+< CHECKER_VERSION = "vocab_check_sites v2"
+---
+> CHECKER_VERSION = "vocab_check_sites v3"
+437c437,445
+<     lits = set()
+---
+>     lits, notes = set(), []
+>     for m in re.finditer(r"\.\s*note\s*\(", mm):  # trace notes: free text, never a label
+>         depth, j = 0, m.end() - 1
+>         while True:
+>             depth += {"(": 1, ")": -1}.get(mm[j], 0)
+>             if depth == 0:
+>                 break
+>             j += 1
+>         notes.append((m.end(), j))
+438a447,448
+>         if any(a <= m.start() <= b for a, b in notes):
+>             continue
+445,446c455,456
+<     check("A7 every complete label literal in model_tests.rs is a vocabulary label", not outside,
+<           f"{len(lits)} distinct literals; outside {outside}")
+---
+>     check("A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary label",
+>           not outside, f"{len(lits)} distinct literals; {len(notes)} note calls excluded; outside {outside}")

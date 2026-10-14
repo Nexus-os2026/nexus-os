@@ -1,0 +1,226 @@
+STATIC CHECK B 2026-10-14T14:47:04+01:00 — tools/vocab_check_eval.py on vocabulary/VOCABULARY.json (--dump: every derived label per site)
+OK   B1 every .branch( call found by the lexer has a receiver of a known type: 11 Obs; others [('model_tests.rs', 692, 'oracle', 'self-or-field'), ('model_tests.rs', 735, 'oracle', 'self-or-field'), ('model_tests.rs', 2713, 'o', 'Oracle'), ('model_tests.rs', 2977, 'o', 'Oracle'), ('model_tests.rs', 3166, 'o', 'Oracle'), ('model_tests.rs', 4271, 'oracle', 'Oracle')]
+OK   B1 the self/field receivers are Io's oracle (a choice, not a label): [(692, 'oracle'), (735, 'oracle')]
+     site model_tests.rs:2489 fn fact_append: 36 labels
+     site model_tests.rs:2548 fn step_fw: 1 labels
+     site model_tests.rs:2600 fn step_fw: 1 labels
+     site model_tests.rs:2688 fn settlement_read: 23 labels
+     site model_tests.rs:2939 fn worker_op: 67 labels
+     site model_tests.rs:3055 fn step_gc: 34 labels
+     site model_tests.rs:3153 fn step_ack: 10 labels
+     site model_tests.rs:3180 fn step_ack: 3 labels
+     site model_tests.rs:3216 fn step_ack: 16 labels
+     site model_tests.rs:3258 fn step_adm: 2 labels
+     site model_tests.rs:5798 fn admit_by: 2 labels
+OK   B3 the Obs sites the lexer finds equal the vocabulary's sites: derived [('admit_by', 5798), ('fact_append', 2489), ('settlement_read', 2688), ('step_ack', 3153), ('step_ack', 3180), ('step_ack', 3216), ('step_adm', 3258), ('step_fw', 2548), ('step_fw', 2600), ('step_gc', 3055), ('worker_op', 2939)]; vocabulary [('admit_by', 5798), ('fact_append', 2489), ('settlement_read', 2688), ('step_ack', 3153), ('step_ack', 3180), ('step_ack', 3216), ('step_adm', 3258), ('step_fw', 2548), ('step_fw', 2600), ('step_gc', 3055), ('worker_op', 2939)]
+OK   B4 site S11 (admit_by:5798): derived labels equal the vocabulary's: 2 derived, 2 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S01 (fact_append:2489): derived labels equal the vocabulary's: 36 derived, 36 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's: 23 derived, 23 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S07 (step_ack:3153): derived labels equal the vocabulary's: 10 derived, 10 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S08 (step_ack:3180): derived labels equal the vocabulary's: 3 derived, 3 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S09 (step_ack:3216): derived labels equal the vocabulary's: 16 derived, 16 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S10 (step_adm:3258): derived labels equal the vocabulary's: 2 derived, 2 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S02 (step_fw:2548): derived labels equal the vocabulary's: 1 derived, 1 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S03 (step_fw:2600): derived labels equal the vocabulary's: 1 derived, 1 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S06 (step_gc:3055): derived labels equal the vocabulary's: 34 derived, 34 in the vocabulary; derived only []; vocabulary only []
+OK   B4 site S05 (worker_op:2939): derived labels equal the vocabulary's: 67 derived, 67 in the vocabulary; derived only []; vocabulary only []
+OK   B5 every derived label's operation (its text before ': ') is the vocabulary row's operation: []
+OK   B6 every label derived at two sites is a collision the vocabulary records as resolved: collisions {'admission: refused': ['S10', 'S11'], 'admission: admitted': ['S10', 'S11']}; unresolved {}
+OK   B7 every vocabulary row is derived from source (no row without a source derivation): []
+OK   B7 every derived label is a vocabulary row: []
+     fact_append:2489  append_facts: Committed (already present)
+     fact_append:2489  append_facts: Committed (inserted)
+     fact_append:2489  append_facts: NotApplied NotWritten Conflict(explained)
+     fact_append:2489  append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)
+     fact_append:2489  append_facts: NotApplied NotWritten Conflict(new or retained cause IdentityContent)
+     fact_append:2489  append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)
+     fact_append:2489  append_facts: NotApplied NotWritten Constraint
+     fact_append:2489  append_facts: NotApplied NotWritten Corrected
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(CellsBusy)
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(Expired)
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(Latched)
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(Malformed)
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(NotHealthy)
+     fact_append:2489  append_facts: NotApplied NotWritten Entry(NotOpen)
+     fact_append:2489  append_facts: NotApplied NotWritten SessionClosed
+     fact_append:2489  append_facts: NotApplied NotWritten Storage
+     fact_append:2489  append_facts: NotApplied NotWritten TableFull
+     fact_append:2489  append_facts: NotApplied Uncertain Conflict(explained)
+     fact_append:2489  append_facts: NotApplied Uncertain Conflict(new or retained cause DuplicateRole)
+     fact_append:2489  append_facts: NotApplied Uncertain Conflict(new or retained cause IdentityContent)
+     fact_append:2489  append_facts: NotApplied Uncertain Conflict(new or retained cause MissingPrepared)
+     fact_append:2489  append_facts: NotApplied Uncertain Constraint
+     fact_append:2489  append_facts: NotApplied Uncertain Corrected
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(CellsBusy)
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(Expired)
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(Latched)
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(Malformed)
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(NotHealthy)
+     fact_append:2489  append_facts: NotApplied Uncertain Entry(NotOpen)
+     fact_append:2489  append_facts: NotApplied Uncertain SessionClosed
+     fact_append:2489  append_facts: NotApplied Uncertain Storage
+     fact_append:2489  append_facts: NotApplied Uncertain TableFull
+     fact_append:2489  append_facts: Rejected(NotArmed)
+     fact_append:2489  append_facts: Rejected(OtherLedger)
+     fact_append:2489  append_facts: unwound after an insert was issued
+     fact_append:2489  append_facts: unwound before any insert
+     step_fw:2548  expire: Armed -> Counted
+     step_fw:2600  DROP: a Counted ticket dropped
+     settlement_read:2688  explain: Busy
+     settlement_read:2688  explain: Explained
+     settlement_read:2688  explain: Pending
+     settlement_read:2688  explain: Refused(CellsBusy)
+     settlement_read:2688  explain: Refused(Expired)
+     settlement_read:2688  explain: Refused(Latched)
+     settlement_read:2688  explain: Refused(Malformed)
+     settlement_read:2688  explain: Refused(NotHealthy)
+     settlement_read:2688  explain: Refused(NotOpen)
+     settlement_read:2688  explain: Unknown
+     settlement_read:2688  explain: unwound
+     settlement_read:2688  lookup: Absent
+     settlement_read:2688  lookup: Conflict(cause)
+     settlement_read:2688  lookup: Conflict(explained)
+     settlement_read:2688  lookup: Failed
+     settlement_read:2688  lookup: Present
+     settlement_read:2688  lookup: Refused(CellsBusy)
+     settlement_read:2688  lookup: Refused(Expired)
+     settlement_read:2688  lookup: Refused(Latched)
+     settlement_read:2688  lookup: Refused(Malformed)
+     settlement_read:2688  lookup: Refused(NotHealthy)
+     settlement_read:2688  lookup: Refused(NotOpen)
+     settlement_read:2688  lookup: unwound
+     worker_op:2939  append_cell C: Committed (already marked)
+     worker_op:2939  append_cell C: Committed (inserted)
+     worker_op:2939  append_cell C: Committed (present)
+     worker_op:2939  append_cell C: NotWritten
+     worker_op:2939  append_cell C: OtherLedger
+     worker_op:2939  append_cell C: Refused(CellsBusy)
+     worker_op:2939  append_cell C: Refused(Expired)
+     worker_op:2939  append_cell C: Refused(Latched)
+     worker_op:2939  append_cell C: Refused(Malformed)
+     worker_op:2939  append_cell C: Refused(NotHealthy)
+     worker_op:2939  append_cell C: Refused(NotOpen)
+     worker_op:2939  append_cell C: Stale
+     worker_op:2939  append_cell C: Uncertain
+     worker_op:2939  append_cell C: unwound
+     worker_op:2939  append_cell U: Committed (already marked)
+     worker_op:2939  append_cell U: Committed (inserted)
+     worker_op:2939  append_cell U: Committed (present)
+     worker_op:2939  append_cell U: NotWritten
+     worker_op:2939  append_cell U: OtherLedger
+     worker_op:2939  append_cell U: Refused(CellsBusy)
+     worker_op:2939  append_cell U: Refused(Expired)
+     worker_op:2939  append_cell U: Refused(Latched)
+     worker_op:2939  append_cell U: Refused(Malformed)
+     worker_op:2939  append_cell U: Refused(NotHealthy)
+     worker_op:2939  append_cell U: Refused(NotOpen)
+     worker_op:2939  append_cell U: Stale
+     worker_op:2939  append_cell U: Uncertain
+     worker_op:2939  append_cell U: unwound
+     worker_op:2939  append_cell X: Committed (already marked)
+     worker_op:2939  append_cell X: Committed (inserted)
+     worker_op:2939  append_cell X: Committed (present)
+     worker_op:2939  append_cell X: NotWritten
+     worker_op:2939  append_cell X: OtherLedger
+     worker_op:2939  append_cell X: Refused(CellsBusy)
+     worker_op:2939  append_cell X: Refused(Expired)
+     worker_op:2939  append_cell X: Refused(Latched)
+     worker_op:2939  append_cell X: Refused(Malformed)
+     worker_op:2939  append_cell X: Refused(NotHealthy)
+     worker_op:2939  append_cell X: Refused(NotOpen)
+     worker_op:2939  append_cell X: Stale
+     worker_op:2939  append_cell X: Uncertain
+     worker_op:2939  append_cell X: unwound
+     worker_op:2939  barrier: Failed
+     worker_op:2939  barrier: NotNeeded
+     worker_op:2939  barrier: OtherLedger
+     worker_op:2939  barrier: Passed
+     worker_op:2939  barrier: unwound
+     worker_op:2939  empty: Done
+     worker_op:2939  empty: NotCommitted
+     worker_op:2939  empty: OtherLedger
+     worker_op:2939  empty: Stale
+     worker_op:2939  empty: unwound
+     worker_op:2939  resolve: Absent
+     worker_op:2939  resolve: Acknowledged
+     worker_op:2939  resolve: ConflictPlaced
+     worker_op:2939  resolve: Corrected
+     worker_op:2939  resolve: Inconsistent
+     worker_op:2939  resolve: OtherLedger
+     worker_op:2939  resolve: Refused(CellsBusy)
+     worker_op:2939  resolve: Refused(Expired)
+     worker_op:2939  resolve: Refused(Latched)
+     worker_op:2939  resolve: Refused(Malformed)
+     worker_op:2939  resolve: Refused(NotHealthy)
+     worker_op:2939  resolve: Refused(NotOpen)
+     worker_op:2939  resolve: Retained
+     worker_op:2939  resolve: Stale
+     worker_op:2939  resolve: unwound
+     step_gc:3055  append_gating: Committed (already present)
+     step_gc:3055  append_gating: Committed (inserted)
+     step_gc:3055  append_gating: Refused NotWritten Conflict(explained)
+     step_gc:3055  append_gating: Refused NotWritten Conflict(new or retained cause DuplicateRole)
+     step_gc:3055  append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)
+     step_gc:3055  append_gating: Refused NotWritten Conflict(new or retained cause MissingPrepared)
+     step_gc:3055  append_gating: Refused NotWritten Constraint
+     step_gc:3055  append_gating: Refused NotWritten Corrected
+     step_gc:3055  append_gating: Refused NotWritten Entry(CellsBusy)
+     step_gc:3055  append_gating: Refused NotWritten Entry(Expired)
+     step_gc:3055  append_gating: Refused NotWritten Entry(Latched)
+     step_gc:3055  append_gating: Refused NotWritten Entry(Malformed)
+     step_gc:3055  append_gating: Refused NotWritten Entry(NotHealthy)
+     step_gc:3055  append_gating: Refused NotWritten Entry(NotOpen)
+     step_gc:3055  append_gating: Refused NotWritten SessionClosed
+     step_gc:3055  append_gating: Refused NotWritten Storage
+     step_gc:3055  append_gating: Refused NotWritten TableFull
+     step_gc:3055  append_gating: Refused Uncertain Conflict(explained)
+     step_gc:3055  append_gating: Refused Uncertain Conflict(new or retained cause DuplicateRole)
+     step_gc:3055  append_gating: Refused Uncertain Conflict(new or retained cause IdentityContent)
+     step_gc:3055  append_gating: Refused Uncertain Conflict(new or retained cause MissingPrepared)
+     step_gc:3055  append_gating: Refused Uncertain Constraint
+     step_gc:3055  append_gating: Refused Uncertain Corrected
+     step_gc:3055  append_gating: Refused Uncertain Entry(CellsBusy)
+     step_gc:3055  append_gating: Refused Uncertain Entry(Expired)
+     step_gc:3055  append_gating: Refused Uncertain Entry(Latched)
+     step_gc:3055  append_gating: Refused Uncertain Entry(Malformed)
+     step_gc:3055  append_gating: Refused Uncertain Entry(NotHealthy)
+     step_gc:3055  append_gating: Refused Uncertain Entry(NotOpen)
+     step_gc:3055  append_gating: Refused Uncertain SessionClosed
+     step_gc:3055  append_gating: Refused Uncertain Storage
+     step_gc:3055  append_gating: Refused Uncertain TableFull
+     step_gc:3055  append_gating: unwound after an insert (U kept, Unwound)
+     step_gc:3055  append_gating: unwound before any insert (U emptied)
+     step_ack:3153  snapshot: Failed
+     step_ack:3153  snapshot: NotNow(CellsBusy)
+     step_ack:3153  snapshot: NotNow(Expired)
+     step_ack:3153  snapshot: NotNow(Latched)
+     step_ack:3153  snapshot: NotNow(Malformed)
+     step_ack:3153  snapshot: NotNow(NotHealthy)
+     step_ack:3153  snapshot: NotNow(NotOpen)
+     step_ack:3153  snapshot: Nothing
+     step_ack:3153  snapshot: Taken
+     step_ack:3153  snapshot: unwound
+     step_ack:3180  malformed snapshot: empty
+     step_ack:3180  malformed snapshot: future
+     step_ack:3180  malformed snapshot: set
+     step_ack:3216  append_acknowledgement: Committed
+     step_ack:3216  append_acknowledgement: NotApplied(NotWritten)
+     step_ack:3216  append_acknowledgement: NotApplied(Uncertain)
+     step_ack:3216  append_acknowledgement: Refused(Empty)
+     step_ack:3216  append_acknowledgement: Refused(Future)
+     step_ack:3216  append_acknowledgement: Refused(NotNow(CellsBusy))
+     step_ack:3216  append_acknowledgement: Refused(NotNow(Expired))
+     step_ack:3216  append_acknowledgement: Refused(NotNow(Latched))
+     step_ack:3216  append_acknowledgement: Refused(NotNow(Malformed))
+     step_ack:3216  append_acknowledgement: Refused(NotNow(NotHealthy))
+     step_ack:3216  append_acknowledgement: Refused(NotNow(NotOpen))
+     step_ack:3216  append_acknowledgement: Refused(OtherStore)
+     step_ack:3216  append_acknowledgement: Refused(Set)
+     step_ack:3216  append_acknowledgement: Refused(Stale)
+     step_ack:3216  append_acknowledgement: unwound after an insert (U kept)
+     step_ack:3216  append_acknowledgement: unwound before any insert (U emptied)
+     step_adm:3258  admission: admitted
+     step_adm:3258  admission: refused
+     admit_by:5798  admission: admitted
+     admit_by:5798  admission: refused
+CHECK B (vocab_check_eval v4): PASS

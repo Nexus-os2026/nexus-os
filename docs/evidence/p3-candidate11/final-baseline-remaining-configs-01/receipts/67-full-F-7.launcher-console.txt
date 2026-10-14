@@ -1,0 +1,34 @@
+SUPERVISED FULL EXPLORATION F-7 — ledger::protocol::model_tests::full_f7 (original explorer)
+started: 2026-10-14T14:55:52+0100
+mission P3-C11-DR01-D2A1-FINAL-EVIDENCE-STAGE2-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+freeze check: 26 frozen files (tools, vocabulary, expectations) against receipts/40-FREEZE.json: ALL EQUAL
+prior step: receipts/66-full-F-6 classified PASS
+source freeze (before): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+executable before: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c", "size": 8984464, "mtime_ns": 1791979773968059672, "inode": 62417761, "symlink": false}; pinned sha256 cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c size 8984464: MATCH
+test environment (env -i; exactly these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+pre-flight 2026-10-14T14:55:53+0100:
+  MemTotal 65077588 KiB; MemAvailable 53776364 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7686560 KiB (the scope has swap disabled)
+  load average ['1.09', '1.17', '1.05']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    845460 brave
+    732224 2.1.281
+    664264 chrome
+    653660 brave
+    598844 python
+    587488 claude
+    485400 chrome
+    457812 chrome
+selection: ['ledger::protocol::model_tests::full_f7', '--exact', '--ignored', '--list'] -> exit 0; listed ['ledger::protocol::model_tests::full_f7: test']; executable after the listing cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c 8984464
+scope unit: p3c11-fbr01-67-full-F-7-1791986153.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-fbr01-67-full-F-7-1791986153 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/67-full-F-7/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/67-full-F-7/time-v.txt timeout -s KILL 2700 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::full_f7 --exact --ignored --nocapture --test-threads=1
+launched: 2026-10-14T14:55:53+0100
+returned: 2026-10-14T14:56:08+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 15.29 s, max RSS (largest single process) 356480 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 363720704 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source freeze (after): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+executable after: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c", "size": 8984464, "mtime_ns": 1791979773968059672, "inode": 62417761, "symlink": false}: MATCH
+raw output: raw-output.txt sha256 69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a bytes 6657
+finished: 2026-10-14T14:56:09+0100

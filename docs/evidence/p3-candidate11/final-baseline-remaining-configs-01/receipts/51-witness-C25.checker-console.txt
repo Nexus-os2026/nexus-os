@@ -1,0 +1,21 @@
+OK   expected healthy line occurs verbatim in AD-1-R4 G.3(d) at C: C25 WITNESS F-1: 1 steps, each enabled and taking its choice…
+OK   the witness started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464
+OK   source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   raw output sha256 equals the launcher's record: 1ad1bc3ef1a12e564ce17c7c8369d986971c2065457f9a9a8d45092b6275a6b0
+OK   argv: the pinned executable, exactly the one test, --exact --nocapture --test-threads=1, no --ignored: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test']
+OK   the test is not an ignored test (--exact --ignored --list shows none): []
+OK   the harness ran exactly that one test: running ['1 test']; started ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world']
+OK   harness: 'ok' then 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in …': ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3153920 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, scope gone
+OK   the exact healthy line(s) of G.3(d), each exactly once as a whole line, nowhere else: {'C25 WITNESS F-1: 1 steps, each enabled and takin…': 1}
+OK   no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic: []
+OK   no other test's output, no 'FAILED' or 'failures:' section
+
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+raw outcome (as printed): harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+checks: 15 of 15 hold
+

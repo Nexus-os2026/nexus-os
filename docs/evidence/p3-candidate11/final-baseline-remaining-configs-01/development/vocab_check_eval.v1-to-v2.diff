@@ -1,0 +1,203 @@
+256c256
+<             elif e.kind in BLOCKLIKE or e.kind in ("block", "if", "match", "loop", "while", "for"):
+---
+>             elif e.kind in ("block", "if", "iflet", "match", "loop", "while", "for"):
+754c754
+<         self.toks = {}
+---
+>         self.toks, self.unparsed = {}, []
+763,788c763,786
+<             tk = toks[i]
+<             if tk.kind == "id" and tk.val == "enum" and toks[i + 1].kind == "id":
+<                 name = toks[i + 1].val
+<                 p = Parser(toks, i + 2)
+<                 p.skip_generics()
+<                 if p.at("{"):
+<                     self.enums.setdefault(name, []).append((path, self.enum_body(p)))
+<                 i += 2
+<                 continue
+<             if tk.kind == "id" and tk.val == "struct" and toks[i + 1].kind == "id":
+<                 name = toks[i + 1].val
+<                 p = Parser(toks, i + 2)
+<                 p.skip_generics()
+<                 if p.at("{"):
+<                     p.i += 1
+<                     fields = {}
+<                     while not p.at("}"):
+<                         if p.at("#"):
+<                             p.i += 1
+<                             p.skip_balanced()
+<                             continue
+<                         if p.at("pub"):
+<                             p.i += 1
+<                             if p.at("("):
+<                                 p.skip_balanced()
+<                         fname = p.peek().val
+---
+>             try:
+>                 i = self.scan_one(path, toks, i)
+>             except (ParseError, IndexError) as ex:
+>                 self.unparsed.append(f"{path.split('/')[-1]} token {i}: {ex}")
+>                 i += 1
+> 
+>     def scan_one(self, path, toks, i):
+>         tk = toks[i]
+>         if tk.kind == "id" and tk.val == "enum" and toks[i + 1].kind == "id":
+>             name = toks[i + 1].val
+>             p = Parser(toks, i + 2)
+>             p.skip_generics()
+>             if p.at("{"):
+>                 self.enums.setdefault(name, []).append((path, self.enum_body(p)))
+>             return i + 2
+>         if tk.kind == "id" and tk.val == "struct" and toks[i + 1].kind == "id":
+>             name = toks[i + 1].val
+>             p = Parser(toks, i + 2)
+>             p.skip_generics()
+>             if p.at("{"):
+>                 p.i += 1
+>                 fields = {}
+>                 while not p.at("}"):
+>                     if p.at("#"):
+790,819c788,790
+<                         p.eat(":")
+<                         fields[fname] = p.type_text({",", "}"})
+<                         if p.at(","):
+<                             p.i += 1
+<                     self.structs.setdefault(name, []).append((path, fields))
+<                 elif p.at("("):
+<                     self.structs.setdefault(name, []).append((path, None))
+<                 i += 2
+<                 continue
+<             if tk.kind == "id" and tk.val == "fn" and toks[i + 1].kind == "id":
+<                 name = toks[i + 1].val
+<                 p = Parser(toks, i + 2)
+<                 generics = None
+<                 if p.at("<"):
+<                     g0 = p.i
+<                     p.skip_generics()
+<                     generics = type_str([t.val for t in toks[g0:p.i]])
+<                 p.eat("(")
+<                 params = []
+<                 while not p.at(")"):
+<                     if p.at("&") or p.at("mut") or (p.at("self")):
+<                         while not (p.at(",") or p.at(")")):
+<                             p.i += 1
+<                         params.append(("self", "Self"))
+<                     else:
+<                         pat = p.pattern1()
+<                         p.eat(":")
+<                         ty = p.type_text({",", ")"})
+<                         params.append((pat.name if pat.kind == "p_ident" else None, ty))
+<                     if p.at(","):
+---
+>                         p.skip_balanced()
+>                         continue
+>                     if p.at("pub"):
+821,823c792,794
+<                 p.eat(")")
+<                 ret = None
+<                 if p.at("->"):
+---
+>                         if p.at("("):
+>                             p.skip_balanced()
+>                     fname = p.peek().val
+825,827c796,798
+<                     ret = p.type_text({"{", ";", "where"})
+<                 if p.at("where"):
+<                     while not p.at("{"):
+---
+>                     p.eat(":")
+>                     fields[fname] = p.type_text({",", "}"})
+>                     if p.at(","):
+829,838c800,843
+<                 body_at = p.i if p.at("{") else None
+<                 self.fns.setdefault(name, []).append(dict(file=path, params=params, ret=ret, body_at=body_at,
+<                                                            generics=generics, tok=i))
+<                 i += 2
+<                 continue
+<             if tk.kind == "id" and tk.val == "const" and toks[i + 1].kind == "id" and toks[i + 2].val == ":":
+<                 name = toks[i + 1].val
+<                 p = Parser(toks, i + 3)
+<                 ty = p.type_text({"="})
+<                 p.eat("=")
+---
+>                 self.structs.setdefault(name, []).append((path, fields))
+>             elif p.at("("):
+>                 self.structs.setdefault(name, []).append((path, None))
+>             return i + 2
+>         if tk.kind == "id" and tk.val == "fn" and toks[i + 1].kind == "id":
+>             name = toks[i + 1].val
+>             p = Parser(toks, i + 2)
+>             generics = None
+>             if p.at("<"):
+>                 g0 = p.i
+>                 p.skip_generics()
+>                 generics = type_str([t.val for t in toks[g0:p.i]])
+>             p.eat("(")
+>             params = []
+>             while not p.at(")"):
+>                 if p.at("&") or p.at("mut") or (p.at("self")):
+>                     while not (p.at(",") or p.at(")")):
+>                         p.i += 1
+>                     params.append(("self", "Self"))
+>                 else:
+>                     pat = p.pattern1()
+>                     p.eat(":")
+>                     ty = p.type_text({",", ")"})
+>                     params.append((pat.name if pat.kind == "p_ident" else None, ty))
+>                 if p.at(","):
+>                     p.i += 1
+>             p.eat(")")
+>             ret = None
+>             if p.at("->"):
+>                 p.i += 1
+>                 ret = p.type_text({"{", ";", "where"})
+>             if p.at("where"):
+>                 while not p.at("{"):
+>                     p.i += 1
+>             body_at = p.i if p.at("{") else None
+>             self.fns.setdefault(name, []).append(dict(file=path, params=params, ret=ret, body_at=body_at,
+>                                                        generics=generics, tok=i))
+>             return i + 2
+>         if tk.kind == "id" and tk.val == "const" and toks[i + 1].kind == "id" and toks[i + 2].val == ":":
+>             name = toks[i + 1].val
+>             p = Parser(toks, i + 3)
+>             ty = p.type_text({"=", ";"})
+>             if p.at("="):
+>                 p.i += 1
+840,846c845,849
+<                     e = p.expr()
+<                     self.consts[name] = (ty, e)
+<                 except ParseError:
+<                     pass
+<                 i += 2
+<                 continue
+<             i += 1
+---
+>                     self.consts[name] = (ty, p.expr())
+>                 except ParseError as ex:
+>                     self.unparsed.append(f"const {name}: {ex}")
+>             return i + 2
+>         return i + 1
+1485c1488
+< def site_labels(ev, fn, call):
+---
+> def site_labels(ev, fn, pos):
+1487a1491,1493
+>     call = find_call(body, pos)
+>     if call is None:
+>         raise Unresolved("the call node was not found in the parsed body")
+1658c1664
+<         fns.enums, fns.structs, fns.fns, fns.consts, fns.toks = {}, {}, {}, {}, {p: (toks, text)}
+---
+>         fns.enums, fns.structs, fns.fns, fns.consts, fns.toks, fns.unparsed = {}, {}, {}, {}, {p: (toks, text)}, []
+1706,1707d1711
+<         toks = decls.toks[s["file"]][0]
+<         body = Parser(toks, s["fn"]["body_at"])
+1709,1712c1713
+<             call = find_call(ev.parse_body(s["fn"]), s["pos"])
+<             if call is None:
+<                 raise Unresolved("the call node was not found")
+<             vals = site_labels(ev, s["fn"], call)
+---
+>             vals = site_labels(ev, s["fn"], s["pos"])

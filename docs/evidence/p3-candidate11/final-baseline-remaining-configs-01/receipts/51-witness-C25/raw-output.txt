@@ -1,0 +1,10 @@
+
+running 1 test
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]
+    branches ["append_gating: Refused Uncertain Storage"]; word after 0x25 (live 0, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+C25 WITNESS F-1: 1 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating: Refused Uncertain Storage'
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

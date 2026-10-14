@@ -1,0 +1,187 @@
+CLASSIFIER CONTROLS (synthetic and historical inputs; work directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/ba83c590-760a-431a-ad90-0ef33c60b32d/scratchpad/checkctl-final)
+
+W-c1-PC — Stage-1 suite segment re-framed as a standalone run (check_witness.py c1)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+    required: PASS -> CONTROL OK
+
+W-c25-PC — Stage-1 suite segment re-framed as a standalone run (check_witness.py c25)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+    required: PASS -> CONTROL OK
+
+W-c4-PC — Stage-1 suite segment re-framed as a standalone run (check_witness.py c4)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+    required: PASS -> CONTROL OK
+
+W-NC1 — a positive marker line (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic)
+    FAILED CHECK: no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic: ['NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)']
+    required: NOT PASS naming 'positive marker' -> CONTROL OK
+
+W-NC2 — the healthy line altered (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact healthy line(s) of G.3(d), each exactly once as a whole line, nowhere else)
+    FAILED CHECK: the exact healthy line(s) of G.3(d), each exactly once as a whole line, nowhere else: {'C1 WITNESS F-1: 11 steps, each enabled and takin…': 0}
+    required: NOT PASS naming 'healthy line' -> CONTROL OK
+
+W-NC3 — the healthy line twice (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact healthy line(s) of G.3(d), each exactly once as a whole line, nowhere else)
+    FAILED CHECK: the exact healthy line(s) of G.3(d), each exactly once as a whole line, nowhere else: {'C1 WITNESS F-1: 11 steps, each enabled and takin…': 2}
+    required: NOT PASS naming 'healthy line' -> CONTROL OK
+
+W-NC4 — exit 101 (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (abnormal termination or resource evidence; never PASS)
+    FAILED CHECK: normal exit 0, no signal: exit 101, signal None, supervisor rc 101
+    required: NOT PASS naming 'normal exit' -> CONTROL OK
+
+W-NC5 — killed by signal 9 at the time limit (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (abnormal termination or resource evidence; never PASS)
+    FAILED CHECK: normal exit 0, no signal: exit None, signal 9, supervisor rc 0
+    FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 1000000 B, swap.peak 0 B, oom 0, oom_kill 0, wall 180.0 s of 180 s
+    required: NOT PASS naming 'normal exit' -> CONTROL OK
+
+W-NC6 — the test is ignored (listed with --ignored) (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the test is not an ignored test (--exact --ignored --list shows none))
+    FAILED CHECK: the test is not an ignored test (--exact --ignored --list shows none): ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test']
+    required: NOT PASS naming 'not an ignored' -> CONTROL OK
+
+W-NC7 — the executable differs after the run (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (executable is the pinned one (path, sha256, size) before, at selection and after)
+    FAILED CHECK: executable is the pinned one (path, sha256, size) before, at selection and after: cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464 / 0000000000000000… 8984464
+    required: NOT PASS naming 'pinned' -> CONTROL OK
+
+W-NC8 — a violation line (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic)
+    FAILED CHECK: no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic: ['    VIOLATION step: P1: x']
+    required: NOT PASS naming 'positive marker' -> CONTROL OK
+
+W-NC9 — an OOM kill recorded (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (abnormal termination or resource evidence; never PASS)
+    FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 1000000 B, swap.peak 0 B, oom 0, oom_kill 1, wall 10.0 s of 180 s,
+    required: NOT PASS naming 'launching command' -> CONTROL OK
+
+W-NC10 — --ignored in argv (check_witness.py c1)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (argv: the pinned executable, exactly the one test, --exact --nocapture --test-threads=1, no --ignored)
+    FAILED CHECK: argv: the pinned executable, exactly the one test, --exact --nocapture --test-threads=1, no --ignored: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/dep
+    required: NOT PASS naming 'argv' -> CONTROL OK
+
+W-NC11 — C4: the changed step consumes a choice (G.6) (check_witness.py c4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (G.6 (healthy role): every step's offered and consumed choices, unused suffix, branches and faults against the frozen schedule; the changed step consumes nothing and leaves its whole offered suffix)
+    FAILED CHECK: G.6 (healthy role): every step's offered and consumed choices, unused suffix, branches and faults against the frozen schedule; the changed step consumes nothing and leaves its whole offe
+    required: NOT PASS naming 'G.6' -> CONTROL OK
+
+F-f4-PC — Stage-1 F-2 report re-labelled as F-4 (check_full.py f4)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    required: PASS -> CONTROL OK
+
+F-fg-PC — Stage-1 F-2 report re-labelled as F-G (check_full.py fg)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    required: PASS -> CONTROL OK
+
+F-fw-NC — F-W with E10 printed 'not applicable' (check_full.py fw)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (every property line has its source-derived applicable form; 25 lines HOLD (mission section 9: 25); E10: HOLDS)
+    FAILED CHECK: every property line has its source-derived applicable form: [('E10', 'not applicable here (worker verbs do not unwind)')]
+    FAILED CHECK: 25 lines HOLD (mission section 9: 25): 24 HOLD
+    FAILED CHECK: E10: HOLDS: not applicable here (worker verbs do not unwind)
+    required: NOT PASS naming 'E10' -> CONTROL OK
+
+F-fw-PC — F-W with E10 HOLDS (25 HOLD) (check_full.py fw)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    required: PASS -> CONTROL OK
+
+F-fd-PC — F-D with L1 not claimed (23 HOLD) (check_full.py fd)
+    CLASSIFICATION: PASS; outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    required: PASS -> CONTROL OK
+
+F-fd-NC — F-D with L1 HOLDS (wrong applicability) (check_full.py fd)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (every property line has its source-derived applicable form; 23 lines HOLD (mission section 9: 23); L1: 'not claimed for this configuration')
+    FAILED CHECK: every property line has its source-derived applicable form: [('L1', 'HOLDS: 50655853 non-fault edges, no cycle; 3206 end states, each terminal (D1)')]
+    FAILED CHECK: 23 lines HOLD (mission section 9: 23): 24 HOLD
+    FAILED CHECK: L1: 'not claimed for this configuration': HOLDS: 50655853 non-fault edges, no cycle; 3206 end states, each terminal (D1)
+    required: NOT PASS naming 'L1' -> CONTROL OK
+
+F-NC1 — INCOMPLETE line (state cap) (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.)
+    FAILED CHECK: outcome PASS: INCOMPLETE
+    FAILED CHECK: no INCOMPLETE line, no FAIL line: incomplete the state cap of 30000000 was reached. No property is established by this run., fail None
+    required: NOT PASS naming 'outcome PASS' -> CONTROL OK
+
+F-NC2 — discovered states above the cap (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (discovered states <= 30,000,000 (K.1, inclusive))
+    FAILED CHECK: discovered states <= 30,000,000 (K.1, inclusive): 30,000,001
+    required: NOT PASS naming '<= 30,000,000' -> CONTROL OK
+
+F-NC3 — expanded below discovered (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (expanded states equal discovered states (0 unexpanded))
+    FAILED CHECK: expanded states equal discovered states (0 unexpanded): states 12602670, expanded 12602669
+    required: NOT PASS naming 'expanded' -> CONTROL OK
+
+F-NC4 — a property line not HOLDS (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (every property line has its source-derived applicable form; 24 lines HOLD (mission section 9: 24))
+    FAILED CHECK: every property line has its source-derived applicable form: [('P7', 'FAILS')]
+    FAILED CHECK: 24 lines HOLD (mission section 9: 24): 23 HOLD
+    required: NOT PASS naming 'property line' -> CONTROL OK
+
+F-NC5 — bounds not the configuration's (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (printed bounds equal the source-derived configuration)
+    FAILED CHECK: printed bounds equal the source-derived configuration: facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgemen
+    required: NOT PASS naming 'bounds' -> CONTROL OK
+
+F-NC6 — actors not the configuration's (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (printed actors equal actors() of the source-derived configuration)
+    FAILED CHECK: printed actors equal actors() of the source-derived configuration: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm]
+    required: NOT PASS naming 'actors' -> CONTROL OK
+
+F-NC7 — a raw label outside the vocabulary (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED))
+    FAILED CHECK: branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED): ["raw label(s) outside the frozen vocabulary: ['ap
+    required: NOT PASS naming 'branch list' -> CONTROL OK
+
+F-NC8 — a NOT APPLICABLE operation taken (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED))
+    FAILED CHECK: branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED): ["B095 'snapshot: Taken' is TAKEN but its operatio
+    required: NOT PASS naming 'branch list' -> CONTROL OK
+
+F-NC9 — exit 101 (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination; never PASS)
+    FAILED CHECK: normal exit 0, no signal: exit 101, signal None, supervisor rc 101
+    required: NOT PASS naming 'normal exit' -> CONTROL OK
+
+F-NC10 — timed out (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination; never PASS)
+    FAILED CHECK: normal exit 0, no signal: exit None, signal 9, supervisor rc 0
+    FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 45 min: memory.peak 1000000 B, swap.peak 0 B, oom 0, oom_kill 0, wall 2700.0 s of 270
+    required: NOT PASS naming 'normal exit' -> CONTROL OK
+
+F-NC11 — a quotient refusal line (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE — VERIFICATION INVALID (quotient or symmetry refusal)
+    FAILED CHECK: no quotient or symmetry refusal: ['quotient inapplicable: x']
+    required: NOT PASS naming 'refusal' -> CONTROL OK
+
+F-NC12 — two tests listed (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (pre-run listing (--exact --ignored --list) selects exactly that one test)
+    FAILED CHECK: pre-run listing (--exact --ignored --list) selects exactly that one test: ['ledger::protocol::model_tests::full_f4: test', 'ledger::protocol::model_tests::full_f2: test']
+    required: NOT PASS naming 'listing' -> CONTROL OK
+
+F-NC13 — a quotient explorer header (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (header: 'EXPLORATION <cfg>' exactly (the original explorer prints no quotient or symmetry note))
+    FAILED CHECK: header: 'EXPLORATION <cfg>' exactly (the original explorer prints no quotient or symmetry note): EXPLORATION F-4 (admission observer quotient: experimental, not the contract's explorer)
+    required: NOT PASS naming 'header' -> CONTROL OK
+
+F-NC14 — source not C after the run (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source exactly C before and after)
+    FAILED CHECK: source exactly C before and after: EXACTLY_C / NOT_C
+    required: NOT PASS naming 'source' -> CONTROL OK
+
+F-NC15 — a FAIL with its states beyond the cap is BUDGET EXCEEDED, never PASS (check_full.py f4)
+    CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE — BUDGET EXCEEDED (FAIL printed beyond the authorised cardinality)
+    FAILED CHECK: outcome PASS: FAIL
+    FAILED CHECK: no INCOMPLETE line, no FAIL line: incomplete None, fail P7: x
+    FAILED CHECK: discovered states <= 30,000,000 (K.1, inclusive): 30,000,002
+    FAILED CHECK: expanded states equal discovered states (0 unexpanded): states 30000002, expanded 30000001
+    required: NOT PASS naming 'outcome PASS' -> CONTROL OK
+
+F-NC15-class — the outer class reads 'INCOMPLETE — BUDGET EXCEEDED': OK
+
+MC1 — meta-control: W-c1-PC judged as if it had to be NOT PASS: the harness rejects it -> CONTROL OK
+MC2 — meta-control: F-NC4 judged as if it had to PASS: the harness rejects it -> CONTROL OK
+
+CLASSIFIER CONTROLS: 38 of 38 behave as required — ALL OK

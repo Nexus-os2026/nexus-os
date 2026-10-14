@@ -1,0 +1,102 @@
+CONFIGURATION EXPECTATIONS FROM SOURCE 2026-10-14T14:47:47+01:00 — tools/configs.py (model_tests.rs at C, git object)
+X-1   ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission  runner default_exploration (original) ignored False
+      bounds: facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+      actors: [Fw(0), Fw(1), Se, Wk, Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+X-2   ledger::protocol::model_tests::x2_one_fact_two_gating_callers  runner default_exploration (original) ignored False
+      bounds: facts 1 conflicting [false, false] ENV false batch false faults 1 admissions 1 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+      actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+X-3   ledger::protocol::model_tests::x3_one_conflicting_fact_with_env  runner default_exploration (original) ignored False
+      bounds: facts 2 conflicting [true, false] ENV true batch false faults 1 admissions 0 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+      actors: [Fw(0), Fw(1), Se, Wk, Adm, Env]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'admission': 'admissions = 0: step_adm returns false while w.adm == 0 (initial adm = config.admissions)'}
+X-4   ledger::protocol::model_tests::x4_one_conflicting_fact_one_acknowledgement  runner default_exploration (original) ignored False
+      bounds: facts 1 conflicting [true, false] ENV false batch false faults 1 admissions 1 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+      actors: [Fw(0), Se, Wk, Ack(0), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'malformed snapshot': "malformed snapshots false: the Owner's choice offers only confirm and decline (options = 2)"}
+X-5   ledger::protocol::model_tests::x5_one_clean_batch_of_two  runner default_exploration (original) ignored False
+      bounds: facts 2 conflicting [false, false] ENV false batch true faults 2 admissions 0 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+      actors: [Fw(0), Se, Wk, Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'admission': 'admissions = 0: step_adm returns false while w.adm == 0 (initial adm = config.admissions)'}
+F-1   ledger::protocol::model_tests::full_f1  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-2   ledger::protocol::model_tests::full_f2  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-3   ledger::protocol::model_tests::gc_symmetry_f3  runner explore_symmetric (composed) ignored True
+      bounds: facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-PT  ledger::protocol::model_tests::gc_symmetry_fpt  runner symmetric_full_exploration (composed) ignored True
+      bounds: facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-B   ledger::protocol::model_tests::gc_symmetry_fb  runner symmetric_full_exploration (composed) ignored True
+      bounds: facts 2 conflicting [true, true] ENV true batch true faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm, Env]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-G   ledger::protocol::model_tests::full_fg  runner full_exploration (original) ignored True
+      bounds: facts 1 conflicting [false, false] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict true acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-B2  ledger::protocol::model_tests::full_fb2  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Se, Wk, Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-4   ledger::protocol::model_tests::full_f4  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint true worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-W   ledger::protocol::model_tests::full_fw  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind true DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 25 HOLD; L1 L1-HOLDS; E10 HOLDS
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-8   ledger::protocol::model_tests::full_f8  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [true, false] ENV false batch false faults 2 admissions 2 gating callers 1 gating conflict false acknowledgement actors 1 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Ack(0), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'malformed snapshot': "malformed snapshots false: the Owner's choice offers only confirm and decline (options = 2)"}
+F-5   ledger::protocol::model_tests::full_f5  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Ack(0), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'malformed snapshot': "malformed snapshots false: the Owner's choice offers only confirm and decline (options = 2)"}
+F-6   ledger::protocol::model_tests::full_f6  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots true cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Ack(0), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)'}
+F-7   ledger::protocol::model_tests::full_f7  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [true, true] ENV false batch false faults 1 admissions 1 gating callers 0 gating conflict false acknowledgement actors 2 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Ack(0), Ack(1), Adm]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'append_gating': 'gating callers = 0: no Gc actor (actors(); initial gc vector empty)', 'malformed snapshot': "malformed snapshots false: the Owner's choice offers only confirm and decline (options = 2)"}
+F-D   ledger::protocol::model_tests::full_fd  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP true REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+      properties: 23 HOLD; L1 not claimed for this configuration; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+F-R   ledger::protocol::model_tests::full_fr  runner full_exploration (original) ignored True
+      bounds: facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 3 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+      actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Replay]
+      properties: 24 HOLD; L1 L1-HOLDS; E10 not applicable here (worker verbs do not unwind)
+      NOT APPLICABLE operations: {'DROP': 'DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted', 'snapshot': 'acknowledgement actors = 0: no Ack actor (actors())', 'append_acknowledgement': 'acknowledgement actors = 0: no Ack actor (actors())', 'malformed snapshot': 'acknowledgement actors = 0: no Ack actor (actors())'}
+CONFIGS: OK (20 required configurations)

@@ -1,0 +1,131 @@
+
+running 1 test
+test ledger::protocol::model_tests::full_f6 ... EXPLORATION F-6
+  outcome: PASS
+  bounds: facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots true cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+  actors: [Fw(0), Fw(1), Se, Wk, Ack(0), Adm]
+  states 9315384 (expanded 9315384), transitions 50476096 (with a fault 5547330), states with no enabled step 862
+  elapsed 59.3 s; explorer tables 1600 MiB
+  P1: HOLDS
+  P2: HOLDS
+  P4: HOLDS
+  P5: HOLDS
+  P6: HOLDS
+  P7: HOLDS
+  P8: HOLDS
+  P9: HOLDS
+  P12: HOLDS
+  P13: HOLDS
+  P15: HOLDS
+  D1: HOLDS
+  L1: HOLDS: 44928766 non-fault edges, no cycle; 862 end states, each terminal (D1)
+  E1: HOLDS
+  E2: HOLDS
+  E3: HOLDS
+  E4: HOLDS
+  E5: HOLDS
+  E6: HOLDS
+  E7: HOLDS
+  E8: HOLDS
+  E9: HOLDS
+  E10: not applicable here (worker verbs do not unwind)
+  E11: HOLDS
+  KEY: HOLDS
+  branches:
+    [NOT TAKEN] append_facts: Committed (inserted)
+    [NOT TAKEN] append_facts: Committed (already present)
+    [taken    ] append_facts: NotApplied NotWritten Entry(NotHealthy)
+    [taken    ] append_facts: NotApplied NotWritten Entry(Latched)
+    [taken    ] append_facts: NotApplied NotWritten Storage
+    [NOT TAKEN] append_facts: NotApplied NotWritten Constraint
+    [NOT TAKEN] append_facts: NotApplied Uncertain Constraint
+    [NOT TAKEN] append_facts: NotApplied Uncertain Storage
+    [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)
+    [NOT TAKEN] append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)
+    [taken    ] append_facts: NotApplied NotWritten Conflict(explained)
+    [taken    ] append_facts: unwound before any insert
+    [NOT TAKEN] append_facts: unwound after an insert was issued
+    [taken    ] expire: Armed -> Counted
+    [NOT TAKEN] append_gating: Committed (inserted)
+    [NOT TAKEN] append_gating: Refused NotWritten Entry(NotHealthy)
+    [NOT TAKEN] append_gating: Refused NotWritten Entry(CellsBusy)
+    [NOT TAKEN] append_gating: Refused NotWritten Entry(Latched)
+    [NOT TAKEN] append_gating: Refused NotWritten Storage
+    [NOT TAKEN] append_gating: Refused NotWritten Constraint
+    [NOT TAKEN] append_gating: Refused Uncertain Storage
+    [NOT TAKEN] append_gating: Refused Uncertain Constraint
+    [NOT TAKEN] append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)
+    [NOT TAKEN] append_gating: unwound after an insert (U kept, Unwound)
+    [NOT TAKEN] append_gating: unwound before any insert (U emptied)
+    [NOT TAKEN] lookup: Present
+    [NOT TAKEN] lookup: Absent
+    [NOT TAKEN] lookup: Conflict(cause)
+    [NOT TAKEN] lookup: Conflict(explained)
+    [NOT TAKEN] lookup: Refused(NotHealthy)
+    [NOT TAKEN] lookup: Refused(Latched)
+    [NOT TAKEN] lookup: Failed
+    [NOT TAKEN] lookup: unwound
+    [taken    ] explain: Explained
+    [taken    ] explain: Pending
+    [taken    ] explain: Busy
+    [NOT TAKEN] explain: Unknown
+    [taken    ] explain: Refused(Latched)
+    [taken    ] explain: unwound
+    [taken    ] snapshot: Taken
+    [taken    ] snapshot: Nothing
+    [taken    ] snapshot: NotNow(NotHealthy)
+    [taken    ] snapshot: NotNow(Latched)
+    [taken    ] snapshot: Failed
+    [taken    ] snapshot: unwound
+    [taken    ] append_acknowledgement: Committed
+    [NOT TAKEN] append_acknowledgement: Refused(Stale)
+    [taken    ] append_acknowledgement: Refused(Empty)
+    [taken    ] append_acknowledgement: Refused(Future)
+    [taken    ] append_acknowledgement: Refused(Set)
+    [taken    ] append_acknowledgement: Refused(NotNow(NotHealthy))
+    [taken    ] append_acknowledgement: Refused(NotNow(CellsBusy))
+    [taken    ] append_acknowledgement: Refused(NotNow(Latched))
+    [taken    ] append_acknowledgement: NotApplied(NotWritten)
+    [taken    ] append_acknowledgement: NotApplied(Uncertain)
+    [taken    ] append_acknowledgement: unwound after an insert (U kept)
+    [taken    ] append_acknowledgement: unwound before any insert (U emptied)
+    [taken    ] barrier: Passed
+    [taken    ] barrier: Failed
+    [NOT TAKEN] barrier: unwound
+    [taken    ] resolve: Absent
+    [NOT TAKEN] resolve: Corrected
+    [NOT TAKEN] resolve: ConflictPlaced
+    [taken    ] resolve: Acknowledged
+    [taken    ] resolve: Retained
+    [NOT TAKEN] resolve: Inconsistent
+    [NOT TAKEN] resolve: Stale
+    [taken    ] resolve: Refused(Latched)
+    [NOT TAKEN] resolve: unwound
+    [NOT TAKEN] append_cell C: Committed (inserted)
+    [NOT TAKEN] append_cell C: Committed (present)
+    [NOT TAKEN] append_cell C: NotWritten
+    [NOT TAKEN] append_cell C: Uncertain
+    [NOT TAKEN] append_cell C: Stale
+    [NOT TAKEN] append_cell C: unwound
+    [taken    ] append_cell X: Committed (inserted)
+    [taken    ] append_cell X: Committed (present)
+    [taken    ] append_cell X: NotWritten
+    [taken    ] append_cell X: Uncertain
+    [NOT TAKEN] append_cell X: Stale
+    [taken    ] append_cell X: Refused(Latched)
+    [NOT TAKEN] append_cell X: unwound
+    [taken    ] empty: Done
+    [NOT TAKEN] empty: Stale
+    [taken    ] admission: admitted
+    [taken    ] admission: refused
+    [NOT TAKEN] DROP: a Counted ticket dropped
+    [taken    ] malformed snapshot: future
+    [taken    ] malformed snapshot: set
+    [taken    ] malformed snapshot: empty
+    [taken    ] append_cell X: Refused(NotHealthy) (not in the listed set)
+  state key fields: word (low 16 bits, live, unapplied; recomposed exactly); core: phase, session, latch cause, U/C/X occupancy numbers and occupants (records, exits, sets, nonces, causes, stage), the three occupancy counters, every refusal-table entry with its cause, the qualified frontier, worker_taken, and the fixed limits (asserted); the simulated ledger's rows beyond the initial ones; every ticket's state and holder (FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number (the worker's agenda step and its last token for REPLAY); every snapshot's values and nonce; each actor's position and any result it holds but has not applied; the test's table (classes, debt counter, H, A); every remaining budget (faults, admissions, attempts, replays); the A2 kept bits; ENV fired; history facts (conflicted, conflicted for E6, unrecorded results, gating insert issued, gating told Committed, Counted tickets dropped)
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 59.42s
+

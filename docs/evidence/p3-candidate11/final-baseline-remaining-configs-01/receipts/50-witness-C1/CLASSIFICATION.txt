@@ -1,0 +1,4 @@
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+raw outcome (as printed): harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+checks: 15 of 15 hold

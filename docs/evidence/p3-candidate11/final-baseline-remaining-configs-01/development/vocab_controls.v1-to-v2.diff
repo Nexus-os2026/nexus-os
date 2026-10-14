@@ -1,0 +1,42 @@
+96,97c96,100
+<         ok = all((rc == 0) if positive else (rc != 0) for _, rc, _ in outcomes if _ in expect) and \
+<              all(t in [o[0] for o in outcomes] for t in expect)
+---
+>         # v1 defect: `for _, rc, _ in outcomes if _ in expect` rebound `_` to the key lines, so nothing was ever
+>         # selected and every control passed vacuously. Each expected tool is now looked up by name.
+>         by_tool = {tool: rc for tool, rc, _ in outcomes}
+>         ok = all(t in by_tool for t in expect) and \
+>             all((by_tool[t] == 0) if positive else (by_tool[t] != 0) for t in expect) and len(expect) > 0
+122a126,132
+>     def edit(text, old, new):
+>         # v1 defect: a replacement whose snippet does not occur left the input unmutated. Exactly one occurrence.
+>         n = text.count(old)
+>         if n != 1:
+>             raise SystemExit(f"a normalizer control's snippet occurs {n} times: {old!r}")
+>         return text.replace(old, new)
+> 
+123a134,135
+>         if not positive and text == f2:
+>             raise SystemExit(f"{cid}: the input is not mutated")
+196c208
+<               f2.replace(marker, "    [taken    ] append_cell C: Refused(Bogus) (not in the listed set)\n" + marker),
+---
+>               edit(f2, marker, "    [taken    ] append_cell C: Refused(Bogus) (not in the listed set)\n" + marker),
+200c212
+<               f2.replace("    [NOT TAKEN] lookup: Conflict(cause)\n", "    [NOT TAKEN] lookup: Conflict(Cause)\n"),
+---
+>               edit(f2, "    [NOT TAKEN] lookup: Conflict(cause)\n", "    [NOT TAKEN] lookup: Conflict(Cause)\n"),
+219,220c231,232
+<               f2.replace("    [NOT TAKEN] DROP: a Counted ticket dropped\n",
+<                          "    [taken    ] DROP: a Counted ticket dropped\n"),
+---
+>               edit(f2, "    [NOT TAKEN] DROP: a Counted ticket dropped\n",
+>                    "    [taken    ] DROP: a Counted ticket dropped\n"),
+225c237
+<     norm_case("NC8", "extra labels out of the printed (sorted) order", f2.replace(e1 + e2, e2 + e1),
+---
+>     norm_case("NC8", "extra labels out of the printed (sorted) order", edit(f2, e1 + e2, e2 + e1),
+229c241
+<               f2.replace("    [NOT TAKEN] explain: Busy\n", ""), ["F-2 report: 'explain: Busy' line removed"])
+---
+>               edit(f2, "    [NOT TAKEN] explain: Pending\n", ""), ["F-2 report: the 'explain: Pending' line removed"])

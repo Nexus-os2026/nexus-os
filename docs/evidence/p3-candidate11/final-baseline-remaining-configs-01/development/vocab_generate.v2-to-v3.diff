@@ -1,0 +1,10 @@
+32c32
+< GENERATOR_VERSION = "vocab_generate v2"
+---
+> GENERATOR_VERSION = "vocab_generate v3"
+555a556,560
+> 
+>     # The inventory's size against the source: every `obs.branch(` call of model_tests.rs (receiver named obs).
+>     calls = len(re.findall(r"\bobs\s*\.\s*branch\s*\(", model))
+>     if calls != len(SITES):
+>         problems.append(f"model_tests.rs has {calls} obs.branch( calls; the inventory has {len(SITES)} sites")

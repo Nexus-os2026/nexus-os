@@ -1,0 +1,121 @@
+SOURCE-EMITTABLE LABELS MISSING FROM THE STATIC BRANCHES CONSTANT (model_tests.rs at d5964ee5326c2733177307db6f507328023d361a)
+vocabulary sha256 db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932; 193 rows; static BRANCHES 90 labels, every one a vocabulary row (yes); rows missing from BRANCHES: 103
+The explorer prints a taken label of this list as '[taken    ] <label> (not in the listed set)' and does not print it when not taken.
+
+append_facts (23):
+  B003  append_facts: NotApplied NotWritten Entry(NotOpen)
+  B006  append_facts: NotApplied NotWritten Entry(CellsBusy)
+  B007  append_facts: NotApplied NotWritten Entry(Malformed)
+  B008  append_facts: NotApplied NotWritten Entry(Expired)
+  B009  append_facts: NotApplied NotWritten Conflict(new or retained cause IdentityContent)
+  B013  append_facts: NotApplied NotWritten SessionClosed
+  B014  append_facts: NotApplied NotWritten Corrected
+  B015  append_facts: NotApplied NotWritten TableFull
+  B018  append_facts: NotApplied Uncertain Entry(NotOpen)
+  B019  append_facts: NotApplied Uncertain Entry(Latched)
+  B020  append_facts: NotApplied Uncertain Entry(NotHealthy)
+  B021  append_facts: NotApplied Uncertain Entry(CellsBusy)
+  B022  append_facts: NotApplied Uncertain Entry(Malformed)
+  B023  append_facts: NotApplied Uncertain Entry(Expired)
+  B024  append_facts: NotApplied Uncertain Conflict(new or retained cause IdentityContent)
+  B025  append_facts: NotApplied Uncertain Conflict(new or retained cause DuplicateRole)
+  B026  append_facts: NotApplied Uncertain Conflict(new or retained cause MissingPrepared)
+  B027  append_facts: NotApplied Uncertain Conflict(explained)
+  B028  append_facts: NotApplied Uncertain SessionClosed
+  B029  append_facts: NotApplied Uncertain Corrected
+  B030  append_facts: NotApplied Uncertain TableFull
+  B033  append_facts: Rejected(OtherLedger)
+  B034  append_facts: Rejected(NotArmed)
+append_gating (23):
+  B039  append_gating: Committed (already present)
+  B040  append_gating: Refused NotWritten Entry(NotOpen)
+  B044  append_gating: Refused NotWritten Entry(Malformed)
+  B045  append_gating: Refused NotWritten Entry(Expired)
+  B047  append_gating: Refused NotWritten Conflict(new or retained cause DuplicateRole)
+  B048  append_gating: Refused NotWritten Conflict(new or retained cause MissingPrepared)
+  B049  append_gating: Refused NotWritten Conflict(explained)
+  B050  append_gating: Refused NotWritten SessionClosed
+  B051  append_gating: Refused NotWritten Corrected
+  B052  append_gating: Refused NotWritten TableFull
+  B055  append_gating: Refused Uncertain Entry(NotOpen)
+  B056  append_gating: Refused Uncertain Entry(Latched)
+  B057  append_gating: Refused Uncertain Entry(NotHealthy)
+  B058  append_gating: Refused Uncertain Entry(CellsBusy)
+  B059  append_gating: Refused Uncertain Entry(Malformed)
+  B060  append_gating: Refused Uncertain Entry(Expired)
+  B061  append_gating: Refused Uncertain Conflict(new or retained cause IdentityContent)
+  B062  append_gating: Refused Uncertain Conflict(new or retained cause DuplicateRole)
+  B063  append_gating: Refused Uncertain Conflict(new or retained cause MissingPrepared)
+  B064  append_gating: Refused Uncertain Conflict(explained)
+  B065  append_gating: Refused Uncertain SessionClosed
+  B066  append_gating: Refused Uncertain Corrected
+  B067  append_gating: Refused Uncertain TableFull
+lookup (4):
+  B076  lookup: Refused(NotOpen)
+  B079  lookup: Refused(CellsBusy)
+  B080  lookup: Refused(Malformed)
+  B081  lookup: Refused(Expired)
+explain (5):
+  B088  explain: Refused(NotOpen)
+  B090  explain: Refused(NotHealthy)
+  B091  explain: Refused(CellsBusy)
+  B092  explain: Refused(Malformed)
+  B093  explain: Refused(Expired)
+snapshot (4):
+  B097  snapshot: NotNow(NotOpen)
+  B100  snapshot: NotNow(CellsBusy)
+  B101  snapshot: NotNow(Malformed)
+  B102  snapshot: NotNow(Expired)
+append_acknowledgement (4):
+  B106  append_acknowledgement: Refused(OtherStore)
+  B107  append_acknowledgement: Refused(NotNow(NotOpen))
+  B111  append_acknowledgement: Refused(NotNow(Malformed))
+  B112  append_acknowledgement: Refused(NotNow(Expired))
+barrier (2):
+  B124  barrier: NotNeeded
+  B125  barrier: OtherLedger
+resolve (6):
+  B133  resolve: Refused(NotOpen)
+  B135  resolve: Refused(NotHealthy)
+  B136  resolve: Refused(CellsBusy)
+  B137  resolve: Refused(Malformed)
+  B138  resolve: Refused(Expired)
+  B139  resolve: OtherLedger
+append_cell C (8):
+  B142  append_cell C: Committed (already marked)
+  B147  append_cell C: Refused(NotOpen)
+  B148  append_cell C: Refused(Latched)
+  B149  append_cell C: Refused(NotHealthy)
+  B150  append_cell C: Refused(CellsBusy)
+  B151  append_cell C: Refused(Malformed)
+  B152  append_cell C: Refused(Expired)
+  B153  append_cell C: OtherLedger
+append_cell X (7):
+  B156  append_cell X: Committed (already marked)
+  B161  append_cell X: Refused(NotOpen)
+  B163  append_cell X: Refused(NotHealthy)
+  B164  append_cell X: Refused(CellsBusy)
+  B165  append_cell X: Refused(Malformed)
+  B166  append_cell X: Refused(Expired)
+  B167  append_cell X: OtherLedger
+append_cell U (14):
+  B169  append_cell U: Committed (inserted)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B170  append_cell U: Committed (already marked)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B171  append_cell U: Committed (present)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B172  append_cell U: NotWritten   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B173  append_cell U: Uncertain   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B174  append_cell U: Stale   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B175  append_cell U: Refused(NotOpen)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B176  append_cell U: Refused(Latched)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B177  append_cell U: Refused(NotHealthy)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B178  append_cell U: Refused(CellsBusy)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B179  append_cell U: Refused(Malformed)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B180  append_cell U: Refused(Expired)   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B181  append_cell U: OtherLedger   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+  B182  append_cell U: unwound   [type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it]
+empty (3):
+  B183  empty: unwound
+  B185  empty: NotCommitted
+  B187  empty: OtherLedger
+
+TOTAL: 103 source-emittable labels are missing from the static BRANCHES constant.

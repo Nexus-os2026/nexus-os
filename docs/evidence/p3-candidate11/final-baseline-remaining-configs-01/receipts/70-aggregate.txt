@@ -1,0 +1,3 @@
+AGGREGATE (mission section 11) 2026-10-14T15:00:50+01:00 — frozen tools/aggregate.py
+AGGREGATE NOT PRODUCED: F-R is not classified PASS (mission section 11)
+exit 3

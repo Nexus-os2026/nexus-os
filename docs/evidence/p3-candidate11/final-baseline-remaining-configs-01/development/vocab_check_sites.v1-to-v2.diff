@@ -1,0 +1,54 @@
+37c37
+< CHECKER_VERSION = "vocab_check_sites v1"
+---
+> CHECKER_VERSION = "vocab_check_sites v2"
+177a178,184
+> def struct_blocks(masked):
+>     out = []
+>     for m in re.finditer(r"\bstruct\s+\w+\s*(<[^>{]*>)?\s*\{", masked):
+>         out.append((m.end() - 1, close_of(masked, m.end() - 1)))
+>     return out
+> 
+> 
+249a257,269
+>         # Every `branch(` token must be a definition, a method call with a resolved receiver, or a path call.
+>         for m in re.finditer(r"\bbranch\s*\(", mt):
+>             pre = mt[max(0, m.start() - 200):m.start()]
+>             if re.search(r"\bfn\s+$", pre):
+>                 continue
+>             if re.search(r"\.\s*$", pre):
+>                 continue  # a method call: classified below
+>             path = re.search(r"\b(\w+)\s*::\s*$", pre)
+>             ln = line_of(mt, m.start())
+>             rec = dict(file=p, line=ln, function=(enclosing_fn(fns, m.start()) or ["-"])[0], receiver=None,
+>                        type=path.group(1) if path else None, why="path call" if path else "unclassified branch(",
+>                        call=re.sub(r"\s+", " ", texts[p][m.start():texts[p].index(";", m.start()) + 1]).strip())
+>             (obs_sites if rec["type"] == "Obs" else other_sites if rec["type"] == "Oracle" else unresolved).append(rec)
+286c306
+<     writes, reads, inits, decls, problems_a3 = [], [], [], [], []
+---
+>     writes, reads, inits, decls, statics = [], [], [], [], []
+302,306c322,327
+<                 # A field declaration (`branches: Type,` in a struct) or an initialiser (`branches: expr,`).
+<                 init = re.match(r"\s*:\s*([^,\n}]+)", after).group(1).strip()
+<                 if f is None or re.match(r"^(Vec<String>|&'static \[&'static str\])$", texts[p][m.end():m.end() + 80]
+<                                           .split(":", 1)[1].split(",")[0].strip()) and f is None:
+<                     decls.append((where, texts[p][m.end():m.end() + 80].split(":", 1)[1].split(",")[0].strip()))
+---
+>                 # A field declaration (`branches: Type,` inside a struct declaration) or an initialiser.
+>                 in_struct = any(o <= m.start() <= c for o, c in struct_blocks(mt))
+>                 if in_struct:
+>                     decls.append((where, re.match(r"\s*:\s*([^,\n]+),", texts[p][m.end():]).group(1).strip()))
+>                 elif f is None and re.match(r"\s*:\s*&\s*\[", after):
+>                     statics.append(where)  # a const witness expectation: a static list of literal labels
+307a329
+>                     init = re.match(r"\s*:\s*([^,\n}]+)", texts[p][m.end():]).group(1).strip()
+321a344,345
+>     lines.append(f"     {len(statics)} const witness expectations (static label lists), lines "
+>                  f"{[w.split(' fn ')[0] for w in statics]}; their labels are checked next")
+414,415c438,439
+<     for m in re.finditer(r'"((?:[^"\\]|\\.)*)"', model):
+<         s = m.group(1)
+---
+>     for m in re.finditer(r'"(x*)"', mm):  # the masked text keeps every literal's quotes at their positions
+>         s = model[m.start() + 1:m.end() - 1]

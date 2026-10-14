@@ -1,0 +1,5706 @@
+{
+ "generator": "vocab_generate v4",
+ "commit": "d5964ee5326c2733177307db6f507328023d361a",
+ "source_blobs": {
+  "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8",
+  "crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66"
+ },
+ "accounting_unit": "(operation identity, exact emitted label)",
+ "rows": [
+  {
+   "id": "B001",
+   "operation": "append_facts",
+   "label": "append_facts: Committed (inserted)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::Committed) if issued => \"Committed (inserted)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 0,
+   "note": ""
+  },
+  {
+   "id": "B002",
+   "operation": "append_facts",
+   "label": "append_facts: Committed (already present)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::Committed) => \"Committed (already present)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 1,
+   "note": ""
+  },
+  {
+   "id": "B003",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotOpen · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B004",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Latched · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 3,
+   "note": ""
+  },
+  {
+   "id": "B005",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotHealthy · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 2,
+   "note": ""
+  },
+  {
+   "id": "B006",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::CellsBusy · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B007",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Malformed · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B008",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Expired · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B009",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause IdentityContent)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::IdentityContent arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B010",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::DuplicateRole arm: literal · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 8,
+   "note": ""
+  },
+  {
+   "id": "B011",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::MissingPrepared arm: literal · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 9,
+   "note": ""
+  },
+  {
+   "id": "B012",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(explained)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 10,
+   "note": ""
+  },
+  {
+   "id": "B013",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten SessionClosed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::SessionClosed arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B014",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Corrected",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Corrected arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B015",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten TableFull",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::TableFull arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B016",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Constraint",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Constraint arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 5,
+   "note": ""
+  },
+  {
+   "id": "B017",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Storage",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Storage arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 4,
+   "note": ""
+  },
+  {
+   "id": "B018",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotOpen · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B019",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Latched · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B020",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotHealthy · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B021",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::CellsBusy · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B022",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Malformed · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B023",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Expired · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B024",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause IdentityContent)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::IdentityContent arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B025",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause DuplicateRole)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::DuplicateRole arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B026",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause MissingPrepared)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::MissingPrepared arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B027",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(explained)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B028",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain SessionClosed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::SessionClosed arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B029",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Corrected",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Corrected arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B030",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain TableFull",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::TableFull arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B031",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Constraint",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Constraint arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 6,
+   "note": ""
+  },
+  {
+   "id": "B032",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Storage",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::NotApplied { counted, reason }) => { format!( \"NotApplied {:?} {}\", counted.persistence, reason_label(reason) ) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Storage arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 7,
+   "note": ""
+  },
+  {
+   "id": "B033",
+   "operation": "append_facts",
+   "label": "append_facts: Rejected(OtherLedger)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::Rejected(fault)) => format!(\"Rejected({fault:?})\"),"
+   ],
+   "derivation": [
+    "literal · Debug TicketFault::OtherLedger · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B034",
+   "operation": "append_facts",
+   "label": "append_facts: Rejected(NotArmed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(FactOutcome::Rejected(fault)) => format!(\"Rejected({fault:?})\"),"
+   ],
+   "derivation": [
+    "literal · Debug TicketFault::NotArmed · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B035",
+   "operation": "append_facts",
+   "label": "append_facts: unwound after an insert was issued",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None if issued => \"unwound after an insert was issued\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 12,
+   "note": ""
+  },
+  {
+   "id": "B036",
+   "operation": "append_facts",
+   "label": "append_facts: unwound before any insert",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "fact_append"
+   ],
+   "sites": [
+    {
+     "site": "S01",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "fact_append",
+     "line": 2489,
+     "call": "obs.branch(format!(\"append_facts: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound before any insert\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 11,
+   "note": ""
+  },
+  {
+   "id": "B037",
+   "operation": "expire",
+   "label": "expire: Armed -> Counted",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_fw"
+   ],
+   "sites": [
+    {
+     "site": "S02",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_fw",
+     "line": 2548,
+     "call": "obs.branch(\"expire: Armed -> Counted\".into());"
+    }
+   ],
+   "source_expressions": [
+    "obs.branch(\"expire: Armed -> Counted\".into());"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 13,
+   "note": ""
+  },
+  {
+   "id": "B038",
+   "operation": "append_gating",
+   "label": "append_gating: Committed (inserted)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Committed(_)) if issued => \"Committed (inserted)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 14,
+   "note": ""
+  },
+  {
+   "id": "B039",
+   "operation": "append_gating",
+   "label": "append_gating: Committed (already present)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Committed(_)) => \"Committed (already present)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B040",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotOpen · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B041",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Latched · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 17,
+   "note": ""
+  },
+  {
+   "id": "B042",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotHealthy · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 15,
+   "note": ""
+  },
+  {
+   "id": "B043",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::CellsBusy · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 16,
+   "note": ""
+  },
+  {
+   "id": "B044",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Malformed · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B045",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Entry arm: literal · Debug Entry::Expired · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B046",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::IdentityContent arm: literal · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 22,
+   "note": ""
+  },
+  {
+   "id": "B047",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause DuplicateRole)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::DuplicateRole arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B048",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause MissingPrepared)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::MissingPrepared arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B049",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(explained)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Conflict arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B050",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten SessionClosed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::SessionClosed arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B051",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Corrected",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Corrected arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B052",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten TableFull",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::TableFull arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B053",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Constraint",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Constraint arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 19,
+   "note": ""
+  },
+  {
+   "id": "B054",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Storage",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::NotWritten · literal · reason_label Reason::Storage arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 18,
+   "note": ""
+  },
+  {
+   "id": "B055",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotOpen · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B056",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Latched · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B057",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::NotHealthy · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B058",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::CellsBusy · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B059",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Malformed · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B060",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Entry arm: literal · Debug Entry::Expired · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B061",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause IdentityContent)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::IdentityContent arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B062",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause DuplicateRole)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::DuplicateRole arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B063",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause MissingPrepared)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal · cause_label CauseKind::MissingPrepared arm: literal · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B064",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(explained)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Conflict arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B065",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain SessionClosed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::SessionClosed arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B066",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Corrected",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Corrected arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B067",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain TableFull",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::TableFull arm: literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B068",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Constraint",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Constraint arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 21,
+   "note": ""
+  },
+  {
+   "id": "B069",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Storage",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(GatingOutcome::Refused { persistence, reason, }) => { format!(\"Refused {persistence:?} {}\", reason_label(reason)) }"
+   ],
+   "derivation": [
+    "literal · Debug Persistence::Uncertain · literal · reason_label Reason::Storage arm: literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 20,
+   "note": ""
+  },
+  {
+   "id": "B070",
+   "operation": "append_gating",
+   "label": "append_gating: unwound after an insert (U kept, Unwound)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None if u_holds_it => \"unwound after an insert (U kept, Unwound)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 23,
+   "note": ""
+  },
+  {
+   "id": "B071",
+   "operation": "append_gating",
+   "label": "append_gating: unwound before any insert (U emptied)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_gc"
+   ],
+   "sites": [
+    {
+     "site": "S06",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_gc",
+     "line": 3055,
+     "call": "obs.branch(format!(\"append_gating: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound before any insert (U emptied)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 24,
+   "note": ""
+  },
+  {
+   "id": "B072",
+   "operation": "lookup",
+   "label": "lookup: Conflict(cause)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(Lookup::Conflict(Known::Cause(_))) => \"Conflict(cause)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 27,
+   "note": ""
+  },
+  {
+   "id": "B073",
+   "operation": "lookup",
+   "label": "lookup: Conflict(explained)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(Lookup::Conflict(Known::Explained(_))) => \"Conflict(explained)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 28,
+   "note": ""
+  },
+  {
+   "id": "B074",
+   "operation": "lookup",
+   "label": "lookup: Present",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(Lookup::Present(_)) => \"Present\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 25,
+   "note": ""
+  },
+  {
+   "id": "B075",
+   "operation": "lookup",
+   "label": "lookup: Absent",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Absent"
+   ],
+   "in_static_branches": true,
+   "static_index": 26,
+   "note": ""
+  },
+  {
+   "id": "B076",
+   "operation": "lookup",
+   "label": "lookup: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B077",
+   "operation": "lookup",
+   "label": "lookup: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": true,
+   "static_index": 30,
+   "note": ""
+  },
+  {
+   "id": "B078",
+   "operation": "lookup",
+   "label": "lookup: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": true,
+   "static_index": 29,
+   "note": ""
+  },
+  {
+   "id": "B079",
+   "operation": "lookup",
+   "label": "lookup: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B080",
+   "operation": "lookup",
+   "label": "lookup: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B081",
+   "operation": "lookup",
+   "label": "lookup: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B082",
+   "operation": "lookup",
+   "label": "lookup: Failed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Lookup::Failed"
+   ],
+   "in_static_branches": true,
+   "static_index": 31,
+   "note": ""
+  },
+  {
+   "id": "B083",
+   "operation": "lookup",
+   "label": "lookup: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 32,
+   "note": ""
+  },
+  {
+   "id": "B084",
+   "operation": "explain",
+   "label": "explain: Explained",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(Explain::Explained(_)) => \"Explained\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 33,
+   "note": ""
+  },
+  {
+   "id": "B085",
+   "operation": "explain",
+   "label": "explain: Pending",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Pending"
+   ],
+   "in_static_branches": true,
+   "static_index": 34,
+   "note": ""
+  },
+  {
+   "id": "B086",
+   "operation": "explain",
+   "label": "explain: Busy",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Busy"
+   ],
+   "in_static_branches": true,
+   "static_index": 35,
+   "note": ""
+  },
+  {
+   "id": "B087",
+   "operation": "explain",
+   "label": "explain: Unknown",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Unknown"
+   ],
+   "in_static_branches": true,
+   "static_index": 36,
+   "note": ""
+  },
+  {
+   "id": "B088",
+   "operation": "explain",
+   "label": "explain: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B089",
+   "operation": "explain",
+   "label": "explain: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": true,
+   "static_index": 37,
+   "note": ""
+  },
+  {
+   "id": "B090",
+   "operation": "explain",
+   "label": "explain: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B091",
+   "operation": "explain",
+   "label": "explain: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B092",
+   "operation": "explain",
+   "label": "explain: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B093",
+   "operation": "explain",
+   "label": "explain: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Explain::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B094",
+   "operation": "explain",
+   "label": "explain: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "settlement_read"
+   ],
+   "sites": [
+    {
+     "site": "S04",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "settlement_read",
+     "line": 2688,
+     "call": "obs.branch(format!(\"{name}: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 38,
+   "note": ""
+  },
+  {
+   "id": "B095",
+   "operation": "snapshot",
+   "label": "snapshot: Taken",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(SnapshotOutcome::Taken(_)) => \"Taken\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 39,
+   "note": ""
+  },
+  {
+   "id": "B096",
+   "operation": "snapshot",
+   "label": "snapshot: Nothing",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::Nothing"
+   ],
+   "in_static_branches": true,
+   "static_index": 40,
+   "note": ""
+  },
+  {
+   "id": "B097",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B098",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::Latched)"
+   ],
+   "in_static_branches": true,
+   "static_index": 42,
+   "note": ""
+  },
+  {
+   "id": "B099",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::NotHealthy)"
+   ],
+   "in_static_branches": true,
+   "static_index": 41,
+   "note": ""
+  },
+  {
+   "id": "B100",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B101",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B102",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::NotNow(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B103",
+   "operation": "snapshot",
+   "label": "snapshot: Failed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug SnapshotOutcome::Failed"
+   ],
+   "in_static_branches": true,
+   "static_index": 43,
+   "note": ""
+  },
+  {
+   "id": "B104",
+   "operation": "snapshot",
+   "label": "snapshot: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S07",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3153,
+     "call": "obs.branch(format!(\"snapshot: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 44,
+   "note": ""
+  },
+  {
+   "id": "B105",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Committed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(AckOutcome::Committed(_)) => \"Committed\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 45,
+   "note": ""
+  },
+  {
+   "id": "B106",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(OtherStore)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::OtherStore)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B107",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(NotOpen))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::NotOpen))"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B108",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Latched))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::Latched))"
+   ],
+   "in_static_branches": true,
+   "static_index": 52,
+   "note": ""
+  },
+  {
+   "id": "B109",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(NotHealthy))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::NotHealthy))"
+   ],
+   "in_static_branches": true,
+   "static_index": 50,
+   "note": ""
+  },
+  {
+   "id": "B110",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(CellsBusy))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::CellsBusy))"
+   ],
+   "in_static_branches": true,
+   "static_index": 51,
+   "note": ""
+  },
+  {
+   "id": "B111",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Malformed))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::Malformed))"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B112",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Expired))",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::NotNow(Entry::Expired))"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B113",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Stale)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::Stale)"
+   ],
+   "in_static_branches": true,
+   "static_index": 46,
+   "note": ""
+  },
+  {
+   "id": "B114",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Empty)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::Empty)"
+   ],
+   "in_static_branches": true,
+   "static_index": 47,
+   "note": ""
+  },
+  {
+   "id": "B115",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Future)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::Future)"
+   ],
+   "in_static_branches": true,
+   "static_index": 48,
+   "note": ""
+  },
+  {
+   "id": "B116",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Set)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::Refused(AckRefusal::Set)"
+   ],
+   "in_static_branches": true,
+   "static_index": 49,
+   "note": ""
+  },
+  {
+   "id": "B117",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: NotApplied(NotWritten)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::NotApplied(Persistence::NotWritten)"
+   ],
+   "in_static_branches": true,
+   "static_index": 53,
+   "note": ""
+  },
+  {
+   "id": "B118",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: NotApplied(Uncertain)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug AckOutcome::NotApplied(Persistence::Uncertain)"
+   ],
+   "in_static_branches": true,
+   "static_index": 54,
+   "note": ""
+  },
+  {
+   "id": "B119",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: unwound after an insert (U kept)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None if u_kept => \"unwound after an insert (U kept)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 55,
+   "note": ""
+  },
+  {
+   "id": "B120",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: unwound before any insert (U emptied)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S09",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3216,
+     "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound before any insert (U emptied)\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 56,
+   "note": ""
+  },
+  {
+   "id": "B121",
+   "operation": "barrier",
+   "label": "barrier: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"barrier: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 59,
+   "note": ""
+  },
+  {
+   "id": "B122",
+   "operation": "barrier",
+   "label": "barrier: Passed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"barrier: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug BarrierOutcome::Passed"
+   ],
+   "in_static_branches": true,
+   "static_index": 57,
+   "note": ""
+  },
+  {
+   "id": "B123",
+   "operation": "barrier",
+   "label": "barrier: Failed",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"barrier: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug BarrierOutcome::Failed"
+   ],
+   "in_static_branches": true,
+   "static_index": 58,
+   "note": ""
+  },
+  {
+   "id": "B124",
+   "operation": "barrier",
+   "label": "barrier: NotNeeded",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"barrier: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug BarrierOutcome::NotNeeded"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B125",
+   "operation": "barrier",
+   "label": "barrier: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"barrier: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug BarrierOutcome::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B126",
+   "operation": "resolve",
+   "label": "resolve: Corrected",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(Resolve::Corrected(_)) => \"Corrected\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 61,
+   "note": ""
+  },
+  {
+   "id": "B127",
+   "operation": "resolve",
+   "label": "resolve: ConflictPlaced",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(Resolve::ConflictPlaced(_)) => \"ConflictPlaced\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 62,
+   "note": ""
+  },
+  {
+   "id": "B128",
+   "operation": "resolve",
+   "label": "resolve: Acknowledged",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(Resolve::Acknowledged(_)) => \"Acknowledged\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 63,
+   "note": ""
+  },
+  {
+   "id": "B129",
+   "operation": "resolve",
+   "label": "resolve: Absent",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Absent"
+   ],
+   "in_static_branches": true,
+   "static_index": 60,
+   "note": ""
+  },
+  {
+   "id": "B130",
+   "operation": "resolve",
+   "label": "resolve: Retained",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Retained"
+   ],
+   "in_static_branches": true,
+   "static_index": 64,
+   "note": ""
+  },
+  {
+   "id": "B131",
+   "operation": "resolve",
+   "label": "resolve: Inconsistent",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Inconsistent"
+   ],
+   "in_static_branches": true,
+   "static_index": 65,
+   "note": ""
+  },
+  {
+   "id": "B132",
+   "operation": "resolve",
+   "label": "resolve: Stale",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Stale"
+   ],
+   "in_static_branches": true,
+   "static_index": 66,
+   "note": ""
+  },
+  {
+   "id": "B133",
+   "operation": "resolve",
+   "label": "resolve: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B134",
+   "operation": "resolve",
+   "label": "resolve: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": true,
+   "static_index": 67,
+   "note": ""
+  },
+  {
+   "id": "B135",
+   "operation": "resolve",
+   "label": "resolve: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B136",
+   "operation": "resolve",
+   "label": "resolve: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B137",
+   "operation": "resolve",
+   "label": "resolve: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B138",
+   "operation": "resolve",
+   "label": "resolve: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B139",
+   "operation": "resolve",
+   "label": "resolve: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Resolve::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B140",
+   "operation": "resolve",
+   "label": "resolve: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 68,
+   "note": ""
+  },
+  {
+   "id": "B141",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (inserted)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if inserted => \"Committed (inserted)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::C · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 69,
+   "note": ""
+  },
+  {
+   "id": "B142",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (already marked)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if log.is_empty() => { \"Committed (already marked)\".to_string() }"
+   ],
+   "derivation": [
+    "Debug Cell::C · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B143",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (present)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) => \"Committed (present)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::C · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 70,
+   "note": ""
+  },
+  {
+   "id": "B144",
+   "operation": "append_cell C",
+   "label": "append_cell C: NotWritten",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::NotWritten"
+   ],
+   "in_static_branches": true,
+   "static_index": 71,
+   "note": ""
+  },
+  {
+   "id": "B145",
+   "operation": "append_cell C",
+   "label": "append_cell C: Uncertain",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Uncertain"
+   ],
+   "in_static_branches": true,
+   "static_index": 72,
+   "note": ""
+  },
+  {
+   "id": "B146",
+   "operation": "append_cell C",
+   "label": "append_cell C: Stale",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Stale"
+   ],
+   "in_static_branches": true,
+   "static_index": 73,
+   "note": ""
+  },
+  {
+   "id": "B147",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B148",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B149",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B150",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B151",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B152",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B153",
+   "operation": "append_cell C",
+   "label": "append_cell C: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::C · Debug CellAppend::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B154",
+   "operation": "append_cell C",
+   "label": "append_cell C: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::C · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 74,
+   "note": ""
+  },
+  {
+   "id": "B155",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (inserted)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if inserted => \"Committed (inserted)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::X · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 75,
+   "note": ""
+  },
+  {
+   "id": "B156",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (already marked)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if log.is_empty() => { \"Committed (already marked)\".to_string() }"
+   ],
+   "derivation": [
+    "Debug Cell::X · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B157",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (present)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) => \"Committed (present)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::X · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 76,
+   "note": ""
+  },
+  {
+   "id": "B158",
+   "operation": "append_cell X",
+   "label": "append_cell X: NotWritten",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::NotWritten"
+   ],
+   "in_static_branches": true,
+   "static_index": 77,
+   "note": ""
+  },
+  {
+   "id": "B159",
+   "operation": "append_cell X",
+   "label": "append_cell X: Uncertain",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Uncertain"
+   ],
+   "in_static_branches": true,
+   "static_index": 78,
+   "note": ""
+  },
+  {
+   "id": "B160",
+   "operation": "append_cell X",
+   "label": "append_cell X: Stale",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Stale"
+   ],
+   "in_static_branches": true,
+   "static_index": 79,
+   "note": ""
+  },
+  {
+   "id": "B161",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B162",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": true,
+   "static_index": 80,
+   "note": ""
+  },
+  {
+   "id": "B163",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B164",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B165",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B166",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B167",
+   "operation": "append_cell X",
+   "label": "append_cell X: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::X · Debug CellAppend::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B168",
+   "operation": "append_cell X",
+   "label": "append_cell X: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::X · literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 81,
+   "note": ""
+  },
+  {
+   "id": "B169",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (inserted)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if inserted => \"Committed (inserted)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::U · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B170",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (already marked)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) if log.is_empty() => { \"Committed (already marked)\".to_string() }"
+   ],
+   "derivation": [
+    "Debug Cell::U · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B171",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (present)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(CellAppend::Committed(_)) => \"Committed (present)\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::U · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B172",
+   "operation": "append_cell U",
+   "label": "append_cell U: NotWritten",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::NotWritten"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B173",
+   "operation": "append_cell U",
+   "label": "append_cell U: Uncertain",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Uncertain"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B174",
+   "operation": "append_cell U",
+   "label": "append_cell U: Stale",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Stale"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B175",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(NotOpen)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::NotOpen)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B176",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Latched)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::Latched)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B177",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(NotHealthy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::NotHealthy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B178",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(CellsBusy)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::CellsBusy)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B179",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Malformed)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::Malformed)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B180",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Expired)",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::Refused(Entry::Expired)"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B181",
+   "operation": "append_cell U",
+   "label": "append_cell U: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "Some(other) => format!(\"{other:?}\"),"
+   ],
+   "derivation": [
+    "Debug Cell::U · Debug CellAppend::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B182",
+   "operation": "append_cell U",
+   "label": "append_cell U: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "None => \"unwound\".to_string(),"
+   ],
+   "derivation": [
+    "Debug Cell::U · literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": "type-domain row: the interpolated `{cell:?}` ranges over Cell's declared variants; no reachability argument is used to remove it"
+  },
+  {
+   "id": "B183",
+   "operation": "empty",
+   "label": "empty: unwound",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"empty: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B184",
+   "operation": "empty",
+   "label": "empty: Done",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"empty: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug Emptying::Done"
+   ],
+   "in_static_branches": true,
+   "static_index": 82,
+   "note": ""
+  },
+  {
+   "id": "B185",
+   "operation": "empty",
+   "label": "empty: NotCommitted",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"empty: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug Emptying::NotCommitted"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B186",
+   "operation": "empty",
+   "label": "empty: Stale",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"empty: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug Emptying::Stale"
+   ],
+   "in_static_branches": true,
+   "static_index": 83,
+   "note": ""
+  },
+  {
+   "id": "B187",
+   "operation": "empty",
+   "label": "empty: OtherLedger",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "worker_op"
+   ],
+   "sites": [
+    {
+     "site": "S05",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "worker_op",
+     "line": 2939,
+     "call": "obs.branch(label.clone());"
+    }
+   ],
+   "source_expressions": [
+    "format!( \"empty: {}\", outcome.map_or(\"unwound\".into(), |o| format!(\"{o:?}\")) ),"
+   ],
+   "derivation": [
+    "Debug Emptying::OtherLedger"
+   ],
+   "in_static_branches": false,
+   "static_index": null,
+   "note": ""
+  },
+  {
+   "id": "B188",
+   "operation": "admission",
+   "label": "admission: admitted",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "admit_by",
+    "step_adm"
+   ],
+   "sites": [
+    {
+     "site": "S10",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_adm",
+     "line": 3258,
+     "call": "obs.branch(format!( \"admission: {}\", if admitted { \"admitted\" } else { \"refused\" } ));"
+    },
+    {
+     "site": "S11",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "admit_by",
+     "line": 5798,
+     "call": "obs.branch(format!(\"admission: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "if admitted { \"admitted\" } else { \"refused\" }",
+    "let label = if admitted { \"admitted\" } else { \"refused\" };"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 84,
+   "note": ""
+  },
+  {
+   "id": "B189",
+   "operation": "admission",
+   "label": "admission: refused",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "admit_by",
+    "step_adm"
+   ],
+   "sites": [
+    {
+     "site": "S10",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_adm",
+     "line": 3258,
+     "call": "obs.branch(format!( \"admission: {}\", if admitted { \"admitted\" } else { \"refused\" } ));"
+    },
+    {
+     "site": "S11",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "admit_by",
+     "line": 5798,
+     "call": "obs.branch(format!(\"admission: {label}\"));"
+    }
+   ],
+   "source_expressions": [
+    "if admitted { \"admitted\" } else { \"refused\" }",
+    "let label = if admitted { \"admitted\" } else { \"refused\" };"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 85,
+   "note": ""
+  },
+  {
+   "id": "B190",
+   "operation": "DROP",
+   "label": "DROP: a Counted ticket dropped",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_fw"
+   ],
+   "sites": [
+    {
+     "site": "S03",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_fw",
+     "line": 2600,
+     "call": "obs.branch(\"DROP: a Counted ticket dropped\".into());"
+    }
+   ],
+   "source_expressions": [
+    "obs.branch(\"DROP: a Counted ticket dropped\".into());"
+   ],
+   "derivation": [
+    "literal"
+   ],
+   "in_static_branches": true,
+   "static_index": 86,
+   "note": ""
+  },
+  {
+   "id": "B191",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: future",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S08",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3180,
+     "call": "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+    }
+   ],
+   "source_expressions": [
+    "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+   ],
+   "derivation": [
+    "MALFORMATIONS[0]"
+   ],
+   "in_static_branches": true,
+   "static_index": 87,
+   "note": ""
+  },
+  {
+   "id": "B192",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: set",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S08",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3180,
+     "call": "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+    }
+   ],
+   "source_expressions": [
+    "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+   ],
+   "derivation": [
+    "MALFORMATIONS[1]"
+   ],
+   "in_static_branches": true,
+   "static_index": 88,
+   "note": ""
+  },
+  {
+   "id": "B193",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: empty",
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "source_items": [
+    "step_ack"
+   ],
+   "sites": [
+    {
+     "site": "S08",
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "function": "step_ack",
+     "line": 3180,
+     "call": "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+    }
+   ],
+   "source_expressions": [
+    "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));"
+   ],
+   "derivation": [
+    "MALFORMATIONS[2]"
+   ],
+   "in_static_branches": true,
+   "static_index": 89,
+   "note": ""
+  }
+ ],
+ "sites": [
+  {
+   "site": "S01",
+   "function": "fact_append",
+   "line": 2489,
+   "call": "obs.branch(format!(\"append_facts: {label}\"));",
+   "operations": [
+    "append_facts"
+   ]
+  },
+  {
+   "site": "S02",
+   "function": "step_fw",
+   "line": 2548,
+   "call": "obs.branch(\"expire: Armed -> Counted\".into());",
+   "operations": [
+    "expire"
+   ]
+  },
+  {
+   "site": "S03",
+   "function": "step_fw",
+   "line": 2600,
+   "call": "obs.branch(\"DROP: a Counted ticket dropped\".into());",
+   "operations": [
+    "DROP"
+   ]
+  },
+  {
+   "site": "S04",
+   "function": "settlement_read",
+   "line": 2688,
+   "call": "obs.branch(format!(\"{name}: {label}\"));",
+   "operations": [
+    "lookup",
+    "explain"
+   ]
+  },
+  {
+   "site": "S05",
+   "function": "worker_op",
+   "line": 2939,
+   "call": "obs.branch(label.clone());",
+   "operations": [
+    "barrier",
+    "resolve",
+    "append_cell C",
+    "append_cell X",
+    "append_cell U",
+    "empty"
+   ]
+  },
+  {
+   "site": "S06",
+   "function": "step_gc",
+   "line": 3055,
+   "call": "obs.branch(format!(\"append_gating: {label}\"));",
+   "operations": [
+    "append_gating"
+   ]
+  },
+  {
+   "site": "S07",
+   "function": "step_ack",
+   "line": 3153,
+   "call": "obs.branch(format!(\"snapshot: {label}\"));",
+   "operations": [
+    "snapshot"
+   ]
+  },
+  {
+   "site": "S08",
+   "function": "step_ack",
+   "line": 3180,
+   "call": "obs.branch(format!(\"malformed snapshot: {}\", MALFORMATIONS[which]));",
+   "operations": [
+    "malformed snapshot"
+   ]
+  },
+  {
+   "site": "S09",
+   "function": "step_ack",
+   "line": 3216,
+   "call": "obs.branch(format!(\"append_acknowledgement: {label}\"));",
+   "operations": [
+    "append_acknowledgement"
+   ]
+  },
+  {
+   "site": "S10",
+   "function": "step_adm",
+   "line": 3258,
+   "call": "obs.branch(format!( \"admission: {}\", if admitted { \"admitted\" } else { \"refused\" } ));",
+   "operations": [
+    "admission"
+   ]
+  },
+  {
+   "site": "S11",
+   "function": "admit_by",
+   "line": 5798,
+   "call": "obs.branch(format!(\"admission: {label}\"));",
+   "operations": [
+    "admission"
+   ]
+  }
+ ],
+ "collisions": [
+  {
+   "label": "admission: admitted",
+   "sites": [
+    "S10",
+    "S11"
+   ],
+   "resolved": true,
+   "proof": "S10 (step_adm) and S11 (admit_by) are the two implementations of the AdmStep type ('An admission step: step_adm, or a deliberately defective one in a negative case'): both are ADM's one admission step, both spend one admission, both label 'admission: admitted' exactly when that step admitted and 'admission: refused' otherwise, and both then run admission_properties when admitted. They differ only in the admission predicate. admit_by is not reachable from any required configuration's test (vocab_check_sites.py, reachability), so every required receipt attributes these labels to S10."
+  },
+  {
+   "label": "admission: refused",
+   "sites": [
+    "S10",
+    "S11"
+   ],
+   "resolved": true,
+   "proof": "S10 (step_adm) and S11 (admit_by) are the two implementations of the AdmStep type ('An admission step: step_adm, or a deliberately defective one in a negative case'): both are ADM's one admission step, both spend one admission, both label 'admission: admitted' exactly when that step admitted and 'admission: refused' otherwise, and both then run admission_properties when admitted. They differ only in the admission predicate. admit_by is not reachable from any required configuration's test (vocab_check_sites.py, reachability), so every required receipt attributes these labels to S10."
+  }
+ ],
+ "static_branches": [
+  "append_facts: Committed (inserted)",
+  "append_facts: Committed (already present)",
+  "append_facts: NotApplied NotWritten Entry(NotHealthy)",
+  "append_facts: NotApplied NotWritten Entry(Latched)",
+  "append_facts: NotApplied NotWritten Storage",
+  "append_facts: NotApplied NotWritten Constraint",
+  "append_facts: NotApplied Uncertain Constraint",
+  "append_facts: NotApplied Uncertain Storage",
+  "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)",
+  "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)",
+  "append_facts: NotApplied NotWritten Conflict(explained)",
+  "append_facts: unwound before any insert",
+  "append_facts: unwound after an insert was issued",
+  "expire: Armed -> Counted",
+  "append_gating: Committed (inserted)",
+  "append_gating: Refused NotWritten Entry(NotHealthy)",
+  "append_gating: Refused NotWritten Entry(CellsBusy)",
+  "append_gating: Refused NotWritten Entry(Latched)",
+  "append_gating: Refused NotWritten Storage",
+  "append_gating: Refused NotWritten Constraint",
+  "append_gating: Refused Uncertain Storage",
+  "append_gating: Refused Uncertain Constraint",
+  "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)",
+  "append_gating: unwound after an insert (U kept, Unwound)",
+  "append_gating: unwound before any insert (U emptied)",
+  "lookup: Present",
+  "lookup: Absent",
+  "lookup: Conflict(cause)",
+  "lookup: Conflict(explained)",
+  "lookup: Refused(NotHealthy)",
+  "lookup: Refused(Latched)",
+  "lookup: Failed",
+  "lookup: unwound",
+  "explain: Explained",
+  "explain: Pending",
+  "explain: Busy",
+  "explain: Unknown",
+  "explain: Refused(Latched)",
+  "explain: unwound",
+  "snapshot: Taken",
+  "snapshot: Nothing",
+  "snapshot: NotNow(NotHealthy)",
+  "snapshot: NotNow(Latched)",
+  "snapshot: Failed",
+  "snapshot: unwound",
+  "append_acknowledgement: Committed",
+  "append_acknowledgement: Refused(Stale)",
+  "append_acknowledgement: Refused(Empty)",
+  "append_acknowledgement: Refused(Future)",
+  "append_acknowledgement: Refused(Set)",
+  "append_acknowledgement: Refused(NotNow(NotHealthy))",
+  "append_acknowledgement: Refused(NotNow(CellsBusy))",
+  "append_acknowledgement: Refused(NotNow(Latched))",
+  "append_acknowledgement: NotApplied(NotWritten)",
+  "append_acknowledgement: NotApplied(Uncertain)",
+  "append_acknowledgement: unwound after an insert (U kept)",
+  "append_acknowledgement: unwound before any insert (U emptied)",
+  "barrier: Passed",
+  "barrier: Failed",
+  "barrier: unwound",
+  "resolve: Absent",
+  "resolve: Corrected",
+  "resolve: ConflictPlaced",
+  "resolve: Acknowledged",
+  "resolve: Retained",
+  "resolve: Inconsistent",
+  "resolve: Stale",
+  "resolve: Refused(Latched)",
+  "resolve: unwound",
+  "append_cell C: Committed (inserted)",
+  "append_cell C: Committed (present)",
+  "append_cell C: NotWritten",
+  "append_cell C: Uncertain",
+  "append_cell C: Stale",
+  "append_cell C: unwound",
+  "append_cell X: Committed (inserted)",
+  "append_cell X: Committed (present)",
+  "append_cell X: NotWritten",
+  "append_cell X: Uncertain",
+  "append_cell X: Stale",
+  "append_cell X: Refused(Latched)",
+  "append_cell X: unwound",
+  "empty: Done",
+  "empty: Stale",
+  "admission: admitted",
+  "admission: refused",
+  "DROP: a Counted ticket dropped",
+  "malformed snapshot: future",
+  "malformed snapshot: set",
+  "malformed snapshot: empty"
+ ],
+ "static_missing_from_vocabulary": [],
+ "vocabulary_missing_from_static": [
+  "append_facts: NotApplied NotWritten Entry(NotOpen)",
+  "append_facts: NotApplied NotWritten Entry(CellsBusy)",
+  "append_facts: NotApplied NotWritten Entry(Malformed)",
+  "append_facts: NotApplied NotWritten Entry(Expired)",
+  "append_facts: NotApplied NotWritten Conflict(new or retained cause IdentityContent)",
+  "append_facts: NotApplied NotWritten SessionClosed",
+  "append_facts: NotApplied NotWritten Corrected",
+  "append_facts: NotApplied NotWritten TableFull",
+  "append_facts: NotApplied Uncertain Entry(NotOpen)",
+  "append_facts: NotApplied Uncertain Entry(Latched)",
+  "append_facts: NotApplied Uncertain Entry(NotHealthy)",
+  "append_facts: NotApplied Uncertain Entry(CellsBusy)",
+  "append_facts: NotApplied Uncertain Entry(Malformed)",
+  "append_facts: NotApplied Uncertain Entry(Expired)",
+  "append_facts: NotApplied Uncertain Conflict(new or retained cause IdentityContent)",
+  "append_facts: NotApplied Uncertain Conflict(new or retained cause DuplicateRole)",
+  "append_facts: NotApplied Uncertain Conflict(new or retained cause MissingPrepared)",
+  "append_facts: NotApplied Uncertain Conflict(explained)",
+  "append_facts: NotApplied Uncertain SessionClosed",
+  "append_facts: NotApplied Uncertain Corrected",
+  "append_facts: NotApplied Uncertain TableFull",
+  "append_facts: Rejected(OtherLedger)",
+  "append_facts: Rejected(NotArmed)",
+  "append_gating: Committed (already present)",
+  "append_gating: Refused NotWritten Entry(NotOpen)",
+  "append_gating: Refused NotWritten Entry(Malformed)",
+  "append_gating: Refused NotWritten Entry(Expired)",
+  "append_gating: Refused NotWritten Conflict(new or retained cause DuplicateRole)",
+  "append_gating: Refused NotWritten Conflict(new or retained cause MissingPrepared)",
+  "append_gating: Refused NotWritten Conflict(explained)",
+  "append_gating: Refused NotWritten SessionClosed",
+  "append_gating: Refused NotWritten Corrected",
+  "append_gating: Refused NotWritten TableFull",
+  "append_gating: Refused Uncertain Entry(NotOpen)",
+  "append_gating: Refused Uncertain Entry(Latched)",
+  "append_gating: Refused Uncertain Entry(NotHealthy)",
+  "append_gating: Refused Uncertain Entry(CellsBusy)",
+  "append_gating: Refused Uncertain Entry(Malformed)",
+  "append_gating: Refused Uncertain Entry(Expired)",
+  "append_gating: Refused Uncertain Conflict(new or retained cause IdentityContent)",
+  "append_gating: Refused Uncertain Conflict(new or retained cause DuplicateRole)",
+  "append_gating: Refused Uncertain Conflict(new or retained cause MissingPrepared)",
+  "append_gating: Refused Uncertain Conflict(explained)",
+  "append_gating: Refused Uncertain SessionClosed",
+  "append_gating: Refused Uncertain Corrected",
+  "append_gating: Refused Uncertain TableFull",
+  "lookup: Refused(NotOpen)",
+  "lookup: Refused(CellsBusy)",
+  "lookup: Refused(Malformed)",
+  "lookup: Refused(Expired)",
+  "explain: Refused(NotOpen)",
+  "explain: Refused(NotHealthy)",
+  "explain: Refused(CellsBusy)",
+  "explain: Refused(Malformed)",
+  "explain: Refused(Expired)",
+  "snapshot: NotNow(NotOpen)",
+  "snapshot: NotNow(CellsBusy)",
+  "snapshot: NotNow(Malformed)",
+  "snapshot: NotNow(Expired)",
+  "append_acknowledgement: Refused(OtherStore)",
+  "append_acknowledgement: Refused(NotNow(NotOpen))",
+  "append_acknowledgement: Refused(NotNow(Malformed))",
+  "append_acknowledgement: Refused(NotNow(Expired))",
+  "barrier: NotNeeded",
+  "barrier: OtherLedger",
+  "resolve: Refused(NotOpen)",
+  "resolve: Refused(NotHealthy)",
+  "resolve: Refused(CellsBusy)",
+  "resolve: Refused(Malformed)",
+  "resolve: Refused(Expired)",
+  "resolve: OtherLedger",
+  "append_cell C: Committed (already marked)",
+  "append_cell C: Refused(NotOpen)",
+  "append_cell C: Refused(Latched)",
+  "append_cell C: Refused(NotHealthy)",
+  "append_cell C: Refused(CellsBusy)",
+  "append_cell C: Refused(Malformed)",
+  "append_cell C: Refused(Expired)",
+  "append_cell C: OtherLedger",
+  "append_cell X: Committed (already marked)",
+  "append_cell X: Refused(NotOpen)",
+  "append_cell X: Refused(NotHealthy)",
+  "append_cell X: Refused(CellsBusy)",
+  "append_cell X: Refused(Malformed)",
+  "append_cell X: Refused(Expired)",
+  "append_cell X: OtherLedger",
+  "append_cell U: Committed (inserted)",
+  "append_cell U: Committed (already marked)",
+  "append_cell U: Committed (present)",
+  "append_cell U: NotWritten",
+  "append_cell U: Uncertain",
+  "append_cell U: Stale",
+  "append_cell U: Refused(NotOpen)",
+  "append_cell U: Refused(Latched)",
+  "append_cell U: Refused(NotHealthy)",
+  "append_cell U: Refused(CellsBusy)",
+  "append_cell U: Refused(Malformed)",
+  "append_cell U: Refused(Expired)",
+  "append_cell U: OtherLedger",
+  "append_cell U: unwound",
+  "empty: unwound",
+  "empty: NotCommitted",
+  "empty: OtherLedger"
+ ],
+ "operations": [
+  "append_facts",
+  "expire",
+  "append_gating",
+  "lookup",
+  "explain",
+  "snapshot",
+  "append_acknowledgement",
+  "barrier",
+  "resolve",
+  "append_cell C",
+  "append_cell X",
+  "append_cell U",
+  "empty",
+  "admission",
+  "DROP",
+  "malformed snapshot"
+ ],
+ "enums_used": {
+  "AckOutcome": [
+   "Committed",
+   "Refused",
+   "NotApplied"
+  ],
+  "AckRefusal": [
+   "OtherStore",
+   "NotNow",
+   "Stale",
+   "Empty",
+   "Future",
+   "Set"
+  ],
+  "Action": [
+   "Nothing",
+   "Barrier",
+   "Resolve",
+   "AppendC",
+   "AppendX",
+   "EmptyX"
+  ],
+  "BarrierOutcome": [
+   "Passed",
+   "Failed",
+   "NotNeeded",
+   "OtherLedger"
+  ],
+  "CauseKind": [
+   "IdentityContent",
+   "DuplicateRole",
+   "MissingPrepared"
+  ],
+  "Cell": [
+   "U",
+   "C",
+   "X"
+  ],
+  "CellAppend": [
+   "Committed",
+   "NotWritten",
+   "Uncertain",
+   "Stale",
+   "Refused",
+   "OtherLedger"
+  ],
+  "Emptying": [
+   "Done",
+   "NotCommitted",
+   "Stale",
+   "OtherLedger"
+  ],
+  "Entry": [
+   "NotOpen",
+   "Latched",
+   "NotHealthy",
+   "CellsBusy",
+   "Malformed",
+   "Expired"
+  ],
+  "Explain": [
+   "Explained",
+   "Pending",
+   "Busy",
+   "Unknown",
+   "Refused"
+  ],
+  "FactOutcome": [
+   "Committed",
+   "NotApplied",
+   "Rejected"
+  ],
+  "GatingOutcome": [
+   "Committed",
+   "Refused"
+  ],
+  "Known": [
+   "Cause",
+   "Explained"
+  ],
+  "Lookup": [
+   "Present",
+   "Absent",
+   "Conflict",
+   "Refused",
+   "Failed"
+  ],
+  "Persistence": [
+   "NotWritten",
+   "Uncertain"
+  ],
+  "Reason": [
+   "Entry",
+   "Conflict",
+   "SessionClosed",
+   "Corrected",
+   "TableFull",
+   "Constraint",
+   "Storage"
+  ],
+  "Resolve": [
+   "Absent",
+   "Corrected",
+   "Acknowledged",
+   "ConflictPlaced",
+   "Retained",
+   "Inconsistent",
+   "Stale",
+   "Refused",
+   "OtherLedger"
+  ],
+  "SnapshotOutcome": [
+   "Taken",
+   "Nothing",
+   "NotNow",
+   "Failed"
+  ],
+  "TicketFault": [
+   "OtherLedger",
+   "NotArmed"
+  ]
+ },
+ "problems": []
+}

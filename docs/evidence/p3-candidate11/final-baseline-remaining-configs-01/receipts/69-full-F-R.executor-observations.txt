@@ -1,0 +1,22 @@
+EXECUTOR OBSERVATIONS ON THE F-R RECEIPT — read-only; NOT a classification and NOT a checker repair.
+The frozen classification stands: receipts/69-full-F-R/CLASSIFICATION.txt (NOT PASS; INCOMPLETE, state cap).
+raw-output.txt sha256 78e44c335b6ce65f8df6aea18b71e488613403ba8c0471c5cf1c33057ab58ccd (14961 bytes, 273 lines)
+EXPLORATION headers at lines [3, 134]
+panic line 132: thread 'ledger::protocol::model_tests::full_fr' (3288291) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:
+next line: assertion `left == right` failed: failed: {}
+model_tests.rs at C, lines 4130-4140 (full_exploration):
+  4130: fn full_exploration(config: &Config) {
+  4131:     let report = explore(config);
+  4132:     println!("{}", report.text);
+  4133:     assert_eq!(
+  4134:         report.verdict,
+  4135:         Verdict::Pass,
+  4136:         "failed: {:?}\n{}",
+  4137:         report.failed,
+  4138:         report.text
+  4139:     );
+  4140: }
+copy 1: lines 3-129; copy 2: lines 134-260; identical: True
+branch lines in copy 1: 93 (3 printed outside the listed set); taken 57; every printed label a frozen-vocabulary row: True 
+taken labels outside the static BRANCHES (printed): ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+Note: an INCOMPLETE run's branch set covers only the states expanded before the cap (26,539,923 of 30,000,001 discovered). It is not a coverage receipt; no normalized table is produced for it, and none is used in a matrix.

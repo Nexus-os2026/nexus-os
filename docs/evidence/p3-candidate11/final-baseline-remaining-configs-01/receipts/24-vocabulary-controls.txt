@@ -1,0 +1,205 @@
+VOCABULARY CONTROLS — vocabulary vocabulary/VOCABULARY.json sha256 db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932
+work directory (not in the evidence): /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/ba83c590-760a-431a-ad90-0ef33c60b32d/scratchpad/controls-final
+
+PC1 — unmutated source and the vocabulary
+    mutation: none
+    generator --compare: exit 0 -> PASS (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: EQUAL
+    check A: exit 0 -> PASS (expected)
+        | CHECK A (vocab_check_sites v3): PASS
+    check B: exit 0 -> PASS (expected)
+        | CHECK B (vocab_check_eval v4): PASS
+    CONTROL OK
+
+PC2 — unmutated Stage-1 F-2 report
+    mutation: Stage-1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2/raw-output.txt
+    mutation: input sha256 985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5
+    normalizer: exit 0 -> PASS (expected)
+        | F-2: NORMALIZED; totals {'TAKEN': 54, 'NOT TAKEN': 109, 'NOT APPLICABLE': 30}; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+    CONTROL OK
+
+NC1a — an omitted source site: a new obs.branch call (step_env)
+    mutation: model_tests.rs at line 3328: '    w.rows.push(SimRow::Prepared(0));\n' -> '    w.rows.push(SimRow::Prepared(0)); obs.branch("expire: Phantom".into());\n'
+    mutation: mutated sha256 {'model_tests.rs': 'c11fa5477bfa157025844136dca952d4a29859bab9d9bd6a63de9b7b05830ab0', 'protocol.rs': 'a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296'}
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 1: DIFFERENT
+        | PROBLEM: model_tests.rs has 12 obs.branch( calls; the inventory has 11 sites
+    check A: exit 1 -> DETECTED (expected)
+        | FAIL A2 Obs::branch call sites equal the vocabulary's sites (function, line, call text): 12 in source, 11 in the vocabulary; in the vocabulary only []; in the source only [('step_env', 3328, 'obs.branch("expire:Phantom".
+        | FAIL A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary label: 91 distinct literals; 35 note calls excluded; outside ['expire: Phantom']
+        | CHECK A (vocab_check_sites v3): FAIL: A2 Obs::branch call sites equal the vocabulary's sites (function, line, call text); A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary la
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B3 the Obs sites the lexer finds equal the vocabulary's sites: derived [('admit_by', 5798), ('fact_append', 2489), ('settlement_read', 2688), ('step_ack', 3153), ('step_ack', 3180), ('step_ack', 3216), ('step_adm', 
+        | FAIL B4 site UNLISTED (step_env:3328): derived labels equal the vocabulary's: 1 derived, 0 in the vocabulary; derived only ['expire: Phantom']; vocabulary only []
+        | FAIL B7 every derived label is a vocabulary row: ['expire: Phantom']
+        | CHECK B (vocab_check_eval v4): FAIL: B3 the Obs sites the lexer finds equal the vocabulary's sites; B4 site UNLISTED (step_env:3328): derived labels equal the vocabulary's; B7 every derived label is a vocabulary row
+    CONTROL OK
+
+NC1b — an omitted source site: the vocabulary lacks site S08 and its rows
+    mutation: vocabulary without S08, sha256 bc25be2ddb00e41092ad60edfd93a0b2bfbd2f1efb3942e11f7b6b0d96fd279d
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 190; row differences 3; sites equal False; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 1 -> DETECTED (expected)
+        | FAIL A2 Obs::branch call sites equal the vocabulary's sites (function, line, call text): 11 in source, 10 in the vocabulary; in the vocabulary only []; in the source only [('step_ack', 3180, 'obs.branch(format!("malforme
+        | CHECK A (vocab_check_sites v3): FAIL: A2 Obs::branch call sites equal the vocabulary's sites (function, line, call text)
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B3 the Obs sites the lexer finds equal the vocabulary's sites: derived [('admit_by', 5798), ('fact_append', 2489), ('settlement_read', 2688), ('step_ack', 3153), ('step_ack', 3180), ('step_ack', 3216), ('step_adm', 
+        | FAIL B4 site UNLISTED (step_ack:3180): derived labels equal the vocabulary's: 3 derived, 0 in the vocabulary; derived only ['malformed snapshot: empty', 'malformed snapshot: future', 'malformed snapshot: set']; vocabular
+        | FAIL B7 every derived label is a vocabulary row: ['malformed snapshot: empty', 'malformed snapshot: future', 'malformed snapshot: set']
+        | CHECK B (vocab_check_eval v4): FAIL: B3 the Obs sites the lexer finds equal the vocabulary's sites; B4 site UNLISTED (step_ack:3180): derived labels equal the vocabulary's; B7 every derived label is a vocabulary row
+    CONTROL OK
+
+NC2a — an omitted enum variant: the vocabulary lacks 'lookup: Refused(Expired)'
+    mutation: vocabulary sha256 ae2b15810ee60776ff94875f682636d7aa8f1adc0e9caba029bce218a33f4cdb
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 192; row differences 1; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 0 -> NOT DETECTED (not required)
+        | CHECK A (vocab_check_sites v3): PASS
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's: 23 derived, 22 in the vocabulary; derived only ['lookup: Refused(Expired)']; vocabulary only []
+        | FAIL B7 every derived label is a vocabulary row: ['lookup: Refused(Expired)']
+        | CHECK B (vocab_check_eval v4): FAIL: B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's; B7 every derived label is a vocabulary row
+    CONTROL OK
+
+NC2b — an omitted enum variant: Entry gains a variant in source
+    mutation: protocol.rs at line 539: '    Malformed,\n    Expired,\n}' -> '    Malformed,\n    Expired, Bogus,\n}'
+    mutation: mutated sha256 {'model_tests.rs': '2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972', 'protocol.rs': '144434b72f994b9379b29aeeb53535f021512b6a5ba0efef2064cf84c3755964'}
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 205 rows, given 193; row differences 382; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 0 -> NOT DETECTED (not required)
+        | CHECK A (vocab_check_sites v3): PASS
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B4 site S01 (fact_append:2489): derived labels equal the vocabulary's: 38 derived, 36 in the vocabulary; derived only ['append_facts: NotApplied NotWritten Entry(Bogus)', 'append_facts: NotApplied Uncertain Entry(Bo
+        | FAIL B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's: 25 derived, 23 in the vocabulary; derived only ['explain: Refused(Bogus)', 'lookup: Refused(Bogus)']; vocabulary only []
+        | FAIL B4 site S07 (step_ack:3153): derived labels equal the vocabulary's: 11 derived, 10 in the vocabulary; derived only ['snapshot: NotNow(Bogus)']; vocabulary only []
+        | FAIL B4 site S09 (step_ack:3216): derived labels equal the vocabulary's: 17 derived, 16 in the vocabulary; derived only ['append_acknowledgement: Refused(NotNow(Bogus))']; vocabulary only []
+        | FAIL B4 site S06 (step_gc:3055): derived labels equal the vocabulary's: 36 derived, 34 in the vocabulary; derived only ['append_gating: Refused NotWritten Entry(Bogus)', 'append_gating: Refused Uncertain Entry(Bogus)']; 
+        | FAIL B4 site S05 (worker_op:2939): derived labels equal the vocabulary's: 71 derived, 67 in the vocabulary; derived only ['append_cell C: Refused(Bogus)', 'append_cell U: Refused(Bogus)', 'append_cell X: Refused(Bogus)',
+    CONTROL OK
+
+NC3a — a changed exact label in source (fact_append)
+    mutation: model_tests.rs at line 2477: 'Some(FactOutcome::Committed) => "Committed (already present)".to_string(),' -> 'Some(FactOutcome::Committed) => "Committed (already there)".to_string(),'
+    mutation: mutated sha256 {'model_tests.rs': '12a1ac200128cb01f9c954df94c6b98d76903015ba065a4939fcaec3b34f7e34', 'protocol.rs': 'a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296'}
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 2: DIFFERENT
+        | PROBLEM: S01 append_facts: anchor not found verbatim in fn fact_append: 'Some(FactOutcome::Committed) => "Committed (already present)".to_string(),'
+        | PROBLEM: S01 append_facts: arm not inside its label match: 'Some(FactOutcome::Committed) => "Committed (already present)".to_string(),'
+    check A: exit 0 -> NOT DETECTED (not required)
+        | CHECK A (vocab_check_sites v3): PASS
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B4 site S01 (fact_append:2489): derived labels equal the vocabulary's: 36 derived, 36 in the vocabulary; derived only ['append_facts: Committed (already there)']; vocabulary only ['append_facts: Committed (already p
+        | FAIL B7 every vocabulary row is derived from source (no row without a source derivation): ['append_facts: Committed (already present)']
+        | FAIL B7 every derived label is a vocabulary row: ['append_facts: Committed (already there)']
+        | CHECK B (vocab_check_eval v4): FAIL: B4 site S01 (fact_append:2489): derived labels equal the vocabulary's; B7 every vocabulary row is derived from source (no row without a source derivation); B7 every derived label is a
+    CONTROL OK
+
+NC3b — a changed exact label in the vocabulary ('barrier: Passed' -> 'barrier: passed')
+    mutation: vocabulary sha256 2862f2b35209bffa8d87a56a7fd0a2e4a101cd7f6aa8058414609e5ab499efaf
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 2; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 1 -> DETECTED (not required)
+        | FAIL A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary label: 90 distinct literals; 35 note calls excluded; outside ['barrier: Passed']
+        | CHECK A (vocab_check_sites v3): FAIL: A7 every complete label literal in model_tests.rs (outside obs.note trace text) is a vocabulary label
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B4 site S05 (worker_op:2939): derived labels equal the vocabulary's: 67 derived, 67 in the vocabulary; derived only ['barrier: Passed']; vocabulary only ['barrier: passed']
+        | FAIL B7 every vocabulary row is derived from source (no row without a source derivation): ['barrier: passed']
+        | FAIL B7 every derived label is a vocabulary row: ['barrier: Passed']
+        | CHECK B (vocab_check_eval v4): FAIL: B4 site S05 (worker_op:2939): derived labels equal the vocabulary's; B7 every vocabulary row is derived from source (no row without a source derivation); B7 every derived label is a v
+    CONTROL OK
+
+NC4a — an unresolved collision: step_gc also emits 'lookup: Absent'; the vocabulary lists the second site under the same row without a proof
+    mutation: model_tests.rs at line 3103: '    w.gc[g as usize] = GcPos::Done;\n' -> '    w.gc[g as usize] = GcPos::Done; obs.branch("lookup: Absent".into());\n'
+    mutation: mutated sha256 {'model_tests.rs': '3daeaee9278dc9c356cbfa167861afa95e12e2084a2aaaf9517393a1d717e52a', 'protocol.rs': 'a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296'}
+    mutation: vocabulary sha256 8c373bac03d2602e1cffeb7f0232af0029bf9a467663238cb827485bfdb1c60d
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 2; sites equal False; static BRANCHES equal True; collisions equal True; generator problems 1: DIFFERENT
+        | PROBLEM: model_tests.rs has 12 obs.branch( calls; the inventory has 11 sites
+    check A: exit 1 -> DETECTED (expected)
+        | FAIL A5 a label emitted by two sites is emitted by at most one site any required test reaches: shared labels {'lookup: Absent': ['S04', 'S12'], 'admission: admitted': ['S10', 'S11'], 'admission: refused': ['S10', 'S11']}
+        | CHECK A (vocab_check_sites v3): FAIL: A5 a label emitted by two sites is emitted by at most one site any required test reaches
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B6 every label derived at two sites is a collision the vocabulary records as resolved: collisions {'lookup: Absent': ['S04', 'S12'], 'admission: admitted': ['S10', 'S11'], 'admission: refused': ['S10', 'S11']}; unre
+        | CHECK B (vocab_check_eval v4): FAIL: B6 every label derived at two sites is a collision the vocabulary records as resolved
+    CONTROL OK
+
+NC4b — an unresolved collision: the defective admission site S11 becomes reachable from a required test
+    mutation: model_tests.rs at line 4238: 'fn full_fg() {\n    full_exploration(&FG);\n}' -> 'fn full_fg() {\n    full_exploration(&FG); let _ = adm_ignoring_unapplied;\n}'
+    mutation: mutated sha256 {'model_tests.rs': 'b3d5b9909f582aa30f516923aa3d96d7cefa67789c5e80661556245683102e78', 'protocol.rs': 'a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296'}
+    generator --compare: exit 0 -> NOT DETECTED (not required)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: EQUAL
+    check A: exit 1 -> DETECTED (expected)
+        | FAIL A5 a label emitted by two sites is emitted by at most one site any required test reaches: shared labels {'admission: admitted': ['S10', 'S11'], 'admission: refused': ['S10', 'S11']}; unresolved {'admission: admitted
+        | FAIL A5 admit_by (S11) is not reachable from any required test
+        | CHECK A (vocab_check_sites v3): FAIL: A5 a label emitted by two sites is emitted by at most one site any required test reaches; A5 admit_by (S11) is not reachable from any required test
+    check B: exit 0 -> NOT DETECTED (not required)
+        | CHECK B (vocab_check_eval v4): PASS
+    CONTROL OK
+
+NC5a — a raw observed label outside the vocabulary (inserted in sorted position)
+    mutation: F-2 report + '    [taken    ] append_cell C: Refused(Bogus) (not in the listed set)'
+    mutation: input sha256 c7dd100bcdf6d9337943225fcd1cb395005531aed95390c5082a1aeb1bc509c5
+    normalizer: exit 2 -> DETECTED (expected)
+        | F-2: STOP; totals {'TAKEN': 54, 'NOT TAKEN': 109, 'NOT APPLICABLE': 30}; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']; PROBLEMS ["ra
+    CONTROL OK
+
+NC5b — a listed raw label changed
+    mutation: F-2 report: 'lookup: Conflict(cause)' -> 'lookup: Conflict(Cause)'
+    mutation: input sha256 923ee347395a0f72e41c2234c0f651393d83095b62882529003ba81d778081dd
+    normalizer: exit 2 -> DETECTED (expected)
+        | F-2: STOP; totals {'TAKEN': 54, 'NOT TAKEN': 109, 'NOT APPLICABLE': 30}; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']; PROBLEMS ['th
+    CONTROL OK
+
+NC6a — a vocabulary row with no source derivation ('lookup: Phantom', claiming site S04)
+    mutation: vocabulary sha256 854603a3362f0586ed22f295b14123e0e0a6d27b400c1d517cc60c9b42f98b4c
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 194; row differences 1; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 0 -> NOT DETECTED (not required)
+        | CHECK A (vocab_check_sites v3): PASS
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's: 23 derived, 24 in the vocabulary; derived only []; vocabulary only ['lookup: Phantom']
+        | FAIL B7 every vocabulary row is derived from source (no row without a source derivation): ['lookup: Phantom']
+        | CHECK B (vocab_check_eval v4): FAIL: B4 site S04 (settlement_read:2688): derived labels equal the vocabulary's; B7 every vocabulary row is derived from source (no row without a source derivation)
+    CONTROL OK
+
+NC6b — a vocabulary row with no site and no derivation
+    mutation: vocabulary sha256 7530901b72451850303bb4ead0b8bdafbe99a71dbb290a03b36ef83499efaba4
+    generator --compare: exit 1 -> DETECTED (expected)
+        | COMPARE vocab_generate v4: regenerated 193 rows, given 194; row differences 1; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: DIFFERENT
+    check A: exit 1 -> DETECTED (expected)
+        | FAIL A8 every vocabulary row names a site and starts with its operation: ['B999']
+        | CHECK A (vocab_check_sites v3): FAIL: A8 every vocabulary row names a site and starts with its operation
+    check B: exit 1 -> DETECTED (expected)
+        | FAIL B7 every vocabulary row is derived from source (no row without a source derivation): ['lookup: Phantom']
+        | CHECK B (vocab_check_eval v4): FAIL: B7 every vocabulary row is derived from source (no row without a source derivation)
+    CONTROL OK
+
+NC7 — a TAKEN label of an operation NOT APPLICABLE by configuration (DROP in F-2)
+    mutation: F-2 report: DROP marked taken
+    mutation: input sha256 992b1e3c938c3d46f508a3718d882d56cc2b52a221510ab9112beca8b4f40ed4
+    normalizer: exit 2 -> DETECTED (expected)
+        | F-2: STOP; totals {'TAKEN': 55, 'NOT TAKEN': 109, 'NOT APPLICABLE': 29}; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']; PROBLEMS ["B1
+    CONTROL OK
+
+NC8 — extra labels out of the printed (sorted) order
+    mutation: F-2 report: the last two extra lines exchanged
+    mutation: input sha256 16e5ae2d504fad16accd9ef776913005c94f24cde930fb112eb2dffdc08a9510
+    normalizer: exit 2 -> DETECTED (expected)
+        | F-2: STOP; totals {'TAKEN': 54, 'NOT TAKEN': 109, 'NOT APPLICABLE': 30}; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']; PROBLEMS ['th
+    CONTROL OK
+
+NC9 — a truncated branch list (one listed line removed)
+    mutation: F-2 report: the 'explain: Pending' line removed
+    mutation: input sha256 aed3e9e822058cb14d39fef774ccd8f0f1cbb886dd66dd68d21dd8dae8d50308
+    normalizer: exit 2 -> DETECTED (expected)
+        | F-2: STOP; totals {'TAKEN': 53, 'NOT TAKEN': 110, 'NOT APPLICABLE': 30}; taken outside static ['append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']; PROBLEMS ['the listed section is not exactly the
+    CONTROL OK
+
+MC1 — meta-control: NC4b's outcomes judged as if the generator had to detect it
+    the harness judges it FAILED (required: FAILED)
+    CONTROL OK
+
+MC2 — meta-control: PC1's outcomes judged as if they had to be detections
+    the harness judges it FAILED (required: FAILED)
+    CONTROL OK
+
+CONTROLS: 19 of 19 behave as required — ALL OK

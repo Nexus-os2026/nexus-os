@@ -1,0 +1,27 @@
+32c32
+< GENERATOR_VERSION = "vocab_generate v1"
+---
+> GENERATOR_VERSION = "vocab_generate v2"
+332c332
+<          outer=dict(block="let (label, stale_answer) = match action {", arms=6)),
+---
+>          outer=dict(block="let (label, stale_answer) = match action {", arms=5)),
+359,360c359,360
+<                    context=['const MALFORMATIONS: [&str; 3] = ["future", "set", "empty"];',
+<                             'let options = if config.malformed { 2 + MALFORMATIONS.len() } else { 2 };',
+---
+>                    module_context=['const MALFORMATIONS: [&str; 3] = ["future", "set", "empty"];'],
+>                    context=['let options = if config.malformed { 2 + MALFORMATIONS.len() } else { 2 };',
+437,439c437,440
+<         if k in enums:
+<             problems.append(f"enum {k} declared in both files")
+<         enums[k] = v
+---
+>         if k in enums and k in USED_ENUMS:
+>             problems.append(f"enum {k}, interpolated into a label, is declared in both files")
+>         if k in USED_ENUMS or k not in enums:
+>             enums[k] = v
+511a513,515
+>             for a in op.get("module_context", []):
+>                 if norm(model).count(norm(a)) != 1:
+>                     problems.append(f"{site['site']} {op['op']}: module-level anchor not found once: {a!r}")

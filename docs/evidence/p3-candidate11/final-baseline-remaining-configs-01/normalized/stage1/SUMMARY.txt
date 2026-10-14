@@ -1,0 +1,11 @@
+X-1   NORMALIZED: TAKEN 21, NOT TAKEN 108, NOT APPLICABLE 64; taken outside static []
+X-2   NORMALIZED: TAKEN 26, NOT TAKEN 137, NOT APPLICABLE 30; taken outside static []
+X-3   NORMALIZED: TAKEN 24, NOT TAKEN 103, NOT APPLICABLE 66; taken outside static ['append_cell X: Refused(NotHealthy)']
+X-4   NORMALIZED: TAKEN 36, NOT TAKEN 119, NOT APPLICABLE 38; taken outside static ['append_cell X: Refused(NotHealthy)']
+X-5   NORMALIZED: TAKEN 16, NOT TAKEN 111, NOT APPLICABLE 66; taken outside static []
+F-1   NORMALIZED: TAKEN 42, NOT TAKEN 121, NOT APPLICABLE 30; taken outside static ['resolve: Refused(NotHealthy)', 'append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)']
+F-2   NORMALIZED: TAKEN 54, NOT TAKEN 109, NOT APPLICABLE 30; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+F-3   NORMALIZED: TAKEN 56, NOT TAKEN 107, NOT APPLICABLE 30; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+F-PT  NORMALIZED: TAKEN 55, NOT TAKEN 108, NOT APPLICABLE 30; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+F-B   NORMALIZED: TAKEN 56, NOT TAKEN 107, NOT APPLICABLE 30; taken outside static ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+STAGE-1 NORMALIZATION (normalize v1, vocabulary sha256 db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932): ALL NORMALIZED

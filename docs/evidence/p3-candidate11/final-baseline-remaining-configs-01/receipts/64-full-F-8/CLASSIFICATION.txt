@@ -1,0 +1,7 @@
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+raw outcome (as printed): outcome PASS; ; harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 75.36s']
+measured: states 12,775,224 (expanded 12,775,224); transitions 63,000,416 (with a fault 4,562,913; non-fault 58,437,503); no enabled step 1,594; elapsed 75.2 s; explorer tables 1696 MiB
+resources: wall 75.36 s of 2700 s; scope memory.peak 1781534720 B; swap peak 0 B; oom_kill 0; largest process max RSS 1738360 KiB
+branch accounting: NORMALIZED; TAKEN 69, NOT TAKEN 120, NOT APPLICABLE 4; taken outside the static BRANCHES ['append_cell C: Refused(Latched)', 'append_cell C: Refused(NotHealthy)', 'append_cell X: Refused(NotHealthy)']
+checks: 34 of 34 hold

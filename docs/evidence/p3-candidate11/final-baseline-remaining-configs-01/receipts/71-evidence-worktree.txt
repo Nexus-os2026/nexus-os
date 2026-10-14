@@ -1,0 +1,7 @@
+EVIDENCE WORKTREE 2026-10-14T15:01:00+01:00
+Preparing worktree (new branch 'evidence/p3-c11-d2a1-final-baseline-remaining-configs-01')
+HEAD is now at f023cc3d docs(evidence): add the final-baseline known-runs packet for Candidate C
+exit 0
+HEAD f023cc3d031a2a89e5ecbd4086e15f2e50869acd tree 646c4fe9fa96bfee7b4f731a38f20ebfff14239e branch refs/heads/evidence/p3-c11-d2a1-final-baseline-remaining-configs-01
+porcelain lines: 0
+packet dir existed: no

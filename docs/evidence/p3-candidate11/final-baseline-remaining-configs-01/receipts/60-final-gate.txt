@@ -1,0 +1,44 @@
+FINAL GATE 2026-10-14T15:01:05+01:00 — frozen tools/final_gate.py
+OK   identities (authenticate.py): C, worktree byte-equal to C, pinned executable, Stage-1 evidence, destination absent: AUTHENTICATION: ALL OK
+OK   freeze intact: every frozen tool, the vocabulary and the expectations unchanged since the freeze: freeze check: 26 frozen files (tools, vocabulary, expectations) against receipts/40-FREEZE.json: ALL EQUAL
+OK   configuration expectations re-derived from C equal the frozen record (27-EXPECTATIONS.json): equal
+OK   pre-execution gate receipts/20-vocabulary-generate.txt: vocab_generate v4: 193 rows; 11 sites; static BRANCHES 90; not in static 103; collisions 2 (0 unresolved); problems 0
+OK   pre-execution gate receipts/21-vocabulary-compare.txt: COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: EQUAL
+OK   pre-execution gate receipts/22-check-A-sites.txt: CHECK A (vocab_check_sites v3): PASS
+OK   pre-execution gate receipts/23-check-B-eval.txt: CHECK B (vocab_check_eval v4): PASS
+OK   pre-execution gate receipts/24-vocabulary-controls.txt: CONTROLS: 19 of 19 behave as required — ALL OK
+OK   pre-execution gate receipts/25-classifier-controls.txt: CLASSIFIER CONTROLS: 38 of 38 behave as required — ALL OK
+OK   pre-execution gate receipts/26-configs.txt: CONFIGS: OK (20 required configurations)
+OK   pre-execution gate receipts/05-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK
+OK   pre-execution gate normalized/stage1/SUMMARY.txt: STAGE-1 NORMALIZATION (normalize v1, vocabulary sha256 db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932): ALL NORMALIZED
+OK   C1: attempted and classified: CLASSIFICATION: PASS
+OK   C25: attempted and classified: CLASSIFICATION: PASS
+OK   C4: attempted and classified: CLASSIFICATION: PASS
+OK   F-G: attempted and classified: CLASSIFICATION: PASS
+OK   F-B2: attempted and classified: CLASSIFICATION: PASS
+OK   F-4: attempted and classified: CLASSIFICATION: PASS
+OK   F-W: attempted and classified: CLASSIFICATION: PASS
+OK   F-8: attempted and classified: CLASSIFICATION: PASS
+OK   F-5: attempted and classified: CLASSIFICATION: PASS
+OK   F-6: attempted and classified: CLASSIFICATION: PASS
+OK   F-7: attempted and classified: CLASSIFICATION: PASS
+OK   F-D: attempted and classified: CLASSIFICATION: PASS
+OK   F-R: attempted and classified: CLASSIFICATION: NOT PASS
+     C1: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+     C25: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+     C4: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS
+     F-G: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-B2: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-4: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-W: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-8: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-5: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-6: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-7: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-D: CLASSIFICATION: PASS — outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+     F-R: CLASSIFICATION: NOT PASS — outer class (AD-1-R4 K.2): INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.)
+OK   no governed-control executable, build or p3c11 scope still running: [] [] []
+OK   the aggregate matrix exists exactly when all ten remaining configurations PASS: aggregate absent
+FINAL GATE: ALL INTEGRITY CHECKS HOLD
+MISSION STATUS (from the classifications): REMAINING_CONFIGURATION_BLOCKED
+exit 0

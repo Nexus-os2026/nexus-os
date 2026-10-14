@@ -1,0 +1,29 @@
+4a5
+>   vocab_generate.py [--source-dir DIR] --compare VOCABULARY.json     the freeze check (exit 0 only if equal)
+32c33
+< GENERATOR_VERSION = "vocab_generate v3"
+---
+> GENERATOR_VERSION = "vocab_generate v4"
+628a630,651
+>     if "--compare" in argv:
+>         # The freeze check: the vocabulary regenerated from source must equal the given one, row for row.
+>         other = json.load(open(argv[argv.index("--compare") + 1]))
+>         key = lambda r: (r["id"], r["operation"], r["label"], tuple((s["site"], s["function"], s["line"]) for s in
+>                                                                      r["sites"]), r["in_static_branches"])
+>         mine, theirs = [key(r) for r in v["rows"]], [key(r) for r in other["rows"]]
+>         diffs = [f"only regenerated: {x}" for x in mine if x not in theirs] + \
+>                 [f"only in the given vocabulary: {x}" for x in theirs if x not in mine]
+>         same_sites = [(s["site"], s["function"], s["line"]) for s in v["sites"]] == \
+>                      [(s["site"], s["function"], s["line"]) for s in other["sites"]]
+>         same_static = v["static_branches"] == other["static_branches"]
+>         same_coll = [(c["label"], c["sites"], c["resolved"]) for c in v["collisions"]] == \
+>                     [(c["label"], c["sites"], c["resolved"]) for c in other["collisions"]]
+>         ok = not diffs and same_sites and same_static and same_coll and not v["problems"]
+>         print(f"COMPARE {GENERATOR_VERSION}: regenerated {len(mine)} rows, given {len(theirs)}; row differences "
+>               f"{len(diffs)}; sites equal {same_sites}; static BRANCHES equal {same_static}; collisions equal "
+>               f"{same_coll}; generator problems {len(v['problems'])}: {'EQUAL' if ok else 'DIFFERENT'}")
+>         for d in diffs[:20]:
+>             print("  ", d)
+>         for p in v["problems"]:
+>             print("PROBLEM:", p)
+>         return 0 if ok else 1

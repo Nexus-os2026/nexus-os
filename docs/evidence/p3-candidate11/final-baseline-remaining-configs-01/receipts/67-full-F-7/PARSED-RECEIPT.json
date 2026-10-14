@@ -1,0 +1,716 @@
+{
+ "configuration": "F-7",
+ "test": "ledger::protocol::model_tests::full_f7",
+ "explorer": "original",
+ "receipt_type": "AD-1-R4 F.1 (e1)",
+ "expected": {
+  "bounds": "facts 2 conflicting [true, true] ENV false batch false faults 1 admissions 1 gating callers 0 gating conflict false acknowledgement actors 2 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Ack(0), Ack(1), Adm]",
+  "properties": {
+   "P1": "HOLDS",
+   "P2": "HOLDS",
+   "P4": "HOLDS",
+   "P5": "HOLDS",
+   "P6": "HOLDS",
+   "P7": "HOLDS",
+   "P8": "HOLDS",
+   "P9": "HOLDS",
+   "P12": "HOLDS",
+   "P13": "HOLDS",
+   "P15": "HOLDS",
+   "D1": "HOLDS",
+   "L1": "L1-HOLDS",
+   "E1": "HOLDS",
+   "E2": "HOLDS",
+   "E3": "HOLDS",
+   "E4": "HOLDS",
+   "E5": "HOLDS",
+   "E6": "HOLDS",
+   "E7": "HOLDS",
+   "E8": "HOLDS",
+   "E9": "HOLDS",
+   "E10": "not applicable here (worker verbs do not unwind)",
+   "E11": "HOLDS",
+   "KEY": "HOLDS"
+  },
+  "na": {
+   "DROP": "DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted",
+   "append_gating": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "malformed snapshot": "malformed snapshots false: the Owner's choice offers only confirm and decline (options = 2)"
+  }
+ },
+ "report": {
+  "header": "EXPLORATION F-7",
+  "outcome": "PASS",
+  "bounds": "facts 2 conflicting [true, true] ENV false batch false faults 1 admissions 1 gating callers 0 gating conflict false acknowledgement actors 2 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Ack(0), Ack(1), Adm]",
+  "states": 2420576,
+  "expanded": 2420576,
+  "transitions": 12707156,
+  "fault_edges": 744608,
+  "no_step": 327,
+  "elapsed_s": 15.3,
+  "tables_mib": 424,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "incomplete": null,
+  "fail": null,
+  "trace_steps": null,
+  "properties": [
+   [
+    "P1",
+    "HOLDS"
+   ],
+   [
+    "P2",
+    "HOLDS"
+   ],
+   [
+    "P4",
+    "HOLDS"
+   ],
+   [
+    "P5",
+    "HOLDS"
+   ],
+   [
+    "P6",
+    "HOLDS"
+   ],
+   [
+    "P7",
+    "HOLDS"
+   ],
+   [
+    "P8",
+    "HOLDS"
+   ],
+   [
+    "P9",
+    "HOLDS"
+   ],
+   [
+    "P12",
+    "HOLDS"
+   ],
+   [
+    "P13",
+    "HOLDS"
+   ],
+   [
+    "P15",
+    "HOLDS"
+   ],
+   [
+    "D1",
+    "HOLDS"
+   ],
+   [
+    "L1",
+    "HOLDS: 11962548 non-fault edges, no cycle; 327 end states, each terminal (D1)"
+   ],
+   [
+    "E1",
+    "HOLDS"
+   ],
+   [
+    "E2",
+    "HOLDS"
+   ],
+   [
+    "E3",
+    "HOLDS"
+   ],
+   [
+    "E4",
+    "HOLDS"
+   ],
+   [
+    "E5",
+    "HOLDS"
+   ],
+   [
+    "E6",
+    "HOLDS"
+   ],
+   [
+    "E7",
+    "HOLDS"
+   ],
+   [
+    "E8",
+    "HOLDS"
+   ],
+   [
+    "E9",
+    "HOLDS"
+   ],
+   [
+    "E10",
+    "not applicable here (worker verbs do not unwind)"
+   ],
+   [
+    "E11",
+    "HOLDS"
+   ],
+   [
+    "KEY",
+    "HOLDS"
+   ]
+  ],
+  "branches": [
+   [
+    "NOT TAKEN",
+    "append_facts: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: Committed (already present)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(Latched)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied Uncertain Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied Uncertain Storage"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Conflict(explained)"
+   ],
+   [
+    "taken    ",
+    "append_facts: unwound before any insert"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: unwound after an insert was issued"
+   ],
+   [
+    "taken    ",
+    "expire: Armed -> Counted"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(CellsBusy)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused Uncertain Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused Uncertain Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: unwound after an insert (U kept, Unwound)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: unwound before any insert (U emptied)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Present"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Absent"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(cause)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(explained)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Refused(NotHealthy)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: unwound"
+   ],
+   [
+    "taken    ",
+    "explain: Explained"
+   ],
+   [
+    "taken    ",
+    "explain: Pending"
+   ],
+   [
+    "taken    ",
+    "explain: Busy"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Unknown"
+   ],
+   [
+    "taken    ",
+    "explain: Refused(Latched)"
+   ],
+   [
+    "taken    ",
+    "explain: unwound"
+   ],
+   [
+    "taken    ",
+    "snapshot: Taken"
+   ],
+   [
+    "taken    ",
+    "snapshot: Nothing"
+   ],
+   [
+    "taken    ",
+    "snapshot: NotNow(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "snapshot: NotNow(Latched)"
+   ],
+   [
+    "taken    ",
+    "snapshot: Failed"
+   ],
+   [
+    "taken    ",
+    "snapshot: unwound"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: Committed"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: Refused(Stale)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Empty)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Future)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Set)"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: Refused(NotNow(NotHealthy))"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: Refused(NotNow(CellsBusy))"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: Refused(NotNow(Latched))"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: NotApplied(NotWritten)"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: NotApplied(Uncertain)"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: unwound after an insert (U kept)"
+   ],
+   [
+    "taken    ",
+    "append_acknowledgement: unwound before any insert (U emptied)"
+   ],
+   [
+    "taken    ",
+    "barrier: Passed"
+   ],
+   [
+    "NOT TAKEN",
+    "barrier: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "barrier: unwound"
+   ],
+   [
+    "taken    ",
+    "resolve: Absent"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Corrected"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: ConflictPlaced"
+   ],
+   [
+    "taken    ",
+    "resolve: Acknowledged"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Retained"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Inconsistent"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Committed (present)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: NotWritten"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: unwound"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Committed (present)"
+   ],
+   [
+    "taken    ",
+    "append_cell X: NotWritten"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Stale"
+   ],
+   [
+    "taken    ",
+    "append_cell X: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: unwound"
+   ],
+   [
+    "taken    ",
+    "empty: Done"
+   ],
+   [
+    "NOT TAKEN",
+    "empty: Stale"
+   ],
+   [
+    "taken    ",
+    "admission: admitted"
+   ],
+   [
+    "taken    ",
+    "admission: refused"
+   ],
+   [
+    "NOT TAKEN",
+    "DROP: a Counted ticket dropped"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: future"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: set"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: empty"
+   ]
+  ],
+  "extra_branches": [
+   "append_cell X: Refused(NotHealthy) (not in the listed set)"
+  ],
+  "nonfault_edges": 11962548
+ },
+ "harness_result": [
+  "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 15.30s"
+ ],
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "363720704",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 15.29,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 15.337,
+  "max_rss_kib_largest_process": 356480
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "pinned_size": 8984464,
+  "before": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  },
+  "after": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_f7",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f7: test\n\n1 test, 0 benchmarks\n",
+   "listed": [
+    "ledger::protocol::model_tests::full_f7: test"
+   ]
+  },
+  "executable_after_listing": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a",
+ "outer_classification": "PASS \u2014 admissible unchanged-core original-explorer PASS",
+ "branch_accounting": {
+  "verdict": "NORMALIZED",
+  "totals": {
+   "TAKEN": 38,
+   "NOT TAKEN": 117,
+   "NOT APPLICABLE": 38
+  },
+  "taken_outside_static": [
+   "append_cell X: Refused(NotHealthy)"
+  ],
+  "operations": {
+   "append_facts": {
+    "rows": 36,
+    "TAKEN": 5,
+    "NOT TAKEN": 31,
+    "NOT APPLICABLE": 0
+   },
+   "expire": {
+    "rows": 1,
+    "TAKEN": 1,
+    "NOT TAKEN": 0,
+    "NOT APPLICABLE": 0
+   },
+   "append_gating": {
+    "rows": 34,
+    "TAKEN": 0,
+    "NOT TAKEN": 0,
+    "NOT APPLICABLE": 34
+   },
+   "lookup": {
+    "rows": 12,
+    "TAKEN": 0,
+    "NOT TAKEN": 12,
+    "NOT APPLICABLE": 0
+   },
+   "explain": {
+    "rows": 11,
+    "TAKEN": 5,
+    "NOT TAKEN": 6,
+    "NOT APPLICABLE": 0
+   },
+   "snapshot": {
+    "rows": 10,
+    "TAKEN": 6,
+    "NOT TAKEN": 4,
+    "NOT APPLICABLE": 0
+   },
+   "append_acknowledgement": {
+    "rows": 16,
+    "TAKEN": 9,
+    "NOT TAKEN": 7,
+    "NOT APPLICABLE": 0
+   },
+   "barrier": {
+    "rows": 5,
+    "TAKEN": 1,
+    "NOT TAKEN": 4,
+    "NOT APPLICABLE": 0
+   },
+   "resolve": {
+    "rows": 15,
+    "TAKEN": 2,
+    "NOT TAKEN": 13,
+    "NOT APPLICABLE": 0
+   },
+   "append_cell C": {
+    "rows": 14,
+    "TAKEN": 0,
+    "NOT TAKEN": 14,
+    "NOT APPLICABLE": 0
+   },
+   "append_cell X": {
+    "rows": 14,
+    "TAKEN": 6,
+    "NOT TAKEN": 8,
+    "NOT APPLICABLE": 0
+   },
+   "append_cell U": {
+    "rows": 14,
+    "TAKEN": 0,
+    "NOT TAKEN": 14,
+    "NOT APPLICABLE": 0
+   },
+   "empty": {
+    "rows": 5,
+    "TAKEN": 1,
+    "NOT TAKEN": 4,
+    "NOT APPLICABLE": 0
+   },
+   "admission": {
+    "rows": 2,
+    "TAKEN": 2,
+    "NOT TAKEN": 0,
+    "NOT APPLICABLE": 0
+   },
+   "DROP": {
+    "rows": 1,
+    "TAKEN": 0,
+    "NOT TAKEN": 0,
+    "NOT APPLICABLE": 1
+   },
+   "malformed snapshot": {
+    "rows": 3,
+    "TAKEN": 0,
+    "NOT TAKEN": 0,
+    "NOT APPLICABLE": 3
+   }
+  }
+ },
+ "original_graph_explored": true
+}

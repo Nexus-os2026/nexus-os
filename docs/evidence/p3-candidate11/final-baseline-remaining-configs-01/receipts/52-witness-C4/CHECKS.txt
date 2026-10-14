@@ -1,0 +1,21 @@
+OK   expected healthy line occurs verbatim in AD-1-R4 G.5(C) at C: C4 WITNESS F-8 P4: 8 steps, each enabled and consuming its c…
+OK   expected healthy line occurs verbatim in AD-1-R4 G.5(C) at C: C4 WITNESS F-8 P8: 12 steps, each enabled and consuming its …
+OK   expected healthy line occurs verbatim in AD-1-R4 G.5(C) at C: C4 WITNESS F-8: 2 scenarios healthy; no violation…
+OK   the witness started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464
+OK   source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   raw output sha256 equals the launcher's record: 15ec6132bf25eacac418f0b661bffe53985fe20506f95725b8c40ec23cbc9918
+OK   argv: the pinned executable, exactly the one test, --exact --nocapture --test-threads=1, no --ignored: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test']
+OK   the test is not an ignored test (--exact --ignored --list shows none): []
+OK   the harness ran exactly that one test: running ['1 test']; started ['ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8']
+OK   harness: 'ok' then 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in …': ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 4202496 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, scope gone
+OK   the exact healthy line(s) of G.5(C), each exactly once as a whole line, nowhere else: {'C4 WITNESS F-8 P4: 8 steps, each enabled and con…': 1, 'C4 WITNESS F-8 P8: 12 steps, each enabled and co…': 1, 'C4 WITNESS F-8: 2 scenarios healthy; no violatio…': 1}
+OK   no positive marker (NAMED PROPERTY / OBSERVED), violation, fixture failure or panic: []
+OK   no other test's output, no 'FAILED' or 'failures:' section
+OK   C4 frozen schedule (evidence commit a464a366) sha256: d616492ff708a1a836f114424a2cce8ed6c0771d22d3f59e984322b7fa3f536b
+OK   G.6 (healthy role): every step's offered and consumed choices, unused suffix, branches and faults against the frozen schedule; the changed step consumes nothing and leaves its whole offered suffix: step records {'P4': 8, 'P8': 12}; problems []
+     G.6 scenario P4 step 8: offered [0, 0, 0, 1, 0, 0] consumed [] unused [0, 0, 0, 1, 0, 0] faults left 2 branches ['append_acknowledgement: Refused(NotNow(CellsBusy))']
+     G.6 scenario P8 step 12: offered [0, 0, 0, 0] consumed [] unused [0, 0, 0, 0] faults left 1 branches ['append_acknowledgement: Refused(NotNow(NotHealthy))']

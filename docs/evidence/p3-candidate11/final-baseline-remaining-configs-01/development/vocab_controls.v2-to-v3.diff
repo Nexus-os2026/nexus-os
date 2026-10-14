@@ -1,0 +1,27 @@
+31a32
+>   MC1, MC2 meta-controls: the harness judges a wrong expectation FAILED (it cannot pass vacuously)
+94a96,102
+>     def judge(expect, outcomes, positive):
+>         by_tool = {tool: rc for tool, rc, _ in outcomes}
+>         return all(t in by_tool for t in expect) and \
+>             all((by_tool[t] == 0) if positive else (by_tool[t] != 0) for t in expect) and len(expect) > 0
+> 
+>     saved = {}
+> 
+95a104
+>         saved[cid] = outcomes
+98,100c107
+<         by_tool = {tool: rc for tool, rc, _ in outcomes}
+<         ok = all(t in by_tool for t in expect) and \
+<             all((by_tool[t] == 0) if positive else (by_tool[t] != 0) for t in expect) and len(expect) > 0
+---
+>         ok = judge(expect, outcomes, positive)
+242a250,257
+>     # Meta-controls: the harness must be able to judge a control FAILED.
+>     m1 = judge(["generator --compare"], saved["NC4b"], False)
+>     m2 = judge(["generator --compare", "check A", "check B"], saved["PC1"], False)
+>     for cid, inner, what in (("MC1", m1, "NC4b's outcomes judged as if the generator had to detect it"),
+>                              ("MC2", m2, "PC1's outcomes judged as if they had to be detections")):
+>         results.append((cid, inner is False))
+>         report += [f"{cid} — meta-control: {what}", f"    the harness judges it {'OK' if inner else 'FAILED'} "
+>                    f"(required: FAILED)", f"    CONTROL {'OK' if inner is False else 'FAILED'}", ""]

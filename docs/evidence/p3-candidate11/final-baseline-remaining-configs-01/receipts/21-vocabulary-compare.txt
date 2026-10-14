@@ -1,0 +1,2 @@
+FREEZE CHECK (regenerate and compare) 2026-10-14T14:47:02+01:00
+COMPARE vocab_generate v4: regenerated 193 rows, given 193; row differences 0; sites equal True; static BRANCHES equal True; collisions equal True; generator problems 0: EQUAL

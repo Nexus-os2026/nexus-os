@@ -1,0 +1,2 @@
+VOCABULARY GENERATION 2026-10-14T14:47:02+01:00 — tools/vocab_generate.py (sha256 1153fcbc75b87f7f9f1ba0d1c43d1c4c28f26aaaceaa9d7c394dfd1ae94360c0), sources from git objects of C
+vocab_generate v4: 193 rows; 11 sites; static BRANCHES 90; not in static 103; collisions 2 (0 unresolved); problems 0

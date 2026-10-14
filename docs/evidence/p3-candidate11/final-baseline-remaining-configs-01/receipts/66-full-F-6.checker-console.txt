@@ -1,0 +1,43 @@
+OK   configuration expectations derive from the source at C (every anchor holds): []
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464 / cde9f9d20f32f2b8… 8984464
+OK   source exactly C before and after: EXACTLY_C / EXACTLY_C
+OK   raw output sha256 equals the launcher's record: 3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452
+OK   argv: the pinned executable, exactly the one test, --exact --ignored --nocapture --test-threads=1: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f6', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   the test runs this configuration with the original explorer (full_exploration, source-derived): full_exploration (original), ignored True
+OK   pre-run listing (--exact --ignored --list) selects exactly that one test: ['ledger::protocol::model_tests::full_f6: test']
+OK   the harness ran exactly that one test: running ['1 test']; started ['ledger::protocol::model_tests::full_f6']
+OK   harness: 'ok' then 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in …': ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 59.42s']
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 45 min: memory.peak 1363165184 B, swap.peak 0 B, oom 0, oom_kill 0, wall 59.42 s of 2700 s, scope gone
+OK   no quotient or symmetry refusal: []
+OK   no panic, no fixture failure
+OK   exactly one exploration report
+OK   header: 'EXPLORATION <cfg>' exactly (the original explorer prints no quotient or symmetry note): EXPLORATION F-6
+OK   original explorer: no quotient line, no symmetry line
+OK   outcome PASS: PASS
+OK   no INCOMPLETE line, no FAIL line: incomplete None, fail None
+OK   printed bounds equal the source-derived configuration: facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots true cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors equal actors() of the source-derived configuration: [Fw(0), Fw(1), Se, Wk, Ack(0), Adm]
+OK   cap printed equals the authorised ceiling (30,000,000 states, 2700 s) and the configuration's: 30000000, 2700 s
+OK   counts printed
+OK   discovered states <= 30,000,000 (K.1, inclusive): 9,315,384
+OK   expanded states equal discovered states (0 unexpanded): states 9315384, expanded 9315384
+OK   one line for each of the 25 PROPERTIES, in order: ['P1', 'P2', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P12', 'P13', 'P15', 'D1', 'L1', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'KEY']
+OK   every property line has its source-derived applicable form: []
+OK   24 lines HOLD (mission section 9: 24): 24 HOLD
+OK   KEY HOLDS: HOLDS
+OK   D1 HOLDS: HOLDS
+OK   L1: HOLDS: HOLDS: 44928766 non-fault edges, no cycle; 862 end states, each terminal (D1)
+OK   E10: 'not applicable here (worker verbs do not unwind)': not applicable here (worker verbs do not unwind)
+OK   state key fields line present
+OK   branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED): []
+
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+raw outcome (as printed): outcome PASS; ; harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 59.42s']
+measured: states 9,315,384 (expanded 9,315,384); transitions 50,476,096 (with a fault 5,547,330; non-fault 44,928,766); no enabled step 862; elapsed 59.3 s; explorer tables 1600 MiB
+resources: wall 59.42 s of 2700 s; scope memory.peak 1363165184 B; swap peak 0 B; oom_kill 0; largest process max RSS 1331112 KiB
+branch accounting: NORMALIZED; TAKEN 47, NOT TAKEN 111, NOT APPLICABLE 35; taken outside the static BRANCHES ['append_cell X: Refused(NotHealthy)']
+checks: 34 of 34 hold
+

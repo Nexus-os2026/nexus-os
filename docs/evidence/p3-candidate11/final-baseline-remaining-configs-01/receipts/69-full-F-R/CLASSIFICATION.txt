@@ -1,0 +1,21 @@
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.)
+raw outcome (as printed): outcome INCOMPLETE; INCOMPLETE the state cap of 30000000 was reached. No property is established by this run.; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 165.06s']
+measured: states 30,000,001 (expanded 26,539,923); transitions 125,538,060 (with a fault 9,877,119; non-fault 115,660,941); no enabled step 1,920; elapsed 164.7 s; explorer tables 3264 MiB
+resources: wall 165.06 s of 2700 s; scope memory.peak 3973214208 B; swap peak 0 B; oom_kill 0; largest process max RSS 3874656 KiB
+checks: 19 of 34 hold
+FAILED CHECK: harness: 'ok' then 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in …': ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 165.06s']
+FAILED CHECK: normal exit 0, no signal: exit 101, signal None, supervisor rc 101
+FAILED CHECK: no panic, no fixture failure: 
+FAILED CHECK: exactly one exploration report: 
+FAILED CHECK: outcome PASS: INCOMPLETE
+FAILED CHECK: no INCOMPLETE line, no FAIL line: incomplete the state cap of 30000000 was reached. No property is established by this run., fail None
+FAILED CHECK: discovered states <= 30,000,000 (K.1, inclusive): 30,000,001
+FAILED CHECK: expanded states equal discovered states (0 unexpanded): states 30000001, expanded 26539923
+FAILED CHECK: every property line has its source-derived applicable form: [('P1', 'NOT ESTABLISHED (incomplete)'), ('P2', 'NOT ESTABLISHED (incomplete)'), ('P4', 'NOT ESTABLISHED (incomplete)'), ('P5', 'NOT ESTABLISHED (incomplete)'), ('P6', 'NOT ESTABLISHED (incomplete)'), ('P7', 'NOT ESTABLISHED (incomplete)'), ('P8', 'NOT ESTABLISHED (incomplete)'), ('P9', 'NOT ESTABLISHED (incomplete)'), ('P12', 'NOT ESTABLISHED (incomplete)'), ('P13', 'NOT ESTABLISHED (incomplete)'), ('P15', 'NOT ESTABLISHED (incomplete)'), ('D1', 'NOT ESTABLISHED (incomplete)'), ('L1', 'NOT ESTABLISHED (incomplete)'), ('E1', 'NOT ESTABLISHED (incomplete)'), ('E2', 'NOT ESTABLISHED (incomplete)'), ('E3', 'NOT ESTABLISHED (incomplete)'), ('E4', 'NOT ESTABLISHED (incomplete)'), ('E5', 'NOT ESTABLISHED (incomplete)'), ('E6', 'NOT ESTABLISHED (incomplete)'), ('E7', 'NOT ESTABLISHED (incomplete)'), ('E8', 'NOT ESTABLISHED (incomplete)'), ('E9', 'NOT ESTABLISHED (incomplete)'), ('E10', 'NOT ESTABLISHED (incomplete)'), ('E11', 'NOT ESTABLISHED (incomplete)'), ('KEY', 'NOT ESTABLISHED (incomplete)')]
+FAILED CHECK: 24 lines HOLD (mission section 9: 24): 0 HOLD
+FAILED CHECK: KEY HOLDS: NOT ESTABLISHED (incomplete)
+FAILED CHECK: D1 HOLDS: NOT ESTABLISHED (incomplete)
+FAILED CHECK: L1: HOLDS: NOT ESTABLISHED (incomplete)
+FAILED CHECK: E10: 'not applicable here (worker verbs do not unwind)': NOT ESTABLISHED (incomplete)
+FAILED CHECK: branch list complete and every raw label resolved to the frozen vocabulary; no NOT APPLICABLE operation taken (normalizer: NORMALIZED): ['report not found: 2 EXPLORATION headers']
