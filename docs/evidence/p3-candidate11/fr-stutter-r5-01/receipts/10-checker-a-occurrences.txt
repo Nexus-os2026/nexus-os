@@ -1,0 +1,32 @@
+$ python3 <ROOT>/tools/checker_a.py occurrences <OUT>/work/a
+CHECKER A occurrences: 233 target occurrences in 15 of 49 files; 21 semantic consumers; 179 rules
+  ACTION-CONSTRUCT         5
+  ACTION-DECODE            6
+  ACTION-ENCODE            6
+  ACTION-MATCH             21
+  ACTOR-LIST               2
+  CONFIG-READ-INIT         1
+  CONST-VALUE              2
+  DECL                     5
+  DECODE-WRITE             4
+  DISPATCH                 2
+  DOC                      3
+  ENCODE-READ              2
+  GUARD-READ               2
+  INIT-WRITE               2
+  NAME-OTHER               32
+  NAME-PRINT               1
+  PATTERN-IGNORE           1
+  PRINT                    4
+  PRINT-OTHER-EXPLORER     4
+  READ-ACTION              4
+  TEST-FIXTURE             4
+  TRACE-REPLAY             24
+  UNRELATED-LOCAL          3
+  UNRELATED-METHOD         3
+  UNRELATED-OTHER-MODULE   54
+  WITNESS-REPLAY           34
+  WRITE-DEC                1
+  WRITE-SAVE               1
+CHECKER A occurrence verdict: REPLAY_OCCURRENCE_CLOSURE_COMPLETE
+exit status 0

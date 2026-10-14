@@ -1,0 +1,69 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-FR-STUTTER-R5-01 (executor: Claude Code, Claude Opus 5.5)
+Development revisions before the freeze. Every failure is kept here with its repair.
+
+D1  checker_a occurrences, first run (dev/a1): 2 unclassified occurrences and 2 rule-count mismatches.
+    Cause: occurrence_spec named the file egress/tests.rs for two `.name` reads that are in
+    connector/tests.rs. Repair: the two rules' file corrected. Executor spec defect; no source issue.
+D2  checker_a closure, first run (dev/a1): `replays` reported inside the explore closure at
+    mirror_world (the symmetry explorer's `replays: _` pattern).
+    Cause: the name-based call closure treated the field name `hold` in Publish::new's struct
+    literal as a call of model_tests' fn `hold`. Repair: only call-like identifiers (followed by
+    '(' or '::<', or a path segment after '::') are edges. Executor tool defect.
+D3  checker_b, first run (dev/b1): 5 of 61 checks failed, all executor tool defects:
+    B1/B2  items inside inline modules lost their module prefix: the `mod` header regex consumed
+           the '{', so the module's body was mis-found. Repair: a lookahead.
+    B76    the call count of resolve_gating also counted its definition. Repair: exclude `fn `.
+    B81    terminal()'s `w.ack.iter()` was not in the allowed field set (written `ack`). Repair.
+    B86    the format-macro test for config.name was malformed. Repair: the innermost unmatched
+           '(' must follow a format macro name.
+    After repair (dev/b2): 61 of 61.
+D4  agree.py, first run (dev/a3 vs dev/b2): occurrences agree (233 = 233, no status difference);
+    the explore closures disagreed (A 280, B 815). Causes, both executor tool scope defects:
+    B followed calls into all 49 files; A kept body-less trait method declarations. Repair: both
+    follow calls only within the three ledger files (B79 now checks that protocol.rs imports only
+    std, so the closure cannot leave them) and only through fns with bodies. After repair
+    (dev/a4, dev/b3): A 259 = B 259 functions; BOTH ANALYSES AGREE; B 62 of 62.
+D5  branch_disposition.py, first run (dev/bd1): "the two F-R report copies differ". Cause: the
+    comparison ran past each report's end (the panic's own lines follow the first copy).
+    Repair: each copy is compared from its header to its "state key fields:" line. After repair
+    (dev/bd2): the copies are identical; 193 rows, TAKEN 57 / NOT TAKEN 106 / N/A 30, none
+    NOT_ESTABLISHED. Executor tool defect.
+D6  authenticate.py, first run (development/00-authentication-v1-FAILED-checker-expectation.txt):
+    one FAIL, "F-R classification". Cause: the check expected INCOMPLETE on the classification
+    file's first line; Stage-2's file reads "CLASSIFICATION: NOT PASS" there and gives the outer
+    class INCOMPLETE on its second line. Repair: both lines are checked exactly. The receipt is
+    unchanged; executor tool defect. Second run: ALL INPUTS AUTHENTICATED (receipts/00).
+D7  doc_check.py, first run on the drafts: 2 of 25 failed, both rule-precision defects of the executor's checker:
+    W3 judged whole lines, so a table row naming C15 only in its mutant-runs cell and the
+    refinement in another cell was flagged, and C15-DISPOSITION.md's title "C15 — disposition
+    under the F-R refinement route" was flagged (the title was also imprecise: the mutant is not
+    under the refinement route; it was reworded "the mutant stays on the original explorer");
+    S2h judged lines, so section G's negation on the previous wrapped line was not seen.
+    Repair: the rules judge units — each table cell, and each sentence of a paragraph with its
+    lines joined (this also catches a forbidden phrase split across lines). Second run: one
+    failure, W3 on the cell "C15 only: the F-R refinement discharge record after verified
+    restoration" — the allowance named "restored" but not "restoration". Repair: "restor".
+    Third run: 25 of 25.
+D8  controls.py, first run (dev/controls1): 23 of 25 behaved as required; two failures, kept here:
+    SC05 (an ordinary actor writing replays): B failed B1 and B80 but not B87, because B derived
+         read/write only for occurrences that a rule already classified, so an unclassified write
+         never reached B87's write-set check. A genuine weakness of Checker B found by its control.
+         Repair: B derives read/write for every code occurrence of replays, last and .name in
+         model_tests.rs, classified or not.
+    DC21 (the F-R expanded count dropped from the accounting): the control removed only the first
+         of two occurrences, so W4 still saw the number. A defect of the control, not of the
+         checker. Repair: the control removes every occurrence.
+    Second run (dev/controls2): 25 of 25.
+    The failing run's two lines are kept verbatim in development/controls-v1-FAILED.txt. Seeded
+    source copies stay outside the packet (no source copies are transported).
+Note on revisions before the freeze: each repair above is described exactly; the defective tool
+versions were edited in place and are not snapshotted. Every tool is frozen by sha256 before the
+final gate (receipts/40-FREEZE.json), and the final gate runs only the frozen versions.
+D9  prepare.py: two runs into different directories gave byte-identical packets but receipts that
+    differed in the echoed command paths (one relative, one absolute). Repair: prepare normalises its
+    output path and echoes <OUT> and <ROOT>. Two runs then byte-identical (packet and receipts).
+D10 Rehearsal on a scratch copy (dev/rehearsal, outside the packet): prepare, freeze (54 files) and the
+    final gate: 17 check groups, ALL CHECKS HOLD; staged packet 57 files, 848,008 bytes. The rehearsal's
+    outputs are not evidence and are not transported.
+Development closes here. The materials are frozen next (receipts/40-FREEZE.json); the final gate then
+runs once on the frozen files.

@@ -1,0 +1,18 @@
+{
+ "derived_taken_equals_prefix_taken": true,
+ "diagnostic_line_present": true,
+ "f2_complete_taken": 54,
+ "fr_prefix_taken": 57,
+ "fr_prefix_taken_minus_f2": [
+  "append_cell C: Stale",
+  "empty: Stale",
+  "resolve: Stale"
+ ],
+ "fr_status_by_proof": {
+  "NOT APPLICABLE": 30,
+  "NOT TAKEN": 106,
+  "TAKEN": 57
+ },
+ "problems": [],
+ "rows": 193
+}

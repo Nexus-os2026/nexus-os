@@ -1,0 +1,4 @@
+$ python3 <ROOT>/tools/checker_a.py closure <OUT>/work/a
+CHECKER A closure: 259 functions reachable from explore; 25 replay/name occurrences inside it, all classified-allowed: True
+  property/terminal/branch functions free of replay values: True
+exit status 0

@@ -1,0 +1,5 @@
+$ python3 <ROOT>/tools/agree.py <OUT>/work/a <OUT>/work/b
+AGREEMENT: A 233 occurrences, B 233; only A 0, only B 0; status differences 0
+AGREEMENT: explore closure A 259 fns, B 259 fns; only A []; only B []
+AGREEMENT: BOTH ANALYSES AGREE
+exit status 0

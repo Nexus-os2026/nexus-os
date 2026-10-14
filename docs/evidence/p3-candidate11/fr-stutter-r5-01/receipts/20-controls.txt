@@ -1,0 +1,28 @@
+$ python3 <ROOT>/tools/controls.py <OUT>/work/controls <OUT>/packet <OUT>/packet/FR-BRANCH-DISPOSITION-SUMMARY.json
+OK    PC1  unmodified sources: A occurrences/closure/cite and B checks/cite all pass
+OK    SC01  an unclassified replay occurrence (step_fw reads w.replays): anchor x1, seeded copy differs: True; A detects by ['occurrences'] (expected ['occurrences']); B fails ['B1', 'B80', 'cite'] (expected ⊇ ['B1', 'B80'])
+OK    SC02  a property reading Wk.last (state_properties): anchor x1, seeded copy differs: True; A detects by ['occurrences', 'closure'] (expected ['occurrences', 'closure']); B fails ['B1', 'B80', 'B82', 'cite'] (expected ⊇ ['B1', 'B80', 'B82'])
+OK    SC03  a property reading the replay counter (transition_properties): anchor x1, seeded copy differs: True; A detects by ['occurrences', 'closure'] (expected ['occurrences', 'closure']); B fails ['B1', 'B80', 'B83', 'cite'] (expected ⊇ ['B1', 'B80', 'B83'])
+OK    SC04  terminal reading replay history: anchor x1, seeded copy differs: True; A detects by ['occurrences', 'closure', 'cite'] (expected ['occurrences', 'closure', 'cite']); B fails ['B1', 'B80', 'B81', 'cite'] (expected ⊇ ['B1', 'B80', 'B81'])
+OK    SC05  an ordinary actor changing the replay counter (step_se): anchor x1, seeded copy differs: True; A detects by ['occurrences', 'closure', 'cite'] (expected ['occurrences', 'closure', 'cite']); B fails ['B1', 'B80', 'B87', 'cite'] (expected ⊇ ['B1', 'B80', 'B87'])
+OK    SC06  REPLAY failing to decrement: anchor x1, seeded copy differs: True; A detects by ['occurrences', 'cite'] (expected ['occurrences', 'cite']); B fails ['B2', 'B30', 'B87', 'cite'] (expected ⊇ ['B2', 'B30'])
+OK    SC07  REPLAY changing the core: anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B30', 'B89', 'cite'] (expected ⊇ ['B30', 'B89'])
+OK    SC08  REPLAY changing the ledger rows: anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B30', 'B89', 'cite'] (expected ⊇ ['B30', 'B89'])
+OK    SC09  REPLAY consuming an Oracle choice: anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B30', 'B89', 'cite'] (expected ⊇ ['B30', 'B89'])
+OK    SC10  REPLAY creating a fault edge: anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B30', 'B89', 'cite'] (expected ⊇ ['B30', 'B89'])
+OK    SC11  a stale operation reaching storage (Publish::cell opens before the stale test): anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B51', 'cite'] (expected ⊇ ['B51'])
+OK    SC12  REPLAY inserted before an existing actor: anchor x1, seeded copy differs: True; A detects by ['cite'] (expected ['cite']); B fails ['B10', 'cite'] (expected ⊇ ['B10'])
+OK    SC13  an omitted replay action (EmptyX dropped from REPLAY's match): anchor x1, seeded copy differs: True; A detects by ['occurrences', 'cite'] (expected ['occurrences', 'cite']); B fails ['B2', 'B30', 'cite'] (expected ⊇ ['B2', 'B30'])
+OK    PC2  unmodified documents: doc_check passes
+OK    DC14  an omitted replay branch (the 'empty: Stale' row removed from the disposition): anchor x1, seeded copy differs: True; doc_check fails ['S4a', 'S4b', 'S4d'] (expected ⊇ ['S4a', 'S4b'])
+OK    DC15  an unsupported F-R state-count claim: anchor x1, seeded copy differs: True; doc_check fails ['W2'] (expected ⊇ ['W2'])
+OK    DC16  wording that calls F-R PASS: anchor x1, seeded copy differs: True; doc_check fails ['W1'] (expected ⊇ ['W1'])
+OK    DC17  wording that moves C15 to a quotient: anchor x1, seeded copy differs: True; doc_check fails ['W3'] (expected ⊇ ['W3'])
+OK    DC18  AD-1-R5 altering an unrelated clause (F-1's ceiling): anchor x1, seeded copy differs: True; doc_check fails ['S2g'] (expected ⊇ ['S2g'])
+OK    DC19  AD-1-R5 making another configuration dischargeable: anchor x1, seeded copy differs: True; doc_check fails ['S2h'] (expected ⊇ ['S2h'])
+OK    DC20  the proof omitting FR-12's argument: anchor x1, seeded copy differs: True; doc_check fails ['S1b'] (expected ⊇ ['S1b'])
+OK    DC21  the F-R receipt's expanded count dropped from the accounting (every occurrence): anchor x2, seeded copy differs: True; doc_check fails ['W4'] (expected ⊇ ['W4'])
+OK    DC22  a forbidden phrase split across two lines: anchor x1, seeded copy differs: True; doc_check fails ['W1'] (expected ⊇ ['W1'])
+OK    DC23  a prefix-only observation called a complete measurement: anchor x3, seeded copy differs: True; doc_check fails ['S4c'] (expected ⊇ ['S4c'])
+CONTROLS: 25 of 25 behave as required (13 source, 10 document, 2 positive)
+exit status 0

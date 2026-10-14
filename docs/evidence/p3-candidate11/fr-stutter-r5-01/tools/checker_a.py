@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""Checker A — item, occurrence and dependency analysis with exact-source
+extraction (mission section 20, Checker A).
+
+Reads the 49 Rust inputs of the pinned executable from git objects of the
+frozen commit C. Subcommands:
+
+  occurrences OUTDIR [--override REL=FILE ...]
+      scan every target occurrence, classify each against
+      occurrence_spec.RULES, fail on any unclassified occurrence or any rule
+      whose count differs; write the occurrence matrix (TSV, MD, JSON).
+  closure OUTDIR [--override ...]
+      the call closure of `explore` (over-approximate, by name) across the
+      three ledger files; check that within it the only reads of replay
+      values and of `.name` are the classified ones; write it.
+  cite DOC... [--matrix OUT.tsv]
+      resolve every source citation in DOC; fail on any that does not.
+  items OUTDIR
+      the item index of the three ledger files (name, kind, lines, bytes,
+      sha256).
+
+Exit status 0 only if every check holds. Output is deterministic.
+"""
+import json
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import a_items  # noqa: E402
+import a_source  # noqa: E402
+import occurrence_spec  # noqa: E402
+
+LEDGER = ["ledger/protocol.rs", "ledger/protocol/model_tests.rs", "ledger/protocol/unit_tests.rs"]
+SHORT = {"ledger/protocol.rs": "protocol.rs", "ledger/protocol/model_tests.rs": "model_tests.rs",
+         "ledger/protocol/unit_tests.rs": "unit_tests.rs"}
+
+
+def parse_overrides(argv):
+    ov, rest = {}, []
+    k = 0
+    while k < len(argv):
+        if argv[k] == "--override":
+            rel, path = argv[k + 1].split("=", 1)
+            ov[rel] = path
+            k += 2
+        else:
+            rest.append(argv[k])
+            k += 1
+    return ov, rest
+
+
+def item_record(src, rel, it):
+    data, txt = src.text(rel)
+    b0, b1, body = a_items.item_bytes(data, txt, it)
+    return {"file": rel, "item": it.name, "kind": it.kind, "line1": it.line1, "line2": it.line2,
+            "byte1": b0, "byte2": b1, "sha256": a_items.sha256(body), "blob": src.blob(rel)}
+
+
+def classify(occ):
+    rules = occurrence_spec.RULES
+    problems = []
+    hits = [0] * len(rules)
+    for o in occ:
+        matched = []
+        for r, rule in enumerate(rules):
+            f, item, region, token, ordinal, count = rule[:6]
+            if o["file"] == f and o["item"] == item and o["region"] == region and o["token"] == token and (
+                    ordinal == "*" or ordinal == o["ordinal"]):
+                matched.append(r)
+        if len(matched) != 1:
+            problems.append(f"UNCLASSIFIED or ambiguous ({len(matched)} rules): {o['file']}:{o['line']}:{o['col']} "
+                            f"{o['token']} [{o['item']}] {o['region']} #{o['ordinal']}")
+            continue
+        r = matched[0]
+        hits[r] += 1
+        rule = rules[r]
+        o["status"], o["rw"], o["purpose"], o["lemmas"] = rule[6], rule[7], rule[8], rule[9]
+        o["semantic"] = rule[6] in occurrence_spec.SEMANTIC
+    for r, rule in enumerate(rules):
+        if hits[r] != rule[5]:
+            problems.append(f"RULE COUNT MISMATCH: rule {r} {rule[0]} [{rule[1]}] {rule[2]} {rule[3]} "
+                            f"#{rule[4]}: expected {rule[5]}, found {hits[r]}")
+    return problems
+
+
+def cmd_occurrences(outdir, ov):
+    src = a_source.Source(ov)
+    occ, idx = a_source.scan(src)
+    a_source.ordinals(occ)
+    problems = classify(occ)
+    # attach item hashes and line hashes
+    for o in occ:
+        its = idx[o["file"]]
+        it = next((i for i in its if i.name == o["item"]), None)
+        if it is None:
+            o["item_sha256"] = "-"
+            o["item_lines"] = "-"
+        else:
+            rec = item_record(src, o["file"], it)
+            o["item_sha256"] = rec["sha256"]
+            o["item_lines"] = f"{rec['line1']}-{rec['line2']}"
+        data, txt = src.text(o["file"])
+        lt = a_source.line_text(txt, o["line"])
+        o["line_sha256"] = a_source.sha(lt.encode("utf-8"))
+        o["line_text"] = lt.strip()
+        o["blob"] = src.blob(o["file"])
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "A-occurrences.json"), "w") as fh:
+        json.dump(occ, fh, indent=1, sort_keys=True)
+    cols = ["id", "file", "blob", "line", "col", "byte", "region", "group", "token", "item", "item_lines",
+            "item_sha256", "line_sha256", "status", "rw", "semantic", "purpose", "lemmas", "line_text"]
+    for n, o in enumerate(occ, 1):
+        o["id"] = f"O{n:03d}"
+    with open(os.path.join(outdir, "REPLAY-OCCURRENCE-MATRIX.tsv"), "w") as fh:
+        fh.write("\t".join(cols) + "\n")
+        for n, o in enumerate(occ, 1):
+            fh.write("\t".join(str(o.get(c, "")).replace("\t", " ") for c in cols) + "\n")
+    sem = [o for o in occ if o.get("semantic")]
+    with open(os.path.join(outdir, "REPLAY-OCCURRENCE-MATRIX.md"), "w") as fh:
+        fh.write("# Replay occurrence matrix — summary\n\n")
+        fh.write("Generated by Checker A from the frozen sources at Candidate C; the full matrix, every occurrence with its "
+                 "file, blob, line, column, byte offset, region, enclosing item and that item's sha256, its line's "
+                 "sha256, status, read/write, purpose and lemmas, is `REPLAY-OCCURRENCE-MATRIX.tsv`. Definitions: "
+                 "`tools/NAMING.md`.\n\n")
+        fh.write(f"- target occurrences: {len(occ)}, in {len({o['file'] for o in occ})} of {len(src.files)} Rust inputs\n")
+        fh.write(f"- classification rules: {len(occurrence_spec.RULES)}; unclassified: "
+                 f"{sum(1 for p in problems if p.startswith('UNCLASSIFIED'))}; rule-count mismatches: "
+                 f"{sum(1 for p in problems if p.startswith('RULE COUNT'))}\n")
+        fh.write(f"- result: **{'REPLAY_OCCURRENCE_CLOSURE_COMPLETE' if not problems else 'FR_STUTTER_PROOF_BLOCKED'}**\n\n")
+        fh.write("## Semantic consumers (every occurrence whose value can affect a state, a transition, a key or the actor list)\n\n")
+        fh.write("| Id | Line | Item | Token | Status | R/W | Purpose | Lemmas |\n|---|---|---|---|---|---|---|---|\n")
+        for o in sem:
+            fh.write(f"| {o['id']} | {o['line']} | `{o['item']}` | `{o['token']}` | {o['status']} | {o['rw']} | "
+                     f"{o['purpose'].replace('|', '/')} | {o['lemmas']} |\n")
+        fh.write("\n## Occurrences by status\n\n| Status | Count |\n|---|---|\n")
+        counts = {}
+        for o in occ:
+            counts[o.get("status", "UNCLASSIFIED")] = counts.get(o.get("status", "UNCLASSIFIED"), 0) + 1
+        for k in sorted(counts):
+            fh.write(f"| {k} | {counts[k]} |\n")
+        fh.write("\nNo property function (`state_properties`, `transition_properties`, `admission_properties`), no "
+                 "`terminal`, no branch-labelling function (`worker_op`, `fact_append`, `settlement_read`, `step_gc`, "
+                 "`step_adm`) and no ordinary step function other than `step_wk`'s guarded save of `Wk.last` names a "
+                 "replay value (checker A closure, checker B B80–B83).\n")
+    summary = {
+        "occurrences": len(occ),
+        "files_scanned": len(src.files),
+        "files_with_occurrences": len({o["file"] for o in occ}),
+        "semantic_consumers": len(sem),
+        "by_status": {},
+        "problems": problems,
+    }
+    for o in occ:
+        summary["by_status"][o.get("status", "UNCLASSIFIED")] = summary["by_status"].get(o.get("status", "UNCLASSIFIED"), 0) + 1
+    with open(os.path.join(outdir, "A-occurrence-summary.json"), "w") as fh:
+        json.dump(summary, fh, indent=1, sort_keys=True)
+    print(f"CHECKER A occurrences: {len(occ)} target occurrences in {summary['files_with_occurrences']} of "
+          f"{len(src.files)} files; {len(sem)} semantic consumers; {len(occurrence_spec.RULES)} rules")
+    for s, c in sorted(summary["by_status"].items()):
+        print(f"  {s:24} {c}")
+    for p in problems:
+        print("  PROBLEM:", p)
+    verdict = "REPLAY_OCCURRENCE_CLOSURE_COMPLETE" if not problems else "FR_STUTTER_PROOF_BLOCKED (unclassified or mismatched occurrence)"
+    print("CHECKER A occurrence verdict:", verdict)
+    return 0 if not problems else 1
+
+
+# ---- call closure ----------------------------------------------------------------------------
+
+def fn_bodies(src):
+    """name -> (rel, item, body text without comments and strings)."""
+    out = {}
+    for rel in LEDGER:
+        data, txt = src.text(rel)
+        root, its, toks, pos = a_items.items(txt)
+        for it in its:
+            if it.kind != "fn" or it.body_open is None:
+                continue  # a trait method declaration has no body to follow
+            # call-like identifiers inside the item (comments and strings
+            # excluded): followed by '(' or '::<', or a path segment after
+            # '::' (a function passed by path). A field name is not a call.
+            sig = [t for t in toks if it.start <= t.start < it.end and t.kind != "comment"]
+            ids = []
+            for k, t in enumerate(sig):
+                if t.kind != "ident":
+                    continue
+                nxt = sig[k + 1].text if k + 1 < len(sig) else ""
+                nxt2 = sig[k + 2].text if k + 2 < len(sig) else ""
+                prev = sig[k - 1].text if k > 0 else ""
+                prev2 = sig[k - 2].text if k > 1 else ""
+                if nxt == "(" or (nxt == ":" and nxt2 == ":" and k + 3 < len(sig) and sig[k + 3].text == "<") or (
+                        prev == ":" and prev2 == ":"):
+                    ids.append(t)
+            out[(rel, it.name)] = (it, ids)
+    return out
+
+
+def leaf(name):
+    return name.split("::")[-1].split("/")[-1]
+
+
+def closure(src, roots):
+    bodies = fn_bodies(src)
+    by_leaf = {}
+    for key in bodies:
+        by_leaf.setdefault(leaf(key[1]), []).append(key)
+    seen = set()
+    work = [k for k in bodies if k[1] in roots]
+    while work:
+        k = work.pop()
+        if k in seen:
+            continue
+        seen.add(k)
+        it, ids = bodies[k]
+        for t in ids:
+            for cand in by_leaf.get(t.text, []):
+                if cand not in seen:
+                    work.append(cand)
+    return seen, bodies
+
+
+def cmd_closure(outdir, ov):
+    src = a_source.Source(ov)
+    occ, idx = a_source.scan(src)
+    a_source.ordinals(occ)
+    seen, bodies = closure(src, {"explore"})
+    names = sorted(f"{SHORT[r]}::{n}" for r, n in seen)
+    problems = []
+    in_closure = {(r, n) for r, n in seen}
+    allowed = {
+        # (file, item, token): the classified reads/writes allowed inside the explore closure
+        ("ledger/protocol/model_tests.rs", "initial", "replays"),
+        ("ledger/protocol/model_tests.rs", "initial", "last"),
+        ("ledger/protocol/model_tests.rs", "encode", "replays"),
+        ("ledger/protocol/model_tests.rs", "encode", "last"),
+        ("ledger/protocol/model_tests.rs", "decode", "replays"),
+        ("ledger/protocol/model_tests.rs", "decode", "last"),
+        ("ledger/protocol/model_tests.rs", "actors", "replays"),
+        ("ledger/protocol/model_tests.rs", "actors", "Replay"),
+        ("ledger/protocol/model_tests.rs", "step", "Replay"),
+        ("ledger/protocol/model_tests.rs", "step", "step_replay"),
+        ("ledger/protocol/model_tests.rs", "step_wk", "replays"),
+        ("ledger/protocol/model_tests.rs", "step_wk", "last"),
+        ("ledger/protocol/model_tests.rs", "step_replay", "replays"),
+        ("ledger/protocol/model_tests.rs", "step_replay", "last"),
+        ("ledger/protocol/model_tests.rs", "step_replay", "step_replay"),
+        ("ledger/protocol/model_tests.rs", "explore", "replays"),
+        ("ledger/protocol/model_tests.rs", "explore", ".name"),
+        ("ledger/protocol/model_tests.rs", "verb_order", "last"),
+    }
+    inside = []
+    for o in occ:
+        if o["region"] != "code" or o["group"] not in ("exact", "name"):
+            continue
+        if (o["file"], o["item"]) in in_closure:
+            inside.append(o)
+            if (o["file"], o["item"], o["token"]) not in allowed:
+                problems.append(f"unexpected {o['token']} in the explore closure: {o['file']}:{o['line']} [{o['item']}]")
+    # property, terminality and branch functions must hold no replay value at all
+    pure = ["state_properties", "transition_properties", "admission_properties", "terminal", "worker_op",
+            "step_fw", "step_se", "step_gc", "step_adm", "step_ack", "step_env", "fact_append",
+            "settlement_read", "allowed", "present_token", "core_key", "encode_core", "successors"]
+    for name in pure:
+        hits = [o for o in occ if o["file"] == "ledger/protocol/model_tests.rs" and o["item"] == name
+                and o["region"] == "code" and o["group"] == "exact" and o["token"] in ("replays", "last", "Replay", "step_replay")]
+        if hits:
+            problems.append(f"{name} names a replay value: {[(o['line'], o['token']) for o in hits]}")
+        if ("ledger/protocol/model_tests.rs", name) not in in_closure:
+            problems.append(f"{name} is not in the explore closure (expected)")
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "A-explore-closure.txt"), "w") as fh:
+        fh.write(f"# call closure of explore (by name, over-approximate): {len(names)} fns\n")
+        for n in names:
+            fh.write(n + "\n")
+    with open(os.path.join(outdir, "A-closure-occurrences.txt"), "w") as fh:
+        for o in inside:
+            fh.write(f"{o['file']}:{o['line']}:{o['col']}\t{o['token']}\t[{o['item']}]\n")
+    print(f"CHECKER A closure: {len(names)} functions reachable from explore; {len(inside)} replay/name "
+          f"occurrences inside it, all classified-allowed: {not problems}")
+    print(f"  property/terminal/branch functions free of replay values: "
+          f"{all(not p.endswith(')') or 'names a replay' not in p for p in problems)}")
+    for p in problems:
+        print("  PROBLEM:", p)
+    return 0 if not problems else 1
+
+
+# ---- citations ---------------------------------------------------------------------------------
+
+CITE = re.compile(r"\[(protocol\.rs|model_tests\.rs|unit_tests\.rs) · ([^·\]]+?) · L(\d+)(?:–(\d+))? · blob ([0-9a-f]{8}) · item ([0-9a-f]{16})\]")
+FULL = {"protocol.rs": "ledger/protocol.rs", "model_tests.rs": "ledger/protocol/model_tests.rs",
+        "unit_tests.rs": "ledger/protocol/unit_tests.rs"}
+
+
+def cmd_cite(docs, matrix_out, ov):
+    src = a_source.Source(ov)
+    index = {}
+    for rel in LEDGER:
+        data, txt = src.text(rel)
+        root, its, toks, pos = a_items.items(txt)
+        for it in its:
+            index[(rel, it.name)] = item_record(src, rel, it)
+    problems, rows, total = [], {}, 0
+    for doc in docs:
+        text = open(doc, encoding="utf-8").read()
+        for m in CITE.finditer(text):
+            total += 1
+            short, item, l1, l2, blob8, h16 = m.groups()
+            rel = FULL[short]
+            l1 = int(l1)
+            l2 = int(l2) if l2 else l1
+            rec = index.get((rel, item.strip()))
+            where = f"{os.path.basename(doc)}: {m.group(0)}"
+            if rec is None:
+                problems.append(f"no such item: {where}")
+                continue
+            if not rec["blob"].startswith(blob8):
+                problems.append(f"blob mismatch ({rec['blob'][:8]}): {where}")
+            if not rec["sha256"].startswith(h16):
+                problems.append(f"item hash mismatch ({rec['sha256'][:16]}): {where}")
+            if not (rec["line1"] <= l1 <= l2 <= rec["line2"]):
+                problems.append(f"lines outside the item ({rec['line1']}-{rec['line2']}): {where}")
+            rows[(rel, item.strip())] = rec
+    if matrix_out:
+        with open(matrix_out, "w") as fh:
+            cols = ["file", "item", "kind", "blob", "line1", "line2", "byte1", "byte2", "sha256"]
+            fh.write("\t".join(cols) + "\n")
+            for key in sorted(rows):
+                r = rows[key]
+                fh.write("\t".join(str(r[c]) for c in cols) + "\n")
+    print(f"CHECKER A citations: {total} citations in {len(docs)} documents; {len(rows)} distinct items; "
+          f"{len(problems)} unresolved")
+    for p in problems:
+        print("  PROBLEM:", p)
+    if total == 0:
+        print("  PROBLEM: no citation found")
+        return 1
+    return 0 if not problems else 1
+
+
+def cmd_items(outdir, ov):
+    src = a_source.Source(ov)
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "A-item-index.tsv"), "w") as fh:
+        cols = ["file", "item", "kind", "blob", "line1", "line2", "byte1", "byte2", "sha256"]
+        fh.write("\t".join(cols) + "\n")
+        n = 0
+        for rel in LEDGER:
+            data, txt = src.text(rel)
+            root, its, toks, pos = a_items.items(txt)
+            for it in its:
+                r = item_record(src, rel, it)
+                fh.write("\t".join(str(r[c]) for c in cols) + "\n")
+                n += 1
+    print(f"CHECKER A items: {n} items in the three ledger files")
+    return 0
+
+
+def main(argv):
+    ov, rest = parse_overrides(argv[1:])
+    cmd = rest[0]
+    if cmd == "occurrences":
+        return cmd_occurrences(rest[1], ov)
+    if cmd == "closure":
+        return cmd_closure(rest[1], ov)
+    if cmd == "cite":
+        matrix = None
+        docs = []
+        k = 1
+        while k < len(rest):
+            if rest[k] == "--matrix":
+                matrix = rest[k + 1]
+                k += 2
+            else:
+                docs.append(rest[k])
+                k += 1
+        return cmd_cite(docs, matrix, ov)
+    if cmd == "items":
+        return cmd_items(rest[1], ov)
+    print("unknown command", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

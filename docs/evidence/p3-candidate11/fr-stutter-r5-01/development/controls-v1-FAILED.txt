@@ -1,0 +1,5 @@
+controls.py, first run (dev/controls1), the two failing lines exactly as printed (the other 23 lines were OK):
+
+FAIL  SC05  an ordinary actor changing the replay counter (step_se): anchor x1, seeded copy differs: True; A detects by ['occurrences', 'closure', 'cite'] (expected ['occurrences', 'closure', 'cite']); B fails ['B1', 'B80', 'cite'] (expected ⊇ ['B1', 'B80', 'B87'])
+FAIL  DC21  the F-R receipt's expanded count dropped from the accounting: anchor x2, seeded copy differs: True; doc_check fails [] (expected ⊇ ['W4'])
+CONTROLS: 23 of 25 behave as required (13 source, 10 document, 2 positive)

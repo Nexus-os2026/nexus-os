@@ -1,0 +1,260 @@
+# call closure of explore (by name, over-approximate): 259 fns
+model_tests.rs::<Io as AckTxn>::commit
+model_tests.rs::<Io as AckTxn>::insert
+model_tests.rs::<Io as AckTxn>::open
+model_tests.rs::<Io as AckTxn>::recheck
+model_tests.rs::<Io as AckTxn>::rollback
+model_tests.rs::<Io as AckTxn>::survey
+model_tests.rs::<Io as BarrierRun>::run
+model_tests.rs::<Io as CellTxn>::commit
+model_tests.rs::<Io as CellTxn>::insert
+model_tests.rs::<Io as CellTxn>::open
+model_tests.rs::<Io as CellTxn>::present
+model_tests.rs::<Io as CellTxn>::rollback
+model_tests.rs::<Io as Reads>::acknowledgement
+model_tests.rs::<Io as Reads>::explained
+model_tests.rs::<Io as Reads>::frontier
+model_tests.rs::<Io as Reads>::row
+model_tests.rs::<Io as Txn>::commit
+model_tests.rs::<Io as Txn>::facts
+model_tests.rs::<Io as Txn>::insert
+model_tests.rs::<Io as Txn>::open
+model_tests.rs::<Io as Txn>::rollback
+model_tests.rs::<World as Drop>::drop
+model_tests.rs::Dec::action
+model_tests.rs::Dec::b
+model_tests.rs::Dec::byte
+model_tests.rs::Dec::cause
+model_tests.rs::Dec::counted
+model_tests.rs::Dec::entry
+model_tests.rs::Dec::held
+model_tests.rs::Dec::key
+model_tests.rs::Dec::known
+model_tests.rs::Dec::member
+model_tests.rs::Dec::nonce
+model_tests.rs::Dec::occupant
+model_tests.rs::Dec::part
+model_tests.rs::Dec::se_held
+model_tests.rs::Dec::set
+model_tests.rs::Dec::ticket
+model_tests.rs::Dec::token
+model_tests.rs::Dec::u
+model_tests.rs::Dec::x32
+model_tests.rs::Enc::action
+model_tests.rs::Enc::b
+model_tests.rs::Enc::byte
+model_tests.rs::Enc::cause
+model_tests.rs::Enc::counted
+model_tests.rs::Enc::held
+model_tests.rs::Enc::key
+model_tests.rs::Enc::known
+model_tests.rs::Enc::member
+model_tests.rs::Enc::nonce
+model_tests.rs::Enc::occupant
+model_tests.rs::Enc::part
+model_tests.rs::Enc::se_held
+model_tests.rs::Enc::set
+model_tests.rs::Enc::ticket
+model_tests.rs::Enc::token
+model_tests.rs::Enc::u
+model_tests.rs::Enc::x32
+model_tests.rs::Io::do_commit
+model_tests.rs::Io::do_open
+model_tests.rs::Io::do_rollback
+model_tests.rs::Io::holdings
+model_tests.rs::Io::insert_row
+model_tests.rs::Io::new
+model_tests.rs::Io::pick
+model_tests.rs::Io::read
+model_tests.rs::Io::undecided
+model_tests.rs::Obs::branch
+model_tests.rs::Obs::fail
+model_tests.rs::Obs::note
+model_tests.rs::Oracle::branch
+model_tests.rs::Oracle::choose
+model_tests.rs::Oracle::new
+model_tests.rs::Oracle::next
+model_tests.rs::Oracle::sequence
+model_tests.rs::SimRow::key
+model_tests.rs::SimRow::part
+model_tests.rs::Visited::bytes
+model_tests.rs::Visited::grow
+model_tests.rs::Visited::insert
+model_tests.rs::Visited::key
+model_tests.rs::Visited::len
+model_tests.rs::Visited::new
+model_tests.rs::actors
+model_tests.rs::admission_properties
+model_tests.rs::allowed
+model_tests.rs::bit
+model_tests.rs::bytes
+model_tests.rs::cause_label
+model_tests.rs::cell_code
+model_tests.rs::claimable
+model_tests.rs::commitment
+model_tests.rs::core_key
+model_tests.rs::decode
+model_tests.rs::durable_frontier
+model_tests.rs::encode
+model_tests.rs::encode_core
+model_tests.rs::entry_code
+model_tests.rs::exit_code
+model_tests.rs::exit_from
+model_tests.rs::expected_flags
+model_tests.rs::expires
+model_tests.rs::explanations
+model_tests.rs::explore
+model_tests.rs::fact_append
+model_tests.rs::fact_key
+model_tests.rs::fact_member
+model_tests.rs::fact_names
+model_tests.rs::find_seq
+model_tests.rs::gating_key
+model_tests.rs::gating_member
+model_tests.rs::gating_of
+model_tests.rs::hash
+model_tests.rs::initial
+model_tests.rs::initial_rows
+model_tests.rs::is_debt
+model_tests.rs::log_label
+model_tests.rs::malform
+model_tests.rs::member_facts
+model_tests.rs::names
+model_tests.rs::note_fact_result
+model_tests.rs::original_of
+model_tests.rs::pack
+model_tests.rs::present_token
+model_tests.rs::reason_label
+model_tests.rs::record_counted
+model_tests.rs::record_dropped
+model_tests.rs::role_code
+model_tests.rs::row_by_id
+model_tests.rs::row_for_member
+model_tests.rs::row_for_occupant
+model_tests.rs::run_op
+model_tests.rs::seq_at
+model_tests.rs::set_class
+model_tests.rs::settlement_read
+model_tests.rs::state_properties
+model_tests.rs::step
+model_tests.rs::step_ack
+model_tests.rs::step_adm
+model_tests.rs::step_env
+model_tests.rs::step_fw
+model_tests.rs::step_gc
+model_tests.rs::step_replay
+model_tests.rs::step_se
+model_tests.rs::step_wk
+model_tests.rs::successors
+model_tests.rs::survey
+model_tests.rs::terminal
+model_tests.rs::trace
+model_tests.rs::transition_properties
+model_tests.rs::unpack
+model_tests.rs::verb_order
+model_tests.rs::word_of
+model_tests.rs::worker_op
+protocol.rs::<Publish as Drop>::drop
+protocol.rs::<Ticket as Drop>::drop
+protocol.rs::Cause::kind
+protocol.rs::Cell::index
+protocol.rs::Core::agenda
+protocol.rs::Core::append_acknowledgement
+protocol.rs::Core::append_cell
+protocol.rs::Core::append_facts
+protocol.rs::Core::append_gating
+protocol.rs::Core::barrier
+protocol.rs::Core::classify
+protocol.rs::Core::empty
+protocol.rs::Core::explain
+protocol.rs::Core::explanation
+protocol.rs::Core::flags
+protocol.rs::Core::known
+protocol.rs::Core::latch
+protocol.rs::Core::lookup
+protocol.rs::Core::names
+protocol.rs::Core::new
+protocol.rs::Core::next_occupancy
+protocol.rs::Core::occupancy
+protocol.rs::Core::place
+protocol.rs::Core::resolve
+protocol.rs::Core::session_opened
+protocol.rs::Core::snapshot
+protocol.rs::Core::table_full
+protocol.rs::Core::take_worker
+protocol.rs::Core::token
+protocol.rs::FactRecord::member
+protocol.rs::FactRecord::new
+protocol.rs::GatingRecord::member
+protocol.rs::GatingRecord::new
+protocol.rs::Health::arm
+protocol.rs::Health::view
+protocol.rs::HealthView::admits
+protocol.rs::HealthView::handover_fault
+protocol.rs::HealthView::latched
+protocol.rs::HealthView::phase
+protocol.rs::HealthView::x_occupied
+protocol.rs::Publish::acknowledgement
+protocol.rs::Publish::barrier
+protocol.rs::Publish::cell
+protocol.rs::Publish::empty
+protocol.rs::Publish::explain
+protocol.rs::Publish::facts
+protocol.rs::Publish::failed
+protocol.rs::Publish::gating
+protocol.rs::Publish::lookup
+protocol.rs::Publish::new
+protocol.rs::Publish::not_applied
+protocol.rs::Publish::read_failed
+protocol.rs::Publish::resolve
+protocol.rs::Publish::resolve_ack
+protocol.rs::Publish::resolve_gating
+protocol.rs::Publish::rolled
+protocol.rs::Publish::settle
+protocol.rs::Publish::snapshot
+protocol.rs::Publish::worker_belongs
+protocol.rs::Snapshot::nonce
+protocol.rs::Snapshot::set
+protocol.rs::Ticket::confirm
+protocol.rs::Ticket::counted
+protocol.rs::Ticket::expire
+protocol.rs::constraint
+protocol.rs::count_step
+protocol.rs::exchange
+protocol.rs::field
+protocol.rs::hook::remove
+protocol.rs::hook::report
+protocol.rs::hook::take_counts
+protocol.rs::load
+protocol.rs::member_index
+protocol.rs::well_formed
+protocol.rs::with_field
+unit_tests.rs::<HookGuard as Drop>::drop
+unit_tests.rs::<Script as AckTxn>::commit
+unit_tests.rs::<Script as AckTxn>::insert
+unit_tests.rs::<Script as AckTxn>::open
+unit_tests.rs::<Script as AckTxn>::recheck
+unit_tests.rs::<Script as AckTxn>::rollback
+unit_tests.rs::<Script as AckTxn>::survey
+unit_tests.rs::<Script as BarrierRun>::run
+unit_tests.rs::<Script as CellTxn>::commit
+unit_tests.rs::<Script as CellTxn>::insert
+unit_tests.rs::<Script as CellTxn>::open
+unit_tests.rs::<Script as CellTxn>::present
+unit_tests.rs::<Script as CellTxn>::rollback
+unit_tests.rs::<Script as Reads>::acknowledgement
+unit_tests.rs::<Script as Reads>::explained
+unit_tests.rs::<Script as Reads>::frontier
+unit_tests.rs::<Script as Reads>::row
+unit_tests.rs::<Script as Txn>::commit
+unit_tests.rs::<Script as Txn>::facts
+unit_tests.rs::<Script as Txn>::insert
+unit_tests.rs::<Script as Txn>::open
+unit_tests.rs::<Script as Txn>::rollback
+unit_tests.rs::Script::call
+unit_tests.rs::Script::inserted
+unit_tests.rs::Script::new
+unit_tests.rs::bytes
+unit_tests.rs::gating
+unit_tests.rs::key
+unit_tests.rs::set

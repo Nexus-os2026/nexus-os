@@ -1,0 +1,28 @@
+FINAL GATE — P3-C11-DR01-D2A1-FR-STUTTER-R5-01 (run once, after the freeze)
+PASS  G01  all 54 frozen files unchanged ([])
+PASS  G02  every frozen tool re-ran successfully from the frozen inputs (authentication, checker A occurrences and closure, checker B, agreement, branch disposition, proof render, accounting, citations by A and by B, document checks, controls)
+PASS  G03  every regenerated output equals its frozen copy byte for byte (29 files; differing [])
+PASS  G04  complete occurrence closure: REPLAY_OCCURRENCE_CLOSURE_COMPLETE, 233 occurrences, 49 inputs, none unclassified
+PASS  G05  checker B: 62 of 62 checks hold
+PASS  G06  both independent analyses agree: the same 233 occurrences, statuses and explore closure
+PASS  G07  every source citation resolves, by A and independently by B (88 citations)
+PASS  G08-S1b  FR-1 … FR-17 each argued
+PASS  G08-S1c  FR-1 … FR-17 each in the status table
+PASS  G08-W1  F-R is never called PASS (no forbidden wording)
+PASS  G08-W2  no unsupported F-R count
+PASS  G08-W4  the F-R receipt preserved as INCOMPLETE
+PASS  G08-W3  C15 stays original-explorer, 30,000,000
+PASS  G08-S2g  AD-1-R5's rows are scoped to F-R, full_fr or C15
+PASS  G08-S2h  AD-1-R5 makes no other configuration dischargeable
+PASS  G08-S4a  complete branch disposition
+PASS  G08  document checks: 25 of 25
+PASS  G09  every negative control detected and both positive controls pass (25 of 25)
+PASS  G10  all source and evidence provenance authenticated
+PASS  G11  branch accounting complete: 193 rows, 57 / 106 / 30, none NOT_ESTABLISHED
+PASS  G12  AD-1-R4 unchanged at the evidence parent (sha256 00ced6d5…)
+PASS  G13  AD-1-R5 is a separate supplement; it names AD-1-R4 as governing and changes no unrelated rule (S2g, S2h)
+PASS  G14  evidence worktree at the parent 89326b85 with no tracked change (0 untracked entries, all under the packet path)
+PASS  G15  Candidate C unchanged; nothing outside docs/evidence differs from C at the parent
+PASS  G16  packet staged from the frozen files
+PASS  G17  staged packet confined and clean: 57 files, 848701 bytes (limit 2097152, 64 KiB kept for INDEX, the final-gate receipt and SHA256SUMS); text only; no source copy, binary, executable bit, symlink or credential ([])
+FINAL GATE: ALL CHECKS HOLD

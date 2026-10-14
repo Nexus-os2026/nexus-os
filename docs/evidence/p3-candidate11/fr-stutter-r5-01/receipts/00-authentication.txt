@@ -1,0 +1,42 @@
+$ python3 <ROOT>/tools/authenticate.py --remote
+AUTHENTICATION — P3-C11-DR01-D2A1-FR-STUTTER-R5-01
+OK    C d5964ee5326c2733177307db6f507328023d361a is a commit
+OK    C tree 51bac5fd335999cc995c0ab9f582a30244973ef0
+OK    C has the single parent 71264aa81a40b86189783facc8437e0427887c16 (['71264aa81a40b86189783facc8437e0427887c16'])
+OK    protocol.rs blob at C a2df2841b99cad5d452008a6d4150e9369d07e66
+OK    model_tests.rs blob at C 28085ce232827301104b5d757af042ec933976f8
+OK    unit_tests.rs blob at C 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+OK    Stage-1 DEP-INFO lists 49 inputs, each C's blob (49)
+OK    the 49 dep-info inputs are exactly the 49 .rs files of crates/nexus-governed-control/src at C, blob for blob
+OK    pinned executable identity cde9f9d20f32f2b8… recorded by Stage-1 (reference only; not run)
+OK    AD-1-R4 sha256 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+OK    AD-1-R4 blob 35d5074c…
+OK    AD-1-R4 E.3 row 15 reads: | 15 | `full_fr` (4256) | `explore`, F-R | REQUIRED_FINAL_RUN | C15 | |
+OK    Stage-1 f023cc3d single parent 0622a4d0
+OK    Stage-2 89326b85 single parent f023cc3d
+OK    C is an ancestor of Stage-1
+OK    from C to Stage-2 nothing outside docs/evidence changed (0 paths)
+OK    docs/evidence/p3-candidate11/final-baseline-known-runs-01/SHA256SUMS at f023cc3d: 179 entries (expected 179), every committed blob matches (0 mismatches); SHA256SUMS sha256 9e1daf5f0299659a007d2a5a97017093d5b30fbd48a5219f28f6005bcb9bc4a6
+OK    docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/SHA256SUMS at 89326b85: 268 entries (expected 268), every committed blob matches (0 mismatches); SHA256SUMS sha256 2e8748b7c5008a97f324cb6d84a9873673782b0a5536b19a9e212dc7bff3fa36
+OK    F-2 raw output sha256 985a3976…
+OK    F-2: PASS, 12,602,670 states, D1 HOLDS, L1 HOLDS, harness ok
+OK    F-2: 25 property lines, 24 HOLDS, E10 not applicable (25, 24)
+OK    F-2 classification: PASS — admissible unchanged-core original-explorer PASS (34 of 34)
+OK    F-2 receipt: pinned executable and the exact C worktree
+OK    F-R raw output sha256 78e44c33…
+OK    F-R: INCOMPLETE, 30,000,001 discovered, 26,539,923 expanded; no property established
+OK    F-R classification: CLASSIFICATION: NOT PASS; outer class (AD-1-R4 K.2): INCOMPLETE (the state cap of 3000…
+OK    F-R receipt: the same pinned executable
+OK    suite raw output sha256 d6f58742…
+OK    exact-final nonignored suite: 313 passed, 0 failed; e8_holds_for_stale_worker_operations ... ok
+OK    suite classification: PASS
+OK    suite receipt: the pinned executable
+OK    193-row vocabulary sha256 db8734e0…
+OK    contract P3-C11-D2A1-CONTRACT-02-R1 sha256 cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+OK    contract line 713: | C15 | a cell operation ignores the occupancy number | E8 | F-R |
+OK    contract line 851: | F-R | as F-2 | | | | | REPLAY on, three times |
+OK    contract line 639: the REPLAY actor's program
+OK    GitHub refs/heads/review/p3-c11-d2a1-final-baseline-remaining-configs-01 = 89326b859792
+OK    GitHub refs/heads/review/p3-c11-d2a1-fr-stutter-r5-01 absent
+AUTHENTICATION: ALL INPUTS AUTHENTICATED
+exit status 0

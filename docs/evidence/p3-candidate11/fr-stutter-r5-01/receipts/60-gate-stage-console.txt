@@ -1,0 +1,1 @@
+STAGE: 57 files, 848701 bytes, every frozen file equal to its freeze record

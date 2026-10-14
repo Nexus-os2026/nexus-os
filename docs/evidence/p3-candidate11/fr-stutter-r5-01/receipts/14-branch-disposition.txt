@@ -1,0 +1,5 @@
+$ python3 <ROOT>/tools/branch_disposition.py <OUT>/work/bd
+BRANCH DISPOSITION: 193 rows; by proof {'TAKEN': 57, 'NOT TAKEN': 106, 'NOT APPLICABLE': 30}; F-2 complete TAKEN 54; F-R prefix TAKEN 57 (extra over F-2: ['append_cell C: Stale', 'empty: Stale', 'resolve: Stale'])
+  derived TAKEN set equals the prefix's TAKEN set: True (corroboration only, not a measurement of the complete graph)
+BRANCH DISPOSITION: COMPLETE — every row has a status and a provenance; none NOT_ESTABLISHED
+exit status 0

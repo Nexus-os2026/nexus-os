@@ -1,0 +1,13 @@
+00-authentication.txt: exit 0
+10-checker-a-occurrences.txt: exit 0
+11-checker-a-closure.txt: exit 0
+12-checker-b.txt: exit 0
+13-agreement.txt: exit 0
+14-branch-disposition.txt: exit 0
+15-render-proof.txt: exit 0
+16-accounting.txt: exit 0
+17-cite-checker-a.txt: exit 0
+18-cite-checker-b.txt: exit 0
+19-doc-check.txt: exit 0
+20-controls.txt: exit 0
+PREPARE: every step exit 0
