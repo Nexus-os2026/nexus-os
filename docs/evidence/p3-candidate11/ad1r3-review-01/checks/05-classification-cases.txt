@@ -1,0 +1,79 @@
+AD-1-R3 K.2 CLASSIFICATION CASES (synthetic descriptors; no Nexus execution)
+OK   case   1: valid completed PASS
+        raw: PASS
+        outer: PASS
+        kill evidence: —
+OK   case   2: PASS text plus external kill
+        raw: PASS
+        outer: INCOMPLETE (run killed from outside); never PASS
+        kill evidence: no
+OK   case   3: correct witness verdict plus expected completed assertion failure
+        raw: witness FAIL; NAMED PROPERTY P7: OBSERVED on the world after step 1
+        outer: admissible witness receipt: G.3(b) holds
+        kill evidence: part only: with G.3(a) and G.3(d)
+OK   case   4: unrelated panic / nonzero exit
+        raw: (none)
+        outer: NOT ADMISSIBLE (unrelated failure)
+        kill evidence: no
+OK   case   5: original-explorer FAIL without a witness marker
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+OK   case   6: C22 with no mutant executable
+        raw: build exit 101; diagnostics [('E0283', 1089)]
+        outer: FAIL (C22 build failure, E0283 at the designated line); executable and test-run fields NOT PRODUCED BY DESIGN
+        kill evidence: yes
+OK   case   7: raw FAIL discovered after the authorised cardinality is exceeded
+        raw: FAIL
+        outer: INCOMPLETE — BUDGET EXCEEDED
+        kill evidence: no
+OK   case  x1: PASS text, identity mismatch
+        raw: PASS
+        outer: NOT ADMISSIBLE (identity mismatch)
+        kill evidence: no
+OK   case  x2: PASS text, no completion evidence
+        raw: PASS
+        outer: INCOMPLETE (no completion evidence); never PASS
+        kill evidence: no
+OK   case  x3: PASS text, two tests selected
+        raw: PASS
+        outer: NOT ADMISSIBLE (selection)
+        kill evidence: no
+OK   case  x4: quotient precondition refusal
+        raw: (refusal: symmetry inapplicable)
+        outer: INCOMPLETE — VERIFICATION INVALID
+        kill evidence: no
+OK   case  x5: C22 with an internal compiler error
+        raw: build exit 101; diagnostics [('ICE', 0)]
+        outer: NOT ADMISSIBLE (compiler crash or resource failure)
+        kill evidence: no
+OK   case  x6: C22 with E0283 at another line
+        raw: build exit 101; diagnostics [('E0283', 1090)]
+        outer: NOT ADMISSIBLE (unrelated or misplaced diagnostic)
+        kill evidence: no
+OK   case  x7: explorer FAIL of a property other than the named one (non-C1/C25)
+        raw: FAIL
+        outer: FAIL, admissible, of another property: not killed (7.5 stop rule)
+        kill evidence: no
+OK   case  x8: C25 primary receipt: FAIL E4 (not the named P7)
+        raw: FAIL
+        outer: FAIL, admissible (G.3(a) primary receipt)
+        kill evidence: part only: G.3(a)
+OK   case  x9: witness NOT OBSERVED
+        raw: witness FAIL; NAMED PROPERTY P7: NOT OBSERVED
+        outer: NOT ADMISSIBLE (witness rejection, G.3(c))
+        kill evidence: no
+OK   case x10: unit test fails in shared setup
+        raw: (panic in open_core)
+        outer: NOT ADMISSIBLE (failure outside the named test's own checks)
+        kill evidence: no
+OK   case x11: C3a FAIL of either named property
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+OK   case x12: FAIL text but process timed out
+        raw: FAIL
+        outer: INCOMPLETE (run killed from outside); never PASS
+        kill evidence: no
+
+CASES: 19 as expected, 0 not

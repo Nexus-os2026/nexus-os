@@ -1,0 +1,26 @@
+P3-C11-DR01-D2A1-AD1R3-READINESS-01 — FREEZE RECORD   2026-10-14T04:10:00+01:00
+The draft's template, its filler, every checker, the preflight and the diff review are frozen below. The final
+mechanical gate is tools/final-gate.sh, run once. It verifies these hashes first. A gate failure stops the mission;
+no checker or document is changed afterwards to make the gate pass. Provenance mismatches stop immediately.
+
+Declared gate steps: F (frozen inputs + 5 sealed input hashes); G1 fill (exit 0); G2 diff R2->R3 (exit 1 = differences);
+G3 check-ad1r3 (0); G4 negative controls (0); G5 classification cases (0); G6 sealed-definition anchors C9 C10 C24 C4 (0);
+G7 preflight citations (0); G8 obligation scan (0) and G8b its count equals the 30 accounted for in checks/02 (0);
+G9 inert byte copy of controls_defs.py (0); G10 authored-text hygiene: no trailing whitespace, no NUL (0).
+
+59c7c0095943b1716faf40af11febfd68aabcd5f551f04ebbf69fe79671c5f00  tools/ad1r3-template.md
+3b52b9a8cfde0081966e0f77d632db659d1ed2f426b05003627333f3304e08bf  tools/fill-ad1r3.py
+7afda8b3930992c1c3b74e41247434873f861ca5915ab8fbf6510c32b7ebfb01  tools/check-ad1r3.py
+53b92d5fcb232f20252a04f4b8733968f83cac0851cb8801f2ac66a69ccc809e  tools/checker-negative-controls.py
+9f73bab9464ced4de45b51181ca040029f6bcd29740facb3c5e299f4a786f5af  tools/classify-cases.py
+2814e63f9b40054682d385ae77b4b38b859eb4ccc5a7fcafbfe55b39ee2e5f21  tools/defs-anchor-check.py
+55271a845059573c06aa3453890262be59226f6b01100eecfbdd229c0a47f969  tools/check-preflight.py
+5f93652666ee4a26c4637091a9c2bae07d0b68c1a8d8db85f2ce8ba21c617c7c  tools/r2-r3-obligation-scan.py
+7338a186e027e993ff334ab7307b655ea12055785f8004b8d722a82785a46bc4  tools/final-gate.sh
+0d423d21058916cb7271a08ae992d646683a2e6479393027698166a8688b2fa7  tools/stage1-auth.sh
+18fc4bcee3920c906cd8de7d057a3368add4ba95d99bae25b296dd1657086473  tools/revisions/check-ad1r3.v1.py
+50062c3a40466ecd2aa894cc6e4142d0abb589e9e7e7a233fbde48c1158cd89c  tools/revisions/check-ad1r3.v2.py
+255939156e3fe7918e4a680fd4c72102171f21bbb21752acfb67b71fd83ae721  tools/revisions/checker-negative-controls.v1.py
+659302851eb680fe4623cb12fa2fa60c3dcb1b9830901926e5a80c17ef25ab6e  tools/revisions/check-preflight.v1.py
+a80339e15a253d4df199e0a9d8731f0a30ff513b26391b29a634d3ca95a3910b  preflight/C9-C10-C24-C4-ATTRIBUTION-PREFLIGHT.md
+f28b0935005f287ca383e27fb8582439cc2156dd4b821357560905737635e0a3  checks/02-r2-to-r3-diff-review.txt

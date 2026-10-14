@@ -1,0 +1,117 @@
+P3-C11-DR01-D2A1-AD1R3-READINESS-01 — AD-1-R2 -> AD-1-R3 DIFF REVIEW (executor's own review; not an approval)
+
+Inputs: AD-1-R2 sha256 53cdb3d6ea8683a11ccaf90a6671a37b42dd5db178b599cfeb421b898a089ebc (blob 8505fb80 in 8693e3a7).
+        AD-1-R3 as produced by tools/fill-ad1r3.py from tools/ad1r3-template.md (identities in receipts/04-final-gate.txt).
+Method: (1) the unified diff (ad1r3/AD1-R2-to-AD1-R3.diff) read hunk by hunk; (2) tools/r2-r3-obligation-scan.py, which
+        lists every obligation-bearing AD-1-R2 sentence (outside verbatim blocks and change tables) that does not occur
+        verbatim in AD-1-R3. The scanner splits on sentence punctuation, so table rows run together; several of its
+        items are such chunks, whose individual sentences do survive. Each item is accounted for below.
+
+PART 1 — WHAT THE MISSION DIRECTED, AND WHERE R3 DOES IT
+  R2-01 typed receipts
+    - S-6: blanket "G.3(c)'s rejections apply to every failing receipt" removed; each receipt meets its own type (F.1)
+      and K.2; G.3(c) only for the C1/C25 witness invocation; named-property attribution, fixture/unrelated rejection,
+      C22 exception as contracted and the stop rule kept.
+    - F.1 types: (a) original-explorer mutation; (b) named non-explorer unit test; (c) C1/C25 witness; (d) C22 compile
+      failure; (e) unchanged-core PASS; (f) A4 comparison. Witness-only requirements appear only in (c) and G.3.
+    - C22: nonzero compiler result, E0283 at the designated T-OWN assertion (unit_tests.rs 1089 at 42dd1bd1, verified
+      by check C10g), source/build identity, healthy build evidence; ICE, resource failures, other diagnostics and E0283
+      elsewhere rejected; executable and test-run fields NOT PRODUCED BY DESIGN; no invented hash, no witness. I's
+      identity list aligned (item 4-7); K.2's points read for C22 (no contradiction; check C11m).
+    - G.3(a) (the full_f1 primary receipt) carries no witness-line requirement; C1/C25 primary E3/E4 plus separate
+      P1/P7 witnesses kept.
+  R2-02 process-aware classification
+    - "classification is by text, never by exit status" withdrawn (K.2); G.3(a)'s "the report text, not the exit
+      status, decides" replaced; S-1 and S-14 supplemented; F's kill sentence requires an admissible typed receipt.
+    - K.2: the seven points that must agree (identity; selection/configuration; complete raw output and property
+      evidence; expected harness result; exit/signal; supervisor termination and limit records; completion and
+      cardinality). PASS text plus kill/timeout/OOM/incomplete termination/identity mismatch/missing completion is not
+      PASS. Nonzero status alone insufficient. Raw outcome and admissibility recorded separately.
+    - K.1: raw FAIL beyond C kept with its counterexample; outer gate INCOMPLETE — BUDGET EXCEEDED absent a separate
+      explicit authorisation; not a final mutation-kill receipt. Inclusive cardinality <= C kept. No source cap, time
+      or memory allowance changed. INCOMPLETE — VERIFICATION INVALID kept.
+    - Classification table: the seven cases the mission lists (K.2 table rows 1-7); tools/classify-cases.py applies
+      the rules to synthetic descriptors of those seven and twelve extra negatives.
+    - The narrow-probe helper and the readiness probe are recorded as historical, not approved controllers, not
+      modified, not rerun (G.1).
+  Authority
+    - S-20 (contract lines 923, 928, 976) and S-21 (lines 4, 5); section R maps every role reference, including
+      REVIEW-02 line 238 and REVIEW-03 lines 81 and 83 (quoted verbatim; checked against their bytes). Independent
+      review, Owner authority and "a reviewer does not accept a repair it wrote" kept. Claude Chat and Codex not
+      required. The mission's "line 929" is empty in the contract file; the adjacent Codex sentence is line 928; R
+      reports this and maps 928 (open item 11).
+  Trace wording
+    - S-19 replaces line 609's phrase for every run with the scoped statement; S-2 no longer clarifies it; O.4 has one
+      operative text; O.3's NOT ESTABLISHED list (global minimality, cycle witness) kept; raw printed wording and D's
+      replay requirement kept. Source basis checked for all three explorers (C12e).
+  Carried (check C14 confirms each phrase is still present): F-1 60M only after Owner approval; no one-run
+  authorisation inferred; composed quotient only for F-3, F-PT, F-B; all N prerequisites; 15 configurations with
+  dispositions (C4g); diagnostics, D1/L1, replay; no new instrumentation; exact-final-baseline evidence, no
+  historical substitution; detached attestation; historical review fields not current approval; current-tree manifest
+  neither created nor approved; corrected CAS wording; A-1/A-2 undischarged; receipt linking with each control's own
+  restoration and artifact-identity check, still proposed; result-line counts (C8b).
+
+PART 2 — EACH SCAN ITEM (30) ACCOUNTED FOR
+   1  "The diff from AD-1-R1 to this file is kept beside it."        -> header: now "from AD-1-R2"; the R2 diff stays
+                                                                       in the earlier packet.
+   2  verbatim-rule sentence naming check-ad1r2.py                     -> rewritten: covers the two reviews' blocks;
+                                                                       names check-ad1r3.py. Rule unchanged in force.
+   3  basis-table chunk (C1/C25 probes "not yet authenticated")       -> updated per the AD1R3 ruling (0A.1). The
+                                                                       other cells of the chunk are unchanged.
+   4  chunk "Not ready for Owner adoption … ### 0A.2 …"               -> the earlier ruling's table is kept verbatim
+                                                                       (count 1); "Neither that ruling" became
+                                                                       "Neither ruling"; 0A.2 is now this mission's
+                                                                       repairs, the old 0A.2 is 0A.3.
+   5  chunk "C7 without A4 | F | … | G | …"                           -> the disposition table is unchanged, now under
+                                                                       0A.3 (count 1 for its rows).
+   6  "S-16 to S-18 are new." (+ table chunk)                         -> "S-16 to S-18 are AD-1-R2's. S-19 to S-21 are
+                                                                       new." S-1 row amended (K.1/K.2 supplements).
+   7  S-2: CLARIFIED "so that a violation has a shortest trace" …     -> moved to S-19 (REPLACED), per the trace ruling.
+   8  "Unchanged for every original run. | B, E, O |" (+ S-3)          -> S-2: "Otherwise unchanged for every original
+                                                                       run. | B, E |"; S-3 unchanged (count 1).
+   9  "G.3(c)'s rejections apply to every failing receipt."           -> removed, per R2-01.
+  10  "The C22 exception and the stop rule: unchanged." (+ S-7)        -> S-6 keeps both ("the C22 exception as
+                                                                       contracted, and the stop rule: unchanged");
+                                                                       S-7 unchanged.
+  11  S-14 "SUPPLEMENTED: a quotient precondition refusal is …"       -> kept in S-14's new wording, with K.2 and BUDGET
+                                                                       EXCEEDED added.
+  12  "Using the label remains the Owner's decision." (+ chunk)        -> S-18 unchanged (count 1); the chunk differs
+                                                                       because S-19..S-21 follow it.
+  13  F: "A control is killed only by the original explorer's FAIL …" -> rewritten: only by an admissible receipt of
+                                                                       its own type; same three routes (explorer FAIL
+                                                                       of the named property under G for C1/C25; the
+                                                                       named test's failure; C22's build failure).
+  14  "A control run that reaches a ceiling without a FAIL is not …"   -> kept, extended: "or whose FAIL is found beyond
+                                                                       its ceiling (K.1)".
+  15  C25 narrow probe status "EXECUTOR-REPORTED until the Architect …"-> updated per the AD1R3 ruling.
+  16  "No final kill." (+ "First failures … NOT ESTABLISHED")          -> both kept (counts 2 and 1).
+  17  "- An INCOMPLETE run is not a FAIL."                             -> kept, extended with the beyond-C FAIL.
+  18  "Exit status 101 is shared …, so the report text … decides."     -> replaced, per R2-02 (K.2).
+  19  "A failing test exit alone establishes none of (a), (b) or (d)." -> kept (count 1), with "Each … admissible
+                                                                       under K.2" added.
+  20  I item 7 "… and the restored PASS receipt."                      -> kept, with the C22 inclusion added.
+  21  "This makes no PASS possible beyond C."                          -> kept as "No PASS is possible beyond C."
+  22  K: "**Classification is by text, never by exit status.**"        -> withdrawn, per R2-02.
+  23  "FAIL, INCOMPLETE, a refusal and any other panic all exit 101."  -> kept as a fact in K.2's preface (now marked
+                                                                       EXECUTOR-REPORTED), no longer a rule.
+  24  "The receipt classifies a run only from its printed outcome …"   -> withdrawn, per R2-02.
+  25  "A stricter reading … must not create." (+ "## L.")             -> kept (count 1); a sentence follows it now.
+  26  "G and F rely on property names and verdicts, never on minimality." -> kept in substance: "No gate relies on
+                                                                       minimality: G and F rely on property names and
+                                                                       verdicts."
+  27  packet prefix ad1r2-review-packet-01                             -> this packet's prefix; the earlier packet is
+                                                                       named as unchanged.
+  28  "Its commit is an evidence-transport commit, not an engineering baseline." -> "Neither commit is an engineering
+                                                                       baseline."
+  29  open item 2 "A to Q"                                             -> "A to R" (section R added).
+  30  "G applies to C1 and C25 only; nothing here extends it."         -> kept, sharpened: "… extends it to any other
+                                                                       control."
+
+PART 3 — FINDINGS OF THIS REVIEW THAT CHANGED THE DRAFT BEFORE THE GATE (receipts/02-development-log.txt)
+  - I item 4 required a mutant executable for every control, contradicting F.1 (d); aligned.
+  - K.2's seven points presumed an executable and one test run; a paragraph now reads them for non-exploration tests
+    and for C22 (checker C11m added).
+  - S-19 is stated "for every run": checked that explore_experimental and explore_symmetric_kept build traces with the
+    same breadth-first parent table (M 5057, 6598); O.2 cites it.
+  - R mapping wording clarified ("line 5 of each review").
+  No change in this review weakens a gate, relabels a property, removes a stop condition, or authorises anything.

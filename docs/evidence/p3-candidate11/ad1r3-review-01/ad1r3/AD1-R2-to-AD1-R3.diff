@@ -1,0 +1,574 @@
+--- AD-1-R2/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R2-DRAFT.md
++++ AD-1-R3/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R3-DRAFT.md
+@@ -1,23 +1,26 @@
+-# P3-C11-D2A1-CONTRACT-02-R1 — ADDENDUM AD-1-R2 — DRAFT
++# P3-C11-D2A1-CONTRACT-02-R1 — ADDENDUM AD-1-R3 — DRAFT
+ 
+ **STATUS: DRAFT — NOT ACCEPTED — NOT ADOPTED — NOT APPLIED. NOT IN FORCE.**
+ 
+-Prepared by the executor (Claude Code, Claude Opus 5.5) under P3-C11-DR01-D2A1-AD1R2-CONTRACT-EVIDENCE-01, for the
+-Sole Architect's independent review. It repairs AD-1-R1 as that mission's dispositions A to Q direct, and carries the
+-Architect's ruling on the witness audit (0A.1). It decides nothing those dispositions left open. The Owner keeps
++Prepared by the executor (Claude Code, Claude Opus 5.5) under P3-C11-DR01-D2A1-AD1R3-READINESS-01, for the
++Sole Architect's independent review. It repairs AD-1-R2 as that mission directs (0A.2: typed receipts, process-aware
++classification, review roles, trace wording), carries the Architect's rulings (0A.1), and keeps AD-1-R2's dispositions
++A to Q otherwise unchanged. It decides nothing those rulings left open. The Owner keeps
+ authority over every contract amendment. Until the Architect has reviewed this text and the Owner has approved it,
+ contract P3-C11-D2A1-CONTRACT-02-R1 (sha256 `cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c`)
+ applies unchanged, with its binding reviews (`6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce`,
+ `1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35`).
+ 
+-**Relation to AD-1 and AD-1-R1.** This is a new file. AD-1 (`01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e`)
+-and AD-1-R1 (`589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda`) are history. Neither is changed or
+-overwritten. The diff from AD-1-R1 to this file is kept beside it.
++**Relation to AD-1, AD-1-R1 and AD-1-R2.** This is a new file. AD-1 (`01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e`),
++AD-1-R1 (`589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda`) and AD-1-R2
++(`53cdb3d6ea8683a11ccaf90a6671a37b42dd5db178b599cfeb421b898a089ebc`) are history. None is changed or
++overwritten. The diff from AD-1-R2 to this file is kept beside it.
+ 
+ **Verbatim rule.** Each fenced `text` block that follows a `VERBATIM` marker (an HTML comment naming contract line
+-numbers) is copied by program from the contract file above, line by line, without elision. A checker run against the
+-contract's bytes compares every such block, and every inline quotation of the contract listed in it, with those lines
+-(`tools/check-ad1r2.py`; its output is in the review packet). Line numbers are of the contract file.
++numbers) is copied by program from the contract file above, line by line, without elision. A block that follows a
++`VERBATIM REVIEW-02` or `VERBATIM REVIEW-03` marker is copied in the same way from the binding review of that hash. A
++checker run against those bytes compares every such block, and every inline quotation listed in it, with those lines
++(`tools/check-ad1r3.py`; its output is in the review packet). Line numbers are of the file named.
+ 
+ Nothing here does any of the following:
+ 
+@@ -55,11 +58,22 @@
+ | F-1, F-2 original | CAMPAIGN-01 at 244c5b23: F-1 PASS 46,524,336 states (under the Owner's one-run 60M exception); F-2 PASS 12,602,670 | EXECUTOR-REPORTED; informational; not final-commit evidence |
+ | F-3 history | four INCOMPLETE runs (M) | INCOMPLETE; establish nothing |
+ | C1/C25 witness source | commit 42dd1bd1 (tree 7ac6bb21), published on `refs/heads/review/p3-c11-d2a1-ad1r1-witness-01` | PROVEN FROM SOURCE (ref, commit, tree and blobs read back); ARCHITECT-RULED: interim source review passed, no blocking source defect |
+-| C1/C25 probes | C1 probe and the historical compound C25 probe (AD1R1-MUT-READINESS-01); the narrow C25 probe (AD1R1-WITNESS-AUDIT-01) | EXECUTOR-REPORTED; execution evidence not yet authenticated by the Architect (G) |
++| C1/C25 probes | C1 probe and the historical compound C25 probe (AD1R1-MUT-READINESS-01); the narrow C25 probe (AD1R1-WITNESS-AUDIT-01) | EXECUTOR-REPORTED raw receipts. ARCHITECT-RULED (AD1R3-READINESS-01): the historical receipts support C1's intended P1 attribution; the retrieved patch and the authenticated historical receipts support C25's P7 with `self.keep = true` preserved. Historical, not final-baseline evidence; no final mutation kill (G) |
+ 
+ ## 0A. What this draft encodes
+ 
+-### 0A.1 The Architect's ruling carried into this mission
++### 0A.1 The Architect's rulings carried into this draft
++
++**The ruling of P3-C11-DR01-D2A1-AD1R3-READINESS-01** (governs where it and the earlier ruling below differ):
++
++| Subject | Ruling | Section |
++|---|---|---|
++| AD-1-R2 | REPAIR. | this file |
++| C1 | The witness's source-review finding is maintained. The historical receipts support its intended P1 attribution. No final mutation kill. | G |
++| C25 | The narrow one-line return-value definition remains selected. The retrieved patch and the authenticated historical receipts support P7 with `self.keep = true` preserved. No additional probe is justified. No final mutation kill. The old compound C25 definition is historical only. | G |
++| Pending | Final AQ/SQ proof acceptance, the Owner's adoption of the amendment, final baseline selection, the full campaigns and integration. | B, I, N |
++
++**The earlier ruling, on the witness audit (carried by AD-1-R2):**
+ 
+ | Subject | Ruling | Section |
+ |---|---|---|
+@@ -68,9 +82,20 @@
+ | C25 | Select the narrow one-line return-value mutation. Preserve `self.failed()`, `self.rolled(io.rollback())` and `self.keep = true`. The old compound mutation is historical evidence only. No final mutation kill is established. | G |
+ | AD-1-R1 | REPAIR. Not ready for Owner adoption. | this file |
+ 
+-Neither that ruling nor this draft accepts D2A-1, integrates it, or completes Phase Three.
++Neither ruling nor this draft accepts D2A-1, integrates it, or completes Phase Three.
++
++### 0A.2 This mission's repairs
+ 
+-### 0A.2 This mission's dispositions
++| Item | Subject | Section |
++|---|---|---|
++| R2-01 | typed receipt requirements; S-6 no longer applies G.3(c) to every failing receipt; the witness-only rules apply only to the C1/C25 witness invocation | 1 (S-6), F.1, G.3 |
++| R2-02 | process-aware, fail-closed classification in place of "classification by text, never by exit status"; raw outcome kept apart from admissibility; INCOMPLETE — BUDGET EXCEEDED; classification table | 1 (S-1, S-14), F, G.3, K |
++| AU | the contract's and the binding reviews' Lead Architect, First Architect and Codex review roles mapped to the Owner's current arrangement | 1 (S-20, S-21), R |
++| TR | line 609's trace phrase replaced by one scoped, explicit statement; O.4 has one operative reading | 1 (S-2, S-19), O |
++
++Every other disposition below (A to Q) is carried unchanged, except where these four items name its text.
++
++### 0A.3 Dispositions of AD1R2-CONTRACT-EVIDENCE-01, carried
+ 
+ | Disposition | Subject | Section |
+ |---|---|---|
+@@ -92,7 +117,7 @@
+ | P | test-only boundary; this packet's additions only | P |
+ | Q | result-line counts by configuration | Q |
+ 
+-### 0A.3 Earlier rulings kept
++### 0A.4 Earlier rulings kept
+ 
+ AD-1-R1 encoded the rulings A to J of P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01 (F-1's ceiling as a proposed
+ standing exception; F-3's quotient conditionally recognizable; C-1; obligations kept; F-3, F-PT, F-B only; F-1 for
+@@ -111,16 +136,17 @@
+ - **CLARIFIED**: the text governs as written; the addendum states its one reading and changes no obligation.
+ - **PROPOSED CLARIFICATION**: as CLARIFIED, but explicitly open: until approved, the present reading governs.
+ 
+-Numbers S-1 to S-15 are AD-1-R1's. S-16 to S-18 are new.
++Numbers S-1 to S-15 are AD-1-R1's. S-16 to S-18 are AD-1-R2's. S-19 to S-21 are new. S-1, S-2, S-6 and S-14 are
++amended by this draft (0A.2).
+ 
+ | # | Line(s) | Clause (short name) | Effect, with its scope | Section |
+ |---|---|---|---|---|
+-| S-1 | 855 | caps of a full run | REPLACED for F-1's state ceiling (A; only once the Owner approves). REPLACED for what the 30,000,000 counts in F-3, F-PT and F-B runs admitted by E (C). CLARIFIED: "Reaching one" (K). Time, memory, every other configuration and every INCOMPLETE cause: unchanged. | A, C, K |
+-| S-2 | 609 | the explorer visits every interleaving | REPLACED for F-3, F-PT and F-B as the means of their unchanged-core 8.3 evidence: the admitted run visits one representative of each equivalence class (B, E). CLARIFIED: "so that a violation has a shortest trace" (O); its stronger readings are named NOT ESTABLISHED there. Unchanged for every original run. | B, E, O |
++| S-1 | 855 | caps of a full run | REPLACED for F-1's state ceiling (A; only once the Owner approves). REPLACED for what the 30,000,000 counts in F-3, F-PT and F-B runs admitted by E (C). CLARIFIED: "Reaching one" (K.1). SUPPLEMENTED: a raw FAIL found once the discovered count exceeds the ceiling is kept as printed, and its outer gate is INCOMPLETE — BUDGET EXCEEDED (K.1); "a run killed from outside" includes a run killed after it printed PASS (K.2). Time, memory, every other configuration and every INCOMPLETE cause: unchanged. | A, C, K |
++| S-2 | 609 | the explorer visits every interleaving | REPLACED for F-3, F-PT and F-B as the means of their unchanged-core 8.3 evidence: the admitted run visits one representative of each equivalence class (B, E). The sentence's last phrase is S-19's. Otherwise unchanged for every original run. | B, E |
+ | S-3 | 620 | equal keys are one state | REPLACED for E's quotient runs: the admission counter and the gating callers' orientation are left out of the quotient key by the equivalence, not by omission (B, N); the receipt names both. Unchanged for every original run. | B, D, N |
+ | S-4 | 831 | run on the exact final commit, every one | REPLACED for the unchanged-core runs of F-3, F-PT and F-B: "every one" is discharged by E's inventory. SUPPLEMENTED by I. "Missing evidence for any of them is a failed mission": unchanged. | E, I |
+ | S-5 | 853 | failing and restored receipts | REPLACED for the form of the restored receipt on F-PT and F-B, and for the unchanged-core side of the C7-without-A4 comparison (F). SUPPLEMENTED: failing receipts and build identity (F, I). PROPOSED CLARIFICATION: receipt linking (I). | F, I |
+-| S-6 | 693 | a control must make its property fail | REPLACED for C1 and C25 only: the kill criterion is G.3. SUPPLEMENTED for every control: G.3(c)'s rejections apply to every failing receipt. The C22 exception and the stop rule: unchanged. | F, G |
++| S-6 | 693 | a control must make its property fail | REPLACED for C1 and C25 only: the kill criterion is G.3. SUPPLEMENTED for every control: each receipt meets the requirements of its own type (F.1) and is classified by K.2. G.3(c) applies only to the C1/C25 witness invocation, never to any other receipt. Named-property attribution, the rejection of fixture and unrelated failures, the C22 exception as contracted, and the stop rule: unchanged. | F, G, K |
+ | S-7 | 699 | row C1 | REPLACED: the cell "P1" is read as "P1 (first failure E3; witness)". CLARIFIED: the cell "the count becomes a flag" has the exact definition of G.2. | G |
+ | S-8 | 721 | row C25 | REPLACED: the cell "P7" is read as "P7 (first failure E4; witness)". CLARIFIED: the cell's change has the exact narrow definition of G.2. | G |
+ | S-9 | 863 | receipts of every run | REPLACED for E's quotient runs: "states and transitions" are the measured quotient counts, with the derived original states where N holds (D). REPLACED: "with the receipt that shows it ran" becomes "with the receipt that shows it ran, or with its approved disposition" (E). SUPPLEMENTED: count labels and replay (D). | D, E |
+@@ -128,11 +154,14 @@
+ | S-11 | 912 | manifest controls of `P3` | REPLACED as to *how* the text update is made; its condition kept | H |
+ | S-12 | 915 | D2A-1 does not edit the manifest; B/Q-5 | SUPPLEMENTED (not replaced): the revision it requires, and its detached attestation, are specified | H |
+ | S-13 | 548 | rule R1 | REPLACED: only the sentence beginning "The loop needs no load". The other sentences of R1 stay as written. | L |
+-| S-14 | 813 | three outcomes | CLARIFIED: "a cap was reached" (K). SUPPLEMENTED: a quotient precondition refusal is INCOMPLETE — VERIFICATION INVALID (K). "INCOMPLETE is never PASS": unchanged. | K, M |
++| S-14 | 813 | three outcomes | CLARIFIED: "a cap was reached" (K.1). SUPPLEMENTED: the printed outcome is the raw explorer outcome; whether the run is admissible evidence is decided separately (K.2). A quotient precondition refusal is INCOMPLETE — VERIFICATION INVALID, and a raw FAIL beyond the authorised cardinality is INCOMPLETE — BUDGET EXCEEDED (K.1). "INCOMPLETE is never PASS": unchanged. | K, M |
+ | S-15 | 827 | caps of the default suite | CLARIFIED: "under its cap" (K) | K |
+ | S-16 | 742 | row A4 | SUPPLEMENTED: its run is F-PT's 8.3 run, which may be F-PT's admitted quotient run, compared with F-3's (F). No other actor or core change may run under a quotient. | E, F |
+ | S-17 | 748 | C7 without A4 on F-3 | SUPPLEMENTED (second sentence only): the mutant runs on the original explorer; its unchanged-core side may cite an accepted exact-final-baseline F-3 quotient PASS (F). It is still added to the receipts and still not required to kill. The first sentence: unchanged. | F |
+ | S-18 | 923 | the label's first condition | CLARIFIED (consequential): "every run of 8.3" reads per E's inventory; "every control is killed" reads per G for C1 and C25 and per F for A4. Using the label remains the Owner's decision. | E, F, G |
++| S-19 | 609 | the trace phrase "so that a violation has a shortest trace" | REPLACED, for every run (original or quotient, healthy or mutant), by O.4's statement: a shortest breadth-first parent path to the checked state, with the offending transition appended where applicable. No global counterexample minimality and no shortest cycle witness is claimed. The printed trace wording and the replay requirement (D) are unchanged. | O, D |
++| S-20 | 923, 928, 976 | the evidence reviewer named Codex | REPLACED as to who reviews: the Sole Architect (ChatGPT) reviews Claude Code's evidence independently (R). Unchanged: the review must actually pass; a reviewer does not accept a repair it wrote; the Owner decides whether the label is used. | R |
++| S-21 | 4, 5 | the Lead Architect and the First Architect | CLARIFIED: these role names, and their other occurrences listed in R, read under the Owner's current arrangement (R). Historical authorship, dates and acceptances are unchanged. | R |
+ 
+ ### Verbatim text of each superseded clause
+ 
+@@ -268,6 +297,31 @@
+ - every run of 8.2 and 8.3 is PASS, every control is killed, and Codex's review of the evidence passes;
+ ```
+ 
++**S-19, line 609** (verbatim; the same line as S-2, whose last phrase S-19 replaces):
++
++<!-- VERBATIM 609 -->
++```text
++`model_tests.rs` explores the real core. It simulates the ledger's content, implements every verb over that simulation, and plays every caller. It visits every interleaving of whole steps, breadth first, with a visited set and a parent table, so that a violation has a shortest trace.
++```
++
++**S-20, line 923, 928 and 976** (verbatim; line 976 is a row of the table headed at line 970):
++
++<!-- VERBATIM 923,928,970,976 -->
++```text
++- every run of 8.2 and 8.3 is PASS, every control is killed, and Codex's review of the evidence passes;
++The second review accepts this scoped use (ruling 5), only after the evidence and Codex's review have actually passed. No label is awarded now. Using it remains the Owner's decision at that time.
++| Precondition | State |
++| A reviewer for the implementation evidence | Codex, under that arrangement. A reviewer does not accept a repair it wrote. |
++```
++
++**S-21, line 4 and 5** (verbatim; the contract's header):
++
++<!-- VERBATIM 4,5 -->
++```text
++**From:** Claude — Lead Architect
++**To:** ChatGPT — First Architect / Independent Auditor
++```
++
+ ### Not superseded
+ 
+ The following stay in force exactly as written. They are quoted so that no gate is weakened silently.
+@@ -343,7 +397,8 @@
+ - 8.2 (the default suite), except the reading of "under its cap" (S-15);
+ - section 9;
+ - the pins of section 10 other than S-10 and S-11;
+-- the label conditions of section 11, read as S-18 states;
++- the label conditions of section 11, read as S-18 and S-20 state;
++- section 14's other preconditions, and section 15, read under S-21 (role names only);
+ - every stop condition of section 12.
+ 
+ ---
+@@ -576,9 +631,10 @@
+ configuration's ceiling (F-1: 60,000,000 once A is in force; every other: 30,000,000; default explorations: 250,000).
+ Every control killed by a named test runs that test on the mutant build: C14 T-BIND, C19 T-CELL, C21 W6, C22 T-OWN,
+ C27 T-PREC, C28 T-RES. C22 alone is killed by a build failure, with the recorded diagnostic E0283 at the assertion's
+-line. A control is killed only by the original explorer's FAIL of its named property, read under G for C1 and C25, or
+-by its named test's failure. A control run that reaches a ceiling without a FAIL is not killed, and 7.5's stop rule
+-applies.
++line. A control is killed only by an admissible receipt of its own type (F.1, K.2): the original explorer's FAIL of
++its named property, read under G for C1 and C25; its named test's failure; or, for C22 alone, that build failure. A
++control run that reaches a ceiling without a FAIL, or whose FAIL is found beyond its ceiling (K.1), is not killed, and
++7.5's stop rule applies.
+ 
+ After restoration (I), the restored receipt that shows the unchanged core passes the configuration is:
+ 
+@@ -608,16 +664,89 @@
+ - the symmetry guard would end an asymmetric mutant's run "symmetry inapplicable", which kills nothing (K);
+ - the first-reported property may differ (O).
+ 
++### F.1 Receipt types: what each must show
++
++Every receipt is first classified under K.2. It must then show what its own type requires below, and nothing of
++another type is required of it. A field that a type does not produce is recorded as NOT PRODUCED BY DESIGN. It is
++never invented.
++
++Common to every type, as the contract and AD-1-R2 already require:
++
++- the exact baseline commit and tree, and for a mutant the identity of I (control id, patch and its sha256, the changed
++  blobs);
++- the actual test or build selected and the configuration it runs, read from the receipt itself;
++- the raw output, complete and unedited, with its sha256;
++- a fixture failure, an unrelated panic or failure, or a failure of anything other than the named property or the
++  named test, kills nothing.
++
++**(a) Original-explorer mutation receipt.** Every control of 7.5 that names a configuration (A1, A2, A3, A5 and A6
++included; A4 is (f)), and the primary receipt of C1 and C25.
++
++- Selection: exactly the configuration's test (`full_*` with `--exact` and `--ignored`, or the default test with
++  `--exact`), one match, on the pinned mutant executable of I.
++- Harness result: that test failed by the explorer's own verdict assertion (`full_exploration` or
++  `default_exploration`, `model_tests.rs` lines 4130–4140 and 4115–4128 at 42dd1bd1), whose message carries
++  `failed: {"<property>"}` and the report. The process exited 101, by a normal exit and not by a signal.
++- Raw output: the report with `outcome: FAIL`, `FAIL: <property>: <detail>`, the line `states <n> (expanded <m>)`,
++  and the trace under `shortest trace (<n> steps):`.
++- Cardinality: one test ran, and the printed discovered count is at most the configuration's ceiling (K.1).
++- Attribution: the printed property is the control's named property. For C3a, C3b and A6, either property the row
++  names, as its "or" states. For C4, the reading of "P4, P8" is not settled here (open item 10). For C1 and C25 the
++  printed property is recorded as it is under G.3(a). It is not their kill's attribution, which comes from G.3(b).
++- Not required: any witness line, witness locus or witness verdict. A FAIL without a witness marker is complete under
++  this type.
++
++**(b) Named non-explorer unit-test receipt.** C14 T-BIND, C19 T-CELL, C21 W6, C27 T-PREC and C28 T-RES.
++
++- Selection: exactly the named test, `ledger::protocol::unit_tests::<name>` with `--exact`, one match, on the pinned
++  mutant executable of I.
++- Harness result: that test failed at one of its own checks, which the receipt identifies by the panic's message and
++  its `unit_tests.rs:<line>` location. The process exited 101, by a normal exit and not by a signal.
++- Rejected: a failure in shared setup, or in a fixture before the test's own checks; a failure anywhere else; a pass.
++- Not required: an explorer outcome line, or any witness line.
++
++**(c) C1/C25 witness receipt.** G.3(b) on the mutant executable, and G.3(d) on the baseline executable. The exact
++positive line, the header, the witness locus, the line of other properties and the rejections of G.3(c) apply to this
++invocation and only to it. They do not apply to the primary receipt of C1 or C25 (type (a)), or to any other control.
++
++**(d) C22's intentional compile-failure receipt.** The contract's one exception (line 731), exactly as contracted.
++
++- Command: the pinned build command of N.7 on the mutant source of I. Its intended result is a nonzero exit of the
++  compiler.
++- Required: the diagnostic `error[E0283]` at the designated T-OWN assertion (`unit_tests.rs` line 1089 at 42dd1bd1,
++  `<Ticket as NotClone<_>>::check();`; the line is derived again at the final baseline); the source and build identity
++  of I; the toolchain; the complete compiler output; and healthy build evidence, the same command succeeding on the
++  unmutated baseline.
++- Rejected as a kill: a compiler crash (an internal compiler error); a resource failure (a signal, an out-of-memory
++  kill, a timeout); any error diagnostic other than that E0283 at that line; E0283 at another line.
++- NOT PRODUCED BY DESIGN: the mutant test executable, its sha256 and size, the test selection and the test run. No
++  executable hash is invented, and no witness is required.
++
++**(e) Unchanged-core PASS receipt.** Every required run of 8.2 and 8.3 (E), and every restored receipt of 7.5 (I).
++
++- Selection: exactly the configuration's test with `--exact` (and `--ignored` for `full_*`), one match, on the pinned
++  baseline executable; for an admitted quotient run, the test of N.11.
++- Harness result: the test passed (`... ok`, then `test result: ok. 1 passed; 0 failed`). The process exited 0, by a
++  normal exit and not by a signal. The launching command records no kill, timeout or out-of-memory event, and time
++  and memory stayed within its limits.
++- Raw output: `outcome: PASS`, every property line of Q, the counts of D and the branch list. The discovered count is
++  at most the ceiling (K.1). For a quotient run, every prerequisite of N, and no refusal.
++
++**(f) The A4 comparison.** Two admissible receipts of type (e), F-PT's and F-3's 8.3 runs, compared in a separate
++record: both verdicts, both branch sets and both sets of measured counts. It is evidence for A4 only, and it is not a
++kill receipt.
++
+ ## G. C1 and C25 — first failure, named property, healthy replay
+ 
+ ### G.1 Status, with provenance
+ 
+ | Item | Status |
+ |---|---|
+-| Witness source, commit 42dd1bd1 | PROVEN FROM SOURCE: published on `review/p3-c11-d2a1-ad1r1-witness-01`; one file, +277/−0, appended after the parent's end. ARCHITECT-RULED: interim source review passed; execution-evidence authentication pending. |
+-| C1 probe (AD1R1-MUT-READINESS-01) | EXECUTOR-REPORTED: P1 observed at step 11 with "admission: admitted"; E3 listed separately; healthy and restored runs PASS. ARCHITECT-RULED: provisionally valid for the count-to-flag mutation. No final kill. |
++| Witness source, commit 42dd1bd1 | PROVEN FROM SOURCE: published on `review/p3-c11-d2a1-ad1r1-witness-01`; one file, +277/−0, appended after the parent's end. ARCHITECT-RULED: interim source review passed; the source-review finding is maintained (AD1R3-READINESS-01). |
++| C1 probe (AD1R1-MUT-READINESS-01) | EXECUTOR-REPORTED: P1 observed at step 11 with "admission: admitted"; E3 listed separately; healthy and restored runs PASS. ARCHITECT-RULED (AD1R3-READINESS-01): the historical receipts support the intended P1 attribution. Historical evidence, not a final-baseline receipt. No final kill. |
+ | C25 historical compound probe (AD1R1-MUT-READINESS-01, patch `a6de4ed9…656b`) | EXECUTOR-REPORTED. Historical evidence only. It also removed `self.keep = true`. It is not the control's definition. |
+-| C25 narrow probe (AD1R1-WITNESS-AUDIT-01, patch `29a2c1e5…d732`) | EXECUTOR-REPORTED until the Architect authenticates the transported raw evidence. P7 observed on the world after step 1; E4 listed separately; U kept (word 0x25). No final kill. |
++| C25 narrow probe (AD1R1-WITNESS-AUDIT-01, patch `29a2c1e5…d732`) | EXECUTOR-REPORTED: P7 observed on the world after step 1; E4 listed separately; U kept (word 0x25). ARCHITECT-RULED (AD1R3-READINESS-01): the retrieved patch and the authenticated historical receipts support P7 with `self.keep = true` preserved; no additional probe is justified. Historical evidence, not a final-baseline receipt. No final kill. |
++| The probe helpers (`probe.py`, AD1R1-MUT-READINESS-01; `probe-c25-narrow.py`, AD1R1-WITNESS-AUDIT-01) | Historical evidence. They are not approved final campaign controllers. They are not modified or run again. |
+ | First failures under the original explorer (E3 for C1, E4 for C25) | NOT ESTABLISHED. Predictions (EXECUTOR-REPORTED static analysis). No `full_f1` run on either mutant has been made. |
+ 
+ ### G.2 Proposed control definitions (future disposable mutations; NOT APPLIED here)
+@@ -651,8 +780,9 @@
+ - If it reports otherwise, that is reported as it is and not reinterpreted. The control is then not recorded as
+   killed under this clause until the Architect rules.
+ - E3 is never counted as P1, and E4 never as P7.
+-- An INCOMPLETE run is not a FAIL. Exit status 101 is shared by FAIL, INCOMPLETE and any panic, so the report text,
+-  not the exit status, decides.
++- An INCOMPLETE run is not a FAIL, and neither is a FAIL found beyond the ceiling (K.1). This receipt is of type (a)
++  of F.1 and is classified under K.2: neither its text nor its exit status alone decides. No witness line is required
++  of it.
+ 
+ (b) **The named property is established by exact replay.** The control's witness test, selected alone with
+ `--exact` on the same pinned mutant executable as (a), with a listing that shows exactly one match, FAILs, and its
+@@ -665,7 +795,9 @@
+ - E3 (C1) or E4 (C25) in the line `OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: [...]`
+   (or `… as P7: [...]`).
+ 
+-(c) **Rejections.** Any of these means the receipt kills nothing under this clause:
++(c) **Rejections of the witness receipt.** They apply only to the witness invocations of (b) and (d) (F.1 type (c)),
++never to the primary receipt of (a) or to any other control's receipt. Any of these means the witness receipt
++establishes nothing under this clause:
+ - a failing exit without the exact positive line of (b);
+ - `NOT OBSERVED` in the named-property line, or `OBSERVED` at another step or locus;
+ - any `WITNESS FIXTURE FAILURE`;
+@@ -682,7 +814,8 @@
+ (e) **Recording.** Only then are the rows recorded as 'C1: P1 (first failure E3; witness)' and 'C25: P7 (first
+ failure E4; witness)'."
+ 
+-A failing test exit alone establishes none of (a), (b) or (d).
++A failing test exit alone establishes none of (a), (b) or (d). Each of the three receipts must also be admissible
++under K.2.
+ 
+ ### G.4 The witness's required form
+ 
+@@ -806,12 +939,14 @@
+ 1. the final unchanged baseline commit and tree;
+ 2. the exact named control id and its mutation patch, with the patch's sha256;
+ 3. the exact mutation source blob or blobs: git blob id and sha256 of every file the patch changes, as built;
+-4. the mutant test executable's sha256 and size, from a fresh optimised build of that source;
++4. the mutant test executable's sha256 and size, from a fresh optimised build of that source (for C22: NOT PRODUCED
++   BY DESIGN, since its build is meant to fail, F.1 (d));
+ 5. the exact configuration and invocation: test name selected with `--exact`, flags, cwd, environment and resource
+-   limits;
+-6. the raw failing receipt, unedited, with its sha256;
++   limits (for C22: the build command and its environment);
++6. the raw failing receipt, unedited, with its sha256 (for C22: the compiler's complete output);
+ 7. the restored baseline identity (every changed file's blob equal to the baseline's, the worktree clean, nothing
+-   else differing from the baseline commit) and the restored PASS receipt.
++   else differing from the baseline commit) and the restored PASS receipt (for C22, it includes the healthy build
++   evidence of F.1 (d)).
+ 
+ A mutant tree is not the baseline tree, and no receipt describes it as identical to it. Its identity is the baseline
+ tree, plus the named patch, verified by blob. Reproducible builds are not established: two builds of one source have
+@@ -837,7 +972,13 @@
+ **Source fact (PROVEN FROM SOURCE).** All three explorers check `visited.len() as u64 > config.cap` before expanding
+ each key: `explore`, `explore_experimental` and `explore_symmetric_kept`, at `model_tests.rs` lines 3907, 5068 and 6609
+ at 42dd1bd1. `visited` counts every distinct key discovered, the initial key included, expanded or not. A violation
+-found while expanding a key ends the run FAIL at once, before the next check.
++found while expanding a key ends the run FAIL at once, before the next check. In `explore`, a state-property or D1
++violation is found before that expansion adds any key, so its count is at most C. A transition's violation is found
++after the earlier successors of the same expansion were added (lines 3932–3944). The printed count (`states <n>
++(expanded <m>)`, lines 4048–4053) is taken after the search stops, and nothing is added after the violation, so for a
++transition's violation it can exceed C.
++
++### K.1 Ceilings
+ 
+ **Text.** "A state ceiling C of 8.2 or 8.3 bounds the number of distinct keys the run's explorer has discovered. For
+ an original run these are states; for a quotient run admitted by E, they are quotient keys.
+@@ -850,8 +991,12 @@
+   C = 30,000,000; 60,000,001 at C = 60,000,000; 100,000 at C = 99,999). The overshoot is how the stop is detected. It
+   is not extra budget: any run that discovers more than C keys does not complete.
+ - An INCOMPLETE receipt prints the discovered count as it is.
+-- A FAIL found during the expansion in which the count first exceeds C is a FAIL of the explored graph. Its receipt
+-  prints the count as it is. This makes no PASS possible beyond C.
++- For a FAIL, two facts are kept apart. The raw outcome: the explorer's FAIL, with its property, detail,
++  counterexample trace and printed count, kept exactly as printed and never discarded. Its admissibility: the FAIL is
++  within the authorised cardinality only if its printed discovered count is at most C. A FAIL whose printed count
++  exceeds C was found during the overshoot. Unless a separate, explicit authorisation names that run, its outer gate
++  is **INCOMPLETE — BUDGET EXCEEDED**: it is not a final mutation-kill receipt and not the verdict of a complete run,
++  and the overshoot is still not budget. No PASS is possible beyond C.
+ - The time ceiling (45 minutes) and the memory ceiling (16 GiB) are the launching command's, and are not extended.
+   The explorer's own elapsed-time check is an earlier stop, also INCOMPLETE.
+ 
+@@ -860,12 +1005,57 @@
+ VERIFICATION INVALID**, with the raw refusal text and the stop. It is never PASS, never FAIL of a property, and never a
+ mutation kill. The mission stops and reports it."
+ 
+-**Classification is by text, never by exit status.** A full test asserts PASS; FAIL, INCOMPLETE, a refusal and any
+-other panic all exit 101. The receipt classifies a run only from its printed `outcome:` line or the refusal text.
+-
+ **Why this reading.** It is what the frozen code does. It changes no recorded verdict: every complete run so far ended
+ below its ceiling (the closest is F-PT, at 29,751,473 against 30,000,000). A stricter reading would have the explorer
+-report PASS for a run that the contract calls INCOMPLETE, a contradiction this addendum must not create.
++report PASS for a run that the contract calls INCOMPLETE, a contradiction this addendum must not create. Raw outcomes
++are kept as printed; K.1 and K.2 decide only what a receipt may be used as.
++
++### K.2 Classification of a receipt — process-aware and fail-closed
++
++AD-1-R2's rule "classification is by text, never by exit status" is withdrawn. A full test asserts PASS, so FAIL,
++INCOMPLETE, a refusal and any other panic all exit 101 (EXECUTOR-REPORTED in the historical receipts); and a PASS
++already printed when the process is stopped from outside is not a completed run. So neither alone decides.
++
++**Text.** "Neither the printed output nor the exit status alone establishes any result. A receipt is admissible only
++if all of these agree:
++
++1. the authenticated source and executable identity (I, N), the executable checked before and after;
++2. the intended test selection and configuration: exactly the one named test, with `--exact` (and `--ignored` where it
++   is ignored), one match, and the configuration's printed bounds and actors;
++3. the complete raw output, with the named-property evidence that its type requires (F.1);
++4. the harness result expected for that invocation type (F.1);
++5. the actual process exit status, or the signal that ended it;
++6. the launching command's termination and resource-limit records: no kill, timeout or out-of-memory event, and time
++   and memory within its limits;
++7. completion and cardinality: the run finished, one test ran, and the discovered count is within its ceiling (K.1).
++
++For a test that is not an exploration (F.1 (b) and (c)), point 2 needs no configuration bounds and point 7 no
++discovered count. For C22's build-failure receipt (F.1 (d)), points 1, 2, 4 and 7 read as: the source and build
++identity; the build command; the intended nonzero compiler result, with E0283 at the designated line; and a build that
++finished. No executable, test selection or test run is required of it, since none is produced by design.
++
++PASS text followed by a kill, a timeout, an out-of-memory kill, an incomplete termination, an identity mismatch or
++missing completion evidence is not PASS. For an intended assertion failure, the receipt must show the expected,
++completed failure of the named test, with the correct property evidence; a nonzero status alone shows nothing. Each
++receipt records two facts separately: its raw outcome, unchanged, with any counterexample; and its admissibility under
++the authorisation it ran under. A receipt that is not admissible is never PASS and never a kill. It is reported as it
++is, with the reason, and nothing is run again without an Architect ruling."
++
++Outer classes: PASS; FAIL (admissible, of a named property or test); INCOMPLETE (with its cause); INCOMPLETE — BUDGET
++EXCEEDED (K.1); INCOMPLETE — VERIFICATION INVALID (K.1, a quotient refusal); NOT ADMISSIBLE (with its reason).
++
++**Classification cases** (document and checker cases, not Nexus executions; the packet's checker applies these rules
++to each):
++
++| # | Case | Raw outcome kept | Outer classification | Kill evidence |
++|---|---|---|---|---|
++| 1 | Unchanged-core run: `outcome: PASS` and every line of Q; `test result: ok. 1 passed`; exit 0, no signal; no event of the launching command; identities match; count at most C | PASS | PASS | — |
++| 2 | `outcome: PASS` printed, and then the launching command kills the process (a signal, the time limit, an out-of-memory kill), or the completion evidence is missing | PASS, as printed | INCOMPLETE: a run killed from outside (line 855); never PASS | no |
++| 3 | C1/C25 witness on the mutant: the witness's own panic with the exact positive line at its locus, the header and the line of other properties; `1 failed`; exit 101 by a normal exit; the pinned mutant executable of G.3(a) | witness FAIL; named property OBSERVED | admissible witness receipt: G.3(b) holds | a part only: with G.3(a) and G.3(d) |
++| 4 | A panic whose message is not the named test's own verdict (a fixture failure, `WITNESS FIXTURE FAILURE`, an `expect` in setup), or a nonzero exit with no completed failure of the named test | as printed | NOT ADMISSIBLE (unrelated failure). On an unchanged-core run it is not PASS: that run's evidence is missing (line 831); it is reported and the mission stops for a ruling | no |
++| 5 | Original explorer on a mutant: `outcome: FAIL`, `FAIL: E4: …`, no witness line; `failed: {"E4"}`; exit 101, no signal; count at most C; identities match | FAIL E4 | FAIL, admissible (F.1 type (a)); no witness marker is required | yes where E4 is the control's named property (for example C10); for C25 only the primary receipt of G.3(a) |
++| 6 | C22: the build of the mutant source exits nonzero with `error[E0283]` at the designated T-OWN line and no other error; the healthy build succeeds; no executable exists | build failure, E0283 at that line | admissible build-failure receipt (F.1 type (d)); executable and test-run fields NOT PRODUCED BY DESIGN | yes, for C22 only |
++| 7 | Original explorer: `outcome: FAIL` with a printed count above C, found during the overshoot | FAIL, with its counterexample | INCOMPLETE — BUDGET EXCEEDED, unless a separate, explicit authorisation names that run | no |
+ 
+ ## L. Rule R1 — the exchange loop's first expected value
+ 
+@@ -1005,9 +1195,11 @@
+    properties are judged when it is expanded, before its transitions; then D1 if it has no enabled step; then its
+    transitions, in actor order, then oracle order. Only the first violation found is reported. That property, its
+    detail and its trace are the primary record of a FAIL, and the raw report is kept with its text.
+-2. **What path minimality is established (PROVEN FROM SOURCE, `explore`).** The parent table is a breadth-first tree
+-   of the explored key graph. So the printed trace is a shortest path, in the explored graph, from the initial state
+-   to the state at which the reported violation was detected, followed, for a violation of a step, by that step. Every
++2. **What path minimality is established (PROVEN FROM SOURCE, `explore`; `explore_experimental` and
++   `explore_symmetric_kept` build their traces the same way, lines 5057 and 6598).** The parent table is a
++   breadth-first tree of the explored key graph. So the printed trace is a shortest breadth-first parent path, in the
++   explored graph, from the initial state to the checked state, the state at which the reported violation was
++   detected, followed, for a violation of a step, by that offending step. Every
+    state of smaller depth was expanded before it, and none showed a violation. So every trace, in the key graph the
+    explorer searches, that ends in a violation judged during expansion has at least d steps, d being the depth of that
+    state, and the printed one has d or d + 1 steps.
+@@ -1022,11 +1214,15 @@
+      statement that lifted lengths equal original shortest lengths is an executor proof, not accepted, and holds only
+      under B(1).
+    - The minimality of the C1 and C25 witness schedules.
+-4. **Line 609's phrase "so that a violation has a shortest trace".** Read as 2 above, it is what the explorer
+-   establishes, and it is CLARIFIED (S-2). If the Architect reads it as claiming global minimality, that stronger part
+-   is unproved, and this draft proposes replacing the phrase, explicitly, by the statement of 2 and 3. No gate of the
+-   contract or of this draft relies on the stronger reading; G and F rely on property names and verdicts, never on
+-   minimality.
++4. **Line 609's phrase "so that a violation has a shortest trace" is REPLACED (S-19).** The one operative text, for
++   every run, original or quotient, healthy or mutant: "so that the trace printed for a reported violation is a
++   shortest breadth-first parent path, in the key graph that run's explorer searched, from the initial state to the
++   checked state, with the offending transition appended where the violation is of a transition." The claims NOT
++   ESTABLISHED in 3 stay not established: no global counterexample minimality, and no shortest cycle witness. The
++   explorer's printed wording (`shortest trace (<n> steps):`, and its unfolded form) is raw output: it is kept unedited
++   in every receipt and read under this text. The replay requirement of D (unfold, then replay in the original
++   semantics before a trace is cited) is unchanged. No gate relies on minimality: G and F rely on property names and
++   verdicts.
+ 5. **Quotient attribution.** The composed quotient's first-reported property may differ from the original's for the
+    same defect (ASYM-4, Q12, S8). A quotient FAIL names *a* violated property, never "the first", and is never a
+    control's failing receipt (F).
+@@ -1051,8 +1247,9 @@
+ 4. The witness-only source allowance (1 and 2) authorises nothing else. In particular it does not authorise the
+    current-tree manifest (H), any later printing change (D adds none), or carrying the witnesses to the final commit.
+ 5. The review packet that carries this draft adds files only under
+-   `docs/evidence/p3-candidate11/ad1r2-review-packet-01/`. Its commit is an evidence-transport commit, not an
+-   engineering baseline.
++   `docs/evidence/p3-candidate11/ad1r3-review-01/`, in one documentation-only commit whose parent is the earlier
++   evidence-transport commit 8693e3a7. Neither commit is an engineering baseline. The earlier packet,
++   `docs/evidence/p3-candidate11/ad1r2-review-packet-01/`, is not changed.
+ 6. Mutation patches are applied only in disposable worktrees, by a script kept outside the repository (line 750
+    unchanged), and are never committed applied. Documentary patch copies are inert evidence.
+ 
+@@ -1081,26 +1278,92 @@
+ L1's line, where it holds, reads "HOLDS: <n> non-fault edges, no cycle; <m> end states, each terminal (D1)". It counts
+ as HOLDS. E10 is established only by F-W's PASS.
+ 
++## R. Review roles under the Owner's current arrangement
++
++**Basis (ARCHITECT-RULED, AD1R3-READINESS-01).** The Owner's current arrangement: ChatGPT is the Sole Architect and the
++independent reviewer of Claude Code's work; Claude Code is the implementation executor. Neither Claude Chat nor Codex
++has a role in it, and this draft requires neither.
++
++**The binding reviews' role statements** (verbatim; neither review is edited):
++
++<!-- VERBATIM REVIEW-02 238 -->
++```text
++- **Authority:** Claude remains Lead Architect; ChatGPT audits designs/contracts; Codex independently reviews implementation evidence under the adopted arrangement. A reviewer does not independently accept a repair it authored.
++```
++
++<!-- VERBATIM REVIEW-03 81,83 -->
++```text
++The next gate is the Owner’s bounded authorization, not another request for ChatGPT to re-approve these unchanged decisions. Claude retains Lead Architect responsibility for assembling that authorization request and coordinating any subsequently authorized work.
++For these scopes, further architectural review is warranted by a concrete new blocking defect, a material scope/semantic departure, or contradictory implementation evidence—not by recopying a condition or updating a status label. Implementation review remains independent. Failed or incomplete required evidence cannot be promoted to a pass to meet a review-round target.
++```
++
++**Mapping** (proposed; no original is edited; the contract's own lines are quoted under S-20 and S-21):
++
++| Where | Old operational role | Read under the current arrangement |
++|---|---|---|
++| contract line 4, and line 5 of each review: "Claude — Lead Architect" | wrote the contract; coordinates the work around it | Authorship stays historical. The coordinating functions belong to the Sole Architect. |
++| contract lines 5, 8, 31, 972 and 982 ("First Architect"), and line 4 of each review ("ChatGPT — First Architect / Independent Auditor") | audits and accepts designs and contracts | The Sole Architect. The acceptances recorded there stay as dated. |
++| contract line 923, "Codex's review of the evidence passes" | independent review of the implementation evidence | The Sole Architect's independent review of Claude Code's evidence passes. |
++| contract line 928, "only after the evidence and Codex's review have actually passed" | the same | The same. The Owner's decision on the label is unchanged. |
++| contract line 976, "Codex, under that arrangement" | reviewer of the implementation evidence | The Sole Architect. The line's second sentence is unchanged. |
++| REVIEW-02 line 238 | Claude: Lead Architect; ChatGPT: audits designs and contracts; Codex: reviews implementation evidence | ChatGPT: the Sole Architect, auditing designs and contracts and independently reviewing Claude Code's implementation evidence. Claude Code: the implementation executor. Its last sentence is unchanged. |
++| REVIEW-03 line 81 | Claude assembles the authorisation request and coordinates authorised work | The Sole Architect. |
++| REVIEW-03 line 83, "Implementation review remains independent." | — | Unchanged: Claude Code's implementation is reviewed by the Sole Architect, independently of the executor. |
++
++**Kept.** The obligation of independent review; the Owner's authority over adoption, scope, authorisation and the
++label (line 928); the rule that a reviewer does not accept a repair it wrote (line 976; REVIEW-02 line 238); and that
++Claude Code never approves its own work. No review is waived, and none is moved to the executor.
++
++**Not resolved here.** If the Sole Architect is the author of a repair, those rules apply to it unchanged. How
++independent review of such a repair is then obtained is the Owner's decision (open item 11).
++
++**Line 929.** The mission that produced this draft names contract lines 923 and 929. In the contract file of sha256
++`cac65351…3b3c`, line 929 is empty; the adjacent sentence that names Codex's review is line 928. This draft maps lines
++923, 928 and 976, and infers nothing else (open item 11).
++
+ ---
+ 
+ ## Open items (none decided by the executor)
+ 
+ 1. The Owner's approval of A, and of this addendum as a whole.
+-2. Independent review of every resolution in this draft, A to Q, and of the supersession table.
++2. Independent review of every resolution in this draft, A to R, and of the supersession table.
+ 3. Independent review of the AQ and SQ proofs, with E-PT and E-B, against the final source and build-input closure (B,
+    N).
+-4. The Architect's authentication of the transported raw witness and probe evidence (G.1).
++4. Closed as to the witness-audit evidence by the Architect's ruling of AD1R3-READINESS-01 (0A.1, G.1). That ruling
++   establishes no final mutation kill.
+ 5. Authorisation of the `full_f1` mutant runs for C1 and C25, which need A or an explicit Owner authorisation, and of
+    carrying the witnesses to the final commit.
+ 6. Acceptance of E's inventory dispositions and of the S-9 replacement of line 863's listing sentence; and whether the
+    experimental tests are kept at the final commit.
+ 7. The receipt-linking proposal (I).
+-8. Line 609's reading (O.4).
++8. The replacement of line 609's trace phrase (S-19, O.4).
+ 9. The current-tree manifest's mission (H).
+-10. C9, C10 and C24 were flagged in AD1R1-MUT-READINESS-01 as possible first-failure-ordering cases and remain
+-    unanalysed. G applies to C1 and C25 only; nothing here extends it.
++10. C9, C10, C24 and C4 were analysed read-only in AD1R3-READINESS-01's attribution preflight (in its review packet).
++    Its findings are source-supported predictions, not measurements. Whether C4's "P4, P8" is a list or a
++    conjunction, and so whether the original explorer, which reports one property, can show what the row requires,
++    needs the Architect's decision. G applies to C1 and C25 only; nothing here extends it to any other control.
++11. The review-role mapping (R, S-20, S-21), with the line-929 reference, and how independent review is obtained for a
++    repair that the Sole Architect authored.
++12. The typed receipt requirements (F.1) and the process-aware classification (K.2), including INCOMPLETE — BUDGET
++    EXCEEDED and the separate authorisation that it names.
++
++## Changes from AD-1-R2
++
++| Section | AD-1-R2 | AD-1-R3 |
++|---|---|---|
++| status, 0, 0A | the witness-audit ruling; probes awaiting the Architect's authentication | the AD1R3 ruling added and governing (0A.1); this mission's four repairs (0A.2); AD-1-R2's dispositions carried (0A.3) |
++| 1 | S-6 applied G.3(c)'s rejections to every failing receipt; S-2 CLARIFIED the trace phrase | S-6: each receipt meets its own type (F.1) and K.2, and G.3(c) applies only to the witness invocation; S-2 narrowed; S-19 replaces the trace phrase; S-20 and S-21 map the review roles; S-1 and S-14 supplemented for K.1 and K.2 |
++| F | killed by the explorer's FAIL of the named property or the named test's failure; no receipt types | killed only by an admissible receipt of its own type; F.1 types (a) to (f); C22's executable and test-run fields NOT PRODUCED BY DESIGN |
++| G | (a): "the report text, not the exit status, decides"; (c) unscoped; statuses awaiting authentication | (a): a type (a) receipt under K.2, with no witness line required; (c): only the witness invocations; statuses per the AD1R3 ruling; the probe helpers historical |
++| K | "classification is by text, never by exit status"; a FAIL in the crossing expansion is a FAIL of the explored graph | K.1: the raw outcome is kept, and a FAIL beyond C is INCOMPLETE — BUDGET EXCEEDED; K.2: process-aware and fail-closed, the seven points that must agree, the outer classes and the case table |
++| O | O.4: CLARIFIED, with an alternative replacement proposed | O.4: one operative replacement (S-19) |
++| P | packet prefix `ad1r2-review-packet-01` | packet prefix `ad1r3-review-01`; the earlier packet unchanged |
++| R | — | new: review roles under the Owner's current arrangement |
++| open items | ten | twelve: 4, 8 and 10 updated; 11 and 12 added |
++
++## Changes from AD-1-R1 (made by AD-1-R2; history)
+ 
+-## Changes from AD-1-R1
++Where this table and the one above differ, the one above describes this draft.
+ 
+ | Section | AD-1-R1 | AD-1-R2 |
+ |---|---|---|

@@ -1,0 +1,123 @@
+preflight preflight/C9-C10-C24-C4-ATTRIBUTION-PREFLIGHT.md
+  sha256 a80339e15a253d4df199e0a9d8731f0a30ff513b26391b29a634d3ca95a3910b
+
+PASS  contract sha256
+PASS  P 1289 holds 'fn rolled(' (P 1289-1297 rolled)
+PASS  P 1292 holds 'Rollback::Unknown => {' (P 1292-1295)
+PASS  P 1293 holds 'self.failed();' (P 1292-1295)
+PASS  P 1294 holds 'Persistence::Uncertain' (P 1292-1295)
+PASS  P 1398 holds 'let persistence = self.rolled(io.rollback());' (A7 P 1398)
+PASS  P 1486 holds 'let persistence = self.rolled(io.rollback());' (A7 P 1486)
+PASS  P 1687 holds 'let persistence = self.rolled(io.rollback());' (A7 P 1687)
+PASS  P 1913 holds 'return match self.rolled(io.rollback()) {' (A7 P 1913)
+PASS  P 1384 holds 'for (index, (member, slot)) in members().zip(pending.iter())' (P 1384-1400 step 5)
+PASS  P 1397 holds 'self.failed();' (P 1397)
+PASS  P 1405 holds 'self.failed();' (P 1405)
+PASS  P 1404 holds 'Commit::Unknown => {' (C10 anchor P 1404-1408)
+PASS  P 1407 holds 'self.not_applied(Persistence::Uncertain, Reason::Storage)' (C10 anchor P 1404-1408)
+PASS  P 1774 holds 'Read::Got(Some(row)) if row.digest == key.digest => {' (C24 anchor P 1774-1787)
+PASS  P 1786 holds 'Resolve::Corrected(self.core.token(Cell::C, n))' (C24 anchor P 1774-1787)
+PASS  P 1813 holds 'self.core.u = None;' (P 1813-1815)
+PASS  P 1814 holds 'self.core.phase = Phase::Healthy;' (P 1813-1815)
+PASS  P 1472 holds 'Commit::Unknown => {' (P 1470-1477)
+PASS  P 1475 holds 'self.keep = true;' (P 1470-1477)
+PASS  P 1984 holds 'if self.hold != Hold::Nothing {' (P 1984-1994 guard)
+PASS  P 1986 holds 'self.core.u = None;' (P 1984-1987)
+PASS  P 1713 holds 'fn barrier(' (P 1713-1729)
+PASS  P 1723 holds 'self.core.phase = if self.core.u.is_some() {' (P 1713-1729)
+PASS  P 1732 holds 'fn resolve(' (P 1732-1763)
+PASS  P 1995 holds 'let flags = self.core.flags();' (P 1995-2004)
+PASS  P 1625 holds '// Test 1.' (P 1625-1642)
+PASS  P 1641 holds 'return not_now(Entry::Latched);' (P 1625-1642)
+PASS  P 1643 holds 'let set = snapshot.set;' (after test 1)
+PASS  P 1139 holds 'fn place(&mut self, cell: Cell, occupant: Occupant) -> bool ' (P 1139-1149 place)
+PASS  P 1144 holds 'Cell::U => self.u = Some((occupancy, occupant)),' (place overwrites U)
+PASS  P 1688 holds 'self.keep = persistence == Persistence::Uncertain;' (P 1680-1704)
+PASS  P 1702 holds 'self.keep = true;' (P 1680-1704)
+PASS  P 1982 holds 'self.keep = self.issued;' (P 1966-1983)
+PASS  P 1601 holds 'if set.top > set.frontier && set.count > 0 {' (P 1599-1610)
+PASS  P 1859 holds 'fn cell(' (cell append)
+PASS  P 858 holds 'if let Some(holder) = facts.holder {' (P 858-864)
+PASS  P 859 holds 'return Some(CauseKind::DuplicateRole {' (P 858-864)
+PASS  P 1221 holds 'self.refusals.insert(member.key, cause);' (P 1221-1224)
+PASS  P 1223 holds 'self.explanation(member.key, cause);' (P 1221-1224)
+PASS  P 1391 holds 'Insert::Constraint => {' (constraint latch)
+PASS  P 1392 holds 'self.core.latch(LatchCause::Constraint);' (constraint latch)
+PASS  M 3882 holds 'pub(super) fn explore(config: &Config) -> Report {' (M 3882-4110)
+PASS  M 3906 holds 'while (id as usize) < visited.len() {' (M 3906)
+PASS  M 3915 holds 'let key = visited.key(id).to_vec();' (M 3915)
+PASS  M 3896 holds 'let path_to = |parent: &[(u32, u64)], mut id: u32| {' (M 3896-3904)
+PASS  M 3812 holds 'state_properties(config, &base, &mut state);' (M 3812-3815)
+PASS  M 3917 holds 'if let Some((property, detail)) = state_violations.into_iter' (M 3917-3920)
+PASS  M 3921 holds 'if next.is_empty() {' (M 3921-3931)
+PASS  M 3817 holds 'for (index, &actor) in all.iter().enumerate() {' (M 3817)
+PASS  M 3838 holds 'match oracle.next() {' (M 3819-3842)
+PASS  M 3935 holds 'if let Some((property, detail)) = successor.violations.into_' (M 3932-3940)
+PASS  M 4070 holds 'FAIL: {property}: {detail}' (M 4067-4072)
+PASS  M 4071 holds 'shortest trace ({} steps):' (M 4067-4072)
+PASS  M 3403 holds 'fn state_properties(' (M 3403-3511)
+PASS  M 3407 holds '"E1"' (E1 first)
+PASS  M 3431 holds '"E3"' (E3)
+PASS  M 3440 holds '"P2"' (P2)
+PASS  M 3443 holds '"P4"' (P4 at M 3442-3444)
+PASS  M 3448 holds '"P5"' (P5)
+PASS  M 3475 holds '"P7"' (P7)
+PASS  M 3486 holds 'if record_in && !in_u && !in_c && !corrected {' (P8 at M 3486)
+PASS  M 3488 holds '"P8"' (P8)
+PASS  M 3495 holds '"P9"' (P9)
+PASS  M 3501 holds '"P13"' (P13)
+PASS  M 3509 holds '"E11"' (E11)
+PASS  M 2427 holds 'obs.fail("E5"' (E5 before E4 in fact_append)
+PASS  M 2436 holds 'if not_written && w.rows != before {' (E4 at M 2436)
+PASS  M 2438 holds '"E4"' (M 2434-2444)
+PASS  M 2419 holds 'let mut io = Io::new(&mut w.rows, o, true, true);' (M 2419)
+PASS  M 3039 holds 'obs.fail("E5"' (M 3038-3101)
+PASS  M 3205 holds '"E5"' (M 3203-3236)
+PASS  M 3225 holds '"E4"' (M 3203-3236)
+PASS  M 2903 holds 'obs.fail("E5"' (M 2901-2959)
+PASS  M 2942 holds 'label.ends_with("NotWritten") || label.ends_with("Stale") ||' (M 2941-2945)
+PASS  M 2953 holds '"E8"' (M 2946-2959)
+PASS  M 3514 holds 'fn transition_properties(' (M 3514-3545)
+PASS  M 546 holds 'fn choose(&mut self, fault: &[bool]) -> usize {' (M 546-580)
+PASS  M 572 holds 'fn next(&self) -> Option<Vec<u8>> {' (M 546-580)
+PASS  M 652 holds 'fn pick(&mut self, verb: Verb, faults: &[Answer]) -> Answer ' (M 652-666)
+PASS  M 691 holds 'outcomes.insert(0, Vec::new());' (M 684-694 absent first)
+PASS  M 750 holds 'self.pending.clear();' (M 746-752 A-1)
+PASS  M 726 holds '_ => Insert::Failed,' (M 704-728)
+PASS  M 2332 holds 'fn actors(config: &Config) -> Vec<Actor> {' (M 2332-2347)
+PASS  M 2963 holds 'fn step_wk(' (M 2963-3016)
+PASS  M 2540 holds 'if expires(o) {' (expiry choice first)
+PASS  M 449 holds 'fn survey(rows: &[SimRow]) -> SetFacts {' (M 449-464)
+PASS  M 1085 holds 'fn initial_rows(config: &Config) -> Vec<SimRow> {' (M 1085-1100)
+PASS  configuration constants at M 155, 207, 227 ({'F1': 155, 'F8': 207, 'FB2': 227})
+PASS  F-1 as stated
+PASS  F-8 as stated
+PASS  F-B2 as stated
+PASS  contract line 704 is '| C4 | acknowledgement test 1 removed | P4, P8 | F'
+PASS  contract line 709 is '| C9 | `Rollback::Unknown` is treated as `Undone` '
+PASS  contract line 710 is '| C10 | `Commit::Unknown` followed by `Rollback::U'
+PASS  contract line 720 is '| C24 | resolve empties U for a present gating rec'
+PASS  contract line 701 is '| C3a | acknowledgement test 2 removed | P13 or P1'
+PASS  contract line 702 is '| C3b | acknowledgement test 4 removed | P13 or P1'
+PASS  contract line 744 is '| A6 | "recovery required" is a flag, not a compar'
+PASS  contract line 437 defines test 1 as quoted
+PASS  C4's row is the only 7.5 row with a comma between two properties
+PASS  controls_defs.py sha256 ef0420a1…
+PASS  controls_defs.py defines C10 and C24, and neither C9 nor C4
+PASS  scratch REPORT-R4 hash and NC18 line as quoted
+PASS  readiness matrix: F-8 and F-B2 never run unchanged
+PASS  F3-CAP60-01 flag quoted as stated
+PASS  preflight states: 'READ-ONLY. NOTHING WAS EXECUTED.'
+PASS  preflight states: 'NONE AUTHENTICATED.'
+PASS  preflight states: 'not definitions'
+PASS  preflight states: 'not a definition'
+PASS  preflight states: 'So the original explorer is predicted to report P4 and never P8.'
+PASS  preflight states: 'It is not designed or implemented here.'
+PASS  preflight states: 'Neither P4 nor P8 is waived.'
+PASS  preflight states: 'The C1/C25 witness exception is not extended to C4.'
+PASS  preflight states: 'G is not broadened'
+PASS  exactly C9 and C4 marked NONE AUTHENTICATED
+PASS  no kill claimed
+PASS  no ordering is called measured
+
+SUMMARY: 118 passed, 0 failed

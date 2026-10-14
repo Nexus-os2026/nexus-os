@@ -1,0 +1,31 @@
+664 AD-1-R2 sentences; 30 obligation-bearing sentences not verbatim in AD-1-R3
+  1. The diff from AD-1-R1 to this file is kept beside it.
+  2. A checker run against the contract's bytes compares every such block, and every inline quotation of the contract listed in it, with those lines (`tools/check-ad1r2.py`; its output is in the review packet).
+  3. ARCHITECT-RULED: interim source review passed, no blocking source defect | | C1/C25 probes | C1 probe and the historical compound C25 probe (AD1R1-MUT-READINESS-01); the narrow C25 probe (AD1R1-WITNESS-AUDIT-01) | EXECUTOR-REPORTED; execution evidence not yet authenticated by the Architect (G) | ## 
+  4. Not ready for Owner adoption. | this file | Neither that ruling nor this draft accepts D2A-1, integrates it, or completes Phase Three. ### 0A.2 This mission's dispositions | Disposition | Subject | Section | |---|---|---| | A | F-1 ceiling: standing 60M proposal, not effective until Owner approval; 
+  5. C7 without A4 | F | | G | C1/C25: narrow C25 definition; first failure, named-property witness, healthy replay; positive-line rule; provenance | G | | H | historical manifest preserved; proposed current-tree manifest; self-reference resolved by a detached attestation | H | | I | exact-final-baseline
+  6. S-16 to S-18 are new. | # | Line(s) | Clause (short name) | Effect, with its scope | Section | |---|---|---|---|---| | S-1 | 855 | caps of a full run | REPLACED for F-1's state ceiling (A; only once the Owner approves).
+  7. "so that a violation has a shortest trace" (O); its stronger readings are named NOT ESTABLISHED there.
+  8. Unchanged for every original run. | B, E, O | | S-3 | 620 | equal keys are one state | REPLACED for E's quotient runs: the admission counter and the gating callers' orientation are left out of the quotient key by the equivalence, not by omission (B, N); the receipt names both.
+  9. G.3(c)'s rejections apply to every failing receipt.
+ 10. The C22 exception and the stop rule: unchanged. | F, G | | S-7 | 699 | row C1 | REPLACED: the cell "P1" is read as "P1 (first failure E3; witness)".
+ 11. SUPPLEMENTED: a quotient precondition refusal is INCOMPLETE — VERIFICATION INVALID (K).
+ 12. Using the label remains the Owner's decision. | E, F, G | ### Verbatim text of each superseded clause **S-1, line 855** (verbatim): <!-- VERBATIM 855 --> **S-2, line 609** (verbatim): <!-- VERBATIM 609 --> **S-3, line 620** (verbatim): <!-- VERBATIM 620 --> **S-4, line 831** (verbatim): <!-- VERBATI
+ 13. A control is killed only by the original explorer's FAIL of its named property, read under G for C1 and C25, or by its named test's failure.
+ 14. A control run that reaches a ceiling without a FAIL is not killed, and 7.5's stop rule applies.
+ 15. It is not the control's definition. | | C25 narrow probe (AD1R1-WITNESS-AUDIT-01, patch `29a2c1e5…d732`) | EXECUTOR-REPORTED until the Architect authenticates the transported raw evidence.
+ 16. No final kill. | | First failures under the original explorer (E3 for C1, E4 for C25) | NOT ESTABLISHED.
+ 17. - An INCOMPLETE run is not a FAIL.
+ 18. Exit status 101 is shared by FAIL, INCOMPLETE and any panic, so the report text, not the exit status, decides.
+ 19. P7 (first failure E4; witness)'." A failing test exit alone establishes none of (a), (b) or (d). ### G.4 The witness's required form Each is a property of the prototype at 42dd1bd1 (`replay_schedule`, `run_witness`;
+ 20. 7. the restored baseline identity (every changed file's blob equal to the baseline's, the worktree clean, nothing else differing from the baseline commit) and the restored PASS receipt.
+ 21. This makes no PASS possible beyond C.
+ 22. The mission stops and reports it." **Classification is by text, never by exit status.** A full test asserts PASS;
+ 23. FAIL, INCOMPLETE, a refusal and any other panic all exit 101.
+ 24. The receipt classifies a run only from its printed `outcome:` line or the refusal text.
+ 25. A stricter reading would have the explorer report PASS for a run that the contract calls INCOMPLETE, a contradiction this addendum must not create. ## L.
+ 26. G and F rely on property names and verdicts, never on minimality.
+ 27. The review packet that carries this draft adds files only under `docs/evidence/p3-candidate11/ad1r2-review-packet-01/`.
+ 28. Its commit is an evidence-transport commit, not an engineering baseline.
+ 29. Independent review of every resolution in this draft, A to Q, and of the supersession table.
+ 30. G applies to C1 and C25 only; nothing here extends it.

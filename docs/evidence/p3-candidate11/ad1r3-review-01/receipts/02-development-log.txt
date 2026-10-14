@@ -1,0 +1,198 @@
+=== DEV RUN 1  2026-10-14T03:57:59+01:00  checker sha256 18fc4bcee3920c906cd8de7d057a3368add4ba95d99bae25b296dd1657086473  template sha256 2a2b8765fbb788832a122db94721762dc93b20c7b3d50180900e6b56481f05b3
+command: python3 tools/check-ad1r3.py <scratch>/dev-r3.md <contract> <review-02> <review-03> /home/nexus/NEXUS/nexus-os 42dd1bd1cf21ffdea5968b256d2983f6575fab5b /home/nexus/nexus-audits/claude-architect
+exit 0
+SUMMARY: 443 passed, 0 failed
+
+=== DEV NEGATIVE CONTROLS 1  2026-10-14T03:58:28+01:00  negative-controls sha256 255939156e3fe7918e4a680fd4c72102171f21bbb21752acfb67b71fd83ae721
+MISSED    AD-1-R2 itself: exit 1, 0 checks failed
+DETECTED  blanket G.3(c) restored in S-6: exit 1; C10a FAIL lines 1; first: FAIL  C10a S-6 no longer applies G.3(c) to every failing receipt; points to F.1/K.2; C22 exception kept
+DETECTED  text-only classification restored: exit 1; C9b FAIL lines 1; first: FAIL  C9b operative text has no 'never by exit status' outside its allowed context (R2-02: text-only classific
+DETECTED  raw FAIL beyond C made a final FAIL: exit 1; C11a FAIL lines 1; first: FAIL  C11a K.1: raw FAIL kept; beyond C the outer gate is INCOMPLETE — BUDGET EXCEEDED absent separate authori
+MISSED    classification case 7 removed: exit 1; C11i FAIL lines 0
+DETECTED  witness line required of the primary receipt: exit 1; C10j FAIL lines 1; first: FAIL  C10j G.3(a) (the primary receipt) carries no witness-line requirement and defers to K.2
+DETECTED  C22 executable hash invented: exit 1; C10f FAIL lines 1; first: FAIL  C10f type (d): C22 nonzero compile, E0283 at the T-OWN line, rejections, NOT PRODUCED BY DESIGN, no inve
+DETECTED  O.4 alternative reading restored: exit 1; C12c FAIL lines 1; first: FAIL  C12c O.4 has one operative reading; raw trace wording kept; replay unchanged
+DETECTED  a verbatim contract line altered: exit 1; C1b FAIL lines 1; first: FAIL  C1b block 697,721: 2 line(s) byte-equal to L lines [697, 721]
+DETECTED  Codex required outside the mapping: exit 1; C13f FAIL lines 1; first: FAIL  C13f every operative mention of Codex is a quotation or the mapping itself (14 lines)
+DETECTED  line-929 discrepancy dropped: exit 1; C13c FAIL lines 1; first: FAIL  C13c R reports the line-929 discrepancy
+DETECTED  receipt linking loses per-control restoration: exit 1; C14 FAIL lines 1; first: FAIL  C14 carried: receipt linking: own restoration
+DETECTED  C4 reading silently settled: exit 1; C16b FAIL lines 1; first: FAIL  C16b item 10: preflight is prediction; C4 reading needs Architect decision; G not extended
+DETECTED  a control claimed killed: exit 1; C9c FAIL lines 1; first: FAIL  C9c no sentence claims a control is killed (['C25 is killed'])
+DETECTED  open item renumbered away: exit 1; C16a FAIL lines 1; first: FAIL  C16a open items 1-12 (['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13'])
+DETECTED  VERIFICATION INVALID dropped: exit 1; C11b FAIL lines 1; first: FAIL  C11b K.1: quotient precondition refusal stays INCOMPLETE — VERIFICATION INVALID
+
+NEGATIVE CONTROLS: 14 detected, 2 missed or not set up
+exit 1
+
+=== CHECKER REVISION 1  2026-10-14T03:59:26+01:00
+defect: on a draft lacking the case table (AD-1-R2) or with a case row removed, C11k indexed the table and raised IndexError; the checker exited 1 without reporting FAIL lines (fail-closed, but not diagnostic). Negative controls 'AD-1-R2 itself' and 'classification case 7 removed' were MISSED.
+repair: categories C10-C16 run under guard(), which turns an exception into a reported FAIL of that category; C11k checks presence of rows 2, 4 and 7 before reading them. No check was removed or weakened.
+v1 kept: tools/revisions/check-ad1r3.v1.py sha256 18fc4bcee3920c906cd8de7d057a3368add4ba95d99bae25b296dd1657086473
+v2 sha256 50062c3a40466ecd2aa894cc6e4142d0abb589e9e7e7a233fbde48c1158cd89c
+
+=== DEV RUN 2 (v2 on dev draft)  2026-10-14T03:59:26+01:00
+exit 0
+SUMMARY: 443 passed, 0 failed
+
+=== DEV NEGATIVE CONTROLS 2  2026-10-14T03:59:26+01:00
+DETECTED  AD-1-R2 itself: exit 1, 64 checks failed
+DETECTED  blanket G.3(c) restored in S-6: exit 1; C10a FAIL lines 1; first: FAIL  C10a S-6 no longer applies G.3(c) to every failing receipt; points to F.1/K.2; C22 exception kept
+DETECTED  text-only classification restored: exit 1; C9b FAIL lines 1; first: FAIL  C9b operative text has no 'never by exit status' outside its allowed context (R2-02: text-only classific
+DETECTED  raw FAIL beyond C made a final FAIL: exit 1; C11a FAIL lines 1; first: FAIL  C11a K.1: raw FAIL kept; beyond C the outer gate is INCOMPLETE — BUDGET EXCEEDED absent separate authori
+DETECTED  classification case 7 removed: exit 1; C11i FAIL lines 1; first: FAIL  C11i classification table has cases 1-7 (['1', '2', '3', '4', '5', '6'])
+DETECTED  witness line required of the primary receipt: exit 1; C10j FAIL lines 1; first: FAIL  C10j G.3(a) (the primary receipt) carries no witness-line requirement and defers to K.2
+DETECTED  C22 executable hash invented: exit 1; C10f FAIL lines 1; first: FAIL  C10f type (d): C22 nonzero compile, E0283 at the T-OWN line, rejections, NOT PRODUCED BY DESIGN, no inve
+DETECTED  O.4 alternative reading restored: exit 1; C12c FAIL lines 1; first: FAIL  C12c O.4 has one operative reading; raw trace wording kept; replay unchanged
+DETECTED  a verbatim contract line altered: exit 1; C1b FAIL lines 1; first: FAIL  C1b block 697,721: 2 line(s) byte-equal to L lines [697, 721]
+DETECTED  Codex required outside the mapping: exit 1; C13f FAIL lines 1; first: FAIL  C13f every operative mention of Codex is a quotation or the mapping itself (14 lines)
+DETECTED  line-929 discrepancy dropped: exit 1; C13c FAIL lines 1; first: FAIL  C13c R reports the line-929 discrepancy
+DETECTED  receipt linking loses per-control restoration: exit 1; C14 FAIL lines 1; first: FAIL  C14 carried: receipt linking: own restoration
+DETECTED  C4 reading silently settled: exit 1; C16b FAIL lines 1; first: FAIL  C16b item 10: preflight is prediction; C4 reading needs Architect decision; G not extended
+DETECTED  a control claimed killed: exit 1; C9c FAIL lines 1; first: FAIL  C9c no sentence claims a control is killed (['C25 is killed'])
+DETECTED  open item renumbered away: exit 1; C16a FAIL lines 1; first: FAIL  C16a open items 1-12 (['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13'])
+DETECTED  VERIFICATION INVALID dropped: exit 1; C11b FAIL lines 1; first: FAIL  C11b K.1: quotient precondition refusal stays INCOMPLETE — VERIFICATION INVALID
+
+NEGATIVE CONTROLS: 16 detected, 0 missed or not set up
+exit 0
+
+=== DEV CLASSIFICATION CASES 1  2026-10-14T04:01:38+01:00  classify-cases sha256 9f73bab9464ced4de45b51181ca040029f6bcd29740facb3c5e299f4a786f5af
+AD-1-R3 K.2 CLASSIFICATION CASES (synthetic descriptors; no Nexus execution)
+OK   case   1: valid completed PASS
+        raw: PASS
+        outer: PASS
+        kill evidence: —
+OK   case   2: PASS text plus external kill
+        raw: PASS
+        outer: INCOMPLETE (run killed from outside); never PASS
+        kill evidence: no
+OK   case   3: correct witness verdict plus expected completed assertion failure
+        raw: witness FAIL; NAMED PROPERTY P7: OBSERVED on the world after step 1
+        outer: admissible witness receipt: G.3(b) holds
+        kill evidence: part only: with G.3(a) and G.3(d)
+OK   case   4: unrelated panic / nonzero exit
+        raw: (none)
+        outer: NOT ADMISSIBLE (unrelated failure)
+        kill evidence: no
+OK   case   5: original-explorer FAIL without a witness marker
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+OK   case   6: C22 with no mutant executable
+        raw: build exit 101; diagnostics [('E0283', 1089)]
+        outer: FAIL (C22 build failure, E0283 at the designated line); executable and test-run fields NOT PRODUCED BY DESIGN
+        kill evidence: yes
+OK   case   7: raw FAIL discovered after the authorised cardinality is exceeded
+        raw: FAIL
+        outer: INCOMPLETE — BUDGET EXCEEDED
+        kill evidence: no
+OK   case  x1: PASS text, identity mismatch
+        raw: PASS
+        outer: NOT ADMISSIBLE (identity mismatch)
+        kill evidence: no
+OK   case  x2: PASS text, no completion evidence
+        raw: PASS
+        outer: INCOMPLETE (no completion evidence); never PASS
+        kill evidence: no
+OK   case  x3: PASS text, two tests selected
+        raw: PASS
+        outer: NOT ADMISSIBLE (selection)
+        kill evidence: no
+OK   case  x4: quotient precondition refusal
+        raw: (refusal: symmetry inapplicable)
+        outer: INCOMPLETE — VERIFICATION INVALID
+        kill evidence: no
+OK   case  x5: C22 with an internal compiler error
+        raw: build exit 101; diagnostics [('ICE', 0)]
+        outer: NOT ADMISSIBLE (compiler crash or resource failure)
+        kill evidence: no
+OK   case  x6: C22 with E0283 at another line
+        raw: build exit 101; diagnostics [('E0283', 1090)]
+        outer: NOT ADMISSIBLE (unrelated or misplaced diagnostic)
+        kill evidence: no
+OK   case  x7: explorer FAIL of a property other than the named one (non-C1/C25)
+        raw: FAIL
+        outer: FAIL, admissible, of another property: not killed (7.5 stop rule)
+        kill evidence: no
+OK   case  x8: C25 primary receipt: FAIL E4 (not the named P7)
+        raw: FAIL
+        outer: FAIL, admissible (G.3(a) primary receipt)
+        kill evidence: part only: G.3(a)
+OK   case  x9: witness NOT OBSERVED
+        raw: witness FAIL; NAMED PROPERTY P7: NOT OBSERVED
+        outer: NOT ADMISSIBLE (witness rejection, G.3(c))
+        kill evidence: no
+OK   case x10: unit test fails in shared setup
+        raw: (panic in open_core)
+        outer: NOT ADMISSIBLE (failure outside the named test's own checks)
+        kill evidence: no
+OK   case x11: C3a FAIL of either named property
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+OK   case x12: FAIL text but process timed out
+        raw: FAIL
+        outer: INCOMPLETE (run killed from outside); never PASS
+        kill evidence: no
+
+CASES: 19 as expected, 0 not
+exit 0
+
+=== DEV DEFS ANCHOR CHECK 1  2026-10-14T04:03:31+01:00  defs-anchor-check sha256 2814e63f9b40054682d385ae77b4b38b859eb4ccc5a7fcafbfe55b39ee2e5f21
+controls_defs.py /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-campaign-01/tools/stage5-prepared-NOT-EXECUTED/controls_defs.py
+  sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f (= expected)
+  controls defined: C1, C2, C10, C24, C25, C12, C14, C19, C21, C22, C27, C28
+  crates/nexus-governed-control/src/ledger/protocol.rs at 42dd1bd1: blob a2df2841b99cad5d452008a6d4150e9369d07e66, sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+
+C9: NO SEALED DEFINITION in controls_defs.py
+
+C10: Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)
+  file crates/nexus-governed-control/src/ledger/protocol.rs; kind explore; target full_f1; properties ['E4']
+  edit 1: anchor occurs 1 time(s) (lines 1404-1408); replacement occurs 0 time(s)
+    anchor sha256 37f74ba67470e9acddc8006a77f4de04d384dd4b8cb6c8a997666cc7cd25e8cf; replacement sha256 a3a2a2739bfcd8d88f7a26cd69bea6bec8e0c63c8a43f5d5239f130875dc53ae
+
+C24: resolve empties U for a present gating record without placing the correction
+  file crates/nexus-governed-control/src/ledger/protocol.rs; kind explore; target full_f1; properties ['P8']
+  edit 1: anchor occurs 1 time(s) (lines 1774-1787); replacement occurs 0 time(s)
+    anchor sha256 6e9d5ca83c1f636f918b5c9eb814aef7b501565df2bc1801d1573596c616affb; replacement sha256 7d1107e133ac16eff68e5638ff54793edc30cdf475f16338f262148845696f82
+
+C4: NO SEALED DEFINITION in controls_defs.py
+
+C25: a gating append answers Committed on Commit::Unknown (its one rollback is still issued)
+  file crates/nexus-governed-control/src/ledger/protocol.rs; kind explore; target full_f1; properties ['P7']
+  edit 1: anchor occurs 1 time(s) (lines 1472-1477); replacement occurs 0 time(s)
+    anchor sha256 66a61dd207359d3a85498028d324a7890586678c330f157d09b4596058ce4919; replacement sha256 d5ca4ee518614dff22a3bde08ad2276d332a9005521962f5590b1f6076a2bd97
+
+ANCHOR CHECK: every anchor occurs exactly once and no replacement occurs
+exit 0
+
+=== DEV PREFLIGHT CHECK 1  2026-10-14T04:06:49+01:00  check-preflight sha256 659302851eb680fe4623cb12fa2fa60c3dcb1b9830901926e5a80c17ef25ab6e
+exit 1
+FAIL  M 2954 holds '"E8"' (M 2946-2959)
+SUMMARY: 117 passed, 1 failed
+
+=== PREFLIGHT CHECKER REVISION 1  2026-10-14T04:07:13+01:00
+defect: the checker's own citation table pointed the E8 literal at M 2954; it is at M 2953 (M 2952 is obs.fail(). The preflight's cited range M 2941-2959 was correct; the preflight was not changed.
+repair: line number 2954 -> 2953 in the table. No check removed or weakened.
+v1 kept: tools/revisions/check-preflight.v1.py sha256 659302851eb680fe4623cb12fa2fa60c3dcb1b9830901926e5a80c17ef25ab6e; v2 sha256 55271a845059573c06aa3453890262be59226f6b01100eecfbdd229c0a47f969
+
+=== DEV PREFLIGHT CHECK 2  2026-10-14T04:07:13+01:00
+exit 0
+SUMMARY: 118 passed, 0 failed
+
+=== CHECKER REVISION 2  2026-10-14T04:07:28+01:00
+self-review of the draft found that K.2's seven points named an executable, a test selection and 'one test ran', which C22 (F.1 (d)) does not produce; the template gained a paragraph reading the points for non-exploration tests and for C22, and the R mapping's wording was clarified. The checker gained one check, C11m, for that paragraph, and the negative controls gained one corruption for it. No check was removed or weakened.
+checker v2 sha256 50062c3a40466ecd2aa894cc6e4142d0abb589e9e7e7a233fbde48c1158cd89c -> v3 sha256 7afda8b3930992c1c3b74e41247434873f861ca5915ab8fbf6510c32b7ebfb01
+negative controls v1 sha256 255939156e3fe7918e4a680fd4c72102171f21bbb21752acfb67b71fd83ae721 -> v2 sha256 53b92d5fcb232f20252a04f4b8733968f83cac0851cb8801f2ac66a69ccc809e
+template sha256 59c7c0095943b1716faf40af11febfd68aabcd5f551f04ebbf69fe79671c5f00
+
+=== DEV RUN 3 (fill + check v3)  2026-10-14T04:07:28+01:00
+verbatim blocks 32; written /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/d66c9109-2432-4255-9791-8a450736cd38/scratchpad/dev-r3b.md
+exit 0
+SUMMARY: 444 passed, 0 failed
+
+=== DEV NEGATIVE CONTROLS 3  2026-10-14T04:07:29+01:00
+DETECTED  K.2 demands an executable of C22: exit 1; C11m FAIL lines 1; first: FAIL  C11m K.2's points are read for non-exploration tests and for C22 consistently with F.1 (no C22 contradic
+
+NEGATIVE CONTROLS: 17 detected, 0 missed or not set up
+exit 0
+=== REVISION FILE NOTE  2026-10-14T04:09:51+01:00: checker v2 (logged sha256 50062c3a…) was overwritten in place by v3; it was reconstructed by removing v3's single C11m insertion and kept only because its sha256 equals the logged value (tools/revisions/check-ad1r3.v2.py).

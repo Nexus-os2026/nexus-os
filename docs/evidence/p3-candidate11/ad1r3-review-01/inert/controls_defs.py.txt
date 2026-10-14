@@ -1,0 +1,154 @@
+"""Control definitions of contract 7.5 for P3-C11-DR01-D2A1-CAMPAIGN-01.
+
+Each control is one named change: a list of (anchor, replacement) pairs, every
+anchor occurring exactly once in the candidate's file. The unit-test controls
+C12, C14, C19, C21, C22, C27 and C28 are IMPL-01R's definitions, unchanged
+(protocol.rs and unit_tests.rs are byte-identical at 22ebf9a5 and 244c5b23).
+"""
+CORE = "crates/nexus-governed-control/src/ledger/protocol.rs"
+MODEL_FILE = "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+UNIT = "ledger::protocol::unit_tests::"
+
+CONTROLS = {
+    # ---- changes to the core, on a named configuration ------------------------------------
+    "C1": ("the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0",
+           CORE, [(
+        """fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+    let now = field(word, shift);""",
+        """fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+    if shift == UNAPPLIED_SHIFT {
+        return with_field(word, shift, u64::from(up));
+    }
+    let now = field(word, shift);""")], "explore", "full_f1", ["P1"]),
+    "C2": ("the gating entry rule does not test C and X", CORE, [(
+        """        if core.c.is_some() || core.x.is_some() {
+            return entry(Entry::CellsBusy);
+        }
+        if core.u.is_some() {
+            core.latch(LatchCause::CellInvariant);
+            return entry(Entry::Latched);
+        }
+        let occupant = Occupant::Gating {""",
+        """        if core.u.is_some() {
+            core.latch(LatchCause::CellInvariant);
+            return entry(Entry::Latched);
+        }
+        let occupant = Occupant::Gating {""")], "explore", "full_f1", ["P4"]),
+    "C10": ("Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)", CORE, [(
+        """            Commit::Unknown => {
+                self.failed();
+                self.rolled(io.rollback());
+                self.not_applied(Persistence::Uncertain, Reason::Storage)
+            }""",
+        """            Commit::Unknown => {
+                self.failed();
+                let persistence = self.rolled(io.rollback());
+                self.not_applied(persistence, Reason::Storage)
+            }""")], "explore", "full_f1", ["E4"]),
+    "C24": ("resolve empties U for a present gating record without placing the correction", CORE, [(
+        """            Read::Got(Some(row)) if row.digest == key.digest => {
+                let correction = Occupant::Correction {
+                    about: key,
+                    seq: row.seq,
+                    exit,
+                };
+                if !self.core.place(Cell::C, correction) {
+                    return Resolve::Refused(Entry::Latched);
+                }
+                let Some(n) = self.core.occupancy(Cell::C) else {
+                    return Resolve::Refused(Entry::Latched);
+                };
+                Resolve::Corrected(self.core.token(Cell::C, n))
+            }""",
+        """            Read::Got(Some(row)) if row.digest == key.digest => {
+                let _ = (row, exit);
+                Resolve::Absent
+            }""")], "explore", "full_f1", ["P8"]),
+    "C25": ("a gating append answers Committed on Commit::Unknown (its one rollback is still issued)", CORE, [(
+        """                Commit::Unknown => {
+                    self.failed();
+                    self.rolled(io.rollback());
+                    self.keep = true;
+                    return refused(Persistence::Uncertain, Reason::Storage);
+                }""",
+        """                Commit::Unknown => {
+                    self.failed();
+                    self.rolled(io.rollback());
+                    return GatingOutcome::Committed(seq);
+                }""")], "explore", "full_f1", ["P7"]),
+    "C12": ("the publication is two exchanges: bits, then count", CORE, [(
+        """        exchange(&self.core.shared, self.guess, |word| {
+            let carried = (word & !FLAGS) | (word & HANDOVER_FAULT) | flags;
+            if counted {
+                count_step(carried, UNAPPLIED_SHIFT, true)
+            } else {
+                carried
+            }
+        });""",
+        """        exchange(&self.core.shared, self.guess, |word| {
+            (word & !FLAGS) | (word & HANDOVER_FAULT) | flags
+        });
+        if counted {
+            exchange(&self.core.shared, self.guess, |word| {
+                count_step(word, UNAPPLIED_SHIFT, true)
+            });
+        }""")], "explore", "x1_two_facts_two_writers_one_admission", ["E2"]),
+    # ---- changes to the core, killed by a unit test (IMPL-01R definitions) -----------------
+    "C14": ("the ticket check of step 0 is removed", CORE, [(
+        """        let fault = if !Arc::ptr_eq(&ticket.shared, &self.core.shared) {
+            Some(TicketFault::OtherLedger)
+        } else if ticket.state != TicketState::Armed {
+            Some(TicketFault::NotArmed)
+        } else {
+            None
+        };""",
+        """        let fault: Option<TicketFault> = None;""")],
+        "unit", UNIT + "t_bind_every_bound_value_belongs_to_one_ledger", ["T-BIND"]),
+    "C19": ("X can be emptied before it is marked committed", CORE, [(
+        """            Some((_, _, Stage::Committed(_))) => {
+                self.core.x = None;""",
+        """            Some(_) => {
+                self.core.x = None;""")],
+        "unit", UNIT + "t_cell_worker_operations_and_cell_appends", ["T-CELL"]),
+    "C21": ("the well-formed test of step 1 is removed", CORE, [(
+        """        } else if !well_formed(batch) {""",
+        """        } else if false && !well_formed(batch) {""")],
+        "unit", UNIT + "w6_one_identity_under_two_contents", ["W6"]),
+    "C22": ("the ticket derives Clone", CORE, [(
+        """#[derive(Debug)]
+pub(super) struct Ticket {""",
+        """#[derive(Debug, Clone)]
+pub(super) struct Ticket {""")],
+        "build", ("E0283", "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089"),
+        ["T-OWN (build failure E0283 at the assertion's line, unit_tests.rs:1089)"]),
+    "C27": ("the guard is created after the entry rule", CORE, [(
+        """    ) -> FactOutcome {
+        let mut op = Publish::new(self);
+        let outcome = op.facts(ticket, batch, io);""",
+        """    ) -> FactOutcome {
+        let refused = if self.session == Session::Bootstrap {
+            Some(Entry::NotOpen)
+        } else if self.latch.is_some() {
+            Some(Entry::Latched)
+        } else if self.phase != Phase::Healthy {
+            Some(Entry::NotHealthy)
+        } else {
+            None
+        };
+        if let Some(entry) = refused {
+            return FactOutcome::NotApplied {
+                counted: Counted {
+                    persistence: Persistence::NotWritten,
+                    conflict_member: None,
+                },
+                reason: Reason::Entry(entry),
+            };
+        }
+        let mut op = Publish::new(self);
+        let outcome = op.facts(ticket, batch, io);""")],
+        "unit", UNIT + "t_prec_persistence_of_every_ending", ["T-PREC"]),
+    "C28": ("resolve's 'present, frontier below N' check alone is removed", CORE, [(
+        """                Read::Got(durable) if durable >= set.top => {""",
+        """                Read::Got(_) => {""")],
+        "unit", UNIT + "t_res_every_resolve_row", ["T-RES"]),
+}

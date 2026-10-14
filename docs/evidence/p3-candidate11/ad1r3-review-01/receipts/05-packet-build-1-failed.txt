@@ -1,0 +1,26 @@
+PACKET BUILD   2026-10-14T04:11:20+01:00
+builder sha256 7a9263ef3e105e4de83adc5a27638ccdcf000e36a7fd2d62ea854b9d6f257af2
+$ python3 tools/build-packet.py /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r3-readiness-01 /home/nexus/NEXUS/nexus-os-p3-c11-ad1r3-readiness-01
+Traceback (most recent call last):
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r3-readiness-01/tools/build-packet.py", line 130, in <module>
+    PAT = re.compile("|".join([
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/__init__.py", line 228, in compile
+    return _compile(pattern, flags)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/__init__.py", line 307, in _compile
+    p = _compiler.compile(pattern, flags)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/_compiler.py", line 745, in compile
+    p = _parser.parse(p, flags)
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/_parser.py", line 979, in parse
+    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/_parser.py", line 460, in _parse_sub
+    itemsappend(_parse(source, state, verbose, nested + 1,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/re/_parser.py", line 840, in _parse
+    raise source.error('global flags not at the start '
+re.error: global flags not at the start of the expression at position 172
+exit 1

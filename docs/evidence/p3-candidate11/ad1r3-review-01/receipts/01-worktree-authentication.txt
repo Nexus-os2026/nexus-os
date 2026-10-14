@@ -1,0 +1,20 @@
+WORKTREE AUTHENTICATION  2026-10-14T03:48:27+01:00
+path: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r3-readiness-01
+realpath: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r3-readiness-01
+owner uid=1000 (nexus) gid=1000 mode=775 inode=62265283 dev=66310
+toplevel: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r3-readiness-01
+git-dir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-ad1r3-readiness-01
+common-dir: /home/nexus/NEXUS/nexus-os/.git
+HEAD: 8693e3a742ee4d3917cbfdb809b377bcd919d9f4
+tree: 1e9568ddb5a40336820d266652643d6067cd33f6
+parent: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+branch: refs/heads/evidence/p3-c11-d2a1-ad1r3-readiness-01
+porcelain lines: 0
+core.hooksPath: '/home/nexus/NEXUS/nexus-os/.git/hooks'
+active hooks in /home/nexus/NEXUS/nexus-os/.git/hooks: 0
+core.autocrlf/safecrlf/eol: '' '' ''; .gitattributes at HEAD: absent
+target prefix docs/evidence/p3-candidate11/ad1r3-review-01 exists before writing: no
+docs/evidence/p3-candidate11 entries before: ad1r2-review-packet-01 
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r3-readiness-01
+HEAD 8693e3a742ee4d3917cbfdb809b377bcd919d9f4
+branch refs/heads/evidence/p3-c11-d2a1-ad1r3-readiness-01

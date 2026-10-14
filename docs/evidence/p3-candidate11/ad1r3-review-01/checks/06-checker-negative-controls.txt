@@ -1,0 +1,19 @@
+DETECTED  AD-1-R2 itself: exit 1, 65 checks failed
+DETECTED  blanket G.3(c) restored in S-6: exit 1; C10a FAIL lines 1; first: FAIL  C10a S-6 no longer applies G.3(c) to every failing receipt; points to F.1/K.2; C22 exception kept
+DETECTED  text-only classification restored: exit 1; C9b FAIL lines 1; first: FAIL  C9b operative text has no 'never by exit status' outside its allowed context (R2-02: text-only classific
+DETECTED  raw FAIL beyond C made a final FAIL: exit 1; C11a FAIL lines 1; first: FAIL  C11a K.1: raw FAIL kept; beyond C the outer gate is INCOMPLETE — BUDGET EXCEEDED absent separate authori
+DETECTED  classification case 7 removed: exit 1; C11i FAIL lines 1; first: FAIL  C11i classification table has cases 1-7 (['1', '2', '3', '4', '5', '6'])
+DETECTED  witness line required of the primary receipt: exit 1; C10j FAIL lines 1; first: FAIL  C10j G.3(a) (the primary receipt) carries no witness-line requirement and defers to K.2
+DETECTED  C22 executable hash invented: exit 1; C10f FAIL lines 1; first: FAIL  C10f type (d): C22 nonzero compile, E0283 at the T-OWN line, rejections, NOT PRODUCED BY DESIGN, no inve
+DETECTED  O.4 alternative reading restored: exit 1; C12c FAIL lines 1; first: FAIL  C12c O.4 has one operative reading; raw trace wording kept; replay unchanged
+DETECTED  a verbatim contract line altered: exit 1; C1b FAIL lines 1; first: FAIL  C1b block 697,721: 2 line(s) byte-equal to L lines [697, 721]
+DETECTED  Codex required outside the mapping: exit 1; C13f FAIL lines 1; first: FAIL  C13f every operative mention of Codex is a quotation or the mapping itself (14 lines)
+DETECTED  line-929 discrepancy dropped: exit 1; C13c FAIL lines 1; first: FAIL  C13c R reports the line-929 discrepancy
+DETECTED  receipt linking loses per-control restoration: exit 1; C14 FAIL lines 1; first: FAIL  C14 carried: receipt linking: own restoration
+DETECTED  C4 reading silently settled: exit 1; C16b FAIL lines 1; first: FAIL  C16b item 10: preflight is prediction; C4 reading needs Architect decision; G not extended
+DETECTED  a control claimed killed: exit 1; C9c FAIL lines 1; first: FAIL  C9c no sentence claims a control is killed (['C25 is killed'])
+DETECTED  open item renumbered away: exit 1; C16a FAIL lines 1; first: FAIL  C16a open items 1-12 (['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13'])
+DETECTED  VERIFICATION INVALID dropped: exit 1; C11b FAIL lines 1; first: FAIL  C11b K.1: quotient precondition refusal stays INCOMPLETE — VERIFICATION INVALID
+DETECTED  K.2 demands an executable of C22: exit 1; C11m FAIL lines 1; first: FAIL  C11m K.2's points are read for non-exploration tests and for C22 consistently with F.1 (no C22 contradic
+
+NEGATIVE CONTROLS: 17 detected, 0 missed or not set up
