@@ -1,0 +1,7 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL (build) — admissible type-(d) intentional mutant compile failure: E0283 at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: KILL_EVIDENCE_CANDIDATE — type (d) — ARCHITECT REVIEW PENDING
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.26 s of 900 s; scope memory.peak 47796224 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136016 KiB; scope gone
+checks: 16 of 16 hold

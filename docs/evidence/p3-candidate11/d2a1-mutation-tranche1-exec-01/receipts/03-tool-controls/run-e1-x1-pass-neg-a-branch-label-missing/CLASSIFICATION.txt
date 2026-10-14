@@ -1,0 +1,9 @@
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (branch list: every BRANCHES label once, in order, each taken or NOT TAKEN; complete branch receipt: every raw label resolved to the frozen Stage-2 vocabulary (NORMALIZED))
+raw outcome (as printed): outcome PASS; harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 59,104 (expanded 59,104) of the 250,000 ceiling; transitions 219,196 (with a fault 15,026); no enabled step 34; elapsed 0.2 s
+branch accounting: STOP; TAKEN 20, NOT TAKEN 109, NOT APPLICABLE 64
+resources: wall 0.0 s of 180 s; scope memory.peak 3244032 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2868 KiB; scope gone
+checks: 25 of 27 hold
+FAILED CHECK: branch list: every BRANCHES label once, in order, each taken or NOT TAKEN: 89 of 90
+FAILED CHECK: complete branch receipt: every raw label resolved to the frozen Stage-2 vocabulary (NORMALIZED): ['the listed section is not exactly the static BRANCHES list in order (89 lines; first difference at 13)']

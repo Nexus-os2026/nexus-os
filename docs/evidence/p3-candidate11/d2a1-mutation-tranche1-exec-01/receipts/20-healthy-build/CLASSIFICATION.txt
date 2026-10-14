@@ -1,0 +1,6 @@
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible healthy-build type-(e4) success (exact command, Candidate C)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 47s')]
+resources: wall 167.82 s of 900 s; scope memory.peak 2619666432 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1968248 KiB; scope gone
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 1f96de589533c6a1c46a2343af97347f1e6220c6896a04487d8172aaa8839d75 size 8984464
+checks: 19 of 19 hold

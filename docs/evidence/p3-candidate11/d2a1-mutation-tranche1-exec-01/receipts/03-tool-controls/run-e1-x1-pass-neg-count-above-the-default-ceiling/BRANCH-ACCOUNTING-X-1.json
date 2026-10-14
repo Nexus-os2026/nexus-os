@@ -1,0 +1,1957 @@
+{
+ "normalizer": "normalize v1",
+ "configuration": "X-1",
+ "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+ "explorer": "original",
+ "source": "this mission's raw output /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/03-tool-controls/run-e1-x1-pass-neg-count-above-the-default-ceiling/raw-output.txt, sha256 74b7594ada2c4e4799b987ab0509a8174c3cf78059de47b56371aad5c8bd79ca",
+ "report_header": "EXPLORATION X-1",
+ "vocabulary_rows": 193,
+ "totals": {
+  "TAKEN": 21,
+  "NOT TAKEN": 108,
+  "NOT APPLICABLE": 64
+ },
+ "taken_outside_static": [],
+ "not_applicable_operations": {
+  "DROP": "DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted",
+  "append_gating": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+  "snapshot": "acknowledgement actors = 0: no Ack actor (actors())",
+  "append_acknowledgement": "acknowledgement actors = 0: no Ack actor (actors())",
+  "malformed snapshot": "acknowledgement actors = 0: no Ack actor (actors())"
+ },
+ "operations": {
+  "append_facts": {
+   "rows": 36,
+   "TAKEN": 10,
+   "NOT TAKEN": 26,
+   "NOT APPLICABLE": 0
+  },
+  "expire": {
+   "rows": 1,
+   "TAKEN": 1,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 0
+  },
+  "append_gating": {
+   "rows": 34,
+   "TAKEN": 0,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 34
+  },
+  "lookup": {
+   "rows": 12,
+   "TAKEN": 6,
+   "NOT TAKEN": 6,
+   "NOT APPLICABLE": 0
+  },
+  "explain": {
+   "rows": 11,
+   "TAKEN": 0,
+   "NOT TAKEN": 11,
+   "NOT APPLICABLE": 0
+  },
+  "snapshot": {
+   "rows": 10,
+   "TAKEN": 0,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 10
+  },
+  "append_acknowledgement": {
+   "rows": 16,
+   "TAKEN": 0,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 16
+  },
+  "barrier": {
+   "rows": 5,
+   "TAKEN": 2,
+   "NOT TAKEN": 3,
+   "NOT APPLICABLE": 0
+  },
+  "resolve": {
+   "rows": 15,
+   "TAKEN": 0,
+   "NOT TAKEN": 15,
+   "NOT APPLICABLE": 0
+  },
+  "append_cell C": {
+   "rows": 14,
+   "TAKEN": 0,
+   "NOT TAKEN": 14,
+   "NOT APPLICABLE": 0
+  },
+  "append_cell X": {
+   "rows": 14,
+   "TAKEN": 0,
+   "NOT TAKEN": 14,
+   "NOT APPLICABLE": 0
+  },
+  "append_cell U": {
+   "rows": 14,
+   "TAKEN": 0,
+   "NOT TAKEN": 14,
+   "NOT APPLICABLE": 0
+  },
+  "empty": {
+   "rows": 5,
+   "TAKEN": 0,
+   "NOT TAKEN": 5,
+   "NOT APPLICABLE": 0
+  },
+  "admission": {
+   "rows": 2,
+   "TAKEN": 2,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 0
+  },
+  "DROP": {
+   "rows": 1,
+   "TAKEN": 0,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 1
+  },
+  "malformed snapshot": {
+   "rows": 3,
+   "TAKEN": 0,
+   "NOT TAKEN": 0,
+   "NOT APPLICABLE": 3
+  }
+ },
+ "rows": [
+  {
+   "id": "B001",
+   "operation": "append_facts",
+   "label": "append_facts: Committed (inserted)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B002",
+   "operation": "append_facts",
+   "label": "append_facts: Committed (already present)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B003",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B004",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Latched)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B005",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(NotHealthy)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B006",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B007",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B008",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Entry(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B009",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause IdentityContent)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B010",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B011",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B012",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Conflict(explained)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B013",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten SessionClosed",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B014",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Corrected",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B015",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten TableFull",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B016",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Constraint",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B017",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied NotWritten Storage",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B018",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B019",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B020",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B021",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B022",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B023",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Entry(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B024",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause IdentityContent)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B025",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause DuplicateRole)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B026",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(new or retained cause MissingPrepared)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B027",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Conflict(explained)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B028",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain SessionClosed",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B029",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Corrected",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B030",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain TableFull",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B031",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Constraint",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B032",
+   "operation": "append_facts",
+   "label": "append_facts: NotApplied Uncertain Storage",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B033",
+   "operation": "append_facts",
+   "label": "append_facts: Rejected(OtherLedger)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B034",
+   "operation": "append_facts",
+   "label": "append_facts: Rejected(NotArmed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B035",
+   "operation": "append_facts",
+   "label": "append_facts: unwound after an insert was issued",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B036",
+   "operation": "append_facts",
+   "label": "append_facts: unwound before any insert",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B037",
+   "operation": "expire",
+   "label": "expire: Armed -> Counted",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B038",
+   "operation": "append_gating",
+   "label": "append_gating: Committed (inserted)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B039",
+   "operation": "append_gating",
+   "label": "append_gating: Committed (already present)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B040",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(NotOpen)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B041",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Latched)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B042",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(NotHealthy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B043",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(CellsBusy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B044",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Malformed)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B045",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Entry(Expired)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B046",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B047",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause DuplicateRole)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B048",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(new or retained cause MissingPrepared)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B049",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Conflict(explained)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B050",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten SessionClosed",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B051",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Corrected",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B052",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten TableFull",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B053",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Constraint",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B054",
+   "operation": "append_gating",
+   "label": "append_gating: Refused NotWritten Storage",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B055",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(NotOpen)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B056",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Latched)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B057",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(NotHealthy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B058",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(CellsBusy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B059",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Malformed)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B060",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Entry(Expired)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B061",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause IdentityContent)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B062",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause DuplicateRole)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B063",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(new or retained cause MissingPrepared)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B064",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Conflict(explained)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B065",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain SessionClosed",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B066",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Corrected",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B067",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain TableFull",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": false
+  },
+  {
+   "id": "B068",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Constraint",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B069",
+   "operation": "append_gating",
+   "label": "append_gating: Refused Uncertain Storage",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B070",
+   "operation": "append_gating",
+   "label": "append_gating: unwound after an insert (U kept, Unwound)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B071",
+   "operation": "append_gating",
+   "label": "append_gating: unwound before any insert (U emptied)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "gating callers = 0: no Gc actor (actors(); initial gc vector empty)",
+   "in_static_branches": true
+  },
+  {
+   "id": "B072",
+   "operation": "lookup",
+   "label": "lookup: Conflict(cause)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B073",
+   "operation": "lookup",
+   "label": "lookup: Conflict(explained)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B074",
+   "operation": "lookup",
+   "label": "lookup: Present",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B075",
+   "operation": "lookup",
+   "label": "lookup: Absent",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B076",
+   "operation": "lookup",
+   "label": "lookup: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B077",
+   "operation": "lookup",
+   "label": "lookup: Refused(Latched)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B078",
+   "operation": "lookup",
+   "label": "lookup: Refused(NotHealthy)",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B079",
+   "operation": "lookup",
+   "label": "lookup: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B080",
+   "operation": "lookup",
+   "label": "lookup: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B081",
+   "operation": "lookup",
+   "label": "lookup: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B082",
+   "operation": "lookup",
+   "label": "lookup: Failed",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B083",
+   "operation": "lookup",
+   "label": "lookup: unwound",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B084",
+   "operation": "explain",
+   "label": "explain: Explained",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B085",
+   "operation": "explain",
+   "label": "explain: Pending",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B086",
+   "operation": "explain",
+   "label": "explain: Busy",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B087",
+   "operation": "explain",
+   "label": "explain: Unknown",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B088",
+   "operation": "explain",
+   "label": "explain: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B089",
+   "operation": "explain",
+   "label": "explain: Refused(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B090",
+   "operation": "explain",
+   "label": "explain: Refused(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B091",
+   "operation": "explain",
+   "label": "explain: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B092",
+   "operation": "explain",
+   "label": "explain: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B093",
+   "operation": "explain",
+   "label": "explain: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B094",
+   "operation": "explain",
+   "label": "explain: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B095",
+   "operation": "snapshot",
+   "label": "snapshot: Taken",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B096",
+   "operation": "snapshot",
+   "label": "snapshot: Nothing",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B097",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(NotOpen)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B098",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Latched)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B099",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(NotHealthy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B100",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(CellsBusy)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B101",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Malformed)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B102",
+   "operation": "snapshot",
+   "label": "snapshot: NotNow(Expired)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B103",
+   "operation": "snapshot",
+   "label": "snapshot: Failed",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B104",
+   "operation": "snapshot",
+   "label": "snapshot: unwound",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B105",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Committed",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B106",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(OtherStore)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B107",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(NotOpen))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B108",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Latched))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B109",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(NotHealthy))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B110",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(CellsBusy))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B111",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Malformed))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B112",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(NotNow(Expired))",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": false
+  },
+  {
+   "id": "B113",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Stale)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B114",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Empty)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B115",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Future)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B116",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: Refused(Set)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B117",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: NotApplied(NotWritten)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B118",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: NotApplied(Uncertain)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B119",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: unwound after an insert (U kept)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B120",
+   "operation": "append_acknowledgement",
+   "label": "append_acknowledgement: unwound before any insert (U emptied)",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B121",
+   "operation": "barrier",
+   "label": "barrier: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B122",
+   "operation": "barrier",
+   "label": "barrier: Passed",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B123",
+   "operation": "barrier",
+   "label": "barrier: Failed",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B124",
+   "operation": "barrier",
+   "label": "barrier: NotNeeded",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B125",
+   "operation": "barrier",
+   "label": "barrier: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B126",
+   "operation": "resolve",
+   "label": "resolve: Corrected",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B127",
+   "operation": "resolve",
+   "label": "resolve: ConflictPlaced",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B128",
+   "operation": "resolve",
+   "label": "resolve: Acknowledged",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B129",
+   "operation": "resolve",
+   "label": "resolve: Absent",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B130",
+   "operation": "resolve",
+   "label": "resolve: Retained",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B131",
+   "operation": "resolve",
+   "label": "resolve: Inconsistent",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B132",
+   "operation": "resolve",
+   "label": "resolve: Stale",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B133",
+   "operation": "resolve",
+   "label": "resolve: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B134",
+   "operation": "resolve",
+   "label": "resolve: Refused(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B135",
+   "operation": "resolve",
+   "label": "resolve: Refused(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B136",
+   "operation": "resolve",
+   "label": "resolve: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B137",
+   "operation": "resolve",
+   "label": "resolve: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B138",
+   "operation": "resolve",
+   "label": "resolve: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B139",
+   "operation": "resolve",
+   "label": "resolve: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B140",
+   "operation": "resolve",
+   "label": "resolve: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B141",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (inserted)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B142",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (already marked)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B143",
+   "operation": "append_cell C",
+   "label": "append_cell C: Committed (present)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B144",
+   "operation": "append_cell C",
+   "label": "append_cell C: NotWritten",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B145",
+   "operation": "append_cell C",
+   "label": "append_cell C: Uncertain",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B146",
+   "operation": "append_cell C",
+   "label": "append_cell C: Stale",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B147",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B148",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B149",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B150",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B151",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B152",
+   "operation": "append_cell C",
+   "label": "append_cell C: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B153",
+   "operation": "append_cell C",
+   "label": "append_cell C: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B154",
+   "operation": "append_cell C",
+   "label": "append_cell C: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B155",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (inserted)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B156",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (already marked)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B157",
+   "operation": "append_cell X",
+   "label": "append_cell X: Committed (present)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B158",
+   "operation": "append_cell X",
+   "label": "append_cell X: NotWritten",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B159",
+   "operation": "append_cell X",
+   "label": "append_cell X: Uncertain",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B160",
+   "operation": "append_cell X",
+   "label": "append_cell X: Stale",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B161",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B162",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B163",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B164",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B165",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B166",
+   "operation": "append_cell X",
+   "label": "append_cell X: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B167",
+   "operation": "append_cell X",
+   "label": "append_cell X: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B168",
+   "operation": "append_cell X",
+   "label": "append_cell X: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B169",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (inserted)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B170",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (already marked)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B171",
+   "operation": "append_cell U",
+   "label": "append_cell U: Committed (present)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B172",
+   "operation": "append_cell U",
+   "label": "append_cell U: NotWritten",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B173",
+   "operation": "append_cell U",
+   "label": "append_cell U: Uncertain",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B174",
+   "operation": "append_cell U",
+   "label": "append_cell U: Stale",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B175",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(NotOpen)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B176",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Latched)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B177",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(NotHealthy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B178",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(CellsBusy)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B179",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Malformed)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B180",
+   "operation": "append_cell U",
+   "label": "append_cell U: Refused(Expired)",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B181",
+   "operation": "append_cell U",
+   "label": "append_cell U: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B182",
+   "operation": "append_cell U",
+   "label": "append_cell U: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B183",
+   "operation": "empty",
+   "label": "empty: unwound",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B184",
+   "operation": "empty",
+   "label": "empty: Done",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B185",
+   "operation": "empty",
+   "label": "empty: NotCommitted",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B186",
+   "operation": "empty",
+   "label": "empty: Stale",
+   "status": "NOT TAKEN",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B187",
+   "operation": "empty",
+   "label": "empty: OtherLedger",
+   "status": "NOT TAKEN",
+   "raw_evidence": "not printed (not a BRANCHES label, not taken)",
+   "na_reason": "",
+   "in_static_branches": false
+  },
+  {
+   "id": "B188",
+   "operation": "admission",
+   "label": "admission: admitted",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B189",
+   "operation": "admission",
+   "label": "admission: refused",
+   "status": "TAKEN",
+   "raw_evidence": "listed taken",
+   "na_reason": "",
+   "in_static_branches": true
+  },
+  {
+   "id": "B190",
+   "operation": "DROP",
+   "label": "DROP: a Counted ticket dropped",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "DROP false: step_fw offers the DROP option only when config.drop and the held ticket is Counted",
+   "in_static_branches": true
+  },
+  {
+   "id": "B191",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: future",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B192",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: set",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  },
+  {
+   "id": "B193",
+   "operation": "malformed snapshot",
+   "label": "malformed snapshot: empty",
+   "status": "NOT APPLICABLE",
+   "raw_evidence": "listed NOT TAKEN",
+   "na_reason": "acknowledgement actors = 0: no Ack actor (actors())",
+   "in_static_branches": true
+  }
+ ],
+ "raw_branch_lines": [
+  "    [taken    ] append_facts: Committed (inserted)",
+  "    [taken    ] append_facts: Committed (already present)",
+  "    [taken    ] append_facts: NotApplied NotWritten Entry(NotHealthy)",
+  "    [taken    ] append_facts: NotApplied NotWritten Entry(Latched)",
+  "    [taken    ] append_facts: NotApplied NotWritten Storage",
+  "    [taken    ] append_facts: NotApplied NotWritten Constraint",
+  "    [taken    ] append_facts: NotApplied Uncertain Constraint",
+  "    [taken    ] append_facts: NotApplied Uncertain Storage",
+  "    [NOT TAKEN] append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)",
+  "    [NOT TAKEN] append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)",
+  "    [NOT TAKEN] append_facts: NotApplied NotWritten Conflict(explained)",
+  "    [taken    ] append_facts: unwound before any insert",
+  "    [taken    ] append_facts: unwound after an insert was issued",
+  "    [taken    ] expire: Armed -> Counted",
+  "    [NOT TAKEN] append_gating: Committed (inserted)",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Entry(NotHealthy)",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Entry(CellsBusy)",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Entry(Latched)",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Storage",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Constraint",
+  "    [NOT TAKEN] append_gating: Refused Uncertain Storage",
+  "    [NOT TAKEN] append_gating: Refused Uncertain Constraint",
+  "    [NOT TAKEN] append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)",
+  "    [NOT TAKEN] append_gating: unwound after an insert (U kept, Unwound)",
+  "    [NOT TAKEN] append_gating: unwound before any insert (U emptied)",
+  "    [taken    ] lookup: Present",
+  "    [taken    ] lookup: Absent",
+  "    [NOT TAKEN] lookup: Conflict(cause)",
+  "    [NOT TAKEN] lookup: Conflict(explained)",
+  "    [taken    ] lookup: Refused(NotHealthy)",
+  "    [taken    ] lookup: Refused(Latched)",
+  "    [taken    ] lookup: Failed",
+  "    [taken    ] lookup: unwound",
+  "    [NOT TAKEN] explain: Explained",
+  "    [NOT TAKEN] explain: Pending",
+  "    [NOT TAKEN] explain: Busy",
+  "    [NOT TAKEN] explain: Unknown",
+  "    [NOT TAKEN] explain: Refused(Latched)",
+  "    [NOT TAKEN] explain: unwound",
+  "    [NOT TAKEN] snapshot: Taken",
+  "    [NOT TAKEN] snapshot: Nothing",
+  "    [NOT TAKEN] snapshot: NotNow(NotHealthy)",
+  "    [NOT TAKEN] snapshot: NotNow(Latched)",
+  "    [NOT TAKEN] snapshot: Failed",
+  "    [NOT TAKEN] snapshot: unwound",
+  "    [NOT TAKEN] append_acknowledgement: Committed",
+  "    [NOT TAKEN] append_acknowledgement: Refused(Stale)",
+  "    [NOT TAKEN] append_acknowledgement: Refused(Empty)",
+  "    [NOT TAKEN] append_acknowledgement: Refused(Future)",
+  "    [NOT TAKEN] append_acknowledgement: Refused(Set)",
+  "    [NOT TAKEN] append_acknowledgement: Refused(NotNow(NotHealthy))",
+  "    [NOT TAKEN] append_acknowledgement: Refused(NotNow(CellsBusy))",
+  "    [NOT TAKEN] append_acknowledgement: Refused(NotNow(Latched))",
+  "    [NOT TAKEN] append_acknowledgement: NotApplied(NotWritten)",
+  "    [NOT TAKEN] append_acknowledgement: NotApplied(Uncertain)",
+  "    [NOT TAKEN] append_acknowledgement: unwound after an insert (U kept)",
+  "    [NOT TAKEN] append_acknowledgement: unwound before any insert (U emptied)",
+  "    [taken    ] barrier: Passed",
+  "    [taken    ] barrier: Failed",
+  "    [NOT TAKEN] barrier: unwound",
+  "    [NOT TAKEN] resolve: Absent",
+  "    [NOT TAKEN] resolve: Corrected",
+  "    [NOT TAKEN] resolve: ConflictPlaced",
+  "    [NOT TAKEN] resolve: Acknowledged",
+  "    [NOT TAKEN] resolve: Retained",
+  "    [NOT TAKEN] resolve: Inconsistent",
+  "    [NOT TAKEN] resolve: Stale",
+  "    [NOT TAKEN] resolve: Refused(Latched)",
+  "    [NOT TAKEN] resolve: unwound",
+  "    [NOT TAKEN] append_cell C: Committed (inserted)",
+  "    [NOT TAKEN] append_cell C: Committed (present)",
+  "    [NOT TAKEN] append_cell C: NotWritten",
+  "    [NOT TAKEN] append_cell C: Uncertain",
+  "    [NOT TAKEN] append_cell C: Stale",
+  "    [NOT TAKEN] append_cell C: unwound",
+  "    [NOT TAKEN] append_cell X: Committed (inserted)",
+  "    [NOT TAKEN] append_cell X: Committed (present)",
+  "    [NOT TAKEN] append_cell X: NotWritten",
+  "    [NOT TAKEN] append_cell X: Uncertain",
+  "    [NOT TAKEN] append_cell X: Stale",
+  "    [NOT TAKEN] append_cell X: Refused(Latched)",
+  "    [NOT TAKEN] append_cell X: unwound",
+  "    [NOT TAKEN] empty: Done",
+  "    [NOT TAKEN] empty: Stale",
+  "    [taken    ] admission: admitted",
+  "    [taken    ] admission: refused",
+  "    [NOT TAKEN] DROP: a Counted ticket dropped",
+  "    [NOT TAKEN] malformed snapshot: future",
+  "    [NOT TAKEN] malformed snapshot: set",
+  "    [NOT TAKEN] malformed snapshot: empty"
+ ],
+ "raw_listed_taken": 21,
+ "raw_listed_not_taken": 69,
+ "raw_extra_taken": [],
+ "problems": [],
+ "verdict": "NORMALIZED",
+ "vocabulary_sha256": "db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932"
+}

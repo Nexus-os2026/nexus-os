@@ -1,0 +1,4 @@
+scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt1x-run-b-neg-abort-signal-6--1792004463.scope
+time memory.current memory.peak memory.swap.current oom_kill host.MemAvailable(KiB)
+20:01:03 2244608 3313664 0 0 53743488
+sampler: stopped at 20:01:03

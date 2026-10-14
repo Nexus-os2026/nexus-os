@@ -1,0 +1,11 @@
+--- development/classify.v1-dev.py	2026-10-14 19:49:22.785024023 +0100
++++ tools/classify.py	2026-10-14 19:49:22.804269231 +0100
+@@ -228,7 +228,7 @@
+             elif got != form:
+                 bad.append((p, got))
+         ck("every property line has its source-derived form: 24 HOLD (L1 with consistent counts), E10 not applicable",
+-           not bad and sum(v == "HOLDS" or (p == "L1" and L1_HOLDS.match(v)) for p, v in rep["properties"]) == 24
++           not bad and sum(bool(v == "HOLDS" or (p == "L1" and L1_HOLDS.match(v))) for p, v in rep["properties"]) == 24
+            and pv.get("E10") == E10_NA, bad)
+         labels = [lab for _, lab in rep["branches"]]
+         ck("branch list: every BRANCHES label once, in order, each taken or NOT TAKEN",

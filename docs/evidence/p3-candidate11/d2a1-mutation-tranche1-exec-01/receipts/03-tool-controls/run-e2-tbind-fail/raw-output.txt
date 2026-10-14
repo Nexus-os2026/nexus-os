@@ -1,0 +1,17 @@
+
+running 1 test
+test ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger ... 
+thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711598) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:
+assertion `left == right` failed: a synthetic check
+  left: Ok("no")
+ right: Ok("ok")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

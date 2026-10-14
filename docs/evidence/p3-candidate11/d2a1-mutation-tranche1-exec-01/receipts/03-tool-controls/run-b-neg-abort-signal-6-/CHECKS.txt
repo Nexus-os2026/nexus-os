@@ -1,0 +1,13 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+OK   source SYNTHETIC_SOURCE before and after (mutant blob 72556e3f03a53d7a14cb89515a286f42718b6ac8): SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   raw output sha256 equals the launcher's record: 02dc892555a8d4f1235386eda46bc9b865313ce67a693502abd5b27d50e92f8d
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: []; failures []
+FAIL exit 101 by a normal exit, no signal: exit None, signal 6, supervisor rc 134
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3313664 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.09 s of 180 s, timed out False, scope gone
+FAIL exactly one panic, of that test's thread: []
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))

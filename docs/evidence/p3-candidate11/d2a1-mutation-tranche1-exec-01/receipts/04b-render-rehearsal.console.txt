@@ -1,0 +1,10 @@
+TRANCHE STATUS: MUTATION_CONTROL_BLOCKED; candidates 3; attempted ['C22', 'C14', 'C12']
+OK  status MUTATION_CONTROL_BLOCKED
+OK  three candidates rendered
+OK  C22 row: NOT PRODUCED BY DESIGN executable and E0283 named
+OK  C14 row: panic location rendered
+OK  C12 row: discovered count of the 250,000 ceiling
+OK  not attempted listed
+OK  X-1 baseline facts rendered
+OK  INDEX names the status
+RENDER REHEARSAL: ALL AS EXPECTED

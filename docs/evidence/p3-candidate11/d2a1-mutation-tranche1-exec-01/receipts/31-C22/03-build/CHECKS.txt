@@ -1,0 +1,16 @@
+OK   the build started (no pre-flight refusal)
+FAIL source EXACTLY_C_PLUS_PATCH before and after the build: EXACTLY_C_PLUS_PATCH / NOT_THE_MUTANT
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 2615095296 B, swap.peak 0 B, oom 0, oom_kill 0, wall 124.73 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once, by one rustc invocation as a test (a dependency failure would add an error line): 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-2faa0b9718d3e6a3.d', 'fdd11dfeb0844846cc0f8710c22d78308a2e26c033469c41855a39d12e3baf40', 7900)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 2549 files, 772937584 bytes

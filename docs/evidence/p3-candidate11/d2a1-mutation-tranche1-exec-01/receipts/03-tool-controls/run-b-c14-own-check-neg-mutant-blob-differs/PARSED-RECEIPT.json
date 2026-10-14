@@ -1,0 +1,117 @@
+{
+ "control": "C14",
+ "receipt_type": "AD-1-R4 F.1 (b)",
+ "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+ "named_test_id": "T-BIND",
+ "test_span_at_C": [
+  1113,
+  1249
+ ],
+ "panic_location": [
+  "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+  1119,
+  5
+ ],
+ "panic_header": [
+  "thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711625) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:"
+ ],
+ "panic_message": [
+  "assertion `left == right` failed: a synthetic check",
+  "  left: Ok(\"no\")",
+  " right: Ok(\"ok\")"
+ ],
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3551232",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 180,
+  "backstop_runtime_max_seconds": 190,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.027,
+  "max_rss_kib_largest_process": 2828
+ },
+ "executable": {
+  "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+  "pinned_sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+  "pinned_size": 966208,
+  "before": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  },
+  "after": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "0 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": []
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "8cc041ad59502fc64a12ae29413b2682c200b20b28b2bc7d3d3fec4b3fa14cb9",
+ "not_required": "an explorer outcome line, or any witness line (F.1 (b))",
+ "outer_classification": "NOT ADMISSIBLE (source SYNTHETIC_SOURCE before and after (mutant blob 72556e3f03a53d7a14cb89515a286f42718b6ac8)): kills nothing",
+ "checks_hold": 14,
+ "checks_total": 15
+}

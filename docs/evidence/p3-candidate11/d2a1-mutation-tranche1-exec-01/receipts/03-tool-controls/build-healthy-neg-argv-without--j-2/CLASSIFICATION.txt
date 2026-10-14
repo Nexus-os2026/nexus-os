@@ -1,0 +1,6 @@
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact build command, the worktree as cwd)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 206888960 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 274212 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run

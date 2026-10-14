@@ -1,0 +1,7 @@
+RESTORE: EXACTLY_C
+control REHEARSAL: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 3ff16bac0d1f79c8533f36b6f8f4713e17c41de3 sha256 fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries []; mismatches []; missing []; modes []
+status (--ignored --untracked-files=all): ''
+every changed file is byte-equal to C; the worktree is clean but for its own target directory

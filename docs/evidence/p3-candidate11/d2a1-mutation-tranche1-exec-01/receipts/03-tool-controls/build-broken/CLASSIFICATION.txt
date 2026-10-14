@@ -1,0 +1,11 @@
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (exactly one coded error diagnostic, and it is E0283; E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089; the rendered source line is the assertion text; every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv))
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0308]: mismatched types', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.26 s of 900 s; scope memory.peak 47075328 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 141828 KiB; scope gone
+checks: 12 of 16 hold
+FAILED CHECK: exactly one coded error diagnostic, and it is E0283: ['error[E0308]: mismatched types']
+FAILED CHECK: E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+FAILED CHECK: the rendered source line is the assertion text: 
+FAILED CHECK: every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes

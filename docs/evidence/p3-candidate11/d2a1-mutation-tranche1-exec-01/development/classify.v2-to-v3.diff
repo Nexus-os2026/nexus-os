@@ -1,0 +1,20 @@
+--- development/classify.v2-dev.py	2026-10-14 19:50:04.176466234 +0100
++++ tools/classify.py	2026-10-14 19:50:04.196055332 +0100
+@@ -251,7 +251,7 @@
+     good = ck.ok()
+     outer = "PASS — admissible unchanged-core original-explorer X-1 PASS (type (e1))" if good else (
+         "INCOMPLETE (killed from outside or abnormal termination; never PASS)"
+-        if any(l.startswith(("normal exit", "launching command")) for l in ck.failed())
++        if proc["signal"] is not None or sup["timed_out"] or sup["oom_kill"]
+         else "NOT ADMISSIBLE (" + "; ".join(ck.failed()) + ")")
+     extra = []
+     if rep:
+@@ -301,7 +301,7 @@
+     good = ck.ok()
+     outer = f"PASS — admissible restored named-unit-test {b['key']} PASS (type (e2))" if good else (
+         "INCOMPLETE (killed from outside or abnormal termination; never PASS)"
+-        if any(l.startswith(("normal exit", "launching command")) for l in ck.failed())
++        if proc["signal"] is not None or sup["timed_out"] or sup["oom_kill"]
+         else "NOT ADMISSIBLE (" + "; ".join(ck.failed()) + ")")
+     write(d, "CLASSIFICATION: PASS" if good else "CLASSIFICATION: NOT PASS", outer, ck,
+           {"baseline": b["key"], "receipt_type": "AD-1-R4 F.1 (e2)", "test": b["test"], "harness_result": result,

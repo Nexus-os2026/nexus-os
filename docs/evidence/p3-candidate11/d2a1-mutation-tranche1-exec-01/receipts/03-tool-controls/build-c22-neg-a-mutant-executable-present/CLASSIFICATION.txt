@@ -1,0 +1,8 @@
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found)
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.26 s of 900 s; scope memory.peak 47796224 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136016 KiB; scope gone
+checks: 15 of 16 hold
+FAILED CHECK: no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', '6cb6676d2fa389f7b2c0fd8849134cd9a76c3de7a69ea4dafa16efdfa55bdb87', 1160), ('nexus_governed_control-0123456789abcdef', '0000000000000000000000000000000000000000000000000000000000000000', 1)]

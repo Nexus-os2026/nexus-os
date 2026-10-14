@@ -1,0 +1,11 @@
+LINK: VERIFIED
+control C22: restored-side receipt receipts/04-rehearsal/links/healthy (type (e4) healthy-build success)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the healthy build (e4) is classified PASS
+OK   identical command: ['cargo', 'test', '-p', 'nexus-governed-control', '--locked', '--release', '--lib', '--no-run', '-j', '2']
+OK   identical environment (the worktree-local target is the only per-worktree value): {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '<worktree>/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   identical target policy (a fresh worktree-local target in each worktree): /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target; /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-c22/target
+OK   identical toolchain (rustc -vV, cargo -vV, active toolchain): rustc 1.94.0 (4a4ef493e 2026-03-02)
+OK   identical build inputs (rust-toolchain.toml, Cargo.lock, Cargo configuration, manifests)
+OK   identical supervision and resource limits: 17179869184 / 0 / 900
+OK   the intended difference is the source identity only: healthy EXACTLY_C, mutant C plus the C22 patch

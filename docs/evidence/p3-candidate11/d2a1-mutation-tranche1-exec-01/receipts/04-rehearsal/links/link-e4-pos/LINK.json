@@ -1,0 +1,45 @@
+{
+ "reference": "receipts/04-rehearsal/links/healthy (type (e4) healthy-build success)",
+ "checks": [
+  [
+   "the healthy build (e4) is classified PASS",
+   true,
+   ""
+  ],
+  [
+   "identical command",
+   true,
+   "['cargo', 'test', '-p', 'nexus-governed-control', '--locked', '--release', '--lib', '--no-run', '-j', '2']"
+  ],
+  [
+   "identical environment (the worktree-local target is the only per-worktree value)",
+   true,
+   "{'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '<worktree>/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}"
+  ],
+  [
+   "identical target policy (a fresh worktree-local target in each worktree)",
+   true,
+   "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target; /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-c22/target"
+  ],
+  [
+   "identical toolchain (rustc -vV, cargo -vV, active toolchain)",
+   true,
+   "rustc 1.94.0 (4a4ef493e 2026-03-02)"
+  ],
+  [
+   "identical build inputs (rust-toolchain.toml, Cargo.lock, Cargo configuration, manifests)",
+   true,
+   ""
+  ],
+  [
+   "identical supervision and resource limits",
+   true,
+   "17179869184 / 0 / 900"
+  ],
+  [
+   "the intended difference is the source identity only: healthy EXACTLY_C, mutant C plus the C22 patch",
+   true,
+   ""
+  ]
+ ]
+}

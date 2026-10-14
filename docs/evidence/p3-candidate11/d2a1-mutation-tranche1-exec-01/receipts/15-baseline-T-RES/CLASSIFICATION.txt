@@ -1,0 +1,5 @@
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible restored named-unit-test T-RES PASS (type (e2))
+raw outcome (as printed): harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+resources: wall 0.0 s of 180 s; scope memory.peak 3829760 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4424 KiB; scope gone
+checks: 13 of 13 hold

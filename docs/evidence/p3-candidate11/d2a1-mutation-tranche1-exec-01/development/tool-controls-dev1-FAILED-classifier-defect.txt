@@ -1,0 +1,809 @@
+workspace healthy: generate-lockfile rc 0 
+SYNTHETIC BUILD healthy
+started: 2026-10-14T19:49:10+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT BUILD (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob bb19c600309d4bff9f366e5e9b4560efadaafd35 sha256 4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d
+build input Cargo.lock: git blob 1495c442a2bc46fed7b5476dc16a379461ec9464 sha256 4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob f5fc6bc499237d74afb19aa1ae9cc110d7f24503 sha256 c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de
+build input crates/nexus-governed-control/Cargo.toml: git blob e0d9a9a645c18bfaa4ba8e473210dc86af9b0106 sha256 b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9
+target directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-14T19:49:10+0100:
+  MemTotal 65077588 KiB; MemAvailable 53812468 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7695112 KiB (the scope has swap disabled)
+  load average ['0.78', '0.96', '0.97']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    837424 brave
+    756196 python
+    733416 2.1.281
+    684160 chrome
+    665968 brave
+    575600 claude
+    506264 chrome
+    459692 chrome
+scope unit: p3c11-mt1x-tool-controls-dev1-build-1792003751.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy
+command: systemd-run --user --scope --unit=p3c11-mt1x-tool-controls-dev1-build-1792003751 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-healthy/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-healthy/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-14T19:49:11+0100
+returned: 2026-10-14T19:49:14+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 3.44 s, max RSS (largest single process) 278956 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 211902464 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208), ('nexus_governed_control-801c2e64b68ac47d.d', '1766e0407e56f3ac7a4f9e3c896b4a7e61ab84b874a5a381a4a1dad319db30d5', 1160)]
+target manifest: TARGET-MANIFEST.tsv, 9 regular files, 969191 bytes, sha256 feb167a671f6e3fe25194c69211f81f4a6e6beaec407d3e2884a6e8d4f6a242e
+finished: 2026-10-14T19:49:14+0100
+workspace c22: generate-lockfile rc 0 
+SYNTHETIC BUILD c22
+started: 2026-10-14T19:49:14+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT BUILD (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob bb19c600309d4bff9f366e5e9b4560efadaafd35 sha256 4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d
+build input Cargo.lock: git blob 1495c442a2bc46fed7b5476dc16a379461ec9464 sha256 4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob f5fc6bc499237d74afb19aa1ae9cc110d7f24503 sha256 c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de
+build input crates/nexus-governed-control/Cargo.toml: git blob e0d9a9a645c18bfaa4ba8e473210dc86af9b0106 sha256 b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9
+target directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-14T19:49:14+0100:
+  MemTotal 65077588 KiB; MemAvailable 53737600 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7695112 KiB (the scope has swap disabled)
+  load average ['0.96', '1.00', '0.98']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    826648 brave
+    756196 python
+    733416 2.1.281
+    684168 chrome
+    639144 brave
+    575528 claude
+    504240 chrome
+    459692 chrome
+scope unit: p3c11-mt1x-tool-controls-dev1-build-1792003754.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22
+command: systemd-run --user --scope --unit=p3c11-mt1x-tool-controls-dev1-build-1792003754 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-c22/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-c22/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-14T19:49:14+0100
+returned: 2026-10-14T19:49:15+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.27 s, max RSS (largest single process) 136472 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 48283648 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+target manifest: TARGET-MANIFEST.tsv, 6 regular files, 7771 bytes, sha256 eb8002d82be2e0594fcfbe6ae3039ed2f99b063624ce8f9ef27f027bbc34a03b
+finished: 2026-10-14T19:49:15+0100
+workspace twice: generate-lockfile rc 0 
+SYNTHETIC BUILD twice
+started: 2026-10-14T19:49:15+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT BUILD (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob bb19c600309d4bff9f366e5e9b4560efadaafd35 sha256 4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d
+build input Cargo.lock: git blob 1495c442a2bc46fed7b5476dc16a379461ec9464 sha256 4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob f5fc6bc499237d74afb19aa1ae9cc110d7f24503 sha256 c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de
+build input crates/nexus-governed-control/Cargo.toml: git blob e0d9a9a645c18bfaa4ba8e473210dc86af9b0106 sha256 b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9
+target directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-14T19:49:15+0100:
+  MemTotal 65077588 KiB; MemAvailable 53793572 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7695112 KiB (the scope has swap disabled)
+  load average ['0.96', '1.00', '0.98']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    826648 brave
+    756196 python
+    733416 2.1.281
+    684172 chrome
+    639252 brave
+    575664 claude
+    504240 chrome
+    459692 chrome
+scope unit: p3c11-mt1x-tool-controls-dev1-build-1792003755.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice
+command: systemd-run --user --scope --unit=p3c11-mt1x-tool-controls-dev1-build-1792003755 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-twice/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-twice/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-14T19:49:15+0100
+returned: 2026-10-14T19:49:16+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.27 s, max RSS (largest single process) 136444 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 47947776 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-801c2e64b68ac47d.d', 'ced808a5d6e5cd837b21a96c208893a87bb1b3f0bb87c585c2438a9456f3184c', 1156)]
+finished: 2026-10-14T19:49:16+0100
+workspace broken: generate-lockfile rc 0 
+SYNTHETIC BUILD broken
+started: 2026-10-14T19:49:16+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT BUILD (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob bb19c600309d4bff9f366e5e9b4560efadaafd35 sha256 4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d
+build input Cargo.lock: git blob 1495c442a2bc46fed7b5476dc16a379461ec9464 sha256 4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob f5fc6bc499237d74afb19aa1ae9cc110d7f24503 sha256 c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de
+build input crates/nexus-governed-control/Cargo.toml: git blob e0d9a9a645c18bfaa4ba8e473210dc86af9b0106 sha256 b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9
+target directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-14T19:49:16+0100:
+  MemTotal 65077588 KiB; MemAvailable 53777428 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7695112 KiB (the scope has swap disabled)
+  load average ['0.96', '1.00', '0.98']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    826648 brave
+    756196 python
+    733416 2.1.281
+    684180 chrome
+    639360 brave
+    576044 claude
+    516768 chrome
+    459692 chrome
+scope unit: p3c11-mt1x-tool-controls-dev1-build-1792003756.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken
+command: systemd-run --user --scope --unit=p3c11-mt1x-tool-controls-dev1-build-1792003756 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-broken/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/build-broken/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-14T19:49:16+0100
+returned: 2026-10-14T19:49:16+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.28 s, max RSS (largest single process) 141484 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 49381376 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-801c2e64b68ac47d.d', '21c1ada0413c94e723a24fe08a4faab0ebfe864c70e68730073feb601fd06178', 1158)]
+finished: 2026-10-14T19:49:16+0100
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   the target directory is the worktree-local fresh one: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: PASS
+outer class (AD-1-R4 K.2): PASS — admissible healthy-build type-(e4) success (exact command, Candidate C)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+executable: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d sha256 8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8 size 966208
+checks: 19 of 19 hold
+
+CONTROL OK  healthy synthetic build classified (e4): CLASSIFICATION: PASS | outer class (AD-1-R4 K.2): PASS — admissible healthy-build type-(e4) success (exact command, Candidate C)
+OK   the build started (no pre-flight refusal)
+FAIL source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+
+BUILD: NOT OK
+outer class (AD-1-R4 K.2): BUILD NOT OK (source SYNTHETIC_SOURCE before and after the build): kills nothing; the mission stops
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 16 of 17 hold
+FAILED CHECK: source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+
+CONTROL OK  healthy synthetic build as a mutant pin (mutant blob mismatch in the source verdict) is NOT OK: BUILD: NOT OK | outer class (AD-1-R4 K.2): BUILD NOT OK (source SYNTHETIC_SOURCE before and after the build): kills nothing; the mission stops
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+
+BUILD: PINNED
+outer class (AD-1-R4 K.2): mutant build succeeded; one library-test executable pinned
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+executable: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d sha256 8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8 size 966208
+checks: 17 of 17 hold
+
+CONTROL OK  synthetic build pinned as a mutant build: BUILD: PINNED | outer class (AD-1-R4 K.2): mutant build succeeded; one library-test executable pinned
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+FAIL normal exit 0, no signal: exit None, signal 9, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (normal exit 0, no signal)
+raw outcome (as printed): exit None, signal 9; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: normal exit 0, no signal: exit None, signal 9, supervisor rc 0
+
+CONTROL OK  healthy build negative: signal: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (normal exit 0, no signal)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+FAIL launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out True, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out True, scope gone
+
+CONTROL OK  healthy build negative: timeout: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+FAIL launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 1, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 1; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 1, wall 3.44 s of 900 s, timed out False, scope gone
+
+CONTROL OK  healthy build negative: oom: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+FAIL launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 4096 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 4096 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 4096 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+
+CONTROL OK  healthy build negative: swap: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s)
+OK   the build started (no pre-flight refusal)
+FAIL source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / NOT_C
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source SYNTHETIC_SOURCE before and after the build)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / NOT_C
+
+CONTROL OK  healthy build negative: source after: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source SYNTHETIC_SOURCE before and after the build)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+FAIL the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact build command, the worktree as cwd)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run
+
+CONTROL OK  healthy build negative: argv without -j 2: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact build command, the worktree as cwd)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+FAIL the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true', 'RUSTFLAGS': '-C debuginfo=2'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 211902464 B, swap.peak 0 B, oom 0, oom_kill 0, wall 3.44 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '3.41s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-801c2e64b68ac47d.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=530e01c9f95aa79a', 'extra-filename=-801c2e64b68ac47d', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+OK   every artifact the build produced is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 9 files, 969191 bytes
+
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable)
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '3.41s')]
+resources: wall 3.44 s of 900 s; scope memory.peak 211902464 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 278956 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true', 'RUSTFLAGS': '-C debuginfo=2'}
+
+CONTROL OK  healthy build negative: RUSTFLAGS in env: CLASSIFICATION: NOT PASS | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL (build) — admissible type-(d) intentional mutant compile failure: E0283 at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: KILL_EVIDENCE_CANDIDATE — type (d) — ARCHITECT REVIEW PENDING
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 16 of 16 hold
+
+CONTROL OK  synthetic E0283 at unit_tests.rs:1089 classified (d): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING | outer class (AD-1-R4 K.2): FAIL (build) — admissible type-(d) intentional mutant compile failure: E0283 at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-twice/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 47947776 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+FAIL exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed', 'error[E0283]: type annotations needed']
+FAIL no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 2 previous errors']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'ced808a5d6e5cd837b21a96c208893a87bb1b3f0bb87c585c2438a9456f3184c', 1156)]
+FAIL every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (exactly one coded error diagnostic, and it is E0283; no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error; every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv))
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 2 previous errors']; primary location None
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 47947776 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136444 KiB; scope gone
+checks: 11 of 14 hold
+FAILED CHECK: exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed', 'error[E0283]: type annotations needed']
+FAILED CHECK: no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 2 previous errors']
+FAILED CHECK: every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes
+
+CONTROL OK  synthetic build 'twice' is not a (d) candidate: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (exactly one coded error diagnostic, and it is E0283; no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error; every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv))
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-broken/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 49381376 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.28 s of 900 s, timed out False, scope gone
+FAIL exactly one coded error diagnostic, and it is E0283: ['error[E0308]: mismatched types']
+FAIL E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+FAIL the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', '21c1ada0413c94e723a24fe08a4faab0ebfe864c70e68730073feb601fd06178', 1158)]
+FAIL every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (exactly one coded error diagnostic, and it is E0283; E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089; the rendered source line is the assertion text; every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv))
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0308]: mismatched types', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.28 s of 900 s; scope memory.peak 49381376 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 141484 KiB; scope gone
+checks: 12 of 16 hold
+FAILED CHECK: exactly one coded error diagnostic, and it is E0283: ['error[E0308]: mismatched types']
+FAILED CHECK: E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+FAILED CHECK: the rendered source line is the assertion text: 
+FAILED CHECK: every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes
+
+CONTROL OK  synthetic build 'broken' is not a (d) candidate: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (exactly one coded error diagnostic, and it is E0283; E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089; the rendered source line is the assertion text; every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv))
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+FAIL intentional nonzero termination by a normal exit (no signal): exit None, signal 9, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination)
+raw outcome (as printed): exit None, signal 9; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 15 of 16 hold
+FAILED CHECK: intentional nonzero termination by a normal exit (no signal): exit None, signal 9, supervisor rc 101
+
+CONTROL OK  (d) negative: signal: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+FAIL launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out True, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination)
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 15 of 16 hold
+FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out True, scope gone
+
+CONTROL OK  (d) negative: timeout: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+FAIL E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1090: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+FAIL the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1090; the rendered source line is the assertion text)
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 14 of 16 hold
+FAILED CHECK: E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1090: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+FAILED CHECK: the rendered source line is the assertion text: 
+
+CONTROL OK  (d) negative: other line: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1090; the rendered source line is the assertion text)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+FAIL intentional nonzero termination by a normal exit (no signal): exit 0, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (intentional nonzero termination by a normal exit (no signal))
+raw outcome (as printed): exit 0, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 15 of 16 hold
+FAILED CHECK: intentional nonzero termination by a normal exit (no signal): exit 0, signal None, supervisor rc 101
+
+CONTROL OK  (d) negative: exit 0: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (intentional nonzero termination by a normal exit (no signal))
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+FAIL no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152), ('nexus_governed_control-0123456789abcdef', '0000000000000000000000000000000000000000000000000000000000000000', 1)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found)
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 15 of 16 hold
+FAILED CHECK: no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152), ('nexus_governed_control-0123456789abcdef', '0000000000000000000000000000000000000000000000000000000000000000', 1)]
+
+CONTROL OK  (d) negative: a mutant executable present: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found)
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-c22/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 48283648 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.27 s of 900 s, timed out False, scope gone
+OK   exactly one coded error diagnostic, and it is E0283: ['error[E0283]: type annotations needed']
+OK   E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+OK   the rendered source line is the assertion text
+FAIL no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error', 'error: internal compiler error: synthetic']
+FAIL no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once (the failing unit), and every dependency compiled: 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', 'a15998d3f2421708d6a27413f440509495e0c5deb40257364a44869b589a80d3', 1152)]
+OK   every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): 6 files, 7771 bytes
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error; no compiler crash (no internal compiler error, panic or query stack), no signal)
+raw outcome (as printed): exit 101, signal None; diagnostics ['error[E0283]: type annotations needed', 'error: could not compile `nexus-governed-control` (lib test) due to 1 previous error', 'error: internal compiler error: synthetic']; primary location ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1089, 5)
+candidate: none
+mutant executable: NOT PRODUCED BY DESIGN; mutant test run: NOT PRODUCED BY DESIGN
+resources: wall 0.27 s of 900 s; scope memory.peak 48283648 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136472 KiB; scope gone
+checks: 14 of 16 hold
+FAILED CHECK: no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error', 'error: internal compiler error: synthetic']
+FAILED CHECK: no compiler crash (no internal compiler error, panic or query stack), no signal: 
+
+CONTROL OK  (d) negative: an internal compiler error line: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE | outer class (AD-1-R4 K.2): NOT ADMISSIBLE (no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error; no compiler crash (no internal compiler error, panic or query stack), no signal)
+SYNTHETIC RUN e1-x1-pass
+started: 2026-10-14T19:49:16+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT RUN (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+executable before: {"path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d", "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8", "size": 966208, "mtime_ns": 1792003754465837739, "inode": 62165556, "symlink": false}; pinned sha256 8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8 size 966208: MATCH
+test environment (env -i; exactly these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 SYNTH_REPORT_X_1=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/reports/x1-pass.txt
+pre-flight 2026-10-14T19:49:16+0100:
+  MemTotal 65077588 KiB; MemAvailable 53793580 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7695112 KiB (the scope has swap disabled)
+  load average ['0.96', '1.00', '0.98']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    826648 brave
+    756196 python
+    733416 2.1.281
+    684180 chrome
+    639388 brave
+    567144 claude
+    516768 chrome
+    459692 chrome
+selection: ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission', '--exact', '--list'] -> exit 0, listed ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission: test']; ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission', '--exact', '--ignored', '--list'] -> exit 0, listed [] (ignored test expected: False); executable after the listings 8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8 966208
+scope unit: p3c11-mt1x-run-e1-x1-pass-1792003756.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-mt1x-run-e1-x1-pass-1792003756 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=190 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/run-e1-x1-pass/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 SYNTH_REPORT_X_1=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/reports/x1-pass.txt /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/dev-local/tool-controls-dev1/run-e1-x1-pass/time-v.txt timeout -s KILL 180 nice -n 10 /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission --exact --nocapture --test-threads=1
+launched: 2026-10-14T19:49:16+0100
+returned: 2026-10-14T19:49:16+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 2836 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3153920 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+executable after: {"path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-dev1/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d", "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8", "size": 966208, "mtime_ns": 1792003754465837739, "inode": 62165556, "symlink": false}: MATCH
+raw output: raw-output.txt sha256 b507ddeef15b78b600115b5eeb97c290139d560adbf2578fe4b3a81d0e6a17ad bytes 6581
+finished: 2026-10-14T19:49:16+0100
+Traceback (most recent call last):
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/tool_controls.py", line 475, in <module>
+    sys.exit(main(os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/tool_controls.py", line 354, in main
+    classify.classify_e1(d, b, exe, "SYNTHETIC_SOURCE")
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/classify.py", line 231, in classify_e1
+    not bad and sum(v == "HOLDS" or (p == "L1" and L1_HOLDS.match(v)) for p, v in rep["properties"]) == 24
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported operand type(s) for +: 'int' and 're.Match'

@@ -1,0 +1,62 @@
+SYNTHETIC BUILD healthy
+started: 2026-10-14T20:00:56+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+SYNTHETIC DEVELOPMENT BUILD (tool_controls.py): no freeze or prior-step gate; not Nexus evidence
+source (before): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob bb19c600309d4bff9f366e5e9b4560efadaafd35 sha256 4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d
+build input Cargo.lock: git blob 1495c442a2bc46fed7b5476dc16a379461ec9464 sha256 4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob f5fc6bc499237d74afb19aa1ae9cc110d7f24503 sha256 c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de
+build input crates/nexus-governed-control/Cargo.toml: git blob e0d9a9a645c18bfaa4ba8e473210dc86af9b0106 sha256 b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9
+target directory /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-14T20:00:56+0100:
+  MemTotal 65077588 KiB; MemAvailable 53792504 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7696084 KiB (the scope has swap disabled)
+  load average ['0.90', '1.23', '1.15']; online CPUs 16
+  disk free on the worktree filesystem: 51 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    828832 brave
+    731936 2.1.281
+    705868 chrome
+    663692 python
+    650696 brave
+    612172 claude
+    519904 chrome
+    462572 chrome
+scope unit: p3c11-mt1x-03-tool-controls-build-1792004456.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy
+command: systemd-run --user --scope --unit=p3c11-mt1x-03-tool-controls-build-1792004456 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/03-tool-controls/build-healthy/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/03-tool-controls/build-healthy/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-14T20:00:56+0100
+returned: 2026-10-14T20:01:00+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 3.44 s, max RSS (largest single process) 274212 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 206888960 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): SYNTHETIC_SOURCE (synthetic workspace; no Nexus source)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-801c2e64b68ac47d', '8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8', 966208), ('nexus_governed_control-801c2e64b68ac47d.d', '6cd6d9a318c506e7ec090e5027977a688e55de90467e92b034a5ea493dfe6a69', 1168)]
+target manifest: TARGET-MANIFEST.tsv, 9 regular files, 969199 bytes, sha256 cee574f630f9fc4d79df9365bf549115ed0da09dd9fbfc3c69e69fd440ee887e
+finished: 2026-10-14T20:01:00+0100

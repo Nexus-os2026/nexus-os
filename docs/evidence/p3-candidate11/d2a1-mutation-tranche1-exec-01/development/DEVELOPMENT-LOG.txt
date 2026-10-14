@@ -1,0 +1,75 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-14, Europe/London (+01:00). Every step has its receipt under receipts/ (official) or dev-local/ (local
+development runs, kept on the machine; their failing outputs are copied here).
+
+BEFORE THE FREEZE (nothing Nexus was built or run; development used git objects, historical evidence and synthetic,
+non-Nexus programs only)
+
+ 1. 19:27  Read the mission, AGENTS.md and CLAUDE.md; git status/HEAD of the main worktree (clean, rebuild/phase0-trust-
+           boundary f727f5c3, untouched by this mission). Read the frozen R2 catalog's 12 tranche entries, AD-1-R4 F,
+           F.1, F.2, I, K, K.1, K.2, N, O, Q, the Stage-1/Stage-2 supervisors, classifiers and receipts, and the
+           historical impl-01r control receipts (for the E0283 diagnostic's shape).
+ 2. 19:34  Mission evidence root created (absent before). tools/common.py, tools/authenticate.py written.
+ 3. 19:35  authenticate.py, first run: ALL CHECKS HOLD (dev-local/auth-dev1.txt); official run: receipts/00-
+           authentication.txt (378 checks). Only then was any worktree created or any command run.
+ 4. 19:36  Stage-2's configs.py, normalize.py, report.py, verify_tree.py, scope-wrap.sh and VOCABULARY.json copied byte for
+           byte from the authenticated Stage-2 evidence (89326b85); configs.derive works under this mission's common.py.
+ 5. 19:38  expectations.py: every selection derived from the catalog and cross-checked against C's sources (verdict
+           assertions at model_tests.rs 4121:5 and 4133:5, T-OWN at unit_tests.rs 1089, the five named tests' own line
+           spans, ignored status, ceilings and time limits): ALL CROSS-CHECKS HOLD; official receipts/02-EXPECTATIONS.json
+           is byte-identical to the development derivation.
+ 6. 19:40  verify_mutant.py, supervise.py written. supervise.py self-test case 7 had an operator-precedence slip in its
+           predicate, found by reading before any use and fixed before the first run. Self-test (dev): ALL OK.
+ 7. 19:45  classify.py (types a, b, d, e1, e2, e4 and the mutant-build pin), tool_controls.py (a synthetic cargo workspace,
+           package nexus-governed-control, no dependencies, laid out so that its panic and diagnostic locations coincide
+           with the real expectations and with exactly 348 tests; run through the real supervisor and classifiers).
+ 8. 19:47  tool controls dev1 FAILED: classifier defect, classify_e1 summed regex match objects
+           (development/tool-controls-dev1-FAILED-classifier-defect.txt; classify.v1-dev.py; classify.v1-to-v2.diff).
+           Fixed with bool(...). All build-side controls of dev1 were already as expected.
+ 9. 19:50  tool controls dev2: 60 of 60 as expected. Review of the outer classes: a baseline test failing by a normal exit
+           was labelled "INCOMPLETE (killed from outside …)"; e1/e2 now say INCOMPLETE only on a signal, timeout or OOM
+           and NOT ADMISSIBLE otherwise (classify.v2-dev.py; classify.v2-to-v3.diff); the controls assert the outer class.
+           The real libtest 1.94 --nocapture framing and cargo's verbose E0283 output were inspected on the synthetic runs.
+10. 19:55  worktrees.py, healthy.py, control.py written; healthy.py's prior-step list had a slip (it would have refused the
+           build) found by reading and fixed before any use. supervise.toolchain_record now also returns cargo -vV and
+           the build inputs' identities (for C22's healthy/mutant equality at link time); tool controls dev3: 60 of 60.
+11. 19:57  rehearsal.py (dev1): a mission-owned development worktree at C (nexus-os-p3-c11-mt1x-dev-rehearsal, locked
+           with its role; never used for a control) with a SYNTHETIC comment-line patch: create, authenticate, apply,
+           verify_mutant (and three negatives), restore, re-authenticate, and links on synthetic receipt copies and the
+           real Stage-2 links of C9 and C18a: 18 of 18 as expected. Nothing was built or run there.
+12. 19:58  render.py, build_packet.py, final_gate.py, publish_checks.py, record_freeze.py, render_rehearsal.py written.
+           build_packet: C's crates/ holds one empty blob, so an empty receipt file would falsely equal a crate source
+           blob; the empty blob is excluded from that comparison (an empty file copies no content). Packet rehearsal on
+           the partial state: STAGED — ALL CHECKS HOLD. Render rehearsal on synthetic receipts: all as expected.
+13. 19:59  publish_checks.py exercised read-only against the parent commit (lineage checks fail there by design): it
+           exposed a predicate defect — core.hooksPath is explicitly set to the default .git/hooks, and v1 failed on
+           any hooksPath value. v2 checks the effective hooks directory for non-sample entries
+           (development/publish_checks.v1-dev.py, publish_checks.v1-to-v2.diff,
+           publish-pre-rehearsal-v1-FAILED-hooks-predicate.txt). The actions readback ran: 0 runs.
+14. 20:00  final_gate.py exercised before the freeze: only the expected failures (no freeze, no baselines). G3 refined to
+           accept a legitimately stopped baseline chain, so that a blocked tranche can still pass its gate for bounded
+           publication.
+15. 20:01  Official pre-freeze receipts with the final tools: 01-supervision-selftest (ALL OK), 03-tool-controls (60 of 60
+           as expected), 04-rehearsal (18 of 18), 04b-render-rehearsal (all as expected).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file was changed after the freeze)
+
+16. 20:02:06  Freeze recorded: receipts/05-FREEZE.json (64 frozen files: every tool, every authenticated input copy, the
+              expectations and the ruling record) and 05-FREEZE-RECORD.txt.
+17. 20:02:12  Baseline A, X-1 (e1), once: PASS, 27 of 27 checks; 59,104 states of 250,000; branch accounting NORMALIZED.
+18. 20:02:19–20:02:26  Baselines B, once each, in order: T-BIND, T-CELL, W6, T-PREC, T-RES (e2): PASS, 13 of 13 each.
+19. 20:02:34–20:05:23  The exact-command healthy build (e4) in the fresh worktree nexus-os-p3-c11-mt1x-healthy: PASS,
+              19 of 19; 167.8 s; scope peak 2.44 GiB; executable nexus_governed_control-2faa0b9718d3e6a3 sha256
+              1f96de58…9d75, size 8,984,464 (recorded, never run; it differs in sha256 from Stage 1's cde9f9d2…, as
+              AD-1-R4 I anticipates: reproducible builds are not established). 2,552 target files recorded.
+20. 20:05:39–20:07:43  Control C22 (1 of 12), once: worktree created and authenticated; the frozen patch applied
+              (APPLY: EXACTLY_C_PLUS_PATCH); the mutant build exited 101 with exactly E0283 at unit_tests.rs:1089:5. The
+              frozen post-build source check reported NOT_THE_MUTANT and the frozen restoration check RESTORE: FAILED.
+              Classification (frozen): NOT A KILL EVIDENCE CANDIDATE (15 of 16 checks hold). RESULT:
+              MUTATION_CONTROL_BLOCKED. The mission stopped: no later control was executed.
+21. After the stop, read-only: the cause is a frozen-tool defect (receipts/80-STOP-RECORD.md). verify_mutant.py and
+              control.restore list status with `--untracked-files=all`, which expands the ignored worktree-local target
+              into 2,549 file lines; their allowlists accept only the collapsed `!! target/`. The source bytes were exact
+              (the mutant before and after the build; C after the reverse application, verify_tree.py EXACTLY_C). No tool
+              was repaired, no receipt edited, no classification changed, nothing rerun. The rehearsal had not built in
+              its worktree, so the expanded listing never occurred before the freeze; that gap is recorded here.

@@ -1,0 +1,9 @@
+GATE: OPEN
+prior step: receipts/10-baseline-X-1/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/11-baseline-T-BIND/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/12-baseline-T-CELL/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/13-baseline-W6/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/14-baseline-T-PREC/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/15-baseline-T-RES/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+prior step: receipts/20-healthy-build/CLASSIFICATION.txt: 'CLASSIFICATION: PASS' (required 'CLASSIFICATION: PASS')
+freeze check: 64 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL

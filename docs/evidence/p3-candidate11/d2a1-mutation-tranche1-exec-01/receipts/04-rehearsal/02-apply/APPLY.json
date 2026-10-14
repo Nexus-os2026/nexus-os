@@ -1,0 +1,64 @@
+{
+ "patch": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/synthetic/rehearsal.patch",
+ "patch_sha256": "6f0bfdfdb9a9a6d520a0aecf30b1d2f81fc1c53ee75e6d38aa1582973e1de94b",
+ "catalog_patch_sha256": "6f0bfdfdb9a9a6d520a0aecf30b1d2f81fc1c53ee75e6d38aa1582973e1de94b",
+ "catalog_patch_file": "(synthetic)",
+ "check": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal",
+   "apply",
+   "--check",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/synthetic/rehearsal.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "apply": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal",
+   "apply",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/synthetic/rehearsal.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "verify_mutant": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246385,
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M crates/nexus-governed-control/src/ledger/protocol.rs"
+  ],
+  "unexpected_status": [],
+  "other_content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "mutant_file": {
+   "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "git_blob": "3ff16bac0d1f79c8533f36b6f8f4713e17c41de3",
+   "sha256": "fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c",
+   "bytes": 64590,
+   "differs_from_baseline": true
+  },
+  "expected_mutant_blob": "3ff16bac0d1f79c8533f36b6f8f4713e17c41de3",
+  "expected_mutant_sha256": "fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c",
+  "verdict": "EXACTLY_C_PLUS_PATCH"
+ },
+ "numstat": "1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs\n",
+ "changed_files": [
+  "crates/nexus-governed-control/src/ledger/protocol.rs"
+ ]
+}

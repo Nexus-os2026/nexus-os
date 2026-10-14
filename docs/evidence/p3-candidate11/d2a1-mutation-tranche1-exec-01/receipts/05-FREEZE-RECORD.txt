@@ -1,0 +1,85 @@
+FREEZE: RECORDED
+recorded: 2026-10-14T20:02:06+0100
+frozen files: 64
+05-FREEZE.json sha256 ad79d893774dc934d25309737fae0a15ee288ae3af86ae85c2ef131b0e572224
+  8327525c20085c859176af85251bf5668c61395ccc019f8f267e4605dcb9ce53  documents/ARCHITECT-RULING-CATALOG-FREEZE.md
+  00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693  inputs/AD1-R4.md
+  4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473  inputs/AD1-R5.md
+  1da1ae92f313496dade2bfea5c508af1e17bf2e39b9bd11cca3e448c35f0cb26  inputs/ARCHITECT-CONTROL-DEFINITIONS-R2.md
+  cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c  inputs/CONTRACT-02-R1.md
+  d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83  inputs/catalog.json
+  8c528ed49dadf9eaa6e21fbf1e503f6ce5188ee02195367a430930262ac60e62  inputs/linked/F-B2/CHECKS.txt
+  38a588f51730039d48d52b84eb5007f96ab9fdd50301513cad09f384662c9292  inputs/linked/F-B2/CLASSIFICATION.txt
+  5e12ded02c89e255975de3ed33571257b0e8b177b3f07d6bfc267fd77a9475b9  inputs/linked/F-B2/PARSED-RECEIPT.json
+  c9fe190706d4e0d1170869566d6bf9d5680be6d50893e7a08fd2490a1deb8c18  inputs/linked/F-B2/RECEIPT.txt
+  3cff6eb96354f8482d945bac7cf3cb389ef59f0baf2e377fc6c9094e17f6ecd9  inputs/linked/F-B2/descriptor.json
+  516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3  inputs/linked/F-B2/raw-output.txt
+  e4a1f2b41f1eea866b98ff9b3bba99c2b16b6ada30b3760c08985b297c05bfea  inputs/linked/F-B2/scope-record.txt
+  0fed1c8dd39f23bde72d1ffb8113013d31d5eaa59ee07ffcdd4b64c6d8d37ff1  inputs/linked/F-B2/time-v.txt
+  b5c6b4200c6947380fe9f08a168f993d3ca9df39e842db7b027ee82c1cb8698c  inputs/linked/F-G/CHECKS.txt
+  c318fbaa274995f761db3144a933b8cf289f9b20b27dce4b6573afb7f391c3cc  inputs/linked/F-G/CLASSIFICATION.txt
+  43735be4b33c66a324a01fe659a176d0ebab1ee2959a23acf9a9658f935d80b7  inputs/linked/F-G/PARSED-RECEIPT.json
+  3abaac0c49597ac033759127a961455fb862a2ea7196056425ab646351463495  inputs/linked/F-G/RECEIPT.txt
+  5317487c57e3612e760be2732fab555aa1ebe505e2417831ef00aaf4e87c8105  inputs/linked/F-G/descriptor.json
+  fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1  inputs/linked/F-G/raw-output.txt
+  0c17b4f084204ddc040e61f1cbf148cad652d5eb6fff5f07ef9368bee8b9a1bb  inputs/linked/F-G/scope-record.txt
+  54312ce333a775b5d9122d31c76e5ccd4ab4256aa7278449729e18dfab74334d  inputs/linked/F-G/time-v.txt
+  913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768  inputs/patches/C11.patch
+  d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803  inputs/patches/C12.patch
+  2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4  inputs/patches/C14.patch
+  37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0  inputs/patches/C17.patch
+  7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa  inputs/patches/C18a.patch
+  830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2  inputs/patches/C18b.patch
+  066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f  inputs/patches/C19.patch
+  65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8  inputs/patches/C21.patch
+  e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6  inputs/patches/C22.patch
+  bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f  inputs/patches/C27.patch
+  519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868  inputs/patches/C28.patch
+  cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b  inputs/patches/C9.patch
+  011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744  inputs/stage2/tools/configs.py
+  ff13a99b25fa0fe64d8f629fb9b66bd1489e51655246093e0a839a0b74546ad1  inputs/stage2/tools/normalize.py
+  9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa  inputs/stage2/tools/report.py
+  e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874  inputs/stage2/tools/scope-wrap.sh
+  8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  inputs/stage2/tools/verify_tree.py
+  db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932  inputs/stage2/vocabulary/VOCABULARY.json
+  a1038fc29b559ba5ee3b188c9a7d30f9e8891fa8654f9a9a426c27a084f4f500  receipts/02-EXPECTATIONS.json
+  acdf6c6bbdd065927dc0091afaa4ce4b3c75de30ae837afb1f727157c241f5ad  tools/authenticate.py
+  78edcdd58beaf9e9b339d63655ffbebcc745c473a15193f46ce0dcec5f17ab8c  tools/build_packet.py
+  53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684  tools/classify.py
+  ddc8b0b34a2303b565b911898c69687d8b08f47801edea9c06d86ca02d041d9c  tools/common.py
+  011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744  tools/configs.py
+  e45306fd938cef1283cfcc97c73d7fd90710d6659c4336e4c92118675b27f211  tools/control.py
+  96e4d77d525d12d0bc976f8523ec4ec5639ea34cc7e8fb7b1745ad2793ff5668  tools/expectations.py
+  81e3b20292aef3e0cba6e0ae72fb7a2be9c3793506dea111b867ac7601421e30  tools/final_gate.py
+  7e29c41854883fb39809faba08c61cc9664376f1851410f8b2d1ac776b9a8d27  tools/healthy.py
+  ff13a99b25fa0fe64d8f629fb9b66bd1489e51655246093e0a839a0b74546ad1  tools/normalize.py
+  0338be1be8c755f403a7f93b0fbd22188a8e1036a748d6871ad51fb8cf7aef97  tools/publish_checks.py
+  0d673a2696bb042ba26e16b053496a2c911624d56965adfdbc2c13c6f8e364ec  tools/record_freeze.py
+  c855711435d3f5c588e340ebb1267c679ea0348a6c6438d9526215e3fa06b5a1  tools/rehearsal.py
+  be0bc12775d100cb12680d206b2b4821ef52d5b519cc73e2aa8bb8d401b1a967  tools/render.py
+  074abb0a98853368c75c21cae8b2b9e1279c4ac9514ff348399b16ddcfeb9b1a  tools/render_rehearsal.py
+  9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa  tools/report.py
+  e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874  tools/scope-wrap.sh
+  662b969a901e09858a950864a83acbef8a0c13333e8d6f98996b2e824327e56d  tools/supervise.py
+  101fc62cb7cf5500eb3f9d91985777c913cbe493ad532fa8abec5ca81b38676b  tools/tool_controls.py
+  ef1747879bcc6d2cf47e8cf8357506b606a115a088ed13a6e277821a17df4964  tools/verify_mutant.py
+  8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  tools/verify_tree.py
+  e356d4e86f8f106043831473c7a8f9d84eedc0b9af15431892bb1f47e40ac67d  tools/worktrees.py
+  db8734e0bd2743f22a27fb4001e8deb0f6381b393aecc33c781d710ee57fa932  vocabulary/VOCABULARY.json
+pre-freeze receipts (success recorded):
+  ef1f081f46186263b967c780b8dd758ad78dc2e87dc6fa2786b052dcc9fe6641  receipts/00-authentication.txt
+  afac7e2d2eace3704ca98f2937718f9b6e3372a4f40d6ecc7578f3899c9baa25  receipts/01-supervision-selftest/SELFTEST.txt
+  b186f3c333e1aa272600d95c53fa97d9a99d83032b3116d26201c471eb3dd55e  receipts/03-tool-controls/SUMMARY.txt
+  e9a269b00f8715112cd81ba4bc64f96806fd38b1c158be6ad32dbe27cc4e308b  receipts/04-rehearsal/SUMMARY.txt
+  a987c0078153420181412587eae6477f8552a47e4184258be032fa0106b80f51  receipts/04b-render-rehearsal/SUMMARY.txt
+policy:
+  control_order: ['C22', 'C14', 'C19', 'C21', 'C27', 'C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b']
+  not_authorized: ['C1', 'C2', 'C3a', 'C3b', 'C3c', 'C4', 'C5', 'C6', 'C7', 'C8', 'C10', 'C15', 'C16', 'C20', 'C23', 'C24', 'C25', 'C26', 'A1', 'A2', 'A3', 'A5', 'A6']
+  supervision: systemd user scope MemoryMax=16G MemorySwapMax=0, RuntimeMaxSec=limit+10 (backstop), timeout -s KILL <limit>, /usr/bin/time -v, nice -n 10; MemAvailable >= 18 GiB before each step; no conflicting test executable, build or p3c11-* scope
+  limits_seconds: {'baseline tests': 180, 'builds': 900, 'unit-test controls': 180, 'C12 (X-1)': 180, 'F-B2 and F-G controls': 2700}
+  build_command: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+  build_environment: [('HOME', '/home/nexus'), ('PATH', '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin'), ('CARGO_TARGET_DIR', '<worktree>/target'), ('CARGO_TERM_VERBOSE', 'true'), ('CARGO_NET_OFFLINE', 'true')]
+  run_environment: [('PATH', '/usr/bin:/bin'), ('LANG', 'C.UTF-8'), ('RUST_BACKTRACE', '0')]
+  restoration: git apply -R of the same frozen patch in the disposable worktree; changed file byte-equal to C; verify_tree.py EXACTLY_C; status clean but for the worktree-local target
+  retries: none: one baseline invocation each, one build per control, one run per control, no rebuild, no rerun
+No semantic patch repair, classifier repair, alternate control encoding or automatic rerun after this point. A frozen-tool failure stops the mission and preserves its raw evidence.

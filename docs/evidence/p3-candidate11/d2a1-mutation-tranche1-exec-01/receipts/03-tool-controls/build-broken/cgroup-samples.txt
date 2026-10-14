@@ -1,0 +1,4 @@
+scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt1x-03-tool-controls-build-1792004462.scope
+time memory.current memory.peak memory.swap.current oom_kill host.MemAvailable(KiB)
+20:01:02 18771968 18771968 0 0 53767728
+sampler: stopped at 20:01:02

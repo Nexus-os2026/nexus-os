@@ -1,0 +1,10 @@
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination): kills nothing
+named property: E4; configuration F-B2; test ledger::protocol::model_tests::full_fb2
+candidate: none
+resources: wall 0.09 s of 2700 s; scope memory.peak 3399680 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2672 KiB; scope gone
+checks: 10 of 14 hold
+FAILED CHECK: harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: []; failures []
+FAILED CHECK: exit 101 by a normal exit, no signal: exit None, signal 6, supervisor rc 134
+FAILED CHECK: exactly one panic, of that test's thread: []
+FAILED CHECK: the report is printed, then repeated verbatim in the assertion message: 0 EXPLORATION headers

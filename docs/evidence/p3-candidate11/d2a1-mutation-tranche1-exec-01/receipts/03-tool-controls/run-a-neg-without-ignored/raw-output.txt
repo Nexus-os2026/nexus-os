@@ -1,0 +1,6 @@
+
+running 1 test
+test ledger::protocol::model_tests::full_fb2 ... ignored, synthetic
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

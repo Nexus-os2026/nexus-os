@@ -1,0 +1,139 @@
+{
+ "control": "C22",
+ "receipt_type": "AD-1-R4 F.1 (d)",
+ "argv": [
+  "cargo",
+  "test",
+  "-p",
+  "nexus-governed-control",
+  "--locked",
+  "--release",
+  "--lib",
+  "--no-run",
+  "-j",
+  "2"
+ ],
+ "env": {
+  "HOME": "/home/nexus",
+  "PATH": "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+  "CARGO_TARGET_DIR": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target",
+  "CARGO_TERM_VERBOSE": "true",
+  "CARGO_NET_OFFLINE": "true"
+ },
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "2615095296",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 124.73,
+  "time_limit_seconds": 900,
+  "backstop_runtime_max_seconds": 910,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 124.773,
+  "max_rss_kib_largest_process": 1971936
+ },
+ "diagnostics": [
+  "error[E0283]: type annotations needed",
+  "error: could not compile `nexus-governed-control` (lib test) due to 1 previous error"
+ ],
+ "primary_location": [
+  "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+  1089,
+  5
+ ],
+ "warnings": [],
+ "rustc_status": [
+  [
+   "/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc --crate-name nexus_governed_control --edition=2021 crates/nexus-governed-control/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C opt-level=3 -C lto=thin -C codegen-units=16 --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=39c9cf5f26ad991f -C extra-filename=-2faa0b9718d3e6a3 --out-dir /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps -C strip=symbols -L dependency=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps --extern base64=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libbase64-7d35a4708f1ecd2d.rlib --extern getrandom=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libgetrandom-1c43f005430ac146.rlib --extern hex=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libhex-3efc131e9332d31d.rlib --extern libc=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/liblibc-bc2ecac306f45cc0.rlib --extern nexus_kernel=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libnexus_kernel-c8986b9305e854a5.rlib --extern png=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libpng-2a7c143fd4bfc0cd.rlib --extern reqwest=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libreqwest-71001ba0e82385f5.rlib --extern serde=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libserde-d3f4d07513cfd070.rlib --extern serde_json=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libserde_json-07bb11bd3caed973.rlib --extern sha2=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libsha2-88ffe71533fdf221.rlib --extern tokio=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libtokio-b1e68157f13b7cbc.rlib --extern unicode_segmentation=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libunicode_segmentation-0fe9e585333d49ea.rlib --extern url=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/liburl-9581fd3218c468b4.rlib --extern x11rb=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libx11rb-b8f256e72d7da486.rlib --extern zeroize=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/libzeroize-b0d09abaeef53e08.rlib -L native=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/build/libsqlite3-sys-e41dcd7cec14e760/out -L native=/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/build/ring-47c0a389b38b9e0e/out",
+   "exit status: 1"
+  ]
+ ],
+ "deps_artifacts": [
+  {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d",
+   "sha256": "fdd11dfeb0844846cc0f8710c22d78308a2e26c033469c41855a39d12e3baf40",
+   "size": 7900,
+   "executable_bit": false,
+   "test_executable_name": false
+  }
+ ],
+ "effective_rustc_flags": {
+  "-C": [
+   "opt-level=3",
+   "lto=thin",
+   "codegen-units=16",
+   "metadata=39c9cf5f26ad991f",
+   "extra-filename=-2faa0b9718d3e6a3",
+   "strip=symbols"
+  ],
+  "--cfg": [],
+  "--check-cfg": [
+   "'cfg(docsrs,test)'",
+   "'cfg(feature, values())'"
+  ],
+  "--test": true,
+  "--edition": [
+   "2021"
+  ]
+ },
+ "toolchain": {
+  "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "cargo": "cargo 1.94.0 (85eff7c80 2026-01-15)",
+  "rustc_vV": "rustc 1.94.0 (4a4ef493e 2026-03-02)\nbinary: rustc\ncommit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db\ncommit-date: 2026-03-02\nhost: x86_64-unknown-linux-gnu\nrelease: 1.94.0\nLLVM version: 21.1.8",
+  "cargo_vV": "cargo 1.94.0 (85eff7c80 2026-01-15)\nrelease: 1.94.0\ncommit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643\ncommit-date: 2026-01-15\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.3 vendored)\nlibcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Ubuntu 24.4.0 (noble) [64-bit]",
+  "active_toolchain": "1.94.0-x86_64-unknown-linux-gnu",
+  "other_cargo_configs": [],
+  "build_inputs": {
+   "rust-toolchain.toml": {
+    "git_blob": "726005b29561a04536edea412bf551a9884d6639",
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   },
+   "Cargo.lock": {
+    "git_blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   ".cargo/config.toml": {
+    "git_blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.toml": {
+    "git_blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "git_blob": "2543c745d661203326367962714b94c811e07980",
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   }
+  }
+ },
+ "stderr_sha256": "5cbb36bd2d8af4c66bf12fa30eb68133689a181e87d0e15e6d65f471afb633b2",
+ "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "target_manifest": {
+  "path": "TARGET-MANIFEST.tsv",
+  "files": 2549,
+  "bytes": 772937584,
+  "sha256": "2a8472d615208521d20b49dba3e5f002aca369daafccc1dbe91da11a8ea45590"
+ },
+ "mutant_executable": "NOT PRODUCED BY DESIGN",
+ "mutant_test_run": "NOT PRODUCED BY DESIGN",
+ "outer_classification": "NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after the build)",
+ "checks_hold": 15,
+ "checks_total": 16
+}

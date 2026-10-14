@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt1x-receipts-build-1792004556.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 3714172 3714178 
+started: 2026-10-14T20:02:36+01:00
+finished: 2026-10-14T20:05:23+01:00
+command exit status: 0
+memory.peak: 2619666432
+memory.swap.peak: 0
+memory.current: 809250816
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

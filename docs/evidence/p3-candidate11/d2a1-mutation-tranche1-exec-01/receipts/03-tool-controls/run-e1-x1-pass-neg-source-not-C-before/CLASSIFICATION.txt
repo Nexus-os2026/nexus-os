@@ -1,0 +1,8 @@
+CLASSIFICATION: NOT PASS
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source SYNTHETIC_SOURCE before and after)
+raw outcome (as printed): outcome PASS; harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 59,104 (expanded 59,104) of the 250,000 ceiling; transitions 219,196 (with a fault 15,026); no enabled step 34; elapsed 0.2 s
+branch accounting: NORMALIZED; TAKEN 21, NOT TAKEN 108, NOT APPLICABLE 64
+resources: wall 0.0 s of 180 s; scope memory.peak 3244032 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2868 KiB; scope gone
+checks: 26 of 27 hold
+FAILED CHECK: source SYNTHETIC_SOURCE before and after: NOT_C / SYNTHETIC_SOURCE

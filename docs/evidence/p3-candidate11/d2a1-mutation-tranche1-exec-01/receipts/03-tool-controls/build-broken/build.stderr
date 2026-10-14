@@ -1,0 +1,15 @@
+   Compiling nexus-governed-control v0.1.0 (/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/crates/nexus-governed-control)
+     Running `/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc --crate-name nexus_governed_control --edition=2021 crates/nexus-governed-control/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C opt-level=3 -C lto=thin -C codegen-units=16 --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=530e01c9f95aa79a -C extra-filename=-801c2e64b68ac47d --out-dir /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/target/release/deps -C strip=symbols -L dependency=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/target/release/deps`
+error[E0308]: mismatched types
+  --> crates/nexus-governed-control/src/ledger/protocol.rs:21:5
+   |
+20 | pub(super) fn broken() -> u8 {
+   |                           -- expected `u8` because of return type
+21 |     "not a number"
+   |     ^^^^^^^^^^^^^^ expected `u8`, found `&str`
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `nexus-governed-control` (lib test) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc --crate-name nexus_governed_control --edition=2021 crates/nexus-governed-control/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C opt-level=3 -C lto=thin -C codegen-units=16 --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=530e01c9f95aa79a -C extra-filename=-801c2e64b68ac47d --out-dir /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/target/release/deps -C strip=symbols -L dependency=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/target/release/deps` (exit status: 1)

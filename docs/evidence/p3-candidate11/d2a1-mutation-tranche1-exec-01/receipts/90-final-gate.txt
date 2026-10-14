@@ -1,0 +1,45 @@
+FINAL GATE — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01
+OK   G1 authenticate.py --gate: ALL CHECKS HOLD (receipts/90-gate-authentication.txt): RESULT: ALL CHECKS HOLD
+OK   G2 the freeze holds: freeze check: 64 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   G3 baseline X-1 run once and classified: CLASSIFICATION: PASS
+OK   G3 baseline T-BIND run once and classified: CLASSIFICATION: PASS
+OK   G3 baseline T-CELL run once and classified: CLASSIFICATION: PASS
+OK   G3 baseline W6 run once and classified: CLASSIFICATION: PASS
+OK   G3 baseline T-PREC run once and classified: CLASSIFICATION: PASS
+OK   G3 baseline T-RES run once and classified: CLASSIFICATION: PASS
+     healthy build: CLASSIFICATION: PASS
+OK   G3 attempted controls are a prefix of the frozen order: ['C22']
+OK   G3 only the last attempted control may be non-candidate (a stop ends the tranche): {'C22': 'CONTROL RESULT: MUTATION_CONTROL_BLOCKED'}
+OK   G3 C22: RESULT agrees with its sub-receipts: CONTROL RESULT: MUTATION_CONTROL_BLOCKED; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE', 'run': None, 'restore': 'RESTORE: FAILED', 'link': None}
+OK   G4 C22: worktree exactly C now: EXACTLY_C ['!! target/']
+OK   G4 C22: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 control C22 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G3 C1: not executed (no worktree)
+OK   G3 C2: not executed (no worktree)
+OK   G3 C3a: not executed (no worktree)
+OK   G3 C3b: not executed (no worktree)
+OK   G3 C3c: not executed (no worktree)
+OK   G3 C4: not executed (no worktree)
+OK   G3 C5: not executed (no worktree)
+OK   G3 C6: not executed (no worktree)
+OK   G3 C7: not executed (no worktree)
+OK   G3 C8: not executed (no worktree)
+OK   G3 C10: not executed (no worktree)
+OK   G3 C15: not executed (no worktree)
+OK   G3 C16: not executed (no worktree)
+OK   G3 C20: not executed (no worktree)
+OK   G3 C23: not executed (no worktree)
+OK   G3 C24: not executed (no worktree)
+OK   G3 C25: not executed (no worktree)
+OK   G3 C26: not executed (no worktree)
+OK   G3 A1: not executed (no worktree)
+OK   G3 A2: not executed (no worktree)
+OK   G3 A3: not executed (no worktree)
+OK   G3 A5: not executed (no worktree)
+OK   G3 A6: not executed (no worktree)
+OK   G4 healthy-build worktree exactly C now: EXACTLY_C
+OK   G6 the healthy build's executable preserved (never run): /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 1f96de589533c6a1…
+OK   G6 the pinned baseline executable unchanged
+OK   G5 no mutant blob in the repository object store: []
+OK   G5 nothing staged in the main worktree: []
+OK   G7 no mutant source copy anywhere under the evidence root: []
+FINAL GATE: ALL CHECKS HOLD

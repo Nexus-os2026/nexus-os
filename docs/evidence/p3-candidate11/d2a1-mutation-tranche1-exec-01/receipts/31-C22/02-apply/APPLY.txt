@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C22: the ticket derives `Clone`
+patch: inputs/patches/C22.patch (the frozen R2 packet's catalog/patches/C22.patch), sha256 e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6 (catalog e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 694b744de3b70a3a092c633b934262bd510d41aa (expected 694b744de3b70a3a092c633b934262bd510d41aa), sha256 0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5 (expected 0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

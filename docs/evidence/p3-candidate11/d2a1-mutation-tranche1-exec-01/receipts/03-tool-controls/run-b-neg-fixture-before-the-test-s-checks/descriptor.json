@@ -1,0 +1,123 @@
+{
+ "id": "run-b-neg-fixture-before-the-test-s-checks",
+ "type": "synthetic",
+ "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+ "worktree": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy",
+ "argv": [
+  "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+  "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+  "--exact",
+  "--nocapture",
+  "--test-threads=1"
+ ],
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0",
+  "SYNTH_FIXTURE_PANIC": "1"
+ },
+ "cwd": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/crates/nexus-governed-control",
+ "prior": [],
+ "limit_seconds": 180,
+ "synthetic": "b-neg-fixture-before-the-test-s-checks",
+ "source_before": {
+  "verdict": "SYNTHETIC_SOURCE",
+  "mutant_file": {
+   "git_blob": "72556e3f03a53d7a14cb89515a286f42718b6ac8"
+  }
+ },
+ "executable": {
+  "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+  "pinned_sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+  "pinned_size": 966208,
+  "before": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  },
+  "after": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "0 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": []
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "2904064",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 180,
+  "backstop_runtime_max_seconds": 190,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.041,
+  "max_rss_kib_largest_process": 3004
+ },
+ "output_path": "raw-output.txt",
+ "raw_output_sha256": "60e53152e77d489005d8cc6167432785bbd0cf824f159566aaa74bfe60001399",
+ "source_after": {
+  "verdict": "SYNTHETIC_SOURCE",
+  "mutant_file": {
+   "git_blob": "72556e3f03a53d7a14cb89515a286f42718b6ac8"
+  }
+ }
+}

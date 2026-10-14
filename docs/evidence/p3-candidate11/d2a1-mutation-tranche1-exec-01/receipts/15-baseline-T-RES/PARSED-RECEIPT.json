@@ -1,0 +1,99 @@
+{
+ "baseline": "T-RES",
+ "receipt_type": "AD-1-R4 F.1 (e2)",
+ "test": "ledger::protocol::unit_tests::t_res_every_resolve_row",
+ "harness_result": [
+  "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3829760",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 180,
+  "backstop_runtime_max_seconds": 190,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.038,
+  "max_rss_kib_largest_process": 4424
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "pinned_size": 8984464,
+  "before": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  },
+  "after": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::unit_tests::t_res_every_resolve_row: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "0 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": []
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464,
+   "mtime_ns": 1791979773968059672,
+   "inode": 62417761,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "8a9228bdd78336865e0d00831034c1d1954f3f7775f806bf073bfcd76870c8e8",
+ "not_produced_by_design": "the explorer report, counts, property lines and branch list (F.1 (e2))",
+ "outer_classification": "PASS \u2014 admissible restored named-unit-test T-RES PASS (type (e2))",
+ "checks_hold": 13,
+ "checks_total": 13
+}

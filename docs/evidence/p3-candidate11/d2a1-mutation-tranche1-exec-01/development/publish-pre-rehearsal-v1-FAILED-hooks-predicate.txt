@@ -1,0 +1,53 @@
+FAIL evidence commit has the single parent 9f22f890 (the R2 evidence commit): ['f81159046bf0b62666851bc1185992318302d31f']
+OK   the parent's tree is unchanged
+FAIL every changed path is added under the allowed path (no modification, no deletion): 0 paths
+OK   the R2 packet is unchanged (every R2 packet path has the same mode and blob): 72 paths
+OK   the frozen R2 catalog is unchanged: ('100644', 'blob', '1918374263740d2f98640da00fc466737945975e')
+OK   no path outside docs/evidence/ differs from Candidate C: []
+OK   Candidate C is unchanged
+OK   the current-tree manifest is unchanged
+FAIL added files are regular, non-executable blobs: []
+OK   added bytes at most 32 MiB: 0 bytes
+OK   text only (UTF-8, no NUL byte in any added file): []
+OK   no Rust source added
+OK   no added file equals a crate source blob of C (the empty blob excluded): []
+OK   no mutant source staged (no added blob equals any catalog mutant blob): []
+OK   no executable binary staged: []
+OK   no target directory or build artifact staged: []
+FAIL no active git hook (only *.sample files): hooksPath '/home/nexus/NEXUS/nexus-os/.git/hooks'; non-sample entries []
+     workflow .github/workflows/audit.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (branches ['main'])
+     workflow .github/workflows/ci-fast-local.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (branches ['implement/**', 'repair/**'])
+     workflow .github/workflows/ci-phase2-linux-sandbox.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (no push trigger)
+     workflow .github/workflows/ci-portability.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (no push trigger)
+     workflow .github/workflows/ci.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (branches ['main'])
+     workflow .github/workflows/local-runner-smoke.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (branches ['rebuild/phase0-trust-boundary'])
+     workflow .github/workflows/release.yml: push of review/p3-c11-d2a1-mutation-tranche1-exec-01 triggers it: False (tags only {'tags': ['v*']})
+OK   no workflow in the evidence commit's tree has a push trigger matching review/p3-c11-d2a1-mutation-tranche1-exec-01
+OK   glob semantics self-test
+OK   remote workflow list read: rc 0
+     remote workflow .github/workflows/audit.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/ci-deep-diagnostic.yml: state active; in the evidence commit's tree: False
+     remote workflow .github/workflows/ci-fast-local.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/ci-phase2-linux-sandbox.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/ci-portability.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/ci.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/local-runner-smoke.yml: state active; in the evidence commit's tree: True
+     remote workflow .github/workflows/release.yml: state disabled_manually; in the evidence commit's tree: True
+     remote workflow .github/workflows/rs01-mutation-audit.yml: state active; in the evidence commit's tree: False
+     remote workflow dynamic/dependabot/update-graph: state active; in the evidence commit's tree: False
+OK   active remote workflows absent from the pushed tree cannot run on its push (GitHub reads the pushed commit's workflow files): recorded: ['.github/workflows/ci-deep-diagnostic.yml', '.github/workflows/rs01-mutation-audit.yml']
+OK   rulesets read: 5 rulesets
+     ruleset 24514063 'Nexus Phase Three — PR governed': enforcement active, target branch, include ['refs/heads/phase3/governed-real-world-control'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-exec-01: False
+     ruleset 24468658 'Nexus frozen checkpoints — immutable': enforcement active, target branch, include ['refs/heads/rebuild/phase0-trust-boundary', 'refs/heads/evidence/phase0-closure', 'refs/heads/rebuild/phase1-governed-coding', 'refs/heads/evidence/phase1-closure', 'refs/heads/rebuild/phase2-governed-verification', 'refs/heads/evidence/phase2-closure', 'refs/heads/implement/phase2-governed-verification'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-exec-01: False
+     ruleset 24468727 'Nexus main — PR governed': enforcement active, target branch, include ['refs/heads/main'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-exec-01: False
+     ruleset 24500813 'Nexus post-P2 forward — PR governed': enforcement active, target branch, include ['refs/heads/forward/post-p2-hardening'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-exec-01: False
+     ruleset 24502309 'Nexus release tags v* — immutable, creation blocked': enforcement active, target tag, include ['refs/tags/v*'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-exec-01: False
+     branch protection read for review/p3-c11-d2a1-mutation-tranche1-exec-01: rc 1 (none)
+OK   destination ref absent on the remote
+OK   destination ref absent locally
+OK   the R2 review ref still points at the parent
+     remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+     remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+     remote refs: 195; sha256 of the sorted ls-remote listing 33fdd5fe93deee927409c45e4a3321f9b69dac8975569c9a31c415527c917340
+     remote URL: git@github.com:Nexus-os2026/nexus-os.git; push config: none
+RESULT: FAILED: evidence commit has the single parent 9f22f890 (the R2 evidence commit); every changed path is added under the allowed path (no modification, no deletion); added files are regular, non-executable blobs; no active git hook (only *.sample files)

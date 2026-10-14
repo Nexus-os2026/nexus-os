@@ -1,0 +1,586 @@
+{
+ "baseline": "X-1",
+ "receipt_type": "AD-1-R4 F.1 (e1)",
+ "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+ "configuration": "X-1",
+ "report": {
+  "header": "EXPLORATION X-1",
+  "outcome": "PASS",
+  "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Adm]",
+  "states": 59104,
+  "expanded": 59104,
+  "transitions": 219196,
+  "fault_edges": 15026,
+  "no_step": 34,
+  "elapsed_s": 0.2,
+  "cap": 250000,
+  "time_cap_s": 180,
+  "properties": [
+   [
+    "P1",
+    "HOLDS"
+   ],
+   [
+    "P2",
+    "HOLDS"
+   ],
+   [
+    "P4",
+    "HOLDS"
+   ],
+   [
+    "P5",
+    "HOLDS"
+   ],
+   [
+    "P6",
+    "HOLDS"
+   ],
+   [
+    "P7",
+    "HOLDS"
+   ],
+   [
+    "P8",
+    "HOLDS"
+   ],
+   [
+    "P9",
+    "HOLDS"
+   ],
+   [
+    "P12",
+    "HOLDS"
+   ],
+   [
+    "P13",
+    "HOLDS"
+   ],
+   [
+    "P15",
+    "HOLDS"
+   ],
+   [
+    "D1",
+    "HOLDS"
+   ],
+   [
+    "L1",
+    "HOLDS: 204170 non-fault edges, no cycle; 34 end states, each terminal (D1)"
+   ],
+   [
+    "E1",
+    "HOLDS"
+   ],
+   [
+    "E2",
+    "HOLDS"
+   ],
+   [
+    "E3",
+    "HOLDS"
+   ],
+   [
+    "E4",
+    "HOLDS"
+   ],
+   [
+    "E5",
+    "HOLDS"
+   ],
+   [
+    "E6",
+    "HOLDS"
+   ],
+   [
+    "E7",
+    "HOLDS"
+   ],
+   [
+    "E8",
+    "HOLDS"
+   ],
+   [
+    "E9",
+    "HOLDS"
+   ],
+   [
+    "E10",
+    "not applicable here (worker verbs do not unwind)"
+   ],
+   [
+    "E11",
+    "HOLDS"
+   ],
+   [
+    "KEY",
+    "HOLDS"
+   ]
+  ],
+  "branches": [
+   [
+    "taken    ",
+    "append_facts: Committed (inserted)"
+   ],
+   [
+    "taken    ",
+    "append_facts: Committed (already present)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Entry(Latched)"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Storage"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied NotWritten Constraint"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied Uncertain Constraint"
+   ],
+   [
+    "taken    ",
+    "append_facts: NotApplied Uncertain Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_facts: NotApplied NotWritten Conflict(explained)"
+   ],
+   [
+    "taken    ",
+    "append_facts: unwound before any insert"
+   ],
+   [
+    "taken    ",
+    "append_facts: unwound after an insert was issued"
+   ],
+   [
+    "taken    ",
+    "expire: Armed -> Counted"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(NotHealthy)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(CellsBusy)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Entry(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused Uncertain Storage"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused Uncertain Constraint"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: unwound after an insert (U kept, Unwound)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_gating: unwound before any insert (U emptied)"
+   ],
+   [
+    "taken    ",
+    "lookup: Present"
+   ],
+   [
+    "taken    ",
+    "lookup: Absent"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(cause)"
+   ],
+   [
+    "NOT TAKEN",
+    "lookup: Conflict(explained)"
+   ],
+   [
+    "taken    ",
+    "lookup: Refused(NotHealthy)"
+   ],
+   [
+    "taken    ",
+    "lookup: Refused(Latched)"
+   ],
+   [
+    "taken    ",
+    "lookup: Failed"
+   ],
+   [
+    "taken    ",
+    "lookup: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Explained"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Pending"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Busy"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Unknown"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "explain: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Taken"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Nothing"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: NotNow(NotHealthy)"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: NotNow(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "snapshot: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Committed"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Stale)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Empty)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Future)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(Set)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(NotHealthy))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(CellsBusy))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: Refused(NotNow(Latched))"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: NotApplied(NotWritten)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: NotApplied(Uncertain)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: unwound after an insert (U kept)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_acknowledgement: unwound before any insert (U emptied)"
+   ],
+   [
+    "taken    ",
+    "barrier: Passed"
+   ],
+   [
+    "taken    ",
+    "barrier: Failed"
+   ],
+   [
+    "NOT TAKEN",
+    "barrier: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Absent"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Corrected"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: ConflictPlaced"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Acknowledged"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Retained"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Inconsistent"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "resolve: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Committed (present)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: NotWritten"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell C: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Committed (inserted)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Committed (present)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: NotWritten"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Uncertain"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Stale"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: Refused(Latched)"
+   ],
+   [
+    "NOT TAKEN",
+    "append_cell X: unwound"
+   ],
+   [
+    "NOT TAKEN",
+    "empty: Done"
+   ],
+   [
+    "NOT TAKEN",
+    "empty: Stale"
+   ],
+   [
+    "taken    ",
+    "admission: admitted"
+   ],
+   [
+    "taken    ",
+    "admission: refused"
+   ],
+   [
+    "NOT TAKEN",
+    "DROP: a Counted ticket dropped"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: future"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: set"
+   ],
+   [
+    "NOT TAKEN",
+    "malformed snapshot: empty"
+   ]
+  ]
+ },
+ "harness_result": [
+  "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3244032",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 180,
+  "backstop_runtime_max_seconds": 190,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.038,
+  "max_rss_kib_largest_process": 2868
+ },
+ "executable": {
+  "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+  "pinned_sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+  "pinned_size": 966208,
+  "before": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  },
+  "after": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "0 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": []
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d",
+   "sha256": "8cd1e45a72b281388b35bf3e46ebac6ae91fe7ac6914b344e5fdd26aa6cdb6a8",
+   "size": 966208,
+   "mtime_ns": 1792004460266307841,
+   "inode": 62165967,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "b507ddeef15b78b600115b5eeb97c290139d560adbf2578fe4b3a81d0e6a17ad",
+ "branch_accounting": {
+  "verdict": "NORMALIZED",
+  "totals": {
+   "TAKEN": 21,
+   "NOT TAKEN": 108,
+   "NOT APPLICABLE": 64
+  },
+  "taken_outside_static": []
+ },
+ "outer_classification": "NOT ADMISSIBLE (source SYNTHETIC_SOURCE before and after)",
+ "checks_hold": 26,
+ "checks_total": 27
+}

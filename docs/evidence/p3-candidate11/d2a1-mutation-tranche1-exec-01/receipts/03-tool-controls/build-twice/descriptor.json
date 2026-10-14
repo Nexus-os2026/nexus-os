@@ -1,0 +1,113 @@
+{
+ "id": "build-twice",
+ "type": "build",
+ "worktree": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-twice",
+ "cwd": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-twice",
+ "argv": [
+  "cargo",
+  "test",
+  "-p",
+  "nexus-governed-control",
+  "--locked",
+  "--release",
+  "--lib",
+  "--no-run",
+  "-j",
+  "2"
+ ],
+ "env": {
+  "HOME": "/home/nexus",
+  "PATH": "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+  "CARGO_TARGET_DIR": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-twice/target",
+  "CARGO_TERM_VERBOSE": "true",
+  "CARGO_NET_OFFLINE": "true"
+ },
+ "target": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-twice/target",
+ "prior": [],
+ "limit_seconds": 900,
+ "synthetic": "twice",
+ "source_before": {
+  "verdict": "SYNTHETIC_SOURCE",
+  "mutant_file": {
+   "git_blob": "694b744de3b70a3a092c633b934262bd510d41aa"
+  }
+ },
+ "toolchain": {
+  "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "cargo": "cargo 1.94.0 (85eff7c80 2026-01-15)",
+  "rustc_vV": "rustc 1.94.0 (4a4ef493e 2026-03-02)\nbinary: rustc\ncommit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db\ncommit-date: 2026-03-02\nhost: x86_64-unknown-linux-gnu\nrelease: 1.94.0\nLLVM version: 21.1.8",
+  "cargo_vV": "cargo 1.94.0 (85eff7c80 2026-01-15)\nrelease: 1.94.0\ncommit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643\ncommit-date: 2026-01-15\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.3 vendored)\nlibcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Ubuntu 24.4.0 (noble) [64-bit]",
+  "active_toolchain": "1.94.0-x86_64-unknown-linux-gnu",
+  "other_cargo_configs": [],
+  "build_inputs": {
+   "rust-toolchain.toml": {
+    "git_blob": "bb19c600309d4bff9f366e5e9b4560efadaafd35",
+    "sha256": "4d2cd3d39669739231e6b2cf544f9bdcbe07f302afa01401c7edb123ac66ed3d"
+   },
+   "Cargo.lock": {
+    "git_blob": "1495c442a2bc46fed7b5476dc16a379461ec9464",
+    "sha256": "4795e5f0f433047e01bac732b3faeccedbb6e3ff35bb71166d8db168750b22ce"
+   },
+   ".cargo/config.toml": {
+    "git_blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.toml": {
+    "git_blob": "f5fc6bc499237d74afb19aa1ae9cc110d7f24503",
+    "sha256": "c94e5a1ff849e55a17de4438217a5b91bc49643adff7c37d7ee6852d87f1d4de"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "git_blob": "e0d9a9a645c18bfaa4ba8e473210dc86af9b0106",
+    "sha256": "b4753c6d5ce62ecd0aa444c3f07c701d41bbecb7c495ddec0f6605b52735e8f9"
+   }
+  }
+ },
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "48431104",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.27,
+  "time_limit_seconds": 900,
+  "backstop_runtime_max_seconds": 910,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.305,
+  "max_rss_kib_largest_process": 136192
+ },
+ "stdout_path": "build.stdout",
+ "stderr_path": "build.stderr",
+ "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "stderr_sha256": "d1bcd37452eeea063c4c239f488559a6718c40ff22d71e80283b1797b1d8d2a0",
+ "source_after": {
+  "verdict": "SYNTHETIC_SOURCE",
+  "mutant_file": {
+   "git_blob": "694b744de3b70a3a092c633b934262bd510d41aa"
+  }
+ },
+ "deps_artifacts": [
+  {
+   "path": "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-twice/target/release/deps/nexus_governed_control-801c2e64b68ac47d.d",
+   "sha256": "27c7f83b2c02b127434a3c13ad311422da65a5080334bab0a28315bd9b7dc2cf",
+   "size": 1164,
+   "executable_bit": false,
+   "test_executable_name": false
+  }
+ ]
+}

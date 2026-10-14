@@ -1,0 +1,130 @@
+AUTHENTICATE /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal
+result: OK
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink: {'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 62548918, 'mode': '0o40775'}
+OK   owned by this user: 1000
+OK   the worktree's .git file points into the repository's worktree administration: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1x-dev-rehearsal
+OK   the administrative directory points back at this worktree: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal/.git
+OK   locked with this mission's reason (mission ownership): P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 development rehearsal (synthetic patch only; never used for a control): mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 development rehearsal (synthetic patch only; never used for a control): mission-owned; preserve until Architect review']
+OK   toplevel is the path; the common git directory is the repository's: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal; /home/nexus/NEXUS/nexus-os/.git
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   clean: nothing modified, staged, untracked or ignored: 
+OK   every tracked file byte-equal to C (verify_tree.py): EXACTLY_C; 5364 blobs, 97246341 bytes
+OK   baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+REHEARSAL OK  authenticate the development worktree (exactly C, clean, locked, owned): 
+APPLY: EXACTLY_C_PLUS_PATCH
+control REHEARSAL: synthetic comment line (not a control)
+patch: receipts/04-rehearsal/synthetic/rehearsal.patch (the frozen R2 packet's (synthetic)), sha256 6f0bfdfdb9a9a6d520a0aecf30b1d2f81fc1c53ee75e6d38aa1582973e1de94b (catalog 6f0bfdfdb9a9a6d520a0aecf30b1d2f81fc1c53ee75e6d38aa1582973e1de94b)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 3ff16bac0d1f79c8533f36b6f8f4713e17c41de3 (expected 3ff16bac0d1f79c8533f36b6f8f4713e17c41de3), sha256 fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c (expected fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+REHEARSAL OK  apply_patch: applied and EXACTLY_C_PLUS_PATCH: 
+REHEARSAL OK  the mutant blob is not in the object store: 
+REHEARSAL OK  verify_mutant negative: wrong expected blob: 
+REHEARSAL OK  verify_mutant negative: an untracked overlay file: 
+REHEARSAL OK  verify_mutant negative: a second changed file: 
+REHEARSAL OK  after undoing the negatives: EXACTLY_C_PLUS_PATCH again: 
+REHEARSAL OK  supervise.mutant_check agrees: source (rehearsal): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f5
+RESTORE: EXACTLY_C
+control REHEARSAL: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-dev-rehearsal
+crates/nexus-governed-control/src/ledger/protocol.rs: before restoration git blob 3ff16bac0d1f79c8533f36b6f8f4713e17c41de3 sha256 fb1557e541a68b9d82f764fb258b2ee3162ee47d824793b822534a57deead10c
+crates/nexus-governed-control/src/ledger/protocol.rs: after restoration git blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (C: a2df2841b99cad5d452008a6d4150e9369d07e66 / a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries []; mismatches []; missing []; modes []
+status (--ignored --untracked-files=all): ''
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+REHEARSAL OK  restore: EXACTLY_C: 
+REHEARSAL OK  re-authentication after restoration (clean, exactly C): 
+LINK: VERIFIED
+control C22: restored-side receipt receipts/04-rehearsal/links/healthy (type (e4) healthy-build success)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the healthy build (e4) is classified PASS
+OK   identical command: ['cargo', 'test', '-p', 'nexus-governed-control', '--locked', '--release', '--lib', '--no-run', '-j', '2']
+OK   identical environment (the worktree-local target is the only per-worktree value): {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '<worktree>/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   identical target policy (a fresh worktree-local target in each worktree): /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target; /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-c22/target
+OK   identical toolchain (rustc -vV, cargo -vV, active toolchain): rustc 1.94.0 (4a4ef493e 2026-03-02)
+OK   identical build inputs (rust-toolchain.toml, Cargo.lock, Cargo configuration, manifests)
+OK   identical supervision and resource limits: 17179869184 / 0 / 900
+OK   the intended difference is the source identity only: healthy EXACTLY_C, mutant C plus the C22 patch
+REHEARSAL OK  link (e4) positive: synthetic healthy and C22-shaped builds, identity fields set: 
+LINK: FAILED
+control C22: restored-side receipt receipts/04-rehearsal/links/healthy (type (e4) healthy-build success)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the healthy build (e4) is classified PASS
+OK   identical command: ['cargo', 'test', '-p', 'nexus-governed-control', '--locked', '--release', '--lib', '--no-run', '-j', '2']
+FAIL identical environment (the worktree-local target is the only per-worktree value): {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '<worktree>/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   identical target policy (a fresh worktree-local target in each worktree): /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target; /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-c22/target
+OK   identical toolchain (rustc -vV, cargo -vV, active toolchain): rustc 1.94.0 (4a4ef493e 2026-03-02)
+OK   identical build inputs (rust-toolchain.toml, Cargo.lock, Cargo configuration, manifests)
+OK   identical supervision and resource limits: 17179869184 / 0 / 900
+OK   the intended difference is the source identity only: healthy EXACTLY_C, mutant C plus the C22 patch
+REHEARSAL OK  link (e4) negative: an environment difference: 
+LINK: FAILED
+control C22: restored-side receipt receipts/04-rehearsal/links/healthy (type (e4) healthy-build success)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the healthy build (e4) is classified PASS
+OK   identical command: ['cargo', 'test', '-p', 'nexus-governed-control', '--locked', '--release', '--lib', '--no-run', '-j', '2']
+OK   identical environment (the worktree-local target is the only per-worktree value): {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '<worktree>/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   identical target policy (a fresh worktree-local target in each worktree): /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target; /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-c22/target
+OK   identical toolchain (rustc -vV, cargo -vV, active toolchain): rustc 1.94.0 (4a4ef493e 2026-03-02)
+FAIL identical build inputs (rust-toolchain.toml, Cargo.lock, Cargo configuration, manifests)
+OK   identical supervision and resource limits: 17179869184 / 0 / 900
+OK   the intended difference is the source identity only: healthy EXACTLY_C, mutant C plus the C22 patch
+REHEARSAL OK  link (e4) negative: a build-input difference: 
+LINK: VERIFIED
+control C14: restored-side receipt receipts/04-rehearsal/links/e2 (type (e2), standalone, this mission)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the standalone baseline (e2) of this mission is classified PASS: CLASSIFICATION: PASS
+OK   the same test and flags as this control's run, on the pinned baseline executable: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   exact Candidate C before and after
+OK   artifact identity at this control's restoration: the baseline receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+REHEARSAL OK  link (e2) positive: a PASS receipt with the real identity fields: 
+LINK: FAILED
+control C14: restored-side receipt receipts/04-rehearsal/links/e2-unchanged (type (e2), standalone, this mission)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the standalone baseline (e2) of this mission is classified PASS: CLASSIFICATION: PASS
+FAIL the same test and flags as this control's run, on the pinned baseline executable: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+FAIL exact Candidate C before and after
+FAIL artifact identity at this control's restoration: the baseline receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+REHEARSAL OK  link (e2) negative: the synthetic executable is not the pinned baseline executable: 
+LINK: VERIFIED
+control C9: restored-side receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the linked receipt's files equal the accepted Stage-2 evidence (89326b85 SHA256SUMS): []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted unchanged-core PASS of the original explorer: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-B2): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fb2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+REHEARSAL OK  link (Stage-2 e1) C9: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))
+LINK: VERIFIED
+control C18a: restored-side receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the linked receipt's files equal the accepted Stage-2 evidence (89326b85 SHA256SUMS): []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted unchanged-core PASS of the original explorer: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-G): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fg', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+REHEARSAL OK  link (Stage-2 e1) C18a: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))
+REHEARSAL P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01: 17 checks; 17 as expected
+OK  authenticate the development worktree (exactly C, clean, locked, owned): 
+OK  apply_patch: applied and EXACTLY_C_PLUS_PATCH: 
+OK  the mutant blob is not in the object store: 
+OK  verify_mutant negative: wrong expected blob: 
+OK  verify_mutant negative: an untracked overlay file: 
+OK  verify_mutant negative: a second changed file: 
+OK  after undoing the negatives: EXACTLY_C_PLUS_PATCH again: 
+OK  supervise.mutant_check agrees: source (rehearsal): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f5
+OK  restore: EXACTLY_C: 
+OK  re-authentication after restoration (clean, exactly C): 
+OK  link (e4) positive: synthetic healthy and C22-shaped builds, identity fields set: 
+OK  link (e4) negative: an environment difference: 
+OK  link (e4) negative: a build-input difference: 
+OK  link (e2) positive: a PASS receipt with the real identity fields: 
+OK  link (e2) negative: the synthetic executable is not the pinned baseline executable: 
+OK  link (Stage-2 e1) C9: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))
+OK  link (Stage-2 e1) C18a: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))
+REHEARSAL: ALL AS EXPECTED

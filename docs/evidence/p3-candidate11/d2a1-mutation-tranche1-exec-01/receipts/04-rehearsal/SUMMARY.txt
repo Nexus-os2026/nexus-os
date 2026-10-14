@@ -1,0 +1,19 @@
+REHEARSAL P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01: 17 checks; 17 as expected
+OK  authenticate the development worktree (exactly C, clean, locked, owned): 
+OK  apply_patch: applied and EXACTLY_C_PLUS_PATCH: 
+OK  the mutant blob is not in the object store: 
+OK  verify_mutant negative: wrong expected blob: 
+OK  verify_mutant negative: an untracked overlay file: 
+OK  verify_mutant negative: a second changed file: 
+OK  after undoing the negatives: EXACTLY_C_PLUS_PATCH again: 
+OK  supervise.mutant_check agrees: source (rehearsal): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f5
+OK  restore: EXACTLY_C: 
+OK  re-authentication after restoration (clean, exactly C): 
+OK  link (e4) positive: synthetic healthy and C22-shaped builds, identity fields set: 
+OK  link (e4) negative: an environment difference: 
+OK  link (e4) negative: a build-input difference: 
+OK  link (e2) positive: a PASS receipt with the real identity fields: 
+OK  link (e2) negative: the synthetic executable is not the pinned baseline executable: 
+OK  link (Stage-2 e1) C9: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))
+OK  link (Stage-2 e1) C18a: the accepted receipt verifies (read-only): docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))
+REHEARSAL: ALL AS EXPECTED

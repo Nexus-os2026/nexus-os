@@ -1,0 +1,64 @@
+{
+ "patch": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/inputs/patches/C22.patch",
+ "patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
+ "catalog_patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
+ "catalog_patch_file": "catalog/patches/C22.patch",
+ "check": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22",
+   "apply",
+   "--check",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/inputs/patches/C22.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "apply": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22",
+   "apply",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-exec-01/inputs/patches/C22.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "verify_mutant": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246348,
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M crates/nexus-governed-control/src/ledger/protocol.rs"
+  ],
+  "unexpected_status": [],
+  "other_content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "mutant_file": {
+   "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "git_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
+   "sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
+   "bytes": 64553,
+   "differs_from_baseline": true
+  },
+  "expected_mutant_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
+  "expected_mutant_sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
+  "verdict": "EXACTLY_C_PLUS_PATCH"
+ },
+ "numstat": "1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs\n",
+ "changed_files": [
+  "crates/nexus-governed-control/src/ledger/protocol.rs"
+ ]
+}

@@ -1,0 +1,15 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+OK   source SYNTHETIC_SOURCE before and after (mutant blob 72556e3f03a53d7a14cb89515a286f42718b6ac8): SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   raw output sha256 equals the launcher's record: 8cc041ad59502fc64a12ae29413b2682c200b20b28b2bc7d3d3fec4b3fa14cb9
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3551232 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711625) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:"]
+OK   the panic is at one of the named test's own checks: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs, inside fn t_bind_every_bound_value_belongs_to_one_ledger (lines 1114-1249) — not in shared setup, a fixture or elsewhere: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5
+OK   the panic message is recorded (non-empty): ['assertion `left == right` failed: a synthetic check']
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))

@@ -1,0 +1,16 @@
+OK   the build started (no pre-flight refusal)
+OK   source SYNTHETIC_SOURCE before and after the build: SYNTHETIC_SOURCE / SYNTHETIC_SOURCE
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-broken/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   stdout and stderr sha256 equal the launcher's record
+OK   intentional nonzero termination by a normal exit (no signal): exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 47075328 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.26 s of 900 s, timed out False, scope gone
+FAIL exactly one coded error diagnostic, and it is E0283: ['error[E0308]: mismatched types']
+FAIL E0283's primary location is the T-OWN assertion, crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1089: ('crates/nexus-governed-control/src/ledger/protocol.rs', 21, 5)
+FAIL the rendered source line is the assertion text
+OK   no other error diagnostic: the only uncoded error line is cargo's one summary for nexus-governed-control (lib test) due to 1 previous error: ['error: could not compile `nexus-governed-control` (lib test) due to 1 previous error']
+OK   no compiler crash (no internal compiler error, panic or query stack), no signal
+OK   where cargo reports rustc's own status, it is 'exit status: 1' for nexus_governed_control only: ['exit status: 1']
+OK   nexus-governed-control was compiled once, by one rustc invocation as a test (a dependency failure would add an error line): 1 Compiling, 1 rustc
+OK   no mutant test executable exists (NOT PRODUCED BY DESIGN); any other artifact recorded as found: [('nexus_governed_control-801c2e64b68ac47d.d', '2be74e754e30a9238f154ad65b37e33adc36d17c975dc70b9066a29c2abe8991', 1166)]
+FAIL every artifact left in the target directory is recorded by path, sha256 and size (TARGET-MANIFEST.tsv): None files, None bytes

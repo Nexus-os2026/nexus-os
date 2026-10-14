@@ -1,0 +1,18 @@
+--- development/publish_checks.v1-dev.py	2026-10-14 19:59:52.004980807 +0100
++++ tools/publish_checks.py	2026-10-14 19:59:52.024976280 +0100
+@@ -162,10 +162,12 @@
+     check("no executable binary staged", not elf, elf)
+     targets = [p for p in changed if "/target/" in p or p.endswith((".rlib", ".rmeta", ".so", ".o"))]
+     check("no target directory or build artifact staged", not targets, targets[:3])
+-    hooks = subprocess.run(["bash", "-c", f"ls -A {REPO}/.git/hooks | grep -v '\\.sample$' || true"],
+-                           capture_output=True, text=True).stdout.split()
+     hp = git("config", "--get", "core.hooksPath", ok=(0, 1)).decode().strip()
+-    check("no active git hook (only *.sample files)", not hooks and not hp, f"hooksPath {hp!r}; non-sample entries {hooks}")
++    hooks_dir = hp or f"{REPO}/.git/hooks"
++    import os
++    hooks = sorted(n for n in os.listdir(hooks_dir) if not n.endswith(".sample")) if os.path.isdir(hooks_dir) else []
++    check("no active git hook: the effective hooks directory (core.hooksPath, or .git/hooks) holds only *.sample files",
++          not hooks, f"hooksPath {hp!r}; effective {hooks_dir}; non-sample entries {hooks}")
+     wf = [p for p in te if p.startswith(".github/workflows/") and p.endswith((".yml", ".yaml"))]
+     trig = []
+     for p in sorted(wf):

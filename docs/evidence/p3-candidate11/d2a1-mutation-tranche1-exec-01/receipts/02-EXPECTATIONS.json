@@ -1,0 +1,862 @@
+{
+ "mission": "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01",
+ "catalog": {
+  "path": "docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/catalog/catalog.json",
+  "commit": "9f22f890d8532df395f22cd8db8db2552bfdd14c",
+  "blob": "1918374263740d2f98640da00fc466737945975e",
+  "sha256": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83",
+  "version": "d2a1-controls-v1-r2-candidate"
+ },
+ "candidate_c": {
+  "commit": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "blobs": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8",
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114"
+  }
+ },
+ "baseline_executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464,
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01"
+ },
+ "build": {
+  "argv": [
+   "cargo",
+   "test",
+   "-p",
+   "nexus-governed-control",
+   "--locked",
+   "--release",
+   "--lib",
+   "--no-run",
+   "-j",
+   "2"
+  ],
+  "limit_seconds": 900,
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "env_template": [
+   [
+    "HOME",
+    "/home/nexus"
+   ],
+   [
+    "PATH",
+    "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+   ],
+   [
+    "CARGO_TARGET_DIR",
+    "<worktree>/target"
+   ],
+   [
+    "CARGO_TERM_VERBOSE",
+    "true"
+   ],
+   [
+    "CARGO_NET_OFFLINE",
+    "true"
+   ]
+  ]
+ },
+ "run_env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "order": [
+  "C22",
+  "C14",
+  "C19",
+  "C21",
+  "C27",
+  "C28",
+  "C12",
+  "C9",
+  "C11",
+  "C17",
+  "C18a",
+  "C18b"
+ ],
+ "listed_tests_at_C": 348,
+ "baselines": [
+  {
+   "key": "X-1",
+   "type": "e1",
+   "control": "C12",
+   "dir": "receipts/10-baseline-X-1",
+   "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+   "configuration": "X-1",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": 250000,
+   "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Adm]",
+   "properties": {
+    "P1": "HOLDS",
+    "P2": "HOLDS",
+    "P4": "HOLDS",
+    "P5": "HOLDS",
+    "P6": "HOLDS",
+    "P7": "HOLDS",
+    "P8": "HOLDS",
+    "P9": "HOLDS",
+    "P12": "HOLDS",
+    "P13": "HOLDS",
+    "P15": "HOLDS",
+    "D1": "HOLDS",
+    "L1": "L1-HOLDS",
+    "E1": "HOLDS",
+    "E2": "HOLDS",
+    "E3": "HOLDS",
+    "E4": "HOLDS",
+    "E5": "HOLDS",
+    "E6": "HOLDS",
+    "E7": "HOLDS",
+    "E8": "HOLDS",
+    "E9": "HOLDS",
+    "E10": "not applicable here (worker verbs do not unwind)",
+    "E11": "HOLDS",
+    "KEY": "HOLDS"
+   },
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4121,
+    "col": 5,
+    "span": [
+     4115,
+     4128
+    ]
+   }
+  },
+  {
+   "key": "T-BIND",
+   "type": "e2",
+   "control": "C14",
+   "dir": "receipts/11-baseline-T-BIND",
+   "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1113,
+    1249
+   ]
+  },
+  {
+   "key": "T-CELL",
+   "type": "e2",
+   "control": "C19",
+   "dir": "receipts/12-baseline-T-CELL",
+   "test": "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1467,
+    1656
+   ]
+  },
+  {
+   "key": "W6",
+   "type": "e2",
+   "control": "C21",
+   "dir": "receipts/13-baseline-W6",
+   "test": "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    2591,
+    2639
+   ]
+  },
+  {
+   "key": "T-PREC",
+   "type": "e2",
+   "control": "C27",
+   "dir": "receipts/14-baseline-T-PREC",
+   "test": "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    780,
+    1061
+   ]
+  },
+  {
+   "key": "T-RES",
+   "type": "e2",
+   "control": "C28",
+   "dir": "receipts/15-baseline-T-RES",
+   "test": "ledger::protocol::unit_tests::t_res_every_resolve_row",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_span": [
+    1662,
+    1812
+   ]
+  }
+ ],
+ "controls": {
+  "C22": {
+   "id": "C22",
+   "order": 1,
+   "dir": "receipts/31-C22",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22",
+   "kind": "build",
+   "receipt_type": "(d) intentional mutant compile failure; restored (e4) healthy build",
+   "description": "the ticket derives `Clone`",
+   "patch": {
+    "input": "inputs/patches/C22.patch",
+    "catalog_file": "catalog/patches/C22.patch",
+    "sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
+   "mutant_sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
+   "restoration": {
+    "method": "reverse application of patches/C22.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "PENDING_EXACT_COMMAND_HEALTHY_BUILD: a future healthy build of Candidate C by exactly `cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2`",
+    "restored_side_receipt_type": "e4",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "diagnostic_code": "E0283",
+   "diagnostic_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "diagnostic_line": 1089,
+   "diagnostic_source_line": "<Ticket as NotClone<_>>::check();",
+   "linked": {
+    "type": "e4",
+    "dir": "receipts/20-healthy-build"
+   }
+  },
+  "C14": {
+   "id": "C14",
+   "order": 2,
+   "dir": "receipts/32-C14",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14",
+   "kind": "unit",
+   "receipt_type": "(b) named non-explorer mutant-test FAIL; restored (e2) PASS",
+   "description": "the ticket check of step 0 is removed",
+   "patch": {
+    "input": "inputs/patches/C14.patch",
+    "catalog_file": "catalog/patches/C14.patch",
+    "sha256": "2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "72556e3f03a53d7a14cb89515a286f42718b6ac8",
+   "mutant_sha256": "203d788cdfad48db63577de831cd4391d524503e99a0cc149b68a44774740d17",
+   "restoration": {
+    "method": "reverse application of patches/C14.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e2: REQUIRED \u2014 standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e2",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+   "named_test_id": "T-BIND",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "test_span": [
+    1113,
+    1249
+   ],
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/11-baseline-T-BIND"
+   }
+  },
+  "C19": {
+   "id": "C19",
+   "order": 3,
+   "dir": "receipts/33-C19",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19",
+   "kind": "unit",
+   "receipt_type": "(b) named non-explorer mutant-test FAIL; restored (e2) PASS",
+   "description": "X can be emptied before it is marked committed",
+   "patch": {
+    "input": "inputs/patches/C19.patch",
+    "catalog_file": "catalog/patches/C19.patch",
+    "sha256": "066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "899878323428eb34021f8dcf3cefc5ab041f98a2",
+   "mutant_sha256": "a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113",
+   "restoration": {
+    "method": "reverse application of patches/C19.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e2: REQUIRED \u2014 standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e2",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+   "named_test_id": "T-CELL",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "test_span": [
+    1467,
+    1656
+   ],
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/12-baseline-T-CELL"
+   }
+  },
+  "C21": {
+   "id": "C21",
+   "order": 4,
+   "dir": "receipts/34-C21",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21",
+   "kind": "unit",
+   "receipt_type": "(b) named non-explorer mutant-test FAIL; restored (e2) PASS",
+   "description": "the well-formed test of step 1 is removed",
+   "patch": {
+    "input": "inputs/patches/C21.patch",
+    "catalog_file": "catalog/patches/C21.patch",
+    "sha256": "65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "80662d4c7f8b0c25a0d8a038a9e8b28a0e469826",
+   "mutant_sha256": "db9b9d6e98c2d5eff8d38e9b62b44c4badd1248c82ba5d422f47612700bccd3b",
+   "restoration": {
+    "method": "reverse application of patches/C21.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e2: REQUIRED \u2014 standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e2",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+   "named_test_id": "W6",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::w6_one_identity_under_two_contents",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "test_span": [
+    2591,
+    2639
+   ],
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/13-baseline-W6"
+   }
+  },
+  "C27": {
+   "id": "C27",
+   "order": 5,
+   "dir": "receipts/35-C27",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27",
+   "kind": "unit",
+   "receipt_type": "(b) named non-explorer mutant-test FAIL; restored (e2) PASS",
+   "description": "the guard is created after the entry rule",
+   "patch": {
+    "input": "inputs/patches/C27.patch",
+    "catalog_file": "catalog/patches/C27.patch",
+    "sha256": "bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf",
+   "mutant_sha256": "bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7",
+   "restoration": {
+    "method": "reverse application of patches/C27.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e2: REQUIRED \u2014 standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e2",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+   "named_test_id": "T-PREC",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_prec_persistence_of_every_ending",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "test_span": [
+    780,
+    1061
+   ],
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/14-baseline-T-PREC"
+   }
+  },
+  "C28": {
+   "id": "C28",
+   "order": 6,
+   "dir": "receipts/36-C28",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28",
+   "kind": "unit",
+   "receipt_type": "(b) named non-explorer mutant-test FAIL; restored (e2) PASS",
+   "description": "resolve's \"present, frontier below N\" check alone is removed",
+   "patch": {
+    "input": "inputs/patches/C28.patch",
+    "catalog_file": "catalog/patches/C28.patch",
+    "sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
+   "mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
+   "restoration": {
+    "method": "reverse application of patches/C28.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e2: REQUIRED \u2014 standalone PASS of the named test on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e2",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::unit_tests::t_res_every_resolve_row",
+   "named_test_id": "T-RES",
+   "ignored": false,
+   "argv_tail": [
+    "ledger::protocol::unit_tests::t_res_every_resolve_row",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "test_file": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "test_span": [
+    1662,
+    1812
+   ],
+   "linked": {
+    "type": "e2",
+    "dir": "receipts/15-baseline-T-RES"
+   }
+  },
+  "C12": {
+   "id": "C12",
+   "order": 7,
+   "dir": "receipts/37-C12",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "the publication is two exchanges: bits, then count",
+   "patch": {
+    "input": "inputs/patches/C12.patch",
+    "catalog_file": "catalog/patches/C12.patch",
+    "sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+   "mutant_sha256": "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04",
+   "restoration": {
+    "method": "reverse application of patches/C12.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: REQUIRED \u2014 standalone X-1 PASS on the pinned baseline executable; NOT PRODUCED: no execution is authorised in P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+   "configuration": "X-1",
+   "ignored": false,
+   "runner": "default_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 180,
+   "ceiling_states": 250000,
+   "named_property": "E2",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4121,
+    "col": 5,
+    "span": [
+     4115,
+     4128
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "dir": "receipts/10-baseline-X-1"
+   }
+  },
+  "C9": {
+   "id": "C9",
+   "order": 8,
+   "dir": "receipts/38-C9",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "`Rollback::Unknown` is treated as `Undone`",
+   "patch": {
+    "input": "inputs/patches/C9.patch",
+    "catalog_file": "catalog/patches/C9.patch",
+    "sha256": "cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c",
+   "mutant_sha256": "afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e",
+   "restoration": {
+    "method": "reverse application of patches/C9.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "configuration": "F-B2",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Se, Wk, Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C11": {
+   "id": "C11",
+   "order": 9,
+   "dir": "receipts/39-C11",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "a constraint failure during the inserts gives Not written whatever the rollback said. **This is the amendment's rule, which the review rejected.**",
+   "patch": {
+    "input": "inputs/patches/C11.patch",
+    "catalog_file": "catalog/patches/C11.patch",
+    "sha256": "913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "6e039d9dad6415242884ceef97a54d3548658038",
+   "mutant_sha256": "f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01",
+   "restoration": {
+    "method": "reverse application of patches/C11.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "configuration": "F-B2",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Se, Wk, Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C17": {
+   "id": "C17",
+   "order": 10,
+   "dir": "receipts/40-C17",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "the guard reports Not written after an insert was issued",
+   "patch": {
+    "input": "inputs/patches/C17.patch",
+    "catalog_file": "catalog/patches/C17.patch",
+    "sha256": "37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "4dfed9e1600a82b38f3326d26a47c4c41f513ac3",
+   "mutant_sha256": "94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf",
+   "restoration": {
+    "method": "reverse application of patches/C17.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_fb2",
+   "configuration": "F-B2",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E4",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Se, Wk, Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-B2",
+    "input_dir": "inputs/linked/F-B2",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2",
+    "classification_blob": "f1d655eb6b85bdafd13313e72c3ffbd49147bed4",
+    "raw_output_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+    "raw_output_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3"
+   }
+  },
+  "C18a": {
+   "id": "C18a",
+   "order": 11,
+   "dir": "receipts/41-C18a",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "a refused gating append leaves U occupied",
+   "patch": {
+    "input": "inputs/patches/C18a.patch",
+    "catalog_file": "catalog/patches/C18a.patch",
+    "sha256": "7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "92034563e479d1d622b7625e6ff4ad075a32a16a",
+   "mutant_sha256": "94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee",
+   "restoration": {
+    "method": "reverse application of patches/C18a.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_fg",
+   "configuration": "F-G",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fg",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E7",
+   "bounds": "facts 1 conflicting [false, false] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict true acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-G",
+    "input_dir": "inputs/linked/F-G",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G",
+    "classification_blob": "dace6c67fd98904e47b179cbba9b1a421c5971f6",
+    "raw_output_blob": "0b77294ef4eec4da1d911a5cf73f7124e42ebe57",
+    "raw_output_sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1"
+   }
+  },
+  "C18b": {
+   "id": "C18b",
+   "order": 12,
+   "dir": "receipts/42-C18b",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "a gating conflict makes a table entry",
+   "patch": {
+    "input": "inputs/patches/C18b.patch",
+    "catalog_file": "catalog/patches/C18b.patch",
+    "sha256": "830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "c7f2b5ea99bb1676e3844b6c612d3393f97d50da",
+   "mutant_sha256": "25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a",
+   "restoration": {
+    "method": "reverse application of patches/C18b.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_fg",
+   "configuration": "F-G",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_fg",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "E7",
+   "bounds": "facts 1 conflicting [false, false] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict true acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "linked": {
+    "type": "e1",
+    "stage2": true,
+    "configuration": "F-G",
+    "input_dir": "inputs/linked/F-G",
+    "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G",
+    "classification_blob": "dace6c67fd98904e47b179cbba9b1a421c5971f6",
+    "raw_output_blob": "0b77294ef4eec4da1d911a5cf73f7124e42ebe57",
+    "raw_output_sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1"
+   }
+  }
+ },
+ "problems": []
+}

@@ -1,0 +1,27 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+FAIL source SYNTHETIC_SOURCE before and after: NOT_C / SYNTHETIC_SOURCE
+OK   raw output sha256 equals the launcher's record: b507ddeef15b78b600115b5eeb97c290139d560adbf2578fe4b3a81d0e6a17ad
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission']
+OK   harness: 'ok' then 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in …': ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3244032 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   no panic, no fixture failure, no 'FAILED' or 'failures:': []
+OK   no quotient or symmetry refusal
+OK   exactly one exploration report
+OK   header 'EXPLORATION X-1' exactly (the original explorer): EXPLORATION X-1
+OK   outcome PASS; no INCOMPLETE line, no FAIL line: PASS; None; None
+OK   printed bounds equal the source-derived configuration: facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+OK   printed actors equal actors() of the configuration: [Fw(0), Fw(1), Se, Wk, Adm]
+OK   caps printed: 250,000 states, 180 s (the default ceiling): 250000, 180
+OK   counts printed
+OK   discovered states <= 250,000 (K.1, inclusive): 59,104
+OK   expanded states equal discovered states (0 unexpanded): states 59104, expanded 59104
+OK   one line for each of the 25 PROPERTIES, in order: ['P1', 'P2', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P12', 'P13', 'P15', 'D1', 'L1', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'KEY']
+OK   every property line has its source-derived form: 24 HOLD (L1 with consistent counts), E10 not applicable: []
+OK   branch list: every BRANCHES label once, in order, each taken or NOT TAKEN: 90 of 90
+OK   state key fields line present
+OK   complete branch receipt: every raw label resolved to the frozen Stage-2 vocabulary (NORMALIZED): []
