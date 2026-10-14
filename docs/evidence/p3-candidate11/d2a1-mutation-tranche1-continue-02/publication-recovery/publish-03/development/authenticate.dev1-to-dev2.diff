@@ -1,0 +1,18 @@
+--- development/revisions/authenticate.dev1.py	2026-10-14 22:48:07.116604465 +0100
++++ tools/authenticate.py	2026-10-14 22:48:07.136543142 +0100
+@@ -122,10 +122,11 @@
+            or Q.sha256_file(os.path.join(Q.SRC, p)) != h]
+     check("every CONTINUE-02 frozen file and pre-freeze receipt is byte-equal to its freeze record", not bad,
+           f"{len(fz['files'])} frozen files + {len(fz['pre_freeze_receipts'])} pre-freeze receipts; mismatched {bad}")
+-    check("06-PRE-EXECUTION-GATE.txt: ALL CHECKS HOLD",
+-          open(os.path.join(Q.SRC, "receipts/06-PRE-EXECUTION-GATE.txt")).read().rstrip().endswith("ALL CHECKS HOLD"))
+-    check("90-final-gate.txt (the second, unchanged-gate run): FINAL GATE: ALL CHECKS HOLD",
+-          open(os.path.join(Q.SRC, "receipts/90-final-gate.txt")).read().rstrip().endswith("FINAL GATE: ALL CHECKS HOLD"))
++    for g, verdict in (("06-PRE-EXECUTION-GATE.txt", "PRE-EXECUTION GATE: ALL CHECKS HOLD"),
++                       ("90-final-gate.txt", "FINAL GATE: ALL CHECKS HOLD")):
++        ls = open(os.path.join(Q.SRC, "receipts", g)).read().splitlines()
++        check(f"{g}: the verdict line {verdict!r} and no FAIL line (90: the second, unchanged-gate run)",
++              verdict in ls and not [l for l in ls if l.startswith("FAIL")], f"{sum(l.startswith('OK') for l in ls)} OK")
+     crash = open(os.path.join(Q.SRC, "receipts/90-final-gate-attempt-1-CRASHED.txt")).read()
+     check("90-final-gate-attempt-1-CRASHED.txt preserved (the initial read-only crash, FileNotFoundError)",
+           "FileNotFoundError" in crash and "Traceback" in crash)

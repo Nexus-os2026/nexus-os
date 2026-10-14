@@ -1,0 +1,75 @@
+FINAL GATE — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02
+OK   G1 authenticate.py --gate: ALL CHECKS HOLD (receipts/90-gate-authentication.txt): RESULT: ALL CHECKS HOLD
+OK   G2 the freeze holds: freeze check: 116 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   G3 carried-forward baseline X-1 (EXEC-01 packet, not rerun) is PASS: CLASSIFICATION: PASS
+OK   G3 carried-forward baseline T-RES (EXEC-01 packet, not rerun) is PASS: CLASSIFICATION: PASS
+OK   G3 the Architect ruling record documents/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md is frozen and states the ruling
+OK   G3 the Architect ruling record documents/ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md is frozen and states the ruling
+OK   G3 attempted controls are a prefix of the continue order: ['C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b']
+OK   G3 only the last attempted control may be non-candidate (a stop ends the tranche): {'C28': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C12': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C9': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C11': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C17': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C18a': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C18b': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING'}
+OK   G3 C28: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': None, 'build': None, 'admission': 'C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING', 'pin': 'PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C28: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2553 target entries
+OK   G4 C28: worktree locked with RESUME-01's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C28: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 116a6584ebe58c1f…
+OK   G3 C12: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C12: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C12: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C12 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C12: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 c4359cbe2eac514d…
+OK   G3 C9: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C9: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C9: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C9 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C9: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 60821ef6a9c6b77e…
+OK   G3 C11: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C11: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C11: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C11 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C11: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 e6759c9e4884fa0b…
+OK   G3 C17: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C17: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C17: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C17 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C17: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 5cd6d0042c404759…
+OK   G3 C18a: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C18a: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C18a: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C18a disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C18a: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 bf7c2cd17197e075…
+OK   G3 C18b: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'admission': None, 'pin': None, 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C18b: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C ['!! target/']; 2552 target entries
+OK   G4 C18b: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C18b disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C18b: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 9c16a35f34f38eb7…
+OK   G3 C1: not executed (no worktree)
+OK   G3 C2: not executed (no worktree)
+OK   G3 C3a: not executed (no worktree)
+OK   G3 C3b: not executed (no worktree)
+OK   G3 C3c: not executed (no worktree)
+OK   G3 C4: not executed (no worktree)
+OK   G3 C5: not executed (no worktree)
+OK   G3 C6: not executed (no worktree)
+OK   G3 C7: not executed (no worktree)
+OK   G3 C8: not executed (no worktree)
+OK   G3 C10: not executed (no worktree)
+OK   G3 C15: not executed (no worktree)
+OK   G3 C16: not executed (no worktree)
+OK   G3 C20: not executed (no worktree)
+OK   G3 C23: not executed (no worktree)
+OK   G3 C24: not executed (no worktree)
+OK   G3 C25: not executed (no worktree)
+OK   G3 C26: not executed (no worktree)
+OK   G3 A1: not executed (no worktree)
+OK   G3 A2: not executed (no worktree)
+OK   G3 A3: not executed (no worktree)
+OK   G3 A5: not executed (no worktree)
+OK   G3 A6: not executed (no worktree)
+OK   G8 C22 (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)
+OK   G8 C14 (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)
+OK   G8 C19 (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)
+OK   G8 C21 (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)
+OK   G8 C27 (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)
+OK   G8 C22's preserved worktree untouched: exactly C now (read-only), still locked with its own mission's reason: EXACTLY_C; ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01 control C22 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G8 C14's preserved worktree untouched: exactly C now (read-only), still locked with its own mission's reason: EXACTLY_C; ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C14 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G8 C19's preserved worktree untouched: exactly C now (read-only), still locked with its own mission's reason: EXACTLY_C; ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C19 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G8 C21's preserved worktree untouched: exactly C now (read-only), still locked with its own mission's reason: EXACTLY_C; ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C21 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G8 C27's preserved worktree untouched: exactly C now (read-only), still locked with its own mission's reason: EXACTLY_C; ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C27 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 the pinned baseline executable unchanged
+OK   G5 no mutant blob in the repository object store: []
+OK   G5 nothing staged in the main worktree: []
+OK   G7 no mutant source copy anywhere under the evidence root: []
+FINAL GATE: ALL CHECKS HOLD

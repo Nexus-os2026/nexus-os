@@ -1,0 +1,39 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-03 development log (Claude Code, Claude Opus 5.5, effort High).
+Publication recovery only. Times are local (+01:00). Every tool here is Python plus read-only git; nothing is built,
+compiled, tested, explored, mutated or executed. PYTHONDONTWRITEBYTECODE=1 and python3 -B on every run (no bytecode is
+written beside any tool, in particular none under the CONTINUE-02 root).
+
+1. 22:40-22:45  Read the mission, the CONTINUE-02 stop record, failed packet output, frozen build_packet.py, common.py,
+                render.py, publish_checks.py, development log; listed the root (4410 entries with the root, 48 MB);
+                re-derived the duplicate inventory read-only from the CONTINUE-02 failed staging in the old worktree: at
+                1 KiB or more exactly the seven link receipts; below 1 KiB, 14 nonempty constant records; 8 zero-length.
+2. 22:45  This mission's root created (documents, tools, receipts, development, scratch).
+3. 22:46  receipts/00-SOURCE-MANIFEST-BEFORE.tsv written by tools/manifest.py before any tool ran on the CONTINUE-02 root.
+4. 22:48  tools/authenticate.py dev1 FAILED one check of its own: it required the pre-execution gate verdict to be the
+          last line (it is followed by "finished:"). Fixed (verdict line present and no FAIL line); diff
+          development/authenticate.dev1-to-dev2.diff; dev1 output kept. Official receipts/01-AUTHENTICATION.txt: ALL
+          CHECKS HOLD (144).
+5. 22:49  Repaired builder started from a byte copy of the frozen CONTINUE-02 build_packet.py (a42cd96a…) with an
+          unchanged byte copy of common.py beside it (EV stays the CONTINUE-02 root). Ruling constants moved from
+          pubcommon.py into the builder so its diff shows the seven exact paths.
+6. 22:51  tools/make_map.py dev1 FAILED (KeyError: map sha256 column names); a header-only partial TSV it had written is
+          kept as development/make-map-dev1-FAILED-partial-DUPLICATE-CONTENT-MAP.tsv. The same column-name defect was
+          in the builder's restoration/result/classification sha256 lookup; both fixed. Official map: 7 rows, MAP: DERIVED.
+7. 22:52  Builder dev1 into scratch: the policy reported CONFIG_MISMATCH on both ruled LINK.txt files (my parser cut the
+          configuration check label at its first ": "). Fixed (development/revisions/build_packet.dev2.py -> current).
+8. 22:53  Builder dev2 into scratch: all seven ruled link receipts verified and accepted; 14 UNAUTHORIZED_DUPLICATE, the
+          sub-1-KiB constant records that the frozen builder had passed as "info". PACKET: FAILED.
+9. 22:55  tools/repair_controls.py dev run: 29 of 30 as expected; P3 not as expected (the 14). D1 diagnostic: with the
+          frozen 1 KiB floor, P3 would pass but a duplicated 937-byte run classification receipt would be accepted.
+10. 22:56 tools/builder_diff.py dev1 FAILED its own segment classifier (constants and dup_policy() are two segments).
+          Classifier fixed (development/builder_diff.dev1-to-dev2.diff); BUILDER DIFF: ONLY THE DUPLICATE-CONTENT POLICY
+          CHANGED.
+11. 22:56 First official receipts 03 and 04: the console wrapper recorded "rc $?" after a $(date) substitution, so it
+          printed rc 0 for the controls (true exit 1). Those receipts moved, unchanged, to
+          development/superseded-1-rc-misrecorded/ (and their scratch staging renamed -superseded-1); both re-run with the
+          exit status captured first. Outputs identical apart from times and the scratch path.
+12. 22:57 receipts/05: source manifest after, identical to before (SOURCE EVIDENCE: UNCHANGED). receipts/06: state at
+          stop. receipts/07: exact duplicate inventory.
+13. 22:58 STOP (section 15: failed repair control; unauthorized duplicate). Not reached: freeze, evidence worktree and
+          branch, packet assembly, whitespace classification, final publication gate, commit, push, readback, Actions
+          check. receipts/80-STOP-RECORD.md written. Status: BLOCKED.

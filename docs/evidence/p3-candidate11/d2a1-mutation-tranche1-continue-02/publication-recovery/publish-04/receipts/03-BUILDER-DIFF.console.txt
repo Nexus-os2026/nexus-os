@@ -1,0 +1,26 @@
+frozen CONTINUE-02  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/tools/build_packet.py sha256 a42cd96a9d996d2063adc916a606bf7e0cb9933ff18707afac7e2c2aacfe2e45 (157 lines)
+PUBLISH-03          /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-03/tools/build_packet.py sha256 d243334992be1945ace49cf9460a66fff2e9210ef138e122dec86083cc6bd44e (372 lines)
+PUBLISH-04          /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/build_packet.py sha256 c91ac27ccbf72b4d360b34020e7907f8b4b240d03e1a29201e4308509ec87bfb (742 lines)
+OK   the frozen builder is the CONTINUE-02 frozen file (05-FREEZE.json)
+OK   the PUBLISH-03 builder is PUBLISH-03's (its receipts/90-ROOT-SHA256SUMS.txt)
+OK   common.py beside the PUBLISH-04 builder is byte-identical to the frozen CONTINUE-02 common.py
+diff FROZEN-TO-PUBLISH-03.diff: sha256 7cde9a95f59ed23f09cbea11d04354031b973667b32f9fdb73131639d7e2a826; 12 removed, 227 added
+OK   FROZEN-TO-PUBLISH-03.diff is byte-identical to PUBLISH-03's receipts/03-BUILDER-DIFF/BUILDER.diff
+diff PUBLISH-03-TO-PUBLISH-04.diff: sha256 5b94ed23da834204591e1617cd2b1ecbb0446cdaa45eeed1dec3498bf9e10990; 79 removed, 449 added
+diff FROZEN-TO-PUBLISH-04.diff: sha256 80554b661d6d00a6fec46bea308ea0c23a58b54bc14e280323e34c5da927750a; 12 removed, 597 added
+     policy lines removed for the comparison: frozen 12, PUBLISH-03 227, PUBLISH-04 597; remaining 145, 145, 145
+OK   PUBLISH-03 -> PUBLISH-04: outside the policy regions every line is identical, in order: []
+OK   frozen -> PUBLISH-04: outside the policy regions every line is identical, in order: []
+OK   frozen -> PUBLISH-03 (re-checked the same way): identical outside the policy regions
+OK   RULED carried byte-identical from PUBLISH-03: 9 lines
+OK   STAGE2_RECEIPT carried byte-identical from PUBLISH-03: 1 lines
+OK   dup_policy() helper unsafe() carried byte-identical from PUBLISH-03: 15 lines
+OK   dup_policy() helper read() carried byte-identical from PUBLISH-03: 3 lines
+OK   dup_policy(): the previous-packet index (by git blob and by SHA256SUMS) carried byte-identical
+OK   dup_policy(): every line of PUBLISH-03's link-receipt checks (from the linked reference to the run classification) is present in PUBLISH-04's link_checks(): 65 of 65 lines; missing []
+OK   def main(dest): present once, unchanged position relative to the skeleton
+OK   def files_under(root): present once, unchanged position relative to the skeleton
+OK   def carried(rel): present once, unchanged position relative to the skeleton
+OK   def unchanged_tool(rel): present once, unchanged position relative to the skeleton
+BUILDER DIFF: ONLY THE DUPLICATE-CONTENT AND ZERO-LENGTH POLICY CHANGED
+exit 0

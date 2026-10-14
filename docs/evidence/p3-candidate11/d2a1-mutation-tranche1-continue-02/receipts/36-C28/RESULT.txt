@@ -1,0 +1,10 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C28: resolve's "present, frontier below N" check alone is removed
+receipt type: (b) named non-explorer mutant-test FAIL; restored (e2) PASS
+build: NOT REPEATED (the existing RESUME-01 C28 build; no Cargo, no rustc; 03-build absent by design)
+existing-build admission (narrow C28 ruling): C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING
+pin: PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)
+pinned preserved executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 size 8983776
+run (type (b)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-RES at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1745
+restoration (re-authenticated, read-only): RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; receipts/15-baseline-T-RES (type (e2), standalone, this mission)

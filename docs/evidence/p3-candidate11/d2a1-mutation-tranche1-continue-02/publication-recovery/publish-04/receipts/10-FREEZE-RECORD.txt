@@ -1,0 +1,8 @@
+FREEZE: RECORDED
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-04; recorded 2026-10-14T23:46:32+0100
+freeze record receipts/10-FREEZE.json sha256 5a48c518c9498f2288a08d484f4d47b592b43020b8df96202d97e73803e9968a
+frozen root files (outside scratch/): 90; frozen packet files: 465; packet SHA256SUMS sha256 238f34ad362daa33a850838b9f6804ec2a621ea8341ba472eda3957e92a597dc
+maps: nonempty 7882f99f253c551926d18cf99dc7345d28a0e8d5d5a9ab3d052a3d47896b9dc8; zero-length ff0beb691bb83b500d731006fab7ef504e214d3ae4e366d6bf3ffa30f5028928
+builder tools/build_packet.py sha256 c91ac27ccbf72b4d360b34020e7907f8b4b240d03e1a29201e4308509ec87bfb
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-mutation-tranche1-publish-04 HEAD 3695a817a6190781dc66769a72a487b442d3e6da on publication/p3-c11-d2a1-mutation-tranche1-publish-04
+Frozen before the final publication gate. No frozen file may change after this record. The final gate runs once; a gate failure stops the mission; no repair and no rerun after the freeze. The post-gate records (assemble.POST_GATE) are added to the packet by finalize.py only, as byte copies, with every frozen packet file unchanged but SHA256SUMS.

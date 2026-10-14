@@ -1,0 +1,1387 @@
+[
+ {
+  "control": "P1",
+  "title": "all seven exact mapped duplicates accepted",
+  "as_expected": true,
+  "detail": {
+   "accepted": [
+    "receipts/38-C9/06-link/LINK.json",
+    "receipts/38-C9/06-link/LINK.txt",
+    "receipts/39-C11/06-link/LINK.json",
+    "receipts/40-C17/06-link/LINK.json",
+    "receipts/41-C18a/06-link/LINK.json",
+    "receipts/41-C18a/06-link/LINK.txt",
+    "receipts/42-C18b/06-link/LINK.json"
+   ],
+   "problems on a ruled path": [],
+   "absolute (staged set without the base's rejections): problems": []
+  }
+ },
+ {
+  "control": "P2",
+  "title": "each current control path is distinct in the packet manifest despite equal content",
+  "as_expected": true,
+  "detail": {
+   "SHA256SUMS lines per ruled path": {
+    "receipts/38-C9/06-link/LINK.json": 1,
+    "receipts/38-C9/06-link/LINK.txt": 1,
+    "receipts/39-C11/06-link/LINK.json": 1,
+    "receipts/40-C17/06-link/LINK.json": 1,
+    "receipts/41-C18a/06-link/LINK.json": 1,
+    "receipts/41-C18a/06-link/LINK.txt": 1,
+    "receipts/42-C18b/06-link/LINK.json": 1
+   },
+   "ruled paths grouped by sha256": {
+    "4a69c8e7d4ea9574b4350378de65bdeb584e019fa62002c35c61d08f112a98f6": [
+     "receipts/38-C9/06-link/LINK.json",
+     "receipts/39-C11/06-link/LINK.json",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    "32439bccad6c9e7cf7152cad990f8c2b84dda9867afa3095a7401676365f7176": [
+     "receipts/38-C9/06-link/LINK.txt"
+    ],
+    "86b80a7962f697690fd17604d4328fb5e3fc2792e4168f36a4c01cac4bb55369": [
+     "receipts/41-C18a/06-link/LINK.json",
+     "receipts/42-C18b/06-link/LINK.json"
+    ],
+    "dabbaf663bcf828b471c2f53912a2640766f435f43e87ecc2e79e2640de6ecb5": [
+     "receipts/41-C18a/06-link/LINK.txt"
+    ]
+   }
+  }
+ },
+ {
+  "control": "P3",
+  "title": "the existing CONTINUE-02 evidence builds successfully with the seven-path allowlist (repaired builder CLI)",
+  "as_expected": false,
+  "detail": {
+   "exit": 1,
+   "last line": "PACKET: FAILED: no nonempty staged file byte-equal to any file of either previous packet (EXEC-01, RESUME-01), whatever its size, but the seven Architect-ruled link receipts, each verified against every field of its DUPLICATE-CONTENT-MAP.tsv row (PUBLISH-03)",
+   "receipt": "P3-builder-run.txt",
+   "problems (code, path, bytes)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/1/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/1/out.txt",
+     19
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/5/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/6/out.txt",
+     43
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/7/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/7/err.txt",
+     10
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/01-supervision-selftest/7/out.txt",
+     42
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/36-C28/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/40-C17/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/04-run/cgroup-samples.txt",
+     95
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/42-C18b/04-run/cgroup-samples.txt",
+     95
+    ]
+   ]
+  }
+ },
+ {
+  "control": "N4",
+  "title": "remove one mapping (C11 LINK.json row)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N4-remove-mapping",
+   "expected (code, path)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "MAP_ROW_MISSING",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N5a",
+  "title": "add an eighth duplicate (an F-B2 link copy added under C12)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N5a-eighth-duplicate",
+   "expected (code, path)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N5b",
+  "title": "add an eighth duplicate and an eighth map row for it",
+  "as_expected": true,
+  "detail": {
+   "variant": "N5b-eighth-duplicate-and-row",
+   "expected (code, path)": [
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK-F-B2.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "MAP_ROW_NOT_RULED",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N6a",
+  "title": "move an allowed duplicate (C9 LINK.json) into another control's directory (C12)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N6a-move",
+   "expected (code, path)": [
+    [
+     "CURRENT_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CURRENT_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CURRENT_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CURRENT_ABSENT",
+    "RULED_PATH_NOT_A_DUPLICATE",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N6b",
+  "title": "move it and point its map row at the new path",
+  "as_expected": true,
+  "detail": {
+   "variant": "N6b-move-and-row",
+   "expected (code, path)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/37-C12/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "MAP_ROW_MISSING",
+    "MAP_ROW_NOT_RULED",
+    "RULED_PATH_NOT_A_DUPLICATE",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N7a",
+  "title": "change one byte in a mapped file (C17 LINK.json), map unchanged",
+  "as_expected": true,
+  "detail": {
+   "variant": "N7a-byte",
+   "expected (code, path)": [
+    [
+     "CURRENT_BYTES_CHANGED",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CURRENT_BYTES_CHANGED",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CURRENT_BYTES_CHANGED",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CURRENT_BYTES_CHANGED",
+    "NOT_BYTE_EQUAL",
+    "PRIOR_SOURCE_MISMATCH",
+    "RULED_PATH_NOT_A_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N7b",
+  "title": "change one byte and make the map row agree with the changed bytes (similar, not byte-equal)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N7b-similar",
+   "expected (code, path)": [
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "NOT_BYTE_EQUAL",
+    "PRIOR_SOURCE_MISMATCH",
+    "RULED_PATH_NOT_A_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N8",
+  "title": "point C9 LINK.json's row at the wrong prior path (the F-G rehearsal link)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N8-prior-path",
+   "expected (code, path)": [
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "PRIOR_PATH_MISMATCH",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N9",
+  "title": "correct prior path with a wrong prior sha256 (C9 LINK.json row)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N9-prior-sha256",
+   "expected (code, path)": [
+    [
+     "PRIOR_SHA256_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "PRIOR_SHA256_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "PRIOR_SHA256_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "PRIOR_SHA256_MISMATCH",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N10a",
+  "title": "duplicate a build receipt: C12's 03-build/RECEIPT.txt replaced by RESUME-01 C14's (7479 bytes)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N10a",
+   "expected (code, path)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/03-build/RECEIPT.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/03-build/RECEIPT.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/03-build/RECEIPT.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N10b",
+  "title": "duplicate a run receipt: C12's 04-run/RECEIPT.txt replaced by RESUME-01 C14's (5350 bytes)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N10b",
+   "expected (code, path)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/RECEIPT.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/RECEIPT.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/RECEIPT.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N10c",
+  "title": "duplicate a classification receipt: C12's 04-run/CLASSIFICATION.txt replaced by RESUME-01 C14's (937 bytes)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N10c",
+   "expected (code, path)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/CLASSIFICATION.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/CLASSIFICATION.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/04-run/CLASSIFICATION.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N10d",
+  "title": "duplicate a restoration receipt: C12's 05-restore/RESTORE.txt replaced by RESUME-01 C14's (1289 bytes)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N10d",
+   "expected (code, path)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/05-restore/RESTORE.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/05-restore/RESTORE.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/37-C12/05-restore/RESTORE.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N11a",
+  "title": "a generic 06-link exception would accept the unauthorized receipts/37-C12/06-link/LINK-F-B2.json; the repaired policy rejects it",
+  "as_expected": true,
+  "detail": {
+   "over-broad policy would accept": [
+    "receipts/37-C12/06-link/LINK-F-B2.json"
+   ],
+   "repaired policy rejects": true
+  }
+ },
+ {
+  "control": "N11b",
+  "title": "a generic 06-link exception would accept the unauthorized receipts/37-C12/06-link/LINK.json; the repaired policy rejects it",
+  "as_expected": true,
+  "detail": {
+   "over-broad policy would accept": [
+    "receipts/37-C12/06-link/LINK.json"
+   ],
+   "repaired policy rejects": true
+  }
+ },
+ {
+  "control": "N12a",
+  "title": "missing current restoration receipt (C9 05-restore/RESTORE.txt)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N12a",
+   "expected (code, path)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RESTORATION_ABSENT",
+     "receipts/38-C9/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESTORATION_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N12b",
+  "title": "missing current restoration record (C18b 05-restore/RESTORE.json)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N12b",
+   "expected (code, path)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/42-C18b/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/42-C18b/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/42-C18b/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/42-C18b/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/42-C18b/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESTORATION_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N13a",
+  "title": "missing current control result (C11 CONTROL-RESULT.json)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N13a",
+   "expected (code, path)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESULT_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N13b",
+  "title": "missing current run classification (C17 04-run/CLASSIFICATION.txt)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N13b",
+   "expected (code, path)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESULT_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N13c",
+  "title": "missing current RESULT.txt (C18a)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N13c",
+   "expected (code, path)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "RESULT_ABSENT",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESULT_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N14a",
+  "title": "C9 LINK.json replaced by the F-G link (a different configuration), the map row made to agree with the bytes and the F-G prior",
+  "as_expected": true,
+  "detail": {
+   "variant": "N14a",
+   "expected (code, path)": [
+    [
+     "BASELINE_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "CONFIG_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "BASELINE_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "CONFIG_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_BLOB_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SHA256_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "BASELINE_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "CONFIG_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_BLOB_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_PATH_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SHA256_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "BASELINE_MISMATCH",
+    "CONFIG_MISMATCH",
+    "NOT_BYTE_EQUAL",
+    "PRIOR_BLOB_MISMATCH",
+    "PRIOR_PATH_MISMATCH",
+    "PRIOR_SHA256_MISMATCH",
+    "PRIOR_SOURCE_MISMATCH",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N14b",
+  "title": "the map row claims a different linked configuration (C11 F-G)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N14b",
+   "expected (code, path)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/39-C11/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/39-C11/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CONFIG_MISMATCH",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N14c",
+  "title": "C17 LINK.json's configuration check relabelled F-G (map current fields agree)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N14c",
+   "expected (code, path)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CONFIG_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "NOT_BYTE_EQUAL",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "PRIOR_SOURCE_MISMATCH",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CONFIG_MISMATCH",
+    "NOT_BYTE_EQUAL",
+    "PRIOR_SOURCE_MISMATCH",
+    "RULED_PATH_NOT_A_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N15a",
+  "title": "path traversal in the map (C9 LINK.json row as .../06-link/../06-link/LINK.json)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N15a",
+   "expected (code, path)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/38-C9/06-link/../06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/38-C9/06-link/../06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "MAP_ROW_MISSING",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "MAP_ROW_NOT_RULED",
+     "receipts/38-C9/06-link/../06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "MAP_ROW_MISSING",
+    "MAP_ROW_NOT_RULED",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N15b",
+  "title": "symlink substitution: C9 LINK.json replaced by a symlink to C11's (same bytes)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N15b",
+   "expected (code, path)": [
+    [
+     "CURRENT_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CURRENT_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CURRENT_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/38-C9/06-link/LINK.json"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/38-C9/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CURRENT_SYMLINK",
+    "RULED_PATH_NOT_A_DUPLICATE",
+    "STAGED_SYMLINK"
+   ]
+  }
+ },
+ {
+  "control": "N15c",
+  "title": "symlink substitution of a control's restoration directory (C17 05-restore -> C11's)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N15c",
+   "expected (code, path)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "RESTORATION_ABSENT",
+     "receipts/40-C17/06-link/LINK.json"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/40-C17/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "RESTORATION_ABSENT",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "N15d",
+  "title": "symlink substitution to a byte-equal file outside the packet (C18a LINK.txt)",
+  "as_expected": true,
+  "detail": {
+   "variant": "N15d",
+   "expected (code, path)": [
+    [
+     "CURRENT_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ]
+   ],
+   "added problems (differential)": [
+    [
+     "CONTROL_IDENTITY",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "CURRENT_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.json"
+    ]
+   ],
+   "absolute (staged set without the base's rejections)": [
+    [
+     "CONTROL_IDENTITY",
+     "receipts/41-C18a/06-link/LINK.json"
+    ],
+    [
+     "CURRENT_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "RULED_PATH_NOT_A_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "STAGED_SYMLINK",
+     "receipts/41-C18a/06-link/LINK.txt"
+    ],
+    [
+     "UNAUTHORIZED_DUPLICATE",
+     "receipts/41-C18a/06-link/LINK.json"
+    ]
+   ],
+   "verdict": "REJECTED",
+   "codes": [
+    "CONTROL_IDENTITY",
+    "CURRENT_SYMLINK",
+    "RULED_PATH_NOT_A_DUPLICATE",
+    "STAGED_SYMLINK",
+    "UNAUTHORIZED_DUPLICATE"
+   ]
+  }
+ },
+ {
+  "control": "D1",
+  "title": "diagnostic: the frozen 1 KiB floor",
+  "as_expected": null,
+  "detail": {
+   "existing evidence problems with floor": [],
+   "sub-1-KiB classification duplicate rejected with floor": false,
+   "rejected without floor": true
+  }
+ },
+ {
+  "control": "S0",
+  "title": "base staging vs the CONTINUE-02 failed staging",
+  "as_expected": null,
+  "detail": {
+   "only_new": [
+    "receipts/80-STOP-RECORD.md"
+   ],
+   "only_old": [],
+   "differing": [
+    "SHA256SUMS",
+    "development/DEVELOPMENT-LOG.txt"
+   ]
+  }
+ }
+]

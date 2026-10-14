@@ -1,0 +1,7 @@
+before receipts/00-SOURCE-MANIFEST-BEFORE.tsv sha256 9eb18bd27074c17a8380d2bb16697b3f318612cfb53d64ee0bfb262abc368757: 4409 entries
+after  receipts/05-SOURCE-MANIFEST-AFTER.tsv sha256 9eb18bd27074c17a8380d2bb16697b3f318612cfb53d64ee0bfb262abc368757: 4409 entries
+OK   every pre-existing entry has every field equal (type, size, sha256, mode, mtime_ns, symlink target): changed []
+OK   no pre-existing entry missing: []
+OK   nothing added under the root: []
+SOURCE EVIDENCE: UNCHANGED
+exit 0

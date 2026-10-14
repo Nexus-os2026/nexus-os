@@ -1,0 +1,23 @@
+PRE-EXECUTION GATE: ALL CHECKS HOLD
+started: 2026-10-14T22:07:08+0100; mission P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02
+OK   E1 authenticate.py --gate: ALL CHECKS HOLD (receipts/06-gate-authentication.txt): 452 checks OK
+OK   E2 the freeze holds: freeze check: 116 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   E2 the freeze covers every tool (27), the RESUME-01 tools, the expectations, the catalog and the twelve patches, the linked Stage-2 receipts, the carried-forward receipts and both Architect ruling records (91 required paths): []
+OK   E2 the freeze record states the continue order and the five Architect-accepted controls
+OK   E3 receipts/00-authentication.txt: RESULT: ALL CHECKS HOLD: RESULT: ALL CHECKS HOLD
+OK   E3 receipts/01-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK: SELF-TEST RESULT: ALL OK
+OK   E3 receipts/03-c28-admission-controls/SUMMARY.txt: C28 ADMISSION CONTROLS: ALL AS EXPECTED: C28 ADMISSION CONTROLS: ALL AS EXPECTED
+OK   E3 receipts/04-tool-diff/TOOL-DIFF-CHECK.txt: TOOL DIFF: ALL CHECKS HOLD: TOOL DIFF: ALL CHECKS HOLD
+OK   E3 receipts/04b-render-rehearsal/SUMMARY.txt: RENDER REHEARSAL: ALL AS EXPECTED: RENDER REHEARSAL: ALL AS EXPECTED
+OK   E4 only authorized tool differences (tool_diff.py --check against the frozen tools): TOOL DIFF: ALL CHECKS HOLD
+OK   E5 no receipt directory for C28 or any later control; no worktree for C12 or any later control: []
+OK   E5 the preserved C28 worktree is present (it is not recreated)
+OK   E5 no receipt directory for an Architect-accepted control (C22 C14 C19 C21 C27 are not executed): []
+OK   E5 no worktree for any control outside the tranche: []
+OK   E6 no conflicting mission process (governed-control test executable, cargo/rustc in a mission worktree, p3c11-* scope, control.py): [] [] [] []
+OK   E7 the preserved C28 worktree is exactly C (read-only restored check): EXACTLY_C; 2553 target entries
+OK   E8 control order C28 C12 C9 C11 C17 C18a C18b; C22 C14 C19 C21 C27 Architect-accepted, not executed
+OK   E8 build command and environment template, run environment and limits are the expectations' (frozen)
+OK   E9 every identity the freeze records is unchanged now (both previous packets, the C28 prior build evidence, the C28 expected executable, the carried-forward baselines, C, the catalog): []
+OK   E10 the Architect ruling records state the rulings (first lines), frozen
+finished: 2026-10-14T22:07:12+0100

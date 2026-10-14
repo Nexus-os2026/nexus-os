@@ -1,0 +1,496 @@
+[
+ {
+  "control": "K1 the exact C28 evidence (warning unreachable_patterns at protocol.rs:1834:17) is admitted",
+  "expected": "ACCEPT",
+  "got": "ACCEPT",
+  "failed_checks": [],
+  "as_expected": true
+ },
+ {
+  "control": "K2 a different warning (unused_variables) in place of the unreachable pattern is rejected",
+  "expected": "REJECT (A12)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names `#[warn(unreachable_patterns)]`; no code, no other lint)",
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834",
+   "A15 the warning is the frozen mutation's direct consequence: at C, line 1826 reads `Read::Got(durable) if durable >= set.top => {`; in the catalog mutant lines 1826 and 1834 both read `Read::Got(_) => {` from column 17, and the warning renders exactly those mutant lines"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K3a an additional warning (and the summary counting 2) is rejected",
+  "expected": "REJECT (A11)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A11 exactly one warning diagnostic",
+   "A11 exactly one cargo summary, for nexus-governed-control (lib test), counting exactly 1 warning",
+   "A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names `#[warn(unreachable_patterns)]`; no code, no other lint)",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17",
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834",
+   "A15 the warning is the frozen mutation's direct consequence: at C, line 1826 reads `Read::Got(durable) if durable >= set.top => {`; in the catalog mutant lines 1826 and 1834 both read `Read::Got(_) => {` from column 17, and the warning renders exactly those mutant lines",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K3b an additional warning with the summary left at 1 is rejected",
+  "expected": "REJECT (A11)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A11 exactly one warning diagnostic",
+   "A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names `#[warn(unreachable_patterns)]`; no code, no other lint)",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17",
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834",
+   "A15 the warning is the frozen mutation's direct consequence: at C, line 1826 reads `Read::Got(durable) if durable >= set.top => {`; in the catalog mutant lines 1826 and 1834 both read `Read::Got(_) => {` from column 17, and the warning renders exactly those mutant lines",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K3c a second unreachable_patterns warning at another line is rejected",
+  "expected": "REJECT (A11)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A11 exactly one warning diagnostic",
+   "A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names `#[warn(unreachable_patterns)]`; no code, no other lint)",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17",
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834",
+   "A15 the warning is the frozen mutation's direct consequence: at C, line 1826 reads `Read::Got(durable) if durable >= set.top => {`; in the catalog mutant lines 1826 and 1834 both read `Read::Got(_) => {` from column 17, and the warning renders exactly those mutant lines",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K4a an error plus the warning is rejected",
+  "expected": "REJECT (A10)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A10 no error diagnostic (no stderr line begins `error`)",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K4b an uncoded error line plus the warning is rejected",
+  "expected": "REJECT (A10)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A10 no error diagnostic (no stderr line begins `error`)",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K5a the warning at line 1835 is rejected",
+  "expected": "REJECT (A13)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K5b the warning at column 18 is rejected",
+  "expected": "REJECT (A13)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K5c the warning in another file is rejected",
+  "expected": "REJECT (A13)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6a a wrong applied patch sha256 is rejected",
+  "expected": "REJECT (A2)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A2 the frozen C28 patch: catalog patch sha256 = applied patch sha256 = the ruling's"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6b a wrong mutant blob before the build is rejected",
+  "expected": "REJECT (A3)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A3 source_before the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6c a wrong mutant sha256 after the build is rejected",
+  "expected": "REJECT (A3)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A3 source_after the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6d a source not exactly C plus the patch after the build is rejected",
+  "expected": "REJECT (A3)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A3 source_after the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6e a second changed file before the build is rejected",
+  "expected": "REJECT (A3)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A3 source_before the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K6f a ruling mutant identity that the catalog does not hold is rejected",
+  "expected": "REJECT (A2)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A2 the catalog's mutant: blob and sha256 equal the ruling's; the in-process mutant (catalog edits on C's protocol.rs) has that blob",
+   "A3 source_before the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)",
+   "A3 source_after the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)",
+   "A21 the RESUME-01 restoration: git apply -R --check and git apply -R rc 0; protocol.rs from the mutant blob back to C's blob and sha256; verify_tree.py EXACTLY_C; the path-aware restored policy held"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7a the synthetic executable at the ruling's identity is pinned",
+  "expected": "ACCEPT",
+  "got": "ACCEPT",
+  "failed_checks": [],
+  "as_expected": true
+ },
+ {
+  "control": "K7b a wrong executable hash (same size, other bytes) is rejected",
+  "expected": "REJECT (P4)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7c a wrong executable size is rejected",
+  "expected": "REJECT (P4)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7d a missing executable is rejected",
+  "expected": "REJECT (P2)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P2 it exists, as a regular file, not a symlink, with no symlinked path component",
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it",
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)",
+   "P5 the executable bit is set",
+   "P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime are no later than the build's recorded end"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7e a symlinked executable is rejected",
+  "expected": "REJECT (P2)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P2 it exists, as a regular file, not a symlink, with no symlinked path component",
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it",
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7f a target outside the worktree (the worktree's target a symlink to elsewhere) is rejected",
+  "expected": "REJECT (P3)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P2 it exists, as a regular file, not a symlink, with no symlinked path component",
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it",
+   "P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime are no later than the build's recorded end"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7g an executable outside the worktree's target is rejected",
+  "expected": "REJECT (P1)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P1 the executable path is the ruling's (the one the build recorded)",
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7h a target entry changed after the build is rejected",
+  "expected": "REJECT (P6)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime are no later than the build's recorded end"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7i the real preserved C28 executable (read-only: hashed, sized, stat-ed) is accepted",
+  "expected": "ACCEPT",
+  "got": "ACCEPT",
+  "failed_checks": [],
+  "as_expected": true
+ },
+ {
+  "control": "K7j the real preserved executable against a wrong ruling sha256 is rejected",
+  "expected": "REJECT (P4)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7k the real preserved executable against a wrong ruling size is rejected",
+  "expected": "REJECT (P4)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K7l the real preserved executable against a different worktree is rejected",
+  "expected": "REJECT (P1)",
+  "got": "REJECT",
+  "failed_checks": [
+   "P1 the executable path is the ruling's (the one the build recorded)",
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K8a classify.py is byte-identical to RESUME-01's frozen classify.py",
+  "as_expected": true,
+  "detail": "53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684 / 53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684"
+ },
+ {
+  "control": "K8b the unchanged general classifier, on a scratch copy of the real C28 build receipt: BUILD: NOT OK, the one failed check `no error or warning diagnostic`; no PIN.json",
+  "as_expected": true,
+  "detail": "BUILD: NOT OK; [\"FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']\"]"
+ },
+ {
+  "control": "K8c the general classifier's historical C28 output (RESUME-01) equals this re-derivation (first lines)",
+  "as_expected": true,
+  "detail": "['BUILD: NOT OK', 'outer class (AD-1-R4 K.2): BUILD NOT OK (no error or warning diagnostic): kills nothing; the mission stops']"
+ },
+ {
+  "control": "K8d the admission checker admits the same evidence (narrow C28 ruling)",
+  "expected": "ACCEPT",
+  "got": "ACCEPT",
+  "failed_checks": [],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C12 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C9 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C11 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C17 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C18a with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C18b with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C27 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 admit() refuses C22 with the same (C28) evidence",
+  "expected": "REJECT (the control is C28)",
+  "got": "REJECT",
+  "failed_checks": [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K9 the general classifier rejects the same warning presented as another control's build (C12): BUILD: NOT OK",
+  "as_expected": true,
+  "detail": "BUILD: NOT OK"
+ },
+ {
+  "control": "K10 exit 1 is rejected",
+  "expected": "REJECT (A7)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A7 process exit 0 by a normal exit; no signal; supervisor and wrapper record exit 0"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 a signal is rejected",
+  "expected": "REJECT (A7)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A7 process exit 0 by a normal exit; no signal; supervisor and wrapper record exit 0"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 a timeout is rejected",
+  "expected": "REJECT (A8)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A8 resources: 16 GiB, zero swap, enforced and complete; no OOM, no OOM kill, no swap; no timeout; within 900 s"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 an OOM kill is rejected",
+  "expected": "REJECT (A8)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A8 resources: 16 GiB, zero swap, enforced and complete; no OOM, no OOM kill, no swap; no timeout; within 900 s"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 a swap use is rejected",
+  "expected": "REJECT (A8)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A8 resources: 16 GiB, zero swap, enforced and complete; no OOM, no OOM kill, no swap; no timeout; within 900 s"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 a wrong rustc is rejected",
+  "expected": "REJECT (A6)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A6 the exact toolchain: rustc -vV, cargo -vV and the active toolchain equal RESUME-01's C27 build's and EXEC-01's healthy build's"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 an evidence file not equal to the RESUME-01 SHA256SUMS is rejected",
+  "expected": "REJECT (A1)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A1 every C28 evidence file is the RESUME-01 packet's (sha256 listed in its SHA256SUMS at 3695a817)"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 the explanation missing (`matches all the relevant values` absent) is rejected",
+  "expected": "REJECT (A14)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 an extra stderr note line is rejected",
+  "expected": "REJECT (A16)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K10 a changed stderr byte (outside the warning) is rejected",
+  "expected": "REJECT (A9)",
+  "got": "REJECT",
+  "failed_checks": [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record"
+  ],
+  "as_expected": true
+ },
+ {
+  "control": "K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a restored source: candidate",
+  "as_expected": true,
+  "detail": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; []"
+ },
+ {
+  "control": "K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a unrestored source: rejected at the source check",
+  "as_expected": true,
+  "detail": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE; ['FAIL source EXACTLY_C before and after: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH']"
+ },
+ {
+  "control": "K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a not-C source: rejected at the source check",
+  "as_expected": true,
+  "detail": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE; ['FAIL source EXACTLY_C before and after: NOT_C / NOT_C']"
+ }
+]

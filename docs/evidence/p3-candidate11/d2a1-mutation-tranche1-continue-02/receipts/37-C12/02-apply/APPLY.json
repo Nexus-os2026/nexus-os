@@ -1,0 +1,85 @@
+{
+ "patch": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/inputs/patches/C12.patch",
+ "patch_sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803",
+ "catalog_patch_sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803",
+ "catalog_patch_file": "catalog/patches/C12.patch",
+ "check": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12",
+   "apply",
+   "--check",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/inputs/patches/C12.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "apply": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12",
+   "apply",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/inputs/patches/C12.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "verify_mutant": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246347,
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M crates/nexus-governed-control/src/ledger/protocol.rs"
+  ],
+  "unexpected_status": [],
+  "status_policy": {
+   "ok": true,
+   "mode": "mutant",
+   "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "modified_seen": [
+    "crates/nexus-governed-control/src/ledger/protocol.rs"
+   ],
+   "records": 1,
+   "target_entries": 0,
+   "status_sha256": "eef3788c6abd38e5214ec78f73754ef367f978f03eabbc784f4d8587fe23f4d1",
+   "shown": [
+    " M crates/nexus-governed-control/src/ledger/protocol.rs"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12/target",
+    "worktree_is_own_realpath": true,
+    "exists": false,
+    "ok": true
+   }
+  },
+  "other_content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "mutant_file": {
+   "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "git_blob": "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+   "sha256": "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04",
+   "bytes": 64552,
+   "differs_from_baseline": true
+  },
+  "expected_mutant_blob": "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+  "expected_mutant_sha256": "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04",
+  "verdict": "EXACTLY_C_PLUS_PATCH"
+ },
+ "numstat": "6\t6\tcrates/nexus-governed-control/src/ledger/protocol.rs\n",
+ "changed_files": [
+  "crates/nexus-governed-control/src/ledger/protocol.rs"
+ ]
+}

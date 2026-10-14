@@ -1,0 +1,77 @@
+--- development/revisions/finalize.dev1.py	2026-10-14 23:43:18.485797015 +0100
++++ tools/finalize.py	2026-10-14 23:43:52.949727955 +0100
+@@ -29,6 +29,7 @@
+ import pub4common as Q  # noqa: E402
+ 
+ DEST = os.path.join(Q.WORKTREE, Q.PACKET)
++R = Q.RECEIPTS
+ MESSAGE = """docs(evidence): publish D2A-1 tranche 1 continue-02 evidence (duplicate policy R2)
+ 
+ Missions P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (execution evidence),
+@@ -73,17 +74,18 @@
+ def main():
+     Q.no_bytecode()
+     import json
+-    gate = open(os.path.join(Q.P, "receipts/20-FINAL-GATE.txt")).read().splitlines()
++    gate = open(os.path.join(R, "20-FINAL-GATE.txt")).read().splitlines()
+     if gate[-2:] != ["FINAL GATE: ALL CHECKS HOLD", "exit 0"]:
+         print(f"FINALIZE: REFUSED: the final gate did not hold: {gate[-2:]}")
+         return 1
+-    fz = json.load(open(os.path.join(Q.P, "receipts/10-FREEZE.json")))
++    fz = json.load(open(os.path.join(R, "10-FREEZE.json")))
+     now = {f: Q.sha256_file(os.path.join(Q.P, f)) for f in A.root_files(Q.P)}
+     changed = sorted(f for f, h in fz["root_files"].items() if now.get(f) != h)
+     added = sorted(set(now) - set(fz["root_files"]) - set(A.POST_GATE) - {"receipts/30-FINALIZE.txt"})
+     check("every frozen file of this mission's root unchanged since the freeze", not changed, changed)
+-    check("nothing added to this mission's root since the freeze but the post-gate records and this console",
+-          not added and set(A.POST_GATE) - {"receipts/07-ASSEMBLE.console.txt"} <= set(now), added)
++    check("nothing added to this mission's root since the freeze but the post-gate records and this console; every "
++          "post-gate record present", not added and all(os.path.isfile(os.path.join(R, f[len("receipts/"):]))
++                                                       for f in A.POST_GATE), added)
+     packet = {os.path.relpath(f, DEST): Q.sha256_file(f) for f in B.files_under(DEST)}
+     check("the staged packet still equals the frozen packet", packet == fz["packet_files"], len(packet))
+     if fails:
+@@ -91,7 +93,7 @@
+         return 1
+ 
+     print("[post-gate records]")
+-    post = [(os.path.join(Q.P, f), f"{A.P4_DIR}/{f}") for f in A.POST_GATE]
++    post = [(os.path.join(R, f[len("receipts/"):]), f"{A.P4_DIR}/{f}") for f in A.POST_GATE]
+     for src, rel in post:
+         if os.path.lexists(os.path.join(DEST, rel)) or os.path.islink(src) or not os.path.isfile(src):
+             print(f"FINALIZE: REFUSED: {rel} exists in the packet, or its source is not a regular file")
+@@ -108,7 +110,7 @@
+           "SHA256SUMS)", final == expect, f"{len(final) + 1} files")
+ 
+     print("[full checks over the final packet]")
+-    pairs = [(s, r) for s, r in A.sources(post=True)]
++    pairs = A.sources(post=True) + ([p for p in post] if Q.REHEARSAL else [])
+     for label in A.full_checks(DEST, pairs):
+         fails.append("full check: " + label)
+     for src, rel in post:
+@@ -146,19 +148,20 @@
+                        capture_output=True)
+     check("git commit", r.returncode == 0, (r.stdout + r.stderr).decode().strip())
+     head = Q.git("rev-parse", "HEAD", repo=Q.WORKTREE).decode().strip()
+-    info = Q.git("cat-file", "commit", head).decode()
++    info = Q.git("cat-file", "commit", head, repo=Q.WORKTREE).decode()
+     parents = [l[7:] for l in info.partition("\n\n")[0].splitlines() if l.startswith("parent ")]
+     check("the evidence commit has exactly the required parent", parents == [Q.PARENT], parents)
+     check("the publication branch points at the evidence commit", Q.git(
+-        "rev-parse", "refs/heads/" + Q.LOCAL_BRANCH).decode().strip() == head)
+-    diff = Q.git("diff-tree", "-r", "--no-renames", "--name-status", Q.PARENT, head).decode().splitlines()
++        "rev-parse", "refs/heads/" + Q.LOCAL_BRANCH, repo=Q.PUBLISH_REPO).decode().strip() == head)
++    diff = Q.git("diff-tree", "-r", "--no-renames", "--name-status", Q.PARENT, head,
++                 repo=Q.WORKTREE).decode().splitlines()
+     check("every changed path is added under the packet path; nothing else differs from the parent",
+           sorted(diff) == sorted(f"A\t{Q.PACKET}/{f}" for f in files), f"{len(diff)} paths")
+-    bad = [f for f in files if Q.git("rev-parse", f"{head}:{Q.PACKET}/{f}").decode().strip() !=
++    bad = [f for f in files if Q.git("rev-parse", f"{head}:{Q.PACKET}/{f}", repo=Q.WORKTREE).decode().strip() !=
+            Q.git_blob_id(open(os.path.join(DEST, f), "rb").read())]
+     check("every committed blob equals the staged bytes", not bad, bad[:3])
+     check("the worktree is clean after the commit", wt("status", "--porcelain", "-uall").stdout == b"")
+-    tree = Q.git("rev-parse", head + "^{tree}").decode().strip()
++    tree = Q.git("rev-parse", head + "^{tree}", repo=Q.WORKTREE).decode().strip()
+     print(f"evidence commit {head}; tree {tree}; parent {parents}; files {len(files)}; packet SHA256SUMS sha256 "
+           f"{Q.sha256_file(os.path.join(DEST, 'SHA256SUMS'))}")
+     print(f"FINALIZE: {'COMMITTED ' + head if not fails else 'FAILED: ' + '; '.join(fails)}")

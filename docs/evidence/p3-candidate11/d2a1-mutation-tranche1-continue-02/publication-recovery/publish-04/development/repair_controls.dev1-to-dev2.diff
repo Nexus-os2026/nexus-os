@@ -1,0 +1,16 @@
+--- development/revisions/repair_controls.dev1.py	2026-10-14 23:27:29.276450819 +0100
++++ tools/repair_controls.py	2026-10-14 23:27:29.297510099 +0100
+@@ -427,9 +427,11 @@
+               ("DUPLICATE_COUNT", SP)], mutate=link_to(cg["C11"], "../../38-C9/04-run/cgroup-samples.txt"))
+     outside = os.path.join(scratch, "outside-LINK.txt")
+     open(outside, "wb").write(open(os.path.join(base, c18at), "rb").read())
+-    negative("N24b", "symlink substitution to a byte-equal file outside the packet (C18a LINK.txt)",
++    negative("N24b", "symlink substitution to a byte-equal file outside the packet (C18a LINK.txt; C18a's LINK.json, "
++             "which binds on its sibling LINK.txt, is rejected with it)",
+              [("STAGED_SYMLINK", c18at), ("CURRENT_SYMLINK", c18at), ("MAPPED_PATH_NOT_A_DUPLICATE", c18at),
+-              ("DUPLICATE_COUNT", SP)], mutate=link_to(c18at, outside))
++              ("DUPLICATE_COUNT", SP), ("CONTROL_IDENTITY", c18aj), ("UNAUTHORIZED_DUPLICATE", c18aj)],
++             mutate=link_to(c18at, outside))
+     empty_out = os.path.join(scratch, "outside-empty")
+     open(empty_out, "wb").close()
+     negative("N24c", "symlink substitution of a mapped zero-length artifact to an empty file outside the packet "

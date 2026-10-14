@@ -1,0 +1,13 @@
+AUTHENTICATE the C11 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11
+result: OK
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink: {'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 63313500, 'mode': '0o40775'}
+OK   owned by this user: 1000
+OK   the worktree's .git file points into the repository's worktree administration: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt1x-C11
+OK   the administrative directory points back at this worktree: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11/.git
+OK   locked with this mission's reason (mission ownership): P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C11 disposable mutant worktree: mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C11 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   toplevel is the path; the common git directory is the repository's: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11; /home/nexus/NEXUS/nexus-os/.git
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   clean: nothing modified, staged, untracked or ignored: 
+OK   every tracked file byte-equal to C (verify_tree.py): EXACTLY_C; 5364 blobs, 97246341 bytes
+OK   baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's: a2df2841b99cad5d452008a6d4150e9369d07e66

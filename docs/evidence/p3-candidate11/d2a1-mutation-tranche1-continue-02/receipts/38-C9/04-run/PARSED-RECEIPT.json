@@ -1,0 +1,128 @@
+{
+ "control": "C9",
+ "receipt_type": "AD-1-R4 F.1 (a)",
+ "test": "ledger::protocol::model_tests::full_fb2",
+ "configuration": "F-B2",
+ "named_property": "E4",
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-B2",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Se, Wk, Adm]",
+  "states": 14,
+  "expanded": 1,
+  "transitions": 14,
+  "fault_edges": 10,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": "E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (2 steps):"
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::full_fb2' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {\"E4\"}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 6080
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+  "pinned_size": 8984400,
+  "before": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+   "size": 8984400,
+   "mtime_ns": 1792012409511321302,
+   "inode": 63315561,
+   "symlink": false
+  },
+  "after": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+   "size": 8984400,
+   "mtime_ns": 1792012409511321302,
+   "inode": 63315561,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_fb2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_fb2: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_fb2",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_fb2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_fb2: test"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+   "size": 8984400,
+   "mtime_ns": 1792012409511321302,
+   "inode": 63315561,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "518e0e47108811b5e8069c693aa1963f7da3ee87aad824a1bbe7479fa9c798d2",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E4",
+ "checks_hold": 29,
+ "checks_total": 29
+}

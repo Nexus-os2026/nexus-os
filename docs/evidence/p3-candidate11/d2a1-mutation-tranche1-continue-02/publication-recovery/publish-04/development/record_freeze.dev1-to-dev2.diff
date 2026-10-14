@@ -1,0 +1,55 @@
+--- development/revisions/record_freeze.dev1.py	2026-10-14 23:43:18.483457458 +0100
++++ tools/record_freeze.py	2026-10-14 23:43:18.500422588 +0100
+@@ -2,10 +2,8 @@
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-04, mission section 11: the freeze, after the packet is assembled and
+ before the one static final publication gate.
+ 
+-    record_freeze.py                  writes receipts/10-FREEZE.json and receipts/10-FREEZE-RECORD.txt (neither may
+-                                      exist)
+-    record_freeze.py --rehearse DIR   the same into DIR/receipts/ for the packet DIR/packet (DIR under this mission's
+-                                      scratch/; the worktree check does not apply); nothing is written to the root
++    record_freeze.py     writes receipts/10-FREEZE.json and receipts/10-FREEZE-RECORD.txt (neither may exist); in a
++                         rehearsal (pub4common.REHEARSAL), into the rehearsal's receipts, for its clone's packet
+ 
+ Frozen: every file of this mission's root outside scratch/ (tools, documents, receipts 00-07, development), by sha256
+ (this includes both maps, the ruling record, the builder, the controls, both before-manifests and the publication
+@@ -29,25 +27,22 @@
+              "frozen packet file unchanged but SHA256SUMS.")
+ 
+ 
+-def main(rehearse=None):
++def main():
+     Q.no_bytecode()
+-    if rehearse and not rehearse.startswith(Q.P + "/scratch/"):
+-        raise SystemExit("REFUSED: a rehearsal lives under this mission's scratch/")
+-    rdir = os.path.join(rehearse, "receipts") if rehearse else os.path.join(Q.P, "receipts")
++    rdir = Q.RECEIPTS
+     out_json, out_txt = (os.path.join(rdir, n) for n in ("10-FREEZE.json", "10-FREEZE-RECORD.txt"))
+     if os.path.exists(out_json) or os.path.exists(out_txt):
+         raise SystemExit("REFUSED: a freeze record exists")
+     asm = open(os.path.join(rdir, "07-ASSEMBLE.console.txt")).read().splitlines()
+     if asm[-2:] != ["ASSEMBLY: PACKET ASSEMBLED — ALL CHECKS HOLD", "exit 0"]:
+         raise SystemExit(f"REFUSED: the assembly receipt does not end in a held assembly: {asm[-2:]}")
+-    if rehearse:
+-        print("REHEARSAL: the packet is in scratch; the worktree check does not apply")
+-    else:
+-        status = Q.git("status", "--porcelain", "-uall", repo=Q.WORKTREE).decode().splitlines()
+-        if not status or [l for l in status if not l.startswith("?? " + Q.PACKET + "/")]:
+-            raise SystemExit("REFUSED: the worktree holds something other than the untracked packet")
++    if Q.REHEARSAL:
++        print(f"REHEARSAL in {Q.REHEARSAL} (its clone and receipts)")
++    status = Q.git("status", "--porcelain", "-uall", repo=Q.WORKTREE).decode().splitlines()
++    if not status or [l for l in status if not l.startswith("?? " + Q.PACKET + "/")]:
++        raise SystemExit("REFUSED: the worktree holds something other than the untracked packet")
+     root = {f: Q.sha256_file(os.path.join(Q.P, f)) for f in A.root_files(Q.P)}
+-    dest = os.path.join(rehearse, "packet") if rehearse else os.path.join(Q.WORKTREE, Q.PACKET)
++    dest = os.path.join(Q.WORKTREE, Q.PACKET)
+     packet = {os.path.relpath(f, dest): Q.sha256_file(f) for f in B.files_under(dest)}
+     ids = {"C": Q.C, "C_tree": Q.git("rev-parse", Q.C + "^{tree}").decode().strip(),
+            "catalog_blob": Q.git("rev-parse", f"{Q.R2}:{Q.CATALOG_PATH}").decode().strip(),
+@@ -77,4 +72,4 @@
+ 
+ 
+ if __name__ == "__main__":
+-    sys.exit(main(os.path.abspath(sys.argv[2]) if sys.argv[1:2] == ["--rehearse"] else None))
++    sys.exit(main())

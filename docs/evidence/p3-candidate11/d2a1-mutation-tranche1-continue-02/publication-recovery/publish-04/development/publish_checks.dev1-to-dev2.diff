@@ -1,0 +1,11 @@
+--- development/revisions/publish_checks.dev1.py	2026-10-14 23:43:18.486759408 +0100
++++ tools/publish_checks.py	2026-10-14 23:43:18.501009294 +0100
+@@ -28,7 +28,7 @@
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ import pub4common as Q  # noqa: E402
+ 
+-REPO, REMOTE, SLUG = Q.REPO, Q.REMOTE, Q.SLUG
++REPO, REMOTE, SLUG = Q.PUBLISH_REPO, Q.REMOTE, Q.SLUG  # a rehearsal reads its clone (its commit lives there)
+ C, C_TREE, PARENT, PARENT_TREE, EXEC01, R2 = Q.C, Q.C_TREE, Q.PARENT, Q.RESUME01_TREE, Q.EXEC01, Q.R2
+ PREV_PACKET, RESUME_PACKET, R2_PACKET = Q.EXEC01_PACKET + "/", Q.RESUME01_PACKET + "/", Q.R2_PACKET + "/"
+ PREV_BRANCH, RESUME_BRANCH = Q.EXEC01_REF[len("refs/heads/"):], Q.RESUME01_REF[len("refs/heads/"):]

@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C11: a constraint failure during the inserts gives Not written whatever the rollback said. **This is the amendment's rule, which the review rejected.**
+patch: inputs/patches/C11.patch (the frozen R2 packet's catalog/patches/C11.patch), sha256 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768 (catalog 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '3\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 6e039d9dad6415242884ceef97a54d3548658038 (expected 6e039d9dad6415242884ceef97a54d3548658038), sha256 f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01 (expected f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C12: the publication is two exchanges: bits, then count
+patch: inputs/patches/C12.patch (the frozen R2 packet's catalog/patches/C12.patch), sha256 d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803 (catalog d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '6\t6\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b (expected d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b), sha256 4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04 (expected 4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

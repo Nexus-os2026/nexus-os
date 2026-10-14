@@ -1,0 +1,186 @@
+AS EXPECTED  K1 the exact C28 evidence (warning unreachable_patterns at protocol.rs:1834:17) is admitted: expected ACCEPT; got ACCEPT; failed []
+AS EXPECTED  K2 a different warning (unused_variables) in place of the unreachable pattern is rejected: expected REJECT; got REJECT; failed ['A9', 'A12', 'A14', 'A15']
+AS EXPECTED  K3a an additional warning (and the summary counting 2) is rejected: expected REJECT; got REJECT; failed ['A9', 'A11', 'A11', 'A12', 'A13', 'A14', 'A15', 'A16']
+AS EXPECTED  K3b an additional warning with the summary left at 1 is rejected: expected REJECT; got REJECT; failed ['A9', 'A11', 'A12', 'A13', 'A14', 'A15', 'A16']
+AS EXPECTED  K3c a second unreachable_patterns warning at another line is rejected: expected REJECT; got REJECT; failed ['A9', 'A11', 'A12', 'A13', 'A14', 'A15', 'A16']
+AS EXPECTED  K4a an error plus the warning is rejected: expected REJECT; got REJECT; failed ['A9', 'A10', 'A16']
+AS EXPECTED  K4b an uncoded error line plus the warning is rejected: expected REJECT; got REJECT; failed ['A9', 'A10', 'A16']
+AS EXPECTED  K5a the warning at line 1835 is rejected: expected REJECT; got REJECT; failed ['A9', 'A13']
+AS EXPECTED  K5b the warning at column 18 is rejected: expected REJECT; got REJECT; failed ['A9', 'A13']
+AS EXPECTED  K5c the warning in another file is rejected: expected REJECT; got REJECT; failed ['A9', 'A13']
+AS EXPECTED  K6a a wrong applied patch sha256 is rejected: expected REJECT; got REJECT; failed ['A2']
+AS EXPECTED  K6b a wrong mutant blob before the build is rejected: expected REJECT; got REJECT; failed ['A3']
+AS EXPECTED  K6c a wrong mutant sha256 after the build is rejected: expected REJECT; got REJECT; failed ['A3']
+AS EXPECTED  K6d a source not exactly C plus the patch after the build is rejected: expected REJECT; got REJECT; failed ['A3']
+AS EXPECTED  K6e a second changed file before the build is rejected: expected REJECT; got REJECT; failed ['A3']
+AS EXPECTED  K6f a ruling mutant identity that the catalog does not hold is rejected: expected REJECT; got REJECT; failed ['A2', 'A3', 'A3', 'A21']
+AS EXPECTED  K7a the synthetic executable at the ruling's identity is pinned: expected ACCEPT; got ACCEPT; failed []
+AS EXPECTED  K7b a wrong executable hash (same size, other bytes) is rejected: expected REJECT; got REJECT; failed ['P4']
+AS EXPECTED  K7c a wrong executable size is rejected: expected REJECT; got REJECT; failed ['P4']
+AS EXPECTED  K7d a missing executable is rejected: expected REJECT; got REJECT; failed ['P2', 'P3', 'P4', 'P5', 'P6']
+AS EXPECTED  K7e a symlinked executable is rejected: expected REJECT; got REJECT; failed ['P2', 'P3', 'P4']
+AS EXPECTED  K7f a target outside the worktree (the worktree's target a symlink to elsewhere) is rejected: expected REJECT; got REJECT; failed ['P2', 'P3', 'P6']
+AS EXPECTED  K7g an executable outside the worktree's target is rejected: expected REJECT; got REJECT; failed ['P1', 'P3']
+AS EXPECTED  K7h a target entry changed after the build is rejected: expected REJECT; got REJECT; failed ['P6']
+AS EXPECTED  K7i the real preserved C28 executable (read-only: hashed, sized, stat-ed) is accepted: expected ACCEPT; got ACCEPT; failed []
+AS EXPECTED  K7j the real preserved executable against a wrong ruling sha256 is rejected: expected REJECT; got REJECT; failed ['P4']
+AS EXPECTED  K7k the real preserved executable against a wrong ruling size is rejected: expected REJECT; got REJECT; failed ['P4']
+AS EXPECTED  K7l the real preserved executable against a different worktree is rejected: expected REJECT; got REJECT; failed ['P1', 'P3']
+AS EXPECTED  K8a classify.py is byte-identical to RESUME-01's frozen classify.py: 53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684 / 53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684
+OK   the build started (no pre-flight refusal)
+OK   source EXACTLY_C_PLUS_PATCH before and after the build: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   the target directory is the worktree-local fresh one: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 2611777536 B, swap.peak 0 B, oom 0, oom_kill 0, wall 166.4 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '2m 46s')]
+FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-2faa0b9718d3e6a3', '116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36', 8983776)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-2faa0b9718d3e6a3.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+
+BUILD: NOT OK
+outer class (AD-1-R4 K.2): BUILD NOT OK (no error or warning diagnostic): kills nothing; the mission stops
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 46s')]
+resources: wall 166.4 s of 900 s; scope memory.peak 2611777536 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1969692 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']
+
+AS EXPECTED  K8b the unchanged general classifier, on a scratch copy of the real C28 build receipt: BUILD: NOT OK, the one failed check `no error or warning diagnostic`; no PIN.json: BUILD: NOT OK; ["FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']"]
+AS EXPECTED  K8c the general classifier's historical C28 output (RESUME-01) equals this re-derivation (first lines): ['BUILD: NOT OK', 'outer class (AD-1-R4 K.2): BUILD NOT OK (no error or warning diagnostic): kills nothing; the mission stops']
+AS EXPECTED  K8d the admission checker admits the same evidence (narrow C28 ruling): expected ACCEPT; got ACCEPT; failed []
+AS EXPECTED  K9 admit() refuses C12 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C9 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C11 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C17 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C18a with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C18b with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C27 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+AS EXPECTED  K9 admit() refuses C22 with the same (C28) evidence: expected REJECT; got REJECT; failed ['the']
+OK   the build started (no pre-flight refusal)
+OK   source EXACTLY_C_PLUS_PATCH before and after the build: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   the target directory is the worktree-local fresh one: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 2611777536 B, swap.peak 0 B, oom 0, oom_kill 0, wall 166.4 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '2m 46s')]
+FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-2faa0b9718d3e6a3', '116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36', 8983776)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-2faa0b9718d3e6a3.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+
+BUILD: NOT OK
+outer class (AD-1-R4 K.2): BUILD NOT OK (no error or warning diagnostic): kills nothing; the mission stops
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 46s')]
+resources: wall 166.4 s of 900 s; scope memory.peak 2611777536 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1969692 KiB; scope gone
+checks: 17 of 18 hold
+FAILED CHECK: no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']
+
+AS EXPECTED  K9 the general classifier rejects the same warning presented as another control's build (C12): BUILD: NOT OK: BUILD: NOT OK
+AS EXPECTED  K10 exit 1 is rejected: expected REJECT; got REJECT; failed ['A7']
+AS EXPECTED  K10 a signal is rejected: expected REJECT; got REJECT; failed ['A7']
+AS EXPECTED  K10 a timeout is rejected: expected REJECT; got REJECT; failed ['A8']
+AS EXPECTED  K10 an OOM kill is rejected: expected REJECT; got REJECT; failed ['A8']
+AS EXPECTED  K10 a swap use is rejected: expected REJECT; got REJECT; failed ['A8']
+AS EXPECTED  K10 a wrong rustc is rejected: expected REJECT; got REJECT; failed ['A6']
+AS EXPECTED  K10 an evidence file not equal to the RESUME-01 SHA256SUMS is rejected: expected REJECT; got REJECT; failed ['A1']
+AS EXPECTED  K10 the explanation missing (`matches all the relevant values` absent) is rejected: expected REJECT; got REJECT; failed ['A9', 'A14']
+AS EXPECTED  K10 an extra stderr note line is rejected: expected REJECT; got REJECT; failed ['A9', 'A16']
+AS EXPECTED  K10 a changed stderr byte (outside the warning) is rejected: expected REJECT; got REJECT; failed ['A9']
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+OK   source EXACTLY_C before and after: EXACTLY_C / EXACTLY_C
+OK   raw output sha256 equals the launcher's record: 8cc041ad59502fc64a12ae29413b2682c200b20b28b2bc7d3d3fec4b3fa14cb9
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3551232 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711625) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:"]
+OK   the panic is at one of the named test's own checks: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs, inside fn t_bind_every_bound_value_belongs_to_one_ledger (lines 1114-1249) — not in shared setup, a fixture or elsewhere: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5
+OK   the panic message is recorded (non-empty): ['assertion `left == right` failed: a synthetic check']
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(b) named-test FAIL of T-BIND at its own check crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic at ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1119, 5)
+panic message: assertion `left == right` failed: a synthetic check |   left: Ok("no") |  right: Ok("ok")
+named test: T-BIND (ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger)
+candidate: KILL_EVIDENCE_CANDIDATE — type (b) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 180 s; scope memory.peak 3551232 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2828 KiB; scope gone
+checks: 15 of 15 hold
+
+AS EXPECTED  K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a restored source: candidate: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; []
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+FAIL source EXACTLY_C before and after: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 8cc041ad59502fc64a12ae29413b2682c200b20b28b2bc7d3d3fec4b3fa14cb9
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3551232 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711625) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:"]
+OK   the panic is at one of the named test's own checks: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs, inside fn t_bind_every_bound_value_belongs_to_one_ledger (lines 1114-1249) — not in shared setup, a fixture or elsewhere: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5
+OK   the panic message is recorded (non-empty): ['assertion `left == right` failed: a synthetic check']
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source EXACTLY_C before and after): kills nothing
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic at ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1119, 5)
+panic message: assertion `left == right` failed: a synthetic check |   left: Ok("no") |  right: Ok("ok")
+named test: T-BIND (ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger)
+candidate: none
+resources: wall 0.0 s of 180 s; scope memory.peak 3551232 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2828 KiB; scope gone
+checks: 14 of 15 hold
+FAILED CHECK: source EXACTLY_C before and after: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+
+AS EXPECTED  K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a unrestored source: rejected at the source check: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE; ['FAIL source EXACTLY_C before and after: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH']
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 / 8cd1e45a72b28138… 966208 (pinned 8cd1e45a72b28138… 966208)
+FAIL source EXACTLY_C before and after: NOT_C / NOT_C
+OK   raw output sha256 equals the launcher's record: 8cc041ad59502fc64a12ae29413b2682c200b20b28b2bc7d3d3fec4b3fa14cb9
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/8d6fb31a-3bfc-468c-8676-3e5d2773907e/scratchpad/synth-official/ws-healthy/target/release/deps/nexus_governed_control-801c2e64b68ac47d', 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3551232 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger' (3711625) panicked at crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5:"]
+OK   the panic is at one of the named test's own checks: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs, inside fn t_bind_every_bound_value_belongs_to_one_ledger (lines 1114-1249) — not in shared setup, a fixture or elsewhere: crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5
+OK   the panic message is recorded (non-empty): ['assertion `left == right` failed: a synthetic check']
+OK   no fixture failure; no explorer report (NOT PRODUCED BY DESIGN for type (b))
+
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (source EXACTLY_C before and after): kills nothing
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic at ('crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs', 1119, 5)
+panic message: assertion `left == right` failed: a synthetic check |   left: Ok("no") |  right: Ok("ok")
+named test: T-BIND (ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger)
+candidate: none
+resources: wall 0.0 s of 180 s; scope memory.peak 3551232 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 2828 KiB; scope gone
+checks: 14 of 15 hold
+FAILED CHECK: source EXACTLY_C before and after: NOT_C / NOT_C
+
+AS EXPECTED  K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) receipt with a not-C source: rejected at the source check: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE; ['FAIL source EXACTLY_C before and after: NOT_C / NOT_C']
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 — C28 admission/pin tool controls (section 14); no Cargo, no rustc, no Nexus test; the real preserved executable only hashed, sized and stat-ed; synthetic files under /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/dev-local/scratch-03-c28-controls
+controls: 54; as expected: 54
+C28 ADMISSION CONTROLS: ALL AS EXPECTED

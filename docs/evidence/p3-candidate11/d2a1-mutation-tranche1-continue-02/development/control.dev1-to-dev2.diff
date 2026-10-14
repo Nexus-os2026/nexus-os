@@ -1,0 +1,48 @@
+--- development/revisions/control.dev1.py	2026-10-14 22:06:49.274064035 +0100
++++ tools/control.py	2026-10-14 22:06:49.294216482 +0100
+@@ -280,8 +280,8 @@
+ def reauthenticate_restoration(wt, ctl, outdir, exe):
+     """C28 (continue mission sections 9 and 13): no patch is applied or reversed by this mission; the restored worktree
+     (restored by RESUME-01's `git apply -R`, authenticated in 01-admission) is re-authenticated read-only: the changed
+-    file's blob and sha256 are C's, verify_tree.py EXACTLY_C, the path-aware restored policy, and the pinned
+-    executable is unchanged."""
++    file's blob and sha256 are C's, verify_tree.py EXACTLY_C, the path-aware restored policy, and (when an executable
++    was pinned: exe not None) the pinned executable is unchanged."""
+     os.makedirs(outdir)
+     path = os.path.join(wt, ctl["source_file"])
+     data = open(path, "rb").read()
+@@ -290,10 +290,11 @@
+     v, pol = chk["verify_tree"], chk["status_policy"]
+     rec["verify_tree"] = v
+     rec["status_policy"] = pol
+-    now = supervise.exe_identity(exe["path"])
++    now = supervise.exe_identity(exe["path"]) if exe and os.path.lexists(exe["path"]) else None
+     rec["executable_now"] = now
+     ok = (rec["file"]["git_blob"] == ctl["baseline_blob"] and rec["file"]["sha256"] == ctl["baseline_sha256"]
+-          and v["verdict"] == "EXACTLY_C" and pol["ok"] and supervise.exe_ok(now, exe["sha256"], exe["size"]))
++          and v["verdict"] == "EXACTLY_C" and pol["ok"]
++          and (exe is None or (now is not None and supervise.exe_ok(now, exe["sha256"], exe["size"]))))
+     lines = [RESTORE_OK if ok else "RESTORE: FAILED",
+              f"control {ctl['id']}: no patch is applied or reversed by this mission; the worktree {wt} was restored by "
+              f"RESUME-01 (git apply -R of the frozen patch; authenticated in 01-admission A21) and is re-authenticated "
+@@ -303,7 +304,8 @@
+              chk["line"], f"path-aware status policy (--ignored --untracked-files=all --no-renames -z): "
+              f"{'HOLDS' if pol['ok'] else 'REJECTED'}; {pol['records']} records, {pol['target_entries']} ignored entries "
+              f"beneath the worktree-local real target; shown {pol['shown']}; rejected {pol['rejected'][:5]}",
+-             f"pinned executable now: sha256 {now['sha256']} size {now['size']} (pinned {exe['sha256']} / {exe['size']})",
++             (f"pinned executable now: sha256 {now['sha256'] if now else 'MISSING'} size {now['size'] if now else '-'} "
++              f"(pinned {exe['sha256']} / {exe['size']})" if exe else "no executable was pinned (source checks only)"),
+              "every tracked file is byte-equal to C; the worktree is clean but for its own target directory"
+              if ok else "RESTORATION NOT VERIFIED"]
+     json.dump(rec, open(os.path.join(outdir, "RESTORE.json"), "w"), indent=1)
+@@ -370,9 +372,7 @@
+             facts.append(f"run (type (b)): {cls[0]}; {cls[1]}")
+             if not candidate:
+                 stop = "the C28 run is not admissible kill evidence of the named test"
+-    rok = reauthenticate_restoration(wt, ctl, os.path.join(outdir, "05-restore"),
+-                                     exe or {"path": c28_admit.RULING["executable"], "sha256": c28_admit.RULING[
+-                                         "exe_sha256"], "size": c28_admit.RULING["exe_size"]})
++    rok = reauthenticate_restoration(wt, ctl, os.path.join(outdir, "05-restore"), exe)
+     facts.append(f"restoration (re-authenticated, read-only): {supervise.first_line(os.path.join(outdir, '05-restore/RESTORE.txt'))}")
+     if not rok:
+         stop = (stop + "; " if stop else "") + "restoration not re-authenticated"

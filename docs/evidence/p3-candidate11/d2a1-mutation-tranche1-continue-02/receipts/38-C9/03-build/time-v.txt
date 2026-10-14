@@ -1,0 +1,23 @@
+	Command being timed: "timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2"
+	User time (seconds): 286.15
+	System time (seconds): 29.64
+	Percent of CPU this job got: 186%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:49.10
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1966800
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 282
+	Minor (reclaiming a frame) page faults: 8983795
+	Voluntary context switches: 58991
+	Involuntary context switches: 11813
+	Swaps: 0
+	File system inputs: 32
+	File system outputs: 2505640
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

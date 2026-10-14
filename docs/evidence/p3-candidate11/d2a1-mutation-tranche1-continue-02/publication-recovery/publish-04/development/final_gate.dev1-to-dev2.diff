@@ -1,0 +1,31 @@
+--- development/revisions/final_gate.dev1.py	2026-10-14 23:41:21.090663192 +0100
++++ tools/final_gate.py	2026-10-14 23:41:34.003652187 +0100
+@@ -45,7 +45,9 @@
+           f"{P4D}/development/repair-controls-dev1-FAILED-N24b-incomplete-expectation.txt",
+           f"{P4D}/development/repair_controls.dev1-to-dev2.diff",
+           f"{P4D}/development/authenticate.dev1-to-dev2.diff",
+-          f"{P4D}/development/superseded-1-authentication-trailing-space/01-AUTHENTICATION.txt"}
++          f"{P4D}/development/superseded-1-authentication-trailing-space/01-AUTHENTICATION.txt",
++          f"{P4D}/development/gate-rehearsal-1-FAILED-ps-matched-own-shell-args.txt",
++          f"{P4D}/development/final_gate.dev1-to-dev2.diff"}
+ ALLOWED_PROGRAMS = {"git", "gh", "ps"}  # ps: this gate's own read-only process listing
+ fails = []
+ 
+@@ -157,10 +159,13 @@
+           "mission's own tools: no Cargo, rustc, test, explorer or other executable", not bad, bad)
+     py = [(p, l) for p in ran for l, c in process_calls(p) if c == "python"]
+     print(f"     interpreter launches: {py}")
+-    ps = subprocess.run(["ps", "-eo", "pid,comm,args"], capture_output=True, text=True).stdout.splitlines()
+-    busy = [l.strip()[:120] for l in ps[1:] if re.search(r"\b(cargo|rustc)\b|nexus_governed_control", l)
+-            and "ps -eo" not in l]
+-    check("no cargo, rustc or governed-control test process is running now", not busy, busy[:3])
++    # By executable name (comm, at most 15 characters), never by argument text: a shell whose arguments merely
++    # mention a path such as ~/.cargo/bin is not a cargo process.
++    ps = subprocess.run(["ps", "-eo", "pid=,comm="], capture_output=True, text=True).stdout.splitlines()
++    busy = [l.strip() for l in ps if l.split(None, 1)[-1] in ("cargo", "rustc")
++            or l.split(None, 1)[-1].startswith("nexus_governed")]
++    check("no cargo, rustc or governed-control test process is running now (by executable name)", not busy,
++          f"{len(ps)} processes; matching {busy[:3]}")
+     log = open(os.path.join(Q.P, "development/DEVELOPMENT-LOG.txt")).read()
+     check("the development log records that nothing was built, compiled, tested, explored, mutated or executed",
+           "nothing is built, compiled, tested, explored, mutated or executed" in log)

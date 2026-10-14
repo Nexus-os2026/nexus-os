@@ -1,0 +1,82 @@
+{
+ "applied_before_restoration": true,
+ "before": {
+  "git_blob": "7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c",
+  "sha256": "afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e"
+ },
+ "check": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9",
+   "apply",
+   "-R",
+   "--check",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/inputs/patches/C9.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "reverse": {
+  "argv": [
+   "git",
+   "-C",
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9",
+   "apply",
+   "-R",
+   "--whitespace=nowarn",
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/inputs/patches/C9.patch"
+  ],
+  "rc": 0,
+  "stdout": "",
+  "stderr": ""
+ },
+ "after": {
+  "git_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+  "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+ },
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "!! target/"
+  ],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C"
+ },
+ "status_policy": {
+  "ok": true,
+  "mode": "restored",
+  "allowed_modified": null,
+  "modified_seen": [],
+  "records": 2552,
+  "target_entries": 2552,
+  "status_sha256": "47d04a0d86eb0e72bff17870155ab99cb19adfbe6ce2a1119191906033c0d906",
+  "shown": [
+   "!! target/... (2552 ignored entries, each beneath the worktree-local real target)"
+  ],
+  "rejected": [],
+  "target": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target",
+   "worktree_is_own_realpath": true,
+   "exists": true,
+   "is_symlink": false,
+   "is_dir": true,
+   "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target",
+   "own_entry": true,
+   "mounts": [],
+   "ok": true
+  }
+ }
+}

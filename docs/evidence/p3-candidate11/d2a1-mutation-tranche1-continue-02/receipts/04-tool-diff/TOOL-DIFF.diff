@@ -1,0 +1,2554 @@
+--- RESUME-01/tools/authenticate.py
++++ CONTINUE-02/tools/authenticate.py
+@@ -4,6 +4,13 @@
+ mission's paths (the previous mission's preserved worktrees present, this mission's absent before creation), and
+ section [7] authenticates the complete previous evidence packet, the facts of the Architect's C22 ruling, and the
+ carried-forward receipt copies. Sections [1]-[5] are unchanged.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (sections 3, 14 and 19): section [6] states this mission's
++paths (the RESUME-01 worktrees present and locked, among them the preserved C28 worktree; this mission's absent before
++creation) and both previous review refs; section [8] authenticates the complete RESUME-01 packet (commit, tree, parent,
++confinement, SHA256SUMS), every C14/C19/C21/C27 result and its sub-receipts, the C28 apply/build/restoration first
++lines (executor history, unchanged), the previous tool-repair, freeze, pre-execution-gate and final-gate receipts, and
++that this mission's original-tools/ are exactly RESUME-01's frozen tools. Section [7] is unchanged; the carried-forward
++set (common.CARRIED) is now only what this mission links or gates on.
+ 
+ Every identity is compared with the value the mission states, or with the value the frozen R2 catalog records; any
+ mismatch prints MISMATCH and the exit status is 1. Reads git objects, the remote's ref listing and the pinned baseline
+@@ -311,19 +318,26 @@
+     for ref in ("refs/heads/main", "refs/heads/rebuild/phase0-trust-boundary"):
+         print(f"    info      remote {ref}: {rm.get(ref)}")
+     chk(f"previous review ref {K.PREV_REF}", rm.get(K.PREV_REF), K.PREV)
++    chk(f"previous review ref {K.RESUME_REF}", rm.get(K.RESUME_REF), K.RESUME)
+     for p in [K.HEALTHY_WT, K.control_wt("C22"), K.PREV_DEV_WT]:
+         locked = gtext("-C", p, "rev-parse", "--git-path", "locked") if os.path.isdir(p) else None
+         reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
+         chk(f"previous mission's preserved worktree present, locked with its reason: {p}",
+             reason is not None and reason.startswith(K.PREV_MISSION + " "), True)
+     chk(f"previous mission's evidence worktree present: {K.PREV_EVIDENCE_WT}", os.path.isdir(K.PREV_EVIDENCE_WT), True)
+-    if os.path.isdir(K.DEV_WT):  # created by this mission's development verifier controls, after auth-dev1
+-        locked = gtext("-C", K.DEV_WT, "rev-parse", "--git-path", "locked")
++    locked = gtext("-C", K.DEV_WT, "rev-parse", "--git-path", "locked") if os.path.isdir(K.DEV_WT) else None
++    reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
++    chk(f"RESUME-01's development worktree present, locked with its development role: {K.DEV_WT}",
++        reason, f"{K.RESUME_MISSION} development verifier controls (synthetic patch and target sentinels only; never "
++                f"used for a control): mission-owned; preserve until Architect review")
++    for c in ["C14", "C19", "C21", "C27", "C28"]:
++        p = K.control_wt(c)
++        locked = gtext("-C", p, "rev-parse", "--git-path", "locked") if os.path.isdir(p) else None
+         reason = open(locked).read().strip() if locked and os.path.exists(locked) else None
+-        chk(f"this mission's development worktree, if present, is locked with its development role: {K.DEV_WT}",
+-            reason, f"{K.MISSION} development verifier controls (synthetic patch and target sentinels only; never used "
+-                    f"for a control): mission-owned; preserve until Architect review")
+-    paths = [K.EVIDENCE_WT] + [K.control_wt(c) for c in K.RESUME_ORDER]
++        chk(f"RESUME-01's preserved {c} worktree present, locked with its reason: {p}", reason,
++            f"{K.RESUME_MISSION} control {c} disposable mutant worktree: mission-owned; preserve until Architect review")
++    chk(f"RESUME-01's evidence worktree present: {K.RESUME_EVIDENCE_WT}", os.path.isdir(K.RESUME_EVIDENCE_WT), True)
++    paths = [K.EVIDENCE_WT] + [K.control_wt(c) for c in K.CONTINUE_ORDER[1:]]
+     for p in paths:
+         if GATE:
+             print(f"    info      mission-owned path {p}: present {os.path.lexists(p)}")
+@@ -331,6 +345,8 @@
+             chk(f"mission-owned path absent before creation: {p}", os.path.lexists(p), False)
+     print()
+     previous()
++    print()
++    resume()
+     print()
+     print("RESULT: " + ("ALL CHECKS HOLD" if not fail else "MISMATCH — STOP"))
+     return fail
+@@ -452,5 +468,102 @@
+             chk(f"carried-forward {c}: no file that is not the previous packet's", extra, [])
+ 
+ 
++CANDIDATE_RESULT = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
++CANDIDATE_CLS = "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
++RESUME_ACCEPTED = {"C14": "32-C14", "C19": "33-C19", "C21": "34-C21", "C27": "35-C27"}
++# RESUME-01's receipts as recorded: executor history, unchanged (continue mission sections 1-3).
++RESUME_HISTORY = {"receipts/36-C28/RESULT.txt": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
++                  "receipts/36-C28/00-GATE.txt": "GATE: OPEN",
++                  "receipts/36-C28/02-apply/APPLY.txt": "APPLY: EXACTLY_C_PLUS_PATCH",
++                  "receipts/36-C28/03-build/CLASSIFICATION.txt": "BUILD: NOT OK",
++                  "receipts/36-C28/05-restore/RESTORE.txt": "RESTORE: EXACTLY_C",
++                  "receipts/05-FREEZE-RECORD.txt": "FREEZE: RECORDED",
++                  "receipts/06-PRE-EXECUTION-GATE.txt": "PRE-EXECUTION GATE: ALL CHECKS HOLD",
++                  "ARCHITECT-RULING-C22-ACCEPTANCE.md": "C22 — MUTATION CONTROL KILL ACCEPTED"}
++RESUME_LAST = {"receipts/04-tool-repair/TOOL-DIFF-CHECK.txt": "TOOL DIFF: ALL CHECKS HOLD",
++               "receipts/90-final-gate.txt": "FINAL GATE: ALL CHECKS HOLD",
++               "receipts/00-authentication.txt": "RESULT: ALL CHECKS HOLD",
++               "receipts/01-supervision-selftest/SELFTEST.txt": "SELF-TEST RESULT: ALL OK",
++               "receipts/03-verifier-controls/SUMMARY.txt": "VERIFIER CONTROLS: ALL AS EXPECTED",
++               "receipts/04b-render-rehearsal/SUMMARY.txt": "RENDER REHEARSAL: ALL AS EXPECTED"}
++
++
++def resume():
++    print("[8] the RESUME-01 evidence: commit, packet, every C14/C19/C21/C27 result, C28 history, tool repair and freeze "
++          "(continue 3)")
++    chk("RESUME-01 evidence commit type", gtext("cat-file", "-t", K.RESUME), "commit")
++    chk("RESUME-01 evidence commit tree", gtext("rev-parse", K.RESUME + "^{tree}"), K.RESUME_TREE)
++    chk("RESUME-01 evidence commit single parent (the EXEC-01 evidence commit)",
++        gtext("log", "-1", "--format=%P", K.RESUME), K.RESUME_PARENT)
++    ns = gtext("diff", "--name-status", "--no-renames", K.RESUME_PARENT, K.RESUME).splitlines()
++    chk("every path the RESUME-01 evidence commit changes is added under its packet",
++        bool(ns) and all(l.startswith("A\t" + K.RESUME_PACKET + "/") for l in ns), True)
++    sums = packet_sums(K.RESUME, K.RESUME_PACKET)
++    files = sorted(f[len(K.RESUME_PACKET) + 1:] for f in
++                   gtext("ls-tree", "-r", "--name-only", K.RESUME, K.RESUME_PACKET + "/").splitlines())
++    chk("RESUME-01 SHA256SUMS lists every packet file but itself",
++        sorted(sums) == [f for f in files if f != "SHA256SUMS"], True)
++    data = {}
++    proc = subprocess.Popen(["git", "-C", K.REPO, "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
++    for rel in files:
++        proc.stdin.write(f"{K.RESUME}:{K.RESUME_PACKET}/{rel}\n".encode())
++        proc.stdin.flush()
++        size = int(proc.stdout.readline().split()[2])
++        data[rel] = proc.stdout.read(size)
++        proc.stdout.read(1)
++    proc.stdin.close()
++    proc.wait()
++    bad = [p for p, d in sums.items() if K.sha256_bytes(data[p]) != d]
++    chk(f"RESUME-01 packet SHA256SUMS: all {len(sums)} listed files verify at {K.RESUME[:8]}", bad, [])
++    print(f"    info      RESUME-01 packet: {len(files)} files, {sum(len(v) for v in data.values())} bytes; SHA256SUMS "
++          f"sha256 {K.sha256_bytes(data['SHA256SUMS'])}")
++    first = lambda rel: data[rel].decode().splitlines()[0] if rel in data else None
++    last = lambda rel: data[rel].decode().rstrip().splitlines()[-1] if rel in data else None
++    for rel, want in RESUME_HISTORY.items():
++        chk(f"RESUME-01 {rel} first line (executor history, unchanged)", first(rel), want)
++    for rel, want in RESUME_LAST.items():
++        chk(f"RESUME-01 {rel} last line", last(rel), want)
++    cat = json.loads(git("show", f"{K.R2}:{K.CATALOG_PATH}"))
++    by = {e["id"]: e for e in cat["controls"]}
++    for cid, d in RESUME_ACCEPTED.items():
++        e = by[cid]
++        r = f"receipts/{d}/"
++        chk(f"{cid} RESULT (executor candidate; Architect-accepted by the ruling of this mission)", first(r + "RESULT.txt"),
++            CANDIDATE_RESULT)
++        chk(f"{cid} sub-receipts: apply, build, run, restore, link first lines",
++            [first(r + x) for x in ("02-apply/APPLY.txt", "03-build/CLASSIFICATION.txt", "04-run/CLASSIFICATION.txt",
++                                    "05-restore/RESTORE.txt", "06-link/LINK.txt")],
++            ["APPLY: EXACTLY_C_PLUS_PATCH", "BUILD: PINNED", CANDIDATE_CLS, "RESTORE: EXACTLY_C", "LINK: VERIFIED"])
++        ap = json.loads(data[r + "02-apply/APPLY.json"])
++        pin = json.loads(data[r + "03-build/PIN.json"])
++        rd = json.loads(data[r + "04-run/descriptor.json"])
++        chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (apply, pin)",
++            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
++             ap["verify_mutant"]["mutant_file"]["sha256"], pin["mutant_blob"]),
++            (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"], e["mutant_blob"]))
++        chk(f"{cid} run: the catalog's test on the pinned executable (sha256 before and after equal the pin)",
++            (rd["test"], rd["executable"]["before"]["sha256"], rd["executable"]["after"]["sha256"]),
++            (e["test"], pin["sha256"], pin["sha256"]))
++        print(f"    info      {cid}: pinned {pin['path']} sha256 {pin['sha256']} size {pin['size']}")
++    ap = json.loads(data["receipts/36-C28/02-apply/APPLY.json"])
++    chk("C28 frozen patch, mutant blob and sha256 are the catalog's (apply)",
++        (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"], ap["verify_mutant"]["mutant_file"]["sha256"]),
++        (by["C28"]["patch_sha256"], by["C28"]["mutant_blob"], by["C28"]["mutant_sha256"]))
++    chk("C28 has no PIN.json and no run (executor history: the build was never pinned or run)",
++        [f for f in files if f.startswith("receipts/36-C28/") and ("PIN.json" in f or "/04-run/" in f)], [])
++    fr = json.loads(data["receipts/05-FREEZE.json"])
++    rec = data["receipts/05-FREEZE-RECORD.txt"].decode().splitlines()
++    chk("RESUME-01 freeze record names its 05-FREEZE.json sha256", rec[3],
++        f"05-FREEZE.json sha256 {K.sha256_bytes(data['receipts/05-FREEZE.json'])}")
++    tools = {f[len("tools/"):]: K.sha256_bytes(v) for f, v in data.items() if f.startswith("tools/")}
++    chk(f"RESUME-01 packet tools/ ({len(tools)}) are exactly its frozen tools (05-FREEZE.json)", tools,
++        {f[len("tools/"):]: h for f, h in fr["files"].items() if f.startswith("tools/")})
++    orig = {f: K.sha256_file(os.path.join(K.EV, "original-tools", f)) for f in
++            sorted(os.listdir(os.path.join(K.EV, "original-tools")))}
++    chk("this mission's original-tools/ are exactly RESUME-01's frozen tools (names and sha256)", orig, tools)
++    chk("RESUME-01 freeze policy: control order and Architect-accepted C22",
++        (fr["policy"]["control_order"], fr["policy"]["architect_accepted_not_executed"]), (K.RESUME_ORDER, ["C22"]))
++
++
+ if __name__ == "__main__":
+     sys.exit(main())
+--- RESUME-01/tools/build_packet.py
++++ CONTINUE-02/tools/build_packet.py
+@@ -15,6 +15,10 @@
+ path and no file (of 1 KiB or more) of the previous packet's carried-forward set republished; every staged file
+ byte-equal to its source;
+ SHA256SUMS lists every file but itself and verifies. Nothing is committed here.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 18): both Architect ruling records are staged; only
++the tools this mission changed or added are staged (the unchanged RESUME-01 tools are referenced in CARRIED-FORWARD.md,
++not republished); and no staged file of 1 KiB or more may equal ANY file of either previous packet (EXEC-01 or
++RESUME-01), so nothing is duplicated.
+ """
+ import os
+ import shutil
+@@ -25,8 +29,17 @@
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ import common as K  # noqa: E402
+ 
+-SOURCES = [(K.C22_RULING, "ARCHITECT-RULING-C22-ACCEPTANCE.md"),
++SOURCES = [(K.RULING, "ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md"),
++           (K.C28_RULING, "ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md"),
+            ("receipts", "receipts"), ("tools", "tools"), ("development", "development")]
++
++
++def unchanged_tool(rel):
++    """Is EV-relative path rel a tool this mission runs byte-identical to RESUME-01's (referenced, not republished)?"""
++    if not rel.startswith("tools/") or rel.count("/") != 1:
++        return False
++    o = os.path.join(K.EV, "original-tools", rel[6:])
++    return os.path.exists(o) and K.sha256_file(o) == K.sha256_file(os.path.join(K.EV, rel))
+ 
+ 
+ def carried(rel):
+@@ -46,7 +59,7 @@
+     if os.path.exists(dest):
+         raise SystemExit("REFUSED: destination exists")
+     os.makedirs(dest)
+-    rendered = tempfile.mkdtemp(prefix="mt1r-render-")
++    rendered = tempfile.mkdtemp(prefix="mt1c-render-")
+     r = subprocess.run([sys.executable, os.path.join(K.EV, "tools/render.py"), rendered], capture_output=True, text=True)
+     print(r.stdout.strip(), r.stderr.strip())
+     pairs = [(os.path.join(rendered, "INDEX.md"), "INDEX.md"),
+@@ -57,13 +70,14 @@
+         p = os.path.join(K.EV, src)
+         if os.path.isdir(p):
+             for f in files_under(p):
+-                if carried(os.path.relpath(f, K.EV)):
++                if carried(os.path.relpath(f, K.EV)) or unchanged_tool(os.path.relpath(f, K.EV)):
+                     skipped.append(os.path.relpath(f, K.EV))
+                 else:
+                     pairs.append((f, os.path.join(rel, os.path.relpath(f, p))))
+         else:
+             pairs.append((p, rel))
+-    print(f"carried-forward copies not staged (referenced in CARRIED-FORWARD.md): {len(skipped)}")
++    print(f"carried-forward copies and unchanged RESUME-01 tools not staged (referenced in CARRIED-FORWARD.md): "
++          f"{len(skipped)}")
+     for src, rel in pairs:
+         os.makedirs(os.path.dirname(os.path.join(dest, rel)), exist_ok=True)
+         shutil.copyfile(src, os.path.join(dest, rel))
+@@ -93,6 +107,13 @@
+     check("no Rust source file", not [f for f in allf if f.endswith(".rs")])
+     exp = __import__("json").load(open(os.path.join(K.EV, "receipts/02-EXPECTATIONS.json")))
+     mutants = {c["mutant_blob"] for c in exp["controls"].values()}
++    pinned = {K.EXE_SHA256}
++    for d, _, fs in os.walk(os.path.join(K.EV, "receipts")):
++        for n in fs:
++            if n == "PIN.json":
++                pinned.add(__import__("json").load(open(os.path.join(d, n)))["sha256"])
++    check("no file equal to the pinned baseline executable or any pinned mutant executable",
++          not [f for f in allf if K.sha256_file(os.path.join(dest, f)) in pinned], len(pinned))
+     crate = set()
+     for e in K.git("ls-tree", "-r", "-z", K.C, "crates/").split(b"\0"):
+         if e:
+@@ -104,15 +125,20 @@
+           "not counted)", not [f for f, b in blobs.items() if b in crate and b != empty],
+           f"{sum(b == empty for b in blobs.values())} empty file(s)")
+     prev = {}
+-    for line in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines():
+-        h, rel = line.split("  ", 1)
+-        if carried(rel) or rel in K.CARRIED_DOCS.values():
+-            prev[h] = rel
++    for commit, packet in ((K.PREV, K.PREV_PACKET), (K.RESUME, K.RESUME_PACKET)):
++        for line in K.git("show", f"{commit}:{packet}/SHA256SUMS").decode().splitlines():
++            h, rel = line.split("  ", 1)
++            prev[h] = f"{packet}/{rel}"
+     check("no carried-forward path staged", not [f for f in allf if carried(f)], [f for f in allf if carried(f)][:3])
++    staged_tools = sorted(f[6:] for f in allf if f.startswith("tools/"))
++    check("only changed or added tools staged (every unchanged RESUME-01 tool referenced, not republished)",
++          staged_tools and not [t for t in staged_tools if os.path.exists(os.path.join(K.EV, "original-tools", t))
++                                and K.sha256_file(os.path.join(K.EV, "original-tools", t)) ==
++                                K.sha256_file(os.path.join(dest, "tools", t))], staged_tools)
+     same = [f for f in allf if K.sha256_file(os.path.join(dest, f)) in prev and os.path.getsize(os.path.join(dest, f)) > 0]
+     dup = [f for f in same if os.path.getsize(os.path.join(dest, f)) >= 1024]
+-    check("no staged file of 1 KiB or more byte-equal to a carried-forward file of the previous packet (nothing "
+-          "duplicated)", not dup, dup[:3])
++    check("no staged file of 1 KiB or more byte-equal to any file of either previous packet (EXEC-01, RESUME-01; "
++          "nothing duplicated)", not dup, [(f, prev[K.sha256_file(os.path.join(dest, f))]) for f in dup][:3])
+     print(f"     info: {len(same) - len(dup)} small staged file(s) coincide with a carried-forward file's bytes (an "
+           f"independently produced constant record, e.g. the sampler's one-line note): "
+           f"{[(f, os.path.getsize(os.path.join(dest, f)), prev[K.sha256_file(os.path.join(dest, f))]) for f in same if f not in dup][:6]}")
+--- /dev/null
++++ CONTINUE-02/tools/c28_admit.py
+@@ -0,0 +1,459 @@
++#!/usr/bin/env python3
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02, sections 2, 8 and 14: the dedicated, read-only C28 existing-build
++admission checker and the dedicated C28 pin step.
++
++Nothing here runs Cargo or rustc, builds, rebuilds, writes to a worktree or a target directory, or classifies any
++control other than C28. The general build classifier (classify.classify_build_success) is not used, not changed and
++not bypassed for any other control: it classified the C28 build `BUILD: NOT OK` (RESUME-01 executor history, unchanged)
++and still would. This tool applies only the Sole Architect's narrow C28 ruling (documents/ARCHITECT-RULING-C28-BUILD-
++ADMISSIBILITY.md): exit 0; no signal, timeout or OOM; no error diagnostic; exactly one warning, of class
++unreachable_patterns, at protocol.rs:1834:17, explaining that the earlier `Read::Got(_)` matches all relevant values;
++no other warning or diagnostic; source exactly C plus the frozen C28 patch before and after the build; and the
++expected executable present and byte-identical to the recorded artifact.
++
++    (library) evidence()                   the RESUME-01 C28 receipts, read from git objects at 3695a817, each checked
++                                           against that packet's SHA256SUMS (the previous packet is the authority; no
++                                           local copy is trusted)
++    (library) admit(ev, cid, ...)          the ruling's conditions as named checks; any cid but C28 is refused
++    (library) exe_facts(path, wt, bound)   read-only filesystem facts of an executable beneath a worktree's target
++    (library) pin_checks(facts, ...)       the pin's conditions on those facts
++    c28_admit.py admit OUTDIR              writes OUTDIR/ADMISSION.txt and ADMISSION.json; first line
++                                           `C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING` or
++                                           `C28 BUILD: NOT ADMISSIBLE`
++    c28_admit.py pin OUTDIR                writes OUTDIR/PIN.txt and PIN.json; first line
++                                           `PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)` or
++                                           `PIN: C28_PRESERVED_ARTIFACT_BLOCKED`
++Both refuse an existing OUTDIR; neither retries anything.
++"""
++import datetime
++import json
++import os
++import re
++import stat
++import subprocess
++import sys
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import common as K  # noqa: E402
++import verify_mutant  # noqa: E402
++
++ADMITTED = "C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING"
++NOT_ADMITTED = "C28 BUILD: NOT ADMISSIBLE"
++PINNED = "PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)"
++PIN_BLOCKED = "PIN: C28_PRESERVED_ARTIFACT_BLOCKED"
++BUILD_DIR = "receipts/36-C28"
++WT = K.control_wt("C28")
++# The ruling's identities, as the mission states them (section 8).
++RULING = {"control": "C28", "worktree": WT,
++          "executable": WT + "/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
++          "exe_sha256": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36", "exe_size": 8983776,
++          "mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
++          "mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
++          "patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
++          "stderr_sha256": "3e8336d9b25baf56610aad813202e9a3bea60b268de8e0a489b69d6b2caf7436",
++          "warning_message": "unreachable pattern", "lint": "unreachable_patterns",
++          "location": (K.PROTOCOL, 1834, 17), "earlier_line": 1826,
++          "lock_reason": f"{K.RESUME_MISSION} control C28 disposable mutant worktree: mission-owned; preserve until "
++                         f"Architect review"}
++FILES = ["00-GATE.txt", "02-apply/APPLY.json", "02-apply/APPLY.txt", "03-build/descriptor.json",
++         "03-build/build.stderr", "03-build/build.stdout", "03-build/PARSED-RECEIPT.json", "03-build/CLASSIFICATION.txt",
++         "03-build/CHECKS.txt", "03-build/RECEIPT.txt", "03-build/scope-record.txt", "03-build/time-v.txt",
++         "05-restore/RESTORE.json", "05-restore/RESTORE.txt", "RESULT.txt"]
++PROFILE = ["opt-level=3", "lto=thin", "codegen-units=16", "strip=symbols"]
++SUMMARY = re.compile(r"^warning: `([^`]+)` \(([^)]+)\) generated (\d+) warnings?(?: \(.*\))?$")
++DIAG = re.compile(r"^(error|warning)(?:\[([A-Za-z0-9_]+)\])?(?::|\b)")
++
++
++class Checks:
++    def __init__(self):
++        self.items = []
++
++    def __call__(self, label, ok, detail=""):
++        self.items.append((label, bool(ok), str(detail)))
++        return bool(ok)
++
++    def ok(self):
++        return bool(self.items) and all(o for _, o, _ in self.items)
++
++    def failed(self):
++        return [l for l, o, _ in self.items if not o]
++
++
++def git(*args):
++    return subprocess.run(["git", "-C", K.REPO, *args], capture_output=True, check=True).stdout
++
++
++def evidence():
++    """The C28 receipts of the RESUME-01 packet, from git objects, each verified against that packet's SHA256SUMS."""
++    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0]
++            for l in git("show", f"{K.RESUME}:{K.RESUME_PACKET}/SHA256SUMS").decode().splitlines() if l}
++    raw, auth = {}, []
++    for f in FILES:
++        rel = f"{BUILD_DIR}/{f}"
++        b = git("rev-parse", f"{K.RESUME}:{K.RESUME_PACKET}/{rel}").decode().strip()
++        data = git("cat-file", "blob", b)
++        raw[f] = data
++        auth.append({"path": f"{K.RESUME_PACKET}/{rel}", "blob": b, "sha256": K.sha256_bytes(data),
++                     "listed_sha256": sums.get(rel), "ok": sums.get(rel) == K.sha256_bytes(data)})
++    j = lambda f: json.loads(raw[f])
++    t = lambda f: raw[f].decode("utf-8")
++    return {"commit": K.RESUME, "auth": auth, "apply": j("02-apply/APPLY.json"), "apply_txt": t("02-apply/APPLY.txt"),
++            "desc": j("03-build/descriptor.json"), "stderr": t("03-build/build.stderr"),
++            "stderr_bytes": raw["03-build/build.stderr"], "stdout_bytes": raw["03-build/build.stdout"],
++            "parsed": j("03-build/PARSED-RECEIPT.json"), "cls": t("03-build/CLASSIFICATION.txt"),
++            "checks": t("03-build/CHECKS.txt"), "receipt": t("03-build/RECEIPT.txt"),
++            "scope_record": t("03-build/scope-record.txt"), "time_v": t("03-build/time-v.txt"),
++            "restore": j("05-restore/RESTORE.json"), "restore_txt": t("05-restore/RESTORE.txt"),
++            "result": t("RESULT.txt"), "gate": t("00-GATE.txt")}
++
++
++def reference_toolchains():
++    """The toolchain and build inputs of RESUME-01's C27 build (the control built just before C28, same mission) and of
++    EXEC-01's healthy (e4) build: the exact toolchain the C28 build must share."""
++    out = {}
++    for name, commit, path in (("RESUME-01 C27 build", K.RESUME, f"{K.RESUME_PACKET}/receipts/35-C27/03-build/descriptor.json"),
++                               ("EXEC-01 healthy build", K.PREV, f"{K.PREV_PACKET}/receipts/20-healthy-build/descriptor.json")):
++        out[name] = json.loads(git("show", f"{commit}:{path}"))["toolchain"]
++    return out
++
++
++def catalog_entry(cid):
++    cat = json.loads(git("show", f"{K.R2}:{K.CATALOG_PATH}"))
++    return next((e for e in cat["controls"] if e["id"] == cid), None)
++
++
++def mutant_bytes(entry):
++    """The catalog's mutant of C's protocol.rs, computed in-process from the catalog edits (never written anywhere)."""
++    text = git("cat-file", "blob", K.BLOBS[K.PROTOCOL]).decode()
++    for ed in entry["edits"]:
++        text = text.replace(ed["anchor"], ed["replacement"], 1)
++    return text.encode()
++
++
++def warning_blocks(lines):
++    """Each diagnostic header line (column 0, `error`/`warning`) with the block that follows it up to a blank line."""
++    out = []
++    for i, l in enumerate(lines):
++        if DIAG.match(l):
++            j = i + 1
++            while j < len(lines) and lines[j] != "":
++                j += 1
++            out.append((i, j))
++    return out
++
++
++def admit(ev, cid, entry=None, toolchains=None, c_protocol=None, mutant=None, ruling=RULING):
++    """The narrow C28 ruling's conditions over the evidence ev (a dict as evidence() returns). Returns Checks."""
++    ck = Checks()
++    if not ck("the control is C28 (the ruling is C28-specific; it transfers to no other control)",
++              cid == ruling["control"], cid):
++        return ck
++    entry = entry or catalog_entry(cid)
++    toolchains = toolchains if toolchains is not None else reference_toolchains()
++    c_protocol = c_protocol if c_protocol is not None else git("cat-file", "blob", K.BLOBS[K.PROTOCOL])
++    mutant = mutant if mutant is not None else mutant_bytes(entry)
++    desc, ap, stderr = ev["desc"], ev["apply"], ev["stderr"]
++    ck("A1 every C28 evidence file is the RESUME-01 packet's (sha256 listed in its SHA256SUMS at 3695a817)",
++       ev["auth"] and all(a["ok"] for a in ev["auth"]), [a["path"] for a in ev["auth"] if not a["ok"]])
++    ck("A2 the frozen C28 patch: catalog patch sha256 = applied patch sha256 = the ruling's",
++       entry["patch_sha256"] == ap["patch_sha256"] == ap["catalog_patch_sha256"] == ruling["patch_sha256"],
++       ap["patch_sha256"])
++    ck("A2 git apply --check and git apply rc 0; the only changed file is protocol.rs",
++       ap["check"]["rc"] == 0 and ap["apply"]["rc"] == 0 and ap["changed_files"] == [K.PROTOCOL]
++       and ev["apply_txt"].splitlines()[0] == "APPLY: EXACTLY_C_PLUS_PATCH", ap["changed_files"])
++    ck("A2 the catalog's mutant: blob and sha256 equal the ruling's; the in-process mutant (catalog edits on C's "
++       "protocol.rs) has that blob", entry["mutant_blob"] == ruling["mutant_blob"] == K.git_blob_id(mutant)
++       and entry["mutant_sha256"] == ruling["mutant_sha256"] == K.sha256_bytes(mutant), K.git_blob_id(mutant))
++    for when in ("source_before", "source_after"):
++        s = desc[when]
++        m = s.get("mutant_file") or {}
++        pol = s.get("status_policy") or {}
++        ck(f"A3 {when} the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other "
++           "tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)",
++           s["verdict"] == "EXACTLY_C_PLUS_PATCH" and s["head"] == K.C and s["tree"] == K.C_TREE and s["detached"]
++           and s["index_differs_from_head"] == [] and s["other_content_mismatches"] == [] and s["missing"] == []
++           and s["mode_mismatches"] == [] and m.get("path") == K.PROTOCOL and m.get("git_blob") == ruling["mutant_blob"]
++           and m.get("sha256") == ruling["mutant_sha256"] and pol.get("ok") is True
++           and pol.get("modified_seen") == [K.PROTOCOL] and pol.get("rejected") == [],
++           f"{s['verdict']}; {m.get('git_blob')}; status {s.get('status_entries')}")
++    ck("A4 the exact build command, in the C28 worktree", desc["argv"] == K.BUILD_ARGV and desc["cwd"] ==
++       desc["worktree"] == ruling["worktree"], " ".join(desc["argv"]))
++    ck("A5 the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<C28 worktree>/target, CARGO_TERM_VERBOSE, "
++       "CARGO_NET_OFFLINE=true; nothing else (no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, feature or cfg variable)",
++       desc["env"] == dict(K.build_env(ruling["worktree"] + "/target"))
++       and desc["target"] == ruling["worktree"] + "/target", desc["env"])
++    tc = desc["toolchain"]
++    ck("A6 the exact toolchain: rustc -vV, cargo -vV and the active toolchain equal RESUME-01's C27 build's and "
++       "EXEC-01's healthy build's", toolchains and all(all(tc[k] == r[k] for k in ("rustc_vV", "cargo_vV",
++                                                                                    "active_toolchain"))
++                                                       for r in toolchains.values()), tc["rustc"])
++    inputs_c = {f: git("rev-parse", f"{K.C}:{f}").decode().strip() for f in tc["build_inputs"]}
++    ck("A6 the exact build inputs: rust-toolchain.toml, Cargo.lock, .cargo/config.toml, Cargo.toml and the crate "
++       "manifest have Candidate C's blobs, equal to the reference builds'",
++       sorted(tc["build_inputs"]) == sorted(["rust-toolchain.toml", "Cargo.lock", ".cargo/config.toml", "Cargo.toml",
++                                             K.CRATE + "/Cargo.toml"])
++       and all(v["git_blob"] == inputs_c[f] for f, v in tc["build_inputs"].items())
++       and all(r["build_inputs"] == tc["build_inputs"] for r in toolchains.values()), "")
++    ck("A6 no other Cargo configuration file in effect", tc["other_cargo_configs"] == [], tc["other_cargo_configs"])
++    proc, sup = desc["process"], desc["supervisor"]
++    ck("A7 process exit 0 by a normal exit; no signal; supervisor and wrapper record exit 0",
++       proc["exit_status"] == 0 and proc["signal"] is None and proc["supervisor_rc"] == 0
++       and proc["wrapper_recorded_status"] == "0", proc)
++    ck("A8 resources: 16 GiB, zero swap, enforced and complete; no OOM, no OOM kill, no swap; no timeout; within 900 s",
++       sup["memory_max"] == K.MEMORY_MAX and sup["swap_max"] == "0" and sup["oom"] == 0 and sup["oom_kill"] == 0
++       and sup["swap_peak_bytes"] == "0" and sup["completed"] is True and sup["timed_out"] is False
++       and sup["time_limit_seconds"] == K.BUILD_LIMIT and sup["wall_seconds"] is not None
++       and sup["wall_seconds"] < K.BUILD_LIMIT and sup["scope_result"] in ("gone", "success"),
++       f"wall {sup['wall_seconds']} s; peak {sup['memory_peak_bytes']} B; swap {sup['swap_peak_bytes']}; oom_kill "
++       f"{sup['oom_kill']}; timed out {sup['timed_out']}")
++    sr = dict(l.split(": ", 1) for l in ev["scope_record"].splitlines() if ": " in l)
++    ck("A8 the resource receipt (scope-record.txt, time-v.txt) agrees: memory.max, swap.max, peak, swap peak, exit 0",
++       sr.get("memory.max") == sup["memory_max"] and sr.get("memory.swap.max") == "0"
++       and sr.get("memory.peak") == sup["memory_peak_bytes"] and sr.get("memory.swap.peak") == "0"
++       and sr.get("command exit status") == "0" and "Exit status: 0" in ev["time_v"]
++       and "Command terminated by signal" not in ev["time_v"], {k: sr.get(k) for k in ("memory.peak", "command exit status")})
++    ck("A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
++       K.sha256_bytes(ev["stderr_bytes"]) == desc["stderr_sha256"] == ruling["stderr_sha256"]
++       and K.sha256_bytes(ev["stdout_bytes"]) == desc["stdout_sha256"], K.sha256_bytes(ev["stderr_bytes"]))
++    lines = stderr.splitlines()
++    heads = [(i, l) for i, l in enumerate(lines) if DIAG.match(l)]
++    errors = [l for _, l in heads if l.startswith("error")]
++    summaries = [(i, SUMMARY.match(l)) for i, l in heads if SUMMARY.match(l)]
++    warns = [(i, l) for i, l in heads if l.startswith("warning") and not SUMMARY.match(l)]
++    ck("A10 no error diagnostic (no stderr line begins `error`)", not errors, errors[:3])
++    ck("A11 exactly one warning diagnostic", len(warns) == 1, [l for _, l in warns][:4])
++    ck("A11 exactly one cargo summary, for nexus-governed-control (lib test), counting exactly 1 warning",
++       len(summaries) == 1 and summaries[0][1].groups() == ("nexus-governed-control", "lib test", "1"),
++       [lines[i] for i, _ in summaries])
++    block, loc, note = [], None, None
++    if len(warns) == 1:
++        i0 = warns[0][0]
++        j = i0 + 1
++        while j < len(lines) and lines[j] != "":
++            j += 1
++        block = lines[i0:j]
++        arrow = [re.match(r"^\s*--> (\S+):(\d+):(\d+)$", l) for l in block[1:2]]
++        loc = (arrow[0].group(1), int(arrow[0].group(2)), int(arrow[0].group(3))) if arrow and arrow[0] else None
++        notes = [re.match(r"^\s*= note: `#\[warn\(([a-z_]+)\)\]`", l) for l in block]
++        notes = [n.group(1) for n in notes if n]
++        note = notes[0] if len(notes) == 1 else notes
++    ck("A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names "
++       "`#[warn(unreachable_patterns)]`; no code, no other lint)",
++       len(warns) == 1 and warns[0][1] == f"warning: {ruling['warning_message']}" and note == ruling["lint"],
++       f"{warns[0][1] if warns else None}; lint {note}")
++    ck(f"A13 the warning's location is {ruling['location'][0]}:{ruling['location'][1]}:{ruling['location'][2]}",
++       loc == tuple(ruling["location"]), loc)
++    src = lambda n: re.compile(rf"^{n} \|(.*)$")
++    earlier = [k for k, l in enumerate(block) if src(ruling["earlier_line"]).match(l)]
++    later = [k for k, l in enumerate(block) if src(ruling["location"][1]).match(l)]
++    ck(f"A14 the warning explains that the earlier `Read::Got(_)` (line {ruling['earlier_line']}) matches all the "
++       f"relevant values and that no value can reach line {ruling['location'][1]}",
++       len(earlier) == 1 and len(later) == 1 and earlier[0] < later[0]
++       and src(ruling["earlier_line"]).match(block[earlier[0]]).group(1).strip() == "Read::Got(_) => {"
++       and block[earlier[0] + 1].strip().endswith("matches all the relevant values")
++       and src(ruling["location"][1]).match(block[later[0]]).group(1).strip() == "Read::Got(_) => {"
++       and block[later[0] + 1].strip().endswith("no value can reach this"), block[:9])
++    mlines, clines = mutant.decode().splitlines(), c_protocol.decode().splitlines()
++    e_n, w_n, col = ruling["earlier_line"], ruling["location"][1], ruling["location"][2]
++    ck("A15 the warning is the frozen mutation's direct consequence: at C, line "
++       f"{e_n} reads `Read::Got(durable) if durable >= set.top => {{`; in the catalog mutant lines {e_n} and {w_n} both "
++       f"read `Read::Got(_) => {{` from column {col}, and the warning renders exactly those mutant lines",
++       len(mlines) == len(clines) and clines[e_n - 1][col - 1:] == "Read::Got(durable) if durable >= set.top => {"
++       and mlines[e_n - 1][col - 1:] == "Read::Got(_) => {" == mlines[w_n - 1][col - 1:]
++       and clines[w_n - 1] == mlines[w_n - 1]
++       and [i for i, (a, b) in enumerate(zip(clines, mlines)) if a != b] == [e_n - 1]
++       and len(earlier) == 1 and len(later) == 1
++       and src(e_n).match(block[earlier[0]]).group(1)[1:] == mlines[e_n - 1]
++       and src(w_n).match(block[later[0]]).group(1)[1:] == mlines[w_n - 1], "")
++    known = set(range(*([warns[0][0], warns[0][0] + len(block) + 1] if block else [0, 0])))
++    known |= {i for i, _ in summaries}
++    residual = [l for i, l in enumerate(lines) if i not in known and not l.startswith("     Running `")
++                and not re.match(r"^   Compiling \S+ v\S+( \(.*\))?$", l)
++                and not re.match(r"^    Finished `release` profile \[optimized\] target\(s\) in .+$", l)
++                and not re.match(r"^  Executable `[^`]+`$", l)]
++    ck("A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one "
++       "warning block, the one summary, `Finished` or the `Executable` line", not residual, residual[:4])
++    ck("A17 no compiler crash text (internal compiler error, panic, query stack, signal)",
++       not re.search(r"internal compiler error|panicked|query stack|SIGSEGV|signal: ", stderr), "")
++    fin = re.findall(r"^\s*Finished `(\w+)` profile \[([^\]]+)\] target\(s\) in (.+)$", stderr, re.M)
++    rustc = [l for l in lines if "--crate-name nexus_governed_control " in l and l.lstrip().startswith("Running `")]
++    flags = re.findall(r" -C (\S+)", rustc[0]) if len(rustc) == 1 else []
++    ck("A18 cargo's Finished line (release, optimized); one rustc invocation compiled nexus_governed_control as a "
++       "test; profile flags opt-level=3, lto=thin, codegen-units=16, strip=symbols; no --cfg",
++       len(fin) == 1 and fin[0][:2] == ("release", "optimized") and len(rustc) == 1 and " --test " in rustc[0]
++       and [f for f in flags if not f.startswith(("metadata=", "extra-filename="))] == PROFILE
++       and not re.findall(r" --cfg (\S+)", rustc[0]), f"{fin}; {flags}")
++    named = re.findall(r"^\s*Executable `([^`]+)`\s*$", stderr, re.M)
++    tests = [a for a in desc["deps_artifacts"] if a["test_executable_name"]]
++    others = [a for a in desc["deps_artifacts"] if not a["test_executable_name"]]
++    ck("A19 the produced-artifact record: cargo named exactly one library-test executable, the expected one; release/deps "
++       "held exactly that executable (sha256, size and executable bit as the ruling states) and its dep-info only",
++       named == [ruling["executable"]] and len(tests) == 1 and tests[0]["path"] == ruling["executable"]
++       and tests[0]["sha256"] == ruling["exe_sha256"] and tests[0]["size"] == ruling["exe_size"]
++       and tests[0]["executable_bit"] and len(others) == 1 and others[0]["path"] == ruling["executable"] + ".d",
++       [(os.path.basename(a["path"]), a["sha256"], a["size"]) for a in desc["deps_artifacts"]])
++    cls, chks = ev["cls"].splitlines(), ev["checks"].splitlines()
++    fails = [l for l in chks if l.startswith("FAIL")]
++    ck("A20 executor history, unchanged: the general classifier's C28 output is `BUILD: NOT OK` with 17 of 18 checks "
++       "holding; its only failed check is `no error or warning diagnostic`, naming exactly this warning and its summary",
++       cls[0] == "BUILD: NOT OK" and "checks: 17 of 18 hold" in cls and len(chks) == 18 and len(fails) == 1
++       and fails[0] == "FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: "
++                       "`nexus-governed-control` (lib test) generated 1 warning']", fails)
++    ck("A20 executor history, unchanged: RESULT `CONTROL RESULT: MUTATION_CONTROL_BLOCKED`; no PIN.json was written",
++       ev["result"].splitlines()[0] == "CONTROL RESULT: MUTATION_CONTROL_BLOCKED" and ev["parsed"]["executable"] is None,
++       ev["result"].splitlines()[0])
++    rs = ev["restore"]
++    ck("A21 the RESUME-01 restoration: git apply -R --check and git apply -R rc 0; protocol.rs from the mutant blob back to "
++       "C's blob and sha256; verify_tree.py EXACTLY_C; the path-aware restored policy held",
++       rs["applied_before_restoration"] is True and rs["check"]["rc"] == 0 and rs["reverse"]["rc"] == 0
++       and rs["before"]["git_blob"] == ruling["mutant_blob"] and rs["after"]["git_blob"] == K.BLOBS[K.PROTOCOL]
++       == entry["baseline_blob"] and rs["after"]["sha256"] == K.sha256_bytes(c_protocol)
++       and rs["verify_tree"]["verdict"] == "EXACTLY_C" and rs["status_policy"]["ok"] is True
++       and ev["restore_txt"].splitlines()[0] == "RESTORE: EXACTLY_C",
++       f"{rs['before']['git_blob']} -> {rs['after']['git_blob']}")
++    return ck
++
++
++def build_bound(ev):
++    """The end of the build's recorded run: the build receipt's `finished:` time (second resolution) plus one second."""
++    m = re.search(r"^finished: (\S+)$", ev["receipt"], re.M)
++    t = datetime.datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S%z").timestamp() if m else None
++    return (t + 1.0) if t is not None else None, (m.group(1) if m else None)
++
++
++def exe_facts(path, wt, bound, newer_limit=20):
++    """Read-only facts of an executable that must lie beneath wt's own real target directory."""
++    f = {"path": path, "worktree": wt, "path_is_normal_absolute": os.path.isabs(path) and os.path.normpath(path) == path,
++         "worktree_realpath": os.path.realpath(wt), "exists": os.path.lexists(path)}
++    tf = verify_mutant.target_facts(wt)
++    f["target"] = {k: v for k, v in tf.items() if k != "path"}
++    target = os.path.join(wt, "target")
++    f["beneath_target"] = path.startswith(target + "/")
++    if f["exists"]:
++        st = os.lstat(path)
++        f.update(is_regular=stat.S_ISREG(st.st_mode), is_symlink=stat.S_ISLNK(st.st_mode),
++                 realpath=os.path.realpath(path), size=st.st_size, executable_bit=bool(st.st_mode & 0o100),
++                 inode=st.st_ino, dev=st.st_dev, nlink=st.st_nlink, mtime_ns=st.st_mtime_ns, ctime_ns=st.st_ctime_ns,
++                 uid=st.st_uid)
++        f["sha256"] = K.sha256_file(path) if f["is_regular"] else None
++        f["realpath_beneath_target"] = f["realpath"].startswith(os.path.join(f["worktree_realpath"], "target") + "/")
++    newer, scanned = [], 0
++    if bound is not None and tf.get("exists") and tf.get("ok"):
++        for d, dirs, files in os.walk(target):
++            dirs.sort()
++            for n in sorted(dirs + files):
++                p = os.path.join(d, n)
++                st = os.lstat(p)
++                scanned += 1
++                if max(st.st_mtime, st.st_ctime) > bound and len(newer) < newer_limit:
++                    newer.append((os.path.relpath(p, target), st.st_mtime, st.st_ctime))
++        st = os.lstat(target)
++        if max(st.st_mtime, st.st_ctime) > bound:
++            newer.insert(0, (".", st.st_mtime, st.st_ctime))
++    f["target_entries_scanned"] = scanned
++    f["changed_after_bound"] = newer
++    f["bound"] = bound
++    return f
++
++
++def pin_checks(f, ruling=RULING, dep_info=None, worktree_entry=None):
++    """The pin's conditions on exe_facts(); dep_info: (path, sha256, size) recorded by the build; worktree_entry: the
++    `git worktree list --porcelain` block of the C28 worktree and its lock reason (None for synthetic controls)."""
++    ck = Checks()
++    ck("P1 the executable path is the ruling's (the one the build recorded)", f["path"] == ruling["executable"]
++       and f["worktree"] == ruling["worktree"] and f["path_is_normal_absolute"], f["path"])
++    ck("P2 it exists, as a regular file, not a symlink, with no symlinked path component",
++       f["exists"] and f.get("is_regular") and not f.get("is_symlink") and f.get("realpath") == f["path"],
++       {k: f.get(k) for k in ("exists", "is_regular", "is_symlink", "realpath")})
++    ck("P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, "
++       "the worktree's own entry) and the executable's realpath is beneath it",
++       f["worktree_realpath"] == f["worktree"] and f["target"].get("exists") and f["target"].get("ok")
++       and f["beneath_target"] and f.get("realpath_beneath_target"), f["target"])
++    ck("P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)",
++       f.get("sha256") == ruling["exe_sha256"] and f.get("size") == ruling["exe_size"],
++       f"{f.get('sha256')} {f.get('size')}")
++    ck("P5 the executable bit is set", f.get("executable_bit"), f.get("executable_bit"))
++    ck("P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime "
++       "are no later than the build's recorded end", f["bound"] is not None and f["exists"]
++       and max(f.get("mtime_ns", 0), f.get("ctime_ns", 0)) / 1e9 <= f["bound"] and not f["changed_after_bound"]
++       and f["target_entries_scanned"] > 0, f"{f['target_entries_scanned']} entries; later: {f['changed_after_bound'][:3]}")
++    if dep_info is not None:
++        p, sha, size = dep_info
++        ck("P7 the executable's dep-info file is unchanged since the build (sha256 and size as recorded)",
++           os.path.isfile(p) and not os.path.islink(p) and K.sha256_file(p) == sha and os.path.getsize(p) == size, p)
++    if worktree_entry is not None:
++        entry, reason = worktree_entry
++        ck("P8 the preserved C28 worktree: registered, HEAD C, detached, locked with RESUME-01's C28 reason",
++           entry is not None and f"HEAD {K.C}" in entry and "detached" in entry and reason == ruling["lock_reason"],
++           f"{entry}; {reason}")
++    return ck
++
++
++def write(outdir, name, first, ck, extra_lines, record):
++    os.makedirs(outdir)
++    lines = [first] + list(extra_lines) + [f"checks: {sum(o for _, o, _ in ck.items)} of {len(ck.items)} hold"]
++    lines += [f"{'OK  ' if o else 'FAIL'} {l}{(': ' + d) if d else ''}" for l, o, d in ck.items]
++    open(os.path.join(outdir, name + ".txt"), "w").write("\n".join(lines) + "\n")
++    json.dump(dict(record, checks=ck.items, first_line=first), open(os.path.join(outdir, name + ".json"), "w"),
++              indent=1, default=str)
++    print("\n".join(lines))
++
++
++def admit_receipt(outdir):
++    if os.path.exists(outdir):
++        raise SystemExit(f"REFUSED: {outdir} exists (one admission; nothing is retried)")
++    ev = evidence()
++    ck = admit(ev, "C28")
++    good = ck.ok()
++    first = ADMITTED if good else NOT_ADMITTED
++    extra = [f"control C28: the existing RESUME-01 build ({K.RESUME_PACKET}/{BUILD_DIR}/03-build at {K.RESUME}); "
++             "not rebuilt; no Cargo, no rustc",
++             f"ruling: {K.C28_RULING} (first line {K.C28_RULING_FIRST!r}); narrow and C28-specific; the general build "
++             "classifier is unchanged and its historical C28 output `BUILD: NOT OK` stands as executor history",
++             f"evidence files authenticated: {len(ev['auth'])} (from git objects, each against the RESUME-01 SHA256SUMS)"]
++    write(outdir, "ADMISSION", first, ck, extra,
++          {"control": "C28", "ruling": RULING, "evidence": ev["auth"], "admitted": good,
++           "build_supervisor": ev["desc"]["supervisor"], "build_process": ev["desc"]["process"]})
++    return 0 if good else 1
++
++
++def pin_receipt(outdir, admission):
++    if os.path.exists(outdir):
++        raise SystemExit(f"REFUSED: {outdir} exists (one pin; nothing is retried)")
++    first_adm = open(admission).readline().rstrip("\n") if os.path.exists(admission) else None
++    ev = evidence()
++    bound, fin = build_bound(ev)
++    f = exe_facts(RULING["executable"], WT, bound)
++    dep = next((a for a in ev["desc"]["deps_artifacts"] if not a["test_executable_name"]), None)
++    lock = subprocess.run(["git", "-C", WT, "rev-parse", "--git-path", "locked"], capture_output=True,
++                          text=True).stdout.strip() if os.path.isdir(WT) else ""
++    reason = open(lock).read().strip() if lock and os.path.exists(lock) else None
++    out = subprocess.run(["git", "-C", K.REPO, "worktree", "list", "--porcelain"], capture_output=True, text=True).stdout
++    entry = next((b.splitlines() for b in out.strip().split("\n\n") if b.splitlines()[:1] == ["worktree " + WT]), None)
++    ck = pin_checks(f, RULING, (dep["path"], dep["sha256"], dep["size"]) if dep else ("", "", -1), (entry, reason))
++    ck("P0 the C28 build admission holds (prior step)", first_adm == ADMITTED, first_adm)
++    good = ck.ok()
++    first = PINNED if good else PIN_BLOCKED
++    pin = {"path": RULING["executable"], "sha256": f.get("sha256"), "size": f.get("size"), "inode": f.get("inode"),
++           "mtime_ns": f.get("mtime_ns"), "ctime_ns": f.get("ctime_ns"), "source_verdict_at_build": "EXACTLY_C_PLUS_PATCH",
++           "mutant_blob": RULING["mutant_blob"], "mutant_sha256": RULING["mutant_sha256"],
++           "patch_sha256": RULING["patch_sha256"],
++           "build_receipt": f"{K.RESUME_PACKET}/{BUILD_DIR}/03-build at {K.RESUME}", "rebuilt": False,
++           "pinned": good, "facts": f, "build_finished": fin}
++    write(outdir, "PIN", first, ck,
++          [f"executable: {RULING['executable']} sha256 {f.get('sha256')} size {f.get('size')} (ruling "
++           f"{RULING['exe_sha256']} / {RULING['exe_size']})",
++           f"read-only: hashed, sized and stat-ed; never written, moved or rebuilt; build end {fin} (bound {bound})",
++           "C28_PRESERVED_ARTIFACT_BLOCKED: the executable is missing or differs; it is not rebuilt in this mission"
++           if not good else "the run invokes exactly this path, re-checking sha256 and size before, at selection and "
++                            "after"], pin)
++    return 0 if good else 1
++
++
++if __name__ == "__main__":
++    mode, out = sys.argv[1], os.path.abspath(sys.argv[2])
++    if mode == "admit":
++        sys.exit(admit_receipt(out))
++    if mode == "pin":
++        sys.exit(pin_receipt(out, os.path.join(os.path.dirname(out), "01-admission/ADMISSION.txt")))
++    raise SystemExit("usage: c28_admit.py admit|pin OUTDIR")
+--- /dev/null
++++ CONTINUE-02/tools/c28_controls.py
+@@ -0,0 +1,291 @@
++#!/usr/bin/env python3
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02, section 14: the tool controls of the dedicated C28 admission checker
++and pin step, before the freeze. No Cargo, no rustc, no Nexus build or test is run; the real preserved C28 executable is
++only hashed, sized and stat-ed (read-only); every synthetic file lives under SCRATCH, outside every repository.
++
++    c28_controls.py OUTDIR SCRATCH      both must not exist; OUTDIR receives one line per control (CONTROLS.txt),
++                                        a JSON record (CONTROLS.json) and SUMMARY.txt (last line
++                                        `C28 ADMISSION CONTROLS: ALL AS EXPECTED` or `... FAILED`)
++
++Each control states its expected verdict and, for a rejection, the check that must fail (so a rejection is shown to
++come from the intended rule, not only from a changed hash). The admission controls start from the real C28 evidence
++(git objects of 3695a817) and change one field or one stderr passage in memory. The pin controls use a synthetic
++worktree layout (a regular file standing in for the executable) with the ruling's identities replaced by the synthetic
++ones, plus the real preserved executable read-only.
++
++  K1  the exact C28 evidence is admitted                               (mission 14: exact C28 warning accepted)
++  K2  a different warning is rejected                                   (different warning rejected)
++  K3  an additional warning is rejected (summary 2; summary left at 1)  (additional warning rejected)
++  K4  an error plus the warning is rejected                             (error plus the warning rejected)
++  K5  a wrong warning location (line; file) is rejected                 (wrong warning location rejected)
++  K6  a wrong patch, a wrong mutant blob before/after, a non-mutant source after are rejected (wrong patch/source)
++  K7  wrong executable hash, wrong size, missing executable, symlinked executable, target outside the worktree,
++      symlinked target, executable outside the target, a target entry changed after the build are rejected; the
++      synthetic and the real preserved executable are accepted        (wrong hash/size, missing, target outside)
++  K8  the general build classifier is byte-identical to RESUME-01's frozen classify.py and, run on a scratch copy of
++      the real C28 build receipt, still says `BUILD: NOT OK` with the one failed check `no error or warning diagnostic`,
++      while the admission checker admits the same evidence      (accepted without changing the general classifier)
++  K9  another control with the same warning remains rejected: admit() refuses C12, C9, C11, C17, C18a, C18b, C27, C22;
++      the general classifier rejects the same build evidence presented for C12        (another control rejected)
++  K10 further negatives: exit 1, a signal, a timeout, an OOM kill, a swap use, an unauthenticated evidence file, the
++      explanation missing, an extra stderr note line, a changed stderr byte, a changed toolchain line are rejected
++  K11 the C28 run-classification call (unchanged classify_b; source EXACTLY_C; mutant blob withheld from the run-source
++      check only) on EXEC-01's synthetic type-(b) receipt: the restored source is a candidate; an unrestored
++      (C-plus-patch) or a NOT_C source is rejected
++"""
++import copy
++import json
++import os
++import sys
++import time
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import c28_admit as A  # noqa: E402
++import classify  # noqa: E402
++import common as K  # noqa: E402
++
++results = []
++
++
++def record(name, expect_ok, ck, must_fail=None):
++    """expect_ok: the expected verdict; must_fail: a label prefix that must be among the failed checks."""
++    got = ck.ok()
++    failed = ck.failed()
++    good = got == expect_ok and (expect_ok or must_fail is None or any(f.startswith(must_fail) for f in failed))
++    results.append({"control": name, "expected": "ACCEPT" if expect_ok else f"REJECT ({must_fail})",
++                    "got": "ACCEPT" if got else "REJECT", "failed_checks": failed, "as_expected": good})
++    print(f"{'AS EXPECTED ' if good else 'NOT EXPECTED'} {name}: expected {'ACCEPT' if expect_ok else 'REJECT'}; got "
++          f"{'ACCEPT' if got else 'REJECT'}; failed {[f.split(' ')[0] for f in failed]}")
++
++
++def plain(name, ok, detail=""):
++    results.append({"control": name, "as_expected": bool(ok), "detail": str(detail)})
++    print(f"{'AS EXPECTED ' if ok else 'NOT EXPECTED'} {name}: {detail}")
++
++
++def with_stderr(ev, text):
++    e = copy.deepcopy(ev)
++    e["stderr"] = text
++    e["stderr_bytes"] = text.encode()
++    return e
++
++
++def main(outdir, scratch):
++    if os.path.exists(outdir) or os.path.exists(scratch):
++        raise SystemExit("REFUSED: output or scratch exists")
++    os.makedirs(outdir)
++    os.makedirs(scratch)
++    ev = A.evidence()
++    entry = A.catalog_entry("C28")
++    tcs = A.reference_toolchains()
++    cprot = A.git("cat-file", "blob", K.BLOBS[K.PROTOCOL])
++    mut = A.mutant_bytes(entry)
++    adm = lambda e, cid="C28", ruling=A.RULING: A.admit(e, cid, entry, tcs, cprot, mut, ruling)
++    s = ev["stderr"]
++    W = "warning: unreachable pattern\n"
++    SUMM = "warning: `nexus-governed-control` (lib test) generated 1 warning\n"
++    assert s.count(W) == 1 and s.count(SUMM) == 1 and s.count(":1834:17\n") == 1
++
++    # K1
++    record("K1 the exact C28 evidence (warning unreachable_patterns at protocol.rs:1834:17) is admitted", True, adm(ev))
++    # K2
++    other = ("warning: unused variable: `durable`\n    --> crates/nexus-governed-control/src/ledger/protocol.rs:1834:17\n"
++             "     |\n1834 |                 Read::Got(durable) => {\n     |                           ^^^^^^^ help: if this "
++             "is intentional, prefix it with an underscore: `_durable`\n     |\n     = note: `#[warn(unused_variables)]` "
++             "(part of `#[warn(unused)]`) on by default\n\n")
++    blk_start = s.index(W)
++    blk_end = s.index(SUMM)
++    record("K2 a different warning (unused_variables) in place of the unreachable pattern is rejected", False,
++           adm(with_stderr(ev, s[:blk_start] + other + s[blk_end:])), "A12")
++    # K3
++    extra = ("warning: unused import: `std::fmt`\n --> crates/nexus-governed-control/src/lib.rs:3:5\n  |\n3 | use "
++             "std::fmt;\n  |     ^^^^^^^^\n  |\n  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by "
++             "default\n\n")
++    two = s[:blk_end] + extra + s[blk_end:].replace("generated 1 warning", "generated 2 warnings", 1)
++    record("K3a an additional warning (and the summary counting 2) is rejected", False, adm(with_stderr(ev, two)), "A11")
++    record("K3b an additional warning with the summary left at 1 is rejected", False,
++           adm(with_stderr(ev, s[:blk_end] + extra + s[blk_end:])), "A11")
++    record("K3c a second unreachable_patterns warning at another line is rejected", False,
++           adm(with_stderr(ev, s[:blk_end] + s[blk_start:blk_end].replace(":1834:17", ":1900:17") + s[blk_end:])),
++           "A11")
++    # K4
++    err = ("error[E0308]: mismatched types\n    --> crates/nexus-governed-control/src/ledger/protocol.rs:1840:9\n     |\n"
++           "1840 |         x\n     |         ^ expected `Resolve`, found `()`\n\n")
++    record("K4a an error plus the warning is rejected", False, adm(with_stderr(ev, s[:blk_start] + err + s[blk_start:])),
++           "A10")
++    record("K4b an uncoded error line plus the warning is rejected", False,
++           adm(with_stderr(ev, s[:blk_end] + "error: could not compile `nexus-governed-control` (lib test)\n"
++                           + s[blk_end:])), "A10")
++    # K5
++    record("K5a the warning at line 1835 is rejected", False, adm(with_stderr(ev, s.replace(":1834:17", ":1835:17"))),
++           "A13")
++    record("K5b the warning at column 18 is rejected", False, adm(with_stderr(ev, s.replace(":1834:17", ":1834:18"))),
++           "A13")
++    record("K5c the warning in another file is rejected", False,
++           adm(with_stderr(ev, s.replace("src/ledger/protocol.rs:1834:17", "src/ledger/protocol/unit_tests.rs:1834:17"))),
++           "A13")
++    # K6
++    e = copy.deepcopy(ev)
++    e["apply"]["patch_sha256"] = "0" * 64
++    record("K6a a wrong applied patch sha256 is rejected", False, adm(e), "A2")
++    e = copy.deepcopy(ev)
++    e["desc"]["source_before"]["mutant_file"]["git_blob"] = "f" * 40
++    record("K6b a wrong mutant blob before the build is rejected", False, adm(e), "A3")
++    e = copy.deepcopy(ev)
++    e["desc"]["source_after"]["mutant_file"]["sha256"] = "0" * 64
++    record("K6c a wrong mutant sha256 after the build is rejected", False, adm(e), "A3")
++    e = copy.deepcopy(ev)
++    e["desc"]["source_after"]["verdict"] = "NOT_THE_MUTANT"
++    record("K6d a source not exactly C plus the patch after the build is rejected", False, adm(e), "A3")
++    e = copy.deepcopy(ev)
++    e["desc"]["source_before"]["other_content_mismatches"] = ["crates/nexus-governed-control/src/lib.rs"]
++    record("K6e a second changed file before the build is rejected", False, adm(e), "A3")
++    r2 = dict(A.RULING, mutant_blob="f" * 40)
++    record("K6f a ruling mutant identity that the catalog does not hold is rejected", False, adm(ev, ruling=r2), "A2")
++
++    # K7: pin controls on a synthetic layout, then the real preserved executable (read-only).
++    def layout(name, exe_bytes=b"SYNTHETIC EXECUTABLE BYTES\n" * 64, target_symlink=False, exe_symlink=False,
++               outside=False, touch_later=False, missing=False):
++        wt = os.path.join(scratch, name, "wt")
++        real_target = os.path.join(scratch, name, "elsewhere-target") if target_symlink else os.path.join(wt, "target")
++        deps = os.path.join(real_target, "release/deps")
++        os.makedirs(deps)
++        os.makedirs(wt, exist_ok=True)
++        if target_symlink:
++            os.symlink(real_target, os.path.join(wt, "target"))
++        exe = os.path.join(wt, "target/release/deps/nexus_governed_control-2faa0b9718d3e6a3")
++        if outside:
++            exe = os.path.join(scratch, name, "nexus_governed_control-2faa0b9718d3e6a3")
++        good = b"SYNTHETIC EXECUTABLE BYTES\n" * 64
++        if not missing:
++            if exe_symlink:
++                other = os.path.join(scratch, name, "real-exe")
++                open(other, "wb").write(exe_bytes)
++                os.symlink(other, exe)
++            else:
++                open(exe, "wb").write(exe_bytes)
++                os.chmod(exe, 0o755)
++        bound = time.time() + 1.0  # the synthetic "build" ends after every file above was written
++        if touch_later:
++            later = os.path.join(real_target, "release/late-file")
++            open(later, "w").write("x")
++            os.utime(later, (bound + 100, bound + 100))
++        ruling = dict(A.RULING, worktree=wt, executable=os.path.join(wt, "target/release/deps/"
++                                                                         "nexus_governed_control-2faa0b9718d3e6a3"),
++                      exe_sha256=K.sha256_bytes(good), exe_size=len(good))
++        return A.pin_checks(A.exe_facts(exe, wt, bound), ruling)
++    record("K7a the synthetic executable at the ruling's identity is pinned", True, layout("pos"))
++    record("K7b a wrong executable hash (same size, other bytes) is rejected", False,
++           layout("hash", exe_bytes=b"SYNTHETIC EXECUTABLE BYTEZ\n" * 64), "P4")
++    record("K7c a wrong executable size is rejected", False, layout("size", exe_bytes=b"SYNTHETIC EXECUTABLE BYTES\n" * 63),
++           "P4")
++    record("K7d a missing executable is rejected", False, layout("missing", missing=True), "P2")
++    record("K7e a symlinked executable is rejected", False, layout("exe-symlink", exe_symlink=True), "P2")
++    record("K7f a target outside the worktree (the worktree's target a symlink to elsewhere) is rejected", False,
++           layout("target-symlink", target_symlink=True), "P3")
++    record("K7g an executable outside the worktree's target is rejected", False, layout("outside", outside=True), "P1")
++    record("K7h a target entry changed after the build is rejected", False, layout("late", touch_later=True), "P6")
++    bound, _ = A.build_bound(ev)
++    real = A.exe_facts(A.RULING["executable"], A.WT, bound)
++    record("K7i the real preserved C28 executable (read-only: hashed, sized, stat-ed) is accepted", True,
++           A.pin_checks(real, A.RULING))
++    record("K7j the real preserved executable against a wrong ruling sha256 is rejected", False,
++           A.pin_checks(real, dict(A.RULING, exe_sha256="0" * 64)), "P4")
++    record("K7k the real preserved executable against a wrong ruling size is rejected", False,
++           A.pin_checks(real, dict(A.RULING, exe_size=A.RULING["exe_size"] + 1)), "P4")
++    record("K7l the real preserved executable against a different worktree is rejected", False,
++           A.pin_checks(A.exe_facts(A.RULING["executable"], K.control_wt("C27"), bound), A.RULING), "P1")
++
++    # K8: the general classifier unchanged, and still rejecting the C28 build.
++    frozen = json.loads(A.git("show", f"{K.RESUME}:{K.RESUME_PACKET}/receipts/05-FREEZE.json"))["files"]["tools/classify.py"]
++    here = K.sha256_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "classify.py"))
++    plain("K8a classify.py is byte-identical to RESUME-01's frozen classify.py", here == frozen, f"{here} / {frozen}")
++    d = os.path.join(scratch, "general-classifier-on-C28")
++    os.makedirs(d)
++    for f in ("descriptor.json", "build.stdout", "build.stderr"):
++        open(os.path.join(d, f), "wb").write(A.git("show", f"{K.RESUME}:{K.RESUME_PACKET}/{A.BUILD_DIR}/03-build/{f}"))
++    rc = classify.classify_build_success(d, "pin", "EXACTLY_C_PLUS_PATCH", A.RULING["mutant_blob"],
++                                         expect_target=os.path.join(A.WT, "target"))
++    cls = open(os.path.join(d, "CLASSIFICATION.txt")).read().splitlines()
++    fails = [l for l in open(os.path.join(d, "CHECKS.txt")).read().splitlines() if l.startswith("FAIL")]
++    plain("K8b the unchanged general classifier, on a scratch copy of the real C28 build receipt: BUILD: NOT OK, the one "
++          "failed check `no error or warning diagnostic`; no PIN.json", rc == 1 and cls[0] == "BUILD: NOT OK"
++          and len(fails) == 1 and fails[0].startswith("FAIL no error or warning diagnostic")
++          and not os.path.exists(os.path.join(d, "PIN.json")), f"{cls[0]}; {fails}")
++    plain("K8c the general classifier's historical C28 output (RESUME-01) equals this re-derivation (first lines)",
++          ev["cls"].splitlines()[:2] == cls[:2], cls[:2])
++    record("K8d the admission checker admits the same evidence (narrow C28 ruling)", True, adm(ev))
++    # K9
++    for cid in ("C12", "C9", "C11", "C17", "C18a", "C18b", "C27", "C22"):
++        record(f"K9 admit() refuses {cid} with the same (C28) evidence", False, adm(ev, cid), "the control is C28")
++    d2 = os.path.join(scratch, "general-classifier-as-C12")
++    os.makedirs(d2)
++    desc = json.loads(A.git("show", f"{K.RESUME}:{K.RESUME_PACKET}/{A.BUILD_DIR}/03-build/descriptor.json"))
++    desc["control"] = "C12"
++    json.dump(desc, open(os.path.join(d2, "descriptor.json"), "w"))
++    for f in ("build.stdout", "build.stderr"):
++        open(os.path.join(d2, f), "wb").write(A.git("show", f"{K.RESUME}:{K.RESUME_PACKET}/{A.BUILD_DIR}/03-build/{f}"))
++    rc = classify.classify_build_success(d2, "pin", "EXACTLY_C_PLUS_PATCH", A.RULING["mutant_blob"],
++                                         expect_target=os.path.join(A.WT, "target"))
++    plain("K9 the general classifier rejects the same warning presented as another control's build (C12): BUILD: NOT OK",
++          rc == 1 and open(os.path.join(d2, "CLASSIFICATION.txt")).readline().strip() == "BUILD: NOT OK", "BUILD: NOT OK")
++    # K10
++    for label, path, value, must in (("exit 1", ("desc", "process", "exit_status"), 1, "A7"),
++                                     ("a signal", ("desc", "process", "signal"), 9, "A7"),
++                                     ("a timeout", ("desc", "supervisor", "timed_out"), True, "A8"),
++                                     ("an OOM kill", ("desc", "supervisor", "oom_kill"), 1, "A8"),
++                                     ("a swap use", ("desc", "supervisor", "swap_peak_bytes"), "4096", "A8"),
++                                     ("a wrong rustc", ("desc", "toolchain", "rustc_vV"), "rustc 1.95.0", "A6")):
++        e = copy.deepcopy(ev)
++        e[path[0]][path[1]][path[2]] = value
++        record(f"K10 {label} is rejected", False, adm(e), must)
++    e = copy.deepcopy(ev)
++    e["auth"][3]["ok"] = False
++    record("K10 an evidence file not equal to the RESUME-01 SHA256SUMS is rejected", False, adm(e), "A1")
++    record("K10 the explanation missing (`matches all the relevant values` absent) is rejected", False,
++           adm(with_stderr(ev, s.replace(" matches all the relevant values", " is here"))), "A14")
++    record("K10 an extra stderr note line is rejected", False,
++           adm(with_stderr(ev, s.replace(SUMM, SUMM + "note: something else happened\n"))), "A16")
++    record("K10 a changed stderr byte (outside the warning) is rejected", False,
++           adm(with_stderr(ev, s.replace("Compiling proc-macro2 v1.0.106", "Compiling proc-macro2 v1.0.107"))), "A9")
++    # K11: the C28 run-classification call on EXEC-01's synthetic type-(b) receipt.
++    exp = json.loads(A.git("show", f"{K.PREV}:{K.PREV_PACKET}/receipts/02-EXPECTATIONS.json"))
++    c14 = exp["controls"]["C14"]
++    src = f"{K.PREV_PACKET}/receipts/03-tool-controls/run-b-c14-own-check"
++    for name, verdict, want in (("restored", {"verdict": "EXACTLY_C"}, True),
++                                ("unrestored", {"verdict": "EXACTLY_C_PLUS_PATCH",
++                                                "mutant_file": {"git_blob": c14["mutant_blob"]}}, False),
++                                ("not-C", {"verdict": "NOT_C"}, False)):
++        d3 = os.path.join(scratch, "run-b-" + name)
++        os.makedirs(d3)
++        for f in ("descriptor.json", "raw-output.txt", "RECEIPT.txt", "scope-record.txt", "time-v.txt"):
++            open(os.path.join(d3, f), "wb").write(A.git("show", f"{K.PREV}:{src}/{f}"))
++        desc = json.load(open(os.path.join(d3, "descriptor.json")))
++        desc["source_before"] = desc["source_after"] = verdict
++        json.dump(desc, open(os.path.join(d3, "descriptor.json"), "w"))
++        b = desc["executable"]["before"]
++        classify.classify_b(d3, dict(c14, mutant_blob=None), {"path": b["path"], "sha256": b["sha256"],
++                                                              "size": b["size"]}, source_verdict="EXACTLY_C")
++        first = open(os.path.join(d3, "CLASSIFICATION.txt")).readline().strip()
++        fails = [l for l in open(os.path.join(d3, "CHECKS.txt")).read().splitlines() if l.startswith("FAIL")]
++        plain(f"K11 classify_b (unchanged; source EXACTLY_C; mutant blob withheld) on EXEC-01's synthetic type-(b) "
++              f"receipt with a {name} source: {'candidate' if want else 'rejected at the source check'}",
++              (first == classify.CANDIDATE) == want and (want or (len(fails) == 1 and "source EXACTLY_C" in fails[0])),
++              f"{first}; {fails}")
++    ok = all(r["as_expected"] for r in results)
++    open(os.path.join(outdir, "CONTROLS.txt"), "w").write(
++        "\n".join(f"{'AS EXPECTED ' if r['as_expected'] else 'NOT EXPECTED'} {r['control']}: "
++                  f"{r.get('expected', '')} {r.get('got', '')} {r.get('failed_checks', r.get('detail', ''))}"
++                  for r in results) + "\n")
++    json.dump(results, open(os.path.join(outdir, "CONTROLS.json"), "w"), indent=1)
++    summary = [f"{K.MISSION} — C28 admission/pin tool controls (section 14); no Cargo, no rustc, no Nexus test; the real "
++               f"preserved executable only hashed, sized and stat-ed; synthetic files under {scratch}",
++               f"controls: {len(results)}; as expected: {sum(r['as_expected'] for r in results)}",
++               "C28 ADMISSION CONTROLS: " + ("ALL AS EXPECTED" if ok else "FAILED")]
++    open(os.path.join(outdir, "SUMMARY.txt"), "w").write("\n".join(summary) + "\n")
++    print("\n".join(summary))
++    return 0 if ok else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main(os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])))
+--- RESUME-01/tools/common.py
++++ CONTINUE-02/tools/common.py
+@@ -1,4 +1,5 @@
+-"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (from EXEC-01's common.py): frozen identities and small shared helpers.
++"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (from RESUME-01's common.py, itself from EXEC-01's): frozen identities
++and small shared helpers.
+ 
+ Identities only (no analysis logic). Every value here is the mission's (sections 3, 4, 9, 19, 20) or the frozen R2
+ catalog's. Sources are read from git objects of frozen Candidate C, never from a worktree.
+@@ -11,8 +12,8 @@
+ import os
+ import subprocess
+ 
+-MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01"
+-EV = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-resume-01"
++MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02"
++EV = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02"
+ REPO = "/home/nexus/NEXUS/nexus-os"
+ GIT_COMMON_DIR = REPO + "/.git"
+ NEXUS = "/home/nexus/NEXUS"
+@@ -67,7 +68,7 @@
+ 
+ # Mission-owned worktrees (created by this mission only; absent before).
+ HEALTHY_WT = NEXUS + "/nexus-os-p3-c11-mt1x-healthy"
+-EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-resume-01-evidence"
++EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-continue-02-evidence"
+ DEV_WT = NEXUS + "/nexus-os-p3-c11-mt1r-dev-verifier"
+ 
+ 
+@@ -85,6 +86,16 @@
+ RESUME_ORDER = ["C14", "C19", "C21", "C27", "C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
+ C22_RULING = "documents/ARCHITECT-RULING-C22-ACCEPTANCE.md"
+ C22_RULING_FIRST = "C22 — MUTATION CONTROL KILL ACCEPTED"
++# Continue mission sections 1, 2, 5 and 10: C22, C14, C19, C21 and C27 are Architect-accepted and never executed again;
++# C28 starts from its existing, Architect-admissible build (no rebuild); then C12, C9, C11, C17, C18a, C18b, in order.
++# RESUME_ORDER (above) is the previous mission's order, kept as history.
++CONTINUE_ACCEPTED = ["C22", "C14", "C19", "C21", "C27"]
++CONTINUE_ORDER = ["C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
++RULING = "documents/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md"
++RULING_FIRST = ("C22 C14 C19 C21 C27 — MUTATION CONTROL KILL ACCEPTED; C28 BUILD ARCHITECT-ADMISSIBLE (NARROW); C28 KILL "
++                "PENDING")
++C28_RULING = "documents/ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md"
++C28_RULING_FIRST = "C28 BUILD — ARCHITECT-ADMISSIBLE (NARROW C28-SPECIFIC RULING; NO GENERAL WARNING EXCEPTION)"
+ NAMED = {"C14": "T-BIND", "C19": "T-CELL", "C21": "W6", "C27": "T-PREC", "C28": "T-RES"}
+ EXPLORE_CFG = {"C12": "X-1", "C9": "F-B2", "C11": "F-B2", "C17": "F-B2", "C18a": "F-G", "C18b": "F-G"}
+ 
+@@ -113,16 +124,25 @@
+ PREV_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01"
+ PREV_EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-exec-01-evidence"
+ PREV_DEV_WT = NEXUS + "/nexus-os-p3-c11-mt1x-dev-rehearsal"
+-CARRIED = ["receipts/02-EXPECTATIONS.json", "receipts/10-baseline-X-1", "receipts/11-baseline-T-BIND",
+-           "receipts/12-baseline-T-CELL", "receipts/13-baseline-W6", "receipts/14-baseline-T-PREC",
+-           "receipts/15-baseline-T-RES", "receipts/20-healthy-build", "receipts/31-C22"]
++# Continue mission: only the carried-forward files this mission gates or links on (the expectations, the X-1 (e1)
++# baseline for C12 and the T-RES (e2) baseline for C28), byte copies of the EXEC-01 packet's files.
++CARRIED = ["receipts/02-EXPECTATIONS.json", "receipts/10-baseline-X-1", "receipts/15-baseline-T-RES"]
+ CARRIED_DOCS = {"documents/ARCHITECT-RULING-CATALOG-FREEZE.md": "ARCHITECT-RULING-CATALOG-FREEZE.md"}
+ 
+-# Publication (resume mission section 20).
+-PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/"
+-BRANCH = "review/p3-c11-d2a1-mutation-tranche1-resume-01"
++# The previous evidence (continue mission section 3): the RESUME-01 evidence commit, immutable; read from git objects.
++RESUME_MISSION = "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01"
++RESUME = "3695a817a6190781dc66769a72a487b442d3e6da"
++RESUME_TREE = "a5fce69d5f60b0b86f3982aa655d5a33f4ef9ea4"
++RESUME_PARENT = PREV
++RESUME_REF = "refs/heads/review/p3-c11-d2a1-mutation-tranche1-resume-01"
++RESUME_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01"
++RESUME_EVIDENCE_WT = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-resume-01-evidence"
++
++# Publication (continue mission section 19).
++PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/"
++BRANCH = "review/p3-c11-d2a1-mutation-tranche1-continue-02"
+ DEST = "refs/heads/" + BRANCH
+-LOCAL_BRANCH = "evidence/p3-c11-d2a1-mutation-tranche1-resume-01"
++LOCAL_BRANCH = "evidence/p3-c11-d2a1-mutation-tranche1-continue-02"
+ REMOTE = "github"
+ SLUG = "Nexus-os2026/nexus-os"
+ PACKET_LIMIT = 32 * 1024 * 1024
+--- RESUME-01/tools/control.py
++++ CONTINUE-02/tools/control.py
+@@ -3,8 +3,16 @@
+ Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 6): the gate starts after the Architect-accepted C22
+ record (C22 is never executed again), and the restoration status predicate is the path-aware policy of
+ verify_mutant.status_policy (restored_check). Every other step is unchanged.
+-
+-    control.py <ID>      ID in the resume order: C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b (C22 is refused)
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (sections 5, 7-10 and 13): gate/order logic only. C22, C14,
++C19, C21 and C27 are Architect-accepted and refused; the order is C28 C12 C9 C11 C17 C18a C18b; C12's prior step is
++C28's candidate RESULT. C28 (main_c28) starts from its existing, Architect-admissible build: no worktree is created, no
++patch is applied, nothing is built; 01 the read-only admission (c28_admit.py), 02 the read-only pin, 04 one supervised
++invocation of the pinned preserved executable on the restored worktree, classified by the unchanged classify_b (source
++EXACTLY_C, the restored state; the mutant identity is carried by the admission and the pin), 05 the restored worktree
++re-authenticated read-only by the repaired verifier, 06 the carried-forward T-RES (e2) link. Every other step and every
++control from C12 on is unchanged.
++
++    control.py <ID>      ID in the continue order: C28 C12 C9 C11 C17 C18a C18b (C22 C14 C19 C21 C27 are refused)
+ 
+ Steps (each writes its receipt under receipts/<n>-<ID>/; any failure stops the control, restores the source where the
+ patch was applied, writes RESULT.txt with MUTATION_CONTROL_BLOCKED, and no later control can start):
+@@ -37,6 +45,7 @@
+ import sys
+ 
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import c28_admit  # noqa: E402
+ import classify  # noqa: E402
+ import common as K  # noqa: E402
+ import supervise  # noqa: E402
+@@ -56,33 +65,33 @@
+ 
+ 
+ def gate(cid, exp):
+-    if cid not in K.RESUME_ORDER:
+-        return [f"{cid} is not in the resume order (C22 is Architect-accepted and never executed again)"], []
+-    i = K.RESUME_ORDER.index(cid)
++    if cid not in K.CONTINUE_ORDER:
++        return [f"{cid} is not in the continue order (C22 C14 C19 C21 C27 are Architect-accepted and never executed "
++                f"again)"], []
++    i = K.CONTINUE_ORDER.index(cid)
+     need = []
+     problems, lines = [], []
+     if i == 0:
+-        # The carried-forward receipts and the ruling record are frozen byte copies (freeze_check below).
+-        need += [(b["dir"] + "/CLASSIFICATION.txt", "CLASSIFICATION: PASS") for b in exp["baselines"]]
+-        need += [("receipts/20-healthy-build/CLASSIFICATION.txt", "CLASSIFICATION: PASS")]
+-        need += [(K.C22_RULING, K.C22_RULING_FIRST)]
++        # The carried-forward receipts and the ruling records are frozen byte copies (freeze_check below).
++        carried = [b for b in exp["baselines"] if b["dir"] in K.CARRIED]
++        need += [(b["dir"] + "/CLASSIFICATION.txt", "CLASSIFICATION: PASS") for b in carried]
++        need += [(K.RULING, K.RULING_FIRST), (K.C28_RULING, K.C28_RULING_FIRST)]
+         need += [("receipts/06-PRE-EXECUTION-GATE.txt", "PRE-EXECUTION GATE: ALL CHECKS HOLD")]
+         fr = json.load(open(supervise.FREEZE)) if os.path.exists(supervise.FREEZE) else {"files": {}}
+-        frozen = [r for r in [K.C22_RULING] + [b["dir"] + "/descriptor.json" for b in exp["baselines"]] +
+-                  ["receipts/20-healthy-build/descriptor.json", "receipts/31-C22/03-build/descriptor.json"]
++        frozen = [r for r in [K.RULING, K.C28_RULING] + [b["dir"] + "/descriptor.json" for b in carried]
+                   if r not in fr["files"]]
+-        lines.append(f"the C22 ruling record and the carried-forward receipts are in the freeze: "
+-                     f"{'yes' if not frozen else 'NO: ' + str(frozen)}")
++        lines.append(f"the Architect ruling records and the carried-forward baselines {[b['key'] for b in carried]} "
++                     f"are in the freeze: {'yes' if not frozen else 'NO: ' + str(frozen)}")
+         if frozen:
+             problems.append(f"not frozen: {frozen}")
+     else:
+-        need += [(exp["controls"][K.RESUME_ORDER[i - 1]]["dir"] + "/RESULT.txt", RESULT_OK)]
++        need += [(exp["controls"][K.CONTINUE_ORDER[i - 1]]["dir"] + "/RESULT.txt", RESULT_OK)]
+     for p, want in need:
+         got = supervise.first_line(os.path.join(K.EV, p))
+         lines.append(f"prior step: {p}: {got!r} (required {want!r})")
+         if got != want:
+             problems.append(f"{p} is not {want!r}")
+-    later = [c for c in K.RESUME_ORDER[i + 1:] if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
++    later = [c for c in K.CONTINUE_ORDER[i + 1:] if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
+     if later:
+         problems.append(f"a later control's receipts exist: {later}")
+     rec = []
+@@ -90,7 +99,10 @@
+     lines += rec
+     if fz:
+         problems.append(fz)
+-    if os.path.lexists(exp["controls"][cid]["worktree"]):
++    if cid == "C28":
++        if not os.path.isdir(exp["controls"][cid]["worktree"]):
++            problems.append("the preserved C28 worktree is absent")
++    elif os.path.lexists(exp["controls"][cid]["worktree"]):
+         problems.append("the control's worktree path exists")
+     return problems, lines
+ 
+@@ -265,6 +277,116 @@
+     return ok, ref
+ 
+ 
++def reauthenticate_restoration(wt, ctl, outdir, exe):
++    """C28 (continue mission sections 9 and 13): no patch is applied or reversed by this mission; the restored worktree
++    (restored by RESUME-01's `git apply -R`, authenticated in 01-admission) is re-authenticated read-only: the changed
++    file's blob and sha256 are C's, verify_tree.py EXACTLY_C, the path-aware restored policy, and (when an executable
++    was pinned: exe not None) the pinned executable is unchanged."""
++    os.makedirs(outdir)
++    path = os.path.join(wt, ctl["source_file"])
++    data = open(path, "rb").read()
++    rec = {"applied_by_this_mission": False, "file": {"git_blob": K.git_blob_id(data), "sha256": K.sha256_bytes(data)}}
++    chk = restored_check(wt, "after the C28 run")
++    v, pol = chk["verify_tree"], chk["status_policy"]
++    rec["verify_tree"] = v
++    rec["status_policy"] = pol
++    now = supervise.exe_identity(exe["path"]) if exe and os.path.lexists(exe["path"]) else None
++    rec["executable_now"] = now
++    ok = (rec["file"]["git_blob"] == ctl["baseline_blob"] and rec["file"]["sha256"] == ctl["baseline_sha256"]
++          and v["verdict"] == "EXACTLY_C" and pol["ok"]
++          and (exe is None or (now is not None and supervise.exe_ok(now, exe["sha256"], exe["size"]))))
++    lines = [RESTORE_OK if ok else "RESTORE: FAILED",
++             f"control {ctl['id']}: no patch is applied or reversed by this mission; the worktree {wt} was restored by "
++             f"RESUME-01 (git apply -R of the frozen patch; authenticated in 01-admission A21) and is re-authenticated "
++             f"here read-only (GIT_OPTIONAL_LOCKS=0)",
++             f"{ctl['source_file']}: git blob {rec['file']['git_blob']} sha256 {rec['file']['sha256']} (C: "
++             f"{ctl['baseline_blob']} / {ctl['baseline_sha256']})",
++             chk["line"], f"path-aware status policy (--ignored --untracked-files=all --no-renames -z): "
++             f"{'HOLDS' if pol['ok'] else 'REJECTED'}; {pol['records']} records, {pol['target_entries']} ignored entries "
++             f"beneath the worktree-local real target; shown {pol['shown']}; rejected {pol['rejected'][:5]}",
++             (f"pinned executable now: sha256 {now['sha256'] if now else 'MISSING'} size {now['size'] if now else '-'} "
++              f"(pinned {exe['sha256']} / {exe['size']})" if exe else "no executable was pinned (source checks only)"),
++             "every tracked file is byte-equal to C; the worktree is clean but for its own target directory"
++             if ok else "RESTORATION NOT VERIFIED"]
++    json.dump(rec, open(os.path.join(outdir, "RESTORE.json"), "w"), indent=1)
++    open(os.path.join(outdir, "RESTORE.txt"), "w").write("\n".join(lines) + "\n")
++    print("\n".join(lines))
++    return ok
++
++
++def main_c28():
++    """C28 from its existing, Architect-admissible build (continue mission sections 2, 8 and 9): no rebuild."""
++    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # the preserved worktree is RESUME-01's: read, never written
++    exp = supervise.expectations()
++    ctl = exp["controls"]["C28"]
++    outdir = os.path.join(K.EV, ctl["dir"])
++    if os.path.exists(outdir):
++        raise SystemExit(f"REFUSED: {ctl['dir']} exists (one attempt per control; nothing is retried)")
++    os.makedirs(outdir)
++    problems, lines = gate("C28", exp)
++    open(os.path.join(outdir, "00-GATE.txt"), "w").write(
++        ("GATE: OPEN" if not problems else "GATE: CLOSED — " + "; ".join(problems)) + "\n" + "\n".join(lines) + "\n")
++    if problems:
++        return finish(outdir, ctl, RESULT_BLOCKED, [f"not started: {'; '.join(problems)}"])
++    wt = ctl["worktree"]
++    facts = ["build: NOT REPEATED (the existing RESUME-01 C28 build; no Cargo, no rustc; 03-build absent by design)"]
++    status, stop, candidate, exe = RESULT_BLOCKED, None, False, None
++    c28_admit.admit_receipt(os.path.join(outdir, "01-admission"))
++    first = supervise.first_line(os.path.join(outdir, "01-admission/ADMISSION.txt"))
++    facts.append(f"existing-build admission (narrow C28 ruling): {first}")
++    if first != c28_admit.ADMITTED:
++        stop = "the existing C28 build is not admissible under the narrow ruling (no rebuild)"
++    else:
++        c28_admit.pin_receipt(os.path.join(outdir, "02-pin"), os.path.join(outdir, "01-admission/ADMISSION.txt"))
++        pfirst = supervise.first_line(os.path.join(outdir, "02-pin/PIN.txt"))
++        facts.append(f"pin: {pfirst}")
++        if pfirst != c28_admit.PINNED:
++            status = "CONTROL RESULT: C28_PRESERVED_ARTIFACT_BLOCKED"
++            stop = "C28_PRESERVED_ARTIFACT_BLOCKED: the preserved executable is missing or differs (not rebuilt)"
++        else:
++            pin = json.load(open(os.path.join(outdir, "02-pin/PIN.json")))
++            exe = {"path": pin["path"], "sha256": pin["sha256"], "size": pin["size"]}
++            facts.append(f"pinned preserved executable: {pin['path']} sha256 {pin['sha256']} size {pin['size']}")
++
++            def source_ok(rec, when):
++                d = restored_check(wt, when)
++                rec.append(d["line"] + f"; path-aware restored status policy "
++                           f"{'HOLDS' if d['status_policy']['ok'] else 'REJECTED'} "
++                           f"({d['status_policy']['target_entries']} ignored entries beneath the real target)")
++                return d, d["verdict"] == "EXACTLY_C"
++            rdir = os.path.join(outdir, "04-run")
++            supervise.invoke(rdir, f"SUPERVISED MUTANT RUN — control C28: {ctl['test']} on the pinned preserved C28 "
++                                   f"executable (existing build, not rebuilt; type (b)); the worktree is the restored one",
++                             pin["path"], pin["sha256"], pin["size"], os.path.join(wt, K.CRATE), wt, ctl["test"],
++                             ctl["ignored"], ctl["argv_tail"], ctl["limit_seconds"], source_ok, "mutant-unit",
++                             [(ctl["dir"] + "/02-pin/PIN.txt", c28_admit.PINNED)],
++                             {"control": "C28", "configuration": "named unit test", "mutant_blob": ctl["mutant_blob"],
++                              "patch_sha256": ctl["patch"]["sha256"], "existing_build": pin["build_receipt"],
++                              "worktree_source_state": "EXACTLY_C (restored; the executable was built from C plus the "
++                                                       "frozen C28 patch: 01-admission A3)"})
++            # The unchanged classifier; the run's source check is the restored state (the mutant identity is the
++            # admission's and the pin's), so the mutant blob is withheld from check_identity only.
++            classify.classify_b(rdir, dict(ctl, mutant_blob=None), exe, source_verdict="EXACTLY_C")
++            cls = open(os.path.join(rdir, "CLASSIFICATION.txt")).read().splitlines()
++            candidate = cls[0] == classify.CANDIDATE
++            facts.append(f"run (type (b)): {cls[0]}; {cls[1]}")
++            if not candidate:
++                stop = "the C28 run is not admissible kill evidence of the named test"
++    rok = reauthenticate_restoration(wt, ctl, os.path.join(outdir, "05-restore"), exe)
++    facts.append(f"restoration (re-authenticated, read-only): {supervise.first_line(os.path.join(outdir, '05-restore/RESTORE.txt'))}")
++    if not rok:
++        stop = (stop + "; " if stop else "") + "restoration not re-authenticated"
++    if candidate and rok:
++        lok, ref = link(ctl, exp, os.path.join(outdir, "06-link"), None)
++        facts.append(f"linked restored-side receipt: {supervise.first_line(os.path.join(outdir, '06-link/LINK.txt'))}; "
++                     f"{ref}")
++        if not lok:
++            stop = "the restored-side receipt could not be linked"
++    if stop:
++        facts.append(f"STOP: {stop}. No later control is executed.")
++    return finish(outdir, ctl, RESULT_OK if not stop and candidate and rok else status, facts)
++
++
+ def finish(outdir, ctl, status, facts):
+     lines = [status, f"control {ctl['id']}: {ctl['description']}", f"receipt type: {ctl['receipt_type']}"] + facts
+     open(os.path.join(outdir, "RESULT.txt"), "w").write("\n".join(lines) + "\n")
+@@ -275,9 +397,11 @@
+ 
+ 
+ def main(cid):
+-    if cid in K.ACCEPTED or cid not in K.RESUME_ORDER:
+-        raise SystemExit(f"REFUSED: {cid} is not executed by {K.MISSION} (C22 is Architect-accepted; only "
+-                         f"{' '.join(K.RESUME_ORDER)} run)")
++    if cid in K.CONTINUE_ACCEPTED or cid not in K.CONTINUE_ORDER:
++        raise SystemExit(f"REFUSED: {cid} is not executed by {K.MISSION} ({' '.join(K.CONTINUE_ACCEPTED)} are "
++                         f"Architect-accepted; only {' '.join(K.CONTINUE_ORDER)} run)")
++    if cid == "C28":
++        return main_c28()
+     exp = supervise.expectations()
+     ctl = exp["controls"][cid]
+     outdir = os.path.join(K.EV, ctl["dir"])
+--- RESUME-01/tools/final_gate.py
++++ CONTINUE-02/tools/final_gate.py
+@@ -23,6 +23,12 @@
+     mutant executable still have their recorded sha256 and size
+ G7  Candidate C and the R2 catalog are unchanged (from G1), and no file under the mission's evidence root is a source
+     copy (no file equal to a mutant blob)
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (sections 16, 18, 19): G3 reads the carried-forward X-1 and
++T-RES baselines, both Architect ruling records, and the attempted controls against the continue order (C28's
++sub-receipts: admission, pin, run, restoration, link; no build by design); G4 the preserved C28 worktree exactly C and
++still locked with RESUME-01's reason, every newly created worktree exactly C and locked with this mission's reason;
++G6 the C28 pin (02-pin/PIN.json) and every later pinned executable preserved; G8 no receipt for any Architect-accepted
++control (C22 C14 C19 C21 C27) and their preserved worktrees untouched (still exactly C, read-only).
+ """
+ import json
+ import os
+@@ -30,6 +36,7 @@
+ import sys
+ 
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import c28_admit  # noqa: E402
+ import common as K  # noqa: E402
+ import control  # noqa: E402
+ import supervise  # noqa: E402
+@@ -56,21 +63,17 @@
+     fz = supervise.freeze_check(rec)
+     check("G2 the freeze holds", fz is None, rec[0] if rec else fz)
+     exp = supervise.expectations()
+-    for b in exp["baselines"]:
++    for b in [b for b in exp["baselines"] if b["dir"] in K.CARRIED]:
+         cl = supervise.first_line(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))
+-        check(f"G3 carried-forward baseline {b['key']} (previous packet, not rerun) is PASS", cl == "CLASSIFICATION: PASS",
++        check(f"G3 carried-forward baseline {b['key']} (EXEC-01 packet, not rerun) is PASS", cl == "CLASSIFICATION: PASS",
+               cl)
+-    hcl = supervise.first_line(os.path.join(K.EV, "receipts/20-healthy-build/CLASSIFICATION.txt"))
+-    check("G3 carried-forward healthy build (e4; previous packet, not rerun) is PASS", hcl == "CLASSIFICATION: PASS", hcl)
+     fr = json.load(open(supervise.FREEZE))
+-    check("G3 C22: the Architect ruling record is frozen and states the acceptance (C22 is not executed here)",
+-          supervise.first_line(os.path.join(K.EV, K.C22_RULING)) == K.C22_RULING_FIRST and K.C22_RULING in fr["files"]
+-          and K.sha256_file(os.path.join(K.EV, K.C22_RULING)) == fr["files"][K.C22_RULING])
+-    check("G3 C22: its original receipts are the frozen carried-forward copies (RESULT unchanged as history)",
+-          supervise.first_line(os.path.join(K.EV, "receipts/31-C22/RESULT.txt")) == "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+-          and "receipts/31-C22/RESULT.txt" in fr["files"])
+-    attempted = [c for c in K.RESUME_ORDER if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
+-    check("G3 attempted controls are a prefix of the resume order", attempted == K.RESUME_ORDER[:len(attempted)],
++    for rel, first in ((K.RULING, K.RULING_FIRST), (K.C28_RULING, K.C28_RULING_FIRST)):
++        check(f"G3 the Architect ruling record {rel} is frozen and states the ruling",
++              supervise.first_line(os.path.join(K.EV, rel)) == first and rel in fr["files"]
++              and K.sha256_file(os.path.join(K.EV, rel)) == fr["files"][rel])
++    attempted = [c for c in K.CONTINUE_ORDER if os.path.exists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
++    check("G3 attempted controls are a prefix of the continue order", attempted == K.CONTINUE_ORDER[:len(attempted)],
+           attempted)
+     results = {c: supervise.first_line(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt")) for c in attempted}
+     ok_prefix = True
+@@ -83,25 +86,30 @@
+         res = results[c]
+         sub = {k: supervise.first_line(os.path.join(d, p)) for k, p in (
+             ("apply", "02-apply/APPLY.txt"), ("build", "03-build/CLASSIFICATION.txt"),
++            ("admission", "01-admission/ADMISSION.txt"), ("pin", "02-pin/PIN.txt"),
+             ("run", "04-run/CLASSIFICATION.txt"), ("restore", "05-restore/RESTORE.txt"), ("link", "06-link/LINK.txt"))}
+-        want_ok = (sub["apply"] == "APPLY: EXACTLY_C_PLUS_PATCH" and sub["restore"] == "RESTORE: EXACTLY_C"
+-                   and sub["link"] == "LINK: VERIFIED"
+-                   and ((c == "C22" and sub["build"] == "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
+-                         and sub["run"] is None) or
+-                        (c != "C22" and sub["build"] == "BUILD: PINNED"
+-                         and sub["run"] == "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING")))
++        cand = "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
++        want_ok = (sub["restore"] == "RESTORE: EXACTLY_C" and sub["link"] == "LINK: VERIFIED" and sub["run"] == cand
++                   and ((c == "C28" and sub["admission"] == c28_admit.ADMITTED and sub["pin"] == c28_admit.PINNED
++                         and sub["apply"] is None and sub["build"] is None) or
++                        (c != "C28" and sub["apply"] == "APPLY: EXACTLY_C_PLUS_PATCH" and sub["build"] == "BUILD: PINNED"
++                         and sub["admission"] is None and sub["pin"] is None)))
+         check(f"G3 {c}: RESULT agrees with its sub-receipts", (res == "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — "
+                                                                "ARCHITECT REVIEW PENDING") == want_ok, f"{res}; {sub}")
+         wt = exp["controls"][c]["worktree"]
+         if os.path.exists(wt):
++            if c == "C28":
++                os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # RESUME-01's worktree: read, never written
+             v = control.restored_check(wt, "final gate")
++            os.environ.pop("GIT_OPTIONAL_LOCKS", None)
+             check(f"G4 {c}: worktree exactly C now (verify_tree.py and the path-aware status policy)",
+                   v["verdict"] == "EXACTLY_C", f"{v['verdict']} {v['verify_tree']['status_entries']}; "
+                                               f"{v['status_policy']['target_entries']} target entries")
+             entry = worktrees.worktree_entry(wt) or []
+-            check(f"G4 {c}: worktree locked with this mission's reason",
+-                  any(l.startswith("locked " + K.MISSION) for l in entry), entry[-1:] if entry else entry)
+-        pin = os.path.join(d, "03-build/PIN.json")
++            owner = K.RESUME_MISSION if c == "C28" else K.MISSION
++            check(f"G4 {c}: worktree locked with {'RESUME-01' if c == 'C28' else 'this mission'}'s reason",
++                  any(l.startswith("locked " + owner + " ") for l in entry), entry[-1:] if entry else entry)
++        pin = os.path.join(d, "02-pin/PIN.json" if c == "C28" else "03-build/PIN.json")
+         if os.path.exists(pin):
+             p = json.load(open(pin))
+             check(f"G6 {c}: pinned mutant executable preserved", os.path.exists(p["path"])
+@@ -109,18 +117,18 @@
+                   f"{p['path']} {p['sha256'][:16]}…")
+     for c in K.NOT_AUTHORIZED:
+         check(f"G3 {c}: not executed (no worktree)", not os.path.lexists(K.control_wt(c)))
+-    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # the previous mission's worktrees are read, never written
+-    for label, wt in (("healthy-build", K.HEALTHY_WT), ("C22 (Architect-accepted; preserved)", K.control_wt("C22")),
+-                      ("development verifier-control", K.DEV_WT)):
+-        v = control.restored_check(wt, "final gate")
+-        check(f"G4 {label} worktree exactly C now (read-only)", v["verdict"] == "EXACTLY_C",
+-              f"{v['verdict']}; {v['status_policy']['target_entries']} target entries")
++    for c in K.CONTINUE_ACCEPTED:
++        check(f"G8 {c} (Architect-accepted): no receipt directory in this mission (not rebuilt, not rerun)",
++              not os.path.lexists(os.path.join(K.EV, exp["controls"][c]["dir"])))
++    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # the previous missions' worktrees are read, never written
++    for c in K.CONTINUE_ACCEPTED:
++        v = control.restored_check(K.control_wt(c), "final gate")
++        entry = worktrees.worktree_entry(K.control_wt(c)) or []
++        owner = K.PREV_MISSION if c == "C22" else K.RESUME_MISSION
++        check(f"G8 {c}'s preserved worktree untouched: exactly C now (read-only), still locked with its own mission's "
++              f"reason", v["verdict"] == "EXACTLY_C" and any(l.startswith("locked " + owner + " ") for l in entry),
++              f"{v['verdict']}; {entry[-1:] if entry else entry}")
+     del os.environ["GIT_OPTIONAL_LOCKS"]
+-    hx = os.path.join(K.EV, "receipts/20-healthy-build/EXECUTABLES.json")
+-    if os.path.exists(hx):
+-        p = json.load(open(hx))
+-        check("G6 the healthy build's executable preserved (never run)", K.sha256_file(p["path"]) == p["sha256"],
+-              f"{p['path']} {p['sha256'][:16]}…")
+     check("G6 the pinned baseline executable unchanged", K.sha256_file(K.EXE) == K.EXE_SHA256
+           and os.path.getsize(K.EXE) == K.EXE_SIZE)
+     absent = [c["mutant_blob"] for c in exp["controls"].values()
+--- RESUME-01/tools/pre_exec_gate.py
++++ CONTINUE-02/tools/pre_exec_gate.py
+@@ -20,6 +20,13 @@
+     p3c11-* scope, no other control.py
+ E7  the development and preserved C22 worktrees are exactly C (read-only restored check)
+ E8  the control order, the accepted C22 and the commands/environments are the frozen ones
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 14), run once after the freeze and before the C28
++invocation: E1 also authenticates the complete RESUME-01 packet; E2 covers both Architect ruling records, the
++RESUME-01 tools and the dedicated C28 tools; E3 the C28 admission/pin tool controls; E5 no receipt directory for C28 or
++any later control, no worktree for C12 or later, the preserved C28 worktree present; E7 the preserved C28 worktree
++exactly C (read-only); E8 the continue order and the five Architect-accepted controls; E9 every identity the freeze
++records (both previous packets, the C28 prior build evidence, the C28 expected executable, the carried-forward
++baselines, C and the catalog) is unchanged; E10 the ruling records state the rulings.
+ """
+ import json
+ import os
+@@ -63,23 +70,24 @@
+     tools = sorted(f for f in os.listdir(os.path.join(K.EV, "tools")) if f.endswith((".py", ".sh")))
+     need = ([f"tools/{t}" for t in tools] + [f"original-tools/{t}" for t in os.listdir(os.path.join(K.EV,
+                                                                                                "original-tools"))]
+-            + ["receipts/02-EXPECTATIONS.json", K.C22_RULING, "vocabulary/VOCABULARY.json", "inputs/catalog.json"]
++            + ["receipts/02-EXPECTATIONS.json", K.RULING, K.C28_RULING, "vocabulary/VOCABULARY.json",
++               "inputs/catalog.json", "inputs/linked/F-B2/CLASSIFICATION.txt", "inputs/linked/F-G/CLASSIFICATION.txt"]
+             + [f"inputs/patches/{c}.patch" for c in K.ORDER])
+     for c in K.CARRIED:
+         p = os.path.join(K.EV, c)
+         if os.path.isdir(p):
+             need += [os.path.relpath(os.path.join(a, f), K.EV) for a, _, fs in os.walk(p) for f in fs]
+     missing = [n for n in need if n not in fr["files"]]
+-    check(f"E2 the freeze covers every tool ({len(tools)}), the EXEC-01 tools, the expectations, the catalog and the "
+-          f"twelve patches, the carried-forward receipts and the C22 ruling record ({len(need)} required paths)",
+-          not missing, missing[:5])
+-    check("E2 the freeze record states the resume order and the Architect-accepted C22",
+-          fr.get("policy", {}).get("control_order") == K.RESUME_ORDER
+-          and fr.get("policy", {}).get("architect_accepted_not_executed") == K.ACCEPTED)
++    check(f"E2 the freeze covers every tool ({len(tools)}), the RESUME-01 tools, the expectations, the catalog and the "
++          f"twelve patches, the linked Stage-2 receipts, the carried-forward receipts and both Architect ruling records "
++          f"({len(need)} required paths)", not missing, missing[:5])
++    check("E2 the freeze record states the continue order and the five Architect-accepted controls",
++          fr.get("policy", {}).get("control_order") == K.CONTINUE_ORDER
++          and fr.get("policy", {}).get("architect_accepted_not_executed") == K.CONTINUE_ACCEPTED)
+     for rel, want in (("receipts/00-authentication.txt", "RESULT: ALL CHECKS HOLD"),
+                       ("receipts/01-supervision-selftest/SELFTEST.txt", "SELF-TEST RESULT: ALL OK"),
+-                      ("receipts/03-verifier-controls/SUMMARY.txt", "VERIFIER CONTROLS: ALL AS EXPECTED"),
+-                      ("receipts/04-tool-repair/TOOL-DIFF-CHECK.txt", "TOOL DIFF: ALL CHECKS HOLD"),
++                      ("receipts/03-c28-admission-controls/SUMMARY.txt", "C28 ADMISSION CONTROLS: ALL AS EXPECTED"),
++                      ("receipts/04-tool-diff/TOOL-DIFF-CHECK.txt", "TOOL DIFF: ALL CHECKS HOLD"),
+                       ("receipts/04b-render-rehearsal/SUMMARY.txt", "RENDER REHEARSAL: ALL AS EXPECTED")):
+         check(f"E3 {rel}: {want}", last(rel) == want and fr.get("pre_freeze_receipts", {}).get(rel) ==
+               K.sha256_file(os.path.join(K.EV, rel)), last(rel))
+@@ -89,9 +97,14 @@
+           r.returncode == 0 and r.stdout.rstrip().endswith("TOOL DIFF: ALL CHECKS HOLD"),
+           r.stdout.rstrip().splitlines()[-1] if r.stdout else r.stderr[-200:])
+     exp = supervise.expectations()
+-    later = [c for c in K.RESUME_ORDER if os.path.lexists(os.path.join(K.EV, exp["controls"][c]["dir"]))
+-             or os.path.lexists(exp["controls"][c]["worktree"])]
+-    check("E5 no receipt directory and no worktree for C14 or any later control", not later, later)
++    later = [c for c in K.CONTINUE_ORDER if os.path.lexists(os.path.join(K.EV, exp["controls"][c]["dir"]))
++             or (c != "C28" and os.path.lexists(exp["controls"][c]["worktree"]))]
++    check("E5 no receipt directory for C28 or any later control; no worktree for C12 or any later control", not later,
++          later)
++    check("E5 the preserved C28 worktree is present (it is not recreated)", os.path.isdir(K.control_wt("C28")))
++    accepted = [c for c in K.CONTINUE_ACCEPTED if os.path.lexists(os.path.join(K.EV, exp["controls"][c]["dir"]))]
++    check("E5 no receipt directory for an Architect-accepted control (C22 C14 C19 C21 C27 are not executed)",
++          not accepted, accepted)
+     outside = [c for c in K.NOT_AUTHORIZED if os.path.lexists(K.control_wt(c))]
+     check("E5 no worktree for any control outside the tranche", not outside, outside)
+     exes, builds, scopes = supervise.conflicts(K.NEXUS + "/nexus-os-p3-c11-mt1x-")
+@@ -101,20 +114,29 @@
+           "p3c11-* scope, control.py)", not exes and not builds and not scopes and not others,
+           f"{exes} {builds} {scopes} {others}")
+     os.environ["GIT_OPTIONAL_LOCKS"] = "0"
+-    for label, wt in (("development verifier-control", K.DEV_WT), ("preserved C22 (Architect-accepted)",
+-                                                                   K.control_wt("C22"))):
+-        v = control.restored_check(wt, "pre-execution gate")
+-        check(f"E7 the {label} worktree is exactly C (read-only restored check)", v["verdict"] == "EXACTLY_C",
+-              f"{v['verdict']}; {v['status_policy']['target_entries']} target entries")
++    v = control.restored_check(K.control_wt("C28"), "pre-execution gate")
++    check("E7 the preserved C28 worktree is exactly C (read-only restored check)", v["verdict"] == "EXACTLY_C",
++          f"{v['verdict']}; {v['status_policy']['target_entries']} target entries")
+     del os.environ["GIT_OPTIONAL_LOCKS"]
+-    check("E8 control order C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b; C22 accepted, not executed",
+-          K.RESUME_ORDER == ["C14", "C19", "C21", "C27", "C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
+-          and K.ACCEPTED == ["C22"] and exp["order"] == K.ORDER and all(exp["controls"][c]["dir"].endswith("-" + c)
+-                                                                         for c in K.RESUME_ORDER))
++    check("E8 control order C28 C12 C9 C11 C17 C18a C18b; C22 C14 C19 C21 C27 Architect-accepted, not executed",
++          K.CONTINUE_ORDER == ["C28", "C12", "C9", "C11", "C17", "C18a", "C18b"]
++          and K.CONTINUE_ACCEPTED == ["C22", "C14", "C19", "C21", "C27"] and exp["order"] == K.ORDER
++          and all(exp["controls"][c]["dir"].endswith("-" + c) for c in K.CONTINUE_ORDER))
+     check("E8 build command and environment template, run environment and limits are the expectations' (frozen)",
+           exp["build"]["argv"] == K.BUILD_ARGV and exp["build"]["env_template"] == [list(x) for x in K.build_env(
+               "<worktree>/target")] and exp["run_env"] == dict(K.RUN_ENV) and exp["build"]["limit_seconds"] == 900
+           and exp["build"]["memory_max"] == K.MEMORY_MAX and exp["build"]["swap_max"] == "0")
++    import record_freeze
++    now = record_freeze.identities()
++    rec_ids = fr.get("identities", {})
++    check("E9 every identity the freeze records is unchanged now (both previous packets, the C28 prior build evidence, "
++          "the C28 expected executable, the carried-forward baselines, C, the catalog)",
++          rec_ids and json.loads(json.dumps(now)) == rec_ids, sorted(k for k in now if json.loads(json.dumps(now[k]))
++                                                                     != rec_ids.get(k)))
++    check("E10 the Architect ruling records state the rulings (first lines), frozen",
++          supervise.first_line(os.path.join(K.EV, K.RULING)) == K.RULING_FIRST
++          and supervise.first_line(os.path.join(K.EV, K.C28_RULING)) == K.C28_RULING_FIRST
++          and K.RULING in fr["files"] and K.C28_RULING in fr["files"])
+     lines.append(f"finished: {supervise.now()}")
+     head = "PRE-EXECUTION GATE: " + ("ALL CHECKS HOLD" if not fails else "FAILED: " + "; ".join(fails))
+     open(OUT, "w").write(head + "\n" + "\n".join(lines) + "\n")
+--- RESUME-01/tools/publish_checks.py
++++ CONTINUE-02/tools/publish_checks.py
+@@ -4,6 +4,10 @@
+ (the R2 evidence commit), its one allowed path, the destination ref, the 32 MiB limit, and its key receipts read back.
+ Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 20): parent 19eda8cc (the EXEC-01 evidence commit),
+ the resume packet path and review ref, the previous packet checked unchanged, and the resume receipts read back.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 19): parent 3695a817 (the RESUME-01 evidence commit),
++this packet path and review ref, both previous packets (EXEC-01, RESUME-01) checked unchanged, both previous review refs
++checked, and this mission's key receipts (both ruling records, C28 admission, pin, run, restoration and link, every
++later attempted control) read back.
+ 
+   publish_checks.py pre     <evidence-commit>   confinement, lineage, C and the R2 packet unchanged, nothing mutant or
+                                                  executable staged, text only, hooks, workflow triggers, rulesets,
+@@ -25,18 +29,21 @@
+ SLUG = "Nexus-os2026/nexus-os"
+ C = "d5964ee5326c2733177307db6f507328023d361a"
+ C_TREE = "51bac5fd335999cc995c0ab9f582a30244973ef0"
+-PARENT = "19eda8cc7f559054933fed4a93bdb0a18cc725d4"
+-PARENT_TREE = "1b313ec5c23b5bf76db90b5fa89758d9cd880a75"
++PARENT = "3695a817a6190781dc66769a72a487b442d3e6da"
++PARENT_TREE = "a5fce69d5f60b0b86f3982aa655d5a33f4ef9ea4"
++EXEC01 = "19eda8cc7f559054933fed4a93bdb0a18cc725d4"
+ R2 = "9f22f890d8532df395f22cd8db8db2552bfdd14c"
+ PREV_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/"
+ PREV_BRANCH = "review/p3-c11-d2a1-mutation-tranche1-exec-01"
++RESUME_PACKET = "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/"
++RESUME_BRANCH = "review/p3-c11-d2a1-mutation-tranche1-resume-01"
+ R2_PACKET = "docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/"
+ CATALOG = R2_PACKET + "catalog/catalog.json"
+ CATALOG_BLOB = "1918374263740d2f98640da00fc466737945975e"
+ EV = "docs/evidence/p3-candidate11/"
+-PACKET = EV + "d2a1-mutation-tranche1-resume-01/"
++PACKET = EV + "d2a1-mutation-tranche1-continue-02/"
+ ALLOWED = (PACKET,)
+-BRANCH = "review/p3-c11-d2a1-mutation-tranche1-resume-01"
++BRANCH = "review/p3-c11-d2a1-mutation-tranche1-continue-02"
+ DEST = "refs/heads/" + BRANCH
+ PROTECTED = ["refs/heads/main", "refs/heads/rebuild/phase0-trust-boundary"]
+ LIMIT = 32 * 1024 * 1024
+@@ -128,7 +135,7 @@
+     info = git("cat-file", "commit", e).decode()
+     head = info.partition("\n\n")[0].splitlines()
+     parents = [l[7:] for l in head if l.startswith("parent ")]
+-    check("evidence commit has the single parent 19eda8cc (the EXEC-01 evidence commit)", parents == [PARENT], parents)
++    check("evidence commit has the single parent 3695a817 (the RESUME-01 evidence commit)", parents == [PARENT], parents)
+     check("the parent's tree is unchanged", git("rev-parse", PARENT + "^{tree}").decode().strip() == PARENT_TREE)
+     te, tp, tc = tree_map(e), tree_map(PARENT), tree_map(C)
+     changed = sorted(p for p in set(te) | set(tp) if te.get(p) != tp.get(p))
+@@ -139,8 +146,11 @@
+           len(r2) == 72 and all(te.get(p) == tp.get(p) for p in r2), f"{len(r2)} paths")
+     check("the frozen R2 catalog is unchanged", te.get(CATALOG, ("", "", ""))[2] == CATALOG_BLOB, te.get(CATALOG))
+     prev = [p for p in set(te) | set(tp) if p.startswith(PREV_PACKET)]
+-    check("the previous (EXEC-01) packet is unchanged (every path has the same mode and blob)",
++    check("the EXEC-01 packet is unchanged (every path has the same mode and blob)",
+           len(prev) == 963 and all(te.get(p) == tp.get(p) for p in prev), f"{len(prev)} paths")
++    res = [p for p in set(te) | set(tp) if p.startswith(RESUME_PACKET)]
++    check("the RESUME-01 packet is unchanged (every path has the same mode and blob)",
++          len(res) == 381 and all(te.get(p) == tp.get(p) for p in res), f"{len(res)} paths")
+     outside = sorted(p for p in set(te) | set(tc) if te.get(p) != tc.get(p) and not p.startswith("docs/evidence/"))
+     check("no path outside docs/evidence/ differs from Candidate C", not outside, outside[:5])
+     check("Candidate C is unchanged", git("rev-parse", C + "^{tree}").decode().strip() == C_TREE)
+@@ -219,7 +229,9 @@
+           subprocess.run(["git", "-C", REPO, "show-ref", "--verify", "-q", DEST]).returncode == 1)
+     check("the R2 review ref still points at the R2 evidence commit",
+           rm.get("refs/heads/review/p3-c11-d2a1-control-definitions-r2-01") == R2)
+-    check("the previous (EXEC-01) review ref still points at the parent", rm.get("refs/heads/" + PREV_BRANCH) == PARENT)
++    check("the EXEC-01 review ref still points at the EXEC-01 evidence commit",
++          rm.get("refs/heads/" + PREV_BRANCH) == EXEC01)
++    check("the RESUME-01 review ref still points at the parent", rm.get("refs/heads/" + RESUME_BRANCH) == PARENT)
+     for p in PROTECTED:
+         print(f"     remote {p}: {rm.get(p)}")
+     digest = hashlib.sha256("\n".join(sorted(remote)).encode()).hexdigest()
+@@ -249,7 +261,7 @@
+     check("GitHub commit object: sha", d.get("sha") == e)
+     check("GitHub commit object: tree", d.get("commit", {}).get("tree", {}).get("sha") ==
+           git("rev-parse", e + "^{tree}").decode().strip(), d.get("commit", {}).get("tree", {}).get("sha"))
+-    check("GitHub commit object: single parent 19eda8cc", [p["sha"] for p in d.get("parents", [])] == [PARENT])
++    check("GitHub commit object: single parent 3695a817", [p["sha"] for p in d.get("parents", [])] == [PARENT])
+     rc, out = gh(f"repos/{SLUG}/compare/{PARENT}...{e}")
+     cmp = json.loads(out) if rc == 0 else {}
+     files = [f["filename"] for f in cmp.get("files", [])]
+@@ -260,9 +272,10 @@
+           files and all(f.startswith(ALLOWED) for f in files) and all(f["status"] == "added" for f in cmp.get("files", [])),
+           f"{len(files)} files listed (the compare API lists at most 300; {len(local)} local)")
+     check("GitHub compare: the listed files are local packet files", set(files) <= set(local))
+-    key = ["SHA256SUMS", "INDEX.md", "TRANCHE-SUMMARY.md", "CARRIED-FORWARD.md", "ARCHITECT-RULING-C22-ACCEPTANCE.md",
+-           "receipts/00-authentication.txt", "receipts/03-verifier-controls/SUMMARY.txt",
+-           "receipts/04-tool-repair/TOOL-REPAIR.diff", "receipts/04-tool-repair/TOOL-DIFF-CHECK.txt",
++    key = ["SHA256SUMS", "INDEX.md", "TRANCHE-SUMMARY.md", "CARRIED-FORWARD.md",
++           "ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md", "ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md",
++           "receipts/00-authentication.txt", "receipts/03-c28-admission-controls/SUMMARY.txt",
++           "receipts/04-tool-diff/TOOL-DIFF.diff", "receipts/04-tool-diff/TOOL-DIFF-CHECK.txt",
+            "receipts/05-FREEZE.json", "receipts/05-FREEZE-RECORD.txt", "receipts/06-PRE-EXECUTION-GATE.txt",
+            "receipts/90-final-gate.txt"]
+     tm = tree_map(e)
+@@ -272,7 +285,8 @@
+         rel = p[len(PACKET):]
+         if re.match(r"receipts/\d\d-C[0-9a-z]+/(RESULT\.txt|02-apply/APPLY\.txt|03-build/CLASSIFICATION\.txt|"
+                          r"03-build/build\.stderr|03-build/PIN\.json|04-run/CLASSIFICATION\.txt|04-run/raw-output\.txt|"
+-                         r"05-restore/RESTORE\.txt|06-link/LINK\.txt)$", rel):
++                         r"05-restore/RESTORE\.txt|06-link/LINK\.txt|01-admission/ADMISSION\.txt|02-pin/PIN\.txt|"
++                         r"02-pin/PIN\.json)$", rel) or rel == "receipts/80-STOP-RECORD.md":
+             key.append(rel)
+     print(f"     reading back {len(key)} key files from GitHub at the evidence commit")
+     for rel in key:
+--- RESUME-01/tools/record_freeze.py
++++ CONTINUE-02/tools/record_freeze.py
+@@ -3,6 +3,13 @@
+ invocation. Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 10): the freeze is recorded once before
+ C14, and it also covers the EXEC-01 tools the repair starts from, the C22 Architect-ruling record and every
+ carried-forward receipt copy; the pre-freeze receipts are this mission's.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 14): recorded once before the C28 invocation; it
++covers the RESUME-01 tools the mission starts from (original-tools/), every tool (the dedicated C28 admission/pin tool
++and its controls among them), the inputs (catalog, the twelve patches including the seven relevant ones), the
++carried-forward expectations and baselines, both Architect ruling records; and it records, as identities, the two
++previous mission-execution packets (commit, tree, SHA256SUMS sha256), the C28 prior build evidence (every file by
++path, blob and sha256), the C28 expected executable identity, the carried-forward baseline receipt identities, the
++execution order, commands, environments, classifiers, supervision, restoration policy and packet tooling.
+ 
+     record_freeze.py        writes receipts/05-FREEZE.json (sha256 of every frozen file) and receipts/05-FREEZE-RECORD.txt
+                             (first line `FREEZE: RECORDED`); refuses if either exists
+@@ -23,8 +30,13 @@
+ import common as K  # noqa: E402
+ 
+ POLICY = {
+-    "control_order": K.RESUME_ORDER,
+-    "architect_accepted_not_executed": K.ACCEPTED,
++    "control_order": K.CONTINUE_ORDER,
++    "architect_accepted_not_executed": K.CONTINUE_ACCEPTED,
++    "c28": "the existing RESUME-01 build, admitted read-only by tools/c28_admit.py under the narrow C28 ruling (no "
++           "rebuild, no Cargo, no rustc); the preserved executable pinned read-only; one supervised T-RES invocation; "
++           "the restored worktree re-authenticated read-only; the carried-forward T-RES (e2) linked",
++    "later_builds": "C12 C9 C11 C17 C18a C18b: one fresh worktree, the frozen patch, one build each with the general "
++                    "classifier unchanged (no error, no warning diagnostic; the C28 exception does not transfer)",
+     "not_authorized": K.NOT_AUTHORIZED,
+     "supervision": "systemd user scope MemoryMax=16G MemorySwapMax=0, RuntimeMaxSec=limit+10 (backstop), timeout -s KILL "
+                    "<limit>, /usr/bin/time -v, nice -n 10; MemAvailable >= 18 GiB before each step; no conflicting test "
+@@ -36,12 +48,49 @@
+     "run_environment": K.RUN_ENV,
+     "restoration": "git apply -R of the same frozen patch in the disposable worktree; changed file byte-equal to C; "
+                    "verify_tree.py EXACTLY_C; the path-aware status policy (verify_mutant.status_policy): no tracked "
+-                   "change, ignored entries only beneath the worktree's own real target directory",
++                   "change, ignored entries only beneath the worktree's own real target directory; C28: no patch is "
++                   "applied or reversed, the restored worktree is re-authenticated read-only by the same checks",
++    "classifiers": "classify.py unchanged (RESUME-01 = EXEC-01): classify_build_success (pin), classify_a, classify_b; "
++                   "C28's run: classify_b with source EXACTLY_C (the mutant blob withheld from the run-source check "
++                   "only)",
++    "packet_tooling": "render.py, build_packet.py, publish_checks.py, final_gate.py (frozen with every other tool)",
+     "source_verification": "verify_mutant.py: HEAD/tree C, detached, index = HEAD, every tracked byte and mode compared, "
+                            "the named file exactly the catalog mutant; the path-aware status policy (resume section 7)",
+-    "retries": "none: one build per control, one run per control, no rebuild, no rerun; C22 and the baselines are not "
+-               "rerun",
++    "retries": "none: one build per control (none for C28), one run per control, no rebuild, no rerun; C22 C14 C19 "
++               "C21 C27 and the baselines are not rerun",
+ }
++
++
++def identities():
++    """The identities the freeze records (continue mission section 14), each re-checked by the pre-execution gate."""
++    import c28_admit
++    out = {}
++    for name, commit, packet in (("EXEC-01", K.PREV, K.PREV_PACKET), ("RESUME-01", K.RESUME, K.RESUME_PACKET)):
++        b = K.git("rev-parse", f"{commit}:{packet}/SHA256SUMS").decode().strip()
++        out[f"{name} packet"] = {"commit": commit, "tree": K.git("rev-parse", commit + "^{tree}").decode().strip(),
++                                 "packet": packet, "SHA256SUMS_blob": b,
++                                 "SHA256SUMS_sha256": K.sha256_bytes(K.git("cat-file", "blob", b))}
++    ev = c28_admit.evidence()
++    out["C28 prior build evidence"] = [{k: a[k] for k in ("path", "blob", "sha256")} for a in ev["auth"]]
++    out["C28 expected executable"] = {k: c28_admit.RULING[k] for k in ("executable", "exe_sha256", "exe_size",
++                                                                       "mutant_blob", "mutant_sha256", "patch_sha256",
++                                                                       "stderr_sha256")}
++    out["carried-forward baselines"] = {}
++    for c in K.CARRIED:
++        for rel in (["receipts/02-EXPECTATIONS.json"] if c.endswith(".json") else
++                    [c + "/CLASSIFICATION.txt", c + "/descriptor.json", c + "/raw-output.txt"]):
++            b = K.git("rev-parse", f"{K.PREV}:{K.PREV_PACKET}/{rel}").decode().strip()
++            out["carried-forward baselines"][rel] = {"blob": b, "sha256": K.sha256_bytes(K.git("cat-file", "blob", b))}
++    out["candidate_c"] = {"commit": K.C, "tree": K.C_TREE, "blobs": K.BLOBS}
++    out["catalog"] = {"path": K.CATALOG_PATH, "blob": K.CATALOG_BLOB, "sha256": K.CATALOG_SHA, "commit": K.R2}
++    return out
++
++
++PRE_FREEZE = {"receipts/00-authentication.txt": "RESULT: ALL CHECKS HOLD",
++              "receipts/01-supervision-selftest/SELFTEST.txt": "SELF-TEST RESULT: ALL OK",
++              "receipts/03-c28-admission-controls/SUMMARY.txt": "C28 ADMISSION CONTROLS: ALL AS EXPECTED",
++              "receipts/04-tool-diff/TOOL-DIFF-CHECK.txt": "TOOL DIFF: ALL CHECKS HOLD",
++              "receipts/04b-render-rehearsal/SUMMARY.txt": "RENDER REHEARSAL: ALL AS EXPECTED"}
+ 
+ 
+ def main():
+@@ -58,19 +107,15 @@
+                 if not f.endswith(".pyc"):
+                     p = os.path.join(d, f)
+                     files[os.path.relpath(p, K.EV)] = K.sha256_file(p)
+-    for rel in ("receipts/02-EXPECTATIONS.json", K.C22_RULING) + tuple(K.CARRIED_DOCS):
++    for rel in ("receipts/02-EXPECTATIONS.json", K.RULING, K.C28_RULING) + tuple(K.CARRIED_DOCS):
+         files[rel] = K.sha256_file(os.path.join(K.EV, rel))
+-    prior = {rel: K.sha256_file(os.path.join(K.EV, rel)) for rel in (
+-        "receipts/00-authentication.txt", "receipts/01-supervision-selftest/SELFTEST.txt",
+-        "receipts/03-verifier-controls/SUMMARY.txt", "receipts/04-tool-repair/TOOL-DIFF-CHECK.txt",
+-        "receipts/04b-render-rehearsal/SUMMARY.txt")}
++    prior = {rel: K.sha256_file(os.path.join(K.EV, rel)) for rel in PRE_FREEZE}
+     for rel in prior:
+         last = open(os.path.join(K.EV, rel)).read().rstrip().splitlines()[-1]
+-        if last not in ("RESULT: ALL CHECKS HOLD", "SELF-TEST RESULT: ALL OK", "VERIFIER CONTROLS: ALL AS EXPECTED",
+-                        "TOOL DIFF: ALL CHECKS HOLD", "RENDER REHEARSAL: ALL AS EXPECTED"):
++        if last != PRE_FREEZE[rel]:
+             raise SystemExit(f"REFUSED: {rel} does not record success")
+     rec = {"mission": K.MISSION, "recorded": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "files": files,
+-           "pre_freeze_receipts": prior, "policy": POLICY,
++           "pre_freeze_receipts": prior, "policy": POLICY, "identities": identities(),
+            "statement": "No semantic tool repair, patch repair, classifier repair, alternate control encoding or "
+                         "automatic retry after this point. A frozen-tool failure stops the mission and preserves its raw "
+                         "evidence."}
+@@ -80,6 +125,7 @@
+     lines += [f"  {h}  {p}" for p, h in sorted(files.items())]
+     lines += ["pre-freeze receipts (success recorded):"] + [f"  {h}  {p}" for p, h in prior.items()]
+     lines += ["policy:"] + [f"  {k}: {v}" for k, v in POLICY.items()]
++    lines += ["identities:"] + [f"  {k}: {json.dumps(v)}" for k, v in rec["identities"].items()]
+     lines.append(rec["statement"])
+     open(ft, "w").write("\n".join(lines) + "\n")
+     print("\n".join(lines[:4]))
+--- RESUME-01/tools/render.py
++++ CONTINUE-02/tools/render.py
+@@ -4,6 +4,12 @@
+ P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 19): the combined Tranche-1 summary (C22 Architect-accepted from
+ the ruling record; the eleven resume controls from this mission's receipts), the carried-forward receipts referenced
+ by previous commit, path, blob and sha256 (CARRIED-FORWARD.md), and this mission's index.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 18): the combined Tranche-1 status (C22 C14 C19
++C21 C27 Architect-accepted, from the ruling record; C28 from its existing-build admission, pin, run, restoration and
++link; C12 C9 C11 C17 C18a C18b from this mission's receipts), CARRIED-FORWARD.md (the EXEC-01 carried-forward copies,
++and every RESUME-01 file this mission authenticates, gates or links on, by commit, path, blob and sha256; the unchanged
++tools referenced, not republished), and this mission's index. The status is derived from the receipts:
++READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW, C28_PRESERVED_ARTIFACT_BLOCKED, MUTATION_CONTROL_BLOCKED or BLOCKED.
+ 
+     render.py OUTDIR       writes OUTDIR/INDEX.md, OUTDIR/TRANCHE-SUMMARY.md and OUTDIR/CARRIED-FORWARD.md; prints the
+                            derived status
+@@ -18,6 +24,8 @@
+ R = os.path.join(K.EV, "receipts")
+ CANDIDATE = "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
+ RESULT_OK = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
++C28_ARTIFACT_BLOCKED = "CONTROL RESULT: C28_PRESERVED_ARTIFACT_BLOCKED"
++ACCEPTED_DIRS = {"C14": "32-C14", "C19": "33-C19", "C21": "34-C21", "C27": "35-C27"}
+ 
+ 
+ def lines(path):
+@@ -44,15 +52,19 @@
+ 
+ def status(exp):
+     base_ok = all(lines(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))[:1] == ["CLASSIFICATION: PASS"]
+-                  for b in exp["baselines"])
+-    healthy_ok = lines(os.path.join(R, "20-healthy-build/CLASSIFICATION.txt"))[:1] == ["CLASSIFICATION: PASS"]
+-    ruling_ok = lines(os.path.join(K.EV, K.C22_RULING))[:1] == [K.C22_RULING_FIRST]
+-    results = [lines(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt"))[:1] for c in K.RESUME_ORDER]
+-    if not (base_ok and healthy_ok and ruling_ok):
+-        return "BLOCKED", base_ok, healthy_ok, results
++                  for b in exp["baselines"] if b["dir"] in K.CARRIED)
++    ruling_ok = (lines(os.path.join(K.EV, K.RULING))[:1] == [K.RULING_FIRST]
++                 and lines(os.path.join(K.EV, K.C28_RULING))[:1] == [K.C28_RULING_FIRST])
++    results = [lines(os.path.join(K.EV, exp["controls"][c]["dir"], "RESULT.txt"))[:1] for c in K.CONTINUE_ORDER]
++    if not (base_ok and ruling_ok):
++        return "BLOCKED", base_ok, ruling_ok, results
+     if all(r == [RESULT_OK] for r in results):
+-        return "READY_FOR_MUTATION_TRANCHE1_RESUME_ARCHITECT_REVIEW", base_ok, healthy_ok, results
+-    return "MUTATION_CONTROL_BLOCKED", base_ok, healthy_ok, results
++        return "READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW", base_ok, ruling_ok, results
++    if results[0] == [C28_ARTIFACT_BLOCKED]:
++        return "C28_PRESERVED_ARTIFACT_BLOCKED", base_ok, ruling_ok, results
++    if any(r and r[0].startswith("CONTROL RESULT: ") and r != [RESULT_OK] for r in results):
++        return "MUTATION_CONTROL_BLOCKED", base_ok, ruling_ok, results
++    return "BLOCKED", base_ok, ruling_ok, results
+ 
+ 
+ def prev_ref(rel):
+@@ -106,44 +118,98 @@
+     return row
+ 
+ 
++def resume_ref(rel):
++    """(path in the RESUME-01 packet, git blob at the RESUME-01 evidence commit, sha256) of one of its files."""
++    path = f"{K.RESUME_PACKET}/{rel}"
++    b = K.git("rev-parse", f"{K.RESUME}:{path}").decode().strip()
++    return path, b, K.sha256_bytes(K.git("cat-file", "blob", b))
++
++
++def control_row_c28(exp):
++    """C28: the existing RESUME-01 build (admission, pin), one run, the read-only restoration, the link."""
++    c = exp["controls"]["C28"]
++    d = os.path.join(K.EV, c["dir"])
++    if not os.path.exists(d):
++        return None
++    res_first = lines(os.path.join(d, "RESULT.txt"))[:1]
++    adm = lines(os.path.join(d, "01-admission/ADMISSION.txt"))
++    pin = jload(os.path.join(d, "02-pin/PIN.json"))
++    pin_l = lines(os.path.join(d, "02-pin/PIN.txt"))
++    run = jload(os.path.join(d, "04-run/PARSED-RECEIPT.json"))
++    rcls = outer(os.path.join(d, "04-run/CLASSIFICATION.txt")) if run else None
++    restore = lines(os.path.join(d, "05-restore/RESTORE.txt"))
++    link = lines(os.path.join(d, "06-link/LINK.txt"))
++    admj = jload(os.path.join(d, "01-admission/ADMISSION.json")) or {}
++    return {"id": "C28", "dir": c["dir"], "result": res_first[0] if res_first else "NOT COMPLETED",
++            "type": c["receipt_type"], "patch_sha256": c["patch"]["sha256"], "mutant_blob": c["mutant_blob"],
++            "mutant_sha256": c["mutant_sha256"],
++            "build": (f"NOT REPEATED — the existing RESUME-01 build (`{K.RESUME_PACKET}/receipts/36-C28/03-build/` at "
++                      f"`{K.RESUME}`; executor history `BUILD: NOT OK` unchanged); admission: "
++                      f"{adm[0] if adm else 'NOT PRODUCED'}; pin: {pin_l[0] if pin_l else 'NOT PRODUCED'}"),
++            "build_resources": res(admj.get("build_supervisor")) + " (the RESUME-01 build's record)",
++            "executable": (f"{pin['path']} sha256 {pin['sha256']} size {pin['size']} (preserved, not rebuilt)" if pin
++                           else "not pinned"),
++            "selection": " ".join(c["argv_tail"]), "named": f"{c['named_test_id']} ({c['test']})",
++            "raw": (f"panic at {run.get('panic_location')}: {' | '.join(run.get('panic_message') or [])}" if run
++                    else "not run"),
++            "count": "not applicable" if run else "—", "outer": rcls[1] if rcls else "not run",
++            "run_resources": res(run.get("supervisor")) if run else "—",
++            "restore": restore[0] if restore else "NOT PRODUCED", "link": (link[0] + " — " + link[1]) if link else "—"}
++
++
+ def main(outdir):
+     exp = json.load(open(os.path.join(R, "02-EXPECTATIONS.json")))
+-    st, base_ok, healthy_ok, results = status(exp)
+-    rows = [r for r in (control_row(exp, c) for c in K.RESUME_ORDER) if r]
++    st, base_ok, ruling_ok, results = status(exp)
++    rows = [r for r in [control_row_c28(exp)] + [control_row(exp, c) for c in K.CONTINUE_ORDER[1:]] if r]
+     attempted = [r["id"] for r in rows]
+     candidates = [r["id"] for r in rows if r["result"] == RESULT_OK]
+-    c22 = exp["controls"]["C22"]
+     s = [f"# Tranche-1 summary — {K.MISSION}", "",
+          f"Derived status: **{st}** (from the receipts; publication and the final report follow).", "",
+          "Combined Tranche 1 (12 controls):", "",
+-         "- **C22 — MUTATION CONTROL KILL ACCEPTED** by the Sole Architect (ruling recorded in "
+-         "`ARCHITECT-RULING-C22-ACCEPTANCE.md`; type (d), restored side the exact-command healthy build (e4)). Not "
+-         "executed again here. Its original executor classifications remain as historical outputs of the defective "
+-         "frozen tool.",
++         "- **C22, C14, C19, C21, C27 — MUTATION CONTROL KILL ACCEPTED** by the Sole Architect (ruling recorded in "
++         "`ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md`; C22 by the earlier ruling). Not executed again here. Their "
++         "original executor classifications and raw receipts remain unchanged in the previous packets.",
++         "- **C28** — its existing build is ARCHITECT-ADMISSIBLE under the narrow C28 ruling "
++         "(`ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md`); its control kill is pending the Architect's review of this "
++         "mission's candidate evidence.",
+          f"- new **KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING** results of this mission: **{len(candidates)}** "
+-         f"of the 11 remaining controls ({', '.join(candidates) or 'none'}). No control is called killed or accepted "
+-         "here: acceptance belongs to the Sole Architect, receipt by receipt.",
+-         f"- attempted by this mission: {', '.join(attempted) or 'none'}; not attempted: "
+-         f"{', '.join(c for c in K.RESUME_ORDER if c not in attempted) or 'none'}", "",
+-         "## C22 (Architect-accepted; previous packet, not rerun)", "",
+-         "| Receipt | Previous packet path | Blob at `" + K.PREV[:8] + "` | sha256 |", "|---|---|---|---|"]
+-    for rel in ("receipts/31-C22/02-apply/APPLY.json", "receipts/31-C22/03-build/build.stderr",
+-                "receipts/31-C22/03-build/PARSED-RECEIPT.json", "receipts/31-C22/03-build/CLASSIFICATION.txt",
+-                "receipts/31-C22/05-restore/RESTORE.json", "receipts/31-C22/RESULT.txt",
+-                "receipts/20-healthy-build/CLASSIFICATION.txt", "receipts/20-healthy-build/descriptor.json"):
+-        path, b, h = prev_ref(rel)
+-        s.append(f"| {rel.split('/', 1)[1]} | `{path}` | `{b}` | `{h}` |")
+-    s += ["", f"- frozen patch sha256 `{c22['patch']['sha256']}`; mutant protocol.rs blob `{c22['mutant_blob']}`, sha256 "
+-          f"`{c22['mutant_sha256']}`; E0283 at `{c22['diagnostic_file']}:{c22['diagnostic_line']}:5`, "
+-          f"`{c22['diagnostic_source_line']}`; no mutant executable (by design)", "",
+-          "## Baseline receipts linked by this mission (previous packet, not rerun)", "",
++         f"of the 7 remaining controls ({', '.join(candidates) or 'none'}). No control is called killed or accepted "
++         "here by the executor: acceptance belongs to the Sole Architect, receipt by receipt.",
++         f"- Tranche-1 count: Architect-accepted 5 of 12; executor candidates awaiting review {len(candidates)}; "
++         f"attempted by this mission: {', '.join(attempted) or 'none'}; not attempted: "
++         f"{', '.join(c for c in K.CONTINUE_ORDER if c not in attempted) or 'none'}", "",
++         "## Architect-accepted controls (previous packets, not rerun)", "",
++         "| Control | Receipt | Previous packet path | Blob | sha256 | First line (executor history) |",
++         "|---|---|---|---|---|---|"]
++    for cid, d in ACCEPTED_DIRS.items():
++        for f in ("RESULT.txt", "04-run/CLASSIFICATION.txt", "05-restore/RESTORE.txt", "06-link/LINK.txt"):
++            path, b, h = resume_ref(f"receipts/{d}/{f}")
++            s.append(f"| {cid} | {f} | `{path}` | `{b}` | `{h}` | `{K.git('cat-file', 'blob', b).decode().splitlines()[0]}` |")
++    for f in ("receipts/31-C22/RESULT.txt", "receipts/31-C22/03-build/CLASSIFICATION.txt"):
++        path, b, h = prev_ref(f)
++        s.append(f"| C22 | {f.split('/', 2)[2]} | `{path}` | `{b}` | `{h}` | "
++                 f"`{K.git('cat-file', 'blob', b).decode().splitlines()[0]}` |")
++    path, b, h = resume_ref("ARCHITECT-RULING-C22-ACCEPTANCE.md")
++    s += [f"| C22 | the earlier ruling record | `{path}` | `{b}` | `{h}` | `C22 — MUTATION CONTROL KILL ACCEPTED` |", "",
++          "## The C28 build evidence the admission authenticates (RESUME-01 packet, not rebuilt)", "",
++          "| Receipt | Path | Blob | sha256 |", "|---|---|---|---|"]
++    for f in ("03-build/CLASSIFICATION.txt", "03-build/build.stderr", "03-build/descriptor.json", "02-apply/APPLY.json",
++              "05-restore/RESTORE.json", "RESULT.txt"):
++        path, b, h = resume_ref(f"receipts/36-C28/{f}")
++        s.append(f"| {f} | `{path}` | `{b}` | `{h}` |")
++    s += ["", "## Baseline receipts linked by this mission (EXEC-01 packet, not rerun)", "",
+           "| Baseline | Type | For | Previous packet CLASSIFICATION.txt | Blob | sha256 | Classification |",
+           "|---|---|---|---|---|---|---|"]
+-    for b in exp["baselines"]:
++    for b in [b for b in exp["baselines"] if b["dir"] in K.CARRIED]:
+         path, bb, h = prev_ref(b["dir"] + "/CLASSIFICATION.txt")
+         cl = outer(os.path.join(K.EV, b["dir"], "CLASSIFICATION.txt"))
+         s.append(f"| {b['key']} | ({b['type']}) | {b['control']} | `{path}` | `{bb}` | `{h}` | {cl[0]} |")
+-    s += ["", "## The eleven remaining controls (resume order)", ""]
++    for cfg, d in (("F-B2", "61-full-F-B2"), ("F-G", "60-full-F-G")):
++        rel = f"{K.STAGE2_PACKET}/receipts/{d}/CLASSIFICATION.txt"
++        bb = K.git("rev-parse", f"{K.STAGE2}:{rel}").decode().strip()
++        s.append(f"| {cfg} | (e1) | {'C9 C11 C17' if cfg == 'F-B2' else 'C18a C18b'} | `{rel}` (Stage 2, "
++                 f"`{K.STAGE2[:8]}`) | `{bb}` | `{K.sha256_bytes(K.git('cat-file', 'blob', bb))}` | CLASSIFICATION: PASS |")
++    s += ["", "## The seven controls of this mission (continue order)", ""]
+     for r in rows:
+         s += [f"### {r['id']} — `{r['dir']}`", "", f"- result: **{r['result']}**", f"- receipt type: {r['type']}",
+               f"- frozen patch sha256: `{r['patch_sha256']}`", f"- mutant source blob: `{r['mutant_blob']}` (sha256 "
+@@ -154,16 +220,18 @@
+               f"- named property / test: {r['named']}", f"- discovered count: {r['count']}",
+               f"- run resources: {r['run_resources']}", f"- restoration: {r['restore']}",
+               f"- linked restored-side receipt: {r['link']}", ""]
+-    not_attempted = [c for c in K.RESUME_ORDER if c not in attempted]
++    not_attempted = [c for c in K.CONTINUE_ORDER if c not in attempted]
+     s += ["## Not attempted", "",
+           f"- authorized but not attempted (a stop ends the tranche): {', '.join(not_attempted) or 'none'}",
+-          f"- not authorized (never executed): {', '.join(K.NOT_AUTHORIZED)}; C22 not rerun; A4 not rerun; M01–M183 "
+-          "not executed; no baseline receipt rerun", ""]
++          f"- not authorized (never executed): {', '.join(K.NOT_AUTHORIZED)}; C22 C14 C19 C21 C27 not rebuilt or rerun; "
++          "A4 not rerun; M01–M183 not executed; no unchanged-core baseline rerun", ""]
+     open(os.path.join(outdir, "TRANCHE-SUMMARY.md"), "w").write("\n".join(s) + "\n")
+-    cf = [f"# Carried-forward files — {K.MISSION}", "",
+-          f"Byte copies of files of the previous evidence packet (`{K.PREV_PACKET}/` at `{K.PREV}`), kept under this "
+-          "mission's local evidence root for linking and gating, frozen, authenticated against the previous "
+-          "SHA256SUMS, and NOT republished here. Each is identified by its previous path, git blob and sha256.", "",
++    cf = [f"# Carried-forward and referenced files — {K.MISSION}", "",
++          f"Byte copies of EXEC-01 packet files (`{K.PREV_PACKET}/` at `{K.PREV}`), kept under this mission's local "
++          "evidence root for linking and gating, frozen, authenticated against that packet's SHA256SUMS, and NOT "
++          "republished here; then the RESUME-01 files this mission authenticates or gates on (read from git objects at "
++          f"`{K.RESUME}`, never copied); then the RESUME-01 tools this mission ran unchanged (not republished: "
++          "minimal reproducible tools are this packet's changed and added tools plus these references).", "",
+           "| Local path | Previous packet path | Blob | sha256 |", "|---|---|---|---|"]
+     for c in K.CARRIED:
+         p = os.path.join(K.EV, c)
+@@ -175,14 +243,32 @@
+     for dst, src in K.CARRIED_DOCS.items():
+         path, b, h = prev_ref(src)
+         cf.append(f"| `{dst}` | `{path}` | `{b}` | `{h}` |")
++    cf += ["", "## RESUME-01 files authenticated or gated on (referenced, not copied)", "",
++           "| RESUME-01 packet path | Blob | sha256 |", "|---|---|---|"]
++    import c28_admit
++    for a in c28_admit.evidence()["auth"]:
++        cf.append(f"| `{a['path']}` | `{a['blob']}` | `{a['sha256']}` |")
++    for rel in ("SHA256SUMS", "ARCHITECT-RULING-C22-ACCEPTANCE.md", "receipts/05-FREEZE.json",
++                "receipts/05-FREEZE-RECORD.txt", "receipts/04-tool-repair/TOOL-DIFF-CHECK.txt",
++                "receipts/90-final-gate.txt", "receipts/80-STOP-RECORD.md"):
++        path, b, h = resume_ref(rel)
++        cf.append(f"| `{path}` | `{b}` | `{h}` |")
++    cf += ["", "## RESUME-01 tools run unchanged by this mission (referenced, not republished)", "",
++           "| Tool | RESUME-01 packet path | Blob | sha256 |", "|---|---|---|---|"]
++    for t in sorted(os.listdir(os.path.join(K.EV, "original-tools"))):
++        if os.path.exists(os.path.join(K.EV, "tools", t)) and K.sha256_file(os.path.join(K.EV, "tools", t)) == \
++                K.sha256_file(os.path.join(K.EV, "original-tools", t)):
++            path, b, h = resume_ref("tools/" + t)
++            cf.append(f"| `{t}` | `{path}` | `{b}` | `{h}` |")
+     open(os.path.join(outdir, "CARRIED-FORWARD.md"), "w").write("\n".join(cf) + "\n")
+     fr = jload(os.path.join(R, "05-FREEZE.json")) or {}
+     i = [f"# {K.MISSION} — evidence packet", "",
+          "Executor: Claude Code, Claude Opus 5.5 (`claude-opus-5-5`), effort High. Evidence only: no source, catalog, "
+          "patch, contract, amendment or manifest is changed; no mutant source, executable or target directory is "
+-         "committed; the previous packet is not modified or duplicated.", "",
+-         f"Derived status: **{st}**. C22: Architect-accepted (ruling record). New candidate kill evidence: "
+-         f"{len(candidates)} of 11 ({', '.join(candidates) or 'none'}), each **KILL_EVIDENCE_CANDIDATE — ARCHITECT "
++         "committed; the previous packets are not modified or duplicated.", "",
++         f"Derived status: **{st}**. Architect-accepted (ruling record): C22, C14, C19, C21, C27 (5 of 35 kill-required "
++         f"controls). C28: build ARCHITECT-ADMISSIBLE (narrow ruling); kill pending. New candidate kill evidence: "
++         f"{len(candidates)} of 7 ({', '.join(candidates) or 'none'}), each **KILL_EVIDENCE_CANDIDATE — ARCHITECT "
+          "REVIEW PENDING**.", "",
+          "## Identities", "",
+          f"- Candidate C `{K.C}`, tree `{K.C_TREE}`, parent `{K.C_PARENT}`; protocol.rs `{K.BLOBS[K.PROTOCOL]}`, "
+@@ -194,32 +280,37 @@
+          f"- accepted unchanged-core evidence: Stage 1 `{K.STAGE1}`, Stage 2 `{K.STAGE2}`",
+          f"- previous execution evidence ({K.PREV_MISSION}): commit `{K.PREV}`, tree `{K.PREV_TREE}`, parent "
+          f"`{K.PREV_PARENT}`, packet `{K.PREV_PACKET}/`, ref `{K.PREV_REF}`",
++         f"- previous execution evidence ({K.RESUME_MISSION}): commit `{K.RESUME}`, tree `{K.RESUME_TREE}`, parent "
++         f"`{K.RESUME_PARENT}`, packet `{K.RESUME_PACKET}/`, ref `{K.RESUME_REF}`",
+          f"- pinned unchanged-baseline executable `{K.EXE}` sha256 `{K.EXE_SHA256}` size {K.EXE_SIZE:,}",
+-         f"- evidence commit parent: `{K.PREV}`; review ref `{K.DEST}`", "",
++         f"- evidence commit parent: `{K.RESUME}`; review ref `{K.DEST}`", "",
+          "## Contents", "",
+          "| Path | What |", "|---|---|",
+          "| `INDEX.md` | this file |",
+-         "| `TRANCHE-SUMMARY.md` | the combined Tranche-1 summary: C22 Architect-accepted, the linked baselines, and every "
+-         "attempted remaining control with identities, outcomes, classifications, resources, restoration and links |",
+-         "| `ARCHITECT-RULING-C22-ACCEPTANCE.md` | the record of the Architect's C22 ruling (evidence of the ruling; a "
+-         "string is not authority) |",
+-         "| `CARRIED-FORWARD.md` | every previous-packet file this mission links or gates on, by previous commit, path, "
+-         "blob and sha256 (not republished) |",
+-         "| `receipts/00-authentication.txt` | provenance: every input, the complete previous packet and its "
+-         "SHA256SUMS, the facts of the C22 ruling, the carried-forward copies |",
++         "| `TRANCHE-SUMMARY.md` | the combined Tranche-1 status: the five Architect-accepted controls (references), the C28 "
++         "build evidence, the linked baselines, and every attempted control with identities, outcomes, classifications, "
++         "resources, restoration and links |",
++         "| `ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md` | the record of the Architect's acceptance of C22, C14, C19, "
++         "C21, C27 and of the C28 build admissibility (evidence of the ruling; a string is not authority) |",
++         "| `ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md` | the record of the narrow C28 build-admissibility ruling |",
++         "| `CARRIED-FORWARD.md` | every previous-packet file this mission links, gates on or runs unchanged, by commit, "
++         "path, blob and sha256 (not republished) |",
++         "| `receipts/00-authentication.txt` | provenance: every input, both previous packets and their SHA256SUMS, every "
++         "C14/C19/C21/C27 result, the C28 history, the previous tool-repair and freeze receipts |",
+          "| `receipts/01-supervision-selftest/` | the unchanged enforcement chain proven again on non-Nexus processes |",
+-         "| `receipts/03-verifier-controls/` | the repaired verifier's positive, negative, replay, sensitivity and "
+-         "randomized controls (no Cargo, no Nexus test) |",
+-         "| `receipts/04-tool-repair/` | the exact old-to-new tooling diff, its authorization map, and the mechanical check "
+-         "that only authorized differences exist |",
++         "| `receipts/03-c28-admission-controls/` | the section-14 tool controls of the C28 admission checker and pin |",
++         "| `receipts/04-tool-diff/` | the complete RESUME-01-to-this-mission tool diff, its authorization map, and the "
++         "mechanical check that only authorized differences exist |",
+          "| `receipts/04b-render-rehearsal/` | render.py on synthetic receipts |",
+-         "| `receipts/05-FREEZE.json`, `05-FREEZE-RECORD.txt` | the freeze, before C14 |",
+-         "| `receipts/06-PRE-EXECUTION-GATE.txt` (+ `06-gate-authentication.txt`) | the static final pre-execution gate |",
+-         "| `receipts/32-C14/` … `42-C18b/` | one directory per attempted control: gate, worktree, apply, build, run, "
+-         "restore, link, RESULT |",
++         "| `receipts/05-FREEZE.json`, `05-FREEZE-RECORD.txt` | the freeze, before the C28 invocation |",
++         "| `receipts/06-PRE-EXECUTION-GATE.txt` (+ `06-gate-authentication.txt`) | the static pre-execution gate |",
++         "| `receipts/36-C28/` | C28: gate, existing-build admission, pin, run, restoration re-authentication, link, RESULT "
++         "(no build: not repeated) |",
++         "| `receipts/37-C12/` … `42-C18b/` | one directory per attempted later control: gate, worktree, apply, build, "
++         "run, restore, link, RESULT |",
+          "| `receipts/90-final-gate.txt` (+ `90-gate-authentication.txt`) | the final gate |",
+-         "| `tools/` | the tools this mission ran: the EXEC-01 tools, repaired only as authorized (see "
+-         "`receipts/04-tool-repair/`) |",
++         "| `tools/` | the tools this mission changed or added (the unchanged RESUME-01 tools are referenced in "
++         "`CARRIED-FORWARD.md`) |",
+          "| `development/` | the development log, every failing development output, every revision and its diff |",
+          "| `SHA256SUMS` | every packet file but itself |", "",
+          "## Freeze", "",
+@@ -227,17 +318,22 @@
+          f"`{K.sha256_file(os.path.join(R, '05-FREEZE.json')) if os.path.exists(os.path.join(R, '05-FREEZE.json')) else 'none'}`. "
+          "No frozen file was changed after the freeze; every supervised step re-checks it.", "",
+          "## Limitations", "",
+-         "- Classifications are executor candidates for Architect review; no kill is accepted here. C22's acceptance is "
+-         "the Sole Architect's ruling, recorded, not an executor finding.",
++         "- Classifications are executor candidates for Architect review; no kill is accepted here by the executor. The "
++         "acceptances of C22, C14, C19, C21 and C27 and the C28 build admissibility are the Sole Architect's rulings, "
++         "recorded, not executor findings.",
++         "- C28's executable is the RESUME-01 build, admitted under a narrow C28-only ruling; it was not rebuilt. Its run "
++         "was on the restored worktree (the ledger module reads no file at run time); its mutant identity is carried by "
++         "the admitted build evidence (source C plus the frozen patch before and after the build) and the pinned "
++         "executable identity.",
+          "- Results are the explored model's and the named tests' results on Candidate C and its mutants, under "
+          "AD-1-R4 J's storage assumptions; nothing here is a filesystem, network or OS-containment claim.",
+          "- Reproducible builds are not established (AD-1-R4 I); every identity is the sha256 of the executable "
+          "actually built and run.",
+-         "- The restored-side receipts are linked, not rerun: the standalone baselines (X-1 e1; T-BIND, T-CELL, W6, "
+-         "T-PREC, T-RES e2) of the previous packet and the accepted Stage-2 F-B2 and F-G receipts; each link is checked "
+-         "at its control's own verified restoration.", ""]
++         "- The restored-side receipts are linked, not rerun: the standalone X-1 (e1) and T-RES (e2) baselines of the "
++         "EXEC-01 packet and the accepted Stage-2 F-B2 and F-G receipts; each link is checked at its control's own "
++         "verified restoration.", ""]
+     open(os.path.join(outdir, "INDEX.md"), "w").write("\n".join(i) + "\n")
+-    print(f"STATUS: {st}; new candidates {len(candidates)} of 11; attempted {attempted}")
++    print(f"STATUS: {st}; new candidates {len(candidates)} of 7; attempted {attempted}")
+     return 0
+ 
+ 
+--- RESUME-01/tools/render_rehearsal.py
++++ CONTINUE-02/tools/render_rehearsal.py
+@@ -1,17 +1,18 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission section 6: rehearse render.py on SYNTHETIC receipts only.
+ Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 (section 19) for the revised render.py.
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 18) for this mission's render.py.
+ 
+     render_rehearsal.py OUTDIR TOOLCONTROLS     OUTDIR must not exist; TOOLCONTROLS: a copy of the synthetic tool-control
+-                                               receipts of EXEC-01 (receipts/03-tool-controls of the previous packet)
++                                               receipts of EXEC-01 (receipts/03-tool-controls of that packet)
+ 
+-A temporary evidence root OUTSIDE OUTDIR (under dev-local/, never published, so no previous-packet file is
+-republished) holds the carried-forward expectations, baselines, healthy build and C22 receipts and the C22 ruling
+-record (byte copies from this mission's evidence root), and three SYNTHETIC control
+-directories in the layout of the real receipts: C14 (b) and C12 (a) as candidates, C9 (a) as a non-candidate whose
+-run is a synthetic overshoot. render.py's functions are pointed at it and must render every row without error, with
+-the derived status MUTATION_CONTROL_BLOCKED (two new candidates of eleven), C22 rendered as Architect-accepted with
+-its previous-packet references, and every carried-forward file listed with its previous blob and sha256.
++Temporary evidence roots OUTSIDE OUTDIR (under dev-local/, never published) hold the carried-forward expectations and
++baselines, both ruling records and the tool directories (byte copies from this mission's evidence root), and SYNTHETIC
++control directories in the layout of the real receipts. Three scenarios, each rendered by render.py without error:
++  A  C28 a candidate (synthetic admission and pin, the synthetic type-(b) run), C12 a candidate (a), C9 a non-candidate
++     (a synthetic overshoot): MUTATION_CONTROL_BLOCKED, two candidates of seven, the rest not attempted
++  B  C28's pin blocked: C28_PRESERVED_ARTIFACT_BLOCKED
++  C  all seven candidates: READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW
+ """
+ import os
+ import shutil
+@@ -22,55 +23,104 @@
+ 
+ OK = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
+ BLOCKED = "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
++ART = "CONTROL RESULT: C28_PRESERVED_ARTIFACT_BLOCKED"
++EV0 = K.EV
+ 
+ 
+-def main(outdir, tc):
+-    root = os.path.join(K.EV, "dev-local", "render-rehearsal-root-" + os.path.basename(outdir))
+-    if os.path.exists(outdir) or os.path.exists(root):
++def root_for(name, tc, layout):
++    root = os.path.join(EV0, "dev-local", "render-rehearsal-root-" + name)
++    if os.path.exists(root):
+         raise SystemExit("REFUSED: output exists")
+     r = os.path.join(root, "receipts")
+     os.makedirs(r)
+     for c in K.CARRIED:
+-        src = os.path.join(K.EV, c)
++        src = os.path.join(EV0, c)
+         (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(root, c))
+     os.makedirs(os.path.join(root, "documents"))
+-    shutil.copy(os.path.join(K.EV, K.C22_RULING), os.path.join(root, K.C22_RULING))
+-    layout = {"32-C14": ("build-healthy-as-pin-ok", "run-b-c14-own-check", OK),
+-              "37-C12": ("build-healthy-as-pin-ok", "run-a-C12-x1-fail-E2", OK),
+-              "38-C9": ("build-healthy-as-pin-ok", "run-a-neg-fb2-overshoot", BLOCKED)}
+-    for d, (b, run, result) in layout.items():
+-        os.makedirs(os.path.join(r, d, "02-apply"))
+-        open(os.path.join(r, d, "02-apply/APPLY.txt"), "w").write("APPLY: EXACTLY_C_PLUS_PATCH\n(synthetic)\n")
+-        shutil.copytree(os.path.join(tc, b), os.path.join(r, d, "03-build"))
+-        shutil.copytree(os.path.join(tc, run), os.path.join(r, d, "04-run"))
++    for d in (K.RULING, K.C28_RULING):
++        shutil.copy(os.path.join(EV0, d), os.path.join(root, d))
++    for d in ("tools", "original-tools"):
++        shutil.copytree(os.path.join(EV0, d), os.path.join(root, d), ignore=shutil.ignore_patterns("__pycache__"))
++    for d, (run, result, pin_ok) in layout.items():
++        if d.endswith("C28"):
++            os.makedirs(os.path.join(r, d, "01-admission"))
++            open(os.path.join(r, d, "01-admission/ADMISSION.txt"), "w").write(
++                "C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING\n(synthetic)\n")
++            os.makedirs(os.path.join(r, d, "02-pin"))
++            open(os.path.join(r, d, "02-pin/PIN.txt"), "w").write(
++                ("PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)" if pin_ok else "PIN: C28_PRESERVED_ARTIFACT_BLOCKED")
++                + "\n(synthetic)\n")
++            if pin_ok:
++                open(os.path.join(r, d, "02-pin/PIN.json"), "w").write(
++                    '{"path": "/synthetic/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "synthetic", "size": 1}\n')
++        else:
++            os.makedirs(os.path.join(r, d, "02-apply"))
++            open(os.path.join(r, d, "02-apply/APPLY.txt"), "w").write("APPLY: EXACTLY_C_PLUS_PATCH\n(synthetic)\n")
++            shutil.copytree(os.path.join(tc, "build-healthy-as-pin-ok"), os.path.join(r, d, "03-build"))
++        if run:
++            shutil.copytree(os.path.join(tc, run), os.path.join(r, d, "04-run"))
+         os.makedirs(os.path.join(r, d, "05-restore"))
+         open(os.path.join(r, d, "05-restore/RESTORE.txt"), "w").write("RESTORE: EXACTLY_C\n(synthetic)\n")
+         if result == OK:
+             os.makedirs(os.path.join(r, d, "06-link"))
+             open(os.path.join(r, d, "06-link/LINK.txt"), "w").write("LINK: VERIFIED\ncontrol: synthetic link\n")
+         open(os.path.join(r, d, "RESULT.txt"), "w").write(result + "\n(synthetic)\n")
++    return root, r
++
++
++def render_in(name, tc, layout, outdir):
++    root, r = root_for(name, tc, layout)
+     K.EV = root
+     import render
+     render.R = r
+-    out = os.path.join(outdir, "rendered")
++    out = os.path.join(outdir, "rendered-" + name)
+     os.makedirs(out)
+     render.main(out)
+-    s = open(os.path.join(out, "TRANCHE-SUMMARY.md")).read()
+-    i = open(os.path.join(out, "INDEX.md")).read()
+-    cf = open(os.path.join(out, "CARRIED-FORWARD.md")).read()
+-    n_carried = sum(len(fs) for c in K.CARRIED if os.path.isdir(os.path.join(root, c))
+-                    for _, _, fs in os.walk(os.path.join(root, c))) + 1 + len(K.CARRIED_DOCS)
+-    checks = [("status MUTATION_CONTROL_BLOCKED", "**MUTATION_CONTROL_BLOCKED**" in s),
+-              ("C22 rendered as Architect-accepted, with previous-packet blob references",
+-               "**C22 — MUTATION CONTROL KILL ACCEPTED**" in s and K.PREV_PACKET + "/receipts/31-C22/03-build/build.stderr" in s),
+-              ("two new candidates of the eleven rendered", "**2** of the 11 remaining controls (C14, C12)" in s),
+-              ("C14 row: panic location rendered", "### C14" in s and "panic at" in s),
+-              ("C12 row: discovered count of the 250,000 ceiling", "### C12" in s and "of 250,000" in s),
+-              ("C9 row: non-candidate with its outer class", "### C9" in s and BLOCKED in s and "BUDGET EXCEEDED" in s),
+-              ("not attempted listed", "C19, C21, C27, C28, C11, C17, C18a, C18b" in s),
+-              ("baselines rendered as previous-packet references", s.count(K.PREV_PACKET + "/receipts/1") == 6),
+-              ("every carried-forward file listed with blob and sha256", cf.count("\n| `") == n_carried),
+-              ("INDEX names the status and the previous evidence commit", "MUTATION_CONTROL_BLOCKED" in i and K.PREV in i)]
++    K.EV = EV0
++    return (open(os.path.join(out, "TRANCHE-SUMMARY.md")).read(), open(os.path.join(out, "INDEX.md")).read(),
++            open(os.path.join(out, "CARRIED-FORWARD.md")).read())
++
++
++def main(outdir, tc):
++    if os.path.exists(outdir):
++        raise SystemExit("REFUSED: output exists")
++    os.makedirs(outdir)
++    a, ai, acf = render_in("A", tc, {"36-C28": ("run-b-c14-own-check", OK, True),
++                                     "37-C12": ("run-a-C12-x1-fail-E2", OK, True),
++                                     "38-C9": ("run-a-neg-fb2-overshoot", BLOCKED, True)}, outdir)
++    b, bi, _ = render_in("B", tc, {"36-C28": (None, ART, False)}, outdir)
++    full = {"36-C28": ("run-b-c14-own-check", OK, True), "37-C12": ("run-a-C12-x1-fail-E2", OK, True)}
++    full.update({d: ("run-a-C9-fb2-fail-E4", OK, True) for d in ("38-C9", "39-C11", "40-C17")})
++    full.update({d: ("run-a-C18a-fg-fail-E7", OK, True) for d in ("41-C18a", "42-C18b")})
++    c, ci, _ = render_in("C", tc, full, outdir)
++    n_unchanged = sum(1 for t in os.listdir(os.path.join(EV0, "original-tools"))
++                      if os.path.exists(os.path.join(EV0, "tools", t))
++                      and K.sha256_file(os.path.join(EV0, "tools", t)) == K.sha256_file(os.path.join(EV0, "original-tools", t)))
++    checks = [("A: status MUTATION_CONTROL_BLOCKED", "**MUTATION_CONTROL_BLOCKED**" in a),
++              ("A: the five Architect-accepted controls rendered with RESUME-01 / EXEC-01 references",
++               "**C22, C14, C19, C21, C27 — MUTATION CONTROL KILL ACCEPTED**" in a
++               and a.count(K.RESUME_PACKET + "/receipts/3") >= 16 and K.PREV_PACKET + "/receipts/31-C22/RESULT.txt" in a),
++              ("A: C28 build evidence referenced, never rebuilt", "NOT REPEATED — the existing RESUME-01 build" in a
++               and K.RESUME_PACKET + "/receipts/36-C28/03-build/build.stderr" in a),
++              ("A: two new candidates of seven rendered", "**2** of the 7 remaining controls (C28, C12)" in a),
++              ("A: C28 row: panic location rendered", "### C28" in a and "panic at" in a),
++              ("A: C12 row: discovered count of the 250,000 ceiling", "### C12" in a and "of 250,000" in a),
++              ("A: C9 row: non-candidate with its outer class", "### C9" in a and BLOCKED in a and "BUDGET EXCEEDED" in a),
++              ("A: not attempted listed", "not attempted (a stop ends the tranche): C11, C17, C18a, C18b" in a),
++              ("A: X-1 and T-RES baselines and the Stage-2 links rendered", a.count(K.PREV_PACKET + "/receipts/1") == 2
++               and "61-full-F-B2" in a and "60-full-F-G" in a),
++              ("A: CARRIED-FORWARD lists the carried copies, the RESUME-01 files and every unchanged tool",
++               acf.count("receipts/36-C28/") >= 15 and acf.count("| `") >= 22 + 15 + 7 + n_unchanged),
++              ("A: INDEX names the status and both previous evidence commits", "MUTATION_CONTROL_BLOCKED" in ai
++               and K.PREV in ai and K.RESUME in ai),
++              ("B: status C28_PRESERVED_ARTIFACT_BLOCKED", "**C28_PRESERVED_ARTIFACT_BLOCKED**" in b
++               and "C28_PRESERVED_ARTIFACT_BLOCKED" in bi and "PIN: C28_PRESERVED_ARTIFACT_BLOCKED" in b),
++              ("C: status READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW with seven candidates",
++               "**READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW**" in c
++               and "**7** of the 7 remaining controls (C28, C12, C9, C11, C17, C18a, C18b)" in c),
++              ("no rendering claims a final acceptance by the executor", all(
++                  "ALL MUTATIONS COMPLETE" not in x and "D2A-1 ACCEPTED" not in x and "PHASE THREE COMPLETE" not in x
++                  for x in (a, ai, b, bi, c, ci)))]
+     lines = [f"{'OK ' if ok else 'BAD'} {n}" for n, ok in checks]
+     lines.append("RENDER REHEARSAL: " + ("ALL AS EXPECTED" if all(ok for _, ok in checks) else "FAILED"))
+     open(os.path.join(outdir, "SUMMARY.txt"), "w").write("\n".join(lines) + "\n")
+--- RESUME-01/tools/tool_diff.py
++++ CONTINUE-02/tools/tool_diff.py
+@@ -1,22 +1,28 @@
+ #!/usr/bin/env python3
+ """P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01, section 6: the exact old-to-new tooling diff and the mechanical check
+ that only authorized differences exist. Read-only but for OUTDIR.
+-
+-    tool_diff.py OUTDIR      writes OUTDIR/TOOL-REPAIR.diff, OUTDIR/AUTHORIZATION.md and OUTDIR/TOOL-DIFF-CHECK.txt
++Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (section 7): old = the RESUME-01 frozen tools, new = this
++mission's tools; the authorization map is this mission's.
++
++    tool_diff.py OUTDIR      writes OUTDIR/TOOL-DIFF.diff, OUTDIR/AUTHORIZATION.md and OUTDIR/TOOL-DIFF-CHECK.txt
+     tool_diff.py --check     prints the checks only (the pre-execution gate runs this against the frozen tools)
+ 
+-Old: the tools of the EXEC-01 evidence commit (original-tools/, each byte-checked against the previous packet's
+-SHA256SUMS at the commit). New: tools/. Checks:
+-  D1  original-tools/ is exactly the previous packet's tools/ (names and sha256)
++Old: the tools of the RESUME-01 evidence commit (original-tools/, each byte-checked against that packet's SHA256SUMS).
++New: tools/. Checks:
++  D1  original-tools/ is exactly the RESUME-01 packet's tools/ (names and sha256)
+   D2  every tool is UNCHANGED, CHANGED or ADDED exactly as the authorization map below declares; none removed
+-  D3  the tools the mission forbids changing are byte-identical: classify.py (semantic classifications), supervise.py
+-      (resource enforcement), worktrees.py, expectations.py (catalog expectations), configs.py, normalize.py,
+-      report.py, verify_tree.py, scope-wrap.sh, healthy.py, rehearsal.py, tool_controls.py
+-  D4  inside changed files, every function the repair does not need is unchanged (AST identity), and the byte
+-      comparison of verify_mutant.main and sections [1]-[5] of authenticate.main are unchanged
+-  D5  common.py: every name keeps its value except the declared mission/path/publication names; only declared names
+-      are added; build/test commands, environments, limits, order, identities unchanged
+-  D6  the carried-forward expectations equal the previous packet's (commands, selections, properties, ceilings)
++  D3  the tools the mission forbids changing are byte-identical: classify.py (test classifiers, named-property and
++      cardinality logic, the general build classifier), supervise.py (resource supervision), verify_mutant.py and
++      verify_tree.py (source-verification semantics), worktrees.py, expectations.py (catalog expectations), configs.py,
++      normalize.py, report.py, scope-wrap.sh, healthy.py, rehearsal.py, tool_controls.py, verifier_controls.py
++  D4  inside changed files, every function the change does not need is unchanged (AST identity); control.main is
++      unchanged but for its refusal and the C28 dispatch; authenticate.main sections [1]-[5] are unchanged
++  D5  common.py: every name keeps its value except the declared mission/path/publication/carried names; only declared
++      names are added; commands, environments, limits, identities and the previous orders unchanged
++  D6  the carried-forward expectations equal the EXEC-01 packet's
++  D7  control.main_c28 builds nothing: no classify_build_success, classify_d, classify_a, supervise.build,
++      worktrees.create or apply_patch; it calls the unchanged classify_b once, with source_verdict EXACTLY_C
++  D8  the dedicated C28 tools run no process but git (no cargo, no rustc), and c28_admit.py writes only into its OUTDIR
+ """
+ import ast
+ import difflib
+@@ -29,57 +35,59 @@
+ 
+ NEW = os.path.join(K.EV, "tools")
+ OLD = os.path.join(K.EV, "original-tools")
+-I1 = "item 1 (verify_mutant.py: the path-aware status predicate of section 7)"
+-I2 = "item 2 (control.py: the restoration status predicate, the same path-aware policy)"
+-I3 = "item 3 (control gate/order: start after the Architect-accepted C22 record)"
+-I4 = ("item 4 (tool controls, freeze/final-gate logic, packet/index rendering and publication paths required to "
+-      "validate and document this repair)")
++I1 = "item 1 (a dedicated read-only C28 existing-build admission checker)"
++I2 = "item 2 (a dedicated C28 pin step)"
++I3 = ("item 3 (gate/order logic: C22 C14 C19 C21 C27 carried as Architect-accepted; start with C28; continue from C28 "
++      "to C12)")
++I4 = "item 4 (packet, rendering, freeze/final-gate and publication-path changes required for this mission)"
+ CHANGED = {
+-    "verify_mutant.py": [I1 + ": status_records/target_facts/target_entry_problem/mount_points/status_policy added; "
+-                         "main's three status lines and two status terms of `ok` replaced by status_policy; read-only "
+-                         "git (GIT_OPTIONAL_LOCKS=0); docstring"],
+-    "control.py": [I2 + ": restored_check added; restore's status listing and its predicate replaced by it; the "
+-                   "RESTORE.txt status line", I3 + ": gate() over RESUME_ORDER, C14's prior steps = the frozen C22 "
+-                   "ruling record, the carried-forward baselines and healthy build, the pre-execution gate; main() "
+-                   "refuses C22 and any id outside RESUME_ORDER; docstring"],
+-    "common.py": [I3 + ": ACCEPTED, RESUME_ORDER, C22_RULING, C22_RULING_FIRST",
+-                  I4 + ": MISSION, EV, EVIDENCE_WT, DEV_WT, PREV_*, CARRIED, CARRIED_DOCS, PACKET, BRANCH, LOCAL_BRANCH "
+-                  "(DEST follows BRANCH)"],
+-    "authenticate.py": [I4 + ": section [6] states the resume paths; section [7] authenticates the complete previous "
+-                        "packet, the C22 ruling's facts and the carried-forward copies (section 2; pre-execution and "
+-                        "final gates)"],
+-    "record_freeze.py": [I4 + ": freeze logic (section 10): covers original-tools/, the carried-forward receipts and "
+-                         "the C22 ruling record; this mission's pre-freeze receipts; policy text"],
+-    "final_gate.py": [I4 + ": final-gate logic: carried-forward receipts, C22 accepted, RESUME_ORDER, path-aware "
+-                      "restored checks"],
+-    "render.py": [I4 + ": packet/index rendering: combined Tranche-1 summary, CARRIED-FORWARD.md, INDEX"],
++    "common.py": [I3 + ": CONTINUE_ACCEPTED, CONTINUE_ORDER, RULING, RULING_FIRST, C28_RULING, C28_RULING_FIRST",
++                  I4 + ": MISSION, EV, EVIDENCE_WT, PACKET, BRANCH, LOCAL_BRANCH (DEST follows BRANCH), CARRIED (only "
++                  "what this mission links or gates on), RESUME_* (the previous evidence of section 3)"],
++    "control.py": [I3 + ": gate() over CONTINUE_ORDER (C28's prior steps: both ruling records, the carried-forward "
++                   "baselines, the pre-execution gate; the preserved C28 worktree must exist; C12's prior step: C28's "
++                   "candidate RESULT); main() refuses the five accepted controls and dispatches C28 to main_c28(); "
++                   "main_c28() and reauthenticate_restoration(): C28 from its existing build (calls the item-1/2 tool, "
++                   "the unchanged supervise.invoke, classify_b and link); docstring"],
++    "authenticate.py": [I4 + " (inputs of the pre-execution and final gates; section 3): section [6] states this "
++                        "mission's paths and both previous review refs; section [8] authenticates the complete RESUME-01 "
++                        "packet, every C14/C19/C21/C27 result, the C28 history, the previous tool-repair and freeze "
++                        "receipts and the original tools"],
++    "record_freeze.py": [I4 + ": freeze logic (section 14): the ruling records, this mission's pre-freeze receipts, "
++                         "the identities recorded, the policy text"],
++    "pre_exec_gate.py": [I4 + ": the static pre-execution gate of section 14 (E1-E10)"],
++    "final_gate.py": [I4 + ": final-gate logic: continue order, C28's sub-receipts, the accepted controls untouched"],
++    "render.py": [I4 + ": packet/index rendering: combined Tranche-1 status, CARRIED-FORWARD.md, INDEX"],
+     "render_rehearsal.py": [I4 + ": the rendering's tool control, for the revised render.py"],
+-    "build_packet.py": [I4 + ": packet: the ruling record and CARRIED-FORWARD.md staged; carried-forward copies "
+-                        "excluded and checked not republished"],
+-    "publish_checks.py": [I4 + ": publication paths: parent 19eda8cc, resume packet and ref, previous packet unchanged, "
+-                          "key receipts"],
++    "build_packet.py": [I4 + ": packet: both ruling records staged; only changed/added tools staged; no duplication of "
++                        "either previous packet"],
++    "publish_checks.py": [I4 + ": publication paths: parent 3695a817, this packet and ref, both previous packets "
++                          "unchanged, key receipts"],
++    "tool_diff.py": [I4 + ": this diff and its check (section 7: a complete previous-to-current tool diff)"],
+ }
+ ADDED = {
+-    "verifier_controls.py": [I4 + ": the tool controls of section 8 (plus replay, sensitivity, randomized trials)"],
+-    "pre_exec_gate.py": [I4 + ": the static final pre-execution gate of section 10"],
+-    "tool_diff.py": [I4 + ": this diff and its check (section 6)"],
++    "c28_admit.py": [I1 + " and " + I2 + ": read-only; reads the RESUME-01 C28 build evidence from git objects; "
++                     "hashes/stat-s the preserved executable; no Cargo, no rustc"],
++    "c28_controls.py": [I1 + " and " + I2 + ": the tool controls required by section 14 (synthetic evidence and "
++                        "synthetic files; the real executable only hashed)"],
+ }
+-FORBIDDEN = ["classify.py", "supervise.py", "worktrees.py", "expectations.py", "configs.py", "normalize.py", "report.py",
+-             "verify_tree.py", "scope-wrap.sh", "healthy.py", "rehearsal.py", "tool_controls.py"]
+-SAME_FUNCS = {"control.py": ["git", "apply_patch", "link", "finish"],
+-              "verify_mutant.py": ["blob_id"],
+-              "authenticate.py": ["git", "gtext", "chk", "copy_in", "packet_sums", "patch_result"],
+-              "render.py": ["lines", "jload", "outer", "res", "control_row"],
+-              "build_packet.py": ["files_under"],
++FORBIDDEN = ["classify.py", "supervise.py", "verify_mutant.py", "verify_tree.py", "worktrees.py", "expectations.py",
++             "configs.py", "normalize.py", "report.py", "scope-wrap.sh", "healthy.py", "rehearsal.py", "tool_controls.py",
++             "verifier_controls.py"]
++SAME_FUNCS = {"control.py": ["git", "apply_patch", "restored_check", "restore", "link", "finish"],
++              "authenticate.py": ["git", "gtext", "chk", "copy_in", "packet_sums", "patch_result", "previous"],
++              "render.py": ["lines", "jload", "outer", "res", "prev_ref", "control_row"],
++              "build_packet.py": ["files_under", "carried"],
+               "final_gate.py": ["check"],
++              "pre_exec_gate.py": ["check", "last"],
+               "publish_checks.py": ["git", "check", "tree_map", "glob_re", "push_matches", "gh", "mutant_blobs",
+                                     "remote_blob", "actions"],
+               "common.py": ["control_wt", "build_env", "git", "blob", "source", "sha256_bytes", "sha256_file",
+                             "git_blob_id", "inputs"]}
+-COMMON_CHANGED = {"MISSION", "EV", "EVIDENCE_WT", "PACKET", "BRANCH", "DEST", "LOCAL_BRANCH"}
+-COMMON_ADDED = {"DEV_WT", "ACCEPTED", "RESUME_ORDER", "C22_RULING", "C22_RULING_FIRST", "PREV_MISSION", "PREV",
+-                "PREV_TREE", "PREV_PARENT", "PREV_REF", "PREV_PACKET", "PREV_EVIDENCE_WT", "PREV_DEV_WT", "CARRIED",
+-                "CARRIED_DOCS"}
++COMMON_CHANGED = {"MISSION", "EV", "EVIDENCE_WT", "PACKET", "BRANCH", "DEST", "LOCAL_BRANCH", "CARRIED"}
++COMMON_ADDED = {"CONTINUE_ACCEPTED", "CONTINUE_ORDER", "RULING", "RULING_FIRST", "C28_RULING", "C28_RULING_FIRST",
++                "RESUME_MISSION", "RESUME", "RESUME_TREE", "RESUME_PARENT", "RESUME_REF", "RESUME_PACKET",
++                "RESUME_EVIDENCE_WT"}
+ results = []
+ 
+ 
+@@ -103,16 +111,25 @@
+                                                                                                     "subprocess")}
+ 
+ 
++def calls(node):
++    """(dotted callee, call node) for every call under node."""
++    out = []
++    for n in ast.walk(node):
++        if isinstance(n, ast.Call):
++            out.append((ast.unparse(n.func), n))
++    return out
++
++
+ def run():
+     prev = {}
+-    for line in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines():
++    for line in K.git("show", f"{K.RESUME}:{K.RESUME_PACKET}/SHA256SUMS").decode().splitlines():
+         h, rel = line.split("  ", 1)
+         if rel.startswith("tools/"):
+             prev[rel[6:]] = h
+     old = {f: K.sha256_file(os.path.join(OLD, f)) for f in sorted(os.listdir(OLD))}
+     new = {f: K.sha256_file(os.path.join(NEW, f)) for f in sorted(os.listdir(NEW)) if f.endswith((".py", ".sh"))}
+-    check("D1 original-tools/ is exactly the EXEC-01 packet's tools/ (names and sha256 from its SHA256SUMS at "
+-          f"{K.PREV[:8]})", old == prev, f"{len(old)} files")
++    check("D1 original-tools/ is exactly the RESUME-01 packet's tools/ (names and sha256 from its SHA256SUMS at "
++          f"{K.RESUME[:8]})", old == prev, f"{len(old)} files")
+     status = {f: ("UNCHANGED" if f in new and new[f] == old[f] else "CHANGED" if f in new else "REMOVED") for f in old}
+     status.update({f: "ADDED" for f in new if f not in old})
+     check("D2 no tool removed", not [f for f, s in status.items() if s == "REMOVED"])
+@@ -128,55 +145,58 @@
+         names = [n for n in names if n in a]
+         diff = [n for n in names if a.get(n) != b.get(n)]
+         check(f"D4 {f}: unchanged functions {names} (AST identity)", not diff, diff)
+-    # verify_mutant.main: the byte comparison is unchanged; `ok` lost exactly the two status terms and gained pol['ok'].
+-    src_old, src_new = open(os.path.join(OLD, "verify_mutant.py")).read(), open(os.path.join(NEW, "verify_mutant.py")).read()
+-    seg = lambda s: s[s.index("    entries = []\n"):s.index("    proc.wait()\n")]
+-    check("D4 verify_mutant.main: the byte comparison (ls-tree of C, every blob, mode, missing, mutant identity) is "
+-          "unchanged text", seg(src_old) == seg(src_new))
+-    terms = lambda t: [ast.unparse(v) for v in next(s for s in fn(t, "main").body if isinstance(s, ast.Assign) and
+-                                                    getattr(s.targets[0], "id", None) == "ok").value.values]
+-    to, tn = terms(ast.parse(src_old)), terms(ast.parse(src_new))
+-    check("D4 verify_mutant.main `ok`: the original terms minus the two exact-string status terms, plus pol['ok']",
+-          [t for t in to if t not in ("not unexpected_status", "' M ' + path in status")] == [t for t in tn if t !=
+-                                                                                            "pol['ok']"]
+-          and tn.count("pol['ok']") == 1 and len(tn) == len(to) - 1, f"old {to}; new {tn}")
+-    # control.restore: only the status predicate changed.
+-    ro, rn = (ast.unparse(fn(ast.parse(open(os.path.join(d, "control.py")).read()), "restore")) for d in (OLD, NEW))
+-    keep = lambda s: [l for l in s.splitlines() if "status" not in l and "rv" not in l and "v = " not in l
+-                      and "chk" not in l and "pol" not in l and "verify_tree" not in l]
+-    check("D4 control.restore: every line not about the status predicate or its record is unchanged",
+-          keep(ro) == keep(rn), [l for l in difflib.unified_diff(keep(ro), keep(rn), lineterm="")][:6])
+-    rterms = lambda d: [ast.unparse(v) for v in next(
+-        s for s in fn(ast.parse(open(os.path.join(d, "control.py")).read()), "restore").body
+-        if isinstance(s, ast.Assign) and getattr(s.targets[0], "id", None) == "ok").value.values]
+-    ro_t, rn_t = rterms(OLD), rterms(NEW)
+-    check("D4 control.restore `ok`: the original terms (blob, sha256, verify_tree EXACTLY_C) minus the exact-string "
+-          "status term, plus pol['ok']", [t for t in ro_t if t != "rec['status'].strip() in ('', '!! target/')"]
+-          == [t for t in rn_t if t != "pol['ok']"] and rn_t.count("pol['ok']") == 1 and len(rn_t) == len(ro_t),
+-          f"old {ro_t}; new {rn_t}")
+     mo, mn = (fn(ast.parse(open(os.path.join(d, "control.py")).read()), "main") for d in (OLD, NEW))
+-    check("D4 control.main: unchanged but for the leading refusal of C22 and any id outside RESUME_ORDER",
+-          [ast.dump(s) for s in mo.body] == [ast.dump(s) for s in mn.body[1:]]
+-          and "RESUME_ORDER" in ast.unparse(mn.body[0]))
++    check("D4 control.main: unchanged but for the leading refusal (the five accepted controls; CONTINUE_ORDER) and the "
++          "C28 dispatch to main_c28()", [ast.dump(s) for s in mo.body[1:]] == [ast.dump(s) for s in mn.body[2:]]
++          and "CONTINUE_ORDER" in ast.unparse(mn.body[0]) and "CONTINUE_ACCEPTED" in ast.unparse(mn.body[0])
++          and ast.unparse(mn.body[1]) == "if cid == 'C28':\n    return main_c28()", ast.unparse(mn.body[1]))
+     ao, an = (fn(ast.parse(open(os.path.join(d, "authenticate.py")).read()), "main") for d in (OLD, NEW))
+-    cut = next(i for i, s in enumerate(ao.body) if isinstance(s, ast.Assign) and ast.unparse(s).startswith("paths ="))
+-    check("D4 authenticate.main: sections [1]-[5] and the [6] ref checks unchanged (statement by statement)",
++    cut = next(i for i, s in enumerate(ao.body) if "[6] refs" in ast.unparse(s))
++    check("D4 authenticate.main: sections [1]-[5] unchanged (statement by statement, up to the [6] heading)",
+           [ast.dump(s) for s in ao.body[:cut]] == [ast.dump(s) for s in an.body[:cut]], f"{cut} statements")
+     co, cn = namespace(os.path.join(OLD, "common.py")), namespace(os.path.join(NEW, "common.py"))
+     changed = {k for k in co if k in cn and co[k] != cn[k]}
+     check("D5 common.py: no name removed", not [k for k in co if k not in cn], [k for k in co if k not in cn])
+-    check("D5 common.py: changed values only for the declared mission/path/publication names", changed <= COMMON_CHANGED,
+-          sorted(changed))
++    check("D5 common.py: changed values only for the declared mission/path/publication/carried names",
++          changed <= COMMON_CHANGED, sorted(changed))
+     check("D5 common.py: only declared names added", set(cn) - set(co) <= COMMON_ADDED, sorted(set(cn) - set(co)))
+-    check("D5 common.py: commands, environments, limits, order and identities unchanged",
++    check("D5 common.py: commands, environments, limits, identities and the previous orders unchanged",
+           all(co[k] == cn[k] for k in ("C", "C_TREE", "BLOBS", "CATALOG_BLOB", "CATALOG_SHA", "BUILD_ARGV",
+                                         "BUILD_LIMIT", "RUN_ENV", "MEMORY_MAX", "NEED_KIB", "ORDER", "NOT_AUTHORIZED",
+                                         "NAMED", "EXPLORE_CFG", "EXE", "EXE_SHA256", "EXE_SIZE", "LISTED",
+-                                        "UNIT_PREFIX", "HEALTHY_WT")))
++                                        "UNIT_PREFIX", "HEALTHY_WT", "RESUME_ORDER", "ACCEPTED", "PREV", "PREV_PACKET",
++                                        "CARRIED_DOCS", "DEV_WT")))
++    check("D5 common.py: CARRIED is a subset of the previous carried set", set(cn["CARRIED"]) <= set(co["CARRIED"]),
++          cn["CARRIED"])
+     e = os.path.join(K.EV, "receipts/02-EXPECTATIONS.json")
+     want = [l.split("  ")[0] for l in K.git("show", f"{K.PREV}:{K.PREV_PACKET}/SHA256SUMS").decode().splitlines()
+             if l.endswith("  receipts/02-EXPECTATIONS.json")]
+-    check("D6 the carried-forward expectations equal the previous packet's", [K.sha256_file(e)] == want, want)
++    check("D6 the carried-forward expectations equal the EXEC-01 packet's", [K.sha256_file(e)] == want, want)
++    tn = ast.parse(open(os.path.join(NEW, "control.py")).read())
++    c28 = [c for c, _ in calls(fn(tn, "main_c28"))] + [c for c, _ in calls(fn(tn, "reauthenticate_restoration"))]
++    banned = ["classify.classify_build_success", "classify.classify_d", "classify.classify_a", "supervise.build",
++              "worktrees.create", "apply_patch", "restore", "git"]
++    check("D7 control.main_c28/reauthenticate_restoration build, apply, create or reverse nothing (no "
++          + ", ".join(banned) + ")", not [c for c in c28 if c in banned], [c for c in c28 if c in banned])
++    cb = [n for c, n in calls(fn(tn, "main_c28")) if c == "classify.classify_b"]
++    check("D7 control.main_c28 calls the unchanged classify_b exactly once, with source_verdict='EXACTLY_C'",
++          len(cb) == 1 and any(k.arg == "source_verdict" and ast.unparse(k.value) == "'EXACTLY_C'" for k in cb[0].keywords),
++          [ast.unparse(n) for n in cb])
++    for f in ADDED:
++        t = ast.parse(open(os.path.join(NEW, f)).read())
++        proc = [n for c, n in calls(t) if c in ("subprocess.run", "subprocess.Popen", "subprocess.check_output",
++                                                  "subprocess.call", "os.system", "os.popen")]
++        bad = [ast.unparse(n)[:80] for n in proc if not (isinstance(n.args[0], ast.List) and n.args[0].elts
++                                                          and ast.unparse(n.args[0].elts[0]) == "'git'")]
++        consts = [e.value for n in ast.walk(t) if isinstance(n, ast.List) for e in n.elts
++                  if isinstance(e, ast.Constant) and e.value in ("cargo", "rustc")]
++        check(f"D8 {f}: every process it starts is git (no cargo, no rustc)", not bad and not consts, bad + consts)
++    t = ast.parse(open(os.path.join(NEW, "c28_admit.py")).read())
++    writes = [n for c, n in calls(t) if c == "open" and len(n.args) > 1 and ast.unparse(n.args[1]) in ("'w'", "'wb'",
++                                                                                                       "'a'")]
++    check("D8 c28_admit.py writes only into its OUTDIR (every write is open(os.path.join(outdir, ...), 'w'))",
++          writes and all(ast.unparse(n.args[0]).startswith("os.path.join(outdir,") for n in writes),
++          [ast.unparse(n.args[0]) for n in writes])
+     return old, new, status
+ 
+ 
+@@ -197,18 +217,21 @@
+         if status[f] in ("CHANGED", "ADDED"):
+             a = open(os.path.join(OLD, f)).read().splitlines(keepends=True) if status[f] == "CHANGED" else []
+             b = open(os.path.join(NEW, f)).read().splitlines(keepends=True)
+-            diff += difflib.unified_diff(a, b, f"EXEC-01/tools/{f}" if a else "/dev/null", f"RESUME-01/tools/{f}")
+-    open(os.path.join(out, "TOOL-REPAIR.diff"), "w").write("".join(diff))
+-    md = [f"# Tool repair authorization map — {K.MISSION}", "",
+-          f"Old: the tools of `{K.PREV_PACKET}/tools/` at `{K.PREV}`. New: this mission's `tools/`. The exact diff is "
+-          "`TOOL-REPAIR.diff`; the mechanical checks are `TOOL-DIFF-CHECK.txt`.", "",
++            diff += difflib.unified_diff(a, b, f"RESUME-01/tools/{f}" if a else "/dev/null", f"CONTINUE-02/tools/{f}")
++    open(os.path.join(out, "TOOL-DIFF.diff"), "w").write("".join(diff))
++    md = [f"# Tool authorization map — {K.MISSION}", "",
++          f"Old: the tools of `{K.RESUME_PACKET}/tools/` at `{K.RESUME}` (RESUME-01's frozen tools). New: this "
++          "mission's `tools/`. The complete previous-to-current diff is `TOOL-DIFF.diff`; the mechanical checks are "
++          "`TOOL-DIFF-CHECK.txt`.", "",
+           "| Tool | Status | Old sha256 | New sha256 | Authorization |", "|---|---|---|---|---|"]
+     for f in sorted(status):
+         why = "; ".join(CHANGED.get(f, ADDED.get(f, ["byte-identical (no change)"])))
+         md.append(f"| `{f}` | {status[f]} | `{old.get(f, '—')}` | `{new.get(f, '—')}` | {why} |")
+-    md += ["", "Not changed (mission section 6): classify.py's semantic classifications, supervise.py's resource "
+-           "enforcement, the catalog expectations, any patch, any source, the named-property logic, cardinality logic, "
+-           "the build command and the test commands."]
++    md += ["", "Not changed (mission section 7): catalog expectations, source-verification semantics (verify_mutant.py, "
++           "verify_tree.py), test classifiers, named-property logic and cardinality logic (classify.py), resource "
++           "supervision (supervise.py, scope-wrap.sh), and the general no-warning build policy for every control other "
++           "than C28 (classify.classify_build_success, unchanged and still the classifier of C12, C9, C11, C17, C18a and "
++           "C18b)."]
+     open(os.path.join(out, "AUTHORIZATION.md"), "w").write("\n".join(md) + "\n")
+     open(os.path.join(out, "TOOL-DIFF-CHECK.txt"), "w").write("\n".join(lines) + "\n")
+     print("\n".join(lines))

@@ -1,0 +1,141 @@
+--- development/revisions/final_gate.dev2.py	2026-10-14 23:43:18.484387921 +0100
++++ tools/final_gate.py	2026-10-14 23:43:52.949456914 +0100
+@@ -3,9 +3,8 @@
+ after the freeze. Read-only but for its own outputs: receipts/21-ROOT-MANIFESTS-AFTER/{continue-02,publish-03}.tsv (the
+ after-manifests of both read-only roots). Its console is receipts/20-FINAL-GATE.txt.
+ 
+-    final_gate.py                   the gate (once, after the freeze)
+-    final_gate.py --rehearse DIR    the same checks on a scratch rehearsal (DIR/packet, DIR/receipts/ holding its
+-                                    freeze and receiving its after-manifests); the real worktree must still be empty
++    final_gate.py      the gate (once, after the freeze); in a rehearsal (pub4common.REHEARSAL), the same checks on
++                       the rehearsal's clone and receipts
+ 
+ Checks: the freeze (every frozen file of this root and every staged packet file unchanged; nothing added but the
+ freeze and the gate's own outputs); no Cargo, rustc, test, explorer or other executable command in any tool this
+@@ -30,24 +29,14 @@
+ import manifest as M  # noqa: E402
+ import pub4common as Q  # noqa: E402
+ 
+-DEST = os.path.join(Q.WORKTREE, Q.PACKET)
+ BEFORE = os.path.join(Q.P, "receipts/00-ROOT-MANIFESTS-BEFORE")
+ P4D = A.P4_DIR
+ # This mission's packet files that are raw tool output, unified diffs or preserved development failures (byte-exact;
+-# their whitespace findings are listed, never edited). Every other file under publish-04/, and the root index, is
+-# authored by this mission and must be whitespace-clean.
+-RAW_P4 = {f"{P4D}/receipts/03-BUILDER-DIFF/FROZEN-TO-PUBLISH-03.diff",
+-          f"{P4D}/receipts/03-BUILDER-DIFF/PUBLISH-03-TO-PUBLISH-04.diff",
+-          f"{P4D}/receipts/03-BUILDER-DIFF/FROZEN-TO-PUBLISH-04.diff",
+-          f"{P4D}/receipts/04-REPAIR-CONTROLS/P4-builder-run.txt",
+-          f"{P4D}/receipts/07-ASSEMBLE.console.txt",
+-          f"{P4D}/development/build-packet-dev1-FAILED-official-maps-not-yet-written.txt",
+-          f"{P4D}/development/repair-controls-dev1-FAILED-N24b-incomplete-expectation.txt",
+-          f"{P4D}/development/repair_controls.dev1-to-dev2.diff",
+-          f"{P4D}/development/authenticate.dev1-to-dev2.diff",
+-          f"{P4D}/development/superseded-1-authentication-trailing-space/01-AUTHENTICATION.txt",
+-          f"{P4D}/development/gate-rehearsal-1-FAILED-ps-matched-own-shell-args.txt",
+-          f"{P4D}/development/final_gate.dev1-to-dev2.diff"}
++# their whitespace findings are listed, never edited): the two raw console captures below; every .diff (each verified to
++# be a unified diff); every development record named -FAILED- and every superseded-* record (each verified to lie under
++# development/). Every other file under publish-04/, and the root index, is authored by this mission and must be
++# whitespace-clean.
++RAW_P4 = {f"{P4D}/receipts/04-REPAIR-CONTROLS/P4-builder-run.txt", f"{P4D}/receipts/07-ASSEMBLE.console.txt"}
+ ALLOWED_PROGRAMS = {"git", "gh", "ps"}  # ps: this gate's own read-only process listing
+ fails = []
+ 
+@@ -78,8 +67,20 @@
+     return out
+ 
+ 
++def raw_class(rel):
++    """Why a file of this mission is raw (byte-exact) rather than authored, or None."""
++    sub = rel[len(P4D) + 1:]
++    if rel in RAW_P4:
++        return "raw console capture"
++    if sub.endswith(".diff"):
++        return "unified diff"
++    if sub.startswith("development/") and ("-FAILED-" in sub or sub.startswith("development/superseded-")):
++        return "preserved development failure or superseded receipt"
++    return None
++
++
+ def authored(rel):
+-    return rel == "INDEX-PUBLICATION-RECOVERY.md" or (rel.startswith(P4D + "/") and rel not in RAW_P4)
++    return rel == "INDEX-PUBLICATION-RECOVERY.md" or (rel.startswith(P4D + "/") and raw_class(rel) is None)
+ 
+ 
+ def process_calls(path):
+@@ -116,17 +117,15 @@
+     return out
+ 
+ 
+-def main(rehearse=None):
++def main():
+     Q.no_bytecode()
+-    if rehearse and not rehearse.startswith(Q.P + "/scratch/"):
+-        raise SystemExit("REFUSED: a rehearsal lives under this mission's scratch/")
+-    rdir = os.path.join(rehearse, "receipts") if rehearse else os.path.join(Q.P, "receipts")
+-    dest = os.path.join(rehearse, "packet") if rehearse else DEST
++    rdir = Q.RECEIPTS
++    dest = os.path.join(Q.WORKTREE, Q.PACKET)
+     after = os.path.join(rdir, "21-ROOT-MANIFESTS-AFTER")
+     fz_path = os.path.join(rdir, "10-FREEZE.json")
+     fz = json.load(open(fz_path))
+     rec = open(os.path.join(rdir, "10-FREEZE-RECORD.txt")).read()
+-    print(f"FINAL PUBLICATION GATE — {Q.MISSION}" + (f" — REHEARSAL in {rehearse}" if rehearse else ""))
++    print(f"FINAL PUBLICATION GATE — {Q.MISSION}" + (f" — REHEARSAL in {Q.REHEARSAL}" if Q.REHEARSAL else ""))
+ 
+     print("[freeze]")
+     check("10-FREEZE-RECORD.txt records this freeze record's sha256 (FREEZE: RECORDED)",
+@@ -262,19 +261,17 @@
+     pairs = [(s, r) for s, r in A.sources(post=True) if r in packet]
+     for label in A.full_checks(dest, pairs):
+         fails.append("full check: " + label)
+-    post = sum(os.path.getsize(os.path.join(Q.P, f)) for f in A.POST_GATE if os.path.exists(os.path.join(Q.P, f)))
++    post = sum(os.path.getsize(p) for p in (os.path.join(rdir, f[len("receipts/"):]) for f in A.POST_GATE)
++               if os.path.exists(p))
+     total = sum(os.path.getsize(os.path.join(dest, f)) for f in packet)
+     check("the packet with the post-gate records stays at most 32 MiB (the gate's own console counted at 1 MiB)",
+           total + post + (1 << 20) <= Q.LIMIT, f"{total} + {post} + 1048576 bytes")
+ 
+     print("[confinement and repository]")
+     status = Q.git("status", "--porcelain", "-uall", repo=Q.WORKTREE).decode().splitlines()
+-    if rehearse:
+-        check("REHEARSAL: the packet is in scratch; the real worktree holds nothing yet", status == [], status[:3])
+-    else:
+-        check("packet confinement: the worktree holds only untracked files under the packet path, exactly the packet",
+-              sorted(l[3:] for l in status) == sorted(f"{Q.PACKET}/{f}" for f in packet)
+-              and all(l.startswith("?? ") for l in status), f"{len(status)} entries")
++    check("packet confinement: the worktree holds only untracked files under the packet path, exactly the packet",
++          sorted(l[3:] for l in status) == sorted(f"{Q.PACKET}/{f}" for f in packet)
++          and all(l.startswith("?? ") for l in status), f"{len(status)} entries")
+     check("the worktree is at the parent, on the publication branch, with nothing staged", (
+         Q.git("rev-parse", "HEAD", repo=Q.WORKTREE).decode().strip(),
+         Q.git("symbolic-ref", "HEAD", repo=Q.WORKTREE).decode().strip(),
+@@ -295,6 +292,12 @@
+         ["git", "-C", Q.REPO, "show-ref", "--verify", "-q", Q.DEST]).returncode == 1)
+ 
+     print("[whitespace (git's default rules): this mission's files clean; every retained raw finding listed]")
++    diffs = [f for f in allf if f.startswith(P4D + "/") and f.endswith(".diff")]
++    check("every .diff of this mission is a unified diff (raw by class)", all(
++        open(os.path.join(dest, f), "rb").read().startswith(b"--- ") for f in diffs), f"{len(diffs)} diffs")
++    odd = [f for f in allf if f.startswith(P4D + "/") and ("-FAILED-" in f or "/superseded-" in f)
++           and not f.startswith(P4D + "/development/")]
++    check("every -FAILED- or superseded record of this mission lies under development/", not odd, odd)
+     dirty, retained = [], []
+     for f in allf:
+         for n, kind in whitespace(open(os.path.join(dest, f), "rb").read()):
+@@ -306,7 +309,7 @@
+         by.setdefault(f, []).append((n, kind))
+     print(f"     retained raw or preserved findings: {len(retained)} in {len(by)} files (byte-exact; never edited)")
+     for f in sorted(by):
+-        origin = ("this mission's raw tool output, diff or development failure" if f in RAW_P4
++        origin = (f"this mission's {raw_class(f)}" if f.startswith(P4D + "/")
+                   else "PUBLISH-03 record" if f.startswith(A.P3_DIR + "/") else "CONTINUE-02 evidence")
+         print(f"     {f} ({origin}): " + "; ".join(f"line {n} {k}" for n, k in by[f]))
+     print("FINAL GATE: " + ("ALL CHECKS HOLD" if not fails else "FAILED: " + "; ".join(fails)))
+@@ -314,4 +317,4 @@
+ 
+ 
+ if __name__ == "__main__":
+-    sys.exit(main(os.path.abspath(sys.argv[2]) if sys.argv[1:2] == ["--rehearse"] else None))
++    sys.exit(main())

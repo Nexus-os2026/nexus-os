@@ -1,0 +1,125 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-14, Europe/London (+01:00). Official receipts are under receipts/; local development runs are under
+dev-local/ (kept on the machine); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build or test; development used git objects, the previous
+packets, the preserved C28 executable (hashed and sized only, never run) and synthetic files only)
+
+ 1. 21:35  Read the mission, AGENTS.md and CLAUDE.md. Main worktree: clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Previous evidence commit 3695a817 present locally (tree a5fce69d, parent
+           19eda8cc); remote review refs: exec-01 -> 19eda8cc, resume-01 -> 3695a817. Its packet (INDEX, TRANCHE-SUMMARY,
+           80-STOP-RECORD, DEVELOPMENT-LOG, 36-C28 receipts) and its 25 tools read. Host: MemAvailable 53.7 GB, 16 CPUs,
+           45 GiB free disk; no p3c11-* scope, cargo or governed-control executable running (a one-day-old bash `until
+           pgrep …full_f3…` wait loop of an earlier session exists; it is not this mission's and is not touched).
+ 2. 21:44  Static read-only facts: the ledger module (protocol.rs, protocol/unit_tests.rs, protocol/model_tests.rs at C)
+           contains no std::fs, std::env, include_str!/include_bytes!, env!() or CARGO_MANIFEST_DIR use (git grep at
+           C): the T-RES test's runtime behaviour does not read the worktree's source files. The preserved C28
+           executable: regular file, 8,983,776 bytes, sha256 116a6584…de36, mtime 21:14:32.73 (the build returned at
+           21:14:32); no file under the C28 target newer than 21:14:34; no symlink in the target; worktree HEAD C,
+           locked with the RESUME-01 C28 reason; read-only status shows nothing tracked changed.
+ 3. 21:46  Mission evidence root created (absent before; every mission worktree path, the local evidence branch and the
+           remote destination ref also absent). The 25 RESUME-01 tools copied from the git objects of 3695a817 into
+           original-tools/ (read-only) and tools/: each sha256 equals the resume packet's SHA256SUMS and the RESUME-01
+           freeze record (receipts/05-FREEZE.json at 3695a817).
+ 4. 21:48  documents/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md and ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md
+           written from mission sections 1, 2, 6 and 8 (identities read from the git objects of 3695a817 and 19eda8cc
+           by dev-local/gen_rulings.py; read-only after writing).
+ 5. 21:48  common.py: mission identity, evidence root and worktree, CONTINUE_ACCEPTED, CONTINUE_ORDER, the ruling record
+           paths and first lines, RESUME_* (section 3), the reduced carried set (02-EXPECTATIONS, X-1, T-RES),
+           publication paths.
+ 6. 21:49  authenticate.py: [6] this mission's paths (RESUME-01's C14/C19/C21/C27/C28 and development worktrees present
+           and locked; C12..C18b and the evidence worktree absent; both previous review refs); new [8] the complete
+           RESUME-01 packet. Dev run 1 FAILED one check: my new [8] passed (label, bool, string) to chk(label, actual,
+           expected) (development/authentication-dev1-FAILED-chk-argument-order.txt; authenticate.dev1-to-dev2.diff).
+           Dev run 2: ALL CHECKS HOLD (459 OK).
+ 7. 21:52  c28_admit.py written (admission A1-A21 over the RESUME-01 C28 evidence read from git objects; pin P0-P8 on
+           the preserved executable, read-only). Development dry evaluation on the real evidence: 30 of 30 admission
+           checks and P1-P6 hold (no receipt written). The build-end bound is parsed with its recorded UTC offset
+           (c28_admit.dev1 used time.mktime on the truncated local time; same value here, made explicit).
+ 8. 21:55  control.py: gate over CONTINUE_ORDER (C28's prior steps: both ruling records frozen, the carried X-1/T-RES
+           baselines PASS, the pre-execution gate; the preserved C28 worktree must exist; C12's prior: C28's candidate
+           RESULT); main refuses the five accepted controls and dispatches C28 to main_c28; main_c28 and
+           reauthenticate_restoration added (no build, no apply, no worktree creation; classify_b unchanged, called
+           with source EXACTLY_C and the mutant blob withheld from the run-source check only).
+ 9. 21:58  c28_controls.py written (section 14). Dev run 1: 54 of 54 controls as expected; every rejection names its
+           intended failed check (A2, A3, A10-A16, P1-P6; the general classifier still says BUILD: NOT OK for C28 and
+           for the same evidence presented as C12; admit() refuses every control but C28).
+10. 22:02  record_freeze.py, pre_exec_gate.py, final_gate.py, render.py, render_rehearsal.py, build_packet.py,
+           publish_checks.py revised; tool_diff.py rewritten for RESUME-01 -> CONTINUE-02 (D1-D8). Render rehearsal dev
+           run 1 (three synthetic scenarios): ALL AS EXPECTED. tool_diff dev run 1 FAILED D8: the constant "rustc" is a
+           dict key in c28_admit.py (tc["rustc"]), not a process; D8 now inspects argv-shaped list literals only
+           (development/tool-diff-dev1-FAILED-D8-dict-key-rustc.txt; tool_diff.dev1-to-dev2.diff). Dev run 2: ALL CHECKS
+           HOLD.
+11. 22:04  Read-only exercise on the real preserved C28 worktree into dev-local (GIT_OPTIONAL_LOCKS=0; nothing run):
+           control.reauthenticate_restoration -> RESTORE: EXACTLY_C (2,553 ignored entries beneath the real target);
+           control.link(C28) -> LINK: VERIFIED (T-RES (e2)); gate(C28) and gate(C12) closed before the freeze as
+           expected; main refuses C14, C22 and C1.
+12. 22:03  vocabulary/VOCABULARY.json placed as a read-only byte copy of inputs/stage2/vocabulary/VOCABULARY.json (sha256
+           db8734e0…fa932, authenticated in [4] against the Stage-2 SHA256SUMS), as in both previous missions (normalize.py
+           reads it; only classify_e1 uses it, and no e1 baseline runs here).
+13. 22:04  Gate-chain rehearsal 1 (dev-local/rehearse_gates.py: a disposable copy of the evidence root whose
+           tools/common.py points at the copy) FAILED at the supervision self-test: "Failed to find executable
+           …/tools/scope-wrap.sh: Permission denied". Cause: extracting the tools from git blobs (stored 100644 in the
+           packet) dropped scope-wrap.sh's executable bit; its bytes are unchanged (sha256 e776ac8f…). tools/scope-wrap.sh
+           chmod 755, as it was in RESUME-01's evidence root (development/gate-rehearsal-1-FAILED-scope-wrap-not-
+           executable-SELFTEST.txt; the failed rehearsal root kept at dev-local/gate-rehearsal-1-FAILED-scope-wrap-mode).
+14. 22:05  Gate-chain rehearsal 2: authentication ALL CHECKS HOLD; self-test ALL OK; C28 controls ALL AS EXPECTED; tool
+           diff ALL CHECKS HOLD; render rehearsal ALL AS EXPECTED; freeze recorded (116 files); pre-execution gate ALL
+           CHECKS HOLD (20 checks; E1 452); control.gate(C28) open; render (nothing attempted: BLOCKED, as designed);
+           final gate ALL CHECKS HOLD; packet staging first failed only because the harness had not copied
+           development/ into the copy; with it: STAGED — ALL CHECKS HOLD (73 files, 1.07 MB; only changed/added tools;
+           nothing duplicated from either previous packet).
+15. 22:07  The dev render-rehearsal roots renamed to dev-local/render-rehearsal-dev1-root-{A,B,C} (the official run
+           refuses existing roots).
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the tool controls and the rehearsals)
+16. 22:05-22:06  Official pre-freeze receipts: receipts/00-authentication.txt (ALL CHECKS HOLD, 459 OK),
+           receipts/01-supervision-selftest (ALL OK; supervise.py unchanged; non-Nexus processes),
+           receipts/03-c28-admission-controls (54 of 54 as expected), receipts/04-tool-diff (ALL CHECKS HOLD),
+           receipts/04b-render-rehearsal (ALL AS EXPECTED).
+17. 22:06  Final pre-freeze review of control.main_c28 found that reauthenticate_restoration would raise (os.stat of a
+           missing file) instead of recording a result if the pin were blocked by a missing executable. Fixed: the
+           executable is checked only when one was pinned (exe None otherwise); a missing pinned executable gives
+           RESTORE: FAILED (development/control.dev1-to-dev2.diff). Exercised read-only on the real C28 worktree into
+           dev-local: pinned -> EXACTLY_C; none -> EXACTLY_C (source only); missing -> FAILED, no crash. The tool-diff
+           receipt, stale after this change, moved to dev-local/04-tool-diff-superseded-1 and regenerated: TOOL DIFF:
+           ALL CHECKS HOLD. (No other pre-freeze receipt depends on control.py.)
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changes after the freeze)
+18. 22:07:07  Freeze recorded: receipts/05-FREEZE.json (116 frozen files; sha256 831f4b27…c84b) and 05-FREEZE-RECORD.txt,
+              with the identities of both previous packets, the C28 prior build evidence (15 files), the C28 expected
+              executable, the carried-forward baselines, C and the catalog, and the policy.
+19. 22:07:08-12  Static pre-execution gate (receipts/06-PRE-EXECUTION-GATE.txt): ALL CHECKS HOLD (E1-E10; E1 452 OK).
+20. 22:07:18-22:07:21  C28, once (receipts/36-C28): admission ARCHITECT-ADMISSIBLE (30 checks), pin PINNED (P0-P8),
+              one supervised T-RES invocation of the preserved executable on the restored worktree: panic at
+              unit_tests.rs:1745:17, "assertion failed: matches!(outcome, Resolve::Inconsistent)" (T-RES's "below N"
+              row), exit 101, 15 of 15 checks; restoration re-authenticated EXACTLY_C; T-RES (e2) LINK: VERIFIED.
+              KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING. Nothing was rebuilt.
+21. 22:07:33-22:25:31  C12, C9, C11, C17, C18a, C18b, once each, in order: each a fresh worktree, the frozen patch
+              (EXACTLY_C_PLUS_PATCH), one build (166.98-169.10 s; no error and no warning diagnostic; BUILD: PINNED), one
+              original-explorer run (29 of 29 checks): C12 X-1 FAIL E2 (5 states of 250,000); C9 and C11 F-B2 FAIL E4 (14
+              of 30,000,000); C17 F-B2 FAIL E4 (9); C18a and C18b F-G FAIL E7 (19); each restored EXACTLY_C and linked.
+              Every one KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING.
+22. 22:25:51  Final gate, first run: CRASHED in G7 (the walk for mutant-source copies under the evidence root):
+              FileNotFoundError from os.path.getsize on a dangling symlink. Cause (find -xtype l): exactly two dangling
+              symlinks, both inside dev-local/gate-rehearsal-1-FAILED-scope-wrap-mode/dev-local/scratch-c28/ (the
+              synthetic K7e/K7f symlinks of the failed gate rehearsal 1); their absolute targets name
+              dev-local/gate-rehearsal-1/…, the root's path before I renamed it in step 13. Not evidence; no frozen file
+              involved (freeze check ALL EQUAL). Output preserved as receipts/90-final-gate-attempt-1-CRASHED.txt and
+              receipts/90-gate-authentication-attempt-1.txt (ALL CHECKS HOLD). Remedy, nothing deleted: that development
+              root renamed back to dev-local/gate-rehearsal-1 (its original path), after which no dangling symlink
+              exists under the evidence root. No tool, receipt or classification was changed.
+23. 22:26:53  Final gate, second run of the unchanged frozen final_gate.py (receipts/90-final-gate.txt): ALL CHECKS HOLD
+              (73). This is a re-run of a read-only consistency gate after a non-evidence environment correction, not a
+              retry of any control, build or test; it is reported for Architect review.
+24. 22:28  Evidence worktree created at 3695a817 on the local branch evidence/p3-c11-d2a1-mutation-tranche1-continue-02;
+           the frozen build_packet.py staged the packet: PACKET: FAILED on one check, "no staged file of 1 KiB or more
+           byte-equal to any file of either previous packet": seven of this mission's link receipts (C9/C11/C17/C18a/
+           C18b 06-link LINK.json; C9/C18a LINK.txt) are byte-identical to EXEC-01's receipts/04-rehearsal/links/
+           link-{C9,C18a}-stage2 outputs, because the unchanged control.link() is deterministic over the same accepted
+           Stage-2 receipt and baseline-executable hash (publication/10-build-packet.txt). Not a republication. The check
+           is this mission's pre-freeze strengthening of RESUME-01's carried-forward-only rule; the pre-freeze packet
+           rehearsal had no control receipts and could not show the coincidence. The packet tooling is frozen;
+           mission section 16 stops on packet failure. STOP: nothing committed, nothing pushed, no tool repaired.
+           receipts/80-STOP-RECORD.md written. Status: BLOCKED.

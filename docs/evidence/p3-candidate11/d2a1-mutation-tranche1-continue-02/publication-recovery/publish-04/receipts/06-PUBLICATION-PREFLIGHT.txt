@@ -1,0 +1,45 @@
+OK   the parent's tree is unchanged
+OK   Candidate C is unchanged
+OK   the packet path is absent at the parent
+OK   no active git hook: the effective hooks directory (core.hooksPath, or .git/hooks) holds only *.sample files: hooksPath '/home/nexus/NEXUS/nexus-os/.git/hooks'; effective /home/nexus/NEXUS/nexus-os/.git/hooks; non-sample entries []
+     workflow .github/workflows/audit.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (branches ['main'])
+     workflow .github/workflows/ci-fast-local.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (branches ['implement/**', 'repair/**'])
+     workflow .github/workflows/ci-phase2-linux-sandbox.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (no push trigger)
+     workflow .github/workflows/ci-portability.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (no push trigger)
+     workflow .github/workflows/ci.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (branches ['main'])
+     workflow .github/workflows/local-runner-smoke.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (branches ['rebuild/phase0-trust-boundary'])
+     workflow .github/workflows/release.yml: push of review/p3-c11-d2a1-mutation-tranche1-continue-02 triggers it: False (tags only {'tags': ['v*']})
+OK   no workflow in the parent's tree has a push trigger matching review/p3-c11-d2a1-mutation-tranche1-continue-02: 7 workflows
+OK   glob semantics self-test
+OK   remote workflow list read: rc 0
+     remote workflow .github/workflows/audit.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/ci-deep-diagnostic.yml: state active; in the parent's tree: False
+     remote workflow .github/workflows/ci-fast-local.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/ci-phase2-linux-sandbox.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/ci-portability.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/ci.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/local-runner-smoke.yml: state active; in the parent's tree: True
+     remote workflow .github/workflows/release.yml: state disabled_manually; in the parent's tree: True
+     remote workflow .github/workflows/rs01-mutation-audit.yml: state active; in the parent's tree: False
+     remote workflow dynamic/dependabot/update-graph: state active; in the parent's tree: False
+OK   active remote workflows absent from the parent's tree cannot run on its push (GitHub reads the pushed commit's workflow files): recorded: ['.github/workflows/ci-deep-diagnostic.yml', '.github/workflows/rs01-mutation-audit.yml']
+OK   rulesets read: 5 rulesets
+     ruleset 24514063 'Nexus Phase Three — PR governed': enforcement active, target branch, include ['refs/heads/phase3/governed-real-world-control'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-continue-02: False
+     ruleset 24468658 'Nexus frozen checkpoints — immutable': enforcement active, target branch, include ['refs/heads/rebuild/phase0-trust-boundary', 'refs/heads/evidence/phase0-closure', 'refs/heads/rebuild/phase1-governed-coding', 'refs/heads/evidence/phase1-closure', 'refs/heads/rebuild/phase2-governed-verification', 'refs/heads/evidence/phase2-closure', 'refs/heads/implement/phase2-governed-verification'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-continue-02: False
+     ruleset 24468727 'Nexus main — PR governed': enforcement active, target branch, include ['refs/heads/main'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-continue-02: False
+     ruleset 24500813 'Nexus post-P2 forward — PR governed': enforcement active, target branch, include ['refs/heads/forward/post-p2-hardening'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-continue-02: False
+     ruleset 24502309 'Nexus release tags v* — immutable, creation blocked': enforcement active, target tag, include ['refs/tags/v*'], exclude []; applies to review/p3-c11-d2a1-mutation-tranche1-continue-02: False
+     branch protection read for review/p3-c11-d2a1-mutation-tranche1-continue-02: rc 1 (none)
+OK   destination ref absent on the remote
+OK   destination ref absent locally
+OK   the R2 review ref still points at the R2 evidence commit
+OK   the EXEC-01 review ref still points at the EXEC-01 evidence commit
+OK   the RESUME-01 review ref still points at the parent
+     remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+     remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+     remote refs: 197; sha256 of the sorted ls-remote listing b91562e1bc1a3e6aed73be27fe18d6d55bbe7af5cb1474137821e34eb63deaeb
+     remote URL: git@github.com:Nexus-os2026/nexus-os.git; push config: none
+OK   the read-only continue-02 root equals its before-manifest (every entry, field for field; nothing added or removed): 4409 entries; changed []; missing []; added []
+OK   the read-only publish-03 root equals its before-manifest (every entry, field for field; nothing added or removed): 33467 entries; changed []; missing []; added []
+RESULT: ALL CHECKS HOLD
+exit 0

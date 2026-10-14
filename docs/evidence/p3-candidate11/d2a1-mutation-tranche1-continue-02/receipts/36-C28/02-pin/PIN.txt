@@ -1,0 +1,14 @@
+PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 size 8983776 (ruling 116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 / 8983776)
+read-only: hashed, sized and stat-ed; never written, moved or rebuilt; build end 2026-10-14T21:14:33+0100 (bound 1792008874.0)
+the run invokes exactly this path, re-checking sha256 and size before, at selection and after
+checks: 9 of 9 hold
+OK   P1 the executable path is the ruling's (the one the build recorded): /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+OK   P2 it exists, as a regular file, not a symlink, with no symlinked path component: {'exists': True, 'is_regular': True, 'is_symlink': False, 'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3'}
+OK   P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it: {'worktree_is_own_realpath': True, 'exists': True, 'is_symlink': False, 'is_dir': True, 'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target', 'own_entry': True, 'mounts': [], 'ok': True}
+OK   P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record): 116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 8983776
+OK   P5 the executable bit is set: True
+OK   P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime are no later than the build's recorded end: 3040 entries; later: []
+OK   P7 the executable's dep-info file is unchanged since the build (sha256 and size as recorded): /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d
+OK   P8 the preserved C28 worktree: registered, HEAD C, detached, locked with RESUME-01's C28 reason: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review']; P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review
+OK   P0 the C28 build admission holds (prior step): C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING

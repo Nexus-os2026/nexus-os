@@ -1,0 +1,29 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: c4359cbe2eac514d… 8983152 / c4359cbe2eac514d… 8983152 / c4359cbe2eac514d… 8983152 (pinned c4359cbe2eac514d… 8983152)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: d7d6dc6780698b402983970a6b7a8171e856d906a0524befa8eaaf7a0b44b7f9
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 180 s: memory.peak 3379200 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 180 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission' (3891480) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4121:5:"]
+OK   the panic is the explorer's own verdict assertion (default_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4121:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4121:5
+OK   the assertion message carries failed: {"E2"}: ['assertion `left == right` failed: failed: {"E2"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION X-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION X-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 2 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 250000 states, 180s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Adm]
+OK   caps printed: 250,000 states, 180 s (the configuration's adopted ceiling): 250000, 180
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property E2 (no attribution exception in the catalog): E2: loads 0, exchanges 2; views 0, ticket steps 0, store operations 1
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 250,000 (K.1, inclusive): 5
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: E2
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90

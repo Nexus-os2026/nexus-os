@@ -1,0 +1,100 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-04 development log (Claude Code, Claude Opus 5.5, effort High; the mission
+named Claude Sonnet 5.5, a deviation). Publication recovery only. Times are local (+01:00). Every tool here is Python,
+git and the GitHub CLI; nothing is built, compiled, tested, explored, mutated or executed. git writes only this
+mission's worktree, its local publication branch and its one commit (and, for rehearsals, a disposable clone under
+scratch/); the GitHub CLI only reads, and the one push is git's.
+PYTHONDONTWRITEBYTECODE=1 and python3 -B on every run (pub4common.no_bytecode() refuses otherwise), so no bytecode is
+written beside any tool of either read-only root.
+
+1. to 23:10     Read the mission; read the PUBLISH-03 root read-only (stop record, inventory, development log, every
+                tool) and the CONTINUE-02 root (self-test receipt, supervise.py sampler/supervised/selftest/build,
+                control.py link(), the run and build descriptors, the freeze record); listed the previous-packet files
+                byte-equal to each of the 14 constant records (61 for the sampler line, 2 for each self-test output).
+2. 23:10        This mission's root created (documents, tools, receipts, development, scratch). The worktree path and
+                the local publication branch were absent.
+3. 23:11        receipts/00-ROOT-MANIFESTS-BEFORE/: both read-only roots manifested by tools/manifest.py before any
+                other tool of this mission read them. The CONTINUE-02 manifest is byte-identical to PUBLISH-03's
+                receipts/00-SOURCE-MANIFEST-BEFORE.tsv (sha256 9eb18bd2...8757): that root is unchanged since PUBLISH-03
+                began. The PUBLISH-03 manifest: 33467 entries (scratch/ included).
+4. 23:14        tools/authenticate.py (PUBLISH-03's, plus both roots): scratch run, then receipts/01-AUTHENTICATION.txt,
+                ALL CHECKS HOLD (163). Superseded at entry 13.
+5. 23:16-23:20  The R2 builder: a byte copy of PUBLISH-03's tools/build_packet.py (d2433349...) and common.py
+                (byte-identical to CONTINUE-02's); the ruling constants and dup_policy() written as two segments
+                (scratch/seg-constants.py, scratch/seg-policy.py) and spliced in place of the PUBLISH-03 policy
+                regions, the docstring paragraph and two imports added, and the policy check call replaced. Every
+                other line kept byte for byte.
+6. 23:19        A syntax check with `python3 -m py_compile` wrote tools/__pycache__/build_packet.cpython-312.pyc in this
+                mission's own tools directory (py_compile writes bytecode even under -B). Removed; later syntax checks
+                use ast.parse. No __pycache__ appeared under either read-only root (checked; both roots unchanged, see
+                receipts/06 and the final gate).
+7. 23:20-23:21  tools/make_maps.py into scratch: 21 nonempty rows (7 LINK_RECEIPT, 10 CGROUP_CONSTANT, 4
+                SELFTEST_CONSTANT), 8 zero-length rows. Builder dev1 CLI into scratch FAILED as expected while the
+                official maps did not yet exist (MAP_UNREADABLE): kept as
+                development/build-packet-dev1-FAILED-official-maps-not-yet-written.txt. Its dup_policy() against the
+                scratch maps: 21 accepted, 8 accepted, no problem.
+8. 23:21        Official maps and the R2 ruling record (documents/; receipts/02-MAKE-MAPS.txt), byte-identical to the
+                scratch derivation.
+9. 23:23        tools/builder_diff.py into scratch: ONLY THE DUPLICATE-CONTENT AND ZERO-LENGTH POLICY CHANGED.
+10. 23:26-23:27 tools/repair_controls.py dev1 into scratch: 65 of 66 as expected. N24b (C18a LINK.txt replaced by a
+                symlink to an outside byte-equal file) was rejected, but also rejected C18a's LINK.json, whose
+                verification reads its sibling LINK.txt; my expectation had not named that binding. Policy unchanged;
+                the expectation strengthened to require both rejections (development/repair_controls.dev1-to-dev2.diff;
+                dev1 tool development/revisions/repair_controls.dev1.py; dev1 console kept as
+                development/repair-controls-dev1-FAILED-N24b-incomplete-expectation.txt).
+11. 23:28       Official receipts/03-BUILDER-DIFF (three diffs; FROZEN-TO-PUBLISH-03.diff byte-identical to PUBLISH-03's
+                BUILDER.diff) and receipts/04-REPAIR-CONTROLS: 66 of 66 as expected (P1-P4, N1-N26). The base staging
+                is byte-identical to PUBLISH-03's base staging (309 files; S0).
+12. 23:29-23:31 receipts/05-WORKTREE.txt: the worktree created at exactly 3695a817 on
+                publication/p3-c11-d2a1-mutation-tranche1-publish-04 (no hook, no filter, no .gitattributes).
+                receipts/06-PUBLICATION-PREFLIGHT.txt: ALL CHECKS HOLD (no workflow push trigger matches the review
+                branch, no ruleset applies, destination absent, both roots unchanged).
+13. 23:32-23:38 tools/assemble.py into scratch: PACKET ASSEMBLED — ALL CHECKS HOLD (437 files, 14,835,083 bytes before
+                the post-gate records). A scratch rehearsal of the final gate's whitespace rule found one trailing
+                space in this mission's own receipts/01-AUTHENTICATION.txt (line 86: a detail cut at 90 characters).
+                authenticate.py fixed (rstrip of the cut detail) and its publication-state checks revised for the
+                worktree that receipt 05 had created since (development/authenticate.dev1-to-dev2.diff; dev1 tool in
+                development/revisions/). The superseded receipt is kept unchanged in
+                development/superseded-1-authentication-trailing-space/; receipts/01-AUTHENTICATION.txt re-recorded:
+                ALL CHECKS HOLD (163).
+14. 23:38       documents/INDEX-PUBLICATION-RECOVERY.md written by tools/make_index.py; the publication tools
+                (assemble, record_freeze, final_gate, finalize, push, publish_checks) complete.
+15. 23:39-23:41 A rehearsal mode added to record_freeze.py and final_gate.py (`--rehearse DIR`: the packet and the
+                freeze in DIR under scratch/; the real worktree must still be empty), so that the frozen gate is
+                exercised before the freeze. While adding it, a word-boundary rename (DEST -> dest, AFTER -> after)
+                also changed two string literals and Q.DEST; found by review and repaired before any run.
+                Rehearsal 1 (scratch/rehearsal-1: assembly, freeze, gate): every check held but one: the
+                running-process check matched this session's own shell, whose arguments mention ~/.cargo/bin. The
+                check now matches the executable name (ps comm), never argument text
+                (development/final_gate.dev1-to-dev2.diff; dev1 tool in development/revisions/; the rehearsal
+                output kept as development/gate-rehearsal-1-FAILED-ps-matched-own-shell-args.txt).
+16. 23:41       Rehearsal 2 (scratch/rehearsal-2): assembly, freeze and gate: FINAL GATE: ALL CHECKS HOLD (53).
+17. 23:42-23:44 The post-gate tools (finalize.py, publish_checks.py pre) cannot be repaired after the freeze either, so
+                the rehearsal was extended to them: one switch, PUB4_REHEARSAL=DIR in pub4common.py (DIR under
+                scratch/), replaces the --rehearse options and redirects the receipts to DIR/receipts and the
+                worktree and commit repository to a disposable clone DIR/clone; push.py refuses to run in a
+                rehearsal. finalize.py reads the commit through the worktree's repository. The gate's whitespace
+                classification of this mission's files made mechanical: raw are the two console captures, every
+                .diff (each verified to be a unified diff) and every -FAILED- or superseded-* development record
+                (each verified to lie under development/); every other file of this mission is authored and must be
+                clean. Revisions and diffs in development/ (pub4common, record_freeze, final_gate dev2-to-dev3,
+                finalize, publish_checks, push).
+18. 23:44       Rehearsal 3 (scratch/rehearsal-3): `git clone --no-checkout --shared` of the repository into
+                scratch/rehearsal-3/clone, its identity and hooks path set as the repository's, its push URLs set to
+                DISABLED-REHEARSAL-NO-PUSH, checked out at 3695a817 on the publication branch name. Assembly, freeze,
+                gate: ALL CHECKS HOLD (55); finalize: a commit in the clone only (468 files, 22,132,793 bytes;
+                git diff --cached --check reported exactly the gate rule's 270 findings, none in an authored file);
+                pre-push checks on that commit: ALL CHECKS HOLD; push.py: REFUSED (rehearsal). The destination ref
+                stayed absent. The GitHub readback paths were probed read-only on the RESUME-01 commit (recursive
+                tree: 7515 blobs, not truncated, equal to local; the contents fallback for its largest file).
+19. 23:45-23:46 The official assembly into the worktree REFUSED before doing anything: the shell had already created
+                its console, receipts/07-ASSEMBLE.console.txt, and the assembler refuses any undeclared receipt (the
+                rehearsals wrote their consoles under scratch/, so they never met this). The worktree was untouched
+                (clean, no packet directory). The assembler now skips a post-gate record at assembly (only the
+                console being written can exist then) and still refuses every other undeclared receipt
+                (development/assemble.dev1-to-dev2.diff; dev1 tool in development/revisions/; the refused console
+                kept as development/assemble-official-1-FAILED-console-is-an-undeclared-receipt.txt).
+20. Next (not part of this log, recorded by their own receipts): the packet assembled into the worktree
+    (receipts/07-ASSEMBLE.console.txt), the freeze (receipts/10-FREEZE.json, 10-FREEZE-RECORD.txt), the one final
+    publication gate (receipts/20-FINAL-GATE.txt, 21-ROOT-MANIFESTS-AFTER/); then, local only, the commit
+    (receipts/30-FINALIZE.txt), the pre-push checks (40), the one push (41), the readback (42) and the Actions readback
+    (43).

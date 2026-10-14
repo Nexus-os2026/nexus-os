@@ -1,0 +1,13 @@
+--- development/revisions/authenticate.dev1.py	2026-10-14 21:49:50.754650404 +0100
++++ tools/authenticate.py	2026-10-14 21:49:50.773640093 +0100
+@@ -556,8 +556,8 @@
+     chk("RESUME-01 freeze record names its 05-FREEZE.json sha256", rec[3],
+         f"05-FREEZE.json sha256 {K.sha256_bytes(data['receipts/05-FREEZE.json'])}")
+     tools = {f[len("tools/"):]: K.sha256_bytes(v) for f, v in data.items() if f.startswith("tools/")}
+-    chk("RESUME-01 packet tools/ are exactly its frozen tools (05-FREEZE.json)",
+-        tools == {f[len("tools/"):]: h for f, h in fr["files"].items() if f.startswith("tools/")}, f"{len(tools)} tools")
++    chk(f"RESUME-01 packet tools/ ({len(tools)}) are exactly its frozen tools (05-FREEZE.json)", tools,
++        {f[len("tools/"):]: h for f, h in fr["files"].items() if f.startswith("tools/")})
+     orig = {f: K.sha256_file(os.path.join(K.EV, "original-tools", f)) for f in
+             sorted(os.listdir(os.path.join(K.EV, "original-tools")))}
+     chk("this mission's original-tools/ are exactly RESUME-01's frozen tools (names and sha256)", orig, tools)

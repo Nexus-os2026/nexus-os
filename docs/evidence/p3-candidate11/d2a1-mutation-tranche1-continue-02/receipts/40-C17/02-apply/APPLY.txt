@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C17: the guard reports Not written after an insert was issued
+patch: inputs/patches/C17.patch (the frozen R2 packet's catalog/patches/C17.patch), sha256 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0 (catalog 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t5\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 4dfed9e1600a82b38f3326d26a47c4c41f513ac3 (expected 4dfed9e1600a82b38f3326d26a47c4c41f513ac3), sha256 94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf (expected 94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

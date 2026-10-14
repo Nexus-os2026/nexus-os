@@ -1,0 +1,184 @@
+FINAL PUBLICATION GATE — P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-04
+[freeze]
+OK   10-FREEZE-RECORD.txt records this freeze record's sha256 (FREEZE: RECORDED): 5a48c518c9498f2288a08d484f4d47b592b43020b8df96202d97e73803e9968a
+OK   every frozen file of this mission's root is unchanged (tools, documents, receipts, development; both maps, the ruling record, the builder, the controls and the publication tooling among them): 90 frozen; changed []
+OK   nothing added to this mission's root since the freeze but the freeze record and the gate's own outputs: []
+OK   the staged packet equals the frozen packet exactly (every path and sha256; nothing added or removed): 465 files; frozen 465
+OK   frozen maps unchanged
+[no engineering execution]
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/assemble.py: ['python']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/authenticate.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/build_packet.py: ['python']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/builder_diff.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/common.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/final_gate.py: ['git', 'ps']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/finalize.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/make_index.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/make_maps.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/manifest.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/pub4common.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/publish_checks.py: ['gh', 'git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/push.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/record_freeze.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/repair_controls.py: ['python']
+     p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/worktree.py: ['git']
+     p3-c11-dr01-d2a1-mutation-tranche1-continue-02/tools/render.py: no process launch
+     p3-c11-dr01-d2a1-mutation-tranche1-continue-02/tools/common.py: ['git']
+OK   every process any tool of this mission launches (and the CONTINUE-02 render.py and common.py the builder runs and imports) is git, gh, ps (this gate's process listing), or this Python interpreter running this mission's own tools: no Cargo, rustc, test, explorer or other executable: {}
+     interpreter launches: [('/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/assemble.py', 182), ('/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/build_packet.py', 653), ('/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/repair_controls.py', 92)]
+OK   no cargo, rustc or governed-control test process is running now (by executable name): 517 processes; matching []
+OK   the development log records that nothing was built, compiled, tested, explored, mutated or executed
+[read-only roots]
+OK   the continue-02 root after packet construction equals its before-manifest byte for byte (every entry: path, type, size, sha256, mode, mtime_ns, symlink target; nothing added, nothing removed): 4409 entries; sha256 9eb18bd27074c17a8380d2bb16697b3f318612cfb53d64ee0bfb262abc368757
+OK   the publish-03 root after packet construction equals its before-manifest byte for byte (every entry: path, type, size, sha256, mode, mtime_ns, symlink target; nothing added, nothing removed): 33467 entries; sha256 d9557fb70d5f85617108789300c88d1955cc184f70849c7e976db6e47a709388
+OK   the CONTINUE-02 root still equals PUBLISH-03's source-evidence manifest
+[maps, policy and controls]
+OK   the nonempty map holds exactly 21 rows (7 LINK_RECEIPT, 10 CGROUP_CONSTANT, 4 SELFTEST_CONSTANT): {'LINK_RECEIPT': 7, 'CGROUP_CONSTANT': 10, 'SELFTEST_CONSTANT': 4}
+OK   the zero-length map holds exactly 8 rows (2 self-test outputs, 6 mutant-build stdouts)
+OK   the packet's NONEMPTY-DUPLICATE-MAP.tsv is byte-equal to this mission's
+OK   the packet's ZERO-LENGTH-ARTIFACT-MAP.tsv is byte-equal to this mission's
+OK   the packet's ARCHITECT-RULING-DUPLICATE-POLICY-R2.md is byte-equal to this mission's
+     duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+OK   exactly 21 mapped nonempty duplicates, each verified; no unmapped duplicate: 21 accepted
+OK   exactly 8 mapped zero-length artifacts, each verified; no unlisted empty file: 8 accepted
+OK   the R2 policy reports no problem over the whole packet: []
+OK   every required repair control (P1-P4, N1-N26) ran, and every control is as expected: 66 controls; missing []
+OK   the controls ran the frozen builder and the frozen maps
+OK   builder diff: ONLY THE DUPLICATE-CONTENT AND ZERO-LENGTH POLICY CHANGED (frozen builder)
+[preserved failures and candidate evidence]
+OK   both publication failures and every stop record are present, byte-equal to their roots (CONTINUE-02: the crashed and the re-run final gate, the frozen builder, its duplicate failure, the stop record, the development log; PUBLISH-03: the repaired builder and diff, the controls with the failed P3, the inventory, the stop record, the development log, the manifests, the root sums, the R1 record and map): 22 records; missing or different []
+OK   C28: complete evidence (receipts/36-C28/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 21 files; missing []
+OK   C12: complete evidence (receipts/37-C12/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+OK   C9: complete evidence (receipts/38-C9/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+OK   C11: complete evidence (receipts/39-C11/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+OK   C17: complete evidence (receipts/40-C17/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+OK   C18a: complete evidence (receipts/41-C18a/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+OK   C18b: complete evidence (receipts/42-C18b/, its console) present byte-equal; its result still 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING': 34 files; missing []
+[packet contents]
+OK   no symlink anywhere in the packet (files or directories): []
+OK   no bytecode or cache file in the packet: []
+OK   packet size at most 32 MiB: 15094081 bytes, 465 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 8
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob excluded)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob excluded): []
+OK   no target directory, build artifact or bytecode: []
+OK   no credential pattern (GitHub, AWS, Slack, Anthropic/OpenAI-style keys, private keys): []
+OK   no carried-forward path staged
+     duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+OK   R2 policy over the whole packet: no nonempty file byte-equal to a previous-packet file but exactly the 21 mapped, verified files; no zero-length file but exactly the 8 mapped, verified artifacts: []
+OK   every added file byte-equal to its source: 156 added
+OK   exactly the declared PUBLISH-03 exclusions (scratch/ and the one zero-length file) are absent: 66 PUBLISH-03 files; excluded ['development/make-map-dev1-FAILED-sha-column-key.txt']
+OK   SHA256SUMS lists every file but itself, and verifies: 464 listed
+     mapped nonempty duplicates accepted: 21; mapped zero-length artifacts accepted: 8; packet files 465; bytes 15094081
+OK   the packet with the post-gate records stays at most 32 MiB (the gate's own console counted at 1 MiB): 15094081 + 7039076 + 1048576 bytes
+[confinement and repository]
+OK   packet confinement: the worktree holds only untracked files under the packet path, exactly the packet: 465 entries
+OK   the worktree is at the parent, on the publication branch, with nothing staged
+OK   Candidate C, the catalog and the previous commits unchanged (trees, catalog blob)
+OK   the R2, EXEC-01 and RESUME-01 review refs unchanged on the remote
+OK   the destination ref is absent on the remote and locally
+[whitespace (git's default rules): this mission's files clean; every retained raw finding listed]
+OK   every .diff of this mission is a unified diff (raw by class): 13 diffs
+OK   every -FAILED- or superseded record of this mission lies under development/: []
+OK   every file this mission authored is whitespace-clean (records, maps, index, tools, controls, manifests, publication receipts): []
+     retained raw or preserved findings: 270 in 95 files (byte-exact; never edited)
+     INDEX.md (CONTINUE-02 evidence): line 52 blank line at end of file
+     TRANCHE-SUMMARY.md (CONTINUE-02 evidence): line 188 blank line at end of file
+     development/authentication-dev1-FAILED-chk-argument-order.txt (CONTINUE-02 evidence): line 55 trailing whitespace; line 79 trailing whitespace; line 101 trailing whitespace; line 123 trailing whitespace; line 145 trailing whitespace; line 167 trailing whitespace; line 189 trailing whitespace; line 211 trailing whitespace; line 233 trailing whitespace; line 255 trailing whitespace; line 277 trailing whitespace; line 299 trailing whitespace
+     publication-recovery/publish-03/development/authentication-dev1-FAILED-gate-verdict-not-last-line.txt (PUBLISH-03 record): line 65 trailing whitespace
+     publication-recovery/publish-03/development/build-packet-dev1-FAILED-link-txt-config-parser.txt (PUBLISH-03 record): line 1 trailing whitespace
+     publication-recovery/publish-03/development/builder_diff.dev1-to-dev2.diff (PUBLISH-03 record): line 21 trailing whitespace; line 21 blank line at end of file
+     publication-recovery/publish-03/development/superseded-1-rc-misrecorded/03-BUILDER-DIFF/BUILDER.diff (PUBLISH-03 record): line 25 trailing whitespace; line 49 trailing whitespace; line 245 trailing whitespace; line 246 trailing whitespace
+     publication-recovery/publish-03/development/superseded-1-rc-misrecorded/04-REPAIR-CONTROLS/P3-builder-run.txt (PUBLISH-03 record): line 1 trailing whitespace
+     publication-recovery/publish-03/documents/ARCHITECT-RULING-DUPLICATE-LINK-RECEIPTS.md (PUBLISH-03 record): line 54 blank line at end of file
+     publication-recovery/publish-03/documents/DUPLICATE-CONTENT-MAP.md (PUBLISH-03 record): line 36 blank line at end of file
+     publication-recovery/publish-03/receipts/01-AUTHENTICATION.txt (PUBLISH-03 record): line 66 trailing whitespace
+     publication-recovery/publish-03/receipts/03-BUILDER-DIFF/BUILDER.diff (PUBLISH-03 record): line 25 trailing whitespace; line 49 trailing whitespace; line 245 trailing whitespace; line 246 trailing whitespace
+     publication-recovery/publish-03/receipts/04-REPAIR-CONTROLS/P3-builder-run.txt (PUBLISH-03 record): line 1 trailing whitespace
+     publication-recovery/publish-03/receipts/07-DUPLICATE-INVENTORY.txt (PUBLISH-03 record): line 4 trailing whitespace; line 6 trailing whitespace; line 12 trailing whitespace; line 14 trailing whitespace; line 16 trailing whitespace; line 18 trailing whitespace; line 20 trailing whitespace; line 22 trailing whitespace
+     publication-recovery/publish-04/development/build-packet-dev1-FAILED-official-maps-not-yet-written.txt (this mission's preserved development failure or superseded receipt): line 1 trailing whitespace
+     publication-recovery/publish-04/development/final_gate.dev1-to-dev2.diff (this mission's unified diff): line 13 trailing whitespace
+     publication-recovery/publish-04/development/final_gate.dev2-to-dev3.diff (this mission's unified diff): line 6 trailing whitespace; line 12 trailing whitespace; line 18 trailing whitespace; line 44 trailing whitespace; line 47 trailing whitespace; line 48 trailing whitespace; line 64 trailing whitespace; line 65 trailing whitespace; line 69 trailing whitespace; line 70 trailing whitespace; line 86 trailing whitespace; line 99 trailing whitespace; line 116 trailing whitespace; line 137 trailing whitespace; line 138 trailing whitespace
+     publication-recovery/publish-04/development/finalize.dev1-to-dev2.diff (this mission's unified diff): line 5 trailing whitespace; line 9 trailing whitespace; line 36 trailing whitespace; line 45 trailing whitespace
+     publication-recovery/publish-04/development/pub4common.dev1-to-dev2.diff (this mission's unified diff): line 19 trailing whitespace
+     publication-recovery/publish-04/development/publish_checks.dev1-to-dev2.diff (this mission's unified diff): line 6 trailing whitespace
+     publication-recovery/publish-04/development/push.dev1-to-dev2.diff (this mission's unified diff): line 4 trailing whitespace
+     publication-recovery/publish-04/development/record_freeze.dev1-to-dev2.diff (this mission's unified diff): line 6 trailing whitespace; line 13 trailing whitespace; line 18 trailing whitespace; line 19 trailing whitespace; line 51 trailing whitespace; line 52 trailing whitespace
+     publication-recovery/publish-04/development/superseded-1-authentication-trailing-space/01-AUTHENTICATION.txt (this mission's preserved development failure or superseded receipt): line 86 trailing whitespace
+     publication-recovery/publish-04/receipts/03-BUILDER-DIFF/FROZEN-TO-PUBLISH-03.diff (this mission's unified diff): line 25 trailing whitespace; line 49 trailing whitespace; line 245 trailing whitespace; line 246 trailing whitespace
+     publication-recovery/publish-04/receipts/03-BUILDER-DIFF/FROZEN-TO-PUBLISH-04.diff (this mission's unified diff): line 40 trailing whitespace; line 169 trailing whitespace; line 613 trailing whitespace; line 614 trailing whitespace
+     publication-recovery/publish-04/receipts/03-BUILDER-DIFF/PUBLISH-03-TO-PUBLISH-04.diff (this mission's unified diff): line 29 trailing whitespace; line 158 trailing whitespace; line 163 trailing whitespace; line 164 trailing whitespace; line 179 trailing whitespace; line 185 trailing whitespace; line 211 trailing whitespace; line 498 trailing whitespace; line 588 trailing whitespace; line 589 trailing whitespace
+     publication-recovery/publish-04/receipts/04-REPAIR-CONTROLS/P4-builder-run.txt (this mission's raw console capture): line 1 trailing whitespace
+     publication/10-build-packet.txt (CONTINUE-02 evidence): line 1 trailing whitespace
+     receipts/00-authentication.txt (CONTINUE-02 evidence): line 55 trailing whitespace; line 79 trailing whitespace; line 101 trailing whitespace; line 123 trailing whitespace; line 145 trailing whitespace; line 167 trailing whitespace; line 189 trailing whitespace; line 211 trailing whitespace; line 233 trailing whitespace; line 255 trailing whitespace; line 277 trailing whitespace; line 299 trailing whitespace
+     receipts/01-supervision-selftest/1/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/01-supervision-selftest/2/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/01-supervision-selftest/3/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/01-supervision-selftest/5/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/01-supervision-selftest/6/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/01-supervision-selftest/7/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/04-tool-diff/TOOL-DIFF.diff (CONTINUE-02 evidence): line 14 trailing whitespace; line 61 trailing whitespace; line 62 trailing whitespace; line 178 trailing whitespace; line 191 trailing whitespace; line 192 trailing whitespace; line 1023 trailing whitespace; line 1029 trailing whitespace; line 1038 trailing whitespace; line 1044 trailing whitespace; line 1045 trailing whitespace; line 1062 trailing whitespace; line 1074 trailing whitespace; line 1114 trailing whitespace; line 1119 trailing whitespace; line 1126 trailing whitespace; line 1127 trailing whitespace; line 1183 trailing whitespace; line 1186 trailing whitespace; line 1187 trailing whitespace; line 1302 trailing whitespace; line 1303 trailing whitespace; line 1333 trailing whitespace; line 1556 trailing whitespace; line 1664 trailing whitespace; line 1669 trailing whitespace; line 1733 trailing whitespace; line 1734 trailing whitespace; line 1780 trailing whitespace; line 1789 trailing whitespace; line 1790 trailing whitespace; line 1793 trailing whitespace; line 1817 trailing whitespace; line 1818 trailing whitespace; line 1822 trailing whitespace; line 1823 trailing whitespace; line 2090 trailing whitespace; line 2091 trailing whitespace; line 2099 trailing whitespace; line 2103 trailing whitespace; line 2122 trailing whitespace; line 2127 trailing whitespace; line 2128 trailing whitespace; line 2269 trailing whitespace; line 2301 trailing whitespace; line 2399 trailing whitespace; line 2400 trailing whitespace; line 2403 trailing whitespace; line 2404 trailing whitespace; line 2523 trailing whitespace; line 2524 trailing whitespace
+     receipts/04b-render-rehearsal/rendered-A/INDEX.md (CONTINUE-02 evidence): line 52 blank line at end of file
+     receipts/04b-render-rehearsal/rendered-A/TRANCHE-SUMMARY.md (CONTINUE-02 evidence): line 116 blank line at end of file
+     receipts/04b-render-rehearsal/rendered-B/INDEX.md (CONTINUE-02 evidence): line 52 blank line at end of file
+     receipts/04b-render-rehearsal/rendered-B/TRANCHE-SUMMARY.md (CONTINUE-02 evidence): line 80 blank line at end of file
+     receipts/04b-render-rehearsal/rendered-C/INDEX.md (CONTINUE-02 evidence): line 52 blank line at end of file
+     receipts/04b-render-rehearsal/rendered-C/TRANCHE-SUMMARY.md (CONTINUE-02 evidence): line 188 blank line at end of file
+     receipts/06-gate-authentication.txt (CONTINUE-02 evidence): line 55 trailing whitespace; line 79 trailing whitespace; line 101 trailing whitespace; line 123 trailing whitespace; line 145 trailing whitespace; line 167 trailing whitespace; line 189 trailing whitespace; line 211 trailing whitespace; line 233 trailing whitespace; line 255 trailing whitespace; line 277 trailing whitespace; line 299 trailing whitespace
+     receipts/36-C28/04-run/raw-output.txt (CONTINUE-02 evidence): line 3 trailing whitespace; line 15 blank line at end of file
+     receipts/36-C28/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/37-C12.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/37-C12/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/37-C12/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/37-C12/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/37-C12/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/37-C12/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/37-C12/04-run/raw-output.txt (CONTINUE-02 evidence): line 225 blank line at end of file
+     receipts/37-C12/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/38-C9.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/38-C9/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/38-C9/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/38-C9/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/38-C9/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/38-C9/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/38-C9/04-run/raw-output.txt (CONTINUE-02 evidence): line 225 blank line at end of file
+     receipts/38-C9/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/39-C11.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/39-C11/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/39-C11/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/39-C11/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/39-C11/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/39-C11/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/39-C11/04-run/raw-output.txt (CONTINUE-02 evidence): line 225 blank line at end of file
+     receipts/39-C11/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/40-C17.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/40-C17/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/40-C17/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/40-C17/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/40-C17/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/40-C17/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/40-C17/04-run/raw-output.txt (CONTINUE-02 evidence): line 225 blank line at end of file
+     receipts/40-C17/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/41-C18a.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/41-C18a/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/41-C18a/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/41-C18a/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/41-C18a/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/41-C18a/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/41-C18a/04-run/raw-output.txt (CONTINUE-02 evidence): line 223 blank line at end of file
+     receipts/41-C18a/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/42-C18b.console.txt (CONTINUE-02 evidence): line 4 trailing whitespace; line 15 trailing whitespace; line 21 trailing whitespace; line 50 trailing whitespace
+     receipts/42-C18b/01-worktree/AUTHENTICATE.txt (CONTINUE-02 evidence): line 11 trailing whitespace
+     receipts/42-C18b/01-worktree/CREATE.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/42-C18b/02-apply/APPLY.txt (CONTINUE-02 evidence): line 4 trailing whitespace
+     receipts/42-C18b/03-build/RECEIPT.txt (CONTINUE-02 evidence): line 26 trailing whitespace
+     receipts/42-C18b/03-build/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/42-C18b/04-run/raw-output.txt (CONTINUE-02 evidence): line 223 blank line at end of file
+     receipts/42-C18b/04-run/scope-record.txt (CONTINUE-02 evidence): line 6 trailing whitespace
+     receipts/90-gate-authentication-attempt-1.txt (CONTINUE-02 evidence): line 55 trailing whitespace; line 79 trailing whitespace; line 101 trailing whitespace; line 123 trailing whitespace; line 145 trailing whitespace; line 167 trailing whitespace; line 189 trailing whitespace; line 211 trailing whitespace; line 233 trailing whitespace; line 255 trailing whitespace; line 277 trailing whitespace; line 299 trailing whitespace
+     receipts/90-gate-authentication.txt (CONTINUE-02 evidence): line 55 trailing whitespace; line 79 trailing whitespace; line 101 trailing whitespace; line 123 trailing whitespace; line 145 trailing whitespace; line 167 trailing whitespace; line 189 trailing whitespace; line 211 trailing whitespace; line 233 trailing whitespace; line 255 trailing whitespace; line 277 trailing whitespace; line 299 trailing whitespace
+FINAL GATE: ALL CHECKS HOLD
+exit 0

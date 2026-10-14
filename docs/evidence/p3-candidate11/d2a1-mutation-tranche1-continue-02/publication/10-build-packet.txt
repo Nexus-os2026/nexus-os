@@ -1,0 +1,15 @@
+STATUS: READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW; new candidates 7 of 7; attempted ['C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b'] 
+carried-forward copies and unchanged RESUME-01 tools not staged (referenced in CARRIED-FORWARD.md): 35
+OK   packet size at most 32 MiB: 4540516 bytes, 308 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 8
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob, present in C's crates/, copies no content and is not counted): 8 empty file(s)
+OK   no carried-forward path staged: []
+OK   only changed or added tools staged (every unchanged RESUME-01 tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'c28_admit.py', 'c28_controls.py', 'common.py', 'control.py', 'final_gate.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'render.py', 'render_rehearsal.py', 'tool_diff.py']
+FAIL no staged file of 1 KiB or more byte-equal to any file of either previous packet (EXEC-01, RESUME-01; nothing duplicated): [('receipts/38-C9/06-link/LINK.json', 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/links/link-C9-stage2/LINK.json'), ('receipts/38-C9/06-link/LINK.txt', 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/links/link-C9-stage2/LINK.txt'), ('receipts/39-C11/06-link/LINK.json', 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/04-rehearsal/links/link-C9-stage2/LINK.json')]
+     info: 14 small staged file(s) coincide with a carried-forward file's bytes (an independently produced constant record, e.g. the sampler's one-line note): [('receipts/01-supervision-selftest/1/cgroup-samples.txt', 95, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/cgroup-samples.txt'), ('receipts/01-supervision-selftest/1/out.txt', 19, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/01-supervision-selftest/1/out.txt'), ('receipts/01-supervision-selftest/5/cgroup-samples.txt', 95, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/cgroup-samples.txt'), ('receipts/01-supervision-selftest/6/out.txt', 43, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/01-supervision-selftest/6/out.txt'), ('receipts/01-supervision-selftest/7/cgroup-samples.txt', 95, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/cgroup-samples.txt'), ('receipts/01-supervision-selftest/7/err.txt', 10, 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/01-supervision-selftest/7/err.txt')]
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 307 listed
+PACKET: FAILED: no staged file of 1 KiB or more byte-equal to any file of either previous packet (EXEC-01, RESUME-01; nothing duplicated)

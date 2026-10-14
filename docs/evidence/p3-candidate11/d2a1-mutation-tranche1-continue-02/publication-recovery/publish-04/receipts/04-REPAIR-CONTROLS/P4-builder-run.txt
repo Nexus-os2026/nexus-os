@@ -1,0 +1,19 @@
+STATUS: READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW; new candidates 7 of 7; attempted ['C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b'] 
+carried-forward copies and unchanged RESUME-01 tools not staged (referenced in CARRIED-FORWARD.md): 35
+OK   packet size at most 32 MiB: 4547590 bytes, 309 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 8
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob, present in C's crates/, copies no content and is not counted): 8 empty file(s)
+OK   no carried-forward path staged: []
+OK   only changed or added tools staged (every unchanged RESUME-01 tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'c28_admit.py', 'c28_controls.py', 'common.py', 'control.py', 'final_gate.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'render.py', 'render_rehearsal.py', 'tool_diff.py']
+     duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+OK   no nonempty staged file byte-equal to any file of either previous packet (EXEC-01, RESUME-01), whatever its size, but exactly the 21 Architect-ruled files of NONEMPTY-DUPLICATE-MAP.tsv, and no zero-length staged file but exactly the 8 Architect-ruled artifacts of ZERO-LENGTH-ARTIFACT-MAP.tsv, each verified against every field of its row (PUBLISH-04, ruling R2): []
+     mapped nonempty duplicates accepted (21 of 21): ['receipts/01-supervision-selftest/1/cgroup-samples.txt', 'receipts/01-supervision-selftest/1/out.txt', 'receipts/01-supervision-selftest/5/cgroup-samples.txt', 'receipts/01-supervision-selftest/6/out.txt', 'receipts/01-supervision-selftest/7/cgroup-samples.txt', 'receipts/01-supervision-selftest/7/err.txt', 'receipts/01-supervision-selftest/7/out.txt', 'receipts/36-C28/04-run/cgroup-samples.txt', 'receipts/37-C12/04-run/cgroup-samples.txt', 'receipts/38-C9/04-run/cgroup-samples.txt', 'receipts/38-C9/06-link/LINK.json', 'receipts/38-C9/06-link/LINK.txt', 'receipts/39-C11/04-run/cgroup-samples.txt', 'receipts/39-C11/06-link/LINK.json', 'receipts/40-C17/04-run/cgroup-samples.txt', 'receipts/40-C17/06-link/LINK.json', 'receipts/41-C18a/04-run/cgroup-samples.txt', 'receipts/41-C18a/06-link/LINK.json', 'receipts/41-C18a/06-link/LINK.txt', 'receipts/42-C18b/04-run/cgroup-samples.txt', 'receipts/42-C18b/06-link/LINK.json']
+     mapped zero-length artifacts accepted (8 of 8): ['receipts/01-supervision-selftest/3/out.txt', 'receipts/01-supervision-selftest/5/out.txt', 'receipts/37-C12/03-build/build.stdout', 'receipts/38-C9/03-build/build.stdout', 'receipts/39-C11/03-build/build.stdout', 'receipts/40-C17/03-build/build.stdout', 'receipts/41-C18a/03-build/build.stdout', 'receipts/42-C18b/03-build/build.stdout']
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 308 listed
+PACKET: STAGED — ALL CHECKS HOLD
+
+exit 0

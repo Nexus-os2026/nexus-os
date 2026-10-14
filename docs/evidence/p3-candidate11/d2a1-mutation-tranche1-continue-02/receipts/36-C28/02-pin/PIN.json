@@ -1,0 +1,98 @@
+{
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+ "sha256": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+ "size": 8983776,
+ "inode": 62955164,
+ "mtime_ns": 1792008872726923712,
+ "ctime_ns": 1792008872727923722,
+ "source_verdict_at_build": "EXACTLY_C_PLUS_PATCH",
+ "mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
+ "mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
+ "patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
+ "build_receipt": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build at 3695a817a6190781dc66769a72a487b442d3e6da",
+ "rebuilt": false,
+ "pinned": true,
+ "facts": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28",
+  "path_is_normal_absolute": true,
+  "worktree_realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28",
+  "exists": true,
+  "target": {
+   "worktree_is_own_realpath": true,
+   "exists": true,
+   "is_symlink": false,
+   "is_dir": true,
+   "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target",
+   "own_entry": true,
+   "mounts": [],
+   "ok": true
+  },
+  "beneath_target": true,
+  "is_regular": true,
+  "is_symlink": false,
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "size": 8983776,
+  "executable_bit": true,
+  "inode": 62955164,
+  "dev": 66310,
+  "nlink": 1,
+  "mtime_ns": 1792008872726923712,
+  "ctime_ns": 1792008872727923722,
+  "uid": 1000,
+  "sha256": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+  "realpath_beneath_target": true,
+  "target_entries_scanned": 3040,
+  "changed_after_bound": [],
+  "bound": 1792008874.0
+ },
+ "build_finished": "2026-10-14T21:14:33+0100",
+ "checks": [
+  [
+   "P1 the executable path is the ruling's (the one the build recorded)",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3"
+  ],
+  [
+   "P2 it exists, as a regular file, not a symlink, with no symlinked path component",
+   true,
+   "{'exists': True, 'is_regular': True, 'is_symlink': False, 'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3'}"
+  ],
+  [
+   "P3 it lies beneath the C28 worktree's own target: the target is a real directory (not a symlink, not a mount, the worktree's own entry) and the executable's realpath is beneath it",
+   true,
+   "{'worktree_is_own_realpath': True, 'exists': True, 'is_symlink': False, 'is_dir': True, 'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target', 'own_entry': True, 'mounts': [], 'ok': True}"
+  ],
+  [
+   "P4 byte-identical to the recorded artifact: sha256 and size equal the ruling's (= the build's deps record)",
+   true,
+   "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 8983776"
+  ],
+  [
+   "P5 the executable bit is set",
+   true,
+   "True"
+  ],
+  [
+   "P6 no target or executable mutation since the build: the executable's and every target entry's mtime and ctime are no later than the build's recorded end",
+   true,
+   "3040 entries; later: []"
+  ],
+  [
+   "P7 the executable's dep-info file is unchanged since the build (sha256 and size as recorded)",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d"
+  ],
+  [
+   "P8 the preserved C28 worktree: registered, HEAD C, detached, locked with RESUME-01's C28 reason",
+   true,
+   "['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review']; P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review"
+  ],
+  [
+   "P0 the C28 build admission holds (prior step)",
+   true,
+   "C28 BUILD: ARCHITECT-ADMISSIBLE \u2014 NARROW C28 RULING"
+  ]
+ ],
+ "first_line": "PIN: PINNED \u2014 EXISTING C28 BUILD (NOT REBUILT)"
+}

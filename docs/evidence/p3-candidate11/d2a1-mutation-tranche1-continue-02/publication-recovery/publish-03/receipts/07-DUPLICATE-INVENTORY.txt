@@ -1,0 +1,25 @@
+staging /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-03/scratch/controls-04-REPAIR-CONTROLS/base: 309 files; classes {'UNAUTHORIZED_DUPLICATE': 14, 'ZERO_LENGTH_NOT_COMPARED': 8, 'ACCEPTED_RULED': 7}; other problem codes []
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/01-supervision-selftest/1/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  UNAUTHORIZED_DUPLICATE      19 B  receipts/01-supervision-selftest/1/out.txt  prior-equal 2  allocated 10485760\n
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/01-supervision-selftest/3/out.txt  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/01-supervision-selftest/5/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/01-supervision-selftest/5/out.txt  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      43 B  receipts/01-supervision-selftest/6/out.txt  prior-equal 2  timeout: the monitored command dumped core\n
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/01-supervision-selftest/7/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  UNAUTHORIZED_DUPLICATE      10 B  receipts/01-supervision-selftest/7/err.txt  prior-equal 2  to stderr\n
+  UNAUTHORIZED_DUPLICATE      42 B  receipts/01-supervision-selftest/7/out.txt  prior-equal 2  ['CARGO_NET_OFFLINE', 'LC_CTYPE', 'PATH']\n
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/36-C28/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/37-C12/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/37-C12/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/38-C9/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/38-C9/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/39-C11/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/39-C11/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/40-C17/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/40-C17/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/41-C18a/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/41-C18a/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+  ZERO_LENGTH_NOT_COMPARED     0 B  receipts/42-C18b/03-build/build.stdout  prior-equal 38  
+  UNAUTHORIZED_DUPLICATE      95 B  receipts/42-C18b/04-run/cgroup-samples.txt  prior-equal 61  sampler: the scope's cgroup was not found while it ran (a sh
+inventory /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-03/receipts/07-DUPLICATE-INVENTORY.tsv sha256 e1c29c98c7c297812f84926e6460ef0aac06db8fa733db1774c5325faae212d0
+exit 0

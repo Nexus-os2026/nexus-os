@@ -1,0 +1,3 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 — C28 admission/pin tool controls (section 14); no Cargo, no rustc, no Nexus test; the real preserved executable only hashed, sized and stat-ed; synthetic files under /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/dev-local/scratch-03-c28-controls
+controls: 54; as expected: 54
+C28 ADMISSION CONTROLS: ALL AS EXPECTED

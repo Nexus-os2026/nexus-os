@@ -1,0 +1,12 @@
+--- development/revisions/tool_diff.dev1.py	2026-10-14 22:02:40.252335177 +0100
++++ tools/tool_diff.py	2026-10-14 22:02:40.265008095 +0100
+@@ -188,7 +188,8 @@
+                                                   "subprocess.call", "os.system", "os.popen")]
+         bad = [ast.unparse(n)[:80] for n in proc if not (isinstance(n.args[0], ast.List) and n.args[0].elts
+                                                           and ast.unparse(n.args[0].elts[0]) == "'git'")]
+-        consts = [n.value for n in ast.walk(t) if isinstance(n, ast.Constant) and n.value in ("cargo", "rustc")]
++        consts = [e.value for n in ast.walk(t) if isinstance(n, ast.List) for e in n.elts
++                  if isinstance(e, ast.Constant) and e.value in ("cargo", "rustc")]
+         check(f"D8 {f}: every process it starts is git (no cargo, no rustc)", not bad and not consts, bad + consts)
+     t = ast.parse(open(os.path.join(NEW, "c28_admit.py")).read())
+     writes = [n for c, n in calls(t) if c == "open" and len(n.args) > 1 and ast.unparse(n.args[1]) in ("'w'", "'wb'",

@@ -1,0 +1,37 @@
+--- development/revisions/authenticate.dev1.py	2026-10-14 23:38:18.275096104 +0100
++++ tools/authenticate.py	2026-10-14 23:38:18.288032565 +0100
+@@ -216,7 +216,7 @@
+           FROZEN_BUILDER_SHA)
+     bp = open(os.path.join(Q.SRC, "publication/10-build-packet.txt")).read().splitlines()
+     check("the original duplicate failure publication/10-build-packet.txt preserved",
+-          bp[-1].startswith("PACKET: FAILED: no staged file of 1 KiB or more byte-equal"), bp[-1][:90])
++          bp[-1].startswith("PACKET: FAILED: no staged file of 1 KiB or more byte-equal"), bp[-1][:90].rstrip())
+     check("the stop record receipts/80-STOP-RECORD.md preserved",
+           (first(os.path.join(Q.SRC, "receipts/80-STOP-RECORD.md")) or "").startswith("# Stop record"))
+     log = open(os.path.join(Q.SRC, "development/DEVELOPMENT-LOG.txt")).read()
+@@ -290,10 +290,21 @@
+     check("destination ref absent on the remote", Q.DEST not in rm)
+     check("destination ref absent locally",
+           subprocess.run(["git", "-C", Q.REPO, "show-ref", "--verify", "-q", Q.DEST]).returncode == 1)
+-    check("this mission's worktree path absent before this mission creates it", not os.path.exists(Q.WORKTREE))
+-    check("this mission's local publication branch absent before this mission creates it",
+-          subprocess.run(["git", "-C", Q.REPO, "show-ref", "--verify", "-q",
+-                          "refs/heads/" + Q.LOCAL_BRANCH]).returncode == 1)
++    # Absent before receipts/05-WORKTREE.txt; after it, exactly the worktree it created: at the parent, on the
++    # publication branch, holding nothing but (at most) the untracked packet.
++    if os.path.exists(Q.WORKTREE):
++        st = Q.git("--no-optional-locks", "status", "--porcelain", "-uall", repo=Q.WORKTREE).decode().splitlines()
++        ok = (Q.git("rev-parse", "HEAD", repo=Q.WORKTREE).decode().strip() == Q.PARENT
++              and Q.git("symbolic-ref", "HEAD", repo=Q.WORKTREE).decode().strip() == "refs/heads/" + Q.LOCAL_BRANCH
++              and all(l.startswith("?? " + Q.PACKET + "/") for l in st))
++        detail = f"present (receipts/05-WORKTREE.txt): HEAD the parent, on {Q.LOCAL_BRANCH}, {len(st)} untracked files"
++    else:
++        ok, detail = True, "absent"
++    check("this mission's worktree: absent, or exactly the one receipts/05-WORKTREE.txt created", ok, detail)
++    br = subprocess.run(["git", "-C", Q.REPO, "rev-parse", "-q", "--verify", "refs/heads/" + Q.LOCAL_BRANCH],
++                        capture_output=True, text=True).stdout.strip()
++    check("this mission's local publication branch: absent, or at the parent (no commit yet)", br in ("", Q.PARENT),
++          br or "absent")
+     ow = Q.git("--no-optional-locks", "status", "--porcelain", "-uall", repo=Q.OLD_WORKTREE).decode().splitlines()
+     check("the old failed evidence worktree is untouched: HEAD the parent, only the untracked failed staging",
+           Q.git("rev-parse", "HEAD", repo=Q.OLD_WORKTREE).decode().strip() == Q.PARENT

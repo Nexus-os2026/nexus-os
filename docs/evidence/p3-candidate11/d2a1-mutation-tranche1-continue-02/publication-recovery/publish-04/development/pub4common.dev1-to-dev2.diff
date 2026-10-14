@@ -1,0 +1,21 @@
+--- development/revisions/pub4common.dev1.py	2026-10-14 23:43:18.481872572 +0100
++++ tools/pub4common.py	2026-10-14 23:43:18.500280511 +0100
+@@ -55,6 +55,18 @@
+ OLD_WORKTREE = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-continue-02-evidence"
+ P3_WORKTREE = NEXUS + "/nexus-os-p3-c11-d2a1-mutation-tranche1-publish-03"
+ LIMIT = 32 * 1024 * 1024
++# The receipts of the publication steps, and the repository the commit is made in. A rehearsal (PUB4_REHEARSAL=DIR,
++# DIR under this mission's scratch/) redirects them to DIR/receipts and to a disposable clone DIR/clone at the parent
++# (its push URL disabled); push.py refuses to run in a rehearsal.
++RECEIPTS = P + "/receipts"
++PUBLISH_REPO = REPO
++REHEARSAL = os.environ.get("PUB4_REHEARSAL")
++if REHEARSAL:
++    REHEARSAL = os.path.abspath(REHEARSAL)
++    if not REHEARSAL.startswith(P + "/scratch/"):
++        raise SystemExit("REFUSED: a rehearsal lives under this mission's scratch/")
++    WORKTREE = PUBLISH_REPO = REHEARSAL + "/clone"
++    RECEIPTS = REHEARSAL + "/receipts"
+ 
+ # The PUBLISH-03 root's own completeness record (mission section 3) and the PUBLISH-03 source-evidence manifest of the
+ # CONTINUE-02 root, written before any PUBLISH-03 tool ran on it.

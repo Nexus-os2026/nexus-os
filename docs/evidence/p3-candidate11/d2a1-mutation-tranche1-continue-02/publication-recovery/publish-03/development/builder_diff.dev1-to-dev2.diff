@@ -1,0 +1,21 @@
+--- development/revisions/builder_diff.dev1.py	2026-10-14 22:56:10.297005958 +0100
++++ tools/builder_diff.py	2026-10-14 22:56:10.358666050 +0100
+@@ -66,13 +66,15 @@
+         text = "\n".join(lines)
+         kind = ("docstring revision" if lines[0].startswith("Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-PUBLISH-03")
+                 else "imports json/stat" if set(l for l in lines) <= {"import json", "import stat"}
+-                else "ruling constants and dup_policy()" if "RULED = {" in text and "def dup_policy(" in text
++                else "ruling constants (RULED, STAGE2_RECEIPT, MAP, MAP_COLUMNS)" if lines[1].startswith(
++                    "# PUBLISH-03 (mission sections 1 and 6)") and "RULED = {" in text and "def " not in text
++                else "dup_policy()" if lines[2].startswith("def dup_policy(") and text.count("\ndef ") == 1
+                 else "the check that calls dup_policy()" if lines[0].strip().startswith("accepted, problems = dup_policy(")
+                 else "OTHER")
+         seg_ok.append(kind != "OTHER")
+         print(f"     added new lines {j1}-{j2} ({len(lines)}): {kind}")
+-    check("every added segment is the docstring revision, the json/stat imports, the ruling constants with "
+-          "dup_policy(), or the check calling it", all(seg_ok) and len(added) >= 4, f"{len(added)} segments")
++    check("every added segment is the docstring revision, the json/stat imports, the ruling constants, dup_policy(), "
++          "or the check calling it", all(seg_ok) and len(added) == 6, f"{len(added)} segments")
+     print("BUILDER DIFF: " + ("ONLY THE DUPLICATE-CONTENT POLICY CHANGED" if not fails else "FAILED: " + "; ".join(fails)))
+     return 0 if not fails else 1
+ 

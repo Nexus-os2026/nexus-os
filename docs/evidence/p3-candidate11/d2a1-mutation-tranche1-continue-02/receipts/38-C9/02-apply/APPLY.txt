@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C9: `Rollback::Unknown` is treated as `Undone`
+patch: inputs/patches/C9.patch (the frozen R2 packet's catalog/patches/C9.patch), sha256 cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b (catalog cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c (expected 7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c), sha256 afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e (expected afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

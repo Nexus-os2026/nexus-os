@@ -1,0 +1,176 @@
+[read-only root: CONTINUE-02 execution evidence]
+OK   this mission's before-manifest of the CONTINUE-02 root is byte-identical to PUBLISH-03 receipts/00-SOURCE-MANIFEST-BEFORE.tsv (every entry: path, type, size, sha256, mode, mtime_ns, symlink target): 9eb18bd27074c17a8380d2bb16697b3f318612cfb53d64ee0bfb262abc368757
+OK   this mission's before-manifest of the CONTINUE-02 root is byte-identical to PUBLISH-03 receipts/05-SOURCE-MANIFEST-AFTER.tsv (every entry: path, type, size, sha256, mode, mtime_ns, symlink target): 9eb18bd27074c17a8380d2bb16697b3f318612cfb53d64ee0bfb262abc368757
+[read-only root: PUBLISH-03 publication recovery]
+OK   PUBLISH-03 receipts/90-ROOT-SHA256SUMS.txt: every listed sha256 verifies (regular files, no symlink): 66 listed; sha256 2dfa707855d111e7e08075aa02873160b5b39fb439ae82941881b91e2f5855f7; mismatched []
+OK   PUBLISH-03 receipts/90-ROOT-SHA256SUMS.txt lists every regular file outside scratch/ but itself, and nothing else: 66 files outside scratch/
+OK   this mission's before-manifest of the PUBLISH-03 root agrees with every listed sha256: []
+OK   the PUBLISH-03 root holds no executable binary (no ELF; scratch included)
+     PUBLISH-03 zero-length regular files outside scratch/: ['development/make-map-dev1-FAILED-sha-column-key.txt']
+OK   PUBLISH-03 tools/build_packet.py: sha256 d243334992be1945… (its root sums)
+OK   PUBLISH-03 documents/DUPLICATE-CONTENT-MAP.tsv: sha256 8842a5e5a5e082ae… (its root sums)
+OK   PUBLISH-03 receipts/80-STOP-RECORD.md: sha256 98c752219882cb59… (its root sums)
+OK   PUBLISH-03 stop record: BLOCKED on control P3 and 14 unauthorized duplicates
+OK   PUBLISH-03 repair controls preserved: 29 as expected, P3 not as expected
+OK   PUBLISH-03 failed P3 builder run preserved (PACKET: FAILED, 14 UNAUTHORIZED_DUPLICATE): 14
+OK   PUBLISH-03 duplicate inventory: 7 accepted ruled, 14 unauthorized, 8 zero-length: {'UNAUTHORIZED_DUPLICATE': 14, 'ZERO_LENGTH_NOT_COMPARED': 8, 'ACCEPTED_RULED': 7}
+OK   PUBLISH-03 builder diff preserved: ONLY THE DUPLICATE-CONTENT POLICY CHANGED
+OK   PUBLISH-03 receipts/05-SOURCE-MANIFEST-COMPARE.txt: SOURCE EVIDENCE: UNCHANGED
+OK   PUBLISH-03 development log preserved (13 entries, ending at the STOP)
+OK   PUBLISH-03 never created a worktree or branch
+[Candidate C]
+OK   C tree: 51bac5fd335999cc995c0ab9f582a30244973ef0
+OK   C single parent: 71264aa81a40b86189783facc8437e0427887c16
+OK   C crates/nexus-governed-control/src/ledger/protocol.rs blob: a2df2841b99cad5d452008a6d4150e9369d07e66
+OK   C crates/nexus-governed-control/src/ledger/protocol/model_tests.rs blob: 28085ce232827301104b5d757af042ec933976f8
+OK   C crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs blob: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+[frozen catalog and the seven relevant patches]
+OK   R2 evidence commit tree: 435f242243907eb7fd3e745669926193f11c5dcf
+OK   R2 review ref on the remote: 9f22f890d8532df395f22cd8db8db2552bfdd14c
+OK   catalog blob: 1918374263740d2f98640da00fc466737945975e
+OK   catalog sha256: d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83
+OK   the CONTINUE-02 input copy of the catalog is byte-equal
+OK   C28 patch patches/C28.patch: git blob 7fbdc586ee655d863bebb7d5d7f3ea7a922f4239 sha256 equals the catalog's patch_sha256: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+OK   C28 CONTINUE-02 input patch copy byte-equal
+OK   C28 expectations: mutant blob and patch sha256 are the catalog's: 446d0365e1472efc40321d259a6f1171d3fe716c
+OK   C28 mutant blob 446d0365e147 absent from the object store (never committed)
+OK   C12 patch patches/C12.patch: git blob 7a5cfa20ddfca111076fb88778265a45d9b206ad sha256 equals the catalog's patch_sha256: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+OK   C12 CONTINUE-02 input patch copy byte-equal
+OK   C12 expectations: mutant blob and patch sha256 are the catalog's: d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b
+OK   C12 mutant blob d1e46ea63bb3 absent from the object store (never committed)
+OK   C9 patch patches/C9.patch: git blob 1412c6e054def558c73950ce293b5939a8182f4d sha256 equals the catalog's patch_sha256: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+OK   C9 CONTINUE-02 input patch copy byte-equal
+OK   C9 expectations: mutant blob and patch sha256 are the catalog's: 7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c
+OK   C9 mutant blob 7ba4a8247ba4 absent from the object store (never committed)
+OK   C11 patch patches/C11.patch: git blob a785ce79b7130fbb4d0a71ab5251d5294e4fc6e7 sha256 equals the catalog's patch_sha256: 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768
+OK   C11 CONTINUE-02 input patch copy byte-equal
+OK   C11 expectations: mutant blob and patch sha256 are the catalog's: 6e039d9dad6415242884ceef97a54d3548658038
+OK   C11 mutant blob 6e039d9dad64 absent from the object store (never committed)
+OK   C17 patch patches/C17.patch: git blob 75133a2f7b4a85f5453c5120cbd450b75a99737b sha256 equals the catalog's patch_sha256: 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0
+OK   C17 CONTINUE-02 input patch copy byte-equal
+OK   C17 expectations: mutant blob and patch sha256 are the catalog's: 4dfed9e1600a82b38f3326d26a47c4c41f513ac3
+OK   C17 mutant blob 4dfed9e1600a absent from the object store (never committed)
+OK   C18a patch patches/C18a.patch: git blob cbfdc5b74a193f927c913c4a4b5a3849e3a52383 sha256 equals the catalog's patch_sha256: 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa
+OK   C18a CONTINUE-02 input patch copy byte-equal
+OK   C18a expectations: mutant blob and patch sha256 are the catalog's: 92034563e479d1d622b7625e6ff4ad075a32a16a
+OK   C18a mutant blob 92034563e479 absent from the object store (never committed)
+OK   C18b patch patches/C18b.patch: git blob 320cb86b8437d0b6dd79dc05c619b30b296636b6 sha256 equals the catalog's patch_sha256: 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2
+OK   C18b CONTINUE-02 input patch copy byte-equal
+OK   C18b expectations: mutant blob and patch sha256 are the catalog's: c7f2b5ea99bb1676e3844b6c612d3393f97d50da
+OK   C18b mutant blob c7f2b5ea99bb absent from the object store (never committed)
+[EXEC-01]
+OK   EXEC-01 commit 19eda8cc: tree: 1b313ec5c23b5bf76db90b5fa89758d9cd880a75
+OK   EXEC-01 commit 19eda8cc: single parent 9f22f890
+OK   EXEC-01 SHA256SUMS lists every packet file but itself and every sha256 verifies against the git blob: 962 listed; 963 paths; SHA256SUMS blob b610ffa90a550865faa2191052e2ef8ae6bd5e62 sha256 be86b13e38a4526a28a5e4678c43c17758109557986af8f53cad60b96759204b
+OK   EXEC-01 packet path count: 963
+OK   EXEC-01 review ref refs/heads/review/p3-c11-d2a1-mutation-tranche1-exec-01 points at 19eda8cc on the remote: 19eda8cc7f559054933fed4a93bdb0a18cc725d4
+[RESUME-01]
+OK   RESUME-01 commit 3695a817: tree: a5fce69d5f60b0b86f3982aa655d5a33f4ef9ea4
+OK   RESUME-01 commit 3695a817: single parent 19eda8cc
+OK   RESUME-01 SHA256SUMS lists every packet file but itself and every sha256 verifies against the git blob: 380 listed; 381 paths; SHA256SUMS blob 0031c26eb4817ffcf7eeaa7a154b151c1e4379c7 sha256 7403e94d0ed543843522f17c54f1ccdc7f6e44d69d19d20d82bed52d31ec40f9
+OK   RESUME-01 packet path count: 381
+OK   RESUME-01 review ref refs/heads/review/p3-c11-d2a1-mutation-tranche1-resume-01 points at 3695a817 on the remote: 3695a817a6190781dc66769a72a487b442d3e6da
+OK   EXEC-01 packet: SHA256SUMS blob equals the CONTINUE-02 freeze record's: b610ffa90a550865faa2191052e2ef8ae6bd5e62
+OK   RESUME-01 packet: SHA256SUMS blob equals the CONTINUE-02 freeze record's: 0031c26eb4817ffcf7eeaa7a154b151c1e4379c7
+OK   the required publication parent is the RESUME-01 evidence commit
+[CONTINUE-02 freeze, gates and preserved failure]
+OK   05-FREEZE.json sha256 is the recorded freeze identity: 831f4b27f878dade62dd7f676b6f85c963af667024479fa74ed71bfb42c7c84b
+OK   every CONTINUE-02 frozen file and pre-freeze receipt is byte-equal to its freeze record: 116 frozen files + 5 pre-freeze receipts; mismatched []
+OK   06-PRE-EXECUTION-GATE.txt: the verdict line 'PRE-EXECUTION GATE: ALL CHECKS HOLD' and no FAIL line (90: the second, unchanged-gate run): 20 OK
+OK   90-final-gate.txt: the verdict line 'FINAL GATE: ALL CHECKS HOLD' and no FAIL line (90: the second, unchanged-gate run): 73 OK
+OK   90-final-gate-attempt-1-CRASHED.txt preserved (the first final-gate run's read-only crash, FileNotFoundError)
+OK   90-gate-authentication.txt: RESULT: ALL CHECKS HOLD
+OK   90-gate-authentication-attempt-1.txt: RESULT: ALL CHECKS HOLD
+OK   06-gate-authentication.txt: RESULT: ALL CHECKS HOLD
+OK   the frozen failed builder tools/build_packet.py is the frozen file: a42cd96a9d996d2063adc916a606bf7e0cb9933ff18707afac7e2c2aacfe2e45
+OK   the original duplicate failure publication/10-build-packet.txt preserved: PACKET: FAILED: no staged file of 1 KiB or more byte-equal to any file of either previous
+OK   the stop record receipts/80-STOP-RECORD.md preserved
+OK   development log entries 22-24 (crash, gate re-run, packet failure) preserved
+[the seven current control receipts]
+OK   C28 receipts/36-C28: exactly the expected receipt files, each a regular file: 20 files; missing []; extra []
+OK   C28 console log present
+OK   C28 RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C28 run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C28 restoration: RESTORE: EXACTLY_C, naming C28
+OK   C28 link: LINK: VERIFIED, naming C28
+OK   C28 admission: C28 BUILD: ARCHITECT-ADMISSIBLE — NARROW C28 RULING
+OK   C28 pin: PIN: PINNED — EXISTING C28 BUILD (NOT REBUILT)
+OK   C28 pinned mutant blob is the catalog's
+OK   C12 receipts/37-C12: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C12 console log present
+OK   C12 RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C12 run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C12 restoration: RESTORE: EXACTLY_C, naming C12
+OK   C12 link: LINK: VERIFIED, naming C12
+OK   C12 apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C12 build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C12 pinned mutant blob is the catalog's
+OK   C9 receipts/38-C9: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C9 console log present
+OK   C9 RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C9 run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C9 restoration: RESTORE: EXACTLY_C, naming C9
+OK   C9 link: LINK: VERIFIED, naming C9
+OK   C9 apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C9 build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C9 pinned mutant blob is the catalog's
+OK   C11 receipts/39-C11: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C11 console log present
+OK   C11 RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C11 run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C11 restoration: RESTORE: EXACTLY_C, naming C11
+OK   C11 link: LINK: VERIFIED, naming C11
+OK   C11 apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C11 build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C11 pinned mutant blob is the catalog's
+OK   C17 receipts/40-C17: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C17 console log present
+OK   C17 RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C17 run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C17 restoration: RESTORE: EXACTLY_C, naming C17
+OK   C17 link: LINK: VERIFIED, naming C17
+OK   C17 apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C17 build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C17 pinned mutant blob is the catalog's
+OK   C18a receipts/41-C18a: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C18a console log present
+OK   C18a RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C18a run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C18a restoration: RESTORE: EXACTLY_C, naming C18a
+OK   C18a link: LINK: VERIFIED, naming C18a
+OK   C18a apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C18a build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C18a pinned mutant blob is the catalog's
+OK   C18b receipts/42-C18b: exactly the expected receipt files, each a regular file: 33 files; missing []; extra []
+OK   C18b console log present
+OK   C18b RESULT.txt and CONTROL-RESULT.json: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C18b run classification: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+OK   C18b restoration: RESTORE: EXACTLY_C, naming C18b
+OK   C18b link: LINK: VERIFIED, naming C18b
+OK   C18b apply: APPLY: EXACTLY_C_PLUS_PATCH
+OK   C18b build classification first line is BUILD: PINNED: BUILD: PINNED
+OK   C18b pinned mutant blob is the catalog's
+[retained executable identities: hashed by reading their bytes; nothing is executed]
+OK   C28 pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: 116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36 8983776
+OK   C28 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C12 pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: c4359cbe2eac514dc6809085ad795a4a393d340b4988daf4b5b31bdc89453a18 8983152
+OK   C12 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C12 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C9 pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: 60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778 8984400
+OK   C9 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C9 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C11 pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: e6759c9e4884fa0bafc450f63e32e783ef58f270d9c2dcc8aa71f60a0515ab30 8986736
+OK   C11 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C11 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C17 pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: 5cd6d0042c4047590e15cfb489b2ffba7e02d220ef19cd0fa4c192b72721500c 8986120
+OK   C17 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C17 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C18a pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: bf7c2cd17197e075f6d3fd8b0c3568cad44c606a23b92bf20c893163a41c78fb 8984464
+OK   C18a worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C18a disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   C18b pinned executable /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: regular, not a symlink, sha256 and size equal the pin record: 9c16a35f34f38eb7062c99dfaf4267b86feb9ebac57071fca21e51af5a3d7e55 8983656
+OK   C18b worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b: registered, HEAD C, detached, locked: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE1-CONTINUE-02 control C18b disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   pinned unchanged-baseline executable: regular, sha256 and size: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+[publication state]
+OK   destination ref absent on the remote
+OK   destination ref absent locally
+OK   this mission's worktree: absent, or exactly the one receipts/05-WORKTREE.txt created: present (receipts/05-WORKTREE.txt): HEAD the parent, on publication/p3-c11-d2a1-mutation-tranche1-publish-04, 0 untracked files
+OK   this mission's local publication branch: absent, or at the parent (no commit yet): 3695a817a6190781dc66769a72a487b442d3e6da
+OK   the old failed evidence worktree is untouched: HEAD the parent, only the untracked failed staging: 308 untracked files
+RESULT: ALL CHECKS HOLD
+exit 0

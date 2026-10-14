@@ -1,0 +1,19 @@
+checked: 2026-10-14T22:57:11+01:00
+remote destination 0 line(s) (0 = absent)
+local destination ref show-ref exit 1 (1 = absent)
+6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+9f22f890d8532df395f22cd8db8db2552bfdd14c	refs/heads/review/p3-c11-d2a1-control-definitions-r2-01
+19eda8cc7f559054933fed4a93bdb0a18cc725d4	refs/heads/review/p3-c11-d2a1-mutation-tranche1-exec-01
+3695a817a6190781dc66769a72a487b442d3e6da	refs/heads/review/p3-c11-d2a1-mutation-tranche1-resume-01
+publish-03 worktree not created
+publish-03 local branches: 0
+old evidence worktree: HEAD 3695a817a6190781dc66769a72a487b442d3e6da; status lines 308; untracked staging SHA256SUMS 84db09306fb9fa6c5c3f22d6463f5472718227dfc57fc37b7e6d23d64d885559
+main repo: ## rebuild/phase0-trust-boundary...github/rebuild/phase0-trust-boundary HEAD f727f5c39fab8d5c729a55eb28ad576d3d56ce47; status lines 0
+mutant blob 446d0365e1472efc40321d259a6f1171d3fe716c absent
+mutant blob d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b absent
+mutant blob 7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c absent
+mutant blob 6e039d9dad6415242884ceef97a54d3548658038 absent
+mutant blob 4dfed9e1600a82b38f3326d26a47c4c41f513ac3 absent
+mutant blob 92034563e479d1d622b7625e6ff4ad075a32a16a absent
+mutant blob c7f2b5ea99bb1676e3844b6c612d3393f97d50da absent

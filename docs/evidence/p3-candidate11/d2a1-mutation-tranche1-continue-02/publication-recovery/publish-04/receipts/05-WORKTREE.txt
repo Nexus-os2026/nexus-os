@@ -1,0 +1,15 @@
+OK   no active git hook (effective hooks directory holds only *.sample files): no post-checkout hook can run: hooksPath '/home/nexus/NEXUS/nexus-os/.git/hooks'; non-sample entries []
+OK   no configured filter and no .gitattributes at the parent: checkout runs no smudge filter: filters ''; .gitattributes ''
+OK   the worktree path is absent: /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-mutation-tranche1-publish-04
+OK   the local publication branch is absent: publication/p3-c11-d2a1-mutation-tranche1-publish-04
+OK   the parent is the RESUME-01 evidence commit, with its recorded tree: 3695a817a6190781dc66769a72a487b442d3e6da
+command: git -C /home/nexus/NEXUS/nexus-os worktree add -b publication/p3-c11-d2a1-mutation-tranche1-publish-04 /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-mutation-tranche1-publish-04 3695a817a6190781dc66769a72a487b442d3e6da
+exit 0; stdout 'HEAD is now at 3695a817 docs(evidence): record D2A-1 tranche 1 resume stopped at control C28'; stderr "Preparing worktree (new branch 'publication/p3-c11-d2a1-mutation-tranche1-publish-04')"
+OK   git worktree add succeeded
+OK   the worktree HEAD is exactly the parent: 3695a817a6190781dc66769a72a487b442d3e6da
+OK   the worktree is on the new local publication branch: refs/heads/publication/p3-c11-d2a1-mutation-tranche1-publish-04
+OK   the worktree is clean
+OK   the packet path is absent at the parent
+OK   the destination ref is still absent locally
+WORKTREE: CREATED
+exit 0

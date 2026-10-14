@@ -1,0 +1,313 @@
+{
+ "control": "C28",
+ "ruling": {
+  "control": "C28",
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28",
+  "executable": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "exe_sha256": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+  "exe_size": 8983776,
+  "mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
+  "mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
+  "patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
+  "stderr_sha256": "3e8336d9b25baf56610aad813202e9a3bea60b268de8e0a489b69d6b2caf7436",
+  "warning_message": "unreachable pattern",
+  "lint": "unreachable_patterns",
+  "location": [
+   "crates/nexus-governed-control/src/ledger/protocol.rs",
+   1834,
+   17
+  ],
+  "earlier_line": 1826,
+  "lock_reason": "P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 control C28 disposable mutant worktree: mission-owned; preserve until Architect review"
+ },
+ "evidence": [
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/00-GATE.txt",
+   "blob": "9fff013bd9ebba8fec750e7e088114ac46bddd61",
+   "sha256": "a1bb0bd367cc5b4a19f80d6046fe0339fb5d070d793fd73573b17d4236f08de5",
+   "listed_sha256": "a1bb0bd367cc5b4a19f80d6046fe0339fb5d070d793fd73573b17d4236f08de5",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/02-apply/APPLY.json",
+   "blob": "a28476d4e542edd22e5f4d1d2cf7e7d879e9b5ee",
+   "sha256": "1aad733717fae63ff685e0fefd27365d2dce4d9af7177155abea0403f397e3af",
+   "listed_sha256": "1aad733717fae63ff685e0fefd27365d2dce4d9af7177155abea0403f397e3af",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/02-apply/APPLY.txt",
+   "blob": "40c9399a9f8782c719e6ac3cf44f000d8922165f",
+   "sha256": "312b75fd8bcaddb1437442d2a8249c7bdc0299f097977112b47fadeddfb2b3aa",
+   "listed_sha256": "312b75fd8bcaddb1437442d2a8249c7bdc0299f097977112b47fadeddfb2b3aa",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/descriptor.json",
+   "blob": "a01a589b858d319b226feebd538aca80a78d0dee",
+   "sha256": "a5b320965354093aafbc0924a9f4af88c939f6430d4c0c4557e1cd548f309433",
+   "listed_sha256": "a5b320965354093aafbc0924a9f4af88c939f6430d4c0c4557e1cd548f309433",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/build.stderr",
+   "blob": "e278f4dccfecbc1e0da38b35b6fa13bf48f5bda2",
+   "sha256": "3e8336d9b25baf56610aad813202e9a3bea60b268de8e0a489b69d6b2caf7436",
+   "listed_sha256": "3e8336d9b25baf56610aad813202e9a3bea60b268de8e0a489b69d6b2caf7436",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/build.stdout",
+   "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "listed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/PARSED-RECEIPT.json",
+   "blob": "e6fd96d4103ce858bfbb03141a2b94db8ff37c2f",
+   "sha256": "632f7e89b93cd51d3247053702def1d4a6e04bc1b1ef0ea19b1e5b5ecc972144",
+   "listed_sha256": "632f7e89b93cd51d3247053702def1d4a6e04bc1b1ef0ea19b1e5b5ecc972144",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/CLASSIFICATION.txt",
+   "blob": "42926e84b5eff10cdd5d70814faa3b0573ee83a2",
+   "sha256": "a85c4dfa8bec87827ff7d47b47dcea30f2fd88511137e0d7d103c20592979ff4",
+   "listed_sha256": "a85c4dfa8bec87827ff7d47b47dcea30f2fd88511137e0d7d103c20592979ff4",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/CHECKS.txt",
+   "blob": "ae120c74b3a2c73e105005e617581e1b082bfb37",
+   "sha256": "e232ff018e7c54cf6d70f9153c31148c9fcb2469880af24e71ce0598c226549e",
+   "listed_sha256": "e232ff018e7c54cf6d70f9153c31148c9fcb2469880af24e71ce0598c226549e",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/RECEIPT.txt",
+   "blob": "9fadf26e630f8e05d548be00768599e98c917b82",
+   "sha256": "80d66272c63d8e9c48b36083755be5b22ef11ea0b330f474e73f6f41aa243d4f",
+   "listed_sha256": "80d66272c63d8e9c48b36083755be5b22ef11ea0b330f474e73f6f41aa243d4f",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/scope-record.txt",
+   "blob": "d40e743149654b3e971786851505f63466bdf2f2",
+   "sha256": "9b5ed79e83e509bb3e193cc1ddaeaec6d3137b5faa287255c12173458ae4635a",
+   "listed_sha256": "9b5ed79e83e509bb3e193cc1ddaeaec6d3137b5faa287255c12173458ae4635a",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/03-build/time-v.txt",
+   "blob": "f41b3030a656009c3a0845e72795920755fe1a9f",
+   "sha256": "89b0f070d15ad9f2740bca03226b69b119746b4fd9027b16b325de0f85774919",
+   "listed_sha256": "89b0f070d15ad9f2740bca03226b69b119746b4fd9027b16b325de0f85774919",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/05-restore/RESTORE.json",
+   "blob": "8ad3c436d61117f06ea9c786f4777377947bab88",
+   "sha256": "147e7561c7065c2aa6f78bbf57cff8894bc58c2293cf5794eef650f41654a963",
+   "listed_sha256": "147e7561c7065c2aa6f78bbf57cff8894bc58c2293cf5794eef650f41654a963",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/05-restore/RESTORE.txt",
+   "blob": "24e5c6388ac6444db0bd229ae0cde5e0368c495e",
+   "sha256": "43ebca1237ef849112a71c3304e008481947e6f81b7eb2ca59380aab5c7828f5",
+   "listed_sha256": "43ebca1237ef849112a71c3304e008481947e6f81b7eb2ca59380aab5c7828f5",
+   "ok": true
+  },
+  {
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/36-C28/RESULT.txt",
+   "blob": "51caee174684f59b0bdfb0243664e29dbdf36123",
+   "sha256": "1ffe66386e3cc2a781bc7ea797d5e1e026b72ba9c7492ca80b1249eba875b003",
+   "listed_sha256": "1ffe66386e3cc2a781bc7ea797d5e1e026b72ba9c7492ca80b1249eba875b003",
+   "ok": true
+  }
+ ],
+ "admitted": true,
+ "build_supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "2611777536",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 166.4,
+  "time_limit_seconds": 900,
+  "backstop_runtime_max_seconds": 910,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 166.438,
+  "max_rss_kib_largest_process": 1969692
+ },
+ "build_process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "checks": [
+  [
+   "the control is C28 (the ruling is C28-specific; it transfers to no other control)",
+   true,
+   "C28"
+  ],
+  [
+   "A1 every C28 evidence file is the RESUME-01 packet's (sha256 listed in its SHA256SUMS at 3695a817)",
+   true,
+   "[]"
+  ],
+  [
+   "A2 the frozen C28 patch: catalog patch sha256 = applied patch sha256 = the ruling's",
+   true,
+   "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868"
+  ],
+  [
+   "A2 git apply --check and git apply rc 0; the only changed file is protocol.rs",
+   true,
+   "['crates/nexus-governed-control/src/ledger/protocol.rs']"
+  ],
+  [
+   "A2 the catalog's mutant: blob and sha256 equal the ruling's; the in-process mutant (catalog edits on C's protocol.rs) has that blob",
+   true,
+   "446d0365e1472efc40321d259a6f1171d3fe716c"
+  ],
+  [
+   "A3 source_before the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)",
+   true,
+   "EXACTLY_C_PLUS_PATCH; 446d0365e1472efc40321d259a6f1171d3fe716c; status [' M crates/nexus-governed-control/src/ledger/protocol.rs']"
+  ],
+  [
+   "A3 source_after the build: exactly C plus the frozen C28 patch (HEAD/tree C, detached, nothing staged, every other tracked byte and mode equal, mutant blob and sha256 exact, path-aware status policy holds)",
+   true,
+   "EXACTLY_C_PLUS_PATCH; 446d0365e1472efc40321d259a6f1171d3fe716c; status [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/... (2553 ignored entries, each beneath the worktree-local real target)']"
+  ],
+  [
+   "A4 the exact build command, in the C28 worktree",
+   true,
+   "cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2"
+  ],
+  [
+   "A5 the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<C28 worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; nothing else (no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, feature or cfg variable)",
+   true,
+   "{'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}"
+  ],
+  [
+   "A6 the exact toolchain: rustc -vV, cargo -vV and the active toolchain equal RESUME-01's C27 build's and EXEC-01's healthy build's",
+   true,
+   "rustc 1.94.0 (4a4ef493e 2026-03-02)"
+  ],
+  [
+   "A6 the exact build inputs: rust-toolchain.toml, Cargo.lock, .cargo/config.toml, Cargo.toml and the crate manifest have Candidate C's blobs, equal to the reference builds'",
+   true,
+   ""
+  ],
+  [
+   "A6 no other Cargo configuration file in effect",
+   true,
+   "[]"
+  ],
+  [
+   "A7 process exit 0 by a normal exit; no signal; supervisor and wrapper record exit 0",
+   true,
+   "{'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}"
+  ],
+  [
+   "A8 resources: 16 GiB, zero swap, enforced and complete; no OOM, no OOM kill, no swap; no timeout; within 900 s",
+   true,
+   "wall 166.4 s; peak 2611777536 B; swap 0; oom_kill 0; timed out False"
+  ],
+  [
+   "A8 the resource receipt (scope-record.txt, time-v.txt) agrees: memory.max, swap.max, peak, swap peak, exit 0",
+   true,
+   "{'memory.peak': '2611777536', 'command exit status': '0'}"
+  ],
+  [
+   "A9 build.stderr sha256 = the launcher's record = the ruling's; build.stdout sha256 = the launcher's record",
+   true,
+   "3e8336d9b25baf56610aad813202e9a3bea60b268de8e0a489b69d6b2caf7436"
+  ],
+  [
+   "A10 no error diagnostic (no stderr line begins `error`)",
+   true,
+   "[]"
+  ],
+  [
+   "A11 exactly one warning diagnostic",
+   true,
+   "['warning: unreachable pattern']"
+  ],
+  [
+   "A11 exactly one cargo summary, for nexus-governed-control (lib test), counting exactly 1 warning",
+   true,
+   "['warning: `nexus-governed-control` (lib test) generated 1 warning']"
+  ],
+  [
+   "A12 the warning's class is unreachable_patterns (message `unreachable pattern`; the lint note names `#[warn(unreachable_patterns)]`; no code, no other lint)",
+   true,
+   "warning: unreachable pattern; lint unreachable_patterns"
+  ],
+  [
+   "A13 the warning's location is crates/nexus-governed-control/src/ledger/protocol.rs:1834:17",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 1834, 17)"
+  ],
+  [
+   "A14 the warning explains that the earlier `Read::Got(_)` (line 1826) matches all the relevant values and that no value can reach line 1834",
+   true,
+   "['warning: unreachable pattern', '    --> crates/nexus-governed-control/src/ledger/protocol.rs:1834:17', '     |', '1826 |                 Read::Got(_) => {', '     |                 ------------ matches all the relevant values', '...', '1834 |                 Read::Got(_) => {', '     |                 ^^^^^^^^^^^^ no value can reach this', '     |']"
+  ],
+  [
+   "A15 the warning is the frozen mutation's direct consequence: at C, line 1826 reads `Read::Got(durable) if durable >= set.top => {`; in the catalog mutant lines 1826 and 1834 both read `Read::Got(_) => {` from column 17, and the warning renders exactly those mutant lines",
+   true,
+   ""
+  ],
+  [
+   "A16 no other diagnostic or unexpected output: every stderr line is a cargo `Compiling`/`Running` line, the one warning block, the one summary, `Finished` or the `Executable` line",
+   true,
+   "[]"
+  ],
+  [
+   "A17 no compiler crash text (internal compiler error, panic, query stack, signal)",
+   true,
+   ""
+  ],
+  [
+   "A18 cargo's Finished line (release, optimized); one rustc invocation compiled nexus_governed_control as a test; profile flags opt-level=3, lto=thin, codegen-units=16, strip=symbols; no --cfg",
+   true,
+   "[('release', 'optimized', '2m 46s')]; ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']"
+  ],
+  [
+   "A19 the produced-artifact record: cargo named exactly one library-test executable, the expected one; release/deps held exactly that executable (sha256, size and executable bit as the ruling states) and its dep-info only",
+   true,
+   "[('nexus_governed_control-2faa0b9718d3e6a3', '116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36', 8983776), ('nexus_governed_control-2faa0b9718d3e6a3.d', 'a46db1207c5efae21378dc9eb314a47a6c022d344d63e15b27746571ffa8efa4', 7900)]"
+  ],
+  [
+   "A20 executor history, unchanged: the general classifier's C28 output is `BUILD: NOT OK` with 17 of 18 checks holding; its only failed check is `no error or warning diagnostic`, naming exactly this warning and its summary",
+   true,
+   "[\"FAIL no error or warning diagnostic: ['warning: unreachable pattern', 'warning: `nexus-governed-control` (lib test) generated 1 warning']\"]"
+  ],
+  [
+   "A20 executor history, unchanged: RESULT `CONTROL RESULT: MUTATION_CONTROL_BLOCKED`; no PIN.json was written",
+   true,
+   "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+  ],
+  [
+   "A21 the RESUME-01 restoration: git apply -R --check and git apply -R rc 0; protocol.rs from the mutant blob back to C's blob and sha256; verify_tree.py EXACTLY_C; the path-aware restored policy held",
+   true,
+   "446d0365e1472efc40321d259a6f1171d3fe716c -> a2df2841b99cad5d452008a6d4150e9369d07e66"
+  ]
+ ],
+ "first_line": "C28 BUILD: ARCHITECT-ADMISSIBLE \u2014 NARROW C28 RULING"
+}

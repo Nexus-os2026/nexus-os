@@ -1,0 +1,18 @@
+started: 2026-10-14T22:56:44+01:00
+frozen  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-continue-02/tools/build_packet.py sha256 a42cd96a9d996d2063adc916a606bf7e0cb9933ff18707afac7e2c2aacfe2e45 (157 lines)
+repaired /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-03/tools/build_packet.py sha256 d243334992be1945ace49cf9460a66fff2e9210ef138e122dec86083cc6bd44e (372 lines)
+diff /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-03/receipts/03-BUILDER-DIFF/BUILDER.diff sha256 7cde9a95f59ed23f09cbea11d04354031b973667b32f9fdb73131639d7e2a826; 12 removed, 227 added
+OK   the frozen builder is the CONTINUE-02 frozen file (05-FREEZE.json)
+OK   common.py beside the repaired builder is byte-identical to the frozen CONTINUE-02 common.py
+     removed frozen lines: [127, 128, 129, 130, 131, 138, 139, 140, 141, 142, 143, 144]
+     the frozen duplicate-content policy lines: prev table 127-131, check 138-144 ([127, 131])
+OK   every removed frozen line is a line of the frozen duplicate-content policy (the prev table and the 1 KiB check with its info line), and all of them are removed: 12 lines
+     added new lines 22-31 (10): docstring revision
+     added new lines 33-33 (1): imports json/stat
+     added new lines 36-36 (1): imports json/stat
+     added new lines 43-63 (21): ruling constants (RULED, STAGE2_RECEIPT, MAP, MAP_COLUMNS)
+     added new lines 89-277 (189): dup_policy()
+     added new lines 355-359 (5): the check that calls dup_policy()
+OK   every added segment is the docstring revision, the json/stat imports, the ruling constants, dup_policy(), or the check calling it: 6 segments
+BUILDER DIFF: ONLY THE DUPLICATE-CONTENT POLICY CHANGED
+finished: 2026-10-14T22:56:44+01:00 exit 0

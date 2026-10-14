@@ -1,0 +1,43 @@
+[the R2 builder, its CLI]
+STATUS: READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW; new candidates 7 of 7; attempted ['C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b'] 
+carried-forward copies and unchanged RESUME-01 tools not staged (referenced in CARRIED-FORWARD.md): 35
+OK   packet size at most 32 MiB: 4547590 bytes, 309 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 8
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob, present in C's crates/, copies no content and is not counted): 8 empty file(s)
+OK   no carried-forward path staged: []
+OK   only changed or added tools staged (every unchanged RESUME-01 tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'c28_admit.py', 'c28_controls.py', 'common.py', 'control.py', 'final_gate.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'render.py', 'render_rehearsal.py', 'tool_diff.py']
+     duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+OK   no nonempty staged file byte-equal to any file of either previous packet (EXEC-01, RESUME-01), whatever its size, but exactly the 21 Architect-ruled files of NONEMPTY-DUPLICATE-MAP.tsv, and no zero-length staged file but exactly the 8 Architect-ruled artifacts of ZERO-LENGTH-ARTIFACT-MAP.tsv, each verified against every field of its row (PUBLISH-04, ruling R2): []
+     mapped nonempty duplicates accepted (21 of 21): ['receipts/01-supervision-selftest/1/cgroup-samples.txt', 'receipts/01-supervision-selftest/1/out.txt', 'receipts/01-supervision-selftest/5/cgroup-samples.txt', 'receipts/01-supervision-selftest/6/out.txt', 'receipts/01-supervision-selftest/7/cgroup-samples.txt', 'receipts/01-supervision-selftest/7/err.txt', 'receipts/01-supervision-selftest/7/out.txt', 'receipts/36-C28/04-run/cgroup-samples.txt', 'receipts/37-C12/04-run/cgroup-samples.txt', 'receipts/38-C9/04-run/cgroup-samples.txt', 'receipts/38-C9/06-link/LINK.json', 'receipts/38-C9/06-link/LINK.txt', 'receipts/39-C11/04-run/cgroup-samples.txt', 'receipts/39-C11/06-link/LINK.json', 'receipts/40-C17/04-run/cgroup-samples.txt', 'receipts/40-C17/06-link/LINK.json', 'receipts/41-C18a/04-run/cgroup-samples.txt', 'receipts/41-C18a/06-link/LINK.json', 'receipts/41-C18a/06-link/LINK.txt', 'receipts/42-C18b/04-run/cgroup-samples.txt', 'receipts/42-C18b/06-link/LINK.json']
+     mapped zero-length artifacts accepted (8 of 8): ['receipts/01-supervision-selftest/3/out.txt', 'receipts/01-supervision-selftest/5/out.txt', 'receipts/37-C12/03-build/build.stdout', 'receipts/38-C9/03-build/build.stdout', 'receipts/39-C11/03-build/build.stdout', 'receipts/40-C17/03-build/build.stdout', 'receipts/41-C18a/03-build/build.stdout', 'receipts/42-C18b/03-build/build.stdout']
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 308 listed
+PACKET: STAGED — ALL CHECKS HOLD
+exit 0
+[added beside the builder's staging: 156 files; SHA256SUMS rewritten]
+     excluded from publication-recovery/publish-03/: scratch/ and {'development/make-map-dev1-FAILED-sha-column-key.txt': "zero-length (the empty sha256): mission section 7 permits exactly eight zero-length packet artifacts; the file stays in the PUBLISH-03 root, listed in its receipts/90-ROOT-SHA256SUMS.txt and in this mission's manifests of that root"}
+[full checks over the whole packet]
+OK   no symlink anywhere in the packet (files or directories): []
+OK   no bytecode or cache file in the packet: []
+OK   packet size at most 32 MiB: 15094081 bytes, 465 files
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 8
+OK   no file equal to a mutant source blob
+OK   no file equal to a crate source blob of C (the empty blob excluded)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob excluded): []
+OK   no target directory, build artifact or bytecode: []
+OK   no credential pattern (GitHub, AWS, Slack, Anthropic/OpenAI-style keys, private keys): []
+OK   no carried-forward path staged
+     duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+OK   R2 policy over the whole packet: no nonempty file byte-equal to a previous-packet file but exactly the 21 mapped, verified files; no zero-length file but exactly the 8 mapped, verified artifacts: []
+OK   every added file byte-equal to its source: 156 added
+OK   exactly the declared PUBLISH-03 exclusions (scratch/ and the one zero-length file) are absent: 66 PUBLISH-03 files; excluded ['development/make-map-dev1-FAILED-sha-column-key.txt']
+OK   SHA256SUMS lists every file but itself, and verifies: 464 listed
+     mapped nonempty duplicates accepted: 21; mapped zero-length artifacts accepted: 8; packet files 465; bytes 15094081
+SHA256SUMS sha256 238f34ad362daa33a850838b9f6804ec2a621ea8341ba472eda3957e92a597dc
+ASSEMBLY: PACKET ASSEMBLED — ALL CHECKS HOLD
+exit 0

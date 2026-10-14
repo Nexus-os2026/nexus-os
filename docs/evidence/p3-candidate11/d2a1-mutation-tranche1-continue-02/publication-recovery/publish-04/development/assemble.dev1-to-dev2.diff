@@ -1,0 +1,13 @@
+--- development/revisions/assemble.dev1.py	2026-10-14 23:46:07.882111520 +0100
++++ tools/assemble.py	2026-10-14 23:46:07.900296408 +0100
+@@ -75,8 +75,8 @@
+         if f in ROOT_DOCS:
+             pairs.append((os.path.join(Q.P, f), ROOT_DOCS[f]))
+         elif f.startswith("receipts/"):
+-            if post and f.startswith(LOCAL_ONLY):
+-                continue
++            if (post and f.startswith(LOCAL_ONLY)) or (not post and f in POST_GATE):
++                continue  # local only; or a post-gate record (at assembly only the console being written exists)
+             if not (any(f == g or (g.endswith("/") and f.startswith(g)) for g in PRE_GATE) or (post and f in POST_GATE)):
+                 raise SystemExit(f"REFUSED: undeclared receipt {f} ({'finalize' if post else 'assembly'})")
+             pairs.append((os.path.join(Q.P, f), f"{P4_DIR}/{f}"))

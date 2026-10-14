@@ -1,0 +1,2 @@
+REFUSED: undeclared receipt receipts/07-ASSEMBLE.console.txt (assembly)
+exit 1

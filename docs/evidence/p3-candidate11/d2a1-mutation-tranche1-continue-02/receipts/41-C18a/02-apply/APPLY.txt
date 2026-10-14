@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C18a: a refused gating append leaves U occupied
+patch: inputs/patches/C18a.patch (the frozen R2 packet's catalog/patches/C18a.patch), sha256 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa (catalog 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 92034563e479d1d622b7625e6ff4ad075a32a16a (expected 92034563e479d1d622b7625e6ff4ad075a32a16a), sha256 94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee (expected 94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

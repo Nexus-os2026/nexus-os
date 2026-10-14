@@ -1,0 +1,18 @@
+STATUS: MUTATION_CONTROL_BLOCKED; new candidates 2 of 7; attempted ['C28', 'C12', 'C9']
+STATUS: C28_PRESERVED_ARTIFACT_BLOCKED; new candidates 0 of 7; attempted ['C28']
+STATUS: READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW; new candidates 7 of 7; attempted ['C28', 'C12', 'C9', 'C11', 'C17', 'C18a', 'C18b']
+OK  A: status MUTATION_CONTROL_BLOCKED
+OK  A: the five Architect-accepted controls rendered with RESUME-01 / EXEC-01 references
+OK  A: C28 build evidence referenced, never rebuilt
+OK  A: two new candidates of seven rendered
+OK  A: C28 row: panic location rendered
+OK  A: C12 row: discovered count of the 250,000 ceiling
+OK  A: C9 row: non-candidate with its outer class
+OK  A: not attempted listed
+OK  A: X-1 and T-RES baselines and the Stage-2 links rendered
+OK  A: CARRIED-FORWARD lists the carried copies, the RESUME-01 files and every unchanged tool
+OK  A: INDEX names the status and both previous evidence commits
+OK  B: status C28_PRESERVED_ARTIFACT_BLOCKED
+OK  C: status READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW with seven candidates
+OK  no rendering claims a final acceptance by the executor
+RENDER REHEARSAL: ALL AS EXPECTED

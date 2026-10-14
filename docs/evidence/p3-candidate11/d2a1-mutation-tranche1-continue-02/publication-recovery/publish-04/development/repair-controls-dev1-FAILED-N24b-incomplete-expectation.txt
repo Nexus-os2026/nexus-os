@@ -1,0 +1,389 @@
+map /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/documents/NONEMPTY-DUPLICATE-MAP.tsv sha256 7882f99f253c551926d18cf99dc7345d28a0e8d5d5a9ab3d052a3d47896b9dc8
+zero-length map /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/documents/ZERO-LENGTH-ARTIFACT-MAP.tsv sha256 ff0beb691bb83b500d731006fab7ef504e214d3ae4e366d6bf3ffa30f5028928
+builder /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche1-publish-04/tools/build_packet.py sha256 c91ac27ccbf72b4d360b34020e7907f8b4b240d03e1a29201e4308509ec87bfb
+[positive controls]
+AS EXPECTED     P1 exactly all 21 mapped nonempty duplicates accepted
+       accepted: 21
+       problems: []
+       policy: duplicate and zero-length policy (R2): 21 nonempty staged file(s) byte-equal to a previous-packet file, 21 mapped and accepted; 8 zero-length staged file(s), 8 mapped and accepted
+AS EXPECTED     P2 all 21 remain separate paths in the packet and in its manifest (SHA256SUMS), equal content or not
+       SHA256SUMS lines per mapped path: [1]
+       21 distinct files (inodes): True
+       mapped paths grouped by sha256: {'ee3247852840': 10, '7c474c35c13f': 1, 'de25f493e2a0': 1, '272537450a80': 1, '9af4cd4cc2fe': 1, '4a69c8e7d4ea': 3, '32439bccad6c': 1, '86b80a7962f6': 2, 'dabbaf663bcf': 1}
+AS EXPECTED     P3 exactly all 8 mapped zero-length artifacts accepted, each a separate path listed once with the empty sha256
+       accepted: ['receipts/01-supervision-selftest/3/out.txt', 'receipts/01-supervision-selftest/5/out.txt', 'receipts/37-C12/03-build/build.stdout', 'receipts/38-C9/03-build/build.stdout', 'receipts/39-C11/03-build/build.stdout', 'receipts/40-C17/03-build/build.stdout', 'receipts/41-C18a/03-build/build.stdout', 'receipts/42-C18b/03-build/build.stdout']
+       SHA256SUMS lines per path: [1]
+AS EXPECTED     P4 the complete real CONTINUE-02 evidence packet stages successfully (R2 builder CLI)
+       exit: 0
+       last line: PACKET: STAGED — ALL CHECKS HOLD
+       receipt: P4-builder-run.txt
+[negative controls]
+AS EXPECTED     N1 remove one link mapping (C11 LINK.json row)
+       expected (code, path), all required: [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported (code, path): [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N2 remove one constant mapping (C12 run sampler record row)
+       expected (code, path), all required: [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N3 remove one zero-length mapping (C9 build.stdout row)
+       expected (code, path), all required: [('ZERO_LENGTH_UNMAPPED', 'receipts/38-C9/03-build/build.stdout'), ('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_MISSING', 'receipts/38-C9/03-build/build.stdout')]
+       reported (code, path): [('ZERO_LENGTH_UNMAPPED', 'receipts/38-C9/03-build/build.stdout'), ('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_MISSING', 'receipts/38-C9/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N4a add a twenty-second nonempty duplicate (an F-B2 link copy under C12)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/06-link/LINK-F-B2.json')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/06-link/LINK-F-B2.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N4b add a twenty-second nonempty duplicate (self-test 7's err.txt bytes as self-test 2's err.txt)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/2/err.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/2/err.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N5 add a ninth zero-length file (C12 04-run/stderr.txt)
+       expected (code, path), all required: [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/04-run/stderr.txt')]
+       reported (code, path): [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/04-run/stderr.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N6a move an allowed duplicate (C9 LINK.json) into another control's directory (C12's 06-link)
+       expected (code, path), all required: [('CURRENT_ABSENT', 'receipts/38-C9/06-link/LINK.json'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/06-link/LINK.json')]
+       reported (code, path): [('CURRENT_ABSENT', 'receipts/38-C9/06-link/LINK.json'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N6b move an allowed zero-length artifact (C12 build.stdout) into another control's directory (C28)
+       expected (code, path), all required: [('ZERO_CURRENT_ABSENT', 'receipts/37-C12/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/36-C28/03-build/build.stdout'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/37-C12/03-build/build.stdout')]
+       reported (code, path): [('ZERO_CURRENT_ABSENT', 'receipts/37-C12/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/36-C28/03-build/build.stdout'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/37-C12/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N6c move an allowed constant (self-test 7 err.txt) into another self-test's directory (6)
+       expected (code, path), all required: [('CURRENT_ABSENT', 'receipts/01-supervision-selftest/7/err.txt'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('ROLE_MISMATCH', 'receipts/01-supervision-selftest/6/out.txt'), ('ROLE_MISMATCH', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt')]
+       reported (code, path): [('CURRENT_ABSENT', 'receipts/01-supervision-selftest/7/err.txt'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('ROLE_MISMATCH', 'receipts/01-supervision-selftest/6/out.txt'), ('ROLE_MISMATCH', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 18 / 8
+AS EXPECTED     N7a change one byte in a mapped link receipt (C17 LINK.json), map unchanged
+       expected (code, path), all required: [('CURRENT_BYTES_CHANGED', 'receipts/40-C17/06-link/LINK.json'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('NOT_BYTE_EQUAL', 'receipts/40-C17/06-link/LINK.json'), ('PRIOR_SOURCE_MISMATCH', 'receipts/40-C17/06-link/LINK.json')]
+       reported (code, path): [('CURRENT_BYTES_CHANGED', 'receipts/40-C17/06-link/LINK.json'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('NOT_BYTE_EQUAL', 'receipts/40-C17/06-link/LINK.json'), ('PRIOR_SOURCE_MISMATCH', 'receipts/40-C17/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N7b change one byte in a mapped constant record (C9 run sampler record), map unchanged
+       expected (code, path), all required: [('CURRENT_BYTES_CHANGED', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('GENERATOR_ITEM_ABSENT', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('LITERAL_MISMATCH', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('NOT_BYTE_EQUAL', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('PRIOR_SOURCE_MISMATCH', 'receipts/38-C9/04-run/cgroup-samples.txt')]
+       reported (code, path): [('CURRENT_BYTES_CHANGED', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('GENERATOR_ITEM_ABSENT', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('LITERAL_MISMATCH', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('NOT_BYTE_EQUAL', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('PRIOR_SOURCE_MISMATCH', 'receipts/38-C9/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N8 make a mapped zero-length artifact nonempty (C17 build.stdout = 'x\n')
+       expected (code, path), all required: [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_NOT_EMPTY', 'receipts/40-C17/03-build/build.stdout')]
+       reported (code, path): [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_NOT_EMPTY', 'receipts/40-C17/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N9 replace a mapped empty file with a symlink (C11 build.stdout -> C9's)
+       expected (code, path), all required: [('STAGED_SYMLINK', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_CURRENT_SYMLINK', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/39-C11/03-build/build.stdout')]
+       reported (code, path): [('STAGED_SYMLINK', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_CURRENT_SYMLINK', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/39-C11/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N10a wrong canonical prior path for a link receipt (C9 LINK.json -> the F-G rehearsal link)
+       expected (code, path), all required: [('PRIOR_PATH_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported (code, path): [('PRIOR_PATH_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N10b wrong canonical prior path, itself byte-equal (C12 run sampler record -> RESUME-01 C19's)
+       expected (code, path), all required: [('PRIOR_PATH_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('PRIOR_PATH_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N10c wrong canonical prior commit and path, byte-equal but another self-test (self-test 1 sampler record -> EXEC-01 self-test 7's)
+       expected (code, path), all required: [('PRIOR_COMMIT_MISMATCH', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('PRIOR_PATH_MISMATCH', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt')]
+       reported (code, path): [('PRIOR_COMMIT_MISMATCH', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('PRIOR_PATH_MISMATCH', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N11a wrong prior sha256 (self-test 6 out.txt row)
+       expected (code, path), all required: [('PRIOR_SHA256_MISMATCH', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt')]
+       reported (code, path): [('PRIOR_SHA256_MISMATCH', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N11b wrong prior git blob (C18b run sampler record row)
+       expected (code, path), all required: [('PRIOR_BLOB_MISMATCH', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt')]
+       reported (code, path): [('PRIOR_BLOB_MISMATCH', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N11c wrong prior sha256 of a link receipt (C9 LINK.txt row)
+       expected (code, path), all required: [('PRIOR_SHA256_MISMATCH', 'receipts/38-C9/06-link/LINK.txt'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt')]
+       reported (code, path): [('PRIOR_SHA256_MISMATCH', 'receipts/38-C9/06-link/LINK.txt'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N12a missing current run descriptor (C12 04-run/descriptor.json)
+       expected (code, path), all required: [('DESCRIPTOR_ABSENT', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('DESCRIPTOR_ABSENT', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N12b missing current build descriptor (C18a 03-build/descriptor.json)
+       expected (code, path), all required: [('ZERO_COMMAND_MISMATCH', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_DESCRIPTOR_MISMATCH', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/41-C18a/03-build/build.stdout')]
+       reported (code, path): [('ZERO_COMMAND_MISMATCH', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_DESCRIPTOR_MISMATCH', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/41-C18a/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N12c missing current self-test receipt (SELFTEST.txt): every self-test row, nonempty and empty
+       expected (code, path), all required: [('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/1/out.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/6/out.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/err.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt')]
+       reported (code, path): [('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/1/out.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/6/out.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/err.txt'), ('DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/7/out.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/1/out.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/6/out.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/7/err.txt'), ('DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt'), ('ZERO_COMMAND_MISMATCH', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_COMMAND_MISMATCH', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_DESCRIPTOR_ABSENT', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_DESCRIPTOR_MISMATCH', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 14 / 6
+AS EXPECTED     N12d missing current restoration receipt (C9 05-restore/RESTORE.txt)
+       expected (code, path), all required: [('RESTORATION_ABSENT', 'receipts/38-C9/06-link/LINK.json'), ('RESTORATION_ABSENT', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt')]
+       reported (code, path): [('RESTORATION_ABSENT', 'receipts/38-C9/06-link/LINK.json'), ('RESTORATION_ABSENT', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 19 / 8
+AS EXPECTED     N12e missing current control result (C11 CONTROL-RESULT.json)
+       expected (code, path), all required: [('DESCRIPTOR_ABSENT', 'receipts/39-C11/06-link/LINK.json'), ('RESULT_ABSENT', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported (code, path): [('DESCRIPTOR_ABSENT', 'receipts/39-C11/06-link/LINK.json'), ('RESULT_ABSENT', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N12f missing current build stderr (C17 03-build/build.stderr)
+       expected (code, path), all required: [('ZERO_DESCRIPTOR_MISMATCH', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_STDERR_ABSENT', 'receipts/40-C17/03-build/build.stdout')]
+       reported (code, path): [('ZERO_DESCRIPTOR_MISMATCH', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_STDERR_ABSENT', 'receipts/40-C17/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N12g missing current supervisor receipt (C28 04-run/scope-record.txt)
+       expected (code, path), all required: [('SUPERVISOR_RECEIPT_ABSENT', 'receipts/36-C28/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/36-C28/04-run/cgroup-samples.txt')]
+       reported (code, path): [('SUPERVISOR_RECEIPT_ABSENT', 'receipts/36-C28/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/36-C28/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N12h missing current result record (self-test 5 time-v.txt): its sampler record and its empty out.txt
+       expected (code, path), all required: [('SUPERVISOR_RECEIPT_ABSENT', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_RESULT_ABSENT', 'receipts/01-supervision-selftest/5/out.txt')]
+       reported (code, path): [('SUPERVISOR_RECEIPT_ABSENT', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_RESULT_ABSENT', 'receipts/01-supervision-selftest/5/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 7
+AS EXPECTED     N13a wrong current control id in the map (C12 run sampler record claims C9)
+       expected (code, path), all required: [('CONTROL_IDENTITY', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('CONTROL_IDENTITY', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N13b wrong current role in the map (self-test 7 err.txt claims the stdout role)
+       expected (code, path), all required: [('ROLE_MISMATCH', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt')]
+       reported (code, path): [('ROLE_MISMATCH', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N13c wrong control id in the zero-length map (C11 build.stdout claims C17)
+       expected (code, path), all required: [('ZERO_CONTROL_IDENTITY', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/39-C11/03-build/build.stdout')]
+       reported (code, path): [('ZERO_CONTROL_IDENTITY', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/39-C11/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N13d wrong role in the zero-length map (self-test 3 out.txt claims a build stdout role)
+       expected (code, path), all required: [('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_ROLE_MISMATCH', 'receipts/01-supervision-selftest/3/out.txt')]
+       reported (code, path): [('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_ROLE_MISMATCH', 'receipts/01-supervision-selftest/3/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N13e wrong self-test id in the map (self-test 6 out.txt claims self-test 1)
+       expected (code, path), all required: [('SELFTEST_IDENTITY', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt')]
+       reported (code, path): [('SELFTEST_IDENTITY', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N13f wrong control id of a link receipt (C18a LINK.txt claims C18b)
+       expected (code, path), all required: [('CONTROL_IDENTITY', 'receipts/41-C18a/06-link/LINK.txt'), ('R1_FIELD_MISMATCH', 'receipts/41-C18a/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt')]
+       reported (code, path): [('CONTROL_IDENTITY', 'receipts/41-C18a/06-link/LINK.txt'), ('R1_FIELD_MISMATCH', 'receipts/41-C18a/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N13g the current run receipt names another control (C12 04-run/RECEIPT.txt replaced by C9's)
+       expected (code, path), all required: [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N13h the current run descriptor describes another control (C12 04-run/descriptor.json replaced by C9's)
+       expected (code, path), all required: [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N14a C9 LINK.json replaced by the F-G link (another configuration), the map row made to agree with the bytes and the F-G prior
+       expected (code, path), all required: [('BASELINE_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('CONFIG_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_PATH_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported (code, path): [('BASELINE_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('CONFIG_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('NOT_BYTE_EQUAL', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_BLOB_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_PATH_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_SHA256_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_SIZE_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('PRIOR_SOURCE_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N14b the map row claims another linked configuration (C11 LINK.json: F-G)
+       expected (code, path), all required: [('CONFIG_MISMATCH', 'receipts/39-C11/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported (code, path): [('CONFIG_MISMATCH', 'receipts/39-C11/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N14c C17 LINK.json's configuration check relabelled F-G (map current fields agree)
+       expected (code, path), all required: [('CONFIG_MISMATCH', 'receipts/40-C17/06-link/LINK.json'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('NOT_BYTE_EQUAL', 'receipts/40-C17/06-link/LINK.json')]
+       reported (code, path): [('CONFIG_MISMATCH', 'receipts/40-C17/06-link/LINK.json'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('NOT_BYTE_EQUAL', 'receipts/40-C17/06-link/LINK.json'), ('PRIOR_SOURCE_MISMATCH', 'receipts/40-C17/06-link/LINK.json'), ('R1_FIELD_MISMATCH', 'receipts/40-C17/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N15a the sampler constant in a build directory (C12 03-build/cgroup-samples.txt)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/cgroup-samples.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N15b the sampler constant in a build directory, with the C12 run row pointed at it
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('MAP_ROW_MISSING', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('MAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('MAP_ROW_MISSING', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('MAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N15c the sampler constant in an unmapped self-test directory (self-test 3, a sampled run)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/3/cgroup-samples.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/3/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N16 duplicate a build receipt: C12's 03-build/RECEIPT.txt replaced by RESUME-01 C14's (7479 bytes)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/RECEIPT.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/RECEIPT.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N17 duplicate a run receipt: C12's 04-run/RECEIPT.txt replaced by RESUME-01 C14's (5350 bytes)
+       expected (code, path), all required: [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/RECEIPT.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported (code, path): [('DESCRIPTOR_MISMATCH', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/RECEIPT.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N18 duplicate a classification receipt: C12's 04-run/CLASSIFICATION.txt replaced by RESUME-01 C14's (937 bytes)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/CLASSIFICATION.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/CLASSIFICATION.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N19 duplicate a restoration receipt: C12's 05-restore/RESTORE.txt replaced by RESUME-01 C14's (1289 bytes)
+       expected (code, path), all required: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/05-restore/RESTORE.txt')]
+       reported (code, path): [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/05-restore/RESTORE.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+[over-broad policies (implemented here only, never in the builder) would wrongly accept]
+AS EXPECTED     N20 reintroduce the 1-KiB threshold: it wrongly accepts N18 (C12's run classification replaced by RESUME-01 C14's, 937 bytes); R2 rejects it
+       threshold policy problems: []
+       R2 problems: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/CLASSIFICATION.txt')]
+AS EXPECTED     N21 permit every cgroup-samples.txt: it wrongly accepts the unauthorized receipts/37-C12/03-build/cgroup-samples.txt (N15a); R2 rejects it
+       over-broad policy problems: []
+       R2 problems: [('DUPLICATE_COUNT', 'staged packet'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/03-build/cgroup-samples.txt')]
+AS EXPECTED     N22a an unauthorized empty build.stdout (C28 has no build): R2 rejects it
+       expected (code, path), all required: [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_LENGTH_UNMAPPED', 'receipts/36-C28/03-build/build.stdout')]
+       reported (code, path): [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_LENGTH_UNMAPPED', 'receipts/36-C28/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N22b permit every build.stdout: it wrongly accepts the unauthorized empty receipts/36-C28/03-build/build.stdout; R2 rejects it
+       over-broad policy problems: []
+       R2 problems: [('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_LENGTH_UNMAPPED', 'receipts/36-C28/03-build/build.stdout')]
+[negative controls, continued]
+AS EXPECTED     N23a path traversal in the nonempty map (C9 LINK.json row as .../06-link/../06-link/LINK.json)
+       expected (code, path), all required: [('MAP_ROW_MISSING', 'receipts/38-C9/06-link/LINK.json'), ('MAP_ROW_NOT_RULED', 'receipts/38-C9/06-link/../06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported (code, path): [('MAP_ROW_MISSING', 'receipts/38-C9/06-link/LINK.json'), ('MAP_ROW_NOT_RULED', 'receipts/38-C9/06-link/../06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N23b path traversal in the zero-length map (C12 build.stdout row as .../03-build/../03-build/...)
+       expected (code, path), all required: [('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/03-build/build.stdout'), ('ZMAP_ROW_MISSING', 'receipts/37-C12/03-build/build.stdout'), ('ZMAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/../03-build/build.stdout')]
+       reported (code, path): [('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/03-build/build.stdout'), ('ZMAP_ROW_MISSING', 'receipts/37-C12/03-build/build.stdout'), ('ZMAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/../03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N24a symlink substitution of a mapped nonempty file (C11 run sampler record -> C9's, same bytes)
+       expected (code, path), all required: [('CURRENT_SYMLINK', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('STAGED_SYMLINK', 'receipts/39-C11/04-run/cgroup-samples.txt')]
+       reported (code, path): [('CURRENT_SYMLINK', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('STAGED_SYMLINK', 'receipts/39-C11/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+NOT AS EXPECTED N24b symlink substitution to a byte-equal file outside the packet (C18a LINK.txt)
+       expected (code, path), all required: [('CURRENT_SYMLINK', 'receipts/41-C18a/06-link/LINK.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt'), ('STAGED_SYMLINK', 'receipts/41-C18a/06-link/LINK.txt')]
+       reported (code, path): [('CONTROL_IDENTITY', 'receipts/41-C18a/06-link/LINK.json'), ('CURRENT_SYMLINK', 'receipts/41-C18a/06-link/LINK.txt'), ('DUPLICATE_COUNT', 'staged packet'), ('MAPPED_PATH_NOT_A_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt'), ('STAGED_SYMLINK', 'receipts/41-C18a/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.json')]
+       reported outside the named paths: [('CONTROL_IDENTITY', 'receipts/41-C18a/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.json')]
+       verdict: REJECTED
+       accepted nonempty / zero-length: 19 / 8
+AS EXPECTED     N24c symlink substitution of a mapped zero-length artifact to an empty file outside the packet (self-test 3 out.txt)
+       expected (code, path), all required: [('STAGED_SYMLINK', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_CURRENT_SYMLINK', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/01-supervision-selftest/3/out.txt')]
+       reported (code, path): [('STAGED_SYMLINK', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_CURRENT_SYMLINK', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_COUNT', 'staged packet'), ('ZERO_MAPPED_PATH_NOT_STAGED_EMPTY', 'receipts/01-supervision-selftest/3/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+AS EXPECTED     N24d the nonempty map is a symlink (to a byte-identical copy)
+       expected (code, path), all required: [('MAP_SYMLINK', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/36-C28/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/06-link/LINK.json')]
+       reported (code, path): [('MAP_SYMLINK', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/1/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/5/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/6/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/err.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/01-supervision-selftest/7/out.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/36-C28/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/37-C12/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/38-C9/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/39-C11/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/41-C18a/06-link/LINK.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 0 / 8
+AS EXPECTED     N24e the zero-length map is a symlink (to a byte-identical copy)
+       expected (code, path), all required: [('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/38-C9/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/42-C18b/03-build/build.stdout'), ('ZMAP_SYMLINK', 'ZERO-LENGTH-ARTIFACT-MAP.tsv')]
+       reported (code, path): [('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/3/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/01-supervision-selftest/5/out.txt'), ('ZERO_LENGTH_UNMAPPED', 'receipts/37-C12/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/38-C9/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/39-C11/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/40-C17/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/41-C18a/03-build/build.stdout'), ('ZERO_LENGTH_UNMAPPED', 'receipts/42-C18b/03-build/build.stdout'), ('ZMAP_SYMLINK', 'ZERO-LENGTH-ARTIFACT-MAP.tsv')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 0
+AS EXPECTED     N24f symlink substitution of a control's restoration directory (C17 05-restore -> C11's)
+       expected (code, path), all required: [('RESTORATION_ABSENT', 'receipts/40-C17/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/06-link/LINK.json')]
+       reported (code, path): [('RESTORATION_ABSENT', 'receipts/40-C17/06-link/LINK.json'), ('UNAUTHORIZED_DUPLICATE', 'receipts/40-C17/06-link/LINK.json')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N25a the nonempty map holds 22 rows (an added row for C12's build sampler record)
+       expected (code, path), all required: [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/cgroup-samples.txt')]
+       reported (code, path): [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_NOT_RULED', 'receipts/37-C12/03-build/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N25b the nonempty map holds 20 rows (C18b's run sampler record row removed)
+       expected (code, path), all required: [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt')]
+       reported (code, path): [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_MISSING', 'receipts/42-C18b/04-run/cgroup-samples.txt'), ('UNAUTHORIZED_DUPLICATE', 'receipts/42-C18b/04-run/cgroup-samples.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 20 / 8
+AS EXPECTED     N25c the nonempty map holds 22 rows (one row repeated)
+       expected (code, path), all required: [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_REPEATED', 'receipts/01-supervision-selftest/1/out.txt')]
+       reported (code, path): [('MAP_ROW_COUNT', 'NONEMPTY-DUPLICATE-MAP.tsv'), ('MAP_ROW_REPEATED', 'receipts/01-supervision-selftest/1/out.txt')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N26a the zero-length map holds 9 rows (an added row for C28 03-build/build.stdout)
+       expected (code, path), all required: [('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_NOT_RULED', 'receipts/36-C28/03-build/build.stdout')]
+       reported (code, path): [('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_NOT_RULED', 'receipts/36-C28/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 8
+AS EXPECTED     N26b the zero-length map holds 7 rows (C18b build.stdout row removed)
+       expected (code, path), all required: [('ZERO_LENGTH_UNMAPPED', 'receipts/42-C18b/03-build/build.stdout'), ('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_MISSING', 'receipts/42-C18b/03-build/build.stdout')]
+       reported (code, path): [('ZERO_LENGTH_UNMAPPED', 'receipts/42-C18b/03-build/build.stdout'), ('ZMAP_ROW_COUNT', 'ZERO-LENGTH-ARTIFACT-MAP.tsv'), ('ZMAP_ROW_MISSING', 'receipts/42-C18b/03-build/build.stdout')]
+       reported outside the named paths: []
+       verdict: REJECTED
+       accepted nonempty / zero-length: 21 / 7
+[S0: disclosed comparison, not a mission control: the base staging against PUBLISH-03's base staging]
+       PUBLISH-03 base 309 files, this base 309; only here []; only there []; differing []
+controls 66; as expected 65; not as expected ['N24b']
+REPAIR CONTROLS: NOT ALL AS EXPECTED: N24b

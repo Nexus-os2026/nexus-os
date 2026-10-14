@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C18b: a gating conflict makes a table entry
+patch: inputs/patches/C18b.patch (the frozen R2 packet's catalog/patches/C18b.patch), sha256 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2 (catalog 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob c7f2b5ea99bb1676e3844b6c612d3393f97d50da (expected c7f2b5ea99bb1676e3844b6c612d3393f97d50da), sha256 25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a (expected 25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
