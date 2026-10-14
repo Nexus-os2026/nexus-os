@@ -1,0 +1,61 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-01 — DEVELOPMENT LOG
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); effort High
+
+Scope of this log: executor-written tools only. No Nexus source was edited. Nothing was built, compiled or run:
+no cargo or rustc invocation, no baseline test, no mutant worktree, no mutant build, no mutant test. The pinned
+baseline executable was hashed and sized only. Every defect below was found before any freeze and before any
+evidence was published; each failed run's output is kept as found.
+
+D0  Finding that decides the mission (not a defect)
+    Searching the authorised sources for exact definitions of the 35 controls: the contract's 7.5 gives one line of
+    prose per control; AD-1-R4 G.2 gives exact text for C1, C25, C4 and C9 and retains C10 and C24 from the sealed
+    file; AD-1-R5 gives none (C15's rules only); the sealed controls_defs.py gives C1, C2, C10, C24, C25 (compound,
+    superseded), C12, C14, C19, C21, C22, C27, C28, and its own sealed README says it "holds only a partial set of
+    definitions". A text search of the local D2A-1 evidence directories (/home/nexus/nexus-audits/claude-architect/
+    p3-c11-dr01-d2a1-*) and of the D2A-1 review commits 42dd1bd1, 8693e3a7, c2c69e3a, a464a366, 71264aa8, 0622a4d0,
+    066a322a and c1e46fc4 found no other definition of C11, C17, C18a or C18b. Its hits were "P3-C11" labels,
+    checkers' own check identifiers (check-ad1r3.py / check-ad1r4.py name their checks C10, C11, ...), and RS01's
+    separate mutation namespace. 21 controls therefore have no exact definition: CONTROL_CATALOG_BLOCKED (mission 7).
+
+D1  derive_catalog.py v1 — descriptor schema; two blocked-note inaccuracies
+    Found by inspecting the first derived catalog (its diff to the final: catalog-dev1-to-final.diff; the full
+    intermediate catalogs are kept outside the packet, in the mission's local dev-local/ directory).
+    (a) receipt_link read only the Stage-2 descriptor schema (`test`, `executable.before/after.sha256`). Stage-1
+        descriptors keep the test only in argv[1] and the digests as `sha256_before` / `sha256_after`, so every
+        Stage-1 link (F-1, F-2, F-PT, F-B) showed test_matches False and executable_before_after_equal False.
+        Fixed: both schemas are read; the raw-output digest recorded in the descriptor is now also compared.
+    (b) blocked_notes C11 said its site text "occurs in more than one append"; the measured count at C was 1. The
+        gating append has the same code at another indentation (a different byte string). Corrected: three
+        sites (facts step 5; gating; the acknowledgement and cell appends' `if failed == Insert::Constraint`).
+    (c) blocked_notes A1's first site text occurred twice (once in the state-key encoding). Made unique.
+
+D2  static_gate.py v1 — two false FAILs (static-gate-dev1.txt)
+    (a) The confinement check used a byte-wise common-prefix/common-suffix scan. C4 is a pure 16-line deletion
+        whose first 8 bytes equal the 8 bytes that follow it, so the scan placed the removed block 8 bytes after
+        the anchor ([48445, 48970) against the anchor's [48437, 48962)) and reported FAIL although the bytes are
+        the same. Replaced by the direct test: every byte before and after the anchor's span is identical in the
+        patched copy and the span equals the replacement.
+    (b) The C25 check sliced the mutant between `fn gating(` and `fn lookup(`, but the first `fn lookup(` is
+        Core::lookup (line 991), before `fn gating(` (line 1413): an empty slice and a false FAIL. Replaced by an
+        exact match of the whole narrow arm (`self.failed();`, the rollback, `self.keep = true;`, the new return)
+        inside `fn gating(`.
+    After both: only the 21 definition-completeness checks fail (static-gate-dev2.txt).
+
+D3  gate_controls.py v1 — one control's expectation (gate-controls-v1-FAILED-control-expectation.txt)
+    The seed "two controls with one mutant blob" gives C21 the mutant blob of C19. The gate detected it (24 FAIL
+    lines) and names the duplicate at the second control in catalog order, C21; the control expected the label on
+    C19. The gate was right; the expectation was corrected to C21. All 14 seeds and the positive control then
+    behave as required.
+
+D4  derive_catalog.py v2 — presentation only (catalog-dev2-to-final.diff)
+    For C1, C10 and C24 the adopted AD-1-R4 G.2 origin is now listed before the historical controls_defs.py entry
+    it cross-checks. No anchor, replacement, patch, blob or status changed.
+
+D5  final_gate.py v1 — the evidence worktree (final-gate-v1-FAILED-evidence-worktree.txt)
+    G6 required the worktree listing to equal the reference taken before any staging, and no path under
+    /home/nexus/NEXUS to contain "tranche1". After the evidence worktree was created (mission 18) and INDEX.md was
+    corrected (its tool list omitted record_tools.py), the gate was re-run and failed both checks on that worktree
+    alone. The packet staged from that run was removed before any commit (the worktree's only entries were this
+    mission's two untracked paths). G6 now accepts exactly one added worktree — the evidence worktree, at c1e46fc4,
+    on branch evidence/p3-c11-d2a1-mutation-tranche1-01 — and requires that it holds nothing but the two allowed
+    paths, uncommitted. Nothing else in the gate changed.

@@ -1,0 +1,24 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-01 — FINAL GATE (before staging)
+OK   every tool, document source and development record equals the tools record: 20 files
+OK   G1 input authentication re-run: ALL CHECKS OK
+OK   G2 two fresh derivations give byte-identical catalogs and patches: 16 files
+OK   G2 the derivation equals the catalog to be published
+OK   G2 the rendered blocker and tranche summary equal the documents to be published
+OK   G3 static catalog gate: exit 1, exactly the 21 definition checks FAIL, nothing else: 21 FAIL lines
+OK   G3 the gate's OK lines: 314
+OK   G3 the R5 adoption record carries the exact required sentence and every required item: 14 items
+OK   G3 INDEX.md cites the actual catalog digest, adoption record identity and gate count: {'catalog sha256': 'a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747', 'adoption record sha256': '9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4', 'adoption record blob': '1492e185cb475bd32d95079a39b49078c0e23ddc', 'static gate OK count': '314 checks hold', 'status': 'CONTROL_CATALOG_BLOCKED'}
+OK   G4 gate controls: 14 seeds and the positive control behave as required
+OK   G5 catalog: CONTROL_CATALOG_BLOCKED, not frozen, 35 + A4, READY 14, BLOCKED 21
+OK   G5 tranche-1 controls without a definition: C11 C17 C18a C18b
+OK   G6 the pinned executable is untouched (sha256, size, inode and mtime as Stage-2 recorded them): mtime_ns 1791979773968059672
+OK   G6 no target directory under the mission root
+OK   G6 no git worktree created or removed by this mission, except its evidence worktree at c1e46fc4: 153 in the reference; added 1; removed 0
+OK   G6 no mutant worktree path exists (the evidence worktree is the only mission path)
+OK   G6 the evidence worktree holds nothing but this mission's two allowed paths, uncommitted: 0 entries
+OK   G7 the baseline worktree is exactly at C and clean
+OK   G7 Candidate C's tree is unchanged
+OK   G7 the Owner worktree is unchanged (rebuild/phase0-trust-boundary at f727f5c3, clean)
+OK   G8 publishable files: text only; no .rs; no ELF; no copy of any crate source at C; no mutant source: 41 files
+
+FINAL GATE: ALL CHECKS HOLD — the blocker packet may be staged

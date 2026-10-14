@@ -1,0 +1,29 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -971,6 +971,24 @@ impl Core {
+         batch: &[FactRecord],
+         io: &mut impl Txn,
+     ) -> FactOutcome {
++        let refused = if self.session == Session::Bootstrap {
++            Some(Entry::NotOpen)
++        } else if self.latch.is_some() {
++            Some(Entry::Latched)
++        } else if self.phase != Phase::Healthy {
++            Some(Entry::NotHealthy)
++        } else {
++            None
++        };
++        if let Some(entry) = refused {
++            return FactOutcome::NotApplied {
++                counted: Counted {
++                    persistence: Persistence::NotWritten,
++                    conflict_member: None,
++                },
++                reason: Reason::Entry(entry),
++            };
++        }
+         let mut op = Publish::new(self);
+         let outcome = op.facts(ticket, batch, io);
+         op.done = true;

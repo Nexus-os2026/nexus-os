@@ -1,0 +1,352 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE1-01 — STATIC CATALOG GATE (mission 8; no build, no test)
+OK   input CONTRACT-02-R1.md authenticated
+OK   input AD1-R4.md authenticated
+OK   input AD1-R5.md authenticated
+OK   input controls_defs.py.txt authenticated
+OK   input C1-mutation.patch authenticated
+OK   input C25-narrow-mutation.patch authenticated
+OK   input C4-test1-removed.patch authenticated
+OK   C's protocol.rs read from git is blob a2df2841
+[ids]
+OK   contract 7.5 rows read independently: 36 ids, each once: ['C1', 'C2', 'C3a', 'C3b', 'C3c', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'C12', 'C15', 'C16', 'C17', 'C18a', 'C18b', 'C20', 'C23', 'C24', 'C25', 'C26', 'C14', 'C19', 'C21', 'C22', 'C27', 'C28', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6']
+OK   catalog ids equal the contract's, in order
+OK   every id occurs exactly once in the catalog
+OK   35 kill-required controls: 35
+OK   A4 separate: one comparison entry, not a mutation, SATISFIED — ARCHITECT ACCEPTED
+OK   A4 evidence directory is Stage-1's receipts/50-A4 at f023cc3d
+OK   no C13 in the contract set (mission 16: 'if present')
+OK   no M-namespace entry
+OK   every tranche-1 id is in the catalog
+OK   no control is marked killed or executed
+OK   every Architect review status is pending
+[definitions]
+OK   C1: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C1: anchor occurs exactly once in C's blob (recounted): 1
+OK   C1: patch file equals the catalog's patch text and its sha256
+OK   C1: GNU patch on a disposable copy gives the anchor replacement
+OK   C1: git apply on a disposable copy gives the same bytes
+OK   C1: mutant blob as recorded: 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66
+OK   C1: reversal (patch -R) restores C's blob exactly
+OK   C1: reversal (git apply -R) restores C's blob exactly
+OK   C1: changed bytes confined to the anchor's span: anchor span [4972, 5061) of 64546 bytes; replacement 184 bytes
+OK   C1: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C1: definition origin recorded
+OK   C2: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C2: anchor occurs exactly once in C's blob (recounted): 1
+OK   C2: patch file equals the catalog's patch text and its sha256
+OK   C2: GNU patch on a disposable copy gives the anchor replacement
+OK   C2: git apply on a disposable copy gives the same bytes
+OK   C2: mutant blob as recorded: 1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d
+OK   C2: reversal (patch -R) restores C's blob exactly
+OK   C2: reversal (git apply -R) restores C's blob exactly
+OK   C2: changed bytes confined to the anchor's span: anchor span [41217, 41495) of 64546 bytes; replacement 174 bytes
+OK   C2: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C2: definition origin recorded
+OK   C3a: BLOCKED entry carries no anchor, replacement or patch
+OK   C3b: BLOCKED entry carries no anchor, replacement or patch
+OK   C3c: BLOCKED entry carries no anchor, replacement or patch
+OK   C4: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C4: anchor occurs exactly once in C's blob (recounted): 1
+OK   C4: patch file equals the catalog's patch text and its sha256
+OK   C4: GNU patch on a disposable copy gives the anchor replacement
+OK   C4: git apply on a disposable copy gives the same bytes
+OK   C4: mutant blob as recorded: f3793c2ff61f8adbf43fe17d6b5237b49bc507b0
+OK   C4: reversal (patch -R) restores C's blob exactly
+OK   C4: reversal (git apply -R) restores C's blob exactly
+OK   C4: changed bytes confined to the anchor's span: anchor span [48437, 48962) of 64546 bytes; replacement 0 bytes
+OK   C4: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C4: definition origin recorded
+OK   C5: BLOCKED entry carries no anchor, replacement or patch
+OK   C6: BLOCKED entry carries no anchor, replacement or patch
+OK   C7: BLOCKED entry carries no anchor, replacement or patch
+OK   C8: BLOCKED entry carries no anchor, replacement or patch
+OK   C9: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C9: anchor occurs exactly once in C's blob (recounted): 1
+OK   C9: patch file equals the catalog's patch text and its sha256
+OK   C9: GNU patch on a disposable copy gives the anchor replacement
+OK   C9: git apply on a disposable copy gives the same bytes
+OK   C9: mutant blob as recorded: 7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c
+OK   C9: reversal (patch -R) restores C's blob exactly
+OK   C9: reversal (git apply -R) restores C's blob exactly
+OK   C9: changed bytes confined to the anchor's span: anchor span [36359, 36477) of 64546 bytes; replacement 119 bytes
+OK   C9: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C9: definition origin recorded
+OK   C10: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C10: anchor occurs exactly once in C's blob (recounted): 1
+OK   C10: patch file equals the catalog's patch text and its sha256
+OK   C10: GNU patch on a disposable copy gives the anchor replacement
+OK   C10: git apply on a disposable copy gives the same bytes
+OK   C10: mutant blob as recorded: 329a830718b81a065e3a03f4958e19e8fa3c8d9c
+OK   C10: reversal (patch -R) restores C's blob exactly
+OK   C10: reversal (git apply -R) restores C's blob exactly
+OK   C10: changed bytes confined to the anchor's span: anchor span [40374, 40569) of 64546 bytes; replacement 202 bytes
+OK   C10: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C10: definition origin recorded
+OK   C11: BLOCKED entry carries no anchor, replacement or patch
+OK   C12: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C12: anchor occurs exactly once in C's blob (recounted): 1
+OK   C12: patch file equals the catalog's patch text and its sha256
+OK   C12: GNU patch on a disposable copy gives the anchor replacement
+OK   C12: git apply on a disposable copy gives the same bytes
+OK   C12: mutant blob as recorded: d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b
+OK   C12: reversal (patch -R) restores C's blob exactly
+OK   C12: reversal (git apply -R) restores C's blob exactly
+OK   C12: changed bytes confined to the anchor's span: anchor span [61614, 61902) of 64546 bytes; replacement 294 bytes
+OK   C12: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C12: definition origin recorded
+OK   C15: BLOCKED entry carries no anchor, replacement or patch
+OK   C16: BLOCKED entry carries no anchor, replacement or patch
+OK   C17: BLOCKED entry carries no anchor, replacement or patch
+OK   C18a: BLOCKED entry carries no anchor, replacement or patch
+OK   C18b: BLOCKED entry carries no anchor, replacement or patch
+OK   C20: BLOCKED entry carries no anchor, replacement or patch
+OK   C23: BLOCKED entry carries no anchor, replacement or patch
+OK   C24: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C24: anchor occurs exactly once in C's blob (recounted): 1
+OK   C24: patch file equals the catalog's patch text and its sha256
+OK   C24: GNU patch on a disposable copy gives the anchor replacement
+OK   C24: git apply on a disposable copy gives the same bytes
+OK   C24: mutant blob as recorded: 3e1bfbe746851b6c63811343cde9dd3b83ad0fa9
+OK   C24: reversal (patch -R) restores C's blob exactly
+OK   C24: reversal (git apply -R) restores C's blob exactly
+OK   C24: changed bytes confined to the anchor's span: anchor span [53520, 54114) of 64546 bytes; replacement 148 bytes
+OK   C24: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C24: definition origin recorded
+OK   C25: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C25: anchor occurs exactly once in C's blob (recounted): 1
+OK   C25: patch file equals the catalog's patch text and its sha256
+OK   C25: GNU patch on a disposable copy gives the anchor replacement
+OK   C25: git apply on a disposable copy gives the same bytes
+OK   C25: mutant blob as recorded: 0456a0c1c1fe40f71593edc6ba5938a3b0c29900
+OK   C25: reversal (patch -R) restores C's blob exactly
+OK   C25: reversal (git apply -R) restores C's blob exactly
+OK   C25: changed bytes confined to the anchor's span: anchor span [43003, 43079) of 64546 bytes; replacement 57 bytes
+OK   C25: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C25: definition origin recorded
+OK   C26: BLOCKED entry carries no anchor, replacement or patch
+OK   C14: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C14: anchor occurs exactly once in C's blob (recounted): 1
+OK   C14: patch file equals the catalog's patch text and its sha256
+OK   C14: GNU patch on a disposable copy gives the anchor replacement
+OK   C14: git apply on a disposable copy gives the same bytes
+OK   C14: mutant blob as recorded: 72556e3f03a53d7a14cb89515a286f42718b6ac8
+OK   C14: reversal (patch -R) restores C's blob exactly
+OK   C14: reversal (git apply -R) restores C's blob exactly
+OK   C14: changed bytes confined to the anchor's span: anchor span [37024, 37279) of 64546 bytes; replacement 46 bytes
+OK   C14: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C14: definition origin recorded
+OK   C19: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C19: anchor occurs exactly once in C's blob (recounted): 1
+OK   C19: patch file equals the catalog's patch text and its sha256
+OK   C19: GNU patch on a disposable copy gives the anchor replacement
+OK   C19: git apply on a disposable copy gives the same bytes
+OK   C19: mutant blob as recorded: 899878323428eb34021f8dcf3cefc5ab041f98a2
+OK   C19: reversal (patch -R) restores C's blob exactly
+OK   C19: reversal (git apply -R) restores C's blob exactly
+OK   C19: changed bytes confined to the anchor's span: anchor span [60259, 60345) of 64546 bytes; replacement 60 bytes
+OK   C19: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C19: definition origin recorded
+OK   C21: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C21: anchor occurs exactly once in C's blob (recounted): 1
+OK   C21: patch file equals the catalog's patch text and its sha256
+OK   C21: GNU patch on a disposable copy gives the anchor replacement
+OK   C21: git apply on a disposable copy gives the same bytes
+OK   C21: mutant blob as recorded: 80662d4c7f8b0c25a0d8a038a9e8b28a0e469826
+OK   C21: reversal (patch -R) restores C's blob exactly
+OK   C21: reversal (git apply -R) restores C's blob exactly
+OK   C21: changed bytes confined to the anchor's span: anchor span [37768, 37807) of 64546 bytes; replacement 48 bytes
+OK   C21: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C21: definition origin recorded
+OK   C22: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C22: anchor occurs exactly once in C's blob (recounted): 1
+OK   C22: patch file equals the catalog's patch text and its sha256
+OK   C22: GNU patch on a disposable copy gives the anchor replacement
+OK   C22: git apply on a disposable copy gives the same bytes
+OK   C22: mutant blob as recorded: 694b744de3b70a3a092c633b934262bd510d41aa
+OK   C22: reversal (patch -R) restores C's blob exactly
+OK   C22: reversal (git apply -R) restores C's blob exactly
+OK   C22: changed bytes confined to the anchor's span: anchor span [9571, 9614) of 64546 bytes; replacement 50 bytes
+OK   C22: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C22: definition origin recorded
+OK   C27: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C27: anchor occurs exactly once in C's blob (recounted): 1
+OK   C27: patch file equals the catalog's patch text and its sha256
+OK   C27: GNU patch on a disposable copy gives the anchor replacement
+OK   C27: git apply on a disposable copy gives the same bytes
+OK   C27: mutant blob as recorded: bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf
+OK   C27: reversal (patch -R) restores C's blob exactly
+OK   C27: reversal (git apply -R) restores C's blob exactly
+OK   C27: changed bytes confined to the anchor's span: anchor span [25968, 26082) of 64546 bytes; replacement 723 bytes
+OK   C27: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C27: definition origin recorded
+OK   C28: source file exists at C: crates/nexus-governed-control/src/ledger/protocol.rs
+OK   C28: anchor occurs exactly once in C's blob (recounted): 1
+OK   C28: patch file equals the catalog's patch text and its sha256
+OK   C28: GNU patch on a disposable copy gives the anchor replacement
+OK   C28: git apply on a disposable copy gives the same bytes
+OK   C28: mutant blob as recorded: 446d0365e1472efc40321d259a6f1171d3fe716c
+OK   C28: reversal (patch -R) restores C's blob exactly
+OK   C28: reversal (git apply -R) restores C's blob exactly
+OK   C28: changed bytes confined to the anchor's span: anchor span [55514, 55575) of 64546 bytes; replacement 33 bytes
+OK   C28: the patch touches exactly one file, protocol.rs (expected changed blob count 1)
+OK   C28: definition origin recorded
+OK   A1: BLOCKED entry carries no anchor, replacement or patch
+OK   A2: BLOCKED entry carries no anchor, replacement or patch
+OK   A3: BLOCKED entry carries no anchor, replacement or patch
+OK   A5: BLOCKED entry carries no anchor, replacement or patch
+OK   A6: BLOCKED entry carries no anchor, replacement or patch
+OK   no two READY controls share an anchor and replacement
+OK   every READY patch sha256 and mutant blob distinct
+[adopted and special definitions]
+OK   C9 is C9-b: `self.failed();` kept, only Persistence::Uncertain replaced
+OK   C25 is the narrow definition: in gating's Commit::Unknown arm `self.failed();`, the rollback and `self.keep = true;` are preserved and only the return is replaced
+OK   C25's patch is the documentary narrow patch (29a2c1e5)
+OK   C4 is the complete Test-1 removal: lines 1627-1642 removed, none added; mutant blob f3793c2f
+OK   C4 names P4 AND P8 on F-8
+OK   C1's patch is the documentary C1 patch (5ecd716a) and equals controls_defs' anchor replacement
+OK   C10 and C24 equal AD-1-R4 G.2's verbatim quotation of the sealed file
+OK   C1: special rule G.3 recorded and witness required
+OK   C25: special rule G.3 recorded and witness required
+OK   C4: special rule G.5 recorded and witness required
+OK   C4: G.6 recorded
+OK   only C1, C25 and C4 require a witness
+OK   C15: original explorer, E8, 30,000,000, AD-1-R5 F rule recorded
+OK   C22: build-only; E0283 at the T-OWN assertion's line, derived again at C: [1089]
+OK   C22 produces no mutant executable by design
+OK   every other control requires a mutant executable
+[configurations and named tests]
+OK   C1: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C1: failing receipt is never a quotient run: (a)
+OK   C2: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C2: failing receipt is never a quotient run: (a)
+OK   C3a: named test full_f7 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C3a: failing receipt is never a quotient run: (a)
+OK   C3b: named test full_f6 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C3b: failing receipt is never a quotient run: (a)
+OK   C3c: named test full_f6 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C3c: failing receipt is never a quotient run: (a)
+OK   C4: named test full_f8 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C4: failing receipt is never a quotient run: (a)
+OK   C5: named test full_f5 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C5: failing receipt is never a quotient run: (a)
+OK   C6: named test full_fpt exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C6: failing receipt is never a quotient run: (a)
+OK   C7: named test full_fpt exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C7: failing receipt is never a quotient run: (a)
+OK   C8: named test full_fb exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C8: failing receipt is never a quotient run: (a)
+OK   C9: named test full_fb2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C9: failing receipt is never a quotient run: (a)
+OK   C10: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C10: failing receipt is never a quotient run: (a)
+OK   C11: named test full_fb2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C11: failing receipt is never a quotient run: (a)
+OK   C12: named test x1_two_facts_two_writers_one_admission exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C12: failing receipt is never a quotient run: (a)
+OK   C15: named test full_fr exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C15: failing receipt is never a quotient run: (a)
+OK   C16: named test full_fd exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C16: failing receipt is never a quotient run: (a)
+OK   C17: named test full_fb2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C17: failing receipt is never a quotient run: (a)
+OK   C18a: named test full_fg exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C18a: failing receipt is never a quotient run: (a)
+OK   C18b: named test full_fg exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C18b: failing receipt is never a quotient run: (a)
+OK   C20: named test full_f2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C20: failing receipt is never a quotient run: (a)
+OK   C23: named test full_f2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C23: failing receipt is never a quotient run: (a)
+OK   C24: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C24: failing receipt is never a quotient run: (a)
+OK   C25: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C25: failing receipt is never a quotient run: (a)
+OK   C26: named test full_f4 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   C26: failing receipt is never a quotient run: (a)
+OK   C14: named test t_bind_every_bound_value_belongs_to_one_ledger exists at C and in the pinned executable's listing
+OK   C14: failing receipt is never a quotient run: (b)
+OK   C19: named test t_cell_worker_operations_and_cell_appends exists at C and in the pinned executable's listing
+OK   C19: failing receipt is never a quotient run: (b)
+OK   C21: named test w6_one_identity_under_two_contents exists at C and in the pinned executable's listing
+OK   C21: failing receipt is never a quotient run: (b)
+OK   C22: named test t_own_tickets_snapshots_and_the_worker_cannot_be_cloned exists at C and in the pinned executable's listing
+OK   C22: failing receipt is never a quotient run: (d)
+OK   C27: named test t_prec_persistence_of_every_ending exists at C and in the pinned executable's listing
+OK   C27: failing receipt is never a quotient run: (b)
+OK   C28: named test t_res_every_resolve_row exists at C and in the pinned executable's listing
+OK   C28: failing receipt is never a quotient run: (b)
+OK   A1: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   A1: failing receipt is never a quotient run: (a)
+OK   A2: named test full_f1 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   A2: failing receipt is never a quotient run: (a)
+OK   A3: named test full_f5 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   A3: failing receipt is never a quotient run: (a)
+OK   A5: named test full_f2 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   A5: failing receipt is never a quotient run: (a)
+OK   A6: named test full_f5 exists at C and in the pinned executable's listing (ignored status agrees)
+OK   A6: failing receipt is never a quotient run: (a)
+[restored-evidence links]
+OK   C1: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C1: e3 healthy-witness link resolves
+OK   C2: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C3a: e1 link 67-full-F-7 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C3b: e1 link 66-full-F-6 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C3c: e1 link 66-full-F-6 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C4: e1 link 64-full-F-8 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C4: e3 healthy-witness link resolves
+OK   C5: e1 link 65-full-F-5 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C6: e1 link 44-full-F-PT resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C7: e1 link 44-full-F-PT resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C8: e1 link 42-full-F-B resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C9: e1 link 61-full-F-B2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C10: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C11: e1 link 61-full-F-B2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+     C12: restored receipt e1 to be produced (mission 10): REQUIRED — standalone X-1 PASS on the pinned baseline executable (mission 10A); NOT PRODUCED: the catalog is blocked
+OK   C15: restored side = AD-1-R5 F discharge record; its F-2 receipt resolves and is PASS
+OK   C16: e1 link 68-full-F-D resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C17: e1 link 61-full-F-B2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C18a: e1 link 60-full-F-G resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C18b: e1 link 60-full-F-G resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C20: e1 link 41-full-F-2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C23: e1 link 41-full-F-2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C24: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C25: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   C25: e3 healthy-witness link resolves
+OK   C26: e1 link 62-full-F-4 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+     C14: restored receipt e2 to be produced (mission 10): REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked
+     C19: restored receipt e2 to be produced (mission 10): REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked
+     C21: restored receipt e2 to be produced (mission 10): REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked
+OK   C22: e4 link resolves (Stage-1 healthy build; pin sha256 equals the pinned executable)
+     C27: restored receipt e2 to be produced (mission 10): REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked
+     C28: restored receipt e2 to be produced (mission 10): REQUIRED — standalone PASS of the named test on the pinned baseline executable (mission 10B); NOT PRODUCED: the catalog is blocked
+OK   A1: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   A2: e1 link 45-full-F-1 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   A3: e1 link 65-full-F-5 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   A5: e1 link 41-full-F-2 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+OK   A6: e1 link 65-full-F-5 resolves: PASS, its test, the pinned executable before and after, raw-output digest as recorded, files equal at the introducing commit
+[definition completeness — mission 7]
+FAIL C3a: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C3b: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C3c: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C5: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C6: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C7: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C8: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C11: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C15: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C16: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C17: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C18a: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C18b: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C20: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C23: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL C26: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL A1: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL A2: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL A3: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL A5: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+FAIL A6: exact definition available from an authorised source: NO AUTHENTICATED EXACT DEFINITION (contract one-line change only)
+     tranche-1 controls without a definition: C11 C17 C18a C18b
+
+definitions READY 14, BLOCKED 21; failing checks 21
+STATIC CATALOG GATE: FAIL — CONTROL_CATALOG_BLOCKED (no Rust build, baseline test or mutant is authorised; mission 8, 19)

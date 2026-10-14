@@ -1,0 +1,35 @@
+--- catalog-dev2.json
++++ catalog.json
+@@ -69,8 +69,8 @@
+     "target": "full_f1"
+    },
+    "definition_origin": [
+-    "controls_defs.py entry 'C1' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0",
+-    "AD-1-R4 G.2: C1's encoding; documentary patch C1-mutation.patch"
++    "AD-1-R4 G.2: C1's encoding; documentary patch C1-mutation.patch (the controls_defs.py anchor below is a cross-check)",
++    "controls_defs.py entry 'C1' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0"
+    ],
+    "description": "the count becomes a flag",
+    "documentary_patch_applies_to_C": true,
+@@ -1342,8 +1342,8 @@
+     "target": "full_f1"
+    },
+    "definition_origin": [
+-    "controls_defs.py entry 'C10' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)",
+-    "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 37-47 quoted verbatim)"
++    "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 37-47 quoted verbatim)",
++    "controls_defs.py entry 'C10' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)"
+    ],
+    "description": "`Commit::Unknown` followed by `Rollback::Undone` gives Not written",
+    "execution_status": "NOT ATTEMPTED",
+@@ -2402,8 +2402,8 @@
+     "target": "full_f1"
+    },
+    "definition_origin": [
+-    "controls_defs.py entry 'C24' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): resolve empties U for a present gating record without placing the correction",
+-    "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 48-66 quoted verbatim)"
++    "AD-1-R4 G.2: ARCHITECT-RULED, the sealed definition retained unchanged (controls_defs.py lines 48-66 quoted verbatim)",
++    "controls_defs.py entry 'C24' (sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f): resolve empties U for a present gating record without placing the correction"
+    ],
+    "description": "resolve empties U for a present gating record without placing the correction",
+    "execution_status": "NOT ATTEMPTED",

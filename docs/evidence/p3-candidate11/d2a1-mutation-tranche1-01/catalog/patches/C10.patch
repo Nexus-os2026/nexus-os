@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..329a830718b81a065e3a03f4958e19e8fa3c8d9c 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1403,8 +1403,8 @@ impl<'a> Publish<'a> {
+             Commit::Durable => FactOutcome::Committed,
+             Commit::Unknown => {
+                 self.failed();
+-                self.rolled(io.rollback());
+-                self.not_applied(Persistence::Uncertain, Reason::Storage)
++                let persistence = self.rolled(io.rollback());
++                self.not_applied(persistence, Reason::Storage)
+             }
+         }
+     }

@@ -1,0 +1,16 @@
+OK   positive control (unmodified copy): exit 1; definition FAILs 21 (required 21); other FAILs 0 (required 0) []
+OK   seed 'duplicate id': exit 1; required FAIL 'every id occurs exactly once in the catalog…' present; FAIL lines 25
+OK   seed 'A4 folded into the mutations': exit 1; required FAIL 'A4 separate…' present; FAIL lines 22
+OK   seed 'anchor with several occurrences': exit 1; required FAIL 'C21: anchor occurs exactly once…' present; FAIL lines 26
+OK   seed 'anchor span not covering the change': exit 1; required FAIL 'C14: changed bytes confined to the anchor's span…' present; FAIL lines 25
+OK   seed 'patch that does not apply': exit 1; required FAIL 'C27: GNU patch on a disposable copy gives the anchor replacement…' present; FAIL lines 27
+OK   seed 'named test absent': exit 1; required FAIL 'C14: named test t_bind_no_such_test exists…' present; FAIL lines 22
+OK   seed 'quotient failing receipt': exit 1; required FAIL 'C9: failing receipt is never a quotient run…' present; FAIL lines 22
+OK   seed 'restored link on another executable': exit 1; required FAIL 'C9: e1 link 61-full-F-B2 resolves…' present; FAIL lines 22
+OK   seed 'compound C25 (drops self.keep = true)': exit 1; required FAIL 'C25 is the narrow definition…' present; FAIL lines 24
+OK   seed 'C9-a (drops self.failed())': exit 1; required FAIL 'C9 is C9-b…' present; FAIL lines 24
+OK   seed 'C22 with a mutant executable': exit 1; required FAIL 'C22 produces no mutant executable by design…' present; FAIL lines 22
+OK   seed 'BLOCKED control given an anchor': exit 1; required FAIL 'C11: BLOCKED entry carries no anchor…' present; FAIL lines 22
+OK   seed 'two controls with one mutant blob': exit 1; required FAIL 'C21: mutant_blob distinct from every other control…' present; FAIL lines 24
+OK   seed 'a control marked killed': exit 1; required FAIL 'no control is marked killed or executed…' present; FAIL lines 22
+GATE CONTROLS: ALL BEHAVE AS REQUIRED (14 seeds + 1 positive)

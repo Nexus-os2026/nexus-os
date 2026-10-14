@@ -1,0 +1,19 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..72556e3f03a53d7a14cb89515a286f42718b6ac8 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1313,13 +1313,7 @@ impl<'a> Publish<'a> {
+         io: &mut impl Txn,
+     ) -> FactOutcome {
+         // Step 0: the ticket belongs to this ledger and is Armed.
+-        let fault = if !Arc::ptr_eq(&ticket.shared, &self.core.shared) {
+-            Some(TicketFault::OtherLedger)
+-        } else if ticket.state != TicketState::Armed {
+-            Some(TicketFault::NotArmed)
+-        } else {
+-            None
+-        };
++        let fault: Option<TicketFault> = None;
+         if let Some(fault) = fault {
+             self.core.latch(LatchCause::TicketFault);
+             return FactOutcome::Rejected(fault);
