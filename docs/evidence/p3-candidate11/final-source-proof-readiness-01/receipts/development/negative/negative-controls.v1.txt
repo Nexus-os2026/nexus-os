@@ -1,0 +1,35 @@
+NEGATIVE CONTROLS — static checkers (P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01)
+
+witness_check.check_addition: one defect appended to the real C4 addition (W1 -> W4)
+  unmodified C4 addition (must pass)                         expect -    -> PASS                  verdict NON_INTERFERING      failed []
+  inherent impl on a model type                              expect N03  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N03', 'N04', 'N08', 'N13']
+  trait impl inside a function body                          expect N03  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N03', 'N04', 'N08', 'N13']
+  module-level name glob-imported and used earlier (Member)  expect N04  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N13']
+  name the earlier text spells (sequence)                    expect N13  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N13']
+  use declaration                                            expect N05  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N05', 'N08']
+  macro definition                                           expect N06  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N06', 'N08']
+  inner attribute                                            expect N07  -> NOT-DETECTED (crash)  verdict -                    failed ['IndexError: list index out of range']
+  cfg attribute                                              expect N07  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N07', 'N08', 'N14']
+  static                                                     expect N08  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N08', 'N13']
+  thread-local                                               expect N08  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N08']
+  environment write                                          expect N08  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N08', 'N14']
+  hook install                                               expect N09  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N08', 'N09', 'N13']
+  Config constant                                            expect N10  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N10']
+  PROPERTIES mention                                         expect N11  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N11', 'N13']
+  ignored test                                               expect N12  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N04', 'N07', 'N12', 'N13']
+  include_str                                                expect N14  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N08', 'N14']
+  in-place edit of an earlier constant                       expect N02  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N01', 'N02', 'N10']
+  protocol.rs changed                                        expect N09  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N09']
+  another compiled file changed (lib.rs)                     expect N14  -> DETECTED              verdict PROOF_REVIEW_BLOCKER failed ['N14']
+
+config_identity.analyze: one edit to the configuration text of model_tests.rs at C (in memory)
+  unmodified C (must pass)                 expect '-'                                  -> PASS                  []
+  F-G added to SYMMETRIC                   expect 'SYMMETRIC is exactly'               -> DETECTED              ['SYMMETRIC is exactly [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB]', 'SYMMETRIC names in order', 'exactly the eight SYMMETRIC members are admitted']
+  F-1 admitted under its own shape         expect 'F1 is refused'                      -> DETECTED              ['SYMMETRIC is exactly [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB]', 'SYMMETRIC names in order', 'exactly the eight SYMMETRIC members are admitted']
+  F-3 with three faults                    expect 'F3 matches AD-1-R4 N.9'             -> DETECTED              ['F3 matches AD-1-R4 N.9 field by field', 'FPT matches AD-1-R4 N.9 field by field', 'FB matches AD-1-R4 N.9 field by field']
+  F-PT with batch on                       expect 'FPT matches AD-1-R4 N.9'            -> DETECTED              ['FPT matches AD-1-R4 N.9 field by field', 'FPT actors equal AD-1-R4 N.10']
+  the full cap raised                      expect 'FULL_CAP = 30,000,000'              -> DETECTED              ['FULL_CAP = 30,000,000', 'F3 matches AD-1-R4 N.9 field by field', 'FPT matches AD-1-R4 N.9 field by field']
+  the time bound raised                    expect 'FULL_TIME = 45 minutes'             -> DETECTED              ['FULL_TIME = 45 minutes', 'F3 matches AD-1-R4 N.9 field by field', 'FPT matches AD-1-R4 N.9 field by field']
+  an actor added to actors()               expect 'fn actors at C is exactly'          -> DETECTED              ['fn actors at C has its audited bytes', 'fn actors at C is exactly the text the transliteration was written against']
+
+negative_controls: FAIL (1 not detected or failing controls)

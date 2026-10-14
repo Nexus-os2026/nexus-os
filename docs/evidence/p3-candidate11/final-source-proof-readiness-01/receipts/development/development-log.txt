@@ -1,0 +1,96 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01
+Executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5), effort High. Development revisions before the freeze.
+
+1. Authentication (read-only git): every named commit exists; lineage SOURCE-R2 -> ADM -> GC -> EXT -> W1 -> W4 -> B -> R4 -> C -> D
+   is a single-parent chain; outside docs/evidence/ only model_tests.rs changes along it.
+2. Sealed proof documents located in /home/nexus/nexus-audits/claude-architect/ (read-only directories) and
+   their byte copies located at 8693e3a7 (published review/p3-c11-d2a1-ad1r2-audit-packet-01).
+3. Evidence worktree created: /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01, new local branch
+   evidence/p3-c11-d2a1-final-source-proof-readiness-01 at D 066a322a. No active hook (core.hooksPath has only samples).
+4. rust_items.py written; cross-checked against a column-0 item regex: 387/387 top-level items in model_tests.rs at C,
+   104/104 in protocol.rs.
+5. source_closure.py v1: PASS at first run (0 expectation failures).
+6. witness_check.py v1: PASS at first run; both additions NON_INTERFERING.
+7. build_inputs.py v1: FAIL, 1 expectation failure: "protocol.rs cfg attributes are #[cfg(test)] only". Cause: the
+   executor's expectation was incomplete. protocol.rs line 15 has an inner, lint-only attribute
+   #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used,
+   clippy::expect_used, clippy::panic))], inactive in a test build. Not a source finding; protocol.rs is
+   byte-identical across the lineage. Repair (v2): the expectation names the exact seven attributes and records
+   the lint-only one. Diff: tools/revisions/build_inputs.v1-to-v2.diff. v2: PASS.
+8. config_identity.py v1: FAIL, 3 expectation failures ("SYMMETRIC is exactly ...", "SYMMETRIC names in order",
+   "exactly the eight SYMMETRIC members are admitted"). Cause: a defect in the checker, not in the source. v1
+   assumed the parsed right-hand side of `const SYMMETRIC` began with the type token `Config` and sliced it off
+   (`sym[1:]`), which dropped X2 from the member list; X-2 was then reported refused. Repair (v2): compare the
+   parsed list itself, and check the declared type `[Config; 8]` separately. Diff:
+   tools/revisions/config_identity.v1-to-v2.diff. v2: PASS.
+9. source_closure.py v2: scope addition, not a failure repair. Added check 8, "layer isolation": for each layer
+   appended to model_tests.rs (AQ, SQ with the EXT in-place hunk, EXT append, C1/C25, C4), no name it defines is
+   mentioned before it (the one by-design exception: SYMMETRIC names SYM_PT, SYM_B, SYM_BI), and it holds no
+   impl/trait/use/static/macro/mod item, no inner attribute and no cfg attribute. Prompted by a supplementary scan
+   that found `names` defined in the SQ layer and also in protocol.rs; there it is the method Core::names, not a
+   module item, so it is not glob-imported. Diff: tools/revisions/source_closure.v1-to-v2.diff. v2: PASS.
+10. proof_docs.py v1: PASS at first run.
+11. matrix.py v1: PASS at first run, but a defect was found on reading: the SOURCE-R2 occurrence scan for
+    `config.admissions` indexed C's token list (`code[i - 1]`) instead of SOURCE-R2's (`s_code[i - 1]`). It gave the
+    right answer only because the model region is a lexically isolated byte prefix of C, so the indices coincide.
+    Repair (v2): index SOURCE-R2's own tokens. Output unchanged (same TSV). Diff: tools/revisions/matrix.v1-to-v2.diff.
+12. Matrix citation resolution reviewed by hand for every non-F-PT/F-B row and for the F-PT/F-B rows: each cited line
+    range resolves to the item the proof names (e.g. ADM F4 -> step_adm, fn load, Health::view; GC I13 -> actors,
+    explore; EXT E-R -> Core::table_full/known/classify, Publish::lookup/explain/settle).
+13. render_matrix.py: two cosmetic revisions while reading its output, before any freeze: the proof-document path
+    column printed the origin label in front of the path (now: the path under the evidence root), and '|' in a
+    statement was rendered as '/' (now escaped as '\|'). No check depends on either.
+14. check_docs.py v1: its own negative controls (dev/negative/check_docs-negative-controls.txt) detected 4 of 5
+    injected defects; "drop-verdict" was NOT DETECTED: v1 required the string **NON_INTERFERING** to appear, which one
+    remaining verdict satisfied. Repair (v2): require each addition's verdict in its exact row
+    ("| **Verdict** | **<C1/C25>** | **<C4>** |") and in INDEX.md ("C1/C25: **…**; C4: **…**"). Also removed a
+    no-op conditional. Diff: tools/revisions/check_docs.v1-to-v2.diff. v2 controls: see
+    check_docs-negative-controls.v2.txt.
+15. check_docs.py v2: CRASHED (KeyError 'C1/C25'): the new local `v` was reassigned by later loops. Its negative
+    controls (check_docs-negative-controls.v2-INVALID-crash.txt) are INVALID: every case exited 1 because of the
+    crash, not because the defect was found. Repair (v3): rename to `verdicts`. Diff:
+    tools/revisions/check_docs.v2-to-v3.diff. v3 baseline PASS; v3 negative controls 8/8 DETECTED, each counted only
+    when the checker exits 1 and names the injected defect, with no traceback.
+16. witness_check.py v2 and config_identity.py v3: refactors only, so negative_controls.py can run the same checks on
+    synthetic input (check_addition(...) and analyze(...)). Each refactored tool's output on the real repository is
+    byte-identical to its previous version's (compared). Diffs: tools/revisions/witness_check.v1-to-v2.diff,
+    tools/revisions/config_identity.v2-to-v3.diff.
+17. negative_controls.py v1 (dev/negative/negative-controls.v1.txt): 25 of 26 injected defects DETECTED; the case
+    "inner attribute" (a `#![allow(unused)]` appended at the end of the file) CRASHED rust_items.py (IndexError:
+    an attribute with no item after it). A crash counts as NOT DETECTED. Repair: rust_items.py v2 records a stray
+    inner attribute as its own pseudo-item. Diff: tools/revisions/rust_items.v1-to-v2.diff. Effect on real input:
+    model_tests.rs item lists unchanged at all seven versions; protocol.rs's own line-15 inner attribute
+    (`#![cfg_attr(not(test), deny(clippy::...))]`), formerly folded into the following `use` item, is now a
+    separate pseudo-item, so the source-closure receipt's protocol_items goes 204 -> 205. Every receipt was
+    regenerated: all byte-identical except that one field. SOURCE-CLOSURE.md and INDEX.md now state the
+    protocol.rs count with the inner attribute. negative_controls v2: 26 of 26 DETECTED, both unmodified controls
+    PASS (dev/negative/negative-controls.v2.txt).
+18. Gate rehearsal 1 (development, on a scratch copy of the packet: freeze.sh, then final-gate.sh with the real
+    worktree): 35 OK, 1 FAIL. The failing step was 19-confinement's packet-content check: running the tools from the
+    packet's tools/ directory had written binary __pycache__/*.pyc files into the (scratch) packet. A real defect of
+    the gate, which the check caught. Repair (final-gate.sh v2): export PYTHONDONTWRITEBYTECODE=1. Diff:
+    tools/revisions/final-gate.v1-to-v2.diff. Every other step of rehearsal 1 passed, including the byte-for-byte
+    regeneration of both matrices and the document-claims check.
+19. render_matrix.py's two cosmetic revisions (item 13) were made in place without keeping the earlier text, so no
+    diff exists for them; the item-13 description is the record.
+20. Gate rehearsal 2 (fresh scratch copy, gate v2): RESULT PASS, 36 OK, 0 FAIL, packet 997,166 bytes, no cache file.
+    Reading its receipts found a gate defect the verdict did not show: 22-remote-before.txt held only the hook
+    step's last lines. Cause: that step piped through `tee /dev/stderr`; tee re-opens /dev/stderr (here the
+    receipt file) with truncation, so it erased the step's earlier evidence (destination absence, the published
+    refs, the branch rules). The steps themselves had passed (COMMANDS.log), but the raw receipt was lost. Repair
+    (final-gate.sh v3): list the non-sample hooks into a variable; no tee. Diff: tools/revisions/final-gate.v2-to-v3.diff.
+21. Gate rehearsal 3 (fresh scratch copy, gate v3): RESULT PASS, 36 OK, 0 FAIL; every receipt complete
+    (22-remote-before.txt now keeps the destination check, the published refs and the branch rules); no cache file.
+22. Pre-freeze accuracy review of the authored documents against the receipts. Two corrections:
+    (a) WITNESS-NONINTERFERENCE.md said "45 identifiers scanned"; witness_check.py scans 67. Corrected to 67, and
+        check_docs.py v4 now requires the scanned count from the receipt (diff tools/revisions/check_docs.v3-to-v4.diff;
+        negative check: the old "45" is reported MISSING).
+    (b) SOURCE-CLOSURE.md said every tree "was read back and matches"; source_closure.py checks the trees of
+        SOURCE-R2, ADM, GC, EXT, W1, W4, C and D against known values and reads B's and R4's. The sentence now says
+        exactly that.
+    Also confirmed mechanically: all 56 moved GC items moved by exactly +187 bytes, as SOURCE-CLOSURE.md states.
+23. Next: copy this log into the packet, freeze (freeze.sh), and run final-gate.sh once on the real packet.
+24. Gate rehearsal 4, on a scratch copy of exactly the content then in the packet (the files differed from what is
+    frozen next only by this entry): RESULT PASS, 36 OK, 0 FAIL. Rehearsal receipts stay in the executor's
+    scratch directory and are not evidence; the final gate below is the one run that counts.
+25. FREEZE, then the final gate, once. No post-freeze repair or retry.

@@ -1,0 +1,7989 @@
+{
+ "B_closure": [
+  {
+   "decl": [
+    1503,
+    1531
+   ],
+   "item": "const TICKET_LIMIT"
+  },
+  {
+   "decl": [
+    1532,
+    1561
+   ],
+   "item": "const REFUSAL_LIMIT"
+  },
+  {
+   "decl": [
+    1665,
+    2878
+   ],
+   "item": "struct Config"
+  },
+  {
+   "decl": [
+    2880,
+    2913
+   ],
+   "item": "const DEFAULT_CAP"
+  },
+  {
+   "decl": [
+    2914,
+    2970
+   ],
+   "item": "const DEFAULT_TIME"
+  },
+  {
+   "decl": [
+    2971,
+    3004
+   ],
+   "item": "const FULL_CAP"
+  },
+  {
+   "decl": [
+    3005,
+    3062
+   ],
+   "item": "const FULL_TIME"
+  },
+  {
+   "decl": [
+    3064,
+    3493
+   ],
+   "item": "const BASE"
+  },
+  {
+   "decl": [
+    3495,
+    3635
+   ],
+   "item": "fn default_run"
+  },
+  {
+   "decl": [
+    3707,
+    3812
+   ],
+   "item": "const X1"
+  },
+  {
+   "decl": [
+    3888,
+    4022
+   ],
+   "item": "const X2"
+  },
+  {
+   "decl": [
+    4077,
+    4207
+   ],
+   "item": "const X3"
+  },
+  {
+   "decl": [
+    4284,
+    4466
+   ],
+   "item": "const X4"
+  },
+  {
+   "decl": [
+    4510,
+    4613
+   ],
+   "item": "const X5"
+  },
+  {
+   "decl": [
+    4615,
+    4722
+   ],
+   "item": "const F1"
+  },
+  {
+   "decl": [
+    4723,
+    4859
+   ],
+   "item": "const F2"
+  },
+  {
+   "decl": [
+    4860,
+    5010
+   ],
+   "item": "const F3"
+  },
+  {
+   "decl": [
+    5011,
+    5094
+   ],
+   "item": "const F4"
+  },
+  {
+   "decl": [
+    5095,
+    5249
+   ],
+   "item": "const F5"
+  },
+  {
+   "decl": [
+    5250,
+    5327
+   ],
+   "item": "const F6"
+  },
+  {
+   "decl": [
+    5328,
+    5482
+   ],
+   "item": "const F7"
+  },
+  {
+   "decl": [
+    5483,
+    5653
+   ],
+   "item": "const F8"
+  },
+  {
+   "decl": [
+    5654,
+    5741
+   ],
+   "item": "const FPT"
+  },
+  {
+   "decl": [
+    5742,
+    5815
+   ],
+   "item": "const FB"
+  },
+  {
+   "decl": [
+    5816,
+    5927
+   ],
+   "item": "const FB2"
+  },
+  {
+   "decl": [
+    5928,
+    6076
+   ],
+   "item": "const FG"
+  },
+  {
+   "decl": [
+    6077,
+    6159
+   ],
+   "item": "const FW"
+  },
+  {
+   "decl": [
+    6160,
+    6262
+   ],
+   "item": "const FD"
+  },
+  {
+   "decl": [
+    6263,
+    6335
+   ],
+   "item": "const FR"
+  },
+  {
+   "decl": [
+    6502,
+    6630
+   ],
+   "item": "fn bytes"
+  },
+  {
+   "decl": [
+    6632,
+    6749
+   ],
+   "item": "fn fact_key"
+  },
+  {
+   "decl": [
+    6751,
+    6870
+   ],
+   "item": "fn gating_key"
+  },
+  {
+   "decl": [
+    6872,
+    6931
+   ],
+   "item": "fn commitment"
+  },
+  {
+   "decl": [
+    6933,
+    7123
+   ],
+   "item": "fn fact_member"
+  },
+  {
+   "decl": [
+    7125,
+    7229
+   ],
+   "item": "fn gating_member"
+  },
+  {
+   "decl": [
+    7307,
+    7483
+   ],
+   "item": "fn original_of"
+  },
+  {
+   "decl": [
+    7485,
+    7576
+   ],
+   "item": "fn gating_of"
+  },
+  {
+   "decl": [
+    7578,
+    7728
+   ],
+   "item": "fn exit_code"
+  },
+  {
+   "decl": [
+    7730,
+    7880
+   ],
+   "item": "fn exit_from"
+  },
+  {
+   "decl": [
+    7953,
+    8496
+   ],
+   "item": "enum SimRow"
+  },
+  {
+   "decl": [
+    8498,
+    9938
+   ],
+   "item": "impl SimRow"
+  },
+  {
+   "decl": [
+    9940,
+    9995
+   ],
+   "item": "fn seq_at"
+  },
+  {
+   "decl": [
+    9997,
+    10123
+   ],
+   "item": "fn find_seq"
+  },
+  {
+   "decl": [
+    10125,
+    10384
+   ],
+   "item": "fn row_by_id"
+  },
+  {
+   "decl": [
+    10438,
+    10674
+   ],
+   "item": "fn durable_frontier"
+  },
+  {
+   "decl": [
+    10801,
+    11214
+   ],
+   "item": "fn explanations"
+  },
+  {
+   "decl": [
+    11216,
+    11620
+   ],
+   "item": "fn survey"
+  },
+  {
+   "decl": [
+    11622,
+    12632
+   ],
+   "item": "fn member_facts"
+  },
+  {
+   "decl": [
+    12634,
+    12935
+   ],
+   "item": "fn row_for_member"
+  },
+  {
+   "decl": [
+    12937,
+    13418
+   ],
+   "item": "fn row_for_occupant"
+  },
+  {
+   "decl": [
+    13660,
+    13805
+   ],
+   "item": "struct Oracle"
+  },
+  {
+   "decl": [
+    13807,
+    15439
+   ],
+   "item": "impl Oracle"
+  },
+  {
+   "decl": [
+    15543,
+    15766
+   ],
+   "item": "enum Verb"
+  },
+  {
+   "decl": [
+    15768,
+    15903
+   ],
+   "item": "enum Answer"
+  },
+  {
+   "decl": [
+    15943,
+    15958
+   ],
+   "item": "struct Unwound"
+  },
+  {
+   "decl": [
+    16065,
+    16561
+   ],
+   "item": "struct Io"
+  },
+  {
+   "decl": [
+    16563,
+    20940
+   ],
+   "item": "impl <'a>Io<'a>"
+  },
+  {
+   "decl": [
+    20942,
+    21447
+   ],
+   "item": "impl Txn for Io<'_>"
+  },
+  {
+   "decl": [
+    21449,
+    22244
+   ],
+   "item": "impl Reads for Io<'_>"
+  },
+  {
+   "decl": [
+    22246,
+    23168
+   ],
+   "item": "impl AckTxn for Io<'_>"
+  },
+  {
+   "decl": [
+    23170,
+    23760
+   ],
+   "item": "impl CellTxn for Io<'_>"
+  },
+  {
+   "decl": [
+    23762,
+    23892
+   ],
+   "item": "impl BarrierRun for Io<'_>"
+  },
+  {
+   "decl": [
+    24005,
+    24250
+   ],
+   "item": "fn run_op"
+  },
+  {
+   "decl": [
+    24354,
+    24495
+   ],
+   "item": "enum Class"
+  },
+  {
+   "decl": [
+    24497,
+    24606
+   ],
+   "item": "fn is_debt"
+  },
+  {
+   "decl": [
+    24686,
+    24943
+   ],
+   "item": "struct Table"
+  },
+  {
+   "decl": [
+    25004,
+    25113
+   ],
+   "item": "enum Held"
+  },
+  {
+   "decl": [
+    25115,
+    25280
+   ],
+   "item": "enum FwPos"
+  },
+  {
+   "decl": [
+    25334,
+    25430
+   ],
+   "item": "struct Fw"
+  },
+  {
+   "decl": [
+    25432,
+    25528
+   ],
+   "item": "enum Claim"
+  },
+  {
+   "decl": [
+    25530,
+    25648
+   ],
+   "item": "enum SeHeld"
+  },
+  {
+   "decl": [
+    25650,
+    25832
+   ],
+   "item": "enum SePos"
+  },
+  {
+   "decl": [
+    25854,
+    25928
+   ],
+   "item": "struct Se"
+  },
+  {
+   "decl": [
+    25930,
+    26095
+   ],
+   "item": "enum Action"
+  },
+  {
+   "decl": [
+    26097,
+    26331
+   ],
+   "item": "enum WkPos"
+  },
+  {
+   "decl": [
+    26405,
+    26505
+   ],
+   "item": "struct Wk"
+  },
+  {
+   "decl": [
+    26507,
+    26587
+   ],
+   "item": "enum GcPos"
+  },
+  {
+   "decl": [
+    26589,
+    26766
+   ],
+   "item": "enum AckPos"
+  },
+  {
+   "decl": [
+    26768,
+    26866
+   ],
+   "item": "struct Ack"
+  },
+  {
+   "decl": [
+    26907,
+    27398
+   ],
+   "item": "struct Ghost"
+  },
+  {
+   "decl": [
+    27400,
+    27772
+   ],
+   "item": "struct World"
+  },
+  {
+   "decl": [
+    27774,
+    28204
+   ],
+   "item": "impl Drop for World"
+  },
+  {
+   "decl": [
+    28206,
+    28240
+   ],
+   "item": "fn bit"
+  },
+  {
+   "decl": [
+    28242,
+    28728
+   ],
+   "item": "fn initial_rows"
+  },
+  {
+   "decl": [
+    28730,
+    30248
+   ],
+   "item": "fn initial"
+  },
+  {
+   "decl": [
+    31408,
+    31428
+   ],
+   "item": "struct Enc"
+  },
+  {
+   "decl": [
+    31430,
+    38901
+   ],
+   "item": "impl Enc"
+  },
+  {
+   "decl": [
+    38903,
+    39041
+   ],
+   "item": "fn role_code"
+  },
+  {
+   "decl": [
+    39043,
+    39166
+   ],
+   "item": "fn cell_code"
+  },
+  {
+   "decl": [
+    39168,
+    39410
+   ],
+   "item": "fn entry_code"
+  },
+  {
+   "decl": [
+    39542,
+    39638
+   ],
+   "item": "fn word_of"
+  },
+  {
+   "decl": [
+    40122,
+    41199
+   ],
+   "item": "fn encode_core"
+  },
+  {
+   "decl": [
+    41201,
+    46520
+   ],
+   "item": "fn encode"
+  },
+  {
+   "decl": [
+    46522,
+    46576
+   ],
+   "item": "struct Dec"
+  },
+  {
+   "decl": [
+    46578,
+    52589
+   ],
+   "item": "impl Dec<'_>"
+  },
+  {
+   "decl": [
+    52591,
+    52673
+   ],
+   "item": "const PHASES"
+  },
+  {
+   "decl": [
+    52674,
+    52758
+   ],
+   "item": "const SESSIONS"
+  },
+  {
+   "decl": [
+    52759,
+    52992
+   ],
+   "item": "const LATCHES"
+  },
+  {
+   "decl": [
+    52993,
+    53149
+   ],
+   "item": "const CLASSES"
+  },
+  {
+   "decl": [
+    53150,
+    53224
+   ],
+   "item": "const CLAIMS"
+  },
+  {
+   "decl": [
+    53367,
+    58572
+   ],
+   "item": "fn decode"
+  },
+  {
+   "decl": [
+    58740,
+    59334
+   ],
+   "item": "struct Obs"
+  },
+  {
+   "decl": [
+    59336,
+    59845
+   ],
+   "item": "impl Obs"
+  },
+  {
+   "decl": [
+    59847,
+    60546
+   ],
+   "item": "fn reason_label"
+  },
+  {
+   "decl": [
+    60548,
+    60816
+   ],
+   "item": "fn cause_label"
+  },
+  {
+   "decl": [
+    60818,
+    60993
+   ],
+   "item": "fn log_label"
+  },
+  {
+   "decl": [
+    61058,
+    63656
+   ],
+   "item": "fn verb_order"
+  },
+  {
+   "decl": [
+    63760,
+    63902
+   ],
+   "item": "enum Actor"
+  },
+  {
+   "decl": [
+    63904,
+    64388
+   ],
+   "item": "fn actors"
+  },
+  {
+   "decl": [
+    64461,
+    64742
+   ],
+   "item": "fn set_class"
+  },
+  {
+   "decl": [
+    64817,
+    65326
+   ],
+   "item": "fn record_counted"
+  },
+  {
+   "decl": [
+    65453,
+    65843
+   ],
+   "item": "fn record_dropped"
+  },
+  {
+   "decl": [
+    65949,
+    66330
+   ],
+   "item": "fn note_fact_result"
+  },
+  {
+   "decl": [
+    66332,
+    66440
+   ],
+   "item": "fn fact_names"
+  },
+  {
+   "decl": [
+    66511,
+    69832
+   ],
+   "item": "fn fact_append"
+  },
+  {
+   "decl": [
+    69925,
+    69997
+   ],
+   "item": "fn expires"
+  },
+  {
+   "decl": [
+    70020,
+    75202
+   ],
+   "item": "fn step_fw"
+  },
+  {
+   "decl": [
+    75264,
+    75744
+   ],
+   "item": "fn claimable"
+  },
+  {
+   "decl": [
+    75817,
+    77454
+   ],
+   "item": "fn settlement_read"
+  },
+  {
+   "decl": [
+    77477,
+    81449
+   ],
+   "item": "fn step_se"
+  },
+  {
+   "decl": [
+    81517,
+    82312
+   ],
+   "item": "fn allowed"
+  },
+  {
+   "decl": [
+    82390,
+    82550
+   ],
+   "item": "fn present_token"
+  },
+  {
+   "decl": [
+    82745,
+    82937
+   ],
+   "item": "fn core_key"
+  },
+  {
+   "decl": [
+    82993,
+    87699
+   ],
+   "item": "fn worker_op"
+  },
+  {
+   "decl": [
+    87722,
+    89581
+   ],
+   "item": "fn step_wk"
+  },
+  {
+   "decl": [
+    89642,
+    92947
+   ],
+   "item": "fn step_gc"
+  },
+  {
+   "decl": [
+    93027,
+    93087
+   ],
+   "item": "const MALFORMATIONS"
+  },
+  {
+   "decl": [
+    93089,
+    93702
+   ],
+   "item": "fn malform"
+  },
+  {
+   "decl": [
+    93822,
+    98745
+   ],
+   "item": "fn step_ack"
+  },
+  {
+   "decl": [
+    98820,
+    99421
+   ],
+   "item": "fn step_adm"
+  },
+  {
+   "decl": [
+    99478,
+    101075
+   ],
+   "item": "fn admission_properties"
+  },
+  {
+   "decl": [
+    101141,
+    101368
+   ],
+   "item": "fn step_env"
+  },
+  {
+   "decl": [
+    101484,
+    102118
+   ],
+   "item": "fn step_replay"
+  },
+  {
+   "decl": [
+    102187,
+    102816
+   ],
+   "item": "fn step"
+  },
+  {
+   "decl": [
+    103026,
+    103625
+   ],
+   "item": "fn expected_flags"
+  },
+  {
+   "decl": [
+    103658,
+    107808
+   ],
+   "item": "fn state_properties"
+  },
+  {
+   "decl": [
+    107858,
+    109216
+   ],
+   "item": "fn transition_properties"
+  },
+  {
+   "decl": [
+    109268,
+    110219
+   ],
+   "item": "fn terminal"
+  },
+  {
+   "decl": [
+    110393,
+    110775
+   ],
+   "item": "fn pack"
+  },
+  {
+   "decl": [
+    110777,
+    111051
+   ],
+   "item": "fn unpack"
+  },
+  {
+   "decl": [
+    111198,
+    111277
+   ],
+   "item": "struct Visited"
+  },
+  {
+   "decl": [
+    111279,
+    111307
+   ],
+   "item": "const EMPTY"
+  },
+  {
+   "decl": [
+    111309,
+    111615
+   ],
+   "item": "fn hash"
+  },
+  {
+   "decl": [
+    111617,
+    113444
+   ],
+   "item": "impl Visited"
+  },
+  {
+   "decl": [
+    113446,
+    113541
+   ],
+   "item": "enum Verdict"
+  },
+  {
+   "decl": [
+    113543,
+    113680
+   ],
+   "item": "struct Report"
+  },
+  {
+   "decl": [
+    113682,
+    113881
+   ],
+   "item": "const PROPERTIES"
+  },
+  {
+   "decl": [
+    114001,
+    117630
+   ],
+   "item": "const BRANCHES"
+  },
+  {
+   "decl": [
+    117662,
+    117804
+   ],
+   "item": "struct Successor"
+  },
+  {
+   "decl": [
+    117922,
+    119311
+   ],
+   "item": "fn successors"
+  },
+  {
+   "decl": [
+    119398,
+    120513
+   ],
+   "item": "fn trace"
+  },
+  {
+   "decl": [
+    120566,
+    128558
+   ],
+   "item": "fn explore"
+  }
+ ],
+ "B_closure_status": {
+  "IDENTICAL": 152
+ },
+ "B_named": 63,
+ "C_closure": [
+  "type AdmStep",
+  "type Violations",
+  "enum Mode",
+  "enum Next",
+  "fn step_with",
+  "fn observe_admission",
+  "fn expand",
+  "fn trace_with",
+  "struct Tally",
+  "fn explore_experimental"
+ ],
+ "D_closure": [
+  "const SYM1",
+  "const SYMMETRIC",
+  "fn shape",
+  "fn assert_symmetric",
+  "fn other_caller",
+  "fn mirror_x32",
+  "fn mirror_key",
+  "fn mirror_part",
+  "fn mirror_member",
+  "fn mirror_cause",
+  "fn mirror_occupant",
+  "fn mirror_row",
+  "fn mirror_bits",
+  "fn mirror_world",
+  "fn mirror",
+  "fn canonical",
+  "fn mirror_edge",
+  "struct Image",
+  "fn names",
+  "fn by_actor",
+  "fn hold",
+  "fn replay",
+  "fn unfold",
+  "fn witness",
+  "fn kahn",
+  "struct Mirrors",
+  "type Kept",
+  "fn explore_symmetric",
+  "fn explore_symmetric_kept"
+ ],
+ "byte_prefix_of_C": {
+  "ADM": true,
+  "C": true,
+  "EXT": true,
+  "GC": false,
+  "SOURCE-R2": true,
+  "W1": true,
+  "W4": true
+ },
+ "expectation_failures": [],
+ "files": {
+  "ADM": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "fad0ffb0ed243bbd445191bc7963b075bde13b5a",
+    "bytes": 194288,
+    "sha256": "6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "B": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "bytes": 310612,
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "C": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "bytes": 310612,
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "D": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "bytes": 310612,
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "EXT": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "4895993e1a9ca68762d873e026d42a6e08e49cc9",
+    "bytes": 275579,
+    "sha256": "1ca836c3d9171f52cb6eaa37170996e995d36b92dbdb8e6d2d5d2fe043ad6f1c"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "GC": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "a80dd05cbc6a90ddd97bfa4dba754ec5569eec21",
+    "bytes": 257218,
+    "sha256": "be562d08c6efe88c54cbd90e83734623ad81c3a1bcafd74d8577ed80236197f7"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "R4": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "bytes": 310612,
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "SOURCE-R2": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e",
+    "bytes": 151991,
+    "sha256": "ede5ef7b093bccef93f8cfc293b32452e250d936019f68c043e98d774afb1b64"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "W1": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "5ad26ddc727d8be30f4fb8d7478bc69e1c974933",
+    "bytes": 286411,
+    "sha256": "be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  },
+  "W4": {
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "bytes": 55,
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "bytes": 289456,
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "bytes": 2535,
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "bytes": 837,
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "bytes": 364,
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "bytes": 64546,
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "bytes": 310612,
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "bytes": 104202,
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "bytes": 4582,
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "bytes": 94,
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   }
+  }
+ },
+ "item_mapping": {
+  "ADM": {
+   "items": 345,
+   "not_identical": [],
+   "status_counts": {
+    "IDENTICAL": 345
+   }
+  },
+  "EXT": {
+   "items": 431,
+   "not_identical": [],
+   "status_counts": {
+    "IDENTICAL": 431
+   }
+  },
+  "GC": {
+   "items": 403,
+   "not_identical": [
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      196409,
+      196455
+     ],
+     "baseline_decl_sha256": "e59fa0185502066aa73f6db3f45867e2ac32900358a5b5e8a5cdd3643480db0c",
+     "baseline_lines": [
+      6077,
+      6077
+     ],
+     "c_decl": [
+      196564,
+      196642
+     ],
+     "c_decl_sha256": "dbf8835ef8cd0114e4e891ecc0a30e6f8f85df696c79502a40d245f3d36bb29d",
+     "c_lines": [
+      6079,
+      6079
+     ],
+     "c_span_sha256": "2140b5fa35e126e776201ef7edc73bd21da0558636525a75c05f5ae5d1a8e885",
+     "item": "const SYMMETRIC",
+     "ordinal": 1,
+     "section": "map",
+     "status": "CHANGED"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      196495,
+      196672
+     ],
+     "baseline_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+     "baseline_lines": [
+      6080,
+      6089
+     ],
+     "c_decl": [
+      196682,
+      196859
+     ],
+     "c_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+     "c_lines": [
+      6082,
+      6091
+     ],
+     "c_span_sha256": "9adca7e0af4093535b1b72d9ea656e3441140c230c70780bcc02d9e319f83578",
+     "item": "fn shape",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      196814,
+      197958
+     ],
+     "baseline_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+     "baseline_lines": [
+      6093,
+      6126
+     ],
+     "c_decl": [
+      197001,
+      198145
+     ],
+     "c_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+     "c_lines": [
+      6095,
+      6128
+     ],
+     "c_span_sha256": "e4c9fc807b7b42d92bca3b82f9a6c9adedde9ed084f9efd4314c8dcb459f63d5",
+     "item": "fn assert_symmetric",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      197989,
+      198095
+     ],
+     "baseline_decl_sha256": "19f242eb1aaf6485e4ff8ae37df1546e32c5dc1c3e0945164006073a3349cded",
+     "baseline_lines": [
+      6129,
+      6132
+     ],
+     "c_decl": [
+      198176,
+      198282
+     ],
+     "c_decl_sha256": "19f242eb1aaf6485e4ff8ae37df1546e32c5dc1c3e0945164006073a3349cded",
+     "c_lines": [
+      6131,
+      6134
+     ],
+     "c_span_sha256": "04126a7b0feee85aa47e0672d4956216a1a7b33485ac22b309439ac1a9851443",
+     "item": "fn other_caller",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      198464,
+      199032
+     ],
+     "baseline_decl_sha256": "02095a766d1e834b28a05a30d1c768ef1de3c4764b37c73e86b8007529fe9885",
+     "baseline_lines": [
+      6139,
+      6155
+     ],
+     "c_decl": [
+      198651,
+      199219
+     ],
+     "c_decl_sha256": "02095a766d1e834b28a05a30d1c768ef1de3c4764b37c73e86b8007529fe9885",
+     "c_lines": [
+      6141,
+      6157
+     ],
+     "c_span_sha256": "5f5d7dc8427807784911d80ec522da54b1cc5f085ae1e12df2dfae2a4cc57295",
+     "item": "fn mirror_x32",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      199034,
+      199177
+     ],
+     "baseline_decl_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+     "baseline_lines": [
+      6157,
+      6162
+     ],
+     "c_decl": [
+      199221,
+      199364
+     ],
+     "c_decl_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+     "c_lines": [
+      6159,
+      6164
+     ],
+     "c_span_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+     "item": "fn mirror_key",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      199179,
+      199310
+     ],
+     "baseline_decl_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+     "baseline_lines": [
+      6164,
+      6169
+     ],
+     "c_decl": [
+      199366,
+      199497
+     ],
+     "c_decl_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+     "c_lines": [
+      6166,
+      6171
+     ],
+     "c_span_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+     "item": "fn mirror_part",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      199312,
+      199469
+     ],
+     "baseline_decl_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+     "baseline_lines": [
+      6171,
+      6176
+     ],
+     "c_decl": [
+      199499,
+      199656
+     ],
+     "c_decl_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+     "c_lines": [
+      6173,
+      6178
+     ],
+     "c_span_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+     "item": "fn mirror_member",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      199549,
+      200535
+     ],
+     "baseline_decl_sha256": "f06050ccab27742e3802924dc7e7b7842941260be96e0d580c259b43d76d99fb",
+     "baseline_lines": [
+      6179,
+      6211
+     ],
+     "c_decl": [
+      199736,
+      200722
+     ],
+     "c_decl_sha256": "f06050ccab27742e3802924dc7e7b7842941260be96e0d580c259b43d76d99fb",
+     "c_lines": [
+      6181,
+      6213
+     ],
+     "c_span_sha256": "10c9629adf0dbaea7535c2e11934b7632355cdfd5a431bc9781ac1130cfacf54",
+     "item": "fn mirror_cause",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      200537,
+      201299
+     ],
+     "baseline_decl_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+     "baseline_lines": [
+      6213,
+      6232
+     ],
+     "c_decl": [
+      200724,
+      201486
+     ],
+     "c_decl_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+     "c_lines": [
+      6215,
+      6234
+     ],
+     "c_span_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+     "item": "fn mirror_occupant",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      201371,
+      202065
+     ],
+     "baseline_decl_sha256": "2289d7d97f1f8820775da50873ec18df22ec326c862dc8bb8ad624bd1cb81c99",
+     "baseline_lines": [
+      6235,
+      6250
+     ],
+     "c_decl": [
+      201558,
+      202252
+     ],
+     "c_decl_sha256": "2289d7d97f1f8820775da50873ec18df22ec326c862dc8bb8ad624bd1cb81c99",
+     "c_lines": [
+      6237,
+      6252
+     ],
+     "c_span_sha256": "95309948ce5cee2107e135a7bd06ab9f4dd89997a22c5d885fe4b9aa49a90a62",
+     "item": "fn mirror_row",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      202114,
+      202288
+     ],
+     "baseline_decl_sha256": "9f58cae53d0e6b1116e8b7c96db9fbdda95947b96b195d997165c1599cc5a125",
+     "baseline_lines": [
+      6253,
+      6259
+     ],
+     "c_decl": [
+      202301,
+      202475
+     ],
+     "c_decl_sha256": "9f58cae53d0e6b1116e8b7c96db9fbdda95947b96b195d997165c1599cc5a125",
+     "c_lines": [
+      6255,
+      6261
+     ],
+     "c_span_sha256": "1ba0e0a5311786f098f73a8e50a213cd272c7b8c82ebd78fd85909545e81d48a",
+     "item": "fn mirror_bits",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      202665,
+      204605
+     ],
+     "baseline_decl_sha256": "1aed6bbe58192d61014dc3bd2491337c4ea7cc0c9892a97e85274a57c41c9d14",
+     "baseline_lines": [
+      6266,
+      6344
+     ],
+     "c_decl": [
+      202852,
+      204792
+     ],
+     "c_decl_sha256": "1aed6bbe58192d61014dc3bd2491337c4ea7cc0c9892a97e85274a57c41c9d14",
+     "c_lines": [
+      6268,
+      6346
+     ],
+     "c_span_sha256": "15691fd138ac0e8b96270131cbf8cc9bf8f76777682eb6278a08d809502a568a",
+     "item": "fn mirror_world",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      204662,
+      204801
+     ],
+     "baseline_decl_sha256": "5946d0b9d9bc6714a5972086d6feecae3c1c05eddc354efac6ec9aa4f5b4aa2b",
+     "baseline_lines": [
+      6347,
+      6351
+     ],
+     "c_decl": [
+      204849,
+      204988
+     ],
+     "c_decl_sha256": "5946d0b9d9bc6714a5972086d6feecae3c1c05eddc354efac6ec9aa4f5b4aa2b",
+     "c_lines": [
+      6349,
+      6353
+     ],
+     "c_span_sha256": "e9a60c29d7158a8b9eed88cdeea089bac5fe55cb6ff8839f16a1649757c947e6",
+     "item": "fn mirror",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      204866,
+      204998
+     ],
+     "baseline_decl_sha256": "bfd85786537f82397144bdb8cd6e89aa69d7fbaca10f27e6263a2876f250500b",
+     "baseline_lines": [
+      6354,
+      6360
+     ],
+     "c_decl": [
+      205053,
+      205185
+     ],
+     "c_decl_sha256": "bfd85786537f82397144bdb8cd6e89aa69d7fbaca10f27e6263a2876f250500b",
+     "c_lines": [
+      6356,
+      6362
+     ],
+     "c_span_sha256": "e7d92e226d15d112828090d188505a00b04292c0fd2a2a6bfad091f3832d9005",
+     "item": "fn canonical",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      205070,
+      205421
+     ],
+     "baseline_decl_sha256": "b7533b618a1872b31985ca40fb67e814fd26eebf856a5b613e36260bcf7c720a",
+     "baseline_lines": [
+      6363,
+      6373
+     ],
+     "c_decl": [
+      205257,
+      205608
+     ],
+     "c_decl_sha256": "b7533b618a1872b31985ca40fb67e814fd26eebf856a5b613e36260bcf7c720a",
+     "c_lines": [
+      6365,
+      6375
+     ],
+     "c_span_sha256": "aa39d3a86c5af4d181c3de14abae39b4cec10cb8bfece4fe282cc7a0c6ff5602",
+     "item": "fn mirror_edge",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      205613,
+      205789
+     ],
+     "baseline_decl_sha256": "54d332c2859bfb046cb4b79844682a8b8563842e4f40ea4b337cc5e2afc8b9cb",
+     "baseline_lines": [
+      6378,
+      6386
+     ],
+     "c_decl": [
+      205800,
+      205976
+     ],
+     "c_decl_sha256": "54d332c2859bfb046cb4b79844682a8b8563842e4f40ea4b337cc5e2afc8b9cb",
+     "c_lines": [
+      6380,
+      6388
+     ],
+     "c_span_sha256": "99003d47eadd042528f835d982af15c5126a365abb53b39046be6fda3bcee70f",
+     "item": "struct Image",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      205791,
+      205985
+     ],
+     "baseline_decl_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+     "baseline_lines": [
+      6388,
+      6392
+     ],
+     "c_decl": [
+      205978,
+      206172
+     ],
+     "c_decl_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+     "c_lines": [
+      6390,
+      6394
+     ],
+     "c_span_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+     "item": "fn names",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      206049,
+      206302
+     ],
+     "baseline_decl_sha256": "756ed5612d309c9c50301f480530e87b905daea87def6f839f7274df76232ecd",
+     "baseline_lines": [
+      6395,
+      6401
+     ],
+     "c_decl": [
+      206236,
+      206489
+     ],
+     "c_decl_sha256": "756ed5612d309c9c50301f480530e87b905daea87def6f839f7274df76232ecd",
+     "c_lines": [
+      6397,
+      6403
+     ],
+     "c_span_sha256": "e758450d3fb4e0e3dd7db09a4b61de600e969d6a33d9e0bc833db15d5921a961",
+     "item": "fn by_actor",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      206661,
+      208068
+     ],
+     "baseline_decl_sha256": "4889e32c331fc27ce6c49843b7d0179af4423d6452681fe0dd2a20f360619ce6",
+     "baseline_lines": [
+      6408,
+      6450
+     ],
+     "c_decl": [
+      206848,
+      208255
+     ],
+     "c_decl_sha256": "4889e32c331fc27ce6c49843b7d0179af4423d6452681fe0dd2a20f360619ce6",
+     "c_lines": [
+      6410,
+      6452
+     ],
+     "c_span_sha256": "54b1585318355c3fc2a00a9a5714a4137c7f071e813b8205315fd26ba571d286",
+     "item": "fn hold",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      208207,
+      208810
+     ],
+     "baseline_decl_sha256": "027a4e3c6e01c5c09b4030d2c2cb00fcc8b53a52e8f13ae0d96b35f28b0e8e56",
+     "baseline_lines": [
+      6454,
+      6469
+     ],
+     "c_decl": [
+      208394,
+      208997
+     ],
+     "c_decl_sha256": "027a4e3c6e01c5c09b4030d2c2cb00fcc8b53a52e8f13ae0d96b35f28b0e8e56",
+     "c_lines": [
+      6456,
+      6471
+     ],
+     "c_span_sha256": "b7ac73d674a22334016a849a079e3825c8e6fbccaed35c4f7174b87cec4392a4",
+     "item": "fn replay",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      209143,
+      210008
+     ],
+     "baseline_decl_sha256": "92d64967cb12a23dce7685f191c6da2d3f1766bf2f4268ed9caf2720a673f07c",
+     "baseline_lines": [
+      6476,
+      6502
+     ],
+     "c_decl": [
+      209330,
+      210195
+     ],
+     "c_decl_sha256": "92d64967cb12a23dce7685f191c6da2d3f1766bf2f4268ed9caf2720a673f07c",
+     "c_lines": [
+      6478,
+      6504
+     ],
+     "c_span_sha256": "756799168dffed4c61c4121d43dd0e569e9f4cf966cc9eaa1e8046732b5133a0",
+     "item": "fn unfold",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      210068,
+      210336
+     ],
+     "baseline_decl_sha256": "8fe20c0a051588c217e96e4658f3c60642afa4a51053f85c80d97602b64b6a24",
+     "baseline_lines": [
+      6505,
+      6512
+     ],
+     "c_decl": [
+      210255,
+      210523
+     ],
+     "c_decl_sha256": "8fe20c0a051588c217e96e4658f3c60642afa4a51053f85c80d97602b64b6a24",
+     "c_lines": [
+      6507,
+      6514
+     ],
+     "c_span_sha256": "3d5c3b83cf6889fa1e82c018754b5e2e2d7bd8b1abc91ead15674f90ac2ad1aa",
+     "item": "fn witness",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      210608,
+      211258
+     ],
+     "baseline_decl_sha256": "3732504593ce889ac3135735d1200af9e107d65b06e1f606a495c51d2372a1a0",
+     "baseline_lines": [
+      6518,
+      6538
+     ],
+     "c_decl": [
+      210795,
+      211445
+     ],
+     "c_decl_sha256": "3732504593ce889ac3135735d1200af9e107d65b06e1f606a495c51d2372a1a0",
+     "c_lines": [
+      6520,
+      6540
+     ],
+     "c_span_sha256": "9e4be666cc804fe9fbce19cda22edcd4fcb8e1f4229656c27bff26aed6e2b53f",
+     "item": "fn kahn",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      211564,
+      211833
+     ],
+     "baseline_decl_sha256": "8aefb443f4886e8c17eb9b5067efc6ae5841d293fc148eb36aab43e8c3a101ed",
+     "baseline_lines": [
+      6544,
+      6554
+     ],
+     "c_decl": [
+      211751,
+      212020
+     ],
+     "c_decl_sha256": "8aefb443f4886e8c17eb9b5067efc6ae5841d293fc148eb36aab43e8c3a101ed",
+     "c_lines": [
+      6546,
+      6556
+     ],
+     "c_span_sha256": "6b9f6c5512d8cd03b419779643ce6016a1900244343be8a2a4a36a4cb44488e6",
+     "item": "struct Mirrors",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      211910,
+      211954
+     ],
+     "baseline_decl_sha256": "5e10373ceabc2c90fdf6ce0172150c2f11a13cef96c6ba696b6e49eae4f6e47e",
+     "baseline_lines": [
+      6557,
+      6557
+     ],
+     "c_decl": [
+      212097,
+      212141
+     ],
+     "c_decl_sha256": "5e10373ceabc2c90fdf6ce0172150c2f11a13cef96c6ba696b6e49eae4f6e47e",
+     "c_lines": [
+      6559,
+      6559
+     ],
+     "c_span_sha256": "9994f380beb8842e224cee3d567f8f7677c0c58839fad2f37a4417fd8d7ab718",
+     "item": "type Kept",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      211956,
+      212168
+     ],
+     "baseline_decl_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+     "baseline_lines": [
+      6559,
+      6562
+     ],
+     "c_decl": [
+      212143,
+      212355
+     ],
+     "c_decl_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+     "c_lines": [
+      6561,
+      6564
+     ],
+     "c_span_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+     "item": "fn explore_symmetric",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      212553,
+      225240
+     ],
+     "baseline_decl_sha256": "24418b978bc6157687151da84a40d25439c70cd6642961880dfc4bd78e9ecf21",
+     "baseline_lines": [
+      6570,
+      6925
+     ],
+     "c_decl": [
+      212740,
+      225427
+     ],
+     "c_decl_sha256": "24418b978bc6157687151da84a40d25439c70cd6642961880dfc4bd78e9ecf21",
+     "c_lines": [
+      6572,
+      6927
+     ],
+     "c_span_sha256": "8af401da1576af72eea06977aa4b07abaa025d007e65bb78b3f03d46fd356269",
+     "item": "fn explore_symmetric_kept",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      225386,
+      225770
+     ],
+     "baseline_decl_sha256": "b4ab26cc6d0d27850a7df8d1879ed27be882f593b0e70fb1fb49ee5648c31717",
+     "baseline_lines": [
+      6929,
+      6941
+     ],
+     "c_decl": [
+      225573,
+      225957
+     ],
+     "c_decl_sha256": "b4ab26cc6d0d27850a7df8d1879ed27be882f593b0e70fb1fb49ee5648c31717",
+     "c_lines": [
+      6931,
+      6943
+     ],
+     "c_span_sha256": "04b84ffa2045f68c9622a15662763e9af1d4fec70e9ea88c4f58e734e8514a9b",
+     "item": "fn gc_symmetry_f3",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      226073,
+      227200
+     ],
+     "baseline_decl_sha256": "da61d1d529347eafb68aa26ba4e99dd466c21631c005e86cb5e2edf3e78c4274",
+     "baseline_lines": [
+      6947,
+      6975
+     ],
+     "c_decl": [
+      226260,
+      227387
+     ],
+     "c_decl_sha256": "da61d1d529347eafb68aa26ba4e99dd466c21631c005e86cb5e2edf3e78c4274",
+     "c_lines": [
+      6949,
+      6977
+     ],
+     "c_span_sha256": "cfe9e553861900ac29426ceae42a13d7cacc97abffa78ce58821d955e871c6be",
+     "item": "fn gc_symmetry_prefix_f3",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      227494,
+      230284
+     ],
+     "baseline_decl_sha256": "49ccf6c4a9568d269b658e0e1849b990048cd8bdae152c7d048fde12f6f3638c",
+     "baseline_lines": [
+      6982,
+      7070
+     ],
+     "c_decl": [
+      227681,
+      230471
+     ],
+     "c_decl_sha256": "49ccf6c4a9568d269b658e0e1849b990048cd8bdae152c7d048fde12f6f3638c",
+     "c_lines": [
+      6984,
+      7072
+     ],
+     "c_span_sha256": "a6d58f452faaa79535b9351c7c60829906667b9ae0a7e7d3c5d0ce5f83f5f37c",
+     "item": "fn gc_symmetry_renames_consistently",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      230469,
+      230951
+     ],
+     "baseline_decl_sha256": "c628e4c1497718fe053f35de89af879d6d6020c75b96b15e67509c24a3759e20",
+     "baseline_lines": [
+      7075,
+      7086
+     ],
+     "c_decl": [
+      230656,
+      231138
+     ],
+     "c_decl_sha256": "c628e4c1497718fe053f35de89af879d6d6020c75b96b15e67509c24a3759e20",
+     "c_lines": [
+      7077,
+      7088
+     ],
+     "c_span_sha256": "868b549a254102366bfe1a98a153235b1c71df6514276a1ed946b6819bd6a189",
+     "item": "fn gc_symmetry_initial_states",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      231390,
+      237148
+     ],
+     "baseline_decl_sha256": "e71a268611c0654705eec4fe0ea23a21abb0b3fd378fbd9795e8f7e06cdfb683",
+     "baseline_lines": [
+      7094,
+      7240
+     ],
+     "c_decl": [
+      231577,
+      237335
+     ],
+     "c_decl_sha256": "e71a268611c0654705eec4fe0ea23a21abb0b3fd378fbd9795e8f7e06cdfb683",
+     "c_lines": [
+      7096,
+      7242
+     ],
+     "c_span_sha256": "167894ad1f04875654e5a50ac8fe531048195ea1bb630e2941d2b1789eb768c0",
+     "item": "fn pairs_of",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      237564,
+      242415
+     ],
+     "baseline_decl_sha256": "81b12027261aa64caab756e65e13cd3d04e6ee068679a08c4f5356a536659f3c",
+     "baseline_lines": [
+      7248,
+      7361
+     ],
+     "c_decl": [
+      237751,
+      242602
+     ],
+     "c_decl_sha256": "81b12027261aa64caab756e65e13cd3d04e6ee068679a08c4f5356a536659f3c",
+     "c_lines": [
+      7250,
+      7363
+     ],
+     "c_span_sha256": "3b9d6b76dbd10f971d3db06109376131dce5e28c738f771f038f37daf9f43aff",
+     "item": "fn symmetry_differential",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      242417,
+      242501
+     ],
+     "baseline_decl_sha256": "b2192d893885b51280a57dec2a17af4acea1a3fa0837b51388f7861d4069347f",
+     "baseline_lines": [
+      7363,
+      7366
+     ],
+     "c_decl": [
+      242604,
+      242688
+     ],
+     "c_decl_sha256": "b2192d893885b51280a57dec2a17af4acea1a3fa0837b51388f7861d4069347f",
+     "c_lines": [
+      7365,
+      7368
+     ],
+     "c_span_sha256": "b2192d893885b51280a57dec2a17af4acea1a3fa0837b51388f7861d4069347f",
+     "item": "fn gc_symmetry_x2_matches_the_original",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      242536,
+      242582
+     ],
+     "baseline_decl_sha256": "25deae9fd4c02e6ff03451f51d97fbd664221634712d654d6d1a4c7043953b56",
+     "baseline_lines": [
+      7369,
+      7369
+     ],
+     "c_decl": [
+      242723,
+      242769
+     ],
+     "c_decl_sha256": "25deae9fd4c02e6ff03451f51d97fbd664221634712d654d6d1a4c7043953b56",
+     "c_lines": [
+      7371,
+      7371
+     ],
+     "c_span_sha256": "b7fc733a48c5edd464dba3fcc66f6f76f8ec9571d3b5c54c561c8b38b87b4ee3",
+     "item": "type Forcing",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      242959,
+      245583
+     ],
+     "baseline_decl_sha256": "f0e77c0bf0fc9083b9275bfec2c470cf0312c25f43395781997885dd3035ffc8",
+     "baseline_lines": [
+      7376,
+      7441
+     ],
+     "c_decl": [
+      243146,
+      245770
+     ],
+     "c_decl_sha256": "f0e77c0bf0fc9083b9275bfec2c470cf0312c25f43395781997885dd3035ffc8",
+     "c_lines": [
+      7378,
+      7443
+     ],
+     "c_span_sha256": "21cbb24e2914aee03e1c6143d7eac1594ee16126a5e1b53c1f0e72dadf060385",
+     "item": "fn gc_symmetry_properties_follow_the_exchange",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      245585,
+      245673
+     ],
+     "baseline_decl_sha256": "ae047c5d7452f1121140a1278402c582e8893ef99c58fc397ef5d9e7aa29cbab",
+     "baseline_lines": [
+      7443,
+      7446
+     ],
+     "c_decl": [
+      245772,
+      245860
+     ],
+     "c_decl_sha256": "ae047c5d7452f1121140a1278402c582e8893ef99c58fc397ef5d9e7aa29cbab",
+     "c_lines": [
+      7445,
+      7448
+     ],
+     "c_span_sha256": "ae047c5d7452f1121140a1278402c582e8893ef99c58fc397ef5d9e7aa29cbab",
+     "item": "fn gc_symmetry_sym1_matches_the_original",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      246053,
+      246866
+     ],
+     "baseline_decl_sha256": "1c11e004cced6e2d81e5b48ec10f54180ab34a7014f80748688b4c976c5ffadd",
+     "baseline_lines": [
+      7454,
+      7476
+     ],
+     "c_decl": [
+      246240,
+      247053
+     ],
+     "c_decl_sha256": "1c11e004cced6e2d81e5b48ec10f54180ab34a7014f80748688b4c976c5ffadd",
+     "c_lines": [
+      7456,
+      7478
+     ],
+     "c_span_sha256": "e8222b0d041ef6a7645b56f1379356a66af4a48c5874869c25baf25396ffc7fc",
+     "item": "fn explore_finite",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      247005,
+      247604
+     ],
+     "baseline_decl_sha256": "e999ea1b73e6be5434e30ff1e04df36e25826f3bdc24ac32b9b7ba1684d820c2",
+     "baseline_lines": [
+      7480,
+      7501
+     ],
+     "c_decl": [
+      247192,
+      247791
+     ],
+     "c_decl_sha256": "e999ea1b73e6be5434e30ff1e04df36e25826f3bdc24ac32b9b7ba1684d820c2",
+     "c_lines": [
+      7482,
+      7503
+     ],
+     "c_span_sha256": "3ac04c4e6477e676008585bb7c26381629027302d9cd60855d1f90e3c5dffca7",
+     "item": "fn reachable_cycle",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      247673,
+      248004
+     ],
+     "baseline_decl_sha256": "22ba8ea4690db6690ff943b174af955fc507184debe8340162027e25e8e283de",
+     "baseline_lines": [
+      7504,
+      7513
+     ],
+     "c_decl": [
+      247860,
+      248191
+     ],
+     "c_decl_sha256": "22ba8ea4690db6690ff943b174af955fc507184debe8340162027e25e8e283de",
+     "c_lines": [
+      7506,
+      7515
+     ],
+     "c_span_sha256": "97ea72ba0a844659b94f51bf014e2353acd733093feb1d1abf6c636fae939956",
+     "item": "fn closed",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      248457,
+      251146
+     ],
+     "baseline_decl_sha256": "acfe4b271bbc8b61325a53a73e5abc70a6b43e219db11feb2300ab8dbda15209",
+     "baseline_lines": [
+      7522,
+      7586
+     ],
+     "c_decl": [
+      248644,
+      251333
+     ],
+     "c_decl_sha256": "acfe4b271bbc8b61325a53a73e5abc70a6b43e219db11feb2300ab8dbda15209",
+     "c_lines": [
+      7524,
+      7588
+     ],
+     "c_span_sha256": "565da20b18adaec9daf6b06c54864c30e67dfd98798c5653ef172a3dd353ae3c",
+     "item": "fn gc_symmetry_l1_on_finite_graphs",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      251565,
+      253089
+     ],
+     "baseline_decl_sha256": "bf09518e2ad2576a9781ed2bc6ac360a65f2b69b6b1e57cce41068e1a0b9370b",
+     "baseline_lines": [
+      7595,
+      7629
+     ],
+     "c_decl": [
+      251752,
+      253276
+     ],
+     "c_decl_sha256": "bf09518e2ad2576a9781ed2bc6ac360a65f2b69b6b1e57cce41068e1a0b9370b",
+     "c_lines": [
+      7597,
+      7631
+     ],
+     "c_span_sha256": "f26729151d34fb4a7f4a75acb3c68d5c6316f7ad408bfca9f47fd53d76203904",
+     "item": "fn symmetry_negative_case",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      253091,
+      253222
+     ],
+     "baseline_decl_sha256": "02ab50db5c4cb50f782d42c3e3d50e75aa331bb6aa6303da4df34d7801513199",
+     "baseline_lines": [
+      7631,
+      7634
+     ],
+     "c_decl": [
+      253278,
+      253409
+     ],
+     "c_decl_sha256": "02ab50db5c4cb50f782d42c3e3d50e75aa331bb6aa6303da4df34d7801513199",
+     "c_lines": [
+      7633,
+      7636
+     ],
+     "c_span_sha256": "02ab50db5c4cb50f782d42c3e3d50e75aa331bb6aa6303da4df34d7801513199",
+     "item": "fn gc_symmetry_negative_p1_admission_ignores_unapplied",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      253224,
+      253355
+     ],
+     "baseline_decl_sha256": "6d38510f9e69a0f7f7bc8a43d133c4bb25016373aee0ab1938d7da06dcb59279",
+     "baseline_lines": [
+      7636,
+      7639
+     ],
+     "c_decl": [
+      253411,
+      253542
+     ],
+     "c_decl_sha256": "6d38510f9e69a0f7f7bc8a43d133c4bb25016373aee0ab1938d7da06dcb59279",
+     "c_lines": [
+      7638,
+      7641
+     ],
+     "c_span_sha256": "6d38510f9e69a0f7f7bc8a43d133c4bb25016373aee0ab1938d7da06dcb59279",
+     "item": "fn gc_symmetry_negative_e9_admission_ignores_the_latch",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      253357,
+      253477
+     ],
+     "baseline_decl_sha256": "581531b18348b7c8fe88e0d6fb9ae994e642b8972a2e5eb40918034c1a113c81",
+     "baseline_lines": [
+      7641,
+      7644
+     ],
+     "c_decl": [
+      253544,
+      253664
+     ],
+     "c_decl_sha256": "581531b18348b7c8fe88e0d6fb9ae994e642b8972a2e5eb40918034c1a113c81",
+     "c_lines": [
+      7643,
+      7646
+     ],
+     "c_span_sha256": "581531b18348b7c8fe88e0d6fb9ae994e642b8972a2e5eb40918034c1a113c81",
+     "item": "fn gc_symmetry_negative_e2_admission_views_twice",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      253688,
+      254449
+     ],
+     "baseline_decl_sha256": "8843d1c03f7e090490d6d46e2becc845b66c32b421fc8111fd2726a674212a95",
+     "baseline_lines": [
+      7649,
+      7666
+     ],
+     "c_decl": [
+      253875,
+      254636
+     ],
+     "c_decl_sha256": "8843d1c03f7e090490d6d46e2becc845b66c32b421fc8111fd2726a674212a95",
+     "c_lines": [
+      7651,
+      7668
+     ],
+     "c_span_sha256": "d3f83f73287bd0a7e493ccacdba5813d3336cbd60bc90757f8f37a40b465d588",
+     "item": "fn gc_symmetry_finds_the_original_l1_cycle",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      254594,
+      254815
+     ],
+     "baseline_decl_sha256": "bd4b73f2208ae8146613973d7ed1ba632a29e72b0095ccc38698a79615e3882d",
+     "baseline_lines": [
+      7670,
+      7674
+     ],
+     "c_decl": [
+      254781,
+      255002
+     ],
+     "c_decl_sha256": "bd4b73f2208ae8146613973d7ed1ba632a29e72b0095ccc38698a79615e3882d",
+     "c_lines": [
+      7672,
+      7676
+     ],
+     "c_span_sha256": "7ab4a9a34067186d0b570ddb1fcb74bb80d12e6d5f19a8b222ba28664da52673",
+     "item": "fn adm_favouring_g2",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      254908,
+      255137
+     ],
+     "baseline_decl_sha256": "15f583bd02460e3e28b2c4f01fda1299ed6b9e72696a7835588d75a92518be2f",
+     "baseline_lines": [
+      7678,
+      7684
+     ],
+     "c_decl": [
+      255095,
+      255324
+     ],
+     "c_decl_sha256": "15f583bd02460e3e28b2c4f01fda1299ed6b9e72696a7835588d75a92518be2f",
+     "c_lines": [
+      7680,
+      7686
+     ],
+     "c_span_sha256": "40006983f0f8f59f722b72d378b6e4c3a7eb116700112ac4c01a7fc430976d9b",
+     "item": "fn gc_symmetry_refuses_an_asymmetric_step",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      255139,
+      255324
+     ],
+     "baseline_decl_sha256": "8bc6d7c6725c6ced892b88d1f9d9d917fbae7cb67bae5fc06f34a0a5113ab515",
+     "baseline_lines": [
+      7686,
+      7690
+     ],
+     "c_decl": [
+      255326,
+      255511
+     ],
+     "c_decl_sha256": "8bc6d7c6725c6ced892b88d1f9d9d917fbae7cb67bae5fc06f34a0a5113ab515",
+     "c_lines": [
+      7688,
+      7692
+     ],
+     "c_span_sha256": "8bc6d7c6725c6ced892b88d1f9d9d917fbae7cb67bae5fc06f34a0a5113ab515",
+     "item": "fn gc_symmetry_refuses_f_g",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      255326,
+      255575
+     ],
+     "baseline_decl_sha256": "9ada224741dee58d9c5c68fc34236f5ac582e21528afdc0dd16176a54471427a",
+     "baseline_lines": [
+      7692,
+      7698
+     ],
+     "c_decl": [
+      255513,
+      255762
+     ],
+     "c_decl_sha256": "9ada224741dee58d9c5c68fc34236f5ac582e21528afdc0dd16176a54471427a",
+     "c_lines": [
+      7694,
+      7700
+     ],
+     "c_span_sha256": "9ada224741dee58d9c5c68fc34236f5ac582e21528afdc0dd16176a54471427a",
+     "item": "fn gc_symmetry_refuses_a_configuration_not_shown_symmetric",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      255577,
+      255910
+     ],
+     "baseline_decl_sha256": "b2e7241473c1673386fd2e8a8ed7c593758dfe734e8de33339adba65ea29570d",
+     "baseline_lines": [
+      7700,
+      7710
+     ],
+     "c_decl": [
+      255764,
+      256097
+     ],
+     "c_decl_sha256": "b2e7241473c1673386fd2e8a8ed7c593758dfe734e8de33339adba65ea29570d",
+     "c_lines": [
+      7702,
+      7712
+     ],
+     "c_span_sha256": "b2e7241473c1673386fd2e8a8ed7c593758dfe734e8de33339adba65ea29570d",
+     "item": "fn gc_symmetry_refuses_another_shape_under_a_known_name",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      255912,
+      256172
+     ],
+     "baseline_decl_sha256": "a351e0bd13d39539c1248af090642d4d4388ce7be5257a09de3b303b4de0c406",
+     "baseline_lines": [
+      7712,
+      7720
+     ],
+     "c_decl": [
+      256099,
+      256359
+     ],
+     "c_decl_sha256": "a351e0bd13d39539c1248af090642d4d4388ce7be5257a09de3b303b4de0c406",
+     "c_lines": [
+      7714,
+      7722
+     ],
+     "c_span_sha256": "a351e0bd13d39539c1248af090642d4d4388ce7be5257a09de3b303b4de0c406",
+     "item": "fn gc_symmetry_refuses_a_raised_cap",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      256174,
+      256455
+     ],
+     "baseline_decl_sha256": "4fb62287040e58b4feb2d7b1681ecd938956ce7554e9c27001e6580d159b04ae",
+     "baseline_lines": [
+      7722,
+      7731
+     ],
+     "c_decl": [
+      256361,
+      256642
+     ],
+     "c_decl_sha256": "4fb62287040e58b4feb2d7b1681ecd938956ce7554e9c27001e6580d159b04ae",
+     "c_lines": [
+      7724,
+      7733
+     ],
+     "c_span_sha256": "4fb62287040e58b4feb2d7b1681ecd938956ce7554e9c27001e6580d159b04ae",
+     "item": "fn gc_symmetry_refuses_acknowledgements",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      256457,
+      256657
+     ],
+     "baseline_decl_sha256": "8ec56e31492d8331855154f122506996ea8cf67e9fcde70fd122fd7c0b94413d",
+     "baseline_lines": [
+      7733,
+      7737
+     ],
+     "c_decl": [
+      256644,
+      256844
+     ],
+     "c_decl_sha256": "8ec56e31492d8331855154f122506996ea8cf67e9fcde70fd122fd7c0b94413d",
+     "c_lines": [
+      7735,
+      7739
+     ],
+     "c_span_sha256": "8ec56e31492d8331855154f122506996ea8cf67e9fcde70fd122fd7c0b94413d",
+     "item": "fn gc_symmetry_refuses_other_callers",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      256659,
+      256839
+     ],
+     "baseline_decl_sha256": "55796a1db4d7765a4940ad87055087f8652587063fb1f81dedcd27f7bb606b6a",
+     "baseline_lines": [
+      7739,
+      7743
+     ],
+     "c_decl": [
+      256846,
+      257026
+     ],
+     "c_decl_sha256": "55796a1db4d7765a4940ad87055087f8652587063fb1f81dedcd27f7bb606b6a",
+     "c_lines": [
+      7741,
+      7745
+     ],
+     "c_span_sha256": "55796a1db4d7765a4940ad87055087f8652587063fb1f81dedcd27f7bb606b6a",
+     "item": "fn gc_symmetry_refuses_kept_bits",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    },
+    {
+     "baseline": "GC",
+     "baseline_decl": [
+      256841,
+      257217
+     ],
+     "baseline_decl_sha256": "3ffb9785fcef9ac73f038ace015d38039d26bcdca21bfc8016e5324f57207317",
+     "baseline_lines": [
+      7745,
+      7758
+     ],
+     "c_decl": [
+      257028,
+      257404
+     ],
+     "c_decl_sha256": "3ffb9785fcef9ac73f038ace015d38039d26bcdca21bfc8016e5324f57207317",
+     "c_lines": [
+      7747,
+      7760
+     ],
+     "c_span_sha256": "3ffb9785fcef9ac73f038ace015d38039d26bcdca21bfc8016e5324f57207317",
+     "item": "fn gc_symmetry_refuses_an_acknowledgement_row",
+     "ordinal": 1,
+     "section": "map",
+     "status": "IDENTICAL (bytes; offset moved)"
+    }
+   ],
+   "status_counts": {
+    "CHANGED": 1,
+    "IDENTICAL": 346,
+    "IDENTICAL (bytes; offset moved)": 56
+   }
+  },
+  "SOURCE-R2": {
+   "items": 287,
+   "not_identical": [],
+   "status_counts": {
+    "IDENTICAL": 287
+   }
+  },
+  "W1": {
+   "items": 441,
+   "not_identical": [],
+   "status_counts": {
+    "IDENTICAL": 441
+   }
+  },
+  "W4": {
+   "items": 471,
+   "not_identical": [],
+   "status_counts": {
+    "IDENTICAL": 471
+   }
+  }
+ },
+ "layer_isolation": [
+  {
+   "allowed_by_design": [],
+   "bytes_at_C": [
+    151991,
+    194288
+   ],
+   "cfg_attributes": 0,
+   "impl_trait_use_static_macro_mod_items": [],
+   "inner_attributes": 0,
+   "isolated": true,
+   "item_kinds": [
+    "enum",
+    "fn",
+    "struct",
+    "type"
+   ],
+   "items": 58,
+   "layer": "AQ",
+   "names_mentioned_earlier": [],
+   "unexpected_mentions": []
+  },
+  {
+   "allowed_by_design": [],
+   "bytes_at_C": [
+    194288,
+    257405
+   ],
+   "cfg_attributes": 0,
+   "impl_trait_use_static_macro_mod_items": [],
+   "inner_attributes": 0,
+   "isolated": true,
+   "item_kinds": [
+    "const",
+    "fn",
+    "struct",
+    "type"
+   ],
+   "items": 58,
+   "layer": "SQ (with the EXT in-place hunk)",
+   "names_mentioned_earlier": [],
+   "unexpected_mentions": []
+  },
+  {
+   "allowed_by_design": [
+    "SYM_B",
+    "SYM_BI",
+    "SYM_PT"
+   ],
+   "bytes_at_C": [
+    257405,
+    275579
+   ],
+   "cfg_attributes": 0,
+   "impl_trait_use_static_macro_mod_items": [],
+   "inner_attributes": 0,
+   "isolated": true,
+   "item_kinds": [
+    "const",
+    "fn",
+    "struct"
+   ],
+   "items": 28,
+   "layer": "EXT append",
+   "names_mentioned_earlier": [
+    "SYM_B",
+    "SYM_BI",
+    "SYM_PT"
+   ],
+   "unexpected_mentions": []
+  },
+  {
+   "allowed_by_design": [],
+   "bytes_at_C": [
+    275579,
+    286411
+   ],
+   "cfg_attributes": 0,
+   "impl_trait_use_static_macro_mod_items": [],
+   "inner_attributes": 0,
+   "isolated": true,
+   "item_kinds": [
+    "const",
+    "fn",
+    "struct",
+    "type"
+   ],
+   "items": 10,
+   "layer": "WITNESS-C1-C25",
+   "names_mentioned_earlier": [],
+   "unexpected_mentions": []
+  },
+  {
+   "allowed_by_design": [],
+   "bytes_at_C": [
+    286411,
+    310612
+   ],
+   "cfg_attributes": 0,
+   "impl_trait_use_static_macro_mod_items": [],
+   "inner_attributes": 0,
+   "isolated": true,
+   "item_kinds": [
+    "const",
+    "fn",
+    "struct"
+   ],
+   "items": 30,
+   "layer": "WITNESS-C4",
+   "names_mentioned_earlier": [],
+   "unexpected_mentions": []
+  }
+ ],
+ "lineage": [
+  {
+   "commit": "244c5b23244d1abd8b2b595c9e7654a25029a9f1",
+   "parents": [
+    "49e29cd317c9854326a556079ac85ad8584bc2ce"
+   ],
+   "role": "SOURCE-R2 (model; ADM proof source read)",
+   "short": "SOURCE-R2",
+   "subject": "fix(test): explore an unwinding insert's row as present or absent",
+   "tree": "1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78"
+  },
+  {
+   "commit": "83816e66916c3a217ab7919d7e6a21893e7d579a",
+   "parents": [
+    "244c5b23244d1abd8b2b595c9e7654a25029a9f1"
+   ],
+   "role": "admission quotient (AQ) implementation; GC proof source read",
+   "short": "ADM",
+   "subject": "test(experiment): add an admission observer quotient beside the explorer",
+   "tree": "74a6a0e5add063dac4d24939b3a62c619847dd3a"
+  },
+  {
+   "commit": "77a146ca606f99329068410b6037721341f00c70",
+   "parents": [
+    "83816e66916c3a217ab7919d7e6a21893e7d579a"
+   ],
+   "role": "gating-caller symmetry (SQ) implementation; extension proof source read",
+   "short": "GC",
+   "subject": "test(experiment): add a gating-caller symmetry quotient beside the explorer",
+   "tree": "21818166ee10a8075ca364bd09f31c7aa64555dd"
+  },
+  {
+   "commit": "2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda",
+   "parents": [
+    "77a146ca606f99329068410b6037721341f00c70"
+   ],
+   "role": "F-PT/F-B extension implementation (SYMMETRIC allow-list)",
+   "short": "EXT",
+   "subject": "test(experiment): admit F-PT and F-B to the gating-caller symmetry quotient",
+   "tree": "6f6a54f5c85d6a3102cd034c67e5791cb5a0286a"
+  },
+  {
+   "commit": "42dd1bd1cf21ffdea5968b256d2983f6575fab5b",
+   "parents": [
+    "2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda"
+   ],
+   "role": "C1/C25 witness source",
+   "short": "W1",
+   "subject": "test(experiment): add replay witnesses for controls C1 and C25",
+   "tree": "7ac6bb21430d15b17e3723b217b20a49dccf8282"
+  },
+  {
+   "commit": "04e42a7ddf0d0a2af17b6506c51997006e7a08dc",
+   "parents": [
+    "42dd1bd1cf21ffdea5968b256d2983f6575fab5b"
+   ],
+   "role": "C4 witness source (commit A)",
+   "short": "W4",
+   "subject": "test(experiment): add replay witness for control C4 (P4 and P8 on F-8)",
+   "tree": "fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3"
+  },
+  {
+   "commit": "a464a36621523f539d2554a6b176d678c7f885ea",
+   "parents": [
+    "04e42a7ddf0d0a2af17b6506c51997006e7a08dc"
+   ],
+   "role": "C4 evidence commit B (documentation)",
+   "short": "B",
+   "subject": "docs(evidence): transport the C4 witness evidence and disposition sheet",
+   "tree": "e1f3e48f5b5fc7c792d99fb21e274f5c5e3af2b3"
+  },
+  {
+   "commit": "71264aa81a40b86189783facc8437e0427887c16",
+   "parents": [
+    "a464a36621523f539d2554a6b176d678c7f885ea"
+   ],
+   "role": "AD-1-R4 review commit R4 (documentation)",
+   "short": "R4",
+   "subject": "docs(evidence): add the consolidated AD-1-R4 draft and its checks",
+   "tree": "f4499b070de59342a1ca89213199b4efa7fbf814"
+  },
+  {
+   "commit": "d5964ee5326c2733177307db6f507328023d361a",
+   "parents": [
+    "71264aa81a40b86189783facc8437e0427887c16"
+   ],
+   "role": "Candidate C (source under review)",
+   "short": "C",
+   "subject": "docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0"
+  },
+  {
+   "commit": "066a322a9182fc978e3f5dc8454157caacec6241",
+   "parents": [
+    "d5964ee5326c2733177307db6f507328023d361a"
+   ],
+   "role": "evidence D (transport only; parent of this packet)",
+   "short": "D",
+   "subject": "docs(evidence): transport the current-tree 183 manifest review packet",
+   "tree": "da31dfa7c9a0c4f358bfde4f15815f6c8d46f806"
+  }
+ ],
+ "mission": "P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01",
+ "model_blobs": {
+  "ADM": "fad0ffb0ed243bbd445191bc7963b075bde13b5a",
+  "C": "28085ce232827301104b5d757af042ec933976f8",
+  "EXT": "4895993e1a9ca68762d873e026d42a6e08e49cc9",
+  "GC": "a80dd05cbc6a90ddd97bfa4dba754ec5569eec21",
+  "SOURCE-R2": "beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e",
+  "W1": "5ad26ddc727d8be30f4fb8d7478bc69e1c974933",
+  "W4": "28085ce232827301104b5d757af042ec933976f8"
+ },
+ "model_chain": [
+  {
+   "appended_bytes": [
+    151991,
+    194288
+   ],
+   "appended_sha256": "cd1ac7af23590b7640756804b299a17770b34243721773271c542a262f9c3d17",
+   "from": "SOURCE-R2",
+   "from_bytes": 151991,
+   "lexically_isolated": true,
+   "old_ends_with_newline": true,
+   "relation": "BYTE-PREFIX APPEND",
+   "to": "ADM",
+   "to_bytes": 194288
+  },
+  {
+   "appended_bytes": [
+    194288,
+    257218
+   ],
+   "appended_sha256": "a74656e49795068bb1d8904fa747a8d26bc65b95a0b959be508131d856246bbd",
+   "from": "ADM",
+   "from_bytes": 194288,
+   "lexically_isolated": true,
+   "old_ends_with_newline": true,
+   "relation": "BYTE-PREFIX APPEND",
+   "to": "GC",
+   "to_bytes": 257218
+  },
+  {
+   "from": "GC",
+   "from_bytes": 257218,
+   "hunks": [
+    {
+     "new_bytes": [
+      196230,
+      196458
+     ],
+     "new_lines": [
+      6074,
+      6076
+     ],
+     "new_text": "/// exhaustive differential below, F-3 by the analysis of its mission; SYM-PT,\n/// SYM-B and SYM-BI by the exhaustive differential at the end of this file,\n/// F-PT and F-B by the analysis of P3-C11-DR01-D2A1-CLOSURE-PREP-01. A\n",
+     "new_text_sha256": "e7be28d71cbcb74e140a011e5bdf91e3b207e93914117c387a7f718a83ce5bd0",
+     "old_bytes": [
+      196230,
+      196303
+     ],
+     "old_lines": [
+      6074,
+      6074
+     ],
+     "old_text": "/// exhaustive differential below, F-3 by the analysis of its mission. A\n",
+     "op": "replace"
+    },
+    {
+     "new_bytes": [
+      196564,
+      196643
+     ],
+     "new_lines": [
+      6079,
+      6079
+     ],
+     "new_text": "const SYMMETRIC: [Config; 8] = [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB];\n",
+     "new_text_sha256": "a2a4ebaf5d1327bb06be6528d5b70a56c1ed6047a62585de2d5fbfb1f36e8498",
+     "old_bytes": [
+      196409,
+      196456
+     ],
+     "old_lines": [
+      6077,
+      6077
+     ],
+     "old_text": "const SYMMETRIC: [Config; 3] = [X2, SYM1, F3];\n",
+     "op": "replace"
+    },
+    {
+     "new_bytes": [
+      257405,
+      275579
+     ],
+     "new_lines": [
+      7761,
+      8244
+     ],
+     "new_text": "(484 lines)",
+     "new_text_sha256": "30516786f083c79888c19a70ffa80ad6de67581497435c04de70e03761db97d7",
+     "old_bytes": [
+      257218,
+      257218
+     ],
+     "old_lines": [
+      7759,
+      7758
+     ],
+     "old_text": "",
+     "op": "insert"
+    }
+   ],
+   "relation": "CHANGED",
+   "to": "EXT",
+   "to_bytes": 275579
+  },
+  {
+   "appended_bytes": [
+    275579,
+    286411
+   ],
+   "appended_sha256": "64f7c29c12ca3106012e6c2045680a52edab0a69096710f1c6c18e52e8c4d07a",
+   "from": "EXT",
+   "from_bytes": 275579,
+   "lexically_isolated": true,
+   "old_ends_with_newline": true,
+   "relation": "BYTE-PREFIX APPEND",
+   "to": "W1",
+   "to_bytes": 286411
+  },
+  {
+   "appended_bytes": [
+    286411,
+    310612
+   ],
+   "appended_sha256": "8069f96e6cdfc243e1a67a1e14deeb92d6ceac238844c03ed8c57d1bb47ab2ac",
+   "from": "W1",
+   "from_bytes": 286411,
+   "lexically_isolated": true,
+   "old_ends_with_newline": true,
+   "relation": "BYTE-PREFIX APPEND",
+   "to": "W4",
+   "to_bytes": 310612
+  },
+  {
+   "from": "W4",
+   "from_bytes": 310612,
+   "relation": "IDENTICAL",
+   "to": "C",
+   "to_bytes": 310612
+  }
+ ],
+ "outside_evidence_delta_vs_C": {
+  "ADM": [
+   {
+    "at": [
+     "100644",
+     "blob",
+     "fad0ffb0ed243bbd445191bc7963b075bde13b5a"
+    ],
+    "at_C": [
+     "100644",
+     "blob",
+     "28085ce232827301104b5d757af042ec933976f8"
+    ],
+    "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   }
+  ],
+  "B": [],
+  "D": [],
+  "EXT": [
+   {
+    "at": [
+     "100644",
+     "blob",
+     "4895993e1a9ca68762d873e026d42a6e08e49cc9"
+    ],
+    "at_C": [
+     "100644",
+     "blob",
+     "28085ce232827301104b5d757af042ec933976f8"
+    ],
+    "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   }
+  ],
+  "GC": [
+   {
+    "at": [
+     "100644",
+     "blob",
+     "a80dd05cbc6a90ddd97bfa4dba754ec5569eec21"
+    ],
+    "at_C": [
+     "100644",
+     "blob",
+     "28085ce232827301104b5d757af042ec933976f8"
+    ],
+    "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   }
+  ],
+  "R4": [],
+  "SOURCE-R2": [
+   {
+    "at": [
+     "100644",
+     "blob",
+     "beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e"
+    ],
+    "at_C": [
+     "100644",
+     "blob",
+     "28085ce232827301104b5d757af042ec933976f8"
+    ],
+    "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   }
+  ],
+  "W1": [
+   {
+    "at": [
+     "100644",
+     "blob",
+     "5ad26ddc727d8be30f4fb8d7478bc69e1c974933"
+    ],
+    "at_C": [
+     "100644",
+     "blob",
+     "28085ce232827301104b5d757af042ec933976f8"
+    ],
+    "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   }
+  ],
+  "W4": []
+ },
+ "protocol_hook": {
+  "decl": [
+   62456,
+   64545
+  ],
+  "decl_sha256": "1f813d27ac256c0e0f6315c7a343b13b0faf63b44a4d665cc1a37e0a32bbb3e6",
+  "lines": [
+   2017,
+   2083
+  ]
+ },
+ "protocol_items": 205,
+ "regions_at_C": {
+  "AQ": [
+   151991,
+   194288
+  ],
+  "MODEL": [
+   0,
+   151991
+  ],
+  "SQ+EXT": [
+   194288,
+   275579
+  ],
+  "WITNESS-C1-C25": [
+   275579,
+   286411
+  ],
+  "WITNESS-C4": [
+   286411,
+   310612
+  ]
+ },
+ "result": "PASS",
+ "section_status_counts": {
+  "A IDENTICAL": 6,
+  "B IDENTICAL": 63,
+  "C IDENTICAL": 10,
+  "D CHANGED": 1,
+  "D IDENTICAL": 1,
+  "D IDENTICAL (bytes; offset moved)": 27,
+  "E IDENTICAL": 29,
+  "WITNESS-C1-C25 APPENDED-AFTER-NO-REFERENCE": 10,
+  "WITNESS-C4 APPENDED-AFTER-NO-REFERENCE": 30
+ },
+ "sections": [
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "W1",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "W4",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "c_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "item": "protocol.rs (whole file, incl. test-only hook)",
+   "section": "A",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    1503,
+    1531
+   ],
+   "baseline_decl_sha256": "ec3c29b50ac9ede40ed33f9c1a36bf5e885a1f2885add2fa2e89cb0e8bd0c03f",
+   "baseline_lines": [
+    31,
+    31
+   ],
+   "c_decl": [
+    1503,
+    1531
+   ],
+   "c_decl_sha256": "ec3c29b50ac9ede40ed33f9c1a36bf5e885a1f2885add2fa2e89cb0e8bd0c03f",
+   "c_lines": [
+    31,
+    31
+   ],
+   "c_span_sha256": "f5f926c08bfe80d10338d91bc355852db107fac666f97ac46c69794af5bf1dd4",
+   "item": "const TICKET_LIMIT",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    1532,
+    1561
+   ],
+   "baseline_decl_sha256": "f8a1e1e07974ebc0f0dddfb1f685b2abb299ff96110952db49a47cafdde9ba4c",
+   "baseline_lines": [
+    32,
+    32
+   ],
+   "c_decl": [
+    1532,
+    1561
+   ],
+   "c_decl_sha256": "f8a1e1e07974ebc0f0dddfb1f685b2abb299ff96110952db49a47cafdde9ba4c",
+   "c_lines": [
+    32,
+    32
+   ],
+   "c_span_sha256": "f8a1e1e07974ebc0f0dddfb1f685b2abb299ff96110952db49a47cafdde9ba4c",
+   "item": "const REFUSAL_LIMIT",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    1665,
+    2878
+   ],
+   "baseline_decl_sha256": "a40ac57ee2eaa872a687b3d1714deacf9d49062281fc4a028f912a8a30331a7e",
+   "baseline_lines": [
+    36,
+    74
+   ],
+   "c_decl": [
+    1665,
+    2878
+   ],
+   "c_decl_sha256": "a40ac57ee2eaa872a687b3d1714deacf9d49062281fc4a028f912a8a30331a7e",
+   "c_lines": [
+    36,
+    74
+   ],
+   "c_span_sha256": "ea1a51a0a1de533f65890da3ed20ef02a2d484412a651bc15fe24d59a8de54c8",
+   "item": "struct Config",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    2880,
+    2913
+   ],
+   "baseline_decl_sha256": "38ac07647111745a3234e1019ff518f19341c8bae0aa5052294c00301379823e",
+   "baseline_lines": [
+    76,
+    76
+   ],
+   "c_decl": [
+    2880,
+    2913
+   ],
+   "c_decl_sha256": "38ac07647111745a3234e1019ff518f19341c8bae0aa5052294c00301379823e",
+   "c_lines": [
+    76,
+    76
+   ],
+   "c_span_sha256": "38ac07647111745a3234e1019ff518f19341c8bae0aa5052294c00301379823e",
+   "item": "const DEFAULT_CAP",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    2914,
+    2970
+   ],
+   "baseline_decl_sha256": "a582206364f0076faf12b5052afe9a2ac279556dacea0aa0d583aa6b2f163a37",
+   "baseline_lines": [
+    77,
+    77
+   ],
+   "c_decl": [
+    2914,
+    2970
+   ],
+   "c_decl_sha256": "a582206364f0076faf12b5052afe9a2ac279556dacea0aa0d583aa6b2f163a37",
+   "c_lines": [
+    77,
+    77
+   ],
+   "c_span_sha256": "a582206364f0076faf12b5052afe9a2ac279556dacea0aa0d583aa6b2f163a37",
+   "item": "const DEFAULT_TIME",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    2971,
+    3004
+   ],
+   "baseline_decl_sha256": "ccc5a94412db3ecdc6802eb52c4155ffc0841206ed02201f6309bafe46dcd2ca",
+   "baseline_lines": [
+    78,
+    78
+   ],
+   "c_decl": [
+    2971,
+    3004
+   ],
+   "c_decl_sha256": "ccc5a94412db3ecdc6802eb52c4155ffc0841206ed02201f6309bafe46dcd2ca",
+   "c_lines": [
+    78,
+    78
+   ],
+   "c_span_sha256": "ccc5a94412db3ecdc6802eb52c4155ffc0841206ed02201f6309bafe46dcd2ca",
+   "item": "const FULL_CAP",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    3005,
+    3062
+   ],
+   "baseline_decl_sha256": "b45bfd1d8c187dd7338d80341fec86c41926780b248152e37e9def4bf11f7621",
+   "baseline_lines": [
+    79,
+    79
+   ],
+   "c_decl": [
+    3005,
+    3062
+   ],
+   "c_decl_sha256": "b45bfd1d8c187dd7338d80341fec86c41926780b248152e37e9def4bf11f7621",
+   "c_lines": [
+    79,
+    79
+   ],
+   "c_span_sha256": "b45bfd1d8c187dd7338d80341fec86c41926780b248152e37e9def4bf11f7621",
+   "item": "const FULL_TIME",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    3064,
+    3493
+   ],
+   "baseline_decl_sha256": "e4f3fac425b44bf75b457379346db87265a03eb992d0d7e78c88669d85fdf96e",
+   "baseline_lines": [
+    81,
+    102
+   ],
+   "c_decl": [
+    3064,
+    3493
+   ],
+   "c_decl_sha256": "e4f3fac425b44bf75b457379346db87265a03eb992d0d7e78c88669d85fdf96e",
+   "c_lines": [
+    81,
+    102
+   ],
+   "c_span_sha256": "e4f3fac425b44bf75b457379346db87265a03eb992d0d7e78c88669d85fdf96e",
+   "item": "const BASE",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    3495,
+    3635
+   ],
+   "baseline_decl_sha256": "24584e118b8843423257a3382f5439b0286b69d3e28bafa1c8165805f023b449",
+   "baseline_lines": [
+    104,
+    110
+   ],
+   "c_decl": [
+    3495,
+    3635
+   ],
+   "c_decl_sha256": "24584e118b8843423257a3382f5439b0286b69d3e28bafa1c8165805f023b449",
+   "c_lines": [
+    104,
+    110
+   ],
+   "c_span_sha256": "24584e118b8843423257a3382f5439b0286b69d3e28bafa1c8165805f023b449",
+   "item": "fn default_run",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    3707,
+    3812
+   ],
+   "baseline_decl_sha256": "42e50883a6b788860d65539879701f91ccc41af2c14ae88932b49e7b4a8b9422",
+   "baseline_lines": [
+    113,
+    118
+   ],
+   "c_decl": [
+    3707,
+    3812
+   ],
+   "c_decl_sha256": "42e50883a6b788860d65539879701f91ccc41af2c14ae88932b49e7b4a8b9422",
+   "c_lines": [
+    113,
+    118
+   ],
+   "c_span_sha256": "5550792a894746e622d7721c9eb985fd945fe5a9f148a4f18966521872a9b5c8",
+   "item": "const X1",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    3888,
+    4022
+   ],
+   "baseline_decl_sha256": "1cd9d6c9c74a6c4182df3460f65e48891b621e982a9594541d2c067337dead59",
+   "baseline_lines": [
+    120,
+    127
+   ],
+   "c_decl": [
+    3888,
+    4022
+   ],
+   "c_decl_sha256": "1cd9d6c9c74a6c4182df3460f65e48891b621e982a9594541d2c067337dead59",
+   "c_lines": [
+    120,
+    127
+   ],
+   "c_span_sha256": "6134e03f31d6c26e51814a5e15284ab6e287e160b14e577f0356a33f010aba69",
+   "item": "const X2",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4077,
+    4207
+   ],
+   "baseline_decl_sha256": "adebe99ed10b60146bb132edf6b7bc714c6826c47636f0b95e417c45e522fb4e",
+   "baseline_lines": [
+    129,
+    135
+   ],
+   "c_decl": [
+    4077,
+    4207
+   ],
+   "c_decl_sha256": "adebe99ed10b60146bb132edf6b7bc714c6826c47636f0b95e417c45e522fb4e",
+   "c_lines": [
+    129,
+    135
+   ],
+   "c_span_sha256": "cf93672390a3bb82a99cbcb28e3ea014bda6e715b288ef7643227bee8533c33f",
+   "item": "const X3",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4284,
+    4466
+   ],
+   "baseline_decl_sha256": "c2d4888051677d80db015b2c63e6810ef0e2894727c7d40f9afbd23894d18f19",
+   "baseline_lines": [
+    137,
+    146
+   ],
+   "c_decl": [
+    4284,
+    4466
+   ],
+   "c_decl_sha256": "c2d4888051677d80db015b2c63e6810ef0e2894727c7d40f9afbd23894d18f19",
+   "c_lines": [
+    137,
+    146
+   ],
+   "c_span_sha256": "3fcc48b6236ca8bdc2a43ea4919c2a8a6d7e91e9a04a7b4a4c728e1951c8b409",
+   "item": "const X4",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4510,
+    4613
+   ],
+   "baseline_decl_sha256": "bd0f254f73a2857502af270c0ce9f51acaba01c20010d5c4724636e79a55ea19",
+   "baseline_lines": [
+    148,
+    153
+   ],
+   "c_decl": [
+    4510,
+    4613
+   ],
+   "c_decl_sha256": "bd0f254f73a2857502af270c0ce9f51acaba01c20010d5c4724636e79a55ea19",
+   "c_lines": [
+    148,
+    153
+   ],
+   "c_span_sha256": "ba89345210e57e40a4c9a61fe9d95da7a38c2b830bc488e848a08dce0a702720",
+   "item": "const X5",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4615,
+    4722
+   ],
+   "baseline_decl_sha256": "98cd18ea14166e4fc82a76d07c3cdba1b2acae9415eff3ddf02c4472db9e0ee8",
+   "baseline_lines": [
+    155,
+    161
+   ],
+   "c_decl": [
+    4615,
+    4722
+   ],
+   "c_decl_sha256": "98cd18ea14166e4fc82a76d07c3cdba1b2acae9415eff3ddf02c4472db9e0ee8",
+   "c_lines": [
+    155,
+    161
+   ],
+   "c_span_sha256": "98cd18ea14166e4fc82a76d07c3cdba1b2acae9415eff3ddf02c4472db9e0ee8",
+   "item": "const F1",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4723,
+    4859
+   ],
+   "baseline_decl_sha256": "58f9b91152d156c922c342174ba27d380e43a29fcef5b3ec9471d4baaa331019",
+   "baseline_lines": [
+    162,
+    169
+   ],
+   "c_decl": [
+    4723,
+    4859
+   ],
+   "c_decl_sha256": "58f9b91152d156c922c342174ba27d380e43a29fcef5b3ec9471d4baaa331019",
+   "c_lines": [
+    162,
+    169
+   ],
+   "c_span_sha256": "58f9b91152d156c922c342174ba27d380e43a29fcef5b3ec9471d4baaa331019",
+   "item": "const F2",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    4860,
+    5010
+   ],
+   "baseline_decl_sha256": "98944f803232996dbf057ca9e438eaa9d9b6ea618d2050dcdc4cf28bab6d153c",
+   "baseline_lines": [
+    170,
+    178
+   ],
+   "c_decl": [
+    4860,
+    5010
+   ],
+   "c_decl_sha256": "98944f803232996dbf057ca9e438eaa9d9b6ea618d2050dcdc4cf28bab6d153c",
+   "c_lines": [
+    170,
+    178
+   ],
+   "c_span_sha256": "98944f803232996dbf057ca9e438eaa9d9b6ea618d2050dcdc4cf28bab6d153c",
+   "item": "const F3",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5011,
+    5094
+   ],
+   "baseline_decl_sha256": "84fd5be04b84e74e088b0a28952e86dc70044e7795d6a70d82f18029a821abd9",
+   "baseline_lines": [
+    179,
+    183
+   ],
+   "c_decl": [
+    5011,
+    5094
+   ],
+   "c_decl_sha256": "84fd5be04b84e74e088b0a28952e86dc70044e7795d6a70d82f18029a821abd9",
+   "c_lines": [
+    179,
+    183
+   ],
+   "c_span_sha256": "84fd5be04b84e74e088b0a28952e86dc70044e7795d6a70d82f18029a821abd9",
+   "item": "const F4",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5095,
+    5249
+   ],
+   "baseline_decl_sha256": "69e1c71ffde248b4e795bc706e557721c710451b7ca724e140a0faada922853b",
+   "baseline_lines": [
+    184,
+    192
+   ],
+   "c_decl": [
+    5095,
+    5249
+   ],
+   "c_decl_sha256": "69e1c71ffde248b4e795bc706e557721c710451b7ca724e140a0faada922853b",
+   "c_lines": [
+    184,
+    192
+   ],
+   "c_span_sha256": "69e1c71ffde248b4e795bc706e557721c710451b7ca724e140a0faada922853b",
+   "item": "const F5",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5250,
+    5327
+   ],
+   "baseline_decl_sha256": "02784bae70bfa87129c49128883d3e3e4d7f50655507b2d715a283e96e93ddde",
+   "baseline_lines": [
+    193,
+    197
+   ],
+   "c_decl": [
+    5250,
+    5327
+   ],
+   "c_decl_sha256": "02784bae70bfa87129c49128883d3e3e4d7f50655507b2d715a283e96e93ddde",
+   "c_lines": [
+    193,
+    197
+   ],
+   "c_span_sha256": "02784bae70bfa87129c49128883d3e3e4d7f50655507b2d715a283e96e93ddde",
+   "item": "const F6",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5328,
+    5482
+   ],
+   "baseline_decl_sha256": "15fb9b07f85c95384720734b23b6e49ba9c4842ccbeda75f8753bc334534652c",
+   "baseline_lines": [
+    198,
+    206
+   ],
+   "c_decl": [
+    5328,
+    5482
+   ],
+   "c_decl_sha256": "15fb9b07f85c95384720734b23b6e49ba9c4842ccbeda75f8753bc334534652c",
+   "c_lines": [
+    198,
+    206
+   ],
+   "c_span_sha256": "15fb9b07f85c95384720734b23b6e49ba9c4842ccbeda75f8753bc334534652c",
+   "item": "const F7",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5483,
+    5653
+   ],
+   "baseline_decl_sha256": "fe5c0fb629d9c6e9706a0951430489c0b0a7fd6692b8afea3f3ed047f2e1efb6",
+   "baseline_lines": [
+    207,
+    216
+   ],
+   "c_decl": [
+    5483,
+    5653
+   ],
+   "c_decl_sha256": "fe5c0fb629d9c6e9706a0951430489c0b0a7fd6692b8afea3f3ed047f2e1efb6",
+   "c_lines": [
+    207,
+    216
+   ],
+   "c_span_sha256": "fe5c0fb629d9c6e9706a0951430489c0b0a7fd6692b8afea3f3ed047f2e1efb6",
+   "item": "const F8",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5654,
+    5741
+   ],
+   "baseline_decl_sha256": "644ceea9895f3f4856356233fb202433c97cbdafd6b9daa9275a9d0827782021",
+   "baseline_lines": [
+    217,
+    221
+   ],
+   "c_decl": [
+    5654,
+    5741
+   ],
+   "c_decl_sha256": "644ceea9895f3f4856356233fb202433c97cbdafd6b9daa9275a9d0827782021",
+   "c_lines": [
+    217,
+    221
+   ],
+   "c_span_sha256": "644ceea9895f3f4856356233fb202433c97cbdafd6b9daa9275a9d0827782021",
+   "item": "const FPT",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5742,
+    5815
+   ],
+   "baseline_decl_sha256": "ccb640fae7bdac5269c52ecfeb2b97e1877f1ea735155ecc27f0a83b12e0772c",
+   "baseline_lines": [
+    222,
+    226
+   ],
+   "c_decl": [
+    5742,
+    5815
+   ],
+   "c_decl_sha256": "ccb640fae7bdac5269c52ecfeb2b97e1877f1ea735155ecc27f0a83b12e0772c",
+   "c_lines": [
+    222,
+    226
+   ],
+   "c_span_sha256": "ccb640fae7bdac5269c52ecfeb2b97e1877f1ea735155ecc27f0a83b12e0772c",
+   "item": "const FB",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5816,
+    5927
+   ],
+   "baseline_decl_sha256": "822de744c5b6254013821821a6dde12e192c99c9d79c9ebb2b2535728b7fea11",
+   "baseline_lines": [
+    227,
+    233
+   ],
+   "c_decl": [
+    5816,
+    5927
+   ],
+   "c_decl_sha256": "822de744c5b6254013821821a6dde12e192c99c9d79c9ebb2b2535728b7fea11",
+   "c_lines": [
+    227,
+    233
+   ],
+   "c_span_sha256": "822de744c5b6254013821821a6dde12e192c99c9d79c9ebb2b2535728b7fea11",
+   "item": "const FB2",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    5928,
+    6076
+   ],
+   "baseline_decl_sha256": "555cea5d58a7aca074b44625bea659d56d2f939cb99a13255d8e8ec2bbb275c8",
+   "baseline_lines": [
+    234,
+    242
+   ],
+   "c_decl": [
+    5928,
+    6076
+   ],
+   "c_decl_sha256": "555cea5d58a7aca074b44625bea659d56d2f939cb99a13255d8e8ec2bbb275c8",
+   "c_lines": [
+    234,
+    242
+   ],
+   "c_span_sha256": "555cea5d58a7aca074b44625bea659d56d2f939cb99a13255d8e8ec2bbb275c8",
+   "item": "const FG",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    6077,
+    6159
+   ],
+   "baseline_decl_sha256": "0648084bb5a1085393ee39629acce78c8a6e249d39627632f072c06522a6d25a",
+   "baseline_lines": [
+    243,
+    247
+   ],
+   "c_decl": [
+    6077,
+    6159
+   ],
+   "c_decl_sha256": "0648084bb5a1085393ee39629acce78c8a6e249d39627632f072c06522a6d25a",
+   "c_lines": [
+    243,
+    247
+   ],
+   "c_span_sha256": "0648084bb5a1085393ee39629acce78c8a6e249d39627632f072c06522a6d25a",
+   "item": "const FW",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    6160,
+    6262
+   ],
+   "baseline_decl_sha256": "6401d7888f0695014df4a7f62c970bc58e132df72cf8ee1c6b0be38a7fd6f155",
+   "baseline_lines": [
+    248,
+    254
+   ],
+   "c_decl": [
+    6160,
+    6262
+   ],
+   "c_decl_sha256": "6401d7888f0695014df4a7f62c970bc58e132df72cf8ee1c6b0be38a7fd6f155",
+   "c_lines": [
+    248,
+    254
+   ],
+   "c_span_sha256": "6401d7888f0695014df4a7f62c970bc58e132df72cf8ee1c6b0be38a7fd6f155",
+   "item": "const FD",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    6263,
+    6335
+   ],
+   "baseline_decl_sha256": "a99f7e62b4f460efe9b7adf11391c753a18769b396dc0f7ffec389523ef057bb",
+   "baseline_lines": [
+    255,
+    259
+   ],
+   "c_decl": [
+    6263,
+    6335
+   ],
+   "c_decl_sha256": "a99f7e62b4f460efe9b7adf11391c753a18769b396dc0f7ffec389523ef057bb",
+   "c_lines": [
+    255,
+    259
+   ],
+   "c_span_sha256": "a99f7e62b4f460efe9b7adf11391c753a18769b396dc0f7ffec389523ef057bb",
+   "item": "const FR",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    13660,
+    13805
+   ],
+   "baseline_decl_sha256": "5cb5afe9f54af6f94b23b8e6497d3aef31b8748a74887c9a6832991ae78b0cd5",
+   "baseline_lines": [
+    526,
+    532
+   ],
+   "c_decl": [
+    13660,
+    13805
+   ],
+   "c_decl_sha256": "5cb5afe9f54af6f94b23b8e6497d3aef31b8748a74887c9a6832991ae78b0cd5",
+   "c_lines": [
+    526,
+    532
+   ],
+   "c_span_sha256": "e5af0e7fd8e57f8199c3d3b19f80dd1fe0d66ef28a5450053ce6db4b7a3d1303",
+   "item": "struct Oracle",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    13807,
+    15439
+   ],
+   "baseline_decl_sha256": "2d617adf39e2c4bb97d8d518634b6eabfe0369a16994e4c56dbc3f47239804f5",
+   "baseline_lines": [
+    534,
+    585
+   ],
+   "c_decl": [
+    13807,
+    15439
+   ],
+   "c_decl_sha256": "2d617adf39e2c4bb97d8d518634b6eabfe0369a16994e4c56dbc3f47239804f5",
+   "c_lines": [
+    534,
+    585
+   ],
+   "c_span_sha256": "2d617adf39e2c4bb97d8d518634b6eabfe0369a16994e4c56dbc3f47239804f5",
+   "item": "impl Oracle",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    16065,
+    16561
+   ],
+   "baseline_decl_sha256": "8ebf12a1b5028d1ef70c62c69badefb062ed78ce84c772eeb177995b5b73065a",
+   "baseline_lines": [
+    621,
+    633
+   ],
+   "c_decl": [
+    16065,
+    16561
+   ],
+   "c_decl_sha256": "8ebf12a1b5028d1ef70c62c69badefb062ed78ce84c772eeb177995b5b73065a",
+   "c_lines": [
+    621,
+    633
+   ],
+   "c_span_sha256": "9fb30d70e5abd90f5bbe51aaca3150c71f4bf694afe0d2dab44dd1e0440496b3",
+   "item": "struct Io",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    16563,
+    20940
+   ],
+   "baseline_decl_sha256": "648065828525d88fc162c231de9af3c9b00b4f71cedd91c524b0aa2e56308eb5",
+   "baseline_lines": [
+    635,
+    763
+   ],
+   "c_decl": [
+    16563,
+    20940
+   ],
+   "c_decl_sha256": "648065828525d88fc162c231de9af3c9b00b4f71cedd91c524b0aa2e56308eb5",
+   "c_lines": [
+    635,
+    763
+   ],
+   "c_span_sha256": "648065828525d88fc162c231de9af3c9b00b4f71cedd91c524b0aa2e56308eb5",
+   "item": "impl <'a>Io<'a>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    20942,
+    21447
+   ],
+   "baseline_decl_sha256": "fce6671dc7d721533fe31e0e6c15613a00259f053f3cb749ca0c0ea8ed509230",
+   "baseline_lines": [
+    765,
+    785
+   ],
+   "c_decl": [
+    20942,
+    21447
+   ],
+   "c_decl_sha256": "fce6671dc7d721533fe31e0e6c15613a00259f053f3cb749ca0c0ea8ed509230",
+   "c_lines": [
+    765,
+    785
+   ],
+   "c_span_sha256": "fce6671dc7d721533fe31e0e6c15613a00259f053f3cb749ca0c0ea8ed509230",
+   "item": "impl Txn for Io<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    21449,
+    22244
+   ],
+   "baseline_decl_sha256": "7ace6b03eedc8ef3f4b49b9bcd5c88b58cbdb36317749aa955364bb482198484",
+   "baseline_lines": [
+    787,
+    811
+   ],
+   "c_decl": [
+    21449,
+    22244
+   ],
+   "c_decl_sha256": "7ace6b03eedc8ef3f4b49b9bcd5c88b58cbdb36317749aa955364bb482198484",
+   "c_lines": [
+    787,
+    811
+   ],
+   "c_span_sha256": "7ace6b03eedc8ef3f4b49b9bcd5c88b58cbdb36317749aa955364bb482198484",
+   "item": "impl Reads for Io<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    22246,
+    23168
+   ],
+   "baseline_decl_sha256": "83ccc3c0cf2172adbe09faca275bed66cd9a33e3d154ff74c8ca208b31f61a27",
+   "baseline_lines": [
+    813,
+    849
+   ],
+   "c_decl": [
+    22246,
+    23168
+   ],
+   "c_decl_sha256": "83ccc3c0cf2172adbe09faca275bed66cd9a33e3d154ff74c8ca208b31f61a27",
+   "c_lines": [
+    813,
+    849
+   ],
+   "c_span_sha256": "83ccc3c0cf2172adbe09faca275bed66cd9a33e3d154ff74c8ca208b31f61a27",
+   "item": "impl AckTxn for Io<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    23170,
+    23760
+   ],
+   "baseline_decl_sha256": "d7a58756a0770122851bf58b1cabb323a9c1d4f72755a811749c713e06d85f18",
+   "baseline_lines": [
+    851,
+    874
+   ],
+   "c_decl": [
+    23170,
+    23760
+   ],
+   "c_decl_sha256": "d7a58756a0770122851bf58b1cabb323a9c1d4f72755a811749c713e06d85f18",
+   "c_lines": [
+    851,
+    874
+   ],
+   "c_span_sha256": "d7a58756a0770122851bf58b1cabb323a9c1d4f72755a811749c713e06d85f18",
+   "item": "impl CellTxn for Io<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    23762,
+    23892
+   ],
+   "baseline_decl_sha256": "82a8dfbd9e7773dccd4c220f0e933275987d8b01af623c41fb2cfa790e2212dc",
+   "baseline_lines": [
+    876,
+    880
+   ],
+   "c_decl": [
+    23762,
+    23892
+   ],
+   "c_decl_sha256": "82a8dfbd9e7773dccd4c220f0e933275987d8b01af623c41fb2cfa790e2212dc",
+   "c_lines": [
+    876,
+    880
+   ],
+   "c_span_sha256": "82a8dfbd9e7773dccd4c220f0e933275987d8b01af623c41fb2cfa790e2212dc",
+   "item": "impl BarrierRun for Io<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    28730,
+    30248
+   ],
+   "baseline_decl_sha256": "b695213fd65cfd10a5a704a080bade0c3d2aaa41edc1a5c28c4473587a716eea",
+   "baseline_lines": [
+    1102,
+    1161
+   ],
+   "c_decl": [
+    28730,
+    30248
+   ],
+   "c_decl_sha256": "b695213fd65cfd10a5a704a080bade0c3d2aaa41edc1a5c28c4473587a716eea",
+   "c_lines": [
+    1102,
+    1161
+   ],
+   "c_span_sha256": "b695213fd65cfd10a5a704a080bade0c3d2aaa41edc1a5c28c4473587a716eea",
+   "item": "fn initial",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    31408,
+    31428
+   ],
+   "baseline_decl_sha256": "c137763c8a938c5e46d3b11495f09ecc122fccffcb34cec844f1a14ceaf3f44f",
+   "baseline_lines": [
+    1177,
+    1177
+   ],
+   "c_decl": [
+    31408,
+    31428
+   ],
+   "c_decl_sha256": "c137763c8a938c5e46d3b11495f09ecc122fccffcb34cec844f1a14ceaf3f44f",
+   "c_lines": [
+    1177,
+    1177
+   ],
+   "c_span_sha256": "c137763c8a938c5e46d3b11495f09ecc122fccffcb34cec844f1a14ceaf3f44f",
+   "item": "struct Enc",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    31430,
+    38901
+   ],
+   "baseline_decl_sha256": "b39e2e8dd6e61efeb86a3e4fe4d4c2a78e266f2cb3ccb7c613966f5e74b96ba0",
+   "baseline_lines": [
+    1179,
+    1435
+   ],
+   "c_decl": [
+    31430,
+    38901
+   ],
+   "c_decl_sha256": "b39e2e8dd6e61efeb86a3e4fe4d4c2a78e266f2cb3ccb7c613966f5e74b96ba0",
+   "c_lines": [
+    1179,
+    1435
+   ],
+   "c_span_sha256": "b39e2e8dd6e61efeb86a3e4fe4d4c2a78e266f2cb3ccb7c613966f5e74b96ba0",
+   "item": "impl Enc",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    41201,
+    46520
+   ],
+   "baseline_decl_sha256": "0258487c6ec1f4b12c6ee050ce5500b9461d7a28c503e0b01e2915695657079f",
+   "baseline_lines": [
+    1521,
+    1721
+   ],
+   "c_decl": [
+    41201,
+    46520
+   ],
+   "c_decl_sha256": "0258487c6ec1f4b12c6ee050ce5500b9461d7a28c503e0b01e2915695657079f",
+   "c_lines": [
+    1521,
+    1721
+   ],
+   "c_span_sha256": "0258487c6ec1f4b12c6ee050ce5500b9461d7a28c503e0b01e2915695657079f",
+   "item": "fn encode",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    46522,
+    46576
+   ],
+   "baseline_decl_sha256": "e6dd1544862badacb3dcd73bf6214f9d1b401538e25be02e64626cc500867e6a",
+   "baseline_lines": [
+    1723,
+    1726
+   ],
+   "c_decl": [
+    46522,
+    46576
+   ],
+   "c_decl_sha256": "e6dd1544862badacb3dcd73bf6214f9d1b401538e25be02e64626cc500867e6a",
+   "c_lines": [
+    1723,
+    1726
+   ],
+   "c_span_sha256": "e6dd1544862badacb3dcd73bf6214f9d1b401538e25be02e64626cc500867e6a",
+   "item": "struct Dec",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    46578,
+    52589
+   ],
+   "baseline_decl_sha256": "e33836a80a58c7cd3232293bf578d4f9e77450330eeb54647abb26a40f1e4822",
+   "baseline_lines": [
+    1728,
+    1951
+   ],
+   "c_decl": [
+    46578,
+    52589
+   ],
+   "c_decl_sha256": "e33836a80a58c7cd3232293bf578d4f9e77450330eeb54647abb26a40f1e4822",
+   "c_lines": [
+    1728,
+    1951
+   ],
+   "c_span_sha256": "e33836a80a58c7cd3232293bf578d4f9e77450330eeb54647abb26a40f1e4822",
+   "item": "impl Dec<'_>",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    53367,
+    58572
+   ],
+   "baseline_decl_sha256": "74bebd4af487b88ee784b38bbfb158f99eed31a2067c78f4c9f39fbdf4301f26",
+   "baseline_lines": [
+    1976,
+    2168
+   ],
+   "c_decl": [
+    53367,
+    58572
+   ],
+   "c_decl_sha256": "74bebd4af487b88ee784b38bbfb158f99eed31a2067c78f4c9f39fbdf4301f26",
+   "c_lines": [
+    1976,
+    2168
+   ],
+   "c_span_sha256": "912dd837b0bd5afebe726083db62ed7102937d118af4f9a75ac49f50f0000324",
+   "item": "fn decode",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    63904,
+    64388
+   ],
+   "baseline_decl_sha256": "5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956",
+   "baseline_lines": [
+    2332,
+    2347
+   ],
+   "c_decl": [
+    63904,
+    64388
+   ],
+   "c_decl_sha256": "5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956",
+   "c_lines": [
+    2332,
+    2347
+   ],
+   "c_span_sha256": "5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956",
+   "item": "fn actors",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    70020,
+    75202
+   ],
+   "baseline_decl_sha256": "853d3ed8a99e3e36f8f9e792df017140a833cfd7f58fe9bcee714be65efd8cbc",
+   "baseline_lines": [
+    2510,
+    2638
+   ],
+   "c_decl": [
+    70020,
+    75202
+   ],
+   "c_decl_sha256": "853d3ed8a99e3e36f8f9e792df017140a833cfd7f58fe9bcee714be65efd8cbc",
+   "c_lines": [
+    2510,
+    2638
+   ],
+   "c_span_sha256": "8f275a9e87e2dcd4f31dc7ef54875f43b248c2c0fad974e0909e5b8e5780b481",
+   "item": "fn step_fw",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    77477,
+    81449
+   ],
+   "baseline_decl_sha256": "56648761912a8657d09e06bde0b111d3d64592daf9884a35ba71ac52fbc1d1e9",
+   "baseline_lines": [
+    2702,
+    2800
+   ],
+   "c_decl": [
+    77477,
+    81449
+   ],
+   "c_decl_sha256": "56648761912a8657d09e06bde0b111d3d64592daf9884a35ba71ac52fbc1d1e9",
+   "c_lines": [
+    2702,
+    2800
+   ],
+   "c_span_sha256": "7cf06d9d435640e099918ee706da3c5500b57556e7b666cf68725434a87a57bd",
+   "item": "fn step_se",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    87722,
+    89581
+   ],
+   "baseline_decl_sha256": "7cc6ae895941c99a621d9f0d5faadc1f4a2b7bc461ea148d434c317f7649bf0f",
+   "baseline_lines": [
+    2963,
+    3016
+   ],
+   "c_decl": [
+    87722,
+    89581
+   ],
+   "c_decl_sha256": "7cc6ae895941c99a621d9f0d5faadc1f4a2b7bc461ea148d434c317f7649bf0f",
+   "c_lines": [
+    2963,
+    3016
+   ],
+   "c_span_sha256": "8b55d861cc15ad8273350b1ad2edb3aa5194fac09d05443da316e868df787a43",
+   "item": "fn step_wk",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    89642,
+    92947
+   ],
+   "baseline_decl_sha256": "357fc6dd1d3504497bdb80b1acf75b415afc69c5b4345f98e894a390761dcabe",
+   "baseline_lines": [
+    3019,
+    3105
+   ],
+   "c_decl": [
+    89642,
+    92947
+   ],
+   "c_decl_sha256": "357fc6dd1d3504497bdb80b1acf75b415afc69c5b4345f98e894a390761dcabe",
+   "c_lines": [
+    3019,
+    3105
+   ],
+   "c_span_sha256": "c07807aa74518ca07eb510a821624a1f6c327ebcac18a921a00f47127afb6943",
+   "item": "fn step_gc",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    93822,
+    98745
+   ],
+   "baseline_decl_sha256": "ed61dda079230a955766cd5bb593372022562ad02167b563dc37dfef06f496a2",
+   "baseline_lines": [
+    3130,
+    3247
+   ],
+   "c_decl": [
+    93822,
+    98745
+   ],
+   "c_decl_sha256": "ed61dda079230a955766cd5bb593372022562ad02167b563dc37dfef06f496a2",
+   "c_lines": [
+    3130,
+    3247
+   ],
+   "c_span_sha256": "17051295e99132b06f0f123d66b3dbd48edeb00fd491edf48725e75f11c70f58",
+   "item": "fn step_ack",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    98820,
+    99421
+   ],
+   "baseline_decl_sha256": "6ce990510af9b1a7973fc2c030fa0967129a0e151786f62aaef56ff56cf935b3",
+   "baseline_lines": [
+    3250,
+    3272
+   ],
+   "c_decl": [
+    98820,
+    99421
+   ],
+   "c_decl_sha256": "6ce990510af9b1a7973fc2c030fa0967129a0e151786f62aaef56ff56cf935b3",
+   "c_lines": [
+    3250,
+    3272
+   ],
+   "c_span_sha256": "a2e589fb0b9fc75e2fdc4a4c242329d3a2324106bd7ca21106c45a2568e3ee5d",
+   "item": "fn step_adm",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    99478,
+    101075
+   ],
+   "baseline_decl_sha256": "e460c782ec1a19206878a392a6fb3c144168ec7aa8c7d72a42736ea56d1735be",
+   "baseline_lines": [
+    3275,
+    3321
+   ],
+   "c_decl": [
+    99478,
+    101075
+   ],
+   "c_decl_sha256": "e460c782ec1a19206878a392a6fb3c144168ec7aa8c7d72a42736ea56d1735be",
+   "c_lines": [
+    3275,
+    3321
+   ],
+   "c_span_sha256": "8f88fbd2fc017dbdbf6803ec745a27e4bc8e27da40e89c9912d1ba3a4e0a1e16",
+   "item": "fn admission_properties",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    101141,
+    101368
+   ],
+   "baseline_decl_sha256": "9c899e370d975e674e2d17280cd0317045fb6ade5327b9c5f15fe8a80013b613",
+   "baseline_lines": [
+    3324,
+    3332
+   ],
+   "c_decl": [
+    101141,
+    101368
+   ],
+   "c_decl_sha256": "9c899e370d975e674e2d17280cd0317045fb6ade5327b9c5f15fe8a80013b613",
+   "c_lines": [
+    3324,
+    3332
+   ],
+   "c_span_sha256": "608d5887ddd6fa3e103a009bba39f7f00f6560bea8258121b695d693b4efea94",
+   "item": "fn step_env",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    101484,
+    102118
+   ],
+   "baseline_decl_sha256": "697fd932aa677d8e01f1160b3232480840783dc8477043e4194756504fe0cdc6",
+   "baseline_lines": [
+    3336,
+    3354
+   ],
+   "c_decl": [
+    101484,
+    102118
+   ],
+   "c_decl_sha256": "697fd932aa677d8e01f1160b3232480840783dc8477043e4194756504fe0cdc6",
+   "c_lines": [
+    3336,
+    3354
+   ],
+   "c_span_sha256": "070538e2755752f06875f1b1153fbcfe73d9286897e4359af3509c83a9a5c232",
+   "item": "fn step_replay",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    102187,
+    102816
+   ],
+   "baseline_decl_sha256": "ac1019183ab5450e90d5421e9a0628e706e7b69f9460416723b42d5908f6576e",
+   "baseline_lines": [
+    3357,
+    3371
+   ],
+   "c_decl": [
+    102187,
+    102816
+   ],
+   "c_decl_sha256": "ac1019183ab5450e90d5421e9a0628e706e7b69f9460416723b42d5908f6576e",
+   "c_lines": [
+    3357,
+    3371
+   ],
+   "c_span_sha256": "9224d2aecd0815c52599271fbf33529ecdefd4a62c20207cb64f8d49d60f83e1",
+   "item": "fn step",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    103658,
+    107808
+   ],
+   "baseline_decl_sha256": "ae83b7d26acc43941503b573e0147fd7b7da89b149ed31291b75e757cda2dd2b",
+   "baseline_lines": [
+    3403,
+    3511
+   ],
+   "c_decl": [
+    103658,
+    107808
+   ],
+   "c_decl_sha256": "ae83b7d26acc43941503b573e0147fd7b7da89b149ed31291b75e757cda2dd2b",
+   "c_lines": [
+    3403,
+    3511
+   ],
+   "c_span_sha256": "e1d53be10ebf79b3636103156de009c3e10e8f06a5df1c9536de3935c0d4afd8",
+   "item": "fn state_properties",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    107858,
+    109216
+   ],
+   "baseline_decl_sha256": "64fde78cb3bcd6019cb17a373f8cdd171ec6c5c5d8c698723d87fa0e1f10917b",
+   "baseline_lines": [
+    3514,
+    3545
+   ],
+   "c_decl": [
+    107858,
+    109216
+   ],
+   "c_decl_sha256": "64fde78cb3bcd6019cb17a373f8cdd171ec6c5c5d8c698723d87fa0e1f10917b",
+   "c_lines": [
+    3514,
+    3545
+   ],
+   "c_span_sha256": "b09267fd92f90ad22a33a5b037ccaa6c83a723f1c63bc99758f5396c7e498a0d",
+   "item": "fn transition_properties",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    109268,
+    110219
+   ],
+   "baseline_decl_sha256": "fcc3274f262aca1636681b392de7f967c2bda409b6800db673b45f288feb1668",
+   "baseline_lines": [
+    3548,
+    3569
+   ],
+   "c_decl": [
+    109268,
+    110219
+   ],
+   "c_decl_sha256": "fcc3274f262aca1636681b392de7f967c2bda409b6800db673b45f288feb1668",
+   "c_lines": [
+    3548,
+    3569
+   ],
+   "c_span_sha256": "fb398b42fa3c841ca6d5515597147251dc92b30c80ebf2f57b0b64fe5b26f0fa",
+   "item": "fn terminal",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    113682,
+    113881
+   ],
+   "baseline_decl_sha256": "06becf94fb5723bd0e98e5115fb1b104a95ca8c89a65965114024d6a9ba79b21",
+   "baseline_lines": [
+    3694,
+    3697
+   ],
+   "c_decl": [
+    113682,
+    113881
+   ],
+   "c_decl_sha256": "06becf94fb5723bd0e98e5115fb1b104a95ca8c89a65965114024d6a9ba79b21",
+   "c_lines": [
+    3694,
+    3697
+   ],
+   "c_span_sha256": "06becf94fb5723bd0e98e5115fb1b104a95ca8c89a65965114024d6a9ba79b21",
+   "item": "const PROPERTIES",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    114001,
+    117630
+   ],
+   "baseline_decl_sha256": "c4427f7d494d6865b55ac719b5634dd39af2322c824bc5d50b0cb6abdf24e523",
+   "baseline_lines": [
+    3701,
+    3792
+   ],
+   "c_decl": [
+    114001,
+    117630
+   ],
+   "c_decl_sha256": "c4427f7d494d6865b55ac719b5634dd39af2322c824bc5d50b0cb6abdf24e523",
+   "c_lines": [
+    3701,
+    3792
+   ],
+   "c_span_sha256": "229c9d2434063af6366ed03ec8afd468c348a34dda4f0af5aef873a9401a0155",
+   "item": "const BRANCHES",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    117922,
+    119311
+   ],
+   "baseline_decl_sha256": "1583053513439be0712e889727990f1d5c4c2293ede61e39632cf3962b377fa7",
+   "baseline_lines": [
+    3805,
+    3845
+   ],
+   "c_decl": [
+    117922,
+    119311
+   ],
+   "c_decl_sha256": "1583053513439be0712e889727990f1d5c4c2293ede61e39632cf3962b377fa7",
+   "c_lines": [
+    3805,
+    3845
+   ],
+   "c_span_sha256": "c9832f65d954e0414d50e4d1538c0e1447eeb49a7a90d5ded064bc236f4186b7",
+   "item": "fn successors",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "SOURCE-R2",
+   "baseline_decl": [
+    120566,
+    128558
+   ],
+   "baseline_decl_sha256": "cb9839b32a66fc2730dfc660d4ecf229d96904af71a98229944bced06d78bef6",
+   "baseline_lines": [
+    3882,
+    4110
+   ],
+   "c_decl": [
+    120566,
+    128558
+   ],
+   "c_decl_sha256": "cb9839b32a66fc2730dfc660d4ecf229d96904af71a98229944bced06d78bef6",
+   "c_lines": [
+    3882,
+    4110
+   ],
+   "c_span_sha256": "d7d79ebfe32ce7327d2e732d4a678558e6ea2251982942521cdec3bc84d59f98",
+   "item": "fn explore",
+   "ordinal": 1,
+   "section": "B",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    153049,
+    153106
+   ],
+   "baseline_decl_sha256": "8fc0aa5395ff4adbd77f9376cc99da679943a9db6651e05fb68ea1985499ff2f",
+   "baseline_lines": [
+    4834,
+    4834
+   ],
+   "c_decl": [
+    153049,
+    153106
+   ],
+   "c_decl_sha256": "8fc0aa5395ff4adbd77f9376cc99da679943a9db6651e05fb68ea1985499ff2f",
+   "c_lines": [
+    4834,
+    4834
+   ],
+   "c_span_sha256": "7dae23d30f3036df31c8ea4e327ce3f3ed7ba04147e77c072b603e518259668c",
+   "item": "type AdmStep",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    153108,
+    153154
+   ],
+   "baseline_decl_sha256": "8f3a378d51f050f02e34facc4004d3bdb7c02bb5bb698bc9ad0811d519db07eb",
+   "baseline_lines": [
+    4836,
+    4836
+   ],
+   "c_decl": [
+    153108,
+    153154
+   ],
+   "c_decl_sha256": "8f3a378d51f050f02e34facc4004d3bdb7c02bb5bb698bc9ad0811d519db07eb",
+   "c_lines": [
+    4836,
+    4836
+   ],
+   "c_span_sha256": "8f3a378d51f050f02e34facc4004d3bdb7c02bb5bb698bc9ad0811d519db07eb",
+   "item": "type Violations",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    153156,
+    153386
+   ],
+   "baseline_decl_sha256": "8e6fb26213793af8c5cee9935b3fc5cc41f1836974dcddfdf55190d9d0f48a59",
+   "baseline_lines": [
+    4838,
+    4844
+   ],
+   "c_decl": [
+    153156,
+    153386
+   ],
+   "c_decl_sha256": "8e6fb26213793af8c5cee9935b3fc5cc41f1836974dcddfdf55190d9d0f48a59",
+   "c_lines": [
+    4838,
+    4844
+   ],
+   "c_span_sha256": "8e6fb26213793af8c5cee9935b3fc5cc41f1836974dcddfdf55190d9d0f48a59",
+   "item": "enum Mode",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    153425,
+    153651
+   ],
+   "baseline_decl_sha256": "5582ecdba22872e7c3c7456ae8a9ea955d77a87aba2e92ecbfc782df1fe76507",
+   "baseline_lines": [
+    4847,
+    4853
+   ],
+   "c_decl": [
+    153425,
+    153651
+   ],
+   "c_decl_sha256": "5582ecdba22872e7c3c7456ae8a9ea955d77a87aba2e92ecbfc782df1fe76507",
+   "c_lines": [
+    4847,
+    4853
+   ],
+   "c_span_sha256": "eadd71cb9bf386ad3774ff79b348342b94d67c6d82310d6cb302416f1409b478",
+   "item": "enum Next",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    153706,
+    154052
+   ],
+   "baseline_decl_sha256": "de6df9c30198965293e87e625af64b422823ee3b287b4a66531e0be47f6ace42",
+   "baseline_lines": [
+    4856,
+    4871
+   ],
+   "c_decl": [
+    153706,
+    154052
+   ],
+   "c_decl_sha256": "de6df9c30198965293e87e625af64b422823ee3b287b4a66531e0be47f6ace42",
+   "c_lines": [
+    4856,
+    4871
+   ],
+   "c_span_sha256": "4227051a6da55fe9a8a14f8fa42666e00f9418925bf0280eb6519384b1f56d9b",
+   "item": "fn step_with",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    154522,
+    155754
+   ],
+   "baseline_decl_sha256": "512aae7ac96697b64317eb2ed8da8617eba6f680cec8bf05b92d7400a05eb06f",
+   "baseline_lines": [
+    4884,
+    4927
+   ],
+   "c_decl": [
+    154522,
+    155754
+   ],
+   "c_decl_sha256": "512aae7ac96697b64317eb2ed8da8617eba6f680cec8bf05b92d7400a05eb06f",
+   "c_lines": [
+    4884,
+    4927
+   ],
+   "c_span_sha256": "8f99a8d4464a3230043b0a80e267791fbbbd028488a9d58e71056d2e9e9fdc13",
+   "item": "fn observe_admission",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    155935,
+    157757
+   ],
+   "baseline_decl_sha256": "1a52c4cf59a33fc710e56bdf941eee190b32d84673920b9579b60fc6afccaf53",
+   "baseline_lines": [
+    4932,
+    4984
+   ],
+   "c_decl": [
+    155935,
+    157757
+   ],
+   "c_decl_sha256": "1a52c4cf59a33fc710e56bdf941eee190b32d84673920b9579b60fc6afccaf53",
+   "c_lines": [
+    4932,
+    4984
+   ],
+   "c_span_sha256": "baab85138438aae1001753944cb01064fdf9dd67ce56fdcf1d7867d3d3568411",
+   "item": "fn expand",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    157798,
+    158942
+   ],
+   "baseline_decl_sha256": "0fc52a88fe91631d20b647bdc72da3cdec97f0f8d67ba57ade702d4835c7df87",
+   "baseline_lines": [
+    4987,
+    5017
+   ],
+   "c_decl": [
+    157798,
+    158942
+   ],
+   "c_decl_sha256": "0fc52a88fe91631d20b647bdc72da3cdec97f0f8d67ba57ade702d4835c7df87",
+   "c_lines": [
+    4987,
+    5017
+   ],
+   "c_span_sha256": "cdf686a4fbe84456854919178c156b6cf0b8a5cbd4b88e209691c5618d5f5dcc",
+   "item": "fn trace_with",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    159075,
+    159339
+   ],
+   "baseline_decl_sha256": "e2ac0671d8b1ce499a85d31032360d81078671b899f2e0f7610ec5b5fb6d5c4d",
+   "baseline_lines": [
+    5021,
+    5033
+   ],
+   "c_decl": [
+    159075,
+    159339
+   ],
+   "c_decl_sha256": "e2ac0671d8b1ce499a85d31032360d81078671b899f2e0f7610ec5b5fb6d5c4d",
+   "c_lines": [
+    5021,
+    5033
+   ],
+   "c_span_sha256": "9c770114f4930868a93016ac96a9b02d70fd39fff237223e62129fae33080b96",
+   "item": "struct Tally",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "ADM",
+   "baseline_decl": [
+    159526,
+    170254
+   ],
+   "baseline_decl_sha256": "aa15bc365ba8c6fe8da7013be71fd3439b3540cba085409793b3ef69c2bf245a",
+   "baseline_lines": [
+    5038,
+    5339
+   ],
+   "c_decl": [
+    159526,
+    170254
+   ],
+   "c_decl_sha256": "aa15bc365ba8c6fe8da7013be71fd3439b3540cba085409793b3ef69c2bf245a",
+   "c_lines": [
+    5038,
+    5339
+   ],
+   "c_span_sha256": "5c29e81a1da32d6e194ec612546aa20afa4992bc7a3bba7d62af055482d879fc",
+   "item": "fn explore_experimental",
+   "ordinal": 1,
+   "section": "C",
+   "status": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    195968,
+    196150
+   ],
+   "baseline_decl_sha256": "1eda6013d83df4b6fced2aa60e82823c40c61df92e7a641b822e6f387c09570a",
+   "baseline_lines": [
+    6062,
+    6071
+   ],
+   "c_decl": [
+    195968,
+    196150
+   ],
+   "c_decl_sha256": "1eda6013d83df4b6fced2aa60e82823c40c61df92e7a641b822e6f387c09570a",
+   "c_lines": [
+    6062,
+    6071
+   ],
+   "c_span_sha256": "1945613db929144a26485d2a0f59f0493af2d45a74c16b4e6b8807000144249d",
+   "item": "const SYM1",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    196409,
+    196455
+   ],
+   "baseline_decl_sha256": "e59fa0185502066aa73f6db3f45867e2ac32900358a5b5e8a5cdd3643480db0c",
+   "baseline_lines": [
+    6077,
+    6077
+   ],
+   "c_decl": [
+    196564,
+    196642
+   ],
+   "c_decl_sha256": "dbf8835ef8cd0114e4e891ecc0a30e6f8f85df696c79502a40d245f3d36bb29d",
+   "c_lines": [
+    6079,
+    6079
+   ],
+   "c_span_sha256": "2140b5fa35e126e776201ef7edc73bd21da0558636525a75c05f5ae5d1a8e885",
+   "item": "const SYMMETRIC",
+   "ordinal": 1,
+   "section": "D",
+   "status": "CHANGED",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    196495,
+    196672
+   ],
+   "baseline_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+   "baseline_lines": [
+    6080,
+    6089
+   ],
+   "c_decl": [
+    196682,
+    196859
+   ],
+   "c_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+   "c_lines": [
+    6082,
+    6091
+   ],
+   "c_span_sha256": "9adca7e0af4093535b1b72d9ea656e3441140c230c70780bcc02d9e319f83578",
+   "item": "fn shape",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    196814,
+    197958
+   ],
+   "baseline_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+   "baseline_lines": [
+    6093,
+    6126
+   ],
+   "c_decl": [
+    197001,
+    198145
+   ],
+   "c_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+   "c_lines": [
+    6095,
+    6128
+   ],
+   "c_span_sha256": "e4c9fc807b7b42d92bca3b82f9a6c9adedde9ed084f9efd4314c8dcb459f63d5",
+   "item": "fn assert_symmetric",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    197989,
+    198095
+   ],
+   "baseline_decl_sha256": "19f242eb1aaf6485e4ff8ae37df1546e32c5dc1c3e0945164006073a3349cded",
+   "baseline_lines": [
+    6129,
+    6132
+   ],
+   "c_decl": [
+    198176,
+    198282
+   ],
+   "c_decl_sha256": "19f242eb1aaf6485e4ff8ae37df1546e32c5dc1c3e0945164006073a3349cded",
+   "c_lines": [
+    6131,
+    6134
+   ],
+   "c_span_sha256": "04126a7b0feee85aa47e0672d4956216a1a7b33485ac22b309439ac1a9851443",
+   "item": "fn other_caller",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    198464,
+    199032
+   ],
+   "baseline_decl_sha256": "02095a766d1e834b28a05a30d1c768ef1de3c4764b37c73e86b8007529fe9885",
+   "baseline_lines": [
+    6139,
+    6155
+   ],
+   "c_decl": [
+    198651,
+    199219
+   ],
+   "c_decl_sha256": "02095a766d1e834b28a05a30d1c768ef1de3c4764b37c73e86b8007529fe9885",
+   "c_lines": [
+    6141,
+    6157
+   ],
+   "c_span_sha256": "5f5d7dc8427807784911d80ec522da54b1cc5f085ae1e12df2dfae2a4cc57295",
+   "item": "fn mirror_x32",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    199034,
+    199177
+   ],
+   "baseline_decl_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+   "baseline_lines": [
+    6157,
+    6162
+   ],
+   "c_decl": [
+    199221,
+    199364
+   ],
+   "c_decl_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+   "c_lines": [
+    6159,
+    6164
+   ],
+   "c_span_sha256": "23a8fd1d1c1c373ddb30e408864fc8af85156722524d82b19c4ce78ccb8d5237",
+   "item": "fn mirror_key",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    199179,
+    199310
+   ],
+   "baseline_decl_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+   "baseline_lines": [
+    6164,
+    6169
+   ],
+   "c_decl": [
+    199366,
+    199497
+   ],
+   "c_decl_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+   "c_lines": [
+    6166,
+    6171
+   ],
+   "c_span_sha256": "c18420ebcaae305db6d7376343e87138f7c68bfb177eb3d77c6e6aeca8d0db9c",
+   "item": "fn mirror_part",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    199312,
+    199469
+   ],
+   "baseline_decl_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+   "baseline_lines": [
+    6171,
+    6176
+   ],
+   "c_decl": [
+    199499,
+    199656
+   ],
+   "c_decl_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+   "c_lines": [
+    6173,
+    6178
+   ],
+   "c_span_sha256": "16c9b5e8a30d9e207a1acee89a31e718911158ff904e35a4faa7537c1bc23c25",
+   "item": "fn mirror_member",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    199549,
+    200535
+   ],
+   "baseline_decl_sha256": "f06050ccab27742e3802924dc7e7b7842941260be96e0d580c259b43d76d99fb",
+   "baseline_lines": [
+    6179,
+    6211
+   ],
+   "c_decl": [
+    199736,
+    200722
+   ],
+   "c_decl_sha256": "f06050ccab27742e3802924dc7e7b7842941260be96e0d580c259b43d76d99fb",
+   "c_lines": [
+    6181,
+    6213
+   ],
+   "c_span_sha256": "10c9629adf0dbaea7535c2e11934b7632355cdfd5a431bc9781ac1130cfacf54",
+   "item": "fn mirror_cause",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    200537,
+    201299
+   ],
+   "baseline_decl_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+   "baseline_lines": [
+    6213,
+    6232
+   ],
+   "c_decl": [
+    200724,
+    201486
+   ],
+   "c_decl_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+   "c_lines": [
+    6215,
+    6234
+   ],
+   "c_span_sha256": "e02af0b74adfa88d72038b107f9ebdd8bcc190492c67bbe8760fe41dae964f8b",
+   "item": "fn mirror_occupant",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    201371,
+    202065
+   ],
+   "baseline_decl_sha256": "2289d7d97f1f8820775da50873ec18df22ec326c862dc8bb8ad624bd1cb81c99",
+   "baseline_lines": [
+    6235,
+    6250
+   ],
+   "c_decl": [
+    201558,
+    202252
+   ],
+   "c_decl_sha256": "2289d7d97f1f8820775da50873ec18df22ec326c862dc8bb8ad624bd1cb81c99",
+   "c_lines": [
+    6237,
+    6252
+   ],
+   "c_span_sha256": "95309948ce5cee2107e135a7bd06ab9f4dd89997a22c5d885fe4b9aa49a90a62",
+   "item": "fn mirror_row",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    202114,
+    202288
+   ],
+   "baseline_decl_sha256": "9f58cae53d0e6b1116e8b7c96db9fbdda95947b96b195d997165c1599cc5a125",
+   "baseline_lines": [
+    6253,
+    6259
+   ],
+   "c_decl": [
+    202301,
+    202475
+   ],
+   "c_decl_sha256": "9f58cae53d0e6b1116e8b7c96db9fbdda95947b96b195d997165c1599cc5a125",
+   "c_lines": [
+    6255,
+    6261
+   ],
+   "c_span_sha256": "1ba0e0a5311786f098f73a8e50a213cd272c7b8c82ebd78fd85909545e81d48a",
+   "item": "fn mirror_bits",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    202665,
+    204605
+   ],
+   "baseline_decl_sha256": "1aed6bbe58192d61014dc3bd2491337c4ea7cc0c9892a97e85274a57c41c9d14",
+   "baseline_lines": [
+    6266,
+    6344
+   ],
+   "c_decl": [
+    202852,
+    204792
+   ],
+   "c_decl_sha256": "1aed6bbe58192d61014dc3bd2491337c4ea7cc0c9892a97e85274a57c41c9d14",
+   "c_lines": [
+    6268,
+    6346
+   ],
+   "c_span_sha256": "15691fd138ac0e8b96270131cbf8cc9bf8f76777682eb6278a08d809502a568a",
+   "item": "fn mirror_world",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    204662,
+    204801
+   ],
+   "baseline_decl_sha256": "5946d0b9d9bc6714a5972086d6feecae3c1c05eddc354efac6ec9aa4f5b4aa2b",
+   "baseline_lines": [
+    6347,
+    6351
+   ],
+   "c_decl": [
+    204849,
+    204988
+   ],
+   "c_decl_sha256": "5946d0b9d9bc6714a5972086d6feecae3c1c05eddc354efac6ec9aa4f5b4aa2b",
+   "c_lines": [
+    6349,
+    6353
+   ],
+   "c_span_sha256": "e9a60c29d7158a8b9eed88cdeea089bac5fe55cb6ff8839f16a1649757c947e6",
+   "item": "fn mirror",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    204866,
+    204998
+   ],
+   "baseline_decl_sha256": "bfd85786537f82397144bdb8cd6e89aa69d7fbaca10f27e6263a2876f250500b",
+   "baseline_lines": [
+    6354,
+    6360
+   ],
+   "c_decl": [
+    205053,
+    205185
+   ],
+   "c_decl_sha256": "bfd85786537f82397144bdb8cd6e89aa69d7fbaca10f27e6263a2876f250500b",
+   "c_lines": [
+    6356,
+    6362
+   ],
+   "c_span_sha256": "e7d92e226d15d112828090d188505a00b04292c0fd2a2a6bfad091f3832d9005",
+   "item": "fn canonical",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    205070,
+    205421
+   ],
+   "baseline_decl_sha256": "b7533b618a1872b31985ca40fb67e814fd26eebf856a5b613e36260bcf7c720a",
+   "baseline_lines": [
+    6363,
+    6373
+   ],
+   "c_decl": [
+    205257,
+    205608
+   ],
+   "c_decl_sha256": "b7533b618a1872b31985ca40fb67e814fd26eebf856a5b613e36260bcf7c720a",
+   "c_lines": [
+    6365,
+    6375
+   ],
+   "c_span_sha256": "aa39d3a86c5af4d181c3de14abae39b4cec10cb8bfece4fe282cc7a0c6ff5602",
+   "item": "fn mirror_edge",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    205613,
+    205789
+   ],
+   "baseline_decl_sha256": "54d332c2859bfb046cb4b79844682a8b8563842e4f40ea4b337cc5e2afc8b9cb",
+   "baseline_lines": [
+    6378,
+    6386
+   ],
+   "c_decl": [
+    205800,
+    205976
+   ],
+   "c_decl_sha256": "54d332c2859bfb046cb4b79844682a8b8563842e4f40ea4b337cc5e2afc8b9cb",
+   "c_lines": [
+    6380,
+    6388
+   ],
+   "c_span_sha256": "99003d47eadd042528f835d982af15c5126a365abb53b39046be6fda3bcee70f",
+   "item": "struct Image",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    205791,
+    205985
+   ],
+   "baseline_decl_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+   "baseline_lines": [
+    6388,
+    6392
+   ],
+   "c_decl": [
+    205978,
+    206172
+   ],
+   "c_decl_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+   "c_lines": [
+    6390,
+    6394
+   ],
+   "c_span_sha256": "e5b1ee2bddf41b471ea6f71d76acdd88a8cae1ad1157b0e824ad3a4a782f4a94",
+   "item": "fn names",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    206049,
+    206302
+   ],
+   "baseline_decl_sha256": "756ed5612d309c9c50301f480530e87b905daea87def6f839f7274df76232ecd",
+   "baseline_lines": [
+    6395,
+    6401
+   ],
+   "c_decl": [
+    206236,
+    206489
+   ],
+   "c_decl_sha256": "756ed5612d309c9c50301f480530e87b905daea87def6f839f7274df76232ecd",
+   "c_lines": [
+    6397,
+    6403
+   ],
+   "c_span_sha256": "e758450d3fb4e0e3dd7db09a4b61de600e969d6a33d9e0bc833db15d5921a961",
+   "item": "fn by_actor",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    206661,
+    208068
+   ],
+   "baseline_decl_sha256": "4889e32c331fc27ce6c49843b7d0179af4423d6452681fe0dd2a20f360619ce6",
+   "baseline_lines": [
+    6408,
+    6450
+   ],
+   "c_decl": [
+    206848,
+    208255
+   ],
+   "c_decl_sha256": "4889e32c331fc27ce6c49843b7d0179af4423d6452681fe0dd2a20f360619ce6",
+   "c_lines": [
+    6410,
+    6452
+   ],
+   "c_span_sha256": "54b1585318355c3fc2a00a9a5714a4137c7f071e813b8205315fd26ba571d286",
+   "item": "fn hold",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    208207,
+    208810
+   ],
+   "baseline_decl_sha256": "027a4e3c6e01c5c09b4030d2c2cb00fcc8b53a52e8f13ae0d96b35f28b0e8e56",
+   "baseline_lines": [
+    6454,
+    6469
+   ],
+   "c_decl": [
+    208394,
+    208997
+   ],
+   "c_decl_sha256": "027a4e3c6e01c5c09b4030d2c2cb00fcc8b53a52e8f13ae0d96b35f28b0e8e56",
+   "c_lines": [
+    6456,
+    6471
+   ],
+   "c_span_sha256": "b7ac73d674a22334016a849a079e3825c8e6fbccaed35c4f7174b87cec4392a4",
+   "item": "fn replay",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    209143,
+    210008
+   ],
+   "baseline_decl_sha256": "92d64967cb12a23dce7685f191c6da2d3f1766bf2f4268ed9caf2720a673f07c",
+   "baseline_lines": [
+    6476,
+    6502
+   ],
+   "c_decl": [
+    209330,
+    210195
+   ],
+   "c_decl_sha256": "92d64967cb12a23dce7685f191c6da2d3f1766bf2f4268ed9caf2720a673f07c",
+   "c_lines": [
+    6478,
+    6504
+   ],
+   "c_span_sha256": "756799168dffed4c61c4121d43dd0e569e9f4cf966cc9eaa1e8046732b5133a0",
+   "item": "fn unfold",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    210068,
+    210336
+   ],
+   "baseline_decl_sha256": "8fe20c0a051588c217e96e4658f3c60642afa4a51053f85c80d97602b64b6a24",
+   "baseline_lines": [
+    6505,
+    6512
+   ],
+   "c_decl": [
+    210255,
+    210523
+   ],
+   "c_decl_sha256": "8fe20c0a051588c217e96e4658f3c60642afa4a51053f85c80d97602b64b6a24",
+   "c_lines": [
+    6507,
+    6514
+   ],
+   "c_span_sha256": "3d5c3b83cf6889fa1e82c018754b5e2e2d7bd8b1abc91ead15674f90ac2ad1aa",
+   "item": "fn witness",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    210608,
+    211258
+   ],
+   "baseline_decl_sha256": "3732504593ce889ac3135735d1200af9e107d65b06e1f606a495c51d2372a1a0",
+   "baseline_lines": [
+    6518,
+    6538
+   ],
+   "c_decl": [
+    210795,
+    211445
+   ],
+   "c_decl_sha256": "3732504593ce889ac3135735d1200af9e107d65b06e1f606a495c51d2372a1a0",
+   "c_lines": [
+    6520,
+    6540
+   ],
+   "c_span_sha256": "9e4be666cc804fe9fbce19cda22edcd4fcb8e1f4229656c27bff26aed6e2b53f",
+   "item": "fn kahn",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    211564,
+    211833
+   ],
+   "baseline_decl_sha256": "8aefb443f4886e8c17eb9b5067efc6ae5841d293fc148eb36aab43e8c3a101ed",
+   "baseline_lines": [
+    6544,
+    6554
+   ],
+   "c_decl": [
+    211751,
+    212020
+   ],
+   "c_decl_sha256": "8aefb443f4886e8c17eb9b5067efc6ae5841d293fc148eb36aab43e8c3a101ed",
+   "c_lines": [
+    6546,
+    6556
+   ],
+   "c_span_sha256": "6b9f6c5512d8cd03b419779643ce6016a1900244343be8a2a4a36a4cb44488e6",
+   "item": "struct Mirrors",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    211910,
+    211954
+   ],
+   "baseline_decl_sha256": "5e10373ceabc2c90fdf6ce0172150c2f11a13cef96c6ba696b6e49eae4f6e47e",
+   "baseline_lines": [
+    6557,
+    6557
+   ],
+   "c_decl": [
+    212097,
+    212141
+   ],
+   "c_decl_sha256": "5e10373ceabc2c90fdf6ce0172150c2f11a13cef96c6ba696b6e49eae4f6e47e",
+   "c_lines": [
+    6559,
+    6559
+   ],
+   "c_span_sha256": "9994f380beb8842e224cee3d567f8f7677c0c58839fad2f37a4417fd8d7ab718",
+   "item": "type Kept",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    211956,
+    212168
+   ],
+   "baseline_decl_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+   "baseline_lines": [
+    6559,
+    6562
+   ],
+   "c_decl": [
+    212143,
+    212355
+   ],
+   "c_decl_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+   "c_lines": [
+    6561,
+    6564
+   ],
+   "c_span_sha256": "0d9be6f6bb75f0afb6b7e3131791f14852b8f973945f98781aa1caea10051e72",
+   "item": "fn explore_symmetric",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "GC",
+   "baseline_decl": [
+    212553,
+    225240
+   ],
+   "baseline_decl_sha256": "24418b978bc6157687151da84a40d25439c70cd6642961880dfc4bd78e9ecf21",
+   "baseline_lines": [
+    6570,
+    6925
+   ],
+   "c_decl": [
+    212740,
+    225427
+   ],
+   "c_decl_sha256": "24418b978bc6157687151da84a40d25439c70cd6642961880dfc4bd78e9ecf21",
+   "c_lines": [
+    6572,
+    6927
+   ],
+   "c_span_sha256": "8af401da1576af72eea06977aa4b07abaa025d007e65bb78b3f03d46fd356269",
+   "item": "fn explore_symmetric_kept",
+   "ordinal": 1,
+   "section": "D",
+   "status": "IDENTICAL (bytes; offset moved)",
+   "status_vs_EXT": "IDENTICAL"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    196564,
+    196642
+   ],
+   "baseline_decl_sha256": "dbf8835ef8cd0114e4e891ecc0a30e6f8f85df696c79502a40d245f3d36bb29d",
+   "baseline_lines": [
+    6079,
+    6079
+   ],
+   "c_decl": [
+    196564,
+    196642
+   ],
+   "c_decl_sha256": "dbf8835ef8cd0114e4e891ecc0a30e6f8f85df696c79502a40d245f3d36bb29d",
+   "c_lines": [
+    6079,
+    6079
+   ],
+   "c_span_sha256": "2140b5fa35e126e776201ef7edc73bd21da0558636525a75c05f5ae5d1a8e885",
+   "item": "const SYMMETRIC",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "CHANGED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    258787,
+    258881
+   ],
+   "baseline_decl_sha256": "56addfc0583f3ded8043528e3c91b122a04d0ada0d08ddf34d55f60eae659a19",
+   "baseline_lines": [
+    7784,
+    7788
+   ],
+   "c_decl": [
+    258787,
+    258881
+   ],
+   "c_decl_sha256": "56addfc0583f3ded8043528e3c91b122a04d0ada0d08ddf34d55f60eae659a19",
+   "c_lines": [
+    7784,
+    7788
+   ],
+   "c_span_sha256": "667320cb6a3946a1a65feb07587e8c39728272bd280a930f03a53f32be9aaa6d",
+   "item": "const SYM_PT",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    259059,
+    259229
+   ],
+   "baseline_decl_sha256": "ba420d24a2e1b92a1b8879024fa2045a90b80b2d1f04846cbe6d656cd4a8d22a",
+   "baseline_lines": [
+    7793,
+    7801
+   ],
+   "c_decl": [
+    259059,
+    259229
+   ],
+   "c_decl_sha256": "ba420d24a2e1b92a1b8879024fa2045a90b80b2d1f04846cbe6d656cd4a8d22a",
+   "c_lines": [
+    7793,
+    7801
+   ],
+   "c_span_sha256": "2615c75ca05728090a090156ff7d7f9b7397eda3099416bec2562eddedaeaee7",
+   "item": "const SYM_B",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    259345,
+    259489
+   ],
+   "baseline_decl_sha256": "ad6ba4657c3c38589b5c6bbd9082c3d9429d4decbe8ee5e7a5f1d033032aa0fa",
+   "baseline_lines": [
+    7805,
+    7812
+   ],
+   "c_decl": [
+    259345,
+    259489
+   ],
+   "c_decl_sha256": "ad6ba4657c3c38589b5c6bbd9082c3d9429d4decbe8ee5e7a5f1d033032aa0fa",
+   "c_lines": [
+    7805,
+    7812
+   ],
+   "c_span_sha256": "8cbdf6d7d8e4f7a0c9fcf8e9f0f85458e86cb6c61f46a1ec98bbcc461d30e03b",
+   "item": "const SYM_BI",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    259803,
+    261426
+   ],
+   "baseline_decl_sha256": "dd695a0ca1c6cc147d6e0ed8bc6456320783ee2f89fdec890d4a0a3d336d7bed",
+   "baseline_lines": [
+    7819,
+    7870
+   ],
+   "c_decl": [
+    259803,
+    261426
+   ],
+   "c_decl_sha256": "dd695a0ca1c6cc147d6e0ed8bc6456320783ee2f89fdec890d4a0a3d336d7bed",
+   "c_lines": [
+    7819,
+    7870
+   ],
+   "c_span_sha256": "0b3050e9202cc11244b5e95f07ff2826316726bfdf97c94d4bc03c484f96fd45",
+   "item": "fn gc_symmetry_allow_list_is_exact",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    261428,
+    261520
+   ],
+   "baseline_decl_sha256": "17cca95a241682c55343c227f3dc51f801fcc23cf90e6610c822eb983d62e285",
+   "baseline_lines": [
+    7872,
+    7875
+   ],
+   "c_decl": [
+    261428,
+    261520
+   ],
+   "c_decl_sha256": "17cca95a241682c55343c227f3dc51f801fcc23cf90e6610c822eb983d62e285",
+   "c_lines": [
+    7872,
+    7875
+   ],
+   "c_span_sha256": "17cca95a241682c55343c227f3dc51f801fcc23cf90e6610c822eb983d62e285",
+   "item": "fn gc_symmetry_sym_pt_matches_the_original",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    261522,
+    261612
+   ],
+   "baseline_decl_sha256": "92430b857ba0bfc5202b0d21643586afc62506bdb980e9376b9f2f379a11c7e1",
+   "baseline_lines": [
+    7877,
+    7880
+   ],
+   "c_decl": [
+    261522,
+    261612
+   ],
+   "c_decl_sha256": "92430b857ba0bfc5202b0d21643586afc62506bdb980e9376b9f2f379a11c7e1",
+   "c_lines": [
+    7877,
+    7880
+   ],
+   "c_span_sha256": "92430b857ba0bfc5202b0d21643586afc62506bdb980e9376b9f2f379a11c7e1",
+   "item": "fn gc_symmetry_sym_b_matches_the_original",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    261614,
+    261706
+   ],
+   "baseline_decl_sha256": "fe3bd108defc6129cb75b37e20edc6468e0c259205c1da1515fa42538f994710",
+   "baseline_lines": [
+    7882,
+    7885
+   ],
+   "c_decl": [
+    261614,
+    261706
+   ],
+   "c_decl_sha256": "fe3bd108defc6129cb75b37e20edc6468e0c259205c1da1515fa42538f994710",
+   "c_lines": [
+    7882,
+    7885
+   ],
+   "c_span_sha256": "fe3bd108defc6129cb75b37e20edc6468e0c259205c1da1515fa42538f994710",
+   "item": "fn gc_symmetry_sym_bi_matches_the_original",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    261773,
+    262015
+   ],
+   "baseline_decl_sha256": "0e282b8cc8288274781d6d53b7475dc11de94c1bf9d7608508a3d41f842e1e77",
+   "baseline_lines": [
+    7888,
+    7894
+   ],
+   "c_decl": [
+    261773,
+    262015
+   ],
+   "c_decl_sha256": "0e282b8cc8288274781d6d53b7475dc11de94c1bf9d7608508a3d41f842e1e77",
+   "c_lines": [
+    7888,
+    7894
+   ],
+   "c_span_sha256": "03ec9839839803216ea192c0784b78ac9e8250d4ccd23735dd041662cc688fea",
+   "item": "fn original_graph",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    262344,
+    263442
+   ],
+   "baseline_decl_sha256": "dcf13ebc4402a34930a87fba22b2dc703b185f5baee17c6a485674727d3a2283",
+   "baseline_lines": [
+    7901,
+    7934
+   ],
+   "c_decl": [
+    262344,
+    263442
+   ],
+   "c_decl_sha256": "dcf13ebc4402a34930a87fba22b2dc703b185f5baee17c6a485674727d3a2283",
+   "c_lines": [
+    7901,
+    7934
+   ],
+   "c_span_sha256": "6ffe6e591fa7fcf10cedcaaec63b8eafc0ba4a7f328aa571bd415395cee232dd",
+   "item": "fn exchange_exercised",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    263811,
+    266327
+   ],
+   "baseline_decl_sha256": "172b2dd38be5f77afd8409fc0cbb381ef6f2b7c129784b96577c40d93c3834fa",
+   "baseline_lines": [
+    7941,
+    7997
+   ],
+   "c_decl": [
+    263811,
+    266327
+   ],
+   "c_decl_sha256": "172b2dd38be5f77afd8409fc0cbb381ef6f2b7c129784b96577c40d93c3834fa",
+   "c_lines": [
+    7941,
+    7997
+   ],
+   "c_span_sha256": "a5d8a01d1f4dec7a000941164c9a87f44f35612e14e6124e01a5fbfe1789bfeb",
+   "item": "fn gc_symmetry_sym_pt_takes_the_a4_steps",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    266699,
+    266861
+   ],
+   "baseline_decl_sha256": "256fbd5029bbf564a3a0423567f25116599e9a42a37321b39644ae61ab1d6664",
+   "baseline_lines": [
+    8004,
+    8012
+   ],
+   "c_decl": [
+    266699,
+    266861
+   ],
+   "c_decl_sha256": "256fbd5029bbf564a3a0423567f25116599e9a42a37321b39644ae61ab1d6664",
+   "c_lines": [
+    8004,
+    8012
+   ],
+   "c_span_sha256": "f48fa95abcaef87a0064fa1765a5ddc8c064ad80fafd149f5478fe430b786271",
+   "item": "struct BatchSteps",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    266863,
+    268863
+   ],
+   "baseline_decl_sha256": "9003cc126599a2c50b0730af2ff093b4cffbcf395e3a239cc0326c4089b47234",
+   "baseline_lines": [
+    8014,
+    8058
+   ],
+   "c_decl": [
+    266863,
+    268863
+   ],
+   "c_decl_sha256": "9003cc126599a2c50b0730af2ff093b4cffbcf395e3a239cc0326c4089b47234",
+   "c_lines": [
+    8014,
+    8058
+   ],
+   "c_span_sha256": "9003cc126599a2c50b0730af2ff093b4cffbcf395e3a239cc0326c4089b47234",
+   "item": "fn batch_steps",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    269172,
+    270141
+   ],
+   "baseline_decl_sha256": "1e53a118f85c52dacf8b196db9c0d64964890c881b34d86c090b8f08f926ad55",
+   "baseline_lines": [
+    8064,
+    8089
+   ],
+   "c_decl": [
+    269172,
+    270141
+   ],
+   "c_decl_sha256": "1e53a118f85c52dacf8b196db9c0d64964890c881b34d86c090b8f08f926ad55",
+   "c_lines": [
+    8064,
+    8089
+   ],
+   "c_span_sha256": "3abc9bd53d7dc0c470058f3216533f6adf6407cb1e68077dcb97bf3dac50222b",
+   "item": "fn gc_symmetry_sym_b_takes_the_batch_steps",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    270390,
+    271270
+   ],
+   "baseline_decl_sha256": "5b0a32fe6b1035faee826e9f2a9adce9f213231e9523533349d19ac0c61cec7e",
+   "baseline_lines": [
+    8095,
+    8116
+   ],
+   "c_decl": [
+    270390,
+    271270
+   ],
+   "c_decl_sha256": "5b0a32fe6b1035faee826e9f2a9adce9f213231e9523533349d19ac0c61cec7e",
+   "c_lines": [
+    8095,
+    8116
+   ],
+   "c_span_sha256": "21a15959ba425f526ec40531f25e521c1d3de20d6d9684156a139feaddfbdae2",
+   "item": "fn gc_symmetry_sym_bi_takes_the_batch_inserts",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    271807,
+    271924
+   ],
+   "baseline_decl_sha256": "7a2a7e1ed880d78961c0585fcb25daa2dd34b97ab966fab89f2026b19330031e",
+   "baseline_lines": [
+    8125,
+    8128
+   ],
+   "c_decl": [
+    271807,
+    271924
+   ],
+   "c_decl_sha256": "7a2a7e1ed880d78961c0585fcb25daa2dd34b97ab966fab89f2026b19330031e",
+   "c_lines": [
+    8125,
+    8128
+   ],
+   "c_span_sha256": "422119bbb0f926c1b9a61c7c0b00ef02f7572969ed155d5ae882f450ba3a519a",
+   "item": "fn gc_symmetry_negative_p1_on_sym_pt",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    271926,
+    272042
+   ],
+   "baseline_decl_sha256": "05bae47b2d73dbcfd2bf1a7e541027f0e7ad92f24023fcb6ff2af9ec99e73084",
+   "baseline_lines": [
+    8130,
+    8133
+   ],
+   "c_decl": [
+    271926,
+    272042
+   ],
+   "c_decl_sha256": "05bae47b2d73dbcfd2bf1a7e541027f0e7ad92f24023fcb6ff2af9ec99e73084",
+   "c_lines": [
+    8130,
+    8133
+   ],
+   "c_span_sha256": "05bae47b2d73dbcfd2bf1a7e541027f0e7ad92f24023fcb6ff2af9ec99e73084",
+   "item": "fn gc_symmetry_negative_p12_on_sym_b",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    272044,
+    272161
+   ],
+   "baseline_decl_sha256": "0e1bbccd29cc83749c2b920032e1626806c2032256903ecd84a6ce254ac39f29",
+   "baseline_lines": [
+    8135,
+    8138
+   ],
+   "c_decl": [
+    272044,
+    272161
+   ],
+   "c_decl_sha256": "0e1bbccd29cc83749c2b920032e1626806c2032256903ecd84a6ce254ac39f29",
+   "c_lines": [
+    8135,
+    8138
+   ],
+   "c_span_sha256": "0e1bbccd29cc83749c2b920032e1626806c2032256903ecd84a6ce254ac39f29",
+   "item": "fn gc_symmetry_negative_p1_on_sym_bi",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    272272,
+    272519
+   ],
+   "baseline_decl_sha256": "a8db1e2c37da3a55235d91f3b87f4c3249167c6166eb08758eb2c85c876d3997",
+   "baseline_lines": [
+    8142,
+    8148
+   ],
+   "c_decl": [
+    272272,
+    272519
+   ],
+   "c_decl_sha256": "a8db1e2c37da3a55235d91f3b87f4c3249167c6166eb08758eb2c85c876d3997",
+   "c_lines": [
+    8142,
+    8148
+   ],
+   "c_span_sha256": "0fd0c2e016caf4a9006df7a8b7b86c243625d022a7c465b550ee8d0c2ec21bab",
+   "item": "fn gc_symmetry_refuses_an_asymmetric_step_on_sym_pt",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    272521,
+    272766
+   ],
+   "baseline_decl_sha256": "f9ba9464a7e92aed9bf58a9bad773eb442cddd3d89421531b944ec9e23654dc8",
+   "baseline_lines": [
+    8150,
+    8156
+   ],
+   "c_decl": [
+    272521,
+    272766
+   ],
+   "c_decl_sha256": "f9ba9464a7e92aed9bf58a9bad773eb442cddd3d89421531b944ec9e23654dc8",
+   "c_lines": [
+    8150,
+    8156
+   ],
+   "c_span_sha256": "f9ba9464a7e92aed9bf58a9bad773eb442cddd3d89421531b944ec9e23654dc8",
+   "item": "fn gc_symmetry_refuses_an_asymmetric_step_on_sym_b",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    272768,
+    273015
+   ],
+   "baseline_decl_sha256": "3f8a5cc9f200720535e35dc2a0847cef6bea743c2583f27ed0f69dff95ef6dee",
+   "baseline_lines": [
+    8158,
+    8164
+   ],
+   "c_decl": [
+    272768,
+    273015
+   ],
+   "c_decl_sha256": "3f8a5cc9f200720535e35dc2a0847cef6bea743c2583f27ed0f69dff95ef6dee",
+   "c_lines": [
+    8158,
+    8164
+   ],
+   "c_span_sha256": "3f8a5cc9f200720535e35dc2a0847cef6bea743c2583f27ed0f69dff95ef6dee",
+   "item": "fn gc_symmetry_refuses_an_asymmetric_step_on_sym_bi",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    273017,
+    273308
+   ],
+   "baseline_decl_sha256": "11383a84a38aa14af6318e19ffb847ca3731a7ae4a45c6cbebad6f0ec93914b3",
+   "baseline_lines": [
+    8166,
+    8173
+   ],
+   "c_decl": [
+    273017,
+    273308
+   ],
+   "c_decl_sha256": "11383a84a38aa14af6318e19ffb847ca3731a7ae4a45c6cbebad6f0ec93914b3",
+   "c_lines": [
+    8166,
+    8173
+   ],
+   "c_span_sha256": "11383a84a38aa14af6318e19ffb847ca3731a7ae4a45c6cbebad6f0ec93914b3",
+   "item": "fn gc_symmetry_refuses_a_batch_under_f3s_name",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    273310,
+    273609
+   ],
+   "baseline_decl_sha256": "1bde79edf5a981be9ef9717e06cb66a20897e639799937f50298047eec37e99f",
+   "baseline_lines": [
+    8175,
+    8182
+   ],
+   "c_decl": [
+    273310,
+    273609
+   ],
+   "c_decl_sha256": "1bde79edf5a981be9ef9717e06cb66a20897e639799937f50298047eec37e99f",
+   "c_lines": [
+    8175,
+    8182
+   ],
+   "c_span_sha256": "1bde79edf5a981be9ef9717e06cb66a20897e639799937f50298047eec37e99f",
+   "item": "fn gc_symmetry_refuses_f_pt_with_a_lower_fault_budget",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    273611,
+    273941
+   ],
+   "baseline_decl_sha256": "4709ca9754f2fc2aeafcf079b619184b85e14a327021cda4d20cbb4f3eeab67e",
+   "baseline_lines": [
+    8184,
+    8194
+   ],
+   "c_decl": [
+    273611,
+    273941
+   ],
+   "c_decl_sha256": "4709ca9754f2fc2aeafcf079b619184b85e14a327021cda4d20cbb4f3eeab67e",
+   "c_lines": [
+    8184,
+    8194
+   ],
+   "c_span_sha256": "4709ca9754f2fc2aeafcf079b619184b85e14a327021cda4d20cbb4f3eeab67e",
+   "item": "fn gc_symmetry_refuses_f_b_with_another_actor_change",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    273943,
+    274215
+   ],
+   "baseline_decl_sha256": "15db2dfd55f72b0ea60468ff52a38d44549dfe1f7b7e09d1b78bc4676e59e491",
+   "baseline_lines": [
+    8196,
+    8204
+   ],
+   "c_decl": [
+    273943,
+    274215
+   ],
+   "c_decl_sha256": "15db2dfd55f72b0ea60468ff52a38d44549dfe1f7b7e09d1b78bc4676e59e491",
+   "c_lines": [
+    8196,
+    8204
+   ],
+   "c_span_sha256": "15db2dfd55f72b0ea60468ff52a38d44549dfe1f7b7e09d1b78bc4676e59e491",
+   "item": "fn gc_symmetry_refuses_f_pt_with_a_raised_cap",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    274217,
+    274514
+   ],
+   "baseline_decl_sha256": "bdba2c7c463aabb1f4bc323224dc140243a97c1e21ddf0db79fed5af99a34b30",
+   "baseline_lines": [
+    8206,
+    8214
+   ],
+   "c_decl": [
+    274217,
+    274514
+   ],
+   "c_decl_sha256": "bdba2c7c463aabb1f4bc323224dc140243a97c1e21ddf0db79fed5af99a34b30",
+   "c_lines": [
+    8206,
+    8214
+   ],
+   "c_span_sha256": "bdba2c7c463aabb1f4bc323224dc140243a97c1e21ddf0db79fed5af99a34b30",
+   "item": "fn gc_symmetry_refuses_f_b_with_a_raised_time_cap",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    274637,
+    274939
+   ],
+   "baseline_decl_sha256": "916993027b9a2481049e04030c34096fba74afa983bf7194803980c10151be3a",
+   "baseline_lines": [
+    8218,
+    8228
+   ],
+   "c_decl": [
+    274637,
+    274939
+   ],
+   "c_decl_sha256": "916993027b9a2481049e04030c34096fba74afa983bf7194803980c10151be3a",
+   "c_lines": [
+    8218,
+    8228
+   ],
+   "c_span_sha256": "3f3842866ba897c5ef6f4f8dcbcd6686014242c2ecf6a37ec7001b70da861d52",
+   "item": "fn symmetric_full_exploration",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    275086,
+    275260
+   ],
+   "baseline_decl_sha256": "862a89401406a4a82410ad691aa90a5c13b35d628dcb8db39c730e95195d6000",
+   "baseline_lines": [
+    8232,
+    8236
+   ],
+   "c_decl": [
+    275086,
+    275260
+   ],
+   "c_decl_sha256": "862a89401406a4a82410ad691aa90a5c13b35d628dcb8db39c730e95195d6000",
+   "c_lines": [
+    8232,
+    8236
+   ],
+   "c_span_sha256": "aa27f957cb7d73bb984ee84277d5386bd0c153c3b51023c9e2ca5de1acb324bc",
+   "item": "fn gc_symmetry_fpt",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": "EXT",
+   "baseline_decl": [
+    275406,
+    275578
+   ],
+   "baseline_decl_sha256": "262980075511793a46e0c6dfd90a7c893be701c8c36f823b381b481b51842fb3",
+   "baseline_lines": [
+    8240,
+    8244
+   ],
+   "c_decl": [
+    275406,
+    275578
+   ],
+   "c_decl_sha256": "262980075511793a46e0c6dfd90a7c893be701c8c36f823b381b481b51842fb3",
+   "c_lines": [
+    8240,
+    8244
+   ],
+   "c_span_sha256": "3e380c48d60077f10030ba0b3f4679ea02f4837e4076b0dec28dfde5a131a856",
+   "item": "fn gc_symmetry_fb",
+   "ordinal": 1,
+   "section": "E",
+   "status": "IDENTICAL",
+   "vs_GC": "ADDED"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    275894,
+    275967
+   ],
+   "c_decl_sha256": "ae1e0ca02b5b9d3f1a4fbe93bff53200a8053429cec7b9a92bf09f77d85f0ce6",
+   "c_lines": [
+    8251,
+    8251
+   ],
+   "c_span_sha256": "92cc4293a79273de41f9f9f3b16a33d28a0b7c20da137872740794108b828e38",
+   "item": "type Scheduled",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    276195,
+    276649
+   ],
+   "c_decl_sha256": "29cdbeede4f5364ec062c90200829e07474251a887e8949f22a5251bada238ad",
+   "c_lines": [
+    8256,
+    8269
+   ],
+   "c_span_sha256": "f923ba79ca5da2794b4b575f2e0d9bf3ddff08836a6e237bd14fbacb443d8dbd",
+   "item": "struct Witness",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    276686,
+    277199
+   ],
+   "c_decl_sha256": "5038c64596939b5faf092b5afc67e3b7e196eaa9e0adb7e786fe4c6d497aecb5",
+   "c_lines": [
+    8272,
+    8285
+   ],
+   "c_span_sha256": "8b0394e620e82e5e4ad60f867db7d5fcc70fe7781f5876c3b5542ba2fbefaf62",
+   "item": "struct Replayed",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    277290,
+    277601
+   ],
+   "c_decl_sha256": "43dc09816133a48d2ae460624fcb205e426c840dca16afb8b67bb7792e618625",
+   "c_lines": [
+    8289,
+    8297
+   ],
+   "c_span_sha256": "42645d7b55ac60b47ec6db91dd43511910f2403e6ff93284e446d241ee5f5116",
+   "item": "fn violations_at",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    278136,
+    279918
+   ],
+   "c_decl_sha256": "d9e232fdffe4573ac9d73c537dc3a8a66e6208dccbcc9dc00f72a64d9721fd0d",
+   "c_lines": [
+    8306,
+    8353
+   ],
+   "c_span_sha256": "7636bb352d041e7fe1a745faad3d1dff2acf1a55664415d6a51d17af180b65ee",
+   "item": "fn replay_schedule",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    280522,
+    283969
+   ],
+   "c_decl_sha256": "d0788ab8a8c6356f340fa0402ea5ec2ad2ed72761ae2915e4d0b23e5563fe307",
+   "c_lines": [
+    8363,
+    8457
+   ],
+   "c_span_sha256": "46ba99b5d3bdf159cc18da6076224eeab9fe160ae7931e7066a269e0cd7369ae",
+   "item": "fn run_witness",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    284490,
+    285275
+   ],
+   "c_decl_sha256": "a5dfaf7247767a9b69e91737c2d24b93324baaafd5d9391cfecff3a5d2c9a5dd",
+   "c_lines": [
+    8466,
+    8491
+   ],
+   "c_span_sha256": "ca45971c9be3f7378d5cac614de76d432eb8c50d52fe792b85e9438adba653ed",
+   "item": "const C1_WITNESS",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    285643,
+    285934
+   ],
+   "c_decl_sha256": "810087f1132464f7e53a34a5ad98382b99d146370367ad8995fa7f1016ff6987",
+   "c_lines": [
+    8498,
+    8507
+   ],
+   "c_span_sha256": "7cd297a0095a0b501135772434eb97aee323acf76dd7addee5a15d03ec650e1a",
+   "item": "const C25_WITNESS",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    286086,
+    286172
+   ],
+   "c_decl_sha256": "1db5d6b371e3edab9c1de9f3298b2e567346b58eca858093e13422ba4ff24818",
+   "c_lines": [
+    8511,
+    8514
+   ],
+   "c_span_sha256": "7015d35dbc3137aef8982fd36fd4ab9f6d45d661072af7bd1ac2b49b7a7e16a6",
+   "item": "fn c1_witness_p1_at_a_successful_admission",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    286325,
+    286410
+   ],
+   "c_decl_sha256": "c7b56e43f5ed0571899e975fc62ce9dd1f2785ef3f9b3db90c83fda3f45734c2",
+   "c_lines": [
+    8518,
+    8521
+   ],
+   "c_span_sha256": "236a6ef22fab0936e9987c4da1a8c94dd8f311452ab532038fa365ce70b153c4",
+   "item": "fn c25_witness_p7_on_the_resulting_world",
+   "ordinal": 1,
+   "section": "WITNESS-C1-C25",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    286787,
+    286940
+   ],
+   "c_decl_sha256": "8e76706462f1f20b7ac366e7ff7a90390afa6209fabcf6db96b5fd0d5f016fcc",
+   "c_lines": [
+    8529,
+    8535
+   ],
+   "c_span_sha256": "85ee1117d93a3975bdfb6435007c97b40bd65623c238a45bec37e65747a11f8e",
+   "item": "struct C4Step",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    287128,
+    287224
+   ],
+   "c_decl_sha256": "b16b2b28d20336e222df71bd438156953c836d08a9f1817af582880dd4603b49",
+   "c_lines": [
+    8540,
+    8544
+   ],
+   "c_span_sha256": "63857b1413b1660734dde5fba07953c6db808d6bfc48de8ae2f990b20695d4a8",
+   "item": "struct C4Ending",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    287750,
+    288156
+   ],
+   "c_decl_sha256": "44dc601c18fdcebe3a17a97b1de139138636d3ea5e990ac2626e4ab38e0f348e",
+   "c_lines": [
+    8553,
+    8565
+   ],
+   "c_span_sha256": "882e58902990b40d3c5adfdda393f1c908521825c3cd89eeaec1c939654a30ea",
+   "item": "struct C4Scenario",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    288288,
+    288601
+   ],
+   "c_decl_sha256": "ecead395eb321d237928b47a7f8f6488c9ad0aca2426ab120e22f6d3c8505307",
+   "c_lines": [
+    8569,
+    8583
+   ],
+   "c_span_sha256": "64779366b641d615f5106a9a197d5819baad6b99ded3de04dfcea58957f22aaa",
+   "item": "struct C4After",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    288603,
+    289568
+   ],
+   "c_decl_sha256": "679b25278b7152d619e15a7db97a6d104e52e1cb6dd3ee8dc04ffba72292a733",
+   "c_lines": [
+    8585,
+    8608
+   ],
+   "c_span_sha256": "679b25278b7152d619e15a7db97a6d104e52e1cb6dd3ee8dc04ffba72292a733",
+   "item": "fn c4_after",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    289600,
+    289750
+   ],
+   "c_decl_sha256": "c3298f13d9196a0f6f93ebce5c54421cfcd035a19eb8c4e973794c70027b8b39",
+   "c_lines": [
+    8611,
+    8613
+   ],
+   "c_span_sha256": "2d2916bd91e3e672b2addebe9fafb2aaa76b1eb32c3d5d52ac99ae4f4b40ea58",
+   "item": "fn c4_x_explains_f1",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    289824,
+    289915
+   ],
+   "c_decl_sha256": "d2bd62f1b15685e1a2e44ef7e433eda2b17b1a588f7a5f06f49daa2e21a4bd1c",
+   "c_lines": [
+    8616,
+    8618
+   ],
+   "c_span_sha256": "e4dc60c1a63f694346f6e9eb72b450e341d5da4aed0f627c8335531ed6f0ebef",
+   "item": "fn c4_p4_kept",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    289993,
+    290125
+   ],
+   "c_decl_sha256": "ba24f09872783fcf32965274d144f063cd4e0b46beb242df7f2ead275457ffa0",
+   "c_lines": [
+    8621,
+    8623
+   ],
+   "c_span_sha256": "2b62209de572606a03671cde418f7474af16aa9a2a9499865cb399ca6e699267",
+   "item": "fn c4_p4_lost",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    290203,
+    290320
+   ],
+   "c_decl_sha256": "1897e32c5d1f36cafebad5811704e1467a484a90ed6d8f746cfa55128e2db009",
+   "c_lines": [
+    8626,
+    8628
+   ],
+   "c_span_sha256": "a0c106a6578d1c42f6d2ebe5c46c3232c924196981a9c9c85f16f409fb254451",
+   "item": "fn c4_p8_kept",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    290468,
+    290667
+   ],
+   "c_decl_sha256": "8fb5e4a726df1668d53da00bdcd74c6e9f475a2652d436d2caae5886bb10a945",
+   "c_lines": [
+    8632,
+    8639
+   ],
+   "c_span_sha256": "43fae888910981809dce69ffbf4b7b18968d3b18e19b4fa8dbaaaadb899e5cca",
+   "item": "fn c4_p8_lost",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    290707,
+    291256
+   ],
+   "c_decl_sha256": "051c7c744d774e5683a872f7269bb1facb42297deb7c1641ed8d36acdd69cee9",
+   "c_lines": [
+    8642,
+    8658
+   ],
+   "c_span_sha256": "1b71b557c2b57301da8b251094078f0568fd49dcf9c841cc9e997e11a60b0caf",
+   "item": "struct C4Replayed",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    291748,
+    292846
+   ],
+   "c_decl_sha256": "b9f010bbdc1cd64db56df9842c0ea73803c847522298a86db2ed9596feb6a42f",
+   "c_lines": [
+    8667,
+    8707
+   ],
+   "c_span_sha256": "e10d155db08b6841fcbd000fbb1af9303a2401c90dc4b48c3af28e84c7a3ae02",
+   "item": "fn c4_replay_step",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    293119,
+    293244
+   ],
+   "c_decl_sha256": "f992c3c467903fbbf10b2ca36bf191f245f22934877657c9f28c48c2a5fd4ce7",
+   "c_lines": [
+    8713,
+    8718
+   ],
+   "c_span_sha256": "b26bcc7f69a46442785d3b9f2073c17c49bc4eb1f63470704a4722d5b07c7984",
+   "item": "struct C4Run",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    293309,
+    293417
+   ],
+   "c_decl_sha256": "f2d1fa20037c3493c684970f316faa420fe6bb65ca513142bb386e3bb0ca32ac",
+   "c_lines": [
+    8721,
+    8723
+   ],
+   "c_span_sha256": "81e6adfc58da4712f18754b205d0636b645dab29a1a8a20ec6dbf9530f73b928",
+   "item": "fn c4_choices",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    293633,
+    294390
+   ],
+   "c_decl_sha256": "bc1e2910b1fd29e4510298c8c814df98f56b427b89b2cd2f8a52dd4f2a9e81b9",
+   "c_lines": [
+    8728,
+    8747
+   ],
+   "c_span_sha256": "803b5e3a0493c9a97a5c872cd80c99ce1195364433f3f047d3a7d7d021e015d1",
+   "item": "fn c4_frozen",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    294631,
+    295261
+   ],
+   "c_decl_sha256": "a13ae529515219fbda0320c9cd65193cb940a3c64b79b3f3612226cf979cee6b",
+   "c_lines": [
+    8753,
+    8772
+   ],
+   "c_span_sha256": "6fa71b50e103b23d6c939973b6f888ee914a588f4ab179d1f396fbade6d5c838",
+   "item": "fn c4_consumption",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    295677,
+    298303
+   ],
+   "c_decl_sha256": "fec59460e6ec965ba432b10c8b502de28a9ab238031ca609daeb12bdffd2dbac",
+   "c_lines": [
+    8780,
+    8855
+   ],
+   "c_span_sha256": "7a622d27d85a527bbb527214db8eef4d331c31be7b996136666dd7f34fb13519",
+   "item": "fn c4_replay",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    298993,
+    305371
+   ],
+   "c_decl_sha256": "eaf680d3e73d3e21c29d3284866d022a9060dc4b7e6efed129a144ccc2cf0acf",
+   "c_lines": [
+    8867,
+    9035
+   ],
+   "c_span_sha256": "2ea8b774f6cf3f731633e342696f5ccdb0c31cea3d6773cb6a16ff38963ed48e",
+   "item": "fn run_c4_witness",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    305400,
+    305530
+   ],
+   "c_decl_sha256": "9db18c133988c57911db0118b2ebed0280e1e8502003735f5c5eeb7abc903d1c",
+   "c_lines": [
+    9038,
+    9044
+   ],
+   "c_span_sha256": "e2a13b85b1fbaa91387553478ddf41d2d123250a248e53da863a86ae64fa4ef7",
+   "item": "const C4_ARM",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    305751,
+    306024
+   ],
+   "c_decl_sha256": "02ec2da54d9c4b5892914aebd92281ac17dd0a808bdb1740fda1577ad6e6acc8",
+   "c_lines": [
+    9049,
+    9057
+   ],
+   "c_span_sha256": "3dccf279d641a262ae330d312941b8bdb87aa9cb50429ab7a43362c076daff63",
+   "item": "const C4_CONFLICT",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    306176,
+    306308
+   ],
+   "c_decl_sha256": "a43132f80cdf46f3450a2c65e1ec52a094d5e3250db356248a1ac32360c990e3",
+   "c_lines": [
+    9061,
+    9067
+   ],
+   "c_span_sha256": "4a73db1f24c137d3585a953a384230919f1e375283a4311e612e4006f097999c",
+   "item": "const C4_WK_QUIET",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    306449,
+    306658
+   ],
+   "c_decl_sha256": "f9af2b6da3f5b9e0b61be3f0cbed8a3d25ef59cf167860e91a685bb4427c12e2",
+   "c_lines": [
+    9071,
+    9077
+   ],
+   "c_span_sha256": "21b412cadedb9b8d5677766a6bf0dc2f34ebc6194125751e52fdf59ed5e3f310",
+   "item": "const C4_APPEND_X",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    306725,
+    306885
+   ],
+   "c_decl_sha256": "39cbb3161e6b1bf50de81e516d600e91eafd107fd0974eefcad85b1c3c205e44",
+   "c_lines": [
+    9080,
+    9086
+   ],
+   "c_span_sha256": "ab045e7a729805c1797482d1048481fd28d5a73eece9a3515e97c2e1e1f207d0",
+   "item": "const C4_SNAPSHOT",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    307010,
+    307152
+   ],
+   "c_decl_sha256": "ce92461313f9efb80b510dcff995090dd5823c5ef47fd6d3fbf7a1f23ca0a077",
+   "c_lines": [
+    9090,
+    9096
+   ],
+   "c_span_sha256": "2a24b7c01b0dfdba8919a8b1de6f9cbaefdae8f4fc65154fc5f42b6f83a04d87",
+   "item": "const C4_CONFIRM",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    307207,
+    307351
+   ],
+   "c_decl_sha256": "74506d54ef68901f45e6b04efd04340c0804bfa1e9a736c44218c6aab8e96714",
+   "c_lines": [
+    9099,
+    9105
+   ],
+   "c_span_sha256": "c7fb96dcd71c43c397a80d14acfda7ce9691dda9ba3f1ffbe4473ee6bf2fb5c0",
+   "item": "const C4_EMPTY_X",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    307569,
+    307806
+   ],
+   "c_decl_sha256": "bea1a198d11f961395f6640165e30190ae6c1de7f45c1d32cb74c9c2cbb49021",
+   "c_lines": [
+    9110,
+    9116
+   ],
+   "c_span_sha256": "8d7f6882e159cafee48d537eac92251afc62c9768697dba0d068bd496a7a9b23",
+   "item": "const C4_GATING",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    308137,
+    308892
+   ],
+   "c_decl_sha256": "ee6a9edff3054f61cca7086cd804e11b8b8d108ff2477c06bc1a2cab76282121",
+   "c_lines": [
+    9123,
+    9149
+   ],
+   "c_span_sha256": "0ce015a13db3f4f2320444f3157a1b2a116d14bf3a901cc912c4265598a9411b",
+   "item": "const C4_P4",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    309331,
+    310158
+   ],
+   "c_decl_sha256": "feb3e22bf6e5a9b8cb8c24ac0758e7449ba09c4ec643a7fe735af4ac9cd35702",
+   "c_lines": [
+    9157,
+    9187
+   ],
+   "c_span_sha256": "3902dc5734d49e66c3020c116dcf5b29e2b1223826eab1c22b92bf36b687cc5f",
+   "item": "const C4_P8",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    310160,
+    310213
+   ],
+   "c_decl_sha256": "e365e1d5e7b6ad50449c3319f89dc7ce46edeba636b95e855cee5e89f9485786",
+   "c_lines": [
+    9189,
+    9189
+   ],
+   "c_span_sha256": "e365e1d5e7b6ad50449c3319f89dc7ce46edeba636b95e855cee5e89f9485786",
+   "item": "const C4_SCENARIOS",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  },
+  {
+   "baseline": null,
+   "baseline_decl": null,
+   "baseline_decl_sha256": null,
+   "baseline_lines": null,
+   "c_decl": [
+    310528,
+    310611
+   ],
+   "c_decl_sha256": "aa8f46c63893395efa15d9426fcd4f83f00d9719ecc6d000a2ac3846bba10909",
+   "c_lines": [
+    9196,
+    9199
+   ],
+   "c_span_sha256": "18fda479881c4b1c2954118d8e8b5b499c9aa9d68a523774c4b3f6658788fadc",
+   "item": "fn c4_witness_p4_and_p8_on_f8",
+   "ordinal": 1,
+   "section": "WITNESS-C4",
+   "status": "APPENDED-AFTER-NO-REFERENCE"
+  }
+ ],
+ "tool": "source_closure.py"
+}

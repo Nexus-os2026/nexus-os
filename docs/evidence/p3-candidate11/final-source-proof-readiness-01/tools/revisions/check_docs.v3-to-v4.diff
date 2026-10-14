@@ -1,0 +1,11 @@
+--- revisions/check_docs.v3.py	2026-10-14 12:34:40.484832453 +0100
++++ tools/check_docs.py	2026-10-14 12:34:40.497209311 +0100
+@@ -56,6 +56,8 @@
+             req('WITNESS-NONINTERFERENCE.md', d.split(' ', 1)[1])
+         if a['verdict'] != 'NON_INTERFERING':
+             req('WITNESS-NONINTERFERENCE.md', 'PROOF_REVIEW_BLOCKER')
++    scanned = [c for c in wc['additions'][0]['checks'] if c['check'].startswith('N08')][0]['evidence']['scanned_identifiers']
++    req('WITNESS-NONINTERFERENCE.md', '%d identifiers scanned' % len(scanned))
+     verdicts = wc['verdicts']
+     req('WITNESS-NONINTERFERENCE.md', '| **Verdict** | **%s** | **%s** |' % (verdicts['C1/C25'], verdicts['C4']))
+     # BUILD-INPUT-CLOSURE.md

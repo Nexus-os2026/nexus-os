@@ -1,0 +1,695 @@
+{
+ "build_script_reads": {
+  "kernel/build.rs": {
+   "mentions_docs": false,
+   "rerun_if_changed": [
+    "println!(\"cargo:rerun-if-changed=src/resource_limiter/darwin_proc.c\");"
+   ],
+   "sha256": "5dd672bf7812edfc0fe41be7f6002f973ae87adec0eebfb92ae1f17d33e88da2"
+  }
+ },
+ "build_scripts": [
+  "kernel/build.rs"
+ ],
+ "cargo_config": {
+  "build": {
+   "jobs": 8
+  },
+  "env": {
+   "CARGO_PROFILE_TEST_DEBUG": "1"
+  }
+ },
+ "changed_inputs": [],
+ "crate_dependency_declarations": {
+  "dependencies base64": "0.22",
+  "dependencies getrandom": "0.2",
+  "dependencies hex": "0.4",
+  "dependencies nexus-kernel": {
+   "path": "../../kernel"
+  },
+  "dependencies png": "0.18",
+  "dependencies reqwest": {
+   "default-features": false,
+   "features": [
+    "rustls-tls"
+   ],
+   "version": "0.12"
+  },
+  "dependencies serde": {
+   "features": [
+    "derive"
+   ],
+   "version": "1.0"
+  },
+  "dependencies serde_json": "1.0",
+  "dependencies sha2": "0.10",
+  "dependencies tokio": {
+   "features": [
+    "rt",
+    "time",
+    "macros"
+   ],
+   "version": "1"
+  },
+  "dependencies unicode-segmentation": "1.12",
+  "dependencies url": "2",
+  "dependencies zeroize": "1",
+  "dev-dependencies serde_json": "1.0",
+  "target cfg(target_os = \"linux\") dependencies libc": "0.2",
+  "target cfg(target_os = \"linux\") dependencies x11rb": {
+   "features": [
+    "xtest"
+   ],
+   "version": "0.13"
+  }
+ },
+ "execution_pending": [
+  "the compiler that actually builds the executable (rustc --version) (N.5)",
+  "the build command, environment, RUSTFLAGS/CARGO_*/RUSTC_WRAPPER, effective profile and enabled cfg/features as the build reports them (N.7)",
+  "the pinned executable sha256 before and after (N.14)"
+ ],
+ "expectation_failures": [],
+ "include_macros_in_closure": [
+  {
+   "argument": "run.rs",
+   "file": "crates/nexus-governed-control/src/authority/tests.rs",
+   "macro": "include_str",
+   "resolves_to": "crates/nexus-governed-control/src/authority/run.rs"
+  },
+  {
+   "argument": "tests.rs",
+   "file": "crates/nexus-governed-control/src/authority/tests.rs",
+   "macro": "include_str",
+   "resolves_to": "crates/nexus-governed-control/src/authority/tests.rs"
+  },
+  {
+   "argument": "web.rs",
+   "file": "kernel/src/actuators/web.rs",
+   "macro": "include_str",
+   "resolves_to": "kernel/src/actuators/web.rs"
+  },
+  {
+   "argument": "resource_limiter.rs",
+   "file": "kernel/src/resource_limiter.rs",
+   "macro": "include_str",
+   "resolves_to": "kernel/src/resource_limiter.rs"
+  },
+  {
+   "argument": "resource_limiter/unix.rs",
+   "file": "kernel/src/resource_limiter.rs",
+   "macro": "include_str",
+   "resolves_to": "kernel/src/resource_limiter/unix.rs"
+  },
+  {
+   "argument": "resource_limiter/windows.rs",
+   "file": "kernel/src/resource_limiter.rs",
+   "macro": "include_str",
+   "resolves_to": "kernel/src/resource_limiter/windows.rs"
+  }
+ ],
+ "inputs": [
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "B": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "C": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "EXT": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "GC": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "R4": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "SOURCE-R2": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "W1": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    },
+    "W4": {
+     "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+     "bytes": 289456,
+     "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+    }
+   },
+   "input": "Cargo.lock"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "B": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "C": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "EXT": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "GC": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "R4": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "SOURCE-R2": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "W1": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    },
+    "W4": {
+     "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+     "bytes": 2535,
+     "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+    }
+   },
+   "input": "Cargo.toml"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "B": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "C": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "EXT": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "GC": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "R4": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "SOURCE-R2": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "W1": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    },
+    "W4": {
+     "blob": "2543c745d661203326367962714b94c811e07980",
+     "bytes": 837,
+     "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+    }
+   },
+   "input": "crates/nexus-governed-control/Cargo.toml"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "B": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "C": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "EXT": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "GC": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "R4": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "SOURCE-R2": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "W1": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    },
+    "W4": {
+     "blob": "726005b29561a04536edea412bf551a9884d6639",
+     "bytes": 94,
+     "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+    }
+   },
+   "input": "rust-toolchain.toml"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "B": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "C": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "EXT": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "GC": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "R4": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "SOURCE-R2": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "W1": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    },
+    "W4": {
+     "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+     "bytes": 55,
+     "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+    }
+   },
+   "input": ".cargo/config.toml"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "B": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "C": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "EXT": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "GC": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "R4": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "SOURCE-R2": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "W1": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    },
+    "W4": {
+     "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+     "bytes": 4582,
+     "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+    }
+   },
+   "input": "crates/nexus-governed-control/src/lib.rs"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "B": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "C": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "EXT": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "GC": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "R4": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "SOURCE-R2": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "W1": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    },
+    "W4": {
+     "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+     "bytes": 364,
+     "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+    }
+   },
+   "input": "crates/nexus-governed-control/src/ledger.rs"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "B": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "C": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "EXT": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "GC": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "R4": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "SOURCE-R2": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "W1": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    },
+    "W4": {
+     "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "bytes": 64546,
+     "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+    }
+   },
+   "input": "crates/nexus-governed-control/src/ledger/protocol.rs"
+  },
+  {
+   "classification": "IDENTICAL",
+   "distinct_blobs": 1,
+   "identities": {
+    "ADM": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "B": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "C": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "EXT": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "GC": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "R4": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "SOURCE-R2": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "W1": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    },
+    "W4": {
+     "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "bytes": 104202,
+     "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+    }
+   },
+   "input": "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs"
+  }
+ ],
+ "ledger_rs_attributes": [
+  "#[cfg_attr(not(test),allow(dead_code))]"
+ ],
+ "ledger_rs_protocol_declaration": [
+  "mod protocol;"
+ ],
+ "lib_rs_inner_attributes": [
+  "#![deny(unsafe_code)]"
+ ],
+ "lib_rs_ledger_declaration": [
+  "pub(crate) mod ledger;"
+ ],
+ "mission": "P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01",
+ "model_tests_rs_cfg_attributes": [],
+ "model_tests_rs_inner_attributes": [],
+ "panic_strategy": {
+  "config_or_env_panic_or_rustflags": [],
+  "note": "No manifest, profile, config or [env] entry sets a panic strategy, so it is the default, unwind (AD-1-R4 N.6), on which the explorers' catch_unwind depends. Cargo documents that test targets ignore a profile panic setting; that documentation is cited, not verified here. RUSTFLAGS or CARGO_* in the build environment are execution-time inputs (N.7), pending.",
+  "profile_panic_keys": []
+ },
+ "path_dependency_closure": [
+  "crates/nexus-crypto",
+  "crates/nexus-governed-control",
+  "kernel",
+  "persistence"
+ ],
+ "paths_outside_docs_evidence_differing_from_C": {
+  "ADM": [
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "B": [],
+  "EXT": [
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "GC": [
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "R4": [],
+  "SOURCE-R2": [
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "W1": [
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "W4": []
+ },
+ "protocol_rs_cfg_attributes": [
+  {
+   "inner": true,
+   "line": 15,
+   "text": "#![cfg_attr(not(test),deny(clippy::indexing_slicing,clippy::arithmetic_side_effects,clippy::unwrap_used,clippy::expect_used,clippy::panic))]"
+  },
+  {
+   "inner": false,
+   "line": 30,
+   "text": "#[cfg(test)]"
+  },
+  {
+   "inner": false,
+   "line": 32,
+   "text": "#[cfg(test)]"
+  },
+  {
+   "inner": false,
+   "line": 191,
+   "text": "#[cfg(test)]"
+  },
+  {
+   "inner": false,
+   "line": 209,
+   "text": "#[cfg(test)]"
+  },
+  {
+   "inner": false,
+   "line": 214,
+   "text": "#[cfg(test)]"
+  },
+  {
+   "inner": false,
+   "line": 2017,
+   "text": "#[cfg(test)]"
+  }
+ ],
+ "protocol_rs_cfg_test_count": 6,
+ "protocol_rs_lint_only_cfg_attr": {
+  "active_in_test_build": false,
+  "note": "a lint level (deny of five Clippy lints) in a non-test build only; lint levels change no generated code",
+  "text": "#![cfg_attr(not(test),deny(clippy::indexing_slicing,clippy::arithmetic_side_effects,clippy::unwrap_used,clippy::expect_used,clippy::panic))]"
+ },
+ "result": "PASS",
+ "tool": "build_inputs.py",
+ "toolchain": {
+  "toolchain": {
+   "channel": "1.94.0",
+   "components": [
+    "rustfmt",
+    "clippy"
+   ],
+   "targets": [
+    "wasm32-wasip1"
+   ]
+  }
+ },
+ "workspace_profiles": {
+  "dev": {
+   "debug": 1,
+   "opt-level": 0
+  },
+  "release": {
+   "codegen-units": 16,
+   "lto": "thin",
+   "opt-level": 3,
+   "strip": "symbols"
+  }
+ }
+}

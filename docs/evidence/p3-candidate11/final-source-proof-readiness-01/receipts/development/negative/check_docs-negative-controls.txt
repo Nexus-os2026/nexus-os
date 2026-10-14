@@ -1,0 +1,6 @@
+NEGATIVE CONTROLS for check_docs.py (development, before the freeze)
+case drop-blob: exit=1 (DETECTED) ::   MISSING: a2df2841b99cad5d452008a6d4150e9369d07e66 
+case drop-verdict: exit=0 (NOT-DETECTED) :: 
+case forbidden-phrase: exit=1 (DETECTED) :: INDEX.md: 15 required strings, 0 missing; forbidden phrases: ['theorem proved'] 
+case drop-seal: exit=1 (DETECTED) ::   MISSING: 459101ef4b3ead6e7952eaa4289a0bb5aef6ac81c84d7e3d1fb833f7555e02ce 
+case tsv-forbidden: exit=1 (DETECTED) :: PROOF-PRECONDITION-MATRIX.tsv: forbidden phrases: ['proof accepted'] 

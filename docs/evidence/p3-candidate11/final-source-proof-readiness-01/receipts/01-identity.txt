@@ -1,0 +1,19 @@
+$ git -C /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 log -1 --format=commit\ %H%ntree\ %T%nparents\ %P%nsubject\ %s d5964ee5326c2733177307db6f507328023d361a 
+commit d5964ee5326c2733177307db6f507328023d361a
+tree 51bac5fd335999cc995c0ab9f582a30244973ef0
+parents 71264aa81a40b86189783facc8437e0427887c16
+subject docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 log -1 --format=commit\ %H%ntree\ %T%nparents\ %P%nsubject\ %s 066a322a9182fc978e3f5dc8454157caacec6241 
+commit 066a322a9182fc978e3f5dc8454157caacec6241
+tree da31dfa7c9a0c4f358bfde4f15815f6c8d46f806
+parents d5964ee5326c2733177307db6f507328023d361a
+subject docs(evidence): transport the current-tree 183 manifest review packet
+
+exit=0
+
+PASS C is d5964ee5326c2733177307db6f507328023d361a with tree 51bac5fd335999cc995c0ab9f582a30244973ef0 and the single parent 71264aa81a40b86189783facc8437e0427887c16
+PASS D is 066a322a9182fc978e3f5dc8454157caacec6241 with tree da31dfa7c9a0c4f358bfde4f15815f6c8d46f806 and the single parent C
+PASS the worktree HEAD is D

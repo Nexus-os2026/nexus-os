@@ -1,0 +1,6 @@
+$ python3 /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/witness_check.py /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 --out /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/11-witness-check.json 
+witness_check: PASS {'C1/C25': 'NON_INTERFERING', 'C4': 'NON_INTERFERING'}
+
+exit=0
+
+PASS both witness additions NON_INTERFERING

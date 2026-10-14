@@ -1,0 +1,5 @@
+$ python3 /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/build_inputs.py /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 --out /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/12-build-inputs.json 
+build_inputs: PASS (0 expectation failures)
+
+exit=0
+

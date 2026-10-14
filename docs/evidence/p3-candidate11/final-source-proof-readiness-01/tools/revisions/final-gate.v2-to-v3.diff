@@ -1,0 +1,11 @@
+--- revisions/final-gate.v2.sh	2026-10-14 12:31:46.918075659 +0100
++++ tools/final-gate.sh	2026-10-14 12:31:46.937423360 +0100
+@@ -128,7 +128,7 @@
+ check 22-remote-before.txt "the published D ref is D" test "$(g ls-remote github refs/heads/review/p3-c11-d2a1-current-tree-183-01 | cut -f1)" = "$D"
+ check 22-remote-before.txt "the published proof-transport ref is 8693e3a7" test "$(g ls-remote github refs/heads/review/p3-c11-d2a1-ad1r2-audit-packet-01 | cut -f1)" = "8693e3a742ee4d3917cbfdb809b377bcd919d9f4"
+ run 22-remote-before.txt 0 gh api 'repos/Nexus-os2026/nexus-os/rules/branches/review%2Fp3-c11-d2a1-final-source-proof-readiness-01'
+-run 22-remote-before.txt 0 bash -c 'h=$(git -C "$1" config --get core.hooksPath || echo "$(git -C "$1" rev-parse --git-common-dir)/hooks"); echo "hooks dir: $h"; n=$(ls -A "$h" | grep -v "\.sample$" | tee /dev/stderr | wc -l); echo "non-sample hooks: $n"; [ "$n" = 0 ]' _ "$WT"
++run 22-remote-before.txt 0 bash -c 'h=$(git -C "$1" config --get core.hooksPath || echo "$(git -C "$1" rev-parse --git-common-dir)/hooks"); echo "hooks dir: $h"; hooks=$(ls -A "$h" | grep -v "\.sample$"); echo "non-sample hooks: ${hooks:-none}"; [ -z "$hooks" ]' _ "$WT"
+ 
+ # 23 the freeze still holds at the end (no tool or frozen document changed during the gate).
+ run 23-freeze-verify-end.txt 0 bash -c 'cd "$1" && sha256sum -c --strict receipts/00-FREEZE.sha256' _ "$PKT"

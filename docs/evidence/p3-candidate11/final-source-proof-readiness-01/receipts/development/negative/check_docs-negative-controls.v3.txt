@@ -1,0 +1,10 @@
+NEGATIVE CONTROLS for check_docs.py v3 (development, before the freeze). A case counts as DETECTED only if
+the checker exits 1 AND names the injected defect (a crash would not count).
+case drop-blob: exit=1 DETECTED :: expected 'MISSING: a2df2841b99cad5d452008a6d4150e9369d07e66' ::   MISSING: a2df2841b99cad5d452008a6d4150e9369d07e66 
+case drop-verdict-c4: exit=1 DETECTED :: expected 'MISSING: | **Verdict**' ::   MISSING: | **Verdict** | **NON_INTERFERING** | **NON_INTERFERING** | 
+case drop-verdict-index: exit=1 DETECTED :: expected 'MISSING: C1/C25: **NON_INTERFERING**' ::   MISSING: C1/C25: **NON_INTERFERING**; C4: **NON_INTERFERING** 
+case forbidden-phrase: exit=1 DETECTED :: expected 'forbidden phrases: ['theorem proved']' :: INDEX.md: 14 required strings, 0 missing; forbidden phrases: ['theorem proved'] 
+case drop-seal: exit=1 DETECTED :: expected 'MISSING: 459101ef' ::   MISSING: 459101ef4b3ead6e7952eaa4289a0bb5aef6ac81c84d7e3d1fb833f7555e02ce 
+case tsv-forbidden: exit=1 DETECTED :: expected 'PROOF-PRECONDITION-MATRIX.tsv: forbidden phrases: ['proof accepted']' :: PROOF-PRECONDITION-MATRIX.tsv: forbidden phrases: ['proof accepted'] 
+case drop-matrix-count: exit=1 DETECTED :: expected 'MISSING: 113 IDENTICAL' ::   MISSING: 113 IDENTICAL 
+case drop-config-hash: exit=1 DETECTED :: expected 'MISSING: 5a96285fc20c' ::   MISSING: 5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956 

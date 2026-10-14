@@ -1,0 +1,67 @@
+$ git -C /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 status --porcelain=v1 --untracked-files=all 
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/BUILD-INPUT-CLOSURE.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/CONFIGURATION-IDENTITY.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/INDEX.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/PROOF-DOCUMENT-INTEGRITY.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/PROOF-PRECONDITION-MATRIX.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/PROOF-PRECONDITION-MATRIX.tsv
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/SOURCE-CLOSURE.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/WITNESS-NONINTERFERENCE.md
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/00-FREEZE.sha256
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/00-FREEZE.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/00-freeze-verify.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/01-identity.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/02-object-integrity.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/10-source-closure.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/11-witness-check.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/12-build-inputs.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/13-config-identity.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/14-proof-docs.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/15-matrix.json
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/17-doc-claims.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/18-negative-controls.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/19-confinement.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/development-log.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/negative/check_docs-negative-controls.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/negative/check_docs-negative-controls.v2-INVALID-crash.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/negative/check_docs-negative-controls.v3.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/negative/negative-controls.v1.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/development/negative/negative-controls.v2.txt
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/build_inputs.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/check_docs.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/common.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/config_identity.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/final-gate.sh
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/freeze.sh
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/matrix.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/matrix_rows.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/negative_controls.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/proof_docs.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/render_matrix.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/build_inputs.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/check_docs.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/check_docs.v2-to-v3.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/check_docs.v3-to-v4.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/config_identity.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/config_identity.v2-to-v3.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/final-gate.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/final-gate.v2-to-v3.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/matrix.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/rust_items.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/source_closure.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/revisions/witness_check.v1-to-v2.diff
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/rust_items.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/source_closure.py
+?? docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/witness_check.py
+
+exit=0
+
+PASS no tracked file in the worktree is modified or staged
+PASS every untracked path is inside the packet directory
+$ python3 -c $'\nimport os,sys\nroot=sys.argv[1]; total=0; bad=[]\nfor dp,dn,fn in os.walk(root):\n    for f in fn:\n        p=os.path.join(dp,f); total+=os.path.getsize(p)\n        if os.path.islink(p): bad.append(p+" is a symlink")\n        data=open(p,"rb").read()\n        if b"\\0" in data: bad.append(p+" has a NUL byte")\n        try: data.decode("utf-8")\n        except UnicodeDecodeError: bad.append(p+" is not UTF-8")\n        if "__pycache__" in p or p.endswith(".pyc"): bad.append(p+" is a cache file")\nprint("packet bytes:",total,"limit:",2*1024*1024); print("problems:",bad or "none")\nsys.exit(0 if total<=2*1024*1024 and not bad else 1)' /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01 
+packet bytes: 1004034 limit: 2097152
+problems: none
+
+exit=0
+
+PASS C's tree object is unchanged (51bac5fd335999cc995c0ab9f582a30244973ef0)

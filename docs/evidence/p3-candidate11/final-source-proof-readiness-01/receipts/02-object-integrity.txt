@@ -1,0 +1,4 @@
+$ git -C /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 fsck --connectivity-only --no-dangling --no-progress 
+
+exit=0
+

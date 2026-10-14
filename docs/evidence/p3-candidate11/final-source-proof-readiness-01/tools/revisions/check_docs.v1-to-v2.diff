@@ -1,0 +1,21 @@
+--- revisions/check_docs.v1.py	2026-10-14 12:17:37.249959236 +0100
++++ tools/check_docs.py	2026-10-14 12:17:37.264282010 +0100
+@@ -56,7 +56,8 @@
+             req('WITNESS-NONINTERFERENCE.md', d.split(' ', 1)[1])
+         if a['verdict'] != 'NON_INTERFERING':
+             req('WITNESS-NONINTERFERENCE.md', 'PROOF_REVIEW_BLOCKER')
+-    req('WITNESS-NONINTERFERENCE.md', *['**%s**' % v for v in wc['verdicts'].values()])
++    v = wc['verdicts']
++    req('WITNESS-NONINTERFERENCE.md', '| **Verdict** | **%s** | **%s** |' % (v['C1/C25'], v['C4']))
+     # BUILD-INPUT-CLOSURE.md
+     for r in bi['inputs']:
+         req('BUILD-INPUT-CLOSURE.md', r['identities']['C']['blob'], r['identities']['C']['sha256'], r['classification'])
+@@ -86,7 +87,7 @@
+     # INDEX.md
+     counts = mx['status_counts']
+     req('INDEX.md', '%d rows' % mx['rows'], *['%d %s' % (n, s) for s, n in counts.items()],
+-        *['**%s**' % v for v in wc['verdicts'].values()], sc['lineage'][-2]['commit'], sc['lineage'][-2]['tree'])
++        'C1/C25: **%s**; C4: **%s**' % (v['C1/C25'], v['C4']), sc['lineage'][-2]['commit'], sc['lineage'][-2]['tree'])
+     for rid in mx['changed_rows'] + mx['not_established_rows']:
+         req('INDEX.md', rid if not rid.startswith('N.') else rid)
+     failures = []

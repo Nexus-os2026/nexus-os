@@ -1,0 +1,25 @@
+$ bash -c out=\$\(git\ -C\ \"\$1\"\ ls-remote\ github\ \"\$2\"\)\;\ echo\ \"destination\ \[\$2\]:\ \$\{out:-ABSENT\}\"\;\ \[\ -z\ \"\$out\"\ \] _ /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 refs/heads/review/p3-c11-d2a1-final-source-proof-readiness-01 
+destination [refs/heads/review/p3-c11-d2a1-final-source-proof-readiness-01]: ABSENT
+
+exit=0
+
+$ git -C /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 ls-remote github refs/heads/main refs/heads/rebuild/phase0-trust-boundary refs/heads/review/p3-c11-d2a1-current-tree-183-01 refs/heads/review/p3-c11-d2a1-ad1r2-audit-packet-01 
+6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+8693e3a742ee4d3917cbfdb809b377bcd919d9f4	refs/heads/review/p3-c11-d2a1-ad1r2-audit-packet-01
+066a322a9182fc978e3f5dc8454157caacec6241	refs/heads/review/p3-c11-d2a1-current-tree-183-01
+
+exit=0
+
+PASS the published D ref is D
+PASS the published proof-transport ref is 8693e3a7
+$ gh api repos/Nexus-os2026/nexus-os/rules/branches/review%2Fp3-c11-d2a1-final-source-proof-readiness-01 
+[]
+exit=0
+
+$ bash -c h=\$\(git\ -C\ \"\$1\"\ config\ --get\ core.hooksPath\ \|\|\ echo\ \"\$\(git\ -C\ \"\$1\"\ rev-parse\ --git-common-dir\)/hooks\"\)\;\ echo\ \"hooks\ dir:\ \$h\"\;\ hooks=\$\(ls\ -A\ \"\$h\"\ \|\ grep\ -v\ \"\\.sample\$\"\)\;\ echo\ \"non-sample\ hooks:\ \$\{hooks:-none\}\"\;\ \[\ -z\ \"\$hooks\"\ \] _ /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 
+hooks dir: /home/nexus/NEXUS/nexus-os/.git/hooks
+non-sample hooks: none
+
+exit=0
+

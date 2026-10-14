@@ -1,0 +1,32 @@
+--- revisions/rust_items.v1.py	2026-10-14 12:21:50.386837543 +0100
++++ tools/rust_items.py	2026-10-14 12:21:50.409670179 +0100
+@@ -290,6 +290,29 @@
+     k = 0
+     prev_end = lo
+     while k < len(code):
++        if code[k].text == '#' and k + 1 < len(code) and code[k + 1].text == '!':
++            # an inner attribute stands alone: record it as its own item, ending at its ']'
++            depth, m = 0, k + 2
++            while True:
++                if code[m].text in OPEN:
++                    depth += 1
++                elif code[m].text in CLOSE:
++                    depth -= 1
++                m += 1
++                if depth == 0:
++                    break
++            span_start = prev_end
++            for t in allt:
++                if t.start >= prev_end and t.kind != 'ws':
++                    span_start = t.start
++                    break
++            path = (prefix + '/' if prefix else '') + 'inner_attribute #!'
++            counts[path] = counts.get(path, 0) + 1
++            out.append({'path': path, 'kind': 'inner_attribute', 'name': '#!', 'ordinal': counts[path],
++                        'span': [span_start, code[m - 1].end], 'decl': [code[k].start, code[m - 1].end]})
++            prev_end = code[m - 1].end
++            k = m
++            continue
+         j, kw = _item_header(code, k)
+         if kw == 'macro_rules':
+             kind = 'macro_rules'

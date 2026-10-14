@@ -1,0 +1,1642 @@
+{
+ "admission_table": [
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "BASE",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 250000,
+   "const": "X1",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "X-1",
+   "time_s": 180,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 250000,
+   "const": "X2",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "X-2",
+   "time_s": 180,
+   "why": "admitted as X2 (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 250000,
+   "const": "X3",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "X-3",
+   "time_s": 180,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 1,
+   "admitted": false,
+   "cap": 250000,
+   "const": "X4",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "X-4",
+   "time_s": 180,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 250000,
+   "const": "X5",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "X-5",
+   "time_s": 180,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F1",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-1",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F2",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-2",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 30000000,
+   "const": "F3",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-3",
+   "time_s": 2700,
+   "why": "admitted as F3 (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F4",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-4",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 1,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F5",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "F-5",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 1,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F6",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "F-6",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 2,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F7",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "F-7",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 1,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "F8",
+   "gating": 1,
+   "gating_conflict": false,
+   "name": "F-8",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 30000000,
+   "const": "FPT",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-PT",
+   "time_s": 2700,
+   "why": "admitted as FPT (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 30000000,
+   "const": "FB",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-B",
+   "time_s": 2700,
+   "why": "admitted as FB (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "FB2",
+   "gating": 0,
+   "gating_conflict": false,
+   "name": "F-B2",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "FG",
+   "gating": 2,
+   "gating_conflict": true,
+   "name": "F-G",
+   "time_s": 2700,
+   "why": "refused: callers"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "FW",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-W",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "FD",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-D",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 0,
+   "admitted": false,
+   "cap": 30000000,
+   "const": "FR",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "F-R",
+   "time_s": 2700,
+   "why": "refused: shape not in SYMMETRIC"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 250000,
+   "const": "SYM1",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "SYM-1",
+   "time_s": 180,
+   "why": "admitted as SYM1 (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 250000,
+   "const": "SYM_PT",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "SYM-PT",
+   "time_s": 180,
+   "why": "admitted as SYM_PT (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 250000,
+   "const": "SYM_B",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "SYM-B",
+   "time_s": 180,
+   "why": "admitted as SYM_B (subject to the runtime initial-state mirror check)"
+  },
+  {
+   "acks": 0,
+   "admitted": true,
+   "cap": 250000,
+   "const": "SYM_BI",
+   "gating": 2,
+   "gating_conflict": false,
+   "name": "SYM-BI",
+   "time_s": 180,
+   "why": "admitted as SYM_BI (subject to the runtime initial-state mirror check)"
+  }
+ ],
+ "bound_items": {
+  "fn actors": {
+   "audited_decl_sha256": "5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956",
+   "c_decl_sha256": "5a96285fc20c241994e3e79f530afeeaf2e17ff9968455bdae1e5d359b11b956",
+   "c_lines": [
+    2332,
+    2347
+   ]
+  },
+  "fn assert_symmetric": {
+   "audited_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+   "c_decl_sha256": "e32321eea0ca217348bda5aea4e49a918b9325f003e1f6e912a65949aa139ac0",
+   "c_lines": [
+    6095,
+    6128
+   ]
+  },
+  "fn default_run": {
+   "audited_decl_sha256": "24584e118b8843423257a3382f5439b0286b69d3e28bafa1c8165805f023b449",
+   "c_decl_sha256": "24584e118b8843423257a3382f5439b0286b69d3e28bafa1c8165805f023b449",
+   "c_lines": [
+    104,
+    110
+   ]
+  },
+  "fn shape": {
+   "audited_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+   "c_decl_sha256": "e23f7f25d8f7059e418a7d8780163ab17674908c8c4ca98aa7f8645211a9c742",
+   "c_lines": [
+    6082,
+    6091
+   ]
+  },
+  "struct Config": {
+   "audited_decl_sha256": "a40ac57ee2eaa872a687b3d1714deacf9d49062281fc4a028f912a8a30331a7e",
+   "c_decl_sha256": "a40ac57ee2eaa872a687b3d1714deacf9d49062281fc4a028f912a8a30331a7e",
+   "c_lines": [
+    36,
+    74
+   ]
+  }
+ },
+ "config_fields": [
+  "name",
+  "facts",
+  "conflict",
+  "env",
+  "batch",
+  "faults",
+  "admissions",
+  "gating",
+  "gating_conflict",
+  "acks",
+  "ack_attempts",
+  "malformed",
+  "cell_constraint",
+  "worker_unwinds",
+  "drop",
+  "replays",
+  "blanket_uncertain",
+  "l1",
+  "cap",
+  "time"
+ ],
+ "config_order": [
+  "BASE",
+  "X1",
+  "X2",
+  "X3",
+  "X4",
+  "X5",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "FPT",
+  "FB",
+  "FB2",
+  "FG",
+  "FW",
+  "FD",
+  "FR",
+  "SYM1",
+  "SYM_PT",
+  "SYM_B",
+  "SYM_BI"
+ ],
+ "constants": {
+  "BASE": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 0,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 0,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "DEFAULT_CAP": 250000,
+  "DEFAULT_TIME": [
+   "Duration",
+   180
+  ],
+  "F1": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 3,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-1",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F2": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-2",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F3": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-3",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F4": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": true,
+   "conflict": [
+    false,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-4",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F5": {
+   "ack_attempts": 2,
+   "acks": 1,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-5",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F6": {
+   "ack_attempts": 2,
+   "acks": 1,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": true,
+   "name": "F-6",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F7": {
+   "ack_attempts": 1,
+   "acks": 2,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 1,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-7",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "F8": {
+   "ack_attempts": 1,
+   "acks": 1,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 1,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-8",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FB": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": true,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-B",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FB2": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": true,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 3,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-B2",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FD": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": true,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": false,
+   "malformed": false,
+   "name": "F-D",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FG": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 1,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": true,
+   "l1": true,
+   "malformed": false,
+   "name": "F-G",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FPT": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": true,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-PT",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FR": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-R",
+   "replays": 3,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": false
+  },
+  "FULL_CAP": 30000000,
+  "FULL_TIME": [
+   "Duration",
+   2700
+  ],
+  "FW": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 2,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 30000000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    true
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "F-W",
+   "replays": 0,
+   "time": [
+    "Duration",
+    2700
+   ],
+   "worker_unwinds": true
+  },
+  "SYM1": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    false
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 1,
+   "faults": 1,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "SYM-1",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "SYM_B": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": true,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    true
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 2,
+   "faults": 0,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "SYM-B",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "SYM_BI": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": true,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 1,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "SYM-BI",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "SYM_PT": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": true,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    false
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 1,
+   "faults": 1,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "SYM-PT",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "X1": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "X-1",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "X2": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 1,
+   "faults": 1,
+   "gating": 2,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "X-2",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "X3": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 0,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    false
+   ],
+   "drop": false,
+   "env": true,
+   "facts": 2,
+   "faults": 1,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "X-3",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "X4": {
+   "ack_attempts": 1,
+   "acks": 1,
+   "admissions": 1,
+   "batch": false,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    true,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 1,
+   "faults": 1,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "X-4",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  },
+  "X5": {
+   "ack_attempts": 0,
+   "acks": 0,
+   "admissions": 0,
+   "batch": true,
+   "blanket_uncertain": false,
+   "cap": 250000,
+   "cell_constraint": false,
+   "conflict": [
+    false,
+    false
+   ],
+   "drop": false,
+   "env": false,
+   "facts": 2,
+   "faults": 2,
+   "gating": 0,
+   "gating_conflict": false,
+   "l1": true,
+   "malformed": false,
+   "name": "X-5",
+   "replays": 0,
+   "time": [
+    "Duration",
+    180
+   ],
+   "worker_unwinds": false
+  }
+ },
+ "expectation_failures": [],
+ "explorer_caps": {
+  "fn explore": {
+   "cap_check": true,
+   "lines": [
+    3882,
+    4110
+   ],
+   "time_check": true
+  },
+  "fn explore_experimental": {
+   "cap_check": true,
+   "lines": [
+    5038,
+    5339
+   ],
+   "time_check": true
+  },
+  "fn explore_symmetric_kept": {
+   "cap_check": true,
+   "lines": [
+    6572,
+    6927
+   ],
+   "time_check": true
+  }
+ },
+ "mission": "P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01",
+ "n10": {
+  "F3": {
+   "derived": [
+    "Fw(0)",
+    "Fw(1)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "expected": [
+    "Fw(0)",
+    "Fw(1)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "match": true
+  },
+  "FB": {
+   "derived": [
+    "Fw(0)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "expected": [
+    "Fw(0)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "match": true
+  },
+  "FPT": {
+   "derived": [
+    "Fw(0)",
+    "Fw(1)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "expected": [
+    "Fw(0)",
+    "Fw(1)",
+    "Se",
+    "Wk",
+    "Gc(0)",
+    "Gc(1)",
+    "Adm",
+    "Env"
+   ],
+   "match": true
+  }
+ },
+ "n9": {
+  "F3": {
+   "all_match": true,
+   "name": "F-3",
+   "rows": [
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "facts",
+     "match": true
+    },
+    {
+     "actual": [
+      true,
+      true
+     ],
+     "expected": [
+      true,
+      true
+     ],
+     "field": "conflict",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "env",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "batch",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "faults",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "admissions",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "gating",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "gating_conflict",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "acks",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "ack_attempts",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "malformed",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "cell_constraint",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "worker_unwinds",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "drop",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "replays",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "blanket_uncertain",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "l1",
+     "match": true
+    },
+    {
+     "actual": 30000000,
+     "expected": 30000000,
+     "field": "cap",
+     "match": true
+    },
+    {
+     "actual": [
+      "Duration",
+      2700
+     ],
+     "expected": [
+      "Duration",
+      2700
+     ],
+     "field": "time",
+     "match": true
+    }
+   ]
+  },
+  "FB": {
+   "all_match": true,
+   "name": "F-B",
+   "rows": [
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "facts",
+     "match": true
+    },
+    {
+     "actual": [
+      true,
+      true
+     ],
+     "expected": [
+      true,
+      true
+     ],
+     "field": "conflict",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "env",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "batch",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "faults",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "admissions",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "gating",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "gating_conflict",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "acks",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "ack_attempts",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "malformed",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "cell_constraint",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "worker_unwinds",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "drop",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "replays",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "blanket_uncertain",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "l1",
+     "match": true
+    },
+    {
+     "actual": 30000000,
+     "expected": 30000000,
+     "field": "cap",
+     "match": true
+    },
+    {
+     "actual": [
+      "Duration",
+      2700
+     ],
+     "expected": [
+      "Duration",
+      2700
+     ],
+     "field": "time",
+     "match": true
+    }
+   ]
+  },
+  "FPT": {
+   "all_match": true,
+   "name": "F-PT",
+   "rows": [
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "facts",
+     "match": true
+    },
+    {
+     "actual": [
+      true,
+      true
+     ],
+     "expected": [
+      true,
+      true
+     ],
+     "field": "conflict",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "env",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "batch",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "faults",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "admissions",
+     "match": true
+    },
+    {
+     "actual": 2,
+     "expected": 2,
+     "field": "gating",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "gating_conflict",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "acks",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "ack_attempts",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "malformed",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "cell_constraint",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "worker_unwinds",
+     "match": true
+    },
+    {
+     "actual": false,
+     "expected": false,
+     "field": "drop",
+     "match": true
+    },
+    {
+     "actual": 0,
+     "expected": 0,
+     "field": "replays",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "blanket_uncertain",
+     "match": true
+    },
+    {
+     "actual": true,
+     "expected": true,
+     "field": "l1",
+     "match": true
+    },
+    {
+     "actual": 30000000,
+     "expected": 30000000,
+     "field": "cap",
+     "match": true
+    },
+    {
+     "actual": [
+      "Duration",
+      2700
+     ],
+     "expected": [
+      "Duration",
+      2700
+     ],
+     "field": "time",
+     "match": true
+    }
+   ]
+  }
+ },
+ "required_runs": {
+  "fn gc_symmetry_f3": {
+   "contains": "explore_symmetric(&F3, step_adm, Mode::Quotient)",
+   "ignored": true,
+   "lines": [
+    6931,
+    6943
+   ],
+   "ok": true
+  },
+  "fn gc_symmetry_fb": {
+   "contains": "symmetric_full_exploration(&FB);",
+   "ignored": true,
+   "lines": [
+    8240,
+    8244
+   ],
+   "ok": true
+  },
+  "fn gc_symmetry_fpt": {
+   "contains": "symmetric_full_exploration(&FPT);",
+   "ignored": true,
+   "lines": [
+    8232,
+    8236
+   ],
+   "ok": true
+  },
+  "fn symmetric_full_exploration": {
+   "contains": "explore_symmetric(config, step_adm, Mode::Quotient)",
+   "lines": [
+    8218,
+    8228
+   ],
+   "ok": true
+  }
+ },
+ "result": "PASS",
+ "runtime_only": [
+  "assert_symmetric: the initial state is its own mirror (evaluated by the run, not here)",
+  "the printed bounds and actor lines (N.10) are execution output; the static derivation above is not a substitute"
+ ],
+ "symmetric": {
+  "members": [
+   "X2",
+   "SYM1",
+   "F3",
+   "SYM_PT",
+   "SYM_B",
+   "SYM_BI",
+   "FPT",
+   "FB"
+  ],
+  "names": [
+   "X-2",
+   "SYM-1",
+   "F-3",
+   "SYM-PT",
+   "SYM-B",
+   "SYM-BI",
+   "F-PT",
+   "F-B"
+  ]
+ },
+ "tool": "config_identity.py"
+}

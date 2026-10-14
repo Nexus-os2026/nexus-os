@@ -1,0 +1,21 @@
+--- revisions/build_inputs.v1.py	2026-10-14 11:57:52.629514553 +0100
++++ tools/build_inputs.py	2026-10-14 11:57:52.647365353 +0100
+@@ -201,8 +201,16 @@
+     expect(not doc['model_tests_rs_cfg_attributes'] and not doc['model_tests_rs_inner_attributes'],
+            'model_tests.rs has no cfg/cfg_attr and no inner attribute')
+     p_cfg = [a['text'] for a in doc['protocol_rs_cfg_attributes']]
+-    expect(set(p_cfg) == {'#[cfg(test)]'}, 'protocol.rs cfg attributes are #[cfg(test)] only')
+-    doc['protocol_rs_cfg_test_count'] = len(p_cfg)
++    lint_only = ('#![cfg_attr(not(test),deny(clippy::indexing_slicing,clippy::arithmetic_side_effects,'
++                 'clippy::unwrap_used,clippy::expect_used,clippy::panic))]')
++    # Six #[cfg(test)] (the two test modules and the hook's module and three report
++    # calls) and one inner, lint-only cfg_attr that is inactive in a test build.
++    expect(sorted(p_cfg) == sorted(['#[cfg(test)]'] * 6 + [lint_only]),
++           'protocol.rs cfg attributes: six #[cfg(test)] and one lint-only #![cfg_attr(not(test), deny(clippy::...))]')
++    doc['protocol_rs_cfg_test_count'] = p_cfg.count('#[cfg(test)]')
++    doc['protocol_rs_lint_only_cfg_attr'] = {
++        'text': lint_only, 'active_in_test_build': False,
++        'note': 'a lint level (deny of five Clippy lints) in a non-test build only; lint levels change no generated code'}
+ 
+     # path-dependency closure, its build scripts and include macros
+     closure = path_dep_closure(repo, K.C, CRATE_DIR, ws)

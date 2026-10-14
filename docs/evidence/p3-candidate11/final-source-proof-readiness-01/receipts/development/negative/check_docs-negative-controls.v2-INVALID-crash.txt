@@ -1,0 +1,8 @@
+NEGATIVE CONTROLS for check_docs.py v2 (development, before the freeze)
+case drop-blob: exit=1 (DETECTED) :: 
+case drop-verdict-c4: exit=1 (DETECTED) :: 
+case drop-verdict-index: exit=1 (DETECTED) :: 
+case forbidden-phrase: exit=1 (DETECTED) :: 
+case drop-seal: exit=1 (DETECTED) :: 
+case tsv-forbidden: exit=1 (DETECTED) :: 
+case drop-matrix-count: exit=1 (DETECTED) :: 

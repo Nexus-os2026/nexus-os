@@ -1,0 +1,8 @@
+$ python3 /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/render_matrix.py /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/75cc5751-0e7a-425e-ac3a-9238a3b6a35d/scratchpad/final-gate-scr/PROOF-PRECONDITION-MATRIX.tsv /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/15-matrix.json /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/14-proof-docs.json /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/75cc5751-0e7a-425e-ac3a-9238a3b6a35d/scratchpad/final-gate-scr/PROOF-PRECONDITION-MATRIX.md 
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/75cc5751-0e7a-425e-ac3a-9238a3b6a35d/scratchpad/final-gate-scr/PROOF-PRECONDITION-MATRIX.md /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/PROOF-PRECONDITION-MATRIX.md 
+
+exit=0
+

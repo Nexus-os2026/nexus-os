@@ -1,0 +1,16 @@
+--- revisions/config_identity.v1.py	2026-10-14 11:59:27.703781361 +0100
++++ tools/config_identity.py	2026-10-14 11:59:27.721796370 +0100
+@@ -275,9 +275,10 @@
+ 
+     # SYMMETRIC and a static model of assert_symmetric
+     sym = consts['SYMMETRIC'][1]
+-    expect(sym[:1] == ['Config'] and sym[1:] == SYMMETRIC_EXPECTED,
+-           'SYMMETRIC is exactly [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB]')
+-    members = sym[1:]
++    expect(sym == SYMMETRIC_EXPECTED, 'SYMMETRIC is exactly [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB]')
++    sym_head = decl_text(data, by['const SYMMETRIC']).split('=')[0]
++    expect(sym_head.strip() == 'const SYMMETRIC: [Config; 8]', 'SYMMETRIC is declared [Config; 8]')
++    members = sym
+     doc['symmetric'] = {'members': members, 'names': [consts[m]['name'] for m in members]}
+     expect(doc['symmetric']['names'] == SYMMETRIC_NAMES, 'SYMMETRIC names in order')
+     expected_assert = decl_text(ext, ext_by['fn assert_symmetric'])

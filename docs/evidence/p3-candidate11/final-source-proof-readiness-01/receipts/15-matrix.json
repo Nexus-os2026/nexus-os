@@ -1,0 +1,231 @@
+{
+ "adm_scan_SOURCE_R2_model": {
+  "adm": [
+   1056,
+   1146,
+   1691,
+   2123,
+   2160,
+   3251,
+   3257,
+   3556
+  ],
+  "adm_kept": [
+   1058,
+   1147,
+   1692,
+   2124,
+   2161
+  ],
+  "config.admissions": [
+   1146,
+   4033
+  ]
+ },
+ "adm_scan_at_C": {
+  "AQ": {
+   "adm": [
+    4862,
+    4870,
+    4874,
+    4876,
+    4876,
+    4889,
+    4894,
+    4907,
+    4915,
+    4936,
+    4942,
+    4954,
+    4963,
+    4987,
+    4999,
+    5038,
+    5077,
+    5088,
+    5285,
+    5586,
+    5607,
+    5651,
+    5790,
+    5796,
+    5851,
+    5868,
+    5879,
+    5903,
+    5911,
+    5912,
+    5931
+   ],
+   "adm_kept": [
+    4912,
+    4942,
+    5842
+   ],
+   "config.admissions": [
+    4898,
+    4908,
+    4915,
+    4942,
+    5093,
+    5235,
+    5257,
+    5540
+   ]
+  },
+  "MODEL": {
+   "adm": [
+    1056,
+    1146,
+    1691,
+    2123,
+    2160,
+    3251,
+    3257,
+    3556
+   ],
+   "adm_kept": [
+    1058,
+    1147,
+    1692,
+    2124,
+    2161
+   ],
+   "config.admissions": [
+    1146,
+    4033
+   ]
+  },
+  "SQ+EXT": {
+   "adm": [
+    6278,
+    6456,
+    6462,
+    6478,
+    6493,
+    6495,
+    6507,
+    6508,
+    6512,
+    6561,
+    6562,
+    6574,
+    6622,
+    6626,
+    6627,
+    6638,
+    6658,
+    6659,
+    6855,
+    6862,
+    7128,
+    7129,
+    7597,
+    7602,
+    7603,
+    7619,
+    7621
+   ],
+   "adm_kept": [
+    6279,
+    6333
+   ],
+   "config.admissions": [
+    6669,
+    6800,
+    6822,
+    7256,
+    7833,
+    7863
+   ]
+  }
+ },
+ "changed_rows": [
+  "GC.S14"
+ ],
+ "context": {
+  "layers_isolated": true,
+  "no_hook_install": true,
+  "witness_non_interfering": true
+ },
+ "expectation_failures": [],
+ "group_status_counts": {
+  "AD-1-R4 N": {
+   "EXECUTION_PENDING": 8,
+   "IDENTICAL": 7,
+   "NON_INTERFERING_CHANGE": 1,
+   "NOT_ESTABLISHED": 1,
+   "OWNER_ALREADY_SATISFIED": 1
+  },
+  "Admission: assumptions AQ1-AQ6": {
+   "EXECUTION_PENDING": 2,
+   "IDENTICAL": 1,
+   "NON_INTERFERING_CHANGE": 2,
+   "NOT_ESTABLISHED": 1
+  },
+  "Admission: lemmas and theorem": {
+   "IDENTICAL": 4
+  },
+  "Admission: obligations Q1-Q15": {
+   "IDENTICAL": 15
+  },
+  "Admission: source facts": {
+   "IDENTICAL": 10
+  },
+  "Composition AQ then SQ": {
+   "IDENTICAL": 3
+  },
+  "Extension: F-B matrix 1-17": {
+   "IDENTICAL": 17
+  },
+  "Extension: F-PT matrix 1-17": {
+   "IDENTICAL": 17
+  },
+  "Extension: conditions C-1..C-6": {
+   "EXECUTION_PENDING": 3,
+   "IDENTICAL": 1,
+   "NON_INTERFERING_CHANGE": 1,
+   "NOT_ESTABLISHED": 1
+  },
+  "Extension: lemmas": {
+   "IDENTICAL": 3
+  },
+  "Symmetry: Lemma E and S1-S15": {
+   "CHANGED_REVIEW_REQUIRED": 1,
+   "IDENTICAL": 15
+  },
+  "Symmetry: assumptions AS1-AS4": {
+   "EXECUTION_PENDING": 1,
+   "IDENTICAL": 1,
+   "NON_INTERFERING_CHANGE": 2
+  },
+  "Symmetry: asymmetries ASYM-1..6": {
+   "IDENTICAL": 6
+  },
+  "Symmetry: identity uses I1-I13": {
+   "IDENTICAL": 13
+  }
+ },
+ "hook_calls_at_C": {
+  "Counts": 1,
+  "take_counts": 13
+ },
+ "not_established_rows": [
+  "ADM.AQ6",
+  "EXT.C-4",
+  "N.15a"
+ ],
+ "result": "PASS",
+ "rows": 138,
+ "status_counts": {
+  "CHANGED_REVIEW_REQUIRED": 1,
+  "EXECUTION_PENDING": 14,
+  "IDENTICAL": 113,
+  "NON_INTERFERING_CHANGE": 6,
+  "NOT_ESTABLISHED": 3,
+  "OWNER_ALREADY_SATISFIED": 1
+ },
+ "tool": "matrix.py",
+ "tsv_sha256": "f5d21f6565ccf28a4208306a139acf895955bcd2df6c9183bc810a5b90154fbf",
+ "witness_regions_adm_occurrences": {}
+}

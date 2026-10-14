@@ -1,0 +1,1000 @@
+{
+ "W4_to_C_model_identical": true,
+ "additions": [
+  {
+   "addition": "C1/C25",
+   "base_commit": "2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda",
+   "base_model_blob": "4895993e1a9ca68762d873e026d42a6e08e49cc9",
+   "checks": [
+    {
+     "check": "N01 pure byte append, lexically isolated, at the end of the file",
+     "evidence": {
+      "appended_sha256": "64f7c29c12ca3106012e6c2045680a52edab0a69096710f1c6c18e52e8c4d07a",
+      "base": "EXT",
+      "base_bytes": 275579,
+      "base_ends_with": "}\n",
+      "byte_prefix": true,
+      "lexically_isolated": true,
+      "new": "W1",
+      "new_bytes": 286411,
+      "region_bytes_identical_at_C": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N02 no earlier item changed",
+     "evidence": {
+      "changed": [],
+      "earlier_items": 431
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N03 no impl or trait at any depth",
+     "evidence": {
+      "sites": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N04 no defined name is mentioned earlier or collides",
+     "evidence": {
+      "collide_with_earlier_items": [],
+      "collide_with_prelude_or_file_imports": [],
+      "collide_with_protocol_rs_items": [],
+      "defined_top_level": [
+       "type Scheduled",
+       "struct Witness",
+       "struct Replayed",
+       "fn violations_at",
+       "fn replay_schedule",
+       "fn run_witness",
+       "const C1_WITNESS",
+       "const C25_WITNESS",
+       "fn c1_witness_p1_at_a_successful_admission",
+       "fn c25_witness_p7_on_the_resulting_world"
+      ],
+      "mentioned_in_earlier_text": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N05 no use declaration",
+     "evidence": {
+      "sites": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N06 no macro definition",
+     "evidence": {
+      "macro_attributes": [],
+      "macro_rules": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N07 attributes: outer #[test] only",
+     "evidence": {
+      "attributes": [
+       "#[test]"
+      ],
+      "count": 2,
+      "other": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N08 no global, static, thread-local or process-global state",
+     "evidence": {
+      "forbidden_identifier_hits": {},
+      "keyword_sites": [],
+      "note": "'static is a lifetime token and is not counted",
+      "scanned_identifiers": [
+       "static",
+       "thread_local",
+       "lazy_static",
+       "OnceLock",
+       "OnceCell",
+       "LazyLock",
+       "LazyCell",
+       "Lazy",
+       "Mutex",
+       "RwLock",
+       "Condvar",
+       "SERIAL",
+       "set_var",
+       "remove_var",
+       "set_hook",
+       "take_hook",
+       "unsafe",
+       "spawn",
+       "File",
+       "fs",
+       "process",
+       "exit",
+       "abort",
+       "Command",
+       "env",
+       "include",
+       "include_str",
+       "include_bytes",
+       "option_env",
+       "asm",
+       "global_asm",
+       "no_mangle",
+       "export_name",
+       "link",
+       "global_allocator",
+       "panic_handler",
+       "path",
+       "cfg",
+       "cfg_attr",
+       "macro_export",
+       "proc_macro",
+       "proc_macro_derive",
+       "proc_macro_attribute",
+       "extern",
+       "crate",
+       "super",
+       "mod",
+       "use",
+       "impl",
+       "trait",
+       "macro_rules",
+       "union",
+       "Atomic",
+       "AtomicBool",
+       "AtomicU8",
+       "AtomicU32",
+       "AtomicU64",
+       "AtomicUsize",
+       "AtomicI64",
+       "UnsafeCell",
+       "Cell",
+       "RefCell",
+       "install",
+       "remove",
+       "report",
+       "Rc",
+       "Arc"
+      ],
+      "statics_in_earlier_model_text": [
+       "SERIAL"
+      ]
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N09 hook unchanged; only hook::take_counts called",
+     "evidence": {
+      "hook_paths_called": [
+       "take_counts",
+       "take_counts"
+      ],
+      "protocol_rs_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+      "protocol_rs_unchanged": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N10 configuration constants unchanged; no Config constant defined",
+     "evidence": {
+      "changed": [],
+      "configuration_items_checked": [
+       "const TICKET_LIMIT",
+       "const REFUSAL_LIMIT",
+       "struct Config",
+       "const DEFAULT_CAP",
+       "const DEFAULT_TIME",
+       "const FULL_CAP",
+       "const FULL_TIME",
+       "const BASE",
+       "fn default_run",
+       "const X1",
+       "const X2",
+       "const X3",
+       "const X4",
+       "const X5",
+       "const F1",
+       "const F2",
+       "const F3",
+       "const F4",
+       "const F5",
+       "const F6",
+       "const F7",
+       "const F8",
+       "const FPT",
+       "const FB",
+       "const FB2",
+       "const FG",
+       "const FW",
+       "const FD",
+       "const FR",
+       "const SYM1",
+       "const SYMMETRIC",
+       "const SYM_PT",
+       "const SYM_B",
+       "const SYM_BI"
+      ],
+      "region_consts_and_types": [
+       [
+        "C1_WITNESS",
+        "Witness"
+       ],
+       [
+        "C25_WITNESS",
+        "Witness"
+       ]
+      ]
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N11 PROPERTIES and BRANCHES unchanged and not mentioned",
+     "evidence": {
+      "mentions_in_addition": {
+       "BRANCHES": 0,
+       "PROPERTIES": 0
+      },
+      "unchanged": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N12 earlier tests unchanged; #[ignore] inventory unchanged",
+     "evidence": {
+      "added_tests": [
+       "c1_witness_p1_at_a_successful_admission",
+       "c25_witness_p7_on_the_resulting_world"
+      ],
+      "earlier_tests": 100,
+      "ignored_after": 34,
+      "ignored_before": 34,
+      "tests_after": 102
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N13 not in the closure of the explorers and earlier tests (at C)",
+     "evidence": {
+      "addition_items_reached": [],
+      "closure_items": 340
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N14 crate attributes, features and other compiled files unchanged",
+     "evidence": {
+      "include_env_path_link_cfg_hits": {},
+      "other_files_unchanged": {
+       ".cargo/config.toml": true,
+       "Cargo.lock": true,
+       "Cargo.toml": true,
+       "crates/nexus-governed-control/Cargo.toml": true,
+       "crates/nexus-governed-control/src/ledger.rs": true,
+       "crates/nexus-governed-control/src/ledger/protocol.rs": true,
+       "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": true,
+       "crates/nexus-governed-control/src/lib.rs": true,
+       "rust-toolchain.toml": true
+      },
+      "paths_outside_docs_evidence_changed": [
+       "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+      ]
+     },
+     "result": "PASS"
+    }
+   ],
+   "existing_names_used": [
+    "Actor",
+    "Config",
+    "F1",
+    "Fw",
+    "LIVE_SHIFT",
+    "Obs",
+    "Oracle",
+    "Se",
+    "SimRow",
+    "UNAPPLIED_SHIFT",
+    "Violations",
+    "actors",
+    "decode",
+    "encode",
+    "fail",
+    "field",
+    "hook",
+    "initial",
+    "key",
+    "len",
+    "new",
+    "note",
+    "place",
+    "sequence",
+    "state_properties",
+    "step",
+    "take_counts",
+    "trace",
+    "transition_properties",
+    "witness",
+    "word_of"
+   ],
+   "item_keyword_sites": [
+    {
+     "context": " outcome the control changes. type Scheduled = (Actor, &'static [u8], Option<&'s",
+     "heads_region_item": true,
+     "keyword": "type",
+     "offset": 275894
+    },
+    {
+     "context": " draft proposes, not adopted. struct Witness {     control: &'static str,     co",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 276195
+    },
+    {
+     "context": "hat one replayed step showed. struct Replayed {     /// The step's description, ",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 276686
+    },
+    {
+     "context": " before any of /// its steps. fn violations_at(config: &Config, key: &[u8]) -> V",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 277290
+    },
+    {
+     "context": "s violations and each step's. fn replay_schedule(config: &Config, steps: &[Sched",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 278136
+    },
+    {
+     "context": "ver counted as the named one. fn run_witness(witness: &Witness) {     let config",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 280522
+    },
+    {
+     "context": "orted as itself, never as P1. const C1_WITNESS: Witness = Witness {     control:",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 284490
+    },
+    {
+     "context": "nd P7 on the world it leaves. const C25_WITNESS: Witness = Witness {     control",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 285643
+    },
+    {
+     "context": " P1 at the admission. #[test] fn c1_witness_p1_at_a_successful_admission() {    ",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 286094
+    },
+    {
+     "context": " P7 after the append. #[test] fn c25_witness_p7_on_the_resulting_world() {     r",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 286333
+    }
+   ],
+   "region_at_C_bytes": [
+    275579,
+    286411
+   ],
+   "region_lines_at_C": [
+    8245,
+    8521
+   ],
+   "verdict": "NON_INTERFERING",
+   "witness_commit": "42dd1bd1cf21ffdea5968b256d2983f6575fab5b",
+   "witness_model_blob": "5ad26ddc727d8be30f4fb8d7478bc69e1c974933"
+  },
+  {
+   "addition": "C4",
+   "base_commit": "42dd1bd1cf21ffdea5968b256d2983f6575fab5b",
+   "base_model_blob": "5ad26ddc727d8be30f4fb8d7478bc69e1c974933",
+   "checks": [
+    {
+     "check": "N01 pure byte append, lexically isolated, at the end of the file",
+     "evidence": {
+      "appended_sha256": "8069f96e6cdfc243e1a67a1e14deeb92d6ceac238844c03ed8c57d1bb47ab2ac",
+      "base": "W1",
+      "base_bytes": 286411,
+      "base_ends_with": "}\n",
+      "byte_prefix": true,
+      "lexically_isolated": true,
+      "new": "W4",
+      "new_bytes": 310612,
+      "region_bytes_identical_at_C": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N02 no earlier item changed",
+     "evidence": {
+      "changed": [],
+      "earlier_items": 441
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N03 no impl or trait at any depth",
+     "evidence": {
+      "sites": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N04 no defined name is mentioned earlier or collides",
+     "evidence": {
+      "collide_with_earlier_items": [],
+      "collide_with_prelude_or_file_imports": [],
+      "collide_with_protocol_rs_items": [],
+      "defined_top_level": [
+       "struct C4Step",
+       "struct C4Ending",
+       "struct C4Scenario",
+       "struct C4After",
+       "fn c4_after",
+       "fn c4_x_explains_f1",
+       "fn c4_p4_kept",
+       "fn c4_p4_lost",
+       "fn c4_p8_kept",
+       "fn c4_p8_lost",
+       "struct C4Replayed",
+       "fn c4_replay_step",
+       "struct C4Run",
+       "fn c4_choices",
+       "fn c4_frozen",
+       "fn c4_consumption",
+       "fn c4_replay",
+       "fn run_c4_witness",
+       "const C4_ARM",
+       "const C4_CONFLICT",
+       "const C4_WK_QUIET",
+       "const C4_APPEND_X",
+       "const C4_SNAPSHOT",
+       "const C4_CONFIRM",
+       "const C4_EMPTY_X",
+       "const C4_GATING",
+       "const C4_P4",
+       "const C4_P8",
+       "const C4_SCENARIOS",
+       "fn c4_witness_p4_and_p8_on_f8"
+      ],
+      "mentioned_in_earlier_text": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N05 no use declaration",
+     "evidence": {
+      "sites": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N06 no macro definition",
+     "evidence": {
+      "macro_attributes": [],
+      "macro_rules": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N07 attributes: outer #[test] only",
+     "evidence": {
+      "attributes": [
+       "#[test]"
+      ],
+      "count": 1,
+      "other": []
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N08 no global, static, thread-local or process-global state",
+     "evidence": {
+      "forbidden_identifier_hits": {},
+      "keyword_sites": [],
+      "note": "'static is a lifetime token and is not counted",
+      "scanned_identifiers": [
+       "static",
+       "thread_local",
+       "lazy_static",
+       "OnceLock",
+       "OnceCell",
+       "LazyLock",
+       "LazyCell",
+       "Lazy",
+       "Mutex",
+       "RwLock",
+       "Condvar",
+       "SERIAL",
+       "set_var",
+       "remove_var",
+       "set_hook",
+       "take_hook",
+       "unsafe",
+       "spawn",
+       "File",
+       "fs",
+       "process",
+       "exit",
+       "abort",
+       "Command",
+       "env",
+       "include",
+       "include_str",
+       "include_bytes",
+       "option_env",
+       "asm",
+       "global_asm",
+       "no_mangle",
+       "export_name",
+       "link",
+       "global_allocator",
+       "panic_handler",
+       "path",
+       "cfg",
+       "cfg_attr",
+       "macro_export",
+       "proc_macro",
+       "proc_macro_derive",
+       "proc_macro_attribute",
+       "extern",
+       "crate",
+       "super",
+       "mod",
+       "use",
+       "impl",
+       "trait",
+       "macro_rules",
+       "union",
+       "Atomic",
+       "AtomicBool",
+       "AtomicU8",
+       "AtomicU32",
+       "AtomicU64",
+       "AtomicUsize",
+       "AtomicI64",
+       "UnsafeCell",
+       "Cell",
+       "RefCell",
+       "install",
+       "remove",
+       "report",
+       "Rc",
+       "Arc"
+      ],
+      "statics_in_earlier_model_text": [
+       "SERIAL"
+      ]
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N09 hook unchanged; only hook::take_counts called",
+     "evidence": {
+      "hook_paths_called": [
+       "take_counts",
+       "take_counts"
+      ],
+      "protocol_rs_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+      "protocol_rs_unchanged": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N10 configuration constants unchanged; no Config constant defined",
+     "evidence": {
+      "changed": [],
+      "configuration_items_checked": [
+       "const TICKET_LIMIT",
+       "const REFUSAL_LIMIT",
+       "struct Config",
+       "const DEFAULT_CAP",
+       "const DEFAULT_TIME",
+       "const FULL_CAP",
+       "const FULL_TIME",
+       "const BASE",
+       "fn default_run",
+       "const X1",
+       "const X2",
+       "const X3",
+       "const X4",
+       "const X5",
+       "const F1",
+       "const F2",
+       "const F3",
+       "const F4",
+       "const F5",
+       "const F6",
+       "const F7",
+       "const F8",
+       "const FPT",
+       "const FB",
+       "const FB2",
+       "const FG",
+       "const FW",
+       "const FD",
+       "const FR",
+       "const SYM1",
+       "const SYMMETRIC",
+       "const SYM_PT",
+       "const SYM_B",
+       "const SYM_BI"
+      ],
+      "region_consts_and_types": [
+       [
+        "C4_ARM",
+        "C4Step"
+       ],
+       [
+        "C4_CONFLICT",
+        "C4Step"
+       ],
+       [
+        "C4_WK_QUIET",
+        "C4Step"
+       ],
+       [
+        "C4_APPEND_X",
+        "C4Step"
+       ],
+       [
+        "C4_SNAPSHOT",
+        "C4Step"
+       ],
+       [
+        "C4_CONFIRM",
+        "C4Step"
+       ],
+       [
+        "C4_EMPTY_X",
+        "C4Step"
+       ],
+       [
+        "C4_GATING",
+        "C4Step"
+       ],
+       [
+        "C4_P4",
+        "C4Scenario"
+       ],
+       [
+        "C4_P8",
+        "C4Scenario"
+       ],
+       [
+        "C4_SCENARIOS",
+        "[C4Scenario; 2]"
+       ]
+      ]
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N11 PROPERTIES and BRANCHES unchanged and not mentioned",
+     "evidence": {
+      "mentions_in_addition": {
+       "BRANCHES": 0,
+       "PROPERTIES": 0
+      },
+      "unchanged": true
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N12 earlier tests unchanged; #[ignore] inventory unchanged",
+     "evidence": {
+      "added_tests": [
+       "c4_witness_p4_and_p8_on_f8"
+      ],
+      "earlier_tests": 102,
+      "ignored_after": 34,
+      "ignored_before": 34,
+      "tests_after": 103
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N13 not in the closure of the explorers and earlier tests (at C)",
+     "evidence": {
+      "addition_items_reached": [],
+      "closure_items": 340
+     },
+     "result": "PASS"
+    },
+    {
+     "check": "N14 crate attributes, features and other compiled files unchanged",
+     "evidence": {
+      "include_env_path_link_cfg_hits": {},
+      "other_files_unchanged": {
+       ".cargo/config.toml": true,
+       "Cargo.lock": true,
+       "Cargo.toml": true,
+       "crates/nexus-governed-control/Cargo.toml": true,
+       "crates/nexus-governed-control/src/ledger.rs": true,
+       "crates/nexus-governed-control/src/ledger/protocol.rs": true,
+       "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": true,
+       "crates/nexus-governed-control/src/lib.rs": true,
+       "rust-toolchain.toml": true
+      },
+      "paths_outside_docs_evidence_changed": [
+       "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+      ]
+     },
+     "result": "PASS"
+    }
+   ],
+   "existing_names_used": [
+    "Ack",
+    "Actor",
+    "Config",
+    "F8",
+    "Fw",
+    "LIVE_SHIFT",
+    "LatchCause",
+    "Obs",
+    "Occupant",
+    "Oracle",
+    "Phase",
+    "SimRow",
+    "Stage",
+    "UNAPPLIED_SHIFT",
+    "Violations",
+    "Wk",
+    "World",
+    "bit",
+    "branch",
+    "decode",
+    "encode",
+    "fact_key",
+    "field",
+    "gating_key",
+    "hook",
+    "initial",
+    "key",
+    "latch",
+    "len",
+    "member",
+    "new",
+    "next",
+    "note",
+    "occupant",
+    "phase",
+    "place",
+    "row",
+    "run",
+    "step",
+    "take_counts",
+    "trace",
+    "transition_properties",
+    "u",
+    "violations_at",
+    "word_of"
+   ],
+   "item_keyword_sites": [
+    {
+     "context": "e fault budget it must leave. struct C4Step {     actor: Actor,     offered: &'s",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 286787
+    },
+    {
+     "context": "d the fault budget it leaves. struct C4Ending {     consumed: &'static [(u8, u8)",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 287128
+    },
+    {
+     "context": "e AD-1-R3 draft, not adopted. struct C4Scenario {     named: &'static str,     s",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 287750
+    },
+    {
+     "context": "ds; each described.     kept: fn(&C4After) -> bool,     keeps: &'static str,    ",
+     "heads_region_item": false,
+     "keyword": "fn",
+     "offset": 288051
+    },
+    {
+     "context": "eeps: &'static str,     lost: fn(&C4After) -> bool,     locus: &'static str, }  ",
+     "heads_region_item": false,
+     "keyword": "fn",
+     "offset": 288108
+    },
+    {
+     "context": " for G1, every fact P8 reads. struct C4After {     u: Option<Occupant>,     c: O",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 288288
+    },
+    {
+     "context": "64,     rows: Vec<SimRow>, }  fn c4_after(w: &World) -> C4After {     let key = ",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 288603
+    },
+    {
+     "context": "/// X holds F1's explanation. fn c4_x_explains_f1(after: &C4After) -> bool {    ",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 289600
+    },
+    {
+     "context": " leaves U empty, X as it was. fn c4_p4_kept(after: &C4After) -> bool {     after",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 289824
+    },
+    {
+     "context": "ile X holds F1's explanation. fn c4_p4_lost(after: &C4After) -> bool {     match",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 289993
+    },
+    {
+     "context": "ps G1's written attempt in U. fn c4_p8_kept(after: &C4After) -> bool {     after",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 290203
+    },
+    {
+     "context": "ected, in C or in the ledger. fn c4_p8_lost(after: &C4After) -> bool {     after",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 290468
+    },
+    {
+     "context": " one replayed C4 step showed. struct C4Replayed {     actor: Actor,     offered:",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 290707
+    },
+    {
+     "context": " of the world after the step. fn c4_replay_step(     config: &Config,     key: &",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 291748
+    },
+    {
+     "context": "t ended the scenario, if any. struct C4Run {     initial: Violations,     steps:",
+     "heads_region_item": true,
+     "keyword": "struct",
+     "offset": 293119
+    },
+    {
+     "context": " without their option counts. fn c4_choices(consumed: &[(u8, u8)]) -> Vec<u8> { ",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 293309
+    },
+    {
+     "context": "onsumes every offered choice. fn c4_frozen(scenario: &C4Scenario) -> Option<Stri",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 293633
+    },
+    {
+     "context": "t is not the /// offered one. fn c4_consumption(record: &C4Replayed) -> Option<S",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 294631
+    },
+    {
+     "context": "No violation ends the replay. fn c4_replay(config: &Config, scenario: &C4Scenari",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 295677
+    },
+    {
+     "context": "never counted as /// another. fn run_c4_witness(config: &Config, scenarios: &[C4",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 298993
+    },
+    {
+     "context": "}  /// Fw(0) arms its ticket. const C4_ARM: C4Step = C4Step {     actor: Actor::",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 305400
+    },
+    {
+     "context": "s explanation is placed in X. const C4_CONFLICT: C4Step = C4Step {     actor: Ac",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 305751
+    },
+    {
+     "context": " or it is the [T] step after. const C4_WK_QUIET: C4Step = C4Step {     actor: Ac",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 306176
+    },
+    {
+     "context": " 4 and X is marked committed. const C4_APPEND_X: C4Step = C4Step {     actor: Ac",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 306449
+    },
+    {
+     "context": "explanation at 4 (survey Ok). const C4_SNAPSHOT: C4Step = C4Step {     actor: Ac",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 306725
+    },
+    {
+     "context": "nd nothing outside the model. const C4_CONFIRM: C4Step = C4Step {     actor: Act",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 307010
+    },
+    {
+     "context": "X, which is marked committed. const C4_EMPTY_X: C4Step = C4Step {     actor: Act",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 307207
+    },
+    {
+     "context": "ded and U keeps G1's attempt. const C4_GATING: C4Step = C4Step {     actor: Acto",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 307569
+    },
+    {
+     "context": "/// kept while X is occupied. const C4_P4: C4Scenario = C4Scenario {     named: ",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 308137
+    },
+    {
+     "context": "ritten and corrected nowhere. const C4_P8: C4Scenario = C4Scenario {     named: ",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 309331
+    },
+    {
+     "context": "d in C or in the ledger\", };  const C4_SCENARIOS: [C4Scenario; 2] = [C4_P4, C4_P",
+     "heads_region_item": true,
+     "keyword": "const",
+     "offset": 310160
+    },
+    {
+     "context": "at /// its own locus. #[test] fn c4_witness_p4_and_p8_on_f8() {     run_c4_witne",
+     "heads_region_item": true,
+     "keyword": "fn",
+     "offset": 310536
+    }
+   ],
+   "region_at_C_bytes": [
+    286411,
+    310612
+   ],
+   "region_lines_at_C": [
+    8522,
+    9199
+   ],
+   "verdict": "NON_INTERFERING",
+   "witness_commit": "04e42a7ddf0d0a2af17b6506c51997006e7a08dc",
+   "witness_model_blob": "28085ce232827301104b5d757af042ec933976f8"
+  }
+ ],
+ "explorer_closure_at_C": {
+  "items": 340,
+  "note": "explore, explore_experimental, explore_symmetric(_kept), every model root, and every test of the earlier text",
+  "roots": 142
+ },
+ "mission": "P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01",
+ "result": "PASS",
+ "tool": "witness_check.py",
+ "verdicts": {
+  "C1/C25": "NON_INTERFERING",
+  "C4": "NON_INTERFERING"
+ }
+}

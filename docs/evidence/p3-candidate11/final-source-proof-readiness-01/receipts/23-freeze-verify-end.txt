@@ -1,0 +1,44 @@
+$ bash -c cd\ \"\$1\"\ \&\&\ sha256sum\ -c\ --strict\ receipts/00-FREEZE.sha256 _ /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01 
+BUILD-INPUT-CLOSURE.md: OK
+CONFIGURATION-IDENTITY.md: OK
+INDEX.md: OK
+PROOF-DOCUMENT-INTEGRITY.md: OK
+PROOF-PRECONDITION-MATRIX.md: OK
+PROOF-PRECONDITION-MATRIX.tsv: OK
+SOURCE-CLOSURE.md: OK
+WITNESS-NONINTERFERENCE.md: OK
+receipts/development/development-log.txt: OK
+receipts/development/negative/check_docs-negative-controls.txt: OK
+receipts/development/negative/check_docs-negative-controls.v2-INVALID-crash.txt: OK
+receipts/development/negative/check_docs-negative-controls.v3.txt: OK
+receipts/development/negative/negative-controls.v1.txt: OK
+receipts/development/negative/negative-controls.v2.txt: OK
+tools/build_inputs.py: OK
+tools/check_docs.py: OK
+tools/common.py: OK
+tools/config_identity.py: OK
+tools/final-gate.sh: OK
+tools/freeze.sh: OK
+tools/matrix.py: OK
+tools/matrix_rows.py: OK
+tools/negative_controls.py: OK
+tools/proof_docs.py: OK
+tools/render_matrix.py: OK
+tools/revisions/build_inputs.v1-to-v2.diff: OK
+tools/revisions/check_docs.v1-to-v2.diff: OK
+tools/revisions/check_docs.v2-to-v3.diff: OK
+tools/revisions/check_docs.v3-to-v4.diff: OK
+tools/revisions/config_identity.v1-to-v2.diff: OK
+tools/revisions/config_identity.v2-to-v3.diff: OK
+tools/revisions/final-gate.v1-to-v2.diff: OK
+tools/revisions/final-gate.v2-to-v3.diff: OK
+tools/revisions/matrix.v1-to-v2.diff: OK
+tools/revisions/rust_items.v1-to-v2.diff: OK
+tools/revisions/source_closure.v1-to-v2.diff: OK
+tools/revisions/witness_check.v1-to-v2.diff: OK
+tools/rust_items.py: OK
+tools/source_closure.py: OK
+tools/witness_check.py: OK
+
+exit=0
+

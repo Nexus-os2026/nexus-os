@@ -1,0 +1,250 @@
+--- revisions/witness_check.v1.py	2026-10-14 12:18:33.759320194 +0100
++++ tools/witness_check.py	2026-10-14 12:18:48.712407253 +0100
+@@ -142,6 +142,116 @@
+     return out
+ 
+ 
++def check_addition(label, base, new, c_data, c_its, proto_names, full_closure, proto_same, proto_blob,
++                   other_files, outside, names=('base', 'new')):
++    """The fourteen checks for one addition: `new` is `base` plus the addition, `c_data` the file at C.
++    Git-derived facts (protocol.rs unchanged, the other compiled files, the paths that differ outside
++    docs/evidence/) are passed in, so that negative_controls.py can run the checks on synthetic input."""
++    lo, hi = len(base), len(new)
++    checks = []
++
++    def check(cid, ok, evidence):
++        checks.append({'check': cid, 'result': 'PASS' if ok else 'FAIL', 'evidence': evidence})
++
++    # the region at C must be the same bytes as at the witness commit
++    same_at_c = c_data[lo:hi] == new[lo:hi] and c_data.startswith(new[:hi])
++    n_its, n_toks, n_offs = R.extract(new)
++    b_its, b_toks, b_offs = R.extract(base)
++    region_items = [it for it in n_its if it['span'][0] >= lo and it['span'][1] <= hi]
++    # N01
++    prefix = new.startswith(base)
++    iso = S.lexically_isolated(base, new)
++    first_item_starts_region = bool(region_items) and region_items[0]['span'][0] >= lo
++    check('N01 pure byte append, lexically isolated, at the end of the file', prefix and iso and same_at_c
++          and first_item_starts_region and base.endswith(b'}\n'),
++          {'base': names[0], 'new': names[1], 'base_bytes': lo, 'new_bytes': hi,
++           'appended_sha256': K.sha256(new[lo:]), 'byte_prefix': prefix, 'lexically_isolated': iso,
++           'region_bytes_identical_at_C': same_at_c, 'base_ends_with': base[-2:].decode()})
++    # N02
++    b_idx = S.index(b_its)
++    n_idx = S.index(n_its)
++    changed = [k for k, it in b_idx.items()
++               if k not in n_idx or n_idx[k]['decl'] != it['decl'] or n_idx[k]['span'] != it['span']
++               or n_idx[k]['decl_sha256'] != it['decl_sha256'] or n_idx[k]['span_sha256'] != it['span_sha256']]
++    check('N02 no earlier item changed', not changed, {'earlier_items': len(b_idx), 'changed': changed})
++    # N03-N08 token scans
++    r_ids = R.identifiers(n_toks, n_offs, lo, hi)
++    sites = keyword_sites(n_toks, n_offs, lo, hi, region_items, new)
++    impl_trait = [s for s in sites if s['keyword'] in ('impl', 'trait')]
++    check('N03 no impl or trait at any depth', not impl_trait, {'sites': impl_trait})
++    defined = sorted({it['name'] for it in region_items})
++    pre_ids = R.identifiers(n_toks, n_offs, 0, lo)
++    earlier_names = {it['name'] for it in R.flatten(b_its)}
++    coll_text = sorted(n for n in defined if n in pre_ids)
++    coll_items = sorted(n for n in defined if n in earlier_names)
++    coll_proto = sorted(n for n in defined if n in proto_names)
++    coll_prelude = sorted(n for n in defined if n in PRELUDE)
++    check('N04 no defined name is mentioned earlier or collides', not (coll_text or coll_items or coll_proto or coll_prelude),
++          {'defined_top_level': [it['path'] for it in region_items], 'mentioned_in_earlier_text': coll_text,
++           'collide_with_earlier_items': coll_items, 'collide_with_protocol_rs_items': coll_proto,
++           'collide_with_prelude_or_file_imports': coll_prelude})
++    uses = [s for s in sites if s['keyword'] == 'use']
++    check('N05 no use declaration', not uses, {'sites': uses})
++    macros = [s for s in sites if s['keyword'] == 'macro_rules']
++    attrs = attributes(n_toks, n_offs, lo, hi)
++    macro_attrs = [a for a in attrs if any(x in a['text'] for x in ('macro_export', 'proc_macro'))]
++    check('N06 no macro definition', not macros and not macro_attrs, {'macro_rules': macros, 'macro_attributes': macro_attrs})
++    bad_attrs = [a for a in attrs if a['inner'] or a['text'] != '#[test]']
++    check('N07 attributes: outer #[test] only', not bad_attrs,
++          {'attributes': sorted({a['text'] for a in attrs}), 'count': len(attrs), 'other': bad_attrs})
++    hits = {k: len(r_ids[k]) for k in FORBIDDEN_IDENTS if k in r_ids}
++    other_kw = [s for s in sites if s['keyword'] in ('static', 'mod', 'extern', 'union')]
++    check('N08 no global, static, thread-local or process-global state', not hits and not other_kw,
++          {'forbidden_identifier_hits': hits, 'scanned_identifiers': FORBIDDEN_IDENTS, 'keyword_sites': other_kw,
++           'statics_in_earlier_model_text': sorted(it['name'] for it in b_its if it['kind'] == 'static'),
++           'note': "'static is a lifetime token and is not counted"})
++    calls = hook_calls(n_toks, n_offs, lo, hi)
++    check('N09 hook unchanged; only hook::take_counts called', proto_same and set(calls) <= {'take_counts'},
++          {'protocol_rs_blob': proto_blob, 'protocol_rs_unchanged': proto_same,
++           'hook_paths_called': calls})
++    cfg_items = [it['path'] for it in R.flatten(b_its)
++                 if it['name'] in ('Config', 'default_run', 'BASE', 'DEFAULT_CAP', 'DEFAULT_TIME', 'FULL_CAP',
++                                   'FULL_TIME', 'TICKET_LIMIT', 'REFUSAL_LIMIT', 'SYMMETRIC')
++                 or (it['kind'] == 'const' and base[it['decl'][0]:it['decl'][1]].split(b'=')[0].strip().endswith(b': Config'))]
++    cfg_changed = [p for p in cfg_items if any(k[0] == p for k in changed)]
++    region_consts = [(it['name'], new[it['decl'][0]:it['decl'][1]].split(b'=')[0].decode().split(':', 1)[1].strip())
++                     for it in region_items if it['kind'] == 'const']
++    cfg_new = [n for n, ty in region_consts if ty == 'Config']
++    check('N10 configuration constants unchanged; no Config constant defined', not cfg_changed and not cfg_new,
++          {'configuration_items_checked': cfg_items, 'changed': cfg_changed, 'region_consts_and_types': region_consts})
++    pb = {k: len(r_ids.get(k, [])) for k in ('PROPERTIES', 'BRANCHES')}
++    pb_same = all(any(k[0] == 'const ' + n for k in b_idx) and not any(k[0] == 'const ' + n for k in changed)
++                  for n in ('PROPERTIES', 'BRANCHES'))
++    check('N11 PROPERTIES and BRANCHES unchanged and not mentioned', pb_same and not any(pb.values()),
++          {'mentions_in_addition': pb, 'unchanged': pb_same})
++    b_tests = [it['name'] for it in test_fns(base)]
++    n_tests = [it['name'] for it in test_fns(new)]
++    new_tests = [t for t in n_tests if t not in b_tests]
++    ign_b, ign_n = ignored_tests(base), ignored_tests(new)
++    check('N12 earlier tests unchanged; #[ignore] inventory unchanged',
++          all(t in n_tests for t in b_tests) and n_tests[:len(b_tests)] == b_tests and ign_b == ign_n
++          and not any(k[0].startswith('fn ') and k[0][3:] in b_tests for k in changed),
++          {'earlier_tests': len(b_tests), 'tests_after': len(n_tests), 'added_tests': new_tests,
++           'ignored_before': len(ign_b), 'ignored_after': len(ign_n)})
++    reg_c = {(it['path'], it['ordinal']) for it in c_its if it['span'][0] >= lo and it['span'][1] <= hi}
++    reached = [it['path'] for it in full_closure if (it['path'], it['ordinal']) in reg_c]
++    check('N13 not in the closure of the explorers and earlier tests (at C)', not reached,
++          {'closure_items': len(full_closure), 'addition_items_reached': reached})
++    linkish = {k: len(r_ids[k]) for k in ('include', 'include_str', 'include_bytes', 'env', 'option_env', 'path',
++                                          'link', 'no_mangle', 'export_name', 'cfg', 'cfg_attr', 'extern', 'crate')
++               if k in r_ids}
++    check('N14 crate attributes, features and other compiled files unchanged', all(other_files.values())
++          and outside == [K.MODEL] and not linkish,
++          {'other_files_unchanged': other_files, 'paths_outside_docs_evidence_changed': outside,
++           'include_env_path_link_cfg_hits': linkish})
++    # informational: existing items the addition uses (read-only uses)
++    existing = sorted(n for n in r_ids if n in earlier_names or n in proto_names)
++    verdict = 'NON_INTERFERING' if all(c['result'] == 'PASS' for c in checks) else 'PROOF_REVIEW_BLOCKER'
++    return {'addition': label, 'region_at_C_bytes': [lo, hi],
++            'region_lines_at_C': [base.count(b'\n') + 1, new.count(b'\n')],
++            'checks': checks, 'existing_names_used': existing, 'item_keyword_sites': sites, 'verdict': verdict}
++
++
+ def main():
+     ap = argparse.ArgumentParser()
+     ap.add_argument('repo')
+@@ -169,122 +279,17 @@
+     for label, base_c, new_c in ADDITIONS:
+         base = K.blob(repo, base_c, K.MODEL)
+         new = K.blob(repo, new_c, K.MODEL)
+-        lo, hi = len(base), len(new)
+-        checks = []
+-
+-        def check(cid, ok, evidence):
+-            checks.append({'check': cid, 'result': 'PASS' if ok else 'FAIL', 'evidence': evidence})
+-
+-        # the region at C must be the same bytes as at the witness commit
+-        same_at_c = c_data[lo:hi] == new[lo:hi] and c_data.startswith(new[:hi])
+-        n_its, n_toks, n_offs = R.extract(new)
+-        b_its, b_toks, b_offs = R.extract(base)
+-        region_items = [it for it in n_its if it['span'][0] >= lo and it['span'][1] <= hi]
+-        # N01
+-        prefix = new.startswith(base)
+-        iso = S.lexically_isolated(base, new)
+-        first_item_starts_region = bool(region_items) and region_items[0]['span'][0] >= lo
+-        check('N01 pure byte append, lexically isolated, at the end of the file', prefix and iso and same_at_c
+-              and first_item_starts_region and base.endswith(b'}\n'),
+-              {'base': K.SHORT[base_c], 'new': K.SHORT[new_c], 'base_bytes': lo, 'new_bytes': hi,
+-               'appended_sha256': K.sha256(new[lo:]), 'byte_prefix': prefix, 'lexically_isolated': iso,
+-               'region_bytes_identical_at_C': same_at_c, 'base_ends_with': base[-2:].decode()})
+-        # N02
+-        b_idx = S.index(b_its)
+-        n_idx = S.index(n_its)
+-        changed = [k for k, it in b_idx.items()
+-                   if k not in n_idx or n_idx[k]['decl'] != it['decl'] or n_idx[k]['span'] != it['span']
+-                   or n_idx[k]['decl_sha256'] != it['decl_sha256'] or n_idx[k]['span_sha256'] != it['span_sha256']]
+-        check('N02 no earlier item changed', not changed, {'earlier_items': len(b_idx), 'changed': changed})
+-        # N03-N08 token scans
+-        r_ids = R.identifiers(n_toks, n_offs, lo, hi)
+-        sites = keyword_sites(n_toks, n_offs, lo, hi, region_items, new)
+-        impl_trait = [s for s in sites if s['keyword'] in ('impl', 'trait')]
+-        check('N03 no impl or trait at any depth', not impl_trait, {'sites': impl_trait})
+-        defined = sorted({it['name'] for it in region_items})
+-        pre_ids = R.identifiers(n_toks, n_offs, 0, lo)
+-        earlier_names = {it['name'] for it in R.flatten(b_its)}
+-        coll_text = sorted(n for n in defined if n in pre_ids)
+-        coll_items = sorted(n for n in defined if n in earlier_names)
+-        coll_proto = sorted(n for n in defined if n in proto_names)
+-        coll_prelude = sorted(n for n in defined if n in PRELUDE)
+-        check('N04 no defined name is mentioned earlier or collides', not (coll_text or coll_items or coll_proto or coll_prelude),
+-              {'defined_top_level': [it['path'] for it in region_items], 'mentioned_in_earlier_text': coll_text,
+-               'collide_with_earlier_items': coll_items, 'collide_with_protocol_rs_items': coll_proto,
+-               'collide_with_prelude_or_file_imports': coll_prelude})
+-        uses = [s for s in sites if s['keyword'] == 'use']
+-        check('N05 no use declaration', not uses, {'sites': uses})
+-        macros = [s for s in sites if s['keyword'] == 'macro_rules']
+-        attrs = attributes(n_toks, n_offs, lo, hi)
+-        macro_attrs = [a for a in attrs if any(x in a['text'] for x in ('macro_export', 'proc_macro'))]
+-        check('N06 no macro definition', not macros and not macro_attrs, {'macro_rules': macros, 'macro_attributes': macro_attrs})
+-        bad_attrs = [a for a in attrs if a['inner'] or a['text'] != '#[test]']
+-        check('N07 attributes: outer #[test] only', not bad_attrs,
+-              {'attributes': sorted({a['text'] for a in attrs}), 'count': len(attrs), 'other': bad_attrs})
+-        hits = {k: len(r_ids[k]) for k in FORBIDDEN_IDENTS if k in r_ids}
+-        other_kw = [s for s in sites if s['keyword'] in ('static', 'mod', 'extern', 'union')]
+-        check('N08 no global, static, thread-local or process-global state', not hits and not other_kw,
+-              {'forbidden_identifier_hits': hits, 'scanned_identifiers': FORBIDDEN_IDENTS, 'keyword_sites': other_kw,
+-               'statics_in_earlier_model_text': sorted(it['name'] for it in b_its if it['kind'] == 'static'),
+-               'note': "'static is a lifetime token and is not counted"})
+-        calls = hook_calls(n_toks, n_offs, lo, hi)
+-        proto_same = K.blob(repo, base_c, K.PROTO) == K.blob(repo, new_c, K.PROTO) == proto
+-        check('N09 hook unchanged; only hook::take_counts called', proto_same and set(calls) <= {'take_counts'},
+-              {'protocol_rs_blob': K.blob_id(repo, new_c, K.PROTO), 'protocol_rs_unchanged': proto_same,
+-               'hook_paths_called': calls})
+-        cfg_items = [it['path'] for it in R.flatten(b_its)
+-                     if it['name'] in ('Config', 'default_run', 'BASE', 'DEFAULT_CAP', 'DEFAULT_TIME', 'FULL_CAP',
+-                                       'FULL_TIME', 'TICKET_LIMIT', 'REFUSAL_LIMIT', 'SYMMETRIC')
+-                     or (it['kind'] == 'const' and base[it['decl'][0]:it['decl'][1]].split(b'=')[0].strip().endswith(b': Config'))]
+-        cfg_changed = [p for p in cfg_items if any(k[0] == p for k in changed)]
+-        region_consts = [(it['name'], new[it['decl'][0]:it['decl'][1]].split(b'=')[0].decode().split(':', 1)[1].strip())
+-                         for it in region_items if it['kind'] == 'const']
+-        cfg_new = [n for n, ty in region_consts if ty == 'Config']
+-        check('N10 configuration constants unchanged; no Config constant defined', not cfg_changed and not cfg_new,
+-              {'configuration_items_checked': cfg_items, 'changed': cfg_changed, 'region_consts_and_types': region_consts})
+-        pb = {k: len(r_ids.get(k, [])) for k in ('PROPERTIES', 'BRANCHES')}
+-        pb_same = all(any(k[0] == 'const ' + n for k in b_idx) and not any(k[0] == 'const ' + n for k in changed)
+-                      for n in ('PROPERTIES', 'BRANCHES'))
+-        check('N11 PROPERTIES and BRANCHES unchanged and not mentioned', pb_same and not any(pb.values()),
+-              {'mentions_in_addition': pb, 'unchanged': pb_same})
+-        b_tests = [it['name'] for it in test_fns(base)]
+-        n_tests = [it['name'] for it in test_fns(new)]
+-        new_tests = [t for t in n_tests if t not in b_tests]
+-        ign_b, ign_n = ignored_tests(base), ignored_tests(new)
+-        check('N12 earlier tests unchanged; #[ignore] inventory unchanged',
+-              all(t in n_tests for t in b_tests) and n_tests[:len(b_tests)] == b_tests and ign_b == ign_n
+-              and not any(k[0].startswith('fn ') and k[0][3:] in b_tests for k in changed),
+-              {'earlier_tests': len(b_tests), 'tests_after': len(n_tests), 'added_tests': new_tests,
+-               'ignored_before': len(ign_b), 'ignored_after': len(ign_n)})
+-        reg_c = {(it['path'], it['ordinal']) for it in c_its if it['span'][0] >= lo and it['span'][1] <= hi}
+-        reached = [it['path'] for it in full_closure if (it['path'], it['ordinal']) in reg_c]
+-        check('N13 not in the closure of the explorers and earlier tests (at C)', not reached,
+-              {'closure_items': len(full_closure), 'addition_items_reached': reached})
+-        other_files = {}
+-        for p in K.FILES:
+-            if p == K.MODEL:
+-                continue
+-            other_files[p] = K.blob_id(repo, base_c, p) == K.blob_id(repo, new_c, p)
++        other_files = {p: K.blob_id(repo, base_c, p) == K.blob_id(repo, new_c, p) for p in K.FILES if p != K.MODEL}
+         tb, tn = K.tree_map(repo, base_c), K.tree_map(repo, new_c)
+         outside = sorted(p for p in set(tb) | set(tn)
+                          if not p.startswith(K.EVIDENCE_PREFIX) and tb.get(p) != tn.get(p))
+-        linkish = {k: len(r_ids[k]) for k in ('include', 'include_str', 'include_bytes', 'env', 'option_env', 'path',
+-                                              'link', 'no_mangle', 'export_name', 'cfg', 'cfg_attr', 'extern', 'crate')
+-                   if k in r_ids}
+-        check('N14 crate attributes, features and other compiled files unchanged', all(other_files.values())
+-              and outside == [K.MODEL] and not linkish,
+-              {'other_files_unchanged': other_files, 'paths_outside_docs_evidence_changed': outside,
+-               'include_env_path_link_cfg_hits': linkish})
+-        # informational: existing items the addition uses (read-only uses)
+-        existing = sorted(n for n in r_ids if n in earlier_names or n in proto_names)
+-        verdict = 'NON_INTERFERING' if all(c['result'] == 'PASS' for c in checks) else 'PROOF_REVIEW_BLOCKER'
+-        overall.append(verdict)
+-        doc['additions'].append({
+-            'addition': label, 'base_commit': base_c, 'witness_commit': new_c,
+-            'base_model_blob': K.blob_id(repo, base_c, K.MODEL), 'witness_model_blob': K.blob_id(repo, new_c, K.MODEL),
+-            'region_at_C_bytes': [lo, hi], 'region_lines_at_C': [base.count(b'\n') + 1, new.count(b'\n')],
+-            'checks': checks, 'existing_names_used': existing,
+-            'item_keyword_sites': sites, 'verdict': verdict})
++        proto_same = K.blob(repo, base_c, K.PROTO) == K.blob(repo, new_c, K.PROTO) == proto
++        ent = check_addition(label, base, new, c_data, c_its, proto_names, full_closure, proto_same,
++                             K.blob_id(repo, new_c, K.PROTO), other_files, outside, (K.SHORT[base_c], K.SHORT[new_c]))
++        ent.update({'base_commit': base_c, 'witness_commit': new_c, 'base_model_blob': K.blob_id(repo, base_c, K.MODEL),
++                    'witness_model_blob': K.blob_id(repo, new_c, K.MODEL)})
++        overall.append(ent['verdict'])
++        doc['additions'].append(ent)
+     doc['verdicts'] = {a['addition']: a['verdict'] for a in doc['additions']}
+     ok = doc['W4_to_C_model_identical'] and all(v == 'NON_INTERFERING' for v in overall)
+     doc['result'] = 'PASS' if ok else 'FAIL'

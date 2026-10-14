@@ -1,0 +1,548 @@
+{
+ "adm_source_copies": {
+  "model_tests.rs": {
+   "equals_git_at_SOURCE-R2": true,
+   "sha256": "ede5ef7b093bccef93f8cfc293b32452e250d936019f68c043e98d774afb1b64"
+  },
+  "protocol.rs": {
+   "equals_git_at_SOURCE-R2": true,
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+  },
+  "unit_tests.rs": {
+   "equals_git_at_SOURCE-R2": true,
+   "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+  }
+ },
+ "at_C": {
+  "AD-1-R4": {
+   "blob": "35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1",
+   "match": true,
+   "path": "docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md",
+   "sha256": "00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693"
+  },
+  "OWNER-ADOPTION": {
+   "blob": "54c956bc1324dd3a8fd97439faa815f0865b404d",
+   "match": true,
+   "path": "docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "sha256": "105e087137fed4ed7bf2baaab50b06812a1847ddbe9549809b85eecbdae379c6"
+  },
+  "ct-1 manifest": {
+   "blob": "5d31cb45123403626f06c521dd2d53103676250e",
+   "match": true,
+   "path": "docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "sha256": "20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279",
+   "version": "ct-1"
+  }
+ },
+ "documents": [
+  {
+   "bytes": 20860,
+   "git_blob": "591b75a5ce574bbc35222b0adcad25d0f886336e",
+   "key": "ADM-PROOF",
+   "label_occurrences": {
+    "AQ1": 1,
+    "AQ2": 1,
+    "AQ3": 1,
+    "AQ4": 1,
+    "AQ5": 1,
+    "AQ6": 1,
+    "Corollary 1": 3,
+    "F1": 3,
+    "F10": 3,
+    "F2": 5,
+    "F3": 3,
+    "F4": 8,
+    "F5": 5,
+    "F6": 4,
+    "F7": 2,
+    "F8": 4,
+    "F9": 1,
+    "L-A": 8,
+    "L-B": 7,
+    "Q1": 4,
+    "Q10": 2,
+    "Q11": 3,
+    "Q12": 2,
+    "Q13": 1,
+    "Q14": 3,
+    "Q15": 3,
+    "Q2": 3,
+    "Q3": 1,
+    "Q4": 1,
+    "Q5": 2,
+    "Q6": 1,
+    "Q7": 1,
+    "Q8": 1,
+    "Q9": 3,
+    "Theorem 1": 3
+   },
+   "labels_missing": [],
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "ADM-QUOTIENT-01",
+   "role": "proof: admission observer quotient (Theorem 1, Corollary 1, L-A, L-B, Q1-Q15, AQ1-AQ6, facts F1-F10)",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-adm-quotient-01/receipts/stage2/01-formal-argument.txt",
+   "sha256": "c75e7311fdc0eba53b366d5d8fcd11064c2de14d2a7c7bbaf8aace2816b9dd23",
+   "source_binding": {
+    "all_match": true,
+    "blob crates/nexus-governed-control/src/ledger/protocol.rs": {
+     "actual": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "claimed": "a2df2841",
+     "match": true
+    },
+    "blob crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+     "actual": "beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e",
+     "claimed": "beb48fe7",
+     "match": true
+    },
+    "blob crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+     "actual": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+     "claimed": "55dc6640",
+     "match": true
+    },
+    "claimed_source_commit": "244c5b23244d1abd8b2b595c9e7654a25029a9f1",
+    "implementation_commit": "83816e66916c3a217ab7919d7e6a21893e7d579a",
+    "implementation_parent_is_source": true,
+    "sha256 crates/nexus-governed-control/src/ledger/protocol.rs": {
+     "actual": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+     "claimed": "a5454944...a296",
+     "match": true
+    },
+    "sha256 crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+     "actual": "ede5ef7b093bccef93f8cfc293b32452e250d936019f68c043e98d774afb1b64",
+     "claimed": "ede5ef7b...1b64",
+     "match": true
+    },
+    "source_commit_in_text": true,
+    "tree": "1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78",
+    "tree_matches_claim": true
+   },
+   "transported": {
+    "blob": "591b75a5ce574bbc35222b0adcad25d0f886336e",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-adm-quotient-01/receipts/stage2/01-formal-argument.txt"
+   }
+  },
+  {
+   "bytes": 20395,
+   "git_blob": "d9e5260723cb7e28438fbb7a886dca32ac30dc77",
+   "key": "GC-PROOF",
+   "label_occurrences": {
+    "AS1": 1,
+    "AS2": 1,
+    "AS3": 1,
+    "AS4": 1,
+    "ASYM-1": 2,
+    "ASYM-2": 2,
+    "ASYM-3": 2,
+    "ASYM-4": 1,
+    "ASYM-5": 1,
+    "ASYM-6": 1,
+    "I1": 1,
+    "I10": 4,
+    "I11": 4,
+    "I12": 4,
+    "I13": 3,
+    "I2": 1,
+    "I3": 1,
+    "I4": 1,
+    "I5": 1,
+    "I6": 1,
+    "I7": 3,
+    "I8": 3,
+    "I9": 5,
+    "Lemma E": 7,
+    "S1": 4,
+    "S10": 1,
+    "S11": 1,
+    "S12": 2,
+    "S13": 1,
+    "S14": 1,
+    "S15": 1,
+    "S2": 1,
+    "S3": 1,
+    "S4": 1,
+    "S5": 1,
+    "S6": 1,
+    "S7": 3,
+    "S8": 1,
+    "S9": 1
+   },
+   "labels_missing": [],
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "GC-SYMMETRY-01",
+   "role": "proof: gating-caller symmetry (Lemma E, S1-S15, ASYM-1..6, AS1-AS4, identity uses I1-I13)",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-symmetry-01/receipts/stage2/00-FORMAL-SYMMETRY-ANALYSIS.txt",
+   "sha256": "2e6feb4fd4baf6853665fb812441c6daf169858dc531dcb53ef0126303b0bc6a",
+   "source_binding": {
+    "all_match": true,
+    "claimed_source_commit": "83816e66916c3a217ab7919d7e6a21893e7d579a",
+    "implementation_commit": "77a146ca606f99329068410b6037721341f00c70",
+    "implementation_parent_is_source": true,
+    "lines crates/nexus-governed-control/src/ledger/protocol.rs": {
+     "actual": 2083,
+     "claimed": 2083,
+     "match": true
+    },
+    "lines crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+     "actual": 6034,
+     "claimed": 6034,
+     "match": true
+    },
+    "source_commit_in_text": true,
+    "tree": "74a6a0e5add063dac4d24939b3a62c619847dd3a",
+    "tree_matches_claim": true
+   },
+   "transported": {
+    "blob": "d9e5260723cb7e28438fbb7a886dca32ac30dc77",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-symmetry-01/receipts/stage2/00-FORMAL-SYMMETRY-ANALYSIS.txt"
+   }
+  },
+  {
+   "bytes": 17680,
+   "git_blob": "8f8bcd7cdddb9b4177a7151915ab4538b386d746",
+   "key": "EXT-PROOF",
+   "label_occurrences": {
+    "C-1": 1,
+    "C-2": 1,
+    "C-3": 1,
+    "C-4": 1,
+    "C-5": 1,
+    "C-6": 1,
+    "E-B": 3,
+    "E-PT": 3,
+    "E-R": 1
+   },
+   "labels_missing": [],
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "CLOSURE-PREP-01",
+   "role": "proof: F-PT/F-B extension (E-PT, E-B, E-R; F-PT and F-B matrices, items 1-17 each; C-1..C-6)",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01/receipts/stage2/00-FPT-FB-SYMMETRY-PROOF.txt",
+   "sha256": "c2618c19a972826e1b310c289a0075c9954aa6ae6722ac38cf11976846fbb98f",
+   "source_binding": {
+    "all_match": true,
+    "blob crates/nexus-governed-control/src/ledger/protocol.rs": {
+     "actual": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+     "claimed": "a2df2841",
+     "match": true
+    },
+    "blob crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+     "actual": "a80dd05cbc6a90ddd97bfa4dba754ec5569eec21",
+     "claimed": "a80dd05c",
+     "match": true
+    },
+    "claimed_source_commit": "77a146ca606f99329068410b6037721341f00c70",
+    "implementation_commit": "2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda",
+    "implementation_parent_is_source": true,
+    "lines crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+     "actual": 7758,
+     "claimed": 7758,
+     "match": true
+    },
+    "source_commit_in_text": true,
+    "tree": "21818166ee10a8075ca364bd09f31c7aa64555dd",
+    "tree_matches_claim": true
+   },
+   "transported": {
+    "blob": "8f8bcd7cdddb9b4177a7151915ab4538b386d746",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-closure-prep-01/receipts/stage2/00-FPT-FB-SYMMETRY-PROOF.txt"
+   }
+  },
+  {
+   "bytes": 6519,
+   "git_blob": "ad54cbc238c2e55bff5ac8da449e8bd504ec839d",
+   "key": "GC-GREP",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "GC-SYMMETRY-01",
+   "role": "supporting: the exhaustive identity grep behind I1-I13",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-symmetry-01/receipts/stage2/01-identity-grep.txt",
+   "sha256": "bf3c01c06413801eb78684367437ff9db03dee587659b90d11d4dc84719041d9",
+   "transported": {
+    "blob": "ad54cbc238c2e55bff5ac8da449e8bd504ec839d",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-symmetry-01/receipts/stage2/01-identity-grep.txt"
+   }
+  },
+  {
+   "bytes": 3891,
+   "git_blob": "eaaca5bfd4df2f5584b9c44d53505b17bb69c6ae",
+   "key": "EXT-GREP",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "CLOSURE-PREP-01",
+   "role": "supporting: the grep behind E-PT/E-B",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01/receipts/stage2/01-grep.txt",
+   "sha256": "4fb9a4e3d66e1aa85e168e7db9345c68fb8234930d6333655f37ea9a05fb63f6",
+   "transported": {
+    "blob": "eaaca5bfd4df2f5584b9c44d53505b17bb69c6ae",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-closure-prep-01/receipts/stage2/01-grep.txt"
+   }
+  },
+  {
+   "bytes": 25621,
+   "git_blob": "b0e5d8a178b5af2791f45fdccf7fc47f7242d850",
+   "key": "ADM-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "ADM-QUOTIENT-01",
+   "role": "report",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-adm-quotient-01/REPORT.txt",
+   "sha256": "4e5bc7c000c9364e812714ef39bcaea217794b375efb9fe86385db26587d0ee6",
+   "transported": {
+    "blob": "b0e5d8a178b5af2791f45fdccf7fc47f7242d850",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-adm-quotient-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 22046,
+   "git_blob": "1c59477c8028e2324f750043108506c3302d9372",
+   "key": "GC-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "GC-SYMMETRY-01",
+   "role": "report",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-symmetry-01/REPORT.txt",
+   "sha256": "ff34ab0340ee5f2166c870093929c443dabddf85160f929603709a0ad51384a8",
+   "transported": {
+    "blob": "1c59477c8028e2324f750043108506c3302d9372",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-symmetry-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 24011,
+   "git_blob": "de952c86da34055a6c6e5c61be335beb0ddd4968",
+   "key": "EXT-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "CLOSURE-PREP-01",
+   "role": "report",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01/REPORT.txt",
+   "sha256": "5c23bc0e81765811f5c8a0ce4c03daa005571e3815b23afd65ea72d9b5282157",
+   "transported": {
+    "blob": "de952c86da34055a6c6e5c61be335beb0ddd4968",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-closure-prep-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 16501,
+   "git_blob": "fa0394546278cce337b658152676c8025d163cc1",
+   "key": "GCSYMF3-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "GC-SYM-F3-01",
+   "role": "historical experimental execution (F-3 composed quotient); informational, not final evidence",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-sym-f3-01/REPORT.txt",
+   "sha256": "56ed3da7ed2519102281cbd4d772b4fedf3f1a7fc9ffdc76f689219ef69aaf4c",
+   "transported": {
+    "blob": "fa0394546278cce337b658152676c8025d163cc1",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-sym-f3-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 22401,
+   "git_blob": "04b1884cdc41b2ad0478cb9abba783bfe87825df",
+   "key": "PTFB-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "PT-FB-EXPERIMENT-01",
+   "role": "historical experimental execution (F-PT, F-B composed quotient); informational, not final evidence",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-pt-fb-experiment-01/REPORT.txt",
+   "sha256": "2df8420ec5d69207b76bc7419b3522561ae6b3b658cd111838847d20e1b02f78",
+   "transported": {
+    "blob": "04b1884cdc41b2ad0478cb9abba783bfe87825df",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-pt-fb-experiment-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 19629,
+   "git_blob": "06ff1ce012c9e97c10567614ccf819d63dddacb2",
+   "key": "F3Q-REPORT",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "F3-QUOTIENT-01",
+   "role": "historical experimental execution (F-3 admission quotient alone, INCOMPLETE); informational",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-f3-quotient-01/REPORT.txt",
+   "sha256": "798f192cf1f47164f6cea49a3292640721a1a02f0ee9e9ca012ab180cf650008",
+   "transported": {
+    "blob": "06ff1ce012c9e97c10567614ccf819d63dddacb2",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-f3-quotient-01/REPORT.txt"
+   }
+  },
+  {
+   "bytes": 181508,
+   "git_blob": "9c569c805f066efcabbce9fc568659adf8050784",
+   "key": "GATE36",
+   "listed_in_origin_sha256sums": true,
+   "mode": "-r--r--r--",
+   "origin": "AD1R1-MUT-READINESS-01",
+   "role": "historical receipt naming the 24 negatives and fail-closed tests of AD-1-R4 D (N.8)",
+   "sealed_path": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/receipts/stage5/36-negatives-and-fail-closed.txt",
+   "sha256": "2c517f358002e4e99449b554ec8242952640f177269ae89e9430984a4257f1e6",
+   "transported": {
+    "blob": "9c569c805f066efcabbce9fc568659adf8050784",
+    "identical": true,
+    "path": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/receipts/stage5/36-negatives-and-fail-closed.txt"
+   }
+  }
+ ],
+ "evidence_root": "/home/nexus/nexus-audits/claude-architect",
+ "expectation_failures": [],
+ "gate36_names": [
+  "gc_symmetry_negative_p1_on_sym_pt",
+  "gc_symmetry_negative_p12_on_sym_b",
+  "gc_symmetry_negative_p1_on_sym_bi",
+  "gc_symmetry_negative_e2_admission_views_twice",
+  "gc_symmetry_negative_e9_admission_ignores_the_latch",
+  "gc_symmetry_negative_p1_admission_ignores_unapplied",
+  "gc_symmetry_allow_list_is_exact",
+  "gc_symmetry_refuses_a_batch_under_f3s_name",
+  "gc_symmetry_refuses_an_asymmetric_step_on_sym_pt",
+  "gc_symmetry_refuses_an_asymmetric_step_on_sym_b",
+  "gc_symmetry_refuses_an_asymmetric_step_on_sym_bi",
+  "gc_symmetry_refuses_f_pt_with_a_lower_fault_budget",
+  "gc_symmetry_refuses_f_pt_with_a_raised_cap",
+  "gc_symmetry_refuses_f_b_with_another_actor_change",
+  "gc_symmetry_refuses_f_b_with_a_raised_time_cap",
+  "gc_symmetry_refuses_acknowledgements",
+  "gc_symmetry_refuses_a_configuration_not_shown_symmetric",
+  "gc_symmetry_refuses_an_acknowledgement_row",
+  "gc_symmetry_refuses_an_asymmetric_step",
+  "gc_symmetry_refuses_another_shape_under_a_known_name",
+  "gc_symmetry_refuses_a_raised_cap",
+  "gc_symmetry_refuses_f_g",
+  "gc_symmetry_refuses_kept_bits",
+  "gc_symmetry_refuses_other_callers"
+ ],
+ "mission": "P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01",
+ "result": "PASS",
+ "seals": {
+  "AD1R1-MUT-READINESS-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01",
+   "listed": 73,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [
+    "contract/SHA256SUMS"
+   ],
+   "present_files": 75,
+   "sha256sums_sha256": "106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/SHA256SUMS"
+   }
+  },
+  "ADM-QUOTIENT-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-adm-quotient-01",
+   "listed": 42,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [
+    "contract/SHA256SUMS"
+   ],
+   "present_files": 44,
+   "sha256sums_sha256": "459101ef4b3ead6e7952eaa4289a0bb5aef6ac81c84d7e3d1fb833f7555e02ce",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-adm-quotient-01/SHA256SUMS"
+   }
+  },
+  "CLOSURE-PREP-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01",
+   "listed": 42,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [],
+   "present_files": 43,
+   "sha256sums_sha256": "137fba3a9899d5b1985ac7579961ab2a9fb1b9a0f7fbe672c84066d7c3bfbc0f",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-closure-prep-01/SHA256SUMS"
+   }
+  },
+  "F3-QUOTIENT-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-f3-quotient-01",
+   "listed": 45,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [
+    "contract/SHA256SUMS"
+   ],
+   "present_files": 47,
+   "sha256sums_sha256": "5e5037b41a194ff355d3c6982f21a67a44b5f826e6baea2b12ad4d1c9ca89ae4",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-f3-quotient-01/SHA256SUMS"
+   }
+  },
+  "GC-SYM-F3-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-sym-f3-01",
+   "listed": 44,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [
+    "contract/SHA256SUMS"
+   ],
+   "present_files": 46,
+   "sha256sums_sha256": "dd15f3e4a64c4973ab06bea605771bde64f465906e9be88dae95cb5976a8b0e1",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-sym-f3-01/SHA256SUMS"
+   }
+  },
+  "GC-SYMMETRY-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-symmetry-01",
+   "listed": 37,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [],
+   "present_files": 38,
+   "sha256sums_sha256": "34bf59b34ffd60c36e1c435ede4c7bff5f54374a9e4b0b6bcd25e01f97a85826",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-gc-symmetry-01/SHA256SUMS"
+   }
+  },
+  "PT-FB-EXPERIMENT-01": {
+   "contract_sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-pt-fb-experiment-01",
+   "listed": 56,
+   "mismatched_or_missing": [],
+   "mode": "dr-xr-xr-x",
+   "present_but_unlisted": [],
+   "present_files": 57,
+   "sha256sums_sha256": "a4c5435d91bf2baf75e4aa90e02e7a314aac97172d7dbf50e5c7e32064725d22",
+   "transported_sha256sums": {
+    "identical": true,
+    "path": "8693e3a7:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-pt-fb-experiment-01/SHA256SUMS"
+   }
+  }
+ },
+ "tool": "proof_docs.py",
+ "transport_commit": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4",
+ "transport_commit_info": {
+  "commit": "8693e3a742ee4d3917cbfdb809b377bcd919d9f4",
+  "parents": [
+   "42dd1bd1cf21ffdea5968b256d2983f6575fab5b"
+  ],
+  "subject": "docs(evidence): transport AD-1-R2 draft and existing C1/C25 evidence for review",
+  "tree": "1e9568ddb5a40336820d266652643d6067cd33f6"
+ }
+}

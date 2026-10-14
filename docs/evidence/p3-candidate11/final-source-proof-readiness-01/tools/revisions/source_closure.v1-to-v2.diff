@@ -1,0 +1,50 @@
+--- revisions/source_closure.v1.py	2026-10-14 12:03:32.114599648 +0100
++++ tools/source_closure.py	2026-10-14 12:03:32.133402532 +0100
+@@ -424,6 +424,47 @@
+     for label, cl in (('B', b_closure),):
+         expect(all(it['span'][1] <= regions['MODEL'][1] for it in cl), 'closure %s lies in the model region' % label)
+ 
++    # 8. layer isolation at C: the text before each appended layer cannot name, or be
++    # re-resolved by, anything the layer adds. Layers in C's byte coordinates.
++    ext_hunk = [e for e in chain if e['from'] == 'GC'][0]['hunks']
++    ext_append_lo = ext_hunk[2]['new_bytes'][0]
++    layers = [('AQ', regions['AQ'][0], regions['AQ'][1]),
++              ('SQ (with the EXT in-place hunk)', regions['SQ+EXT'][0], ext_append_lo),
++              ('EXT append', ext_append_lo, regions['SQ+EXT'][1]),
++              ('WITNESS-C1-C25', regions['WITNESS-C1-C25'][0], regions['WITNESS-C1-C25'][1]),
++              ('WITNESS-C4', regions['WITNESS-C4'][0], regions['WITNESS-C4'][1])]
++    sym = [it for it in c_its if it['path'] == 'const SYMMETRIC'][0]
++    iso = []
++    for label, lo, hi in layers:
++        reg = [it for it in c_its if it['span'][0] >= lo and it['span'][1] <= hi]
++        defined = sorted({it['name'] for it in reg})
++        pre = R.identifiers(c_toks, c_offs, 0, lo)
++        mentioned = {n: pre[n] for n in defined if n in pre}
++        # by design the extension's SYMMETRIC (in place, before the append) names its fixtures
++        allowed = {}
++        if label == 'EXT append':
++            allowed = {n: offs for n, offs in mentioned.items()
++                       if n in ('SYM_PT', 'SYM_B', 'SYM_BI') and all(sym['decl'][0] <= o < sym['decl'][1] for o in offs)}
++        unexpected = sorted(n for n in mentioned if n not in allowed)
++        item_kinds = sorted({it['kind'] for it in reg})
++        bad_items = [it['path'] for it in reg if it['kind'] in ('impl', 'trait', 'use', 'static', 'macro_rules', 'mod',
++                                                             'extern', 'union', 'macro')]
++        code = [t for t in c_toks if t.kind not in ('ws', 'line_comment', 'block_comment')
++                and lo <= c_offs[t.start] < hi]
++        inner_attrs = sum(1 for i, t in enumerate(code[:-1]) if t.text == '#' and code[i + 1].text == '!')
++        cfg_attrs = sum(1 for i, t in enumerate(code[:-2]) if t.text == '#' and code[i + 1].text == '['
++                        and code[i + 2].text in ('cfg', 'cfg_attr'))
++        ent = {'layer': label, 'bytes_at_C': [lo, hi], 'items': len(reg), 'item_kinds': item_kinds,
++               'names_mentioned_earlier': sorted(mentioned), 'allowed_by_design': sorted(allowed),
++               'unexpected_mentions': unexpected, 'impl_trait_use_static_macro_mod_items': bad_items,
++               'inner_attributes': inner_attrs, 'cfg_attributes': cfg_attrs}
++        ent['isolated'] = not unexpected and not bad_items and not inner_attrs and not cfg_attrs
++        expect(ent['isolated'], 'layer %s is isolated from the text before it' % label)
++        iso.append(ent)
++    expect([e['allowed_by_design'] for e in iso if e['layer'] == 'EXT append'] == [['SYM_B', 'SYM_BI', 'SYM_PT']],
++           'the EXT append is named before it only by SYMMETRIC, and only as SYM_PT, SYM_B and SYM_BI')
++    doc['layer_isolation'] = iso
++
+     doc['expectation_failures'] = FAILURES
+     doc['result'] = 'PASS' if not FAILURES else 'FAIL'
+     text = json.dumps(doc, indent=1, sort_keys=True)

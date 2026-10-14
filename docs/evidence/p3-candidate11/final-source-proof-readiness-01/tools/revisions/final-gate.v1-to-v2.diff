@@ -1,0 +1,11 @@
+--- revisions/final-gate.v1.sh	2026-10-14 12:29:04.072386314 +0100
++++ tools/final-gate.sh	2026-10-14 12:29:04.091084674 +0100
+@@ -4,6 +4,8 @@
+ # Reads git objects, the sealed evidence root and (read-only) the GitHub remote; writes only
+ # <packet-dir>/receipts and <scratch-dir>. No build, no test, no witness, no mutation, no hosted CI.
+ set -u
++# The tools run from the packet; no bytecode cache may be written into it.
++export PYTHONDONTWRITEBYTECODE=1
+ WT=$1; PKT=$2; SCR=$3
+ C=d5964ee5326c2733177307db6f507328023d361a
+ C_TREE=51bac5fd335999cc995c0ab9f582a30244973ef0

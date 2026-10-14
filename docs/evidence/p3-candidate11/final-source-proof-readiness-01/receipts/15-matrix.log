@@ -1,0 +1,10 @@
+$ python3 /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/tools/matrix.py /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01 --source-closure /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/10-source-closure.json --witness-check /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/11-witness-check.json --proof-docs /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/14-proof-docs.json --tsv /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/75cc5751-0e7a-425e-ac3a-9238a3b6a35d/scratchpad/final-gate-scr/PROOF-PRECONDITION-MATRIX.tsv --out /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/receipts/15-matrix.json 
+matrix: PASS rows 138 {"CHANGED_REVIEW_REQUIRED": 1, "EXECUTION_PENDING": 14, "IDENTICAL": 113, "NON_INTERFERING_CHANGE": 6, "NOT_ESTABLISHED": 3, "OWNER_ALREADY_SATISFIED": 1}
+
+exit=0
+
+$ cmp /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/75cc5751-0e7a-425e-ac3a-9238a3b6a35d/scratchpad/final-gate-scr/PROOF-PRECONDITION-MATRIX.tsv /home/nexus/NEXUS/nexus-os-p3-c11-proof-readiness-01/docs/evidence/p3-candidate11/final-source-proof-readiness-01/PROOF-PRECONDITION-MATRIX.tsv 
+
+exit=0
+
+PASS every matrix row has a status from the mission's vocabulary and none claims acceptance

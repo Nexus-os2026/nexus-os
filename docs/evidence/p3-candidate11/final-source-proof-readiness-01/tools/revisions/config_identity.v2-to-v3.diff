@@ -1,0 +1,55 @@
+--- revisions/config_identity.v2.py	2026-10-14 12:19:52.654006089 +0100
++++ tools/config_identity.py	2026-10-14 12:19:52.674689837 +0100
+@@ -141,16 +141,10 @@
+     return data[it['decl'][0]:it['decl'][1]].decode()
+ 
+ 
+-def main():
+-    ap = argparse.ArgumentParser()
+-    ap.add_argument('repo')
+-    ap.add_argument('--out')
+-    args = ap.parse_args()
+-    repo = args.repo
++def analyze(data, sr2, ext):
++    """The whole check on model_tests.rs bytes at C, SOURCE-R2 and EXT; returns (doc, failures)."""
++    del FAILURES[:]
+     doc = {'tool': 'config_identity.py', 'mission': 'P3-C11-DR01-D2A1-FINAL-SOURCE-PROOF-READINESS-01'}
+-    data = K.blob(repo, K.C, K.MODEL)
+-    sr2 = K.blob(repo, K.SOURCE_R2, K.MODEL)
+-    ext = K.blob(repo, K.EXT, K.MODEL)
+     its, _, _ = R.extract(data)
+     by = {it['path']: it for it in its}
+     sr2_its, _, _ = R.extract(sr2)
+@@ -352,17 +346,28 @@
+     doc['explorer_caps'] = caps
+     doc['runtime_only'] = ['assert_symmetric: the initial state is its own mirror (evaluated by the run, not here)',
+                            'the printed bounds and actor lines (N.10) are execution output; the static derivation above is not a substitute']
+-    doc['expectation_failures'] = FAILURES
++    doc['expectation_failures'] = list(FAILURES)
+     doc['result'] = 'PASS' if not FAILURES else 'FAIL'
++    return doc, list(FAILURES)
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('repo')
++    ap.add_argument('--out')
++    args = ap.parse_args()
++    repo = args.repo
++    doc, failures = analyze(K.blob(repo, K.C, K.MODEL), K.blob(repo, K.SOURCE_R2, K.MODEL),
++                            K.blob(repo, K.EXT, K.MODEL))
+     text = json.dumps(doc, indent=1, sort_keys=True)
+     if args.out:
+         open(args.out, 'w').write(text + '\n')
+     else:
+         print(text)
+-    print('config_identity: %s (%d expectation failures)' % (doc['result'], len(FAILURES)), file=sys.stderr)
+-    for f in FAILURES:
++    print('config_identity: %s (%d expectation failures)' % (doc['result'], len(failures)), file=sys.stderr)
++    for f in failures:
+         print('  FAILED: ' + f, file=sys.stderr)
+-    sys.exit(0 if not FAILURES else 1)
++    sys.exit(0 if not failures else 1)
+ 
+ 
+ if __name__ == '__main__':
