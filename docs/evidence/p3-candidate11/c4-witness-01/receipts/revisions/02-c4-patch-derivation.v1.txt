@@ -1,0 +1,42 @@
+baseline 42dd1bd1cf21ffdea5968b256d2983f6575fab5b:crates/nexus-governed-control/src/ledger/protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 bytes 64546
+anchor occurrences in the file: 1; inside Publish::acknowledgement: 1; replacement occurrences before: 0
+anchor starts at line 1625 (`// Test 1.`); the removed checks are lines 1627-1642
+patch: files 1; hunks 1 ['@@ -1624,22 +1624,6 @@']; lines removed 16; lines added 0
+mutant protocol.rs blob f3793c2ff61f8adbf43fe17d6b5237b49bc507b0 sha256 4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2 bytes 64021
+patch /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/patches/C4-test1-removed.patch sha256 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d bytes 1014
+removed lines, exactly:
+  -         if core.session != Session::Open {
+  -             return not_now(Entry::NotOpen);
+  -         }
+  -         if core.latch.is_some() {
+  -             return not_now(Entry::Latched);
+  -         }
+  -         if core.phase != Phase::Healthy {
+  -             return not_now(Entry::NotHealthy);
+  -         }
+  -         if core.c.is_some() || core.x.is_some() {
+  -             return not_now(Entry::CellsBusy);
+  -         }
+  -         if core.u.is_some() {
+  -             core.latch(LatchCause::CellInvariant);
+  -             return not_now(Entry::Latched);
+  -         }
+the mutated function head, as it will be built:
+  |     fn acknowledgement(&mut self, set: &SetFacts, nonce: &[u8; 16]) -> Read<Option<Seq>>;
+  |     fn frontier(&mut self) -> Read<Seq>;
+  | }
+  | 
+  | pub(super) trait AckTxn {
+  |     fn survey(&mut self) -> Read<SetFacts>;
+  |     fn open(&mut self) -> Read<()>;
+  |     fn recheck(&mut self, above: Seq, upto: Seq) -> Read<SetFacts>;
+  |     fn insert(&mut self, snapshot: &Snapshot) -> Insert;
+  |     fn commit(&mut self) -> Commit;
+  |     fn rollback(&mut self) -> Rollback;
+  | }
+  | 
+  | pub(super) trait CellTxn {
+  |     fn open(&mut self) -> Read<()>;
+  |     fn present(&mut self, occupant: &Occupant) -> Read<Option<Seq>>;
+Checking patch crates/nexus-governed-control/src/ledger/protocol.rs...
+git apply --check exit 0 (no file changed)

@@ -1,0 +1,34 @@
+SOURCE COMMIT A — recorded before any build (regenerated: v1's tree line evaluated a literal 'A^{tree}') — 2026-10-14T08:06:30+01:00
+A: 04e42a7ddf0d0a2af17b6506c51997006e7a08dc
+tree: fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3
+parents: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (exactly one)
+author: Suresh Karicheti <nexaiceo@gmail.com> Wed Oct 14 08:06:13 2026 +0100
+committer: Suresh Karicheti <nexaiceo@gmail.com> Wed Oct 14 08:06:13 2026 +0100
+branch: experiment/p3-c11-d2a1-c4-witness-01 at 04e42a7ddf0d0a2af17b6506c51997006e7a08dc (local only)
+files changed vs parent:
+  M	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+  numstat 678	0	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+model_tests.rs blob at A: 28085ce232827301104b5d757af042ec933976f8 sha256 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972 bytes 310612
+model_tests.rs at A begins with every byte of 5ad26ddc: yes
+protocol.rs blob at A: a2df2841b99cad5d452008a6d4150e9369d07e66
+tree diff vs parent outside model_tests.rs: 0
+porcelain after commit: 0 lines
+message:
+  | test(experiment): add replay witness for control C4 (P4 and P8 on F-8)
+  | 
+  | Append-only to model_tests.rs: one ordinary test, c4_witness_p4_and_p8_on_f8,
+  | replays two fixed F-8 schedules from initial(F8) through the original step,
+  | Oracle, encoding, hook counts and property predicates, and records each step's
+  | offered, consumed and unused oracle choices. Before the changed acknowledgement
+  | both cores must consume exactly as frozen; at it the healthy core must refuse
+  | before storage, consuming none, and a core without acknowledgement test 1 must
+  | consume its whole frozen sequence. On the healthy core neither scenario violates
+  | anything; with test 1 removed the test fails after both scenarios ran, with P4
+  | and P8 each observed at its own locus.
+  | 
+  | Experimental witness prototype of P3-C11-DR01-D2A1-C4-WITNESS-01, for review:
+  | not adopted, not a mutation kill. protocol.rs is unchanged.
+  | 
+  | Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  | Claude-Session: https://claude.ai/code/session_01UDVE1KW5mJWzzf64UhtW5F
+  | 

@@ -1,0 +1,677 @@
+
+// ---- named-property witness for control C4 ------------------------------------------------------
+
+/// One step of a C4 scenario that every core takes alike: the actor; the
+/// choices offered to its oracle, in order; every choice it must consume,
+/// each with the number of options it was offered; the branch labels it
+/// must show; and the fault budget it must leave.
+struct C4Step {
+    actor: Actor,
+    offered: &'static [u8],
+    consumed: &'static [(u8, u8)],
+    branches: &'static [&'static str],
+    faults: u8,
+}
+
+/// One planned end of the acknowledgement append that control C4 changes:
+/// the choices it consumes, each with its option count; its branch label;
+/// and the fault budget it leaves.
+struct C4Ending {
+    consumed: &'static [(u8, u8)],
+    branch: &'static str,
+    faults: u8,
+}
+
+/// A C4 scenario on F-8 (contract 7.5: "acknowledgement test 1 removed",
+/// P4 and P8, on F-8). Its steps, which every core takes alike, are
+/// followed by one append of Ack(0)'s confirmed snapshot. At that append,
+/// and only there, the two cores consume the offered choices differently:
+/// the healthy core refuses at test 1, before any storage verb, and consumes
+/// none; with test 1 removed the append proceeds and consumes every one.
+/// Experimental: the C4 route proposed beside the AD-1-R3 draft, not adopted.
+struct C4Scenario {
+    named: &'static str,
+    steps: &'static [C4Step],
+    offered: &'static [u8],
+    healthy: C4Ending,
+    changed: C4Ending,
+    /// On the world after the append: what the healthy refusal must keep,
+    /// and what the named property's locus needs; each described.
+    kept: fn(&C4After) -> bool,
+    keeps: &'static str,
+    lost: fn(&C4After) -> bool,
+    locus: &'static str,
+}
+
+/// What the C4 verdicts read in the world after a step: the cells, the
+/// phase and the latch; and for G1, every fact P8 reads.
+struct C4After {
+    u: Option<Occupant>,
+    c: Option<Occupant>,
+    x: Option<(Occupant, Stage)>,
+    phase: Phase,
+    latch: Option<LatchCause>,
+    g1_issued: bool,
+    g1_told: bool,
+    g1_written: bool,
+    g1_in_u: bool,
+    g1_in_c: bool,
+    g1_corrected: bool,
+    word: u64,
+    rows: Vec<SimRow>,
+}
+
+fn c4_after(w: &World) -> C4After {
+    let key = gating_key(0);
+    C4After {
+        u: w.core.u.as_ref().map(|(_, occupant)| occupant.clone()),
+        c: w.core.c.as_ref().map(|(_, occupant)| occupant.clone()),
+        x: w
+            .core
+            .x
+            .as_ref()
+            .map(|(_, occupant, stage)| (occupant.clone(), *stage)),
+        phase: w.core.phase,
+        latch: w.core.latch,
+        g1_issued: w.ghost.issued & bit(0) != 0,
+        g1_told: w.ghost.told & bit(0) != 0,
+        g1_written: w.rows.contains(&SimRow::Gating(0)),
+        g1_in_u: matches!(&w.core.u, Some((_, Occupant::Gating { record, .. })) if record.member().key == key),
+        g1_in_c: matches!(&w.core.c, Some((_, Occupant::Correction { about, .. })) if *about == key),
+        g1_corrected: w
+            .rows
+            .iter()
+            .any(|row| matches!(row, SimRow::Correction(0, _))),
+        word: word_of(&w.core.shared),
+        rows: w.rows.clone(),
+    }
+}
+
+/// X holds F1's explanation.
+fn c4_x_explains_f1(after: &C4After) -> bool {
+    matches!(&after.x, Some((Occupant::Explanation { original, .. }, _)) if *original == fact_key(0))
+}
+
+/// The healthy refusal of the P4 scenario leaves U empty, X as it was.
+fn c4_p4_kept(after: &C4After) -> bool {
+    after.u.is_none() && c4_x_explains_f1(after)
+}
+
+/// P4's locus: U holds the acknowledgement while X holds F1's explanation.
+fn c4_p4_lost(after: &C4After) -> bool {
+    matches!(&after.u, Some(Occupant::Acknowledgement { .. })) && c4_x_explains_f1(after)
+}
+
+/// The healthy refusal of the P8 scenario keeps G1's written attempt in U.
+fn c4_p8_kept(after: &C4After) -> bool {
+    after.g1_issued && after.g1_written && !after.g1_told && after.g1_in_u
+}
+
+/// P8's locus: G1's attempt issued its insert, is written, was not told
+/// Committed, and is neither in U nor corrected, in C or in the ledger.
+fn c4_p8_lost(after: &C4After) -> bool {
+    after.g1_issued
+        && after.g1_written
+        && !after.g1_told
+        && !after.g1_in_u
+        && !after.g1_in_c
+        && !after.g1_corrected
+}
+
+/// What one replayed C4 step showed.
+struct C4Replayed {
+    actor: Actor,
+    offered: &'static [u8],
+    /// The choices the step consumed, each with its option count, as the
+    /// oracle took them. Beyond `offered` the oracle would take zero.
+    taken: Vec<(u8, u8)>,
+    enabled: bool,
+    faults: u8,
+    fault: bool,
+    note: String,
+    branches: Vec<String>,
+    /// Violations pushed by the step itself, and its transition properties.
+    step: Violations,
+    /// The state properties and key round trip of the world it leaves.
+    after: Violations,
+    world: C4After,
+}
+
+/// Replays one step from the world of `key` in the original semantics, as
+/// `replay_schedule` does: the original `step` on a world decoded from the
+/// key, between two takes of the hook's counts; then, if it was enabled, its
+/// transition properties, and the state properties and key round trip of
+/// the world it leaves. It asserts nothing about the choices: it keeps the
+/// oracle's record of what the step consumed. Returns the record and the
+/// key of the world after the step.
+fn c4_replay_step(
+    config: &Config,
+    key: &[u8],
+    actor: Actor,
+    offered: &'static [u8],
+) -> (C4Replayed, Vec<u8>) {
+    let base = decode(config, key);
+    let mut w = decode(config, key);
+    let mut oracle = Oracle::new(offered.to_vec(), w.faults);
+    let mut obs = Obs {
+        trace: Some(String::new()),
+        ..Obs::default()
+    };
+    hook::take_counts();
+    let enabled = step(config, &mut w, actor, &mut oracle, &mut obs);
+    let counts = hook::take_counts();
+    w.faults = oracle.faults;
+    if enabled {
+        transition_properties(&base, &w, &mut obs, counts);
+    }
+    let next = encode(config, &w);
+    let after = if enabled {
+        violations_at(config, &next)
+    } else {
+        Vec::new()
+    };
+    let record = C4Replayed {
+        actor,
+        offered,
+        taken: oracle.taken.clone(),
+        enabled,
+        faults: oracle.faults,
+        fault: oracle.fault,
+        note: obs.trace.unwrap_or_default(),
+        branches: obs.branches,
+        step: obs.violations,
+        after,
+        world: c4_after(&w),
+    };
+    (record, next)
+}
+
+/// One replayed C4 scenario: the initial state's violations; every step
+/// replayed; which planned end the changed append took (`Some(false)` the
+/// healthy refusal, `Some(true)` the append without test 1); and the fixture
+/// failure that ended the scenario, if any.
+struct C4Run {
+    initial: Violations,
+    steps: Vec<C4Replayed>,
+    changed: Option<bool>,
+    fixture: Option<String>,
+}
+
+/// The choices of a consumption, without their option counts.
+fn c4_choices(consumed: &[(u8, u8)]) -> Vec<u8> {
+    consumed.iter().map(|&(choice, _)| choice).collect()
+}
+
+/// Whether the schedule itself is as frozen: at most 32 actor steps; each
+/// step offered exactly the choices it must consume; the healthy end
+/// consumes nothing; the changed end consumes every offered choice.
+fn c4_frozen(scenario: &C4Scenario) -> Option<String> {
+    if scenario.steps.len() + 1 > 32 {
+        return Some("has more than 32 actor steps".to_string());
+    }
+    for (n, planned) in scenario.steps.iter().enumerate() {
+        if c4_choices(planned.consumed) != planned.offered {
+            return Some(format!(
+                "step {} offers other choices than it must consume",
+                n + 1
+            ));
+        }
+    }
+    if !scenario.healthy.consumed.is_empty() {
+        return Some("plans a healthy end that consumes a choice".to_string());
+    }
+    if c4_choices(scenario.changed.consumed) != scenario.offered {
+        return Some("plans a changed end that does not consume every offered choice".to_string());
+    }
+    None
+}
+
+/// Why a replayed step's consumption is not allowed, if it is not: a step
+/// that is not enabled; consumption beyond the offered choices, which the
+/// oracle would answer with zero; or a consumed choice that is not the
+/// offered one.
+fn c4_consumption(record: &C4Replayed) -> Option<String> {
+    if !record.enabled {
+        return Some("is not enabled".to_string());
+    }
+    if record.taken.len() > record.offered.len() {
+        return Some(format!(
+            "consumed {} choices, beyond the {} offered: {:?}",
+            record.taken.len(),
+            record.offered.len(),
+            record.taken
+        ));
+    }
+    if c4_choices(&record.taken) != record.offered[..record.taken.len()] {
+        return Some(format!(
+            "consumed {:?}, not a prefix of the offered {:?}",
+            record.taken, record.offered
+        ));
+    }
+    None
+}
+
+/// Replays `scenario` from the unchanged initial world of `config`. Every
+/// step must be enabled and consume exactly its offered choices, with the
+/// frozen option counts, show its frozen branches and leave its frozen fault
+/// budget. The changed append must end as one of its two planned ends.
+/// Anything else is a fixture failure: it ends the scenario and kills
+/// nothing. No violation ends the replay.
+fn c4_replay(config: &Config, scenario: &C4Scenario) -> C4Run {
+    let mut key = encode(config, &initial(config));
+    let mut run = C4Run {
+        initial: violations_at(config, &key),
+        steps: Vec::new(),
+        changed: None,
+        fixture: None,
+    };
+    let total = scenario.steps.len() + 1;
+    if let Some(failure) = c4_frozen(scenario) {
+        run.fixture = Some(format!("scenario {} {failure}", scenario.named));
+        return run;
+    }
+    for (n, planned) in scenario.steps.iter().enumerate() {
+        let (record, next) = c4_replay_step(config, &key, planned.actor, planned.offered);
+        let failure = if let Some(failure) = c4_consumption(&record) {
+            Some(failure)
+        } else if record.taken.as_slice() != planned.consumed {
+            Some(format!(
+                "consumed {:?}, not {:?}",
+                record.taken, planned.consumed
+            ))
+        } else if record.branches != planned.branches {
+            Some(format!(
+                "shows branches {:?}, not {:?}",
+                record.branches, planned.branches
+            ))
+        } else if record.faults != planned.faults {
+            Some(format!(
+                "leaves {} faults, not {}",
+                record.faults, planned.faults
+            ))
+        } else {
+            None
+        };
+        run.steps.push(record);
+        key = next;
+        if let Some(failure) = failure {
+            run.fixture = Some(format!(
+                "scenario {} step {}/{total} ({:?}) {failure}",
+                scenario.named,
+                n + 1,
+                planned.actor
+            ));
+            return run;
+        }
+    }
+    let (record, _) = c4_replay_step(config, &key, Actor::Ack(0), scenario.offered);
+    let ends_as = |end: &C4Ending| {
+        record.taken.as_slice() == end.consumed
+            && record.branches == [end.branch]
+            && record.faults == end.faults
+    };
+    let failure = if let Some(failure) = c4_consumption(&record) {
+        Some(failure)
+    } else if ends_as(&scenario.healthy) {
+        run.changed = Some(false);
+        None
+    } else if ends_as(&scenario.changed) {
+        run.changed = Some(true);
+        None
+    } else {
+        Some(format!(
+            "ends as neither planned end: consumed {:?}, branches {:?}, {} faults left",
+            record.taken, record.branches, record.faults
+        ))
+    };
+    run.steps.push(record);
+    if let Some(failure) = failure {
+        run.fixture = Some(format!(
+            "scenario {} step {total}/{total} (Ack(0)) {failure}",
+            scenario.named
+        ));
+    }
+    run
+}
+
+/// Runs every C4 scenario on whatever core this build holds, and prints
+/// every step: its offered, consumed and unused choices, its branches, the
+/// cells, G1's facts, the ledger and every violation. A fixture failure in
+/// any scenario kills nothing; it is reported after every scenario has run.
+/// With no violation in any, each changed append must have ended as the
+/// healthy refusal and kept what its scenario names. With any violation the
+/// test fails, after every scenario has run; its message says, for each
+/// named property, whether it was observed at its own locus, and lists every
+/// other property violated, separately: a property is never counted as
+/// another.
+fn run_c4_witness(config: &Config, scenarios: &[C4Scenario]) {
+    let mut lines = Vec::new();
+    let mut fixtures = Vec::new();
+    let mut verdicts = Vec::new();
+    let mut healthy = Vec::new();
+    let mut kept_all = true;
+    for scenario in scenarios {
+        let total = scenario.steps.len() + 1;
+        println!(
+            "C4 WITNESS {} {}: {total} steps from the initial world; step {total}, Ack(0)'s append, is \
+             offered {:?}: the healthy core must consume {:?} and show '{}' ({} faults left); without \
+             test 1 it must consume {:?} and show '{}' ({} faults left)",
+            config.name,
+            scenario.named,
+            scenario.offered,
+            scenario.healthy.consumed,
+            scenario.healthy.branch,
+            scenario.healthy.faults,
+            scenario.changed.consumed,
+            scenario.changed.branch,
+            scenario.changed.faults
+        );
+        let run = c4_replay(config, scenario);
+        for (property, detail) in &run.initial {
+            println!("    VIOLATION initial: {property}: {detail}");
+            lines.push(format!(
+                "{} initial state: {property}: {detail}",
+                scenario.named
+            ));
+        }
+        for (n, record) in run.steps.iter().enumerate() {
+            let unused = record.offered.get(record.taken.len()..).unwrap_or(&[]);
+            println!(
+                "C4 WITNESS {} {} step {:>2}/{total} {:?} offered {:?} consumed {:?} unused {:?} faults \
+                 left {}: {}{}",
+                config.name,
+                scenario.named,
+                n + 1,
+                record.actor,
+                record.offered,
+                record.taken,
+                unused,
+                record.faults,
+                record.note,
+                if record.fault { "   [fault]" } else { "" }
+            );
+            let after = &record.world;
+            println!(
+                "    branches {:?}; word after {:#x} (live {}, unapplied {}); phase {:?}, latch {:?}",
+                record.branches,
+                after.word,
+                field(after.word, LIVE_SHIFT),
+                field(after.word, UNAPPLIED_SHIFT),
+                after.phase,
+                after.latch
+            );
+            println!("    U {:?}; C {:?}; X {:?}", after.u, after.c, after.x);
+            println!(
+                "    G1: insert issued {}, written {}, told Committed {}, in U {}, correction in C {}, \
+                 correction in the ledger {}",
+                after.g1_issued,
+                after.g1_written,
+                after.g1_told,
+                after.g1_in_u,
+                after.g1_in_c,
+                after.g1_corrected
+            );
+            println!("    ledger after {:?}", after.rows);
+            for (place, violations) in [("step", &record.step), ("after", &record.after)] {
+                for (property, detail) in violations {
+                    println!("    VIOLATION {place}: {property}: {detail}");
+                    lines.push(format!(
+                        "{} step {} {place}: {property}: {detail}",
+                        scenario.named,
+                        n + 1
+                    ));
+                }
+            }
+        }
+        if let Some(failure) = &run.fixture {
+            println!("    WITNESS FIXTURE FAILURE (kills nothing): {failure}");
+            fixtures.push(failure.clone());
+            kept_all = false;
+            continue;
+        }
+        let Some(append) = run.steps.last() else {
+            fixtures.push(format!("scenario {} replayed no step", scenario.named));
+            kept_all = false;
+            continue;
+        };
+        let named_seen = run.changed == Some(true)
+            && append
+                .after
+                .iter()
+                .any(|(property, _)| *property == scenario.named)
+            && (scenario.lost)(&append.world);
+        let kept = run.changed == Some(false) && (scenario.kept)(&append.world);
+        kept_all &= kept;
+        let mut properties: Vec<&str> = run
+            .initial
+            .iter()
+            .chain(run.steps.iter().flat_map(|r| r.step.iter().chain(&r.after)))
+            .map(|(property, _)| *property)
+            .collect();
+        properties.sort_unstable();
+        properties.dedup();
+        let others: Vec<&str> = properties
+            .iter()
+            .copied()
+            .filter(|property| *property != scenario.named)
+            .collect();
+        let seen = if named_seen {
+            "OBSERVED"
+        } else {
+            "NOT OBSERVED"
+        };
+        verdicts.push(format!(
+            "NAMED PROPERTY {}: {seen} on the world after step {total} of scenario {} ({}; {})\n\
+             OTHER PROPERTIES VIOLATED in scenario {}, each reported separately and not counted as {}: \
+             {others:?}",
+            scenario.named,
+            scenario.named,
+            scenario.changed.branch,
+            scenario.locus,
+            scenario.named,
+            scenario.named
+        ));
+        healthy.push(format!(
+            "C4 WITNESS {} {}: {total} steps, each enabled and consuming its choices as frozen; no \
+             violation; step {total} shows the healthy core's '{}', consuming 0 of its {} offered choices; {}",
+            config.name,
+            scenario.named,
+            scenario.healthy.branch,
+            scenario.offered.len(),
+            scenario.keeps
+        ));
+    }
+    if !fixtures.is_empty() {
+        panic!(
+            "WITNESS FIXTURE FAILURE (kills nothing): {}",
+            fixtures.join("; ")
+        );
+    }
+    if lines.is_empty() {
+        assert!(
+            kept_all,
+            "WITNESS: no violation, but a changed append did not end as the healthy refusal keeping \
+             what its scenario names"
+        );
+        for line in &healthy {
+            println!("{line}");
+        }
+        println!(
+            "C4 WITNESS {}: {} scenarios healthy; no violation",
+            config.name,
+            scenarios.len()
+        );
+        return;
+    }
+    panic!(
+        "C4 WITNESS {}: {} scenarios, every step enabled and consuming its choices as planned; {} \
+         violations\n{}\nevery violation:\n  {}",
+        config.name,
+        scenarios.len(),
+        lines.len(),
+        verdicts.join("\n"),
+        lines.join("\n  ")
+    );
+}
+
+/// Fw(0) arms its ticket.
+const C4_ARM: C4Step = C4Step {
+    actor: Actor::Fw(0),
+    offered: &[],
+    consumed: &[],
+    branches: &[],
+    faults: 2,
+};
+
+/// Fw(0) appends F1 (its wait does not expire; open and facts Ok): F1's
+/// Holder holds its role, so the append is refused as a DuplicateRole
+/// conflict, after one rollback, Undone. F1's explanation is placed in X.
+const C4_CONFLICT: C4Step = C4Step {
+    actor: Actor::Fw(0),
+    offered: &[0, 0, 0, 0],
+    consumed: &[(0, 2), (0, 4), (0, 4), (0, 3)],
+    branches: &["append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"],
+    faults: 2,
+};
+
+/// A worker step that consumes no choice and shows no branch: it reads an
+/// agenda that allows exactly one operation, or it is the [T] step after.
+const C4_WK_QUIET: C4Step = C4Step {
+    actor: Actor::Wk,
+    offered: &[],
+    consumed: &[],
+    branches: &[],
+    faults: 2,
+};
+
+/// The worker appends X (open, present: absent, insert, commit, each Ok):
+/// Explanation(0) is committed at 4 and X is marked committed.
+const C4_APPEND_X: C4Step = C4Step {
+    actor: Actor::Wk,
+    offered: &[0, 0, 0, 0],
+    consumed: &[(0, 3), (0, 3), (0, 2), (0, 2)],
+    branches: &["append_cell X: Committed (inserted)"],
+    faults: 2,
+};
+
+/// Ack(0) takes a snapshot of the explanation at 4 (survey Ok).
+const C4_SNAPSHOT: C4Step = C4Step {
+    actor: Actor::Ack(0),
+    offered: &[0],
+    consumed: &[(0, 4)],
+    branches: &["snapshot: Taken"],
+    faults: 2,
+};
+
+/// The simulated Owner confirms the snapshot. A model actor's choice: not
+/// an approval, and nothing outside the model.
+const C4_CONFIRM: C4Step = C4Step {
+    actor: Actor::Ack(0),
+    offered: &[0],
+    consumed: &[(0, 2)],
+    branches: &[],
+    faults: 2,
+};
+
+/// The worker empties X, which is marked committed.
+const C4_EMPTY_X: C4Step = C4Step {
+    actor: Actor::Wk,
+    offered: &[],
+    consumed: &[],
+    branches: &["empty: Done"],
+    faults: 2,
+};
+
+/// Gc(0) appends G1: open, facts and insert Ok; commit Unknown (one fault),
+/// with the record present; the one rollback Undone. Refused Uncertain
+/// Storage: the phase is barrier needed and U keeps G1's attempt.
+const C4_GATING: C4Step = C4Step {
+    actor: Actor::Gc(0),
+    offered: &[0, 0, 0, 1, 1, 0],
+    consumed: &[(0, 4), (0, 4), (0, 4), (1, 3), (1, 2), (0, 3)],
+    branches: &["append_gating: Refused Uncertain Storage"],
+    faults: 1,
+};
+
+/// P4: after steps 1 to 7, Ack(0) appends while X holds F1's explanation.
+/// The healthy core refuses at test 1 (C and X empty). Without test 1 the
+/// acknowledgement is placed in U; open, recheck and insert Ok; commit
+/// Unknown (one fault), absent; the one rollback Undone: Uncertain, and U
+/// kept while X is occupied.
+const C4_P4: C4Scenario = C4Scenario {
+    named: "P4",
+    steps: &[
+        C4_ARM,
+        C4_CONFLICT,
+        C4_WK_QUIET,
+        C4_WK_QUIET,
+        C4_APPEND_X,
+        C4_SNAPSHOT,
+        C4_CONFIRM,
+    ],
+    offered: &[0, 0, 0, 1, 0, 0],
+    healthy: C4Ending {
+        consumed: &[],
+        branch: "append_acknowledgement: Refused(NotNow(CellsBusy))",
+        faults: 2,
+    },
+    changed: C4Ending {
+        consumed: &[(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)],
+        branch: "append_acknowledgement: NotApplied(Uncertain)",
+        faults: 1,
+    },
+    kept: c4_p4_kept,
+    keeps: "U stays empty and X holds F1's explanation",
+    lost: c4_p4_lost,
+    locus: "U holds the acknowledgement while X holds F1's explanation",
+};
+
+/// P8: after steps 1 to 7, the worker empties X (agenda, [T], empty), and
+/// G1's append ends Uncertain with its record written, kept in U. Then
+/// Ack(0) appends. The healthy core refuses at test 1 (Healthy), and U keeps
+/// G1's attempt. Without test 1 the acknowledgement displaces it from U;
+/// open, recheck, insert and commit Ok: Committed, and U emptied, with G1's
+/// record written and corrected nowhere.
+const C4_P8: C4Scenario = C4Scenario {
+    named: "P8",
+    steps: &[
+        C4_ARM,
+        C4_CONFLICT,
+        C4_WK_QUIET,
+        C4_WK_QUIET,
+        C4_APPEND_X,
+        C4_SNAPSHOT,
+        C4_CONFIRM,
+        C4_WK_QUIET,
+        C4_WK_QUIET,
+        C4_EMPTY_X,
+        C4_GATING,
+    ],
+    offered: &[0, 0, 0, 0],
+    healthy: C4Ending {
+        consumed: &[],
+        branch: "append_acknowledgement: Refused(NotNow(NotHealthy))",
+        faults: 1,
+    },
+    changed: C4Ending {
+        consumed: &[(0, 4), (0, 4), (0, 4), (0, 3)],
+        branch: "append_acknowledgement: Committed",
+        faults: 1,
+    },
+    kept: c4_p8_kept,
+    keeps: "G1's written attempt stays in U",
+    lost: c4_p8_lost,
+    locus: "G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger",
+};
+
+const C4_SCENARIOS: [C4Scenario; 2] = [C4_P4, C4_P8];
+
+/// On the healthy core both C4 scenarios violate nothing: the P4
+/// scenario's append is refused while X is occupied, and the P8 scenario's
+/// while the phase is not Healthy, G1's attempt staying in U. Under control
+/// C4 the test fails after both have run, with P4 and P8 each observed at
+/// its own locus.
+#[test]
+fn c4_witness_p4_and_p8_on_f8() {
+    run_c4_witness(&F8, &C4_SCENARIOS);
+}

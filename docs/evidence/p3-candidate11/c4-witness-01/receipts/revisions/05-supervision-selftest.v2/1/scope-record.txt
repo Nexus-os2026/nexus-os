@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/c4w01-selftest-1791961149.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 2967138 2967148 
+started: 2026-10-14T07:59:09+01:00
+finished: 2026-10-14T07:59:09+01:00
+command exit status: 0
+memory.peak: 16007168
+memory.swap.peak: 0
+memory.current: 2174976
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

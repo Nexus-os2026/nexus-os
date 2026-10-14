@@ -1,0 +1,27 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99c..f3793c2ff61f 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1624,22 +1624,6 @@
+         }
+         // Test 1.
+         let core = &mut *self.core;
+-        if core.session != Session::Open {
+-            return not_now(Entry::NotOpen);
+-        }
+-        if core.latch.is_some() {
+-            return not_now(Entry::Latched);
+-        }
+-        if core.phase != Phase::Healthy {
+-            return not_now(Entry::NotHealthy);
+-        }
+-        if core.c.is_some() || core.x.is_some() {
+-            return not_now(Entry::CellsBusy);
+-        }
+-        if core.u.is_some() {
+-            core.latch(LatchCause::CellInvariant);
+-            return not_now(Entry::Latched);
+-        }
+         let set = snapshot.set;
+         let occupant = Occupant::Acknowledgement {
+             set,

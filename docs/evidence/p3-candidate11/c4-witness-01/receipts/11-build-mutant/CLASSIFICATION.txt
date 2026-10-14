@@ -1,0 +1,2 @@
+receipt 11-build-mutant type build role mutant: BUILD OK
+exit 0

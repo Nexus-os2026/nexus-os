@@ -1,0 +1,4 @@
+receipt 12-run-mutant type c4-mutant-witness role mutant: POSITIVE: P4 AND P8 OBSERVED
+  fact: scenario P4 step 8: offered [0, 0, 0, 1, 0, 0] consumed [[0, 4], [0, 4], [0, 4], [1, 3], [0, 2], [0, 3]] unused [] faults left 1 branches ['append_acknowledgement: NotApplied(Uncertain)'] violations [('after', 'P4')]
+  fact: scenario P8 step 12: offered [0, 0, 0, 0] consumed [[0, 4], [0, 4], [0, 4], [0, 3]] unused [] faults left 1 branches ['append_acknowledgement: Committed'] violations [('after', 'P8')]
+exit 0

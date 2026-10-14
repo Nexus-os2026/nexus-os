@@ -1,0 +1,15 @@
+SOURCE COMMIT A — recorded before any build — 2026-10-14T08:06:13+01:00
+A: 04e42a7ddf0d0a2af17b6506c51997006e7a08dc
+tree: A^{tree}
+fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3
+parents: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+author: Suresh Karicheti <nexaiceo@gmail.com> Wed Oct 14 08:06:13 2026 +0100
+committer: Suresh Karicheti <nexaiceo@gmail.com> Wed Oct 14 08:06:13 2026 +0100
+branch: experiment/p3-c11-d2a1-c4-witness-01 (local only)
+files changed vs parent:
+  M	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+  numstat 678	0	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+model_tests.rs blob at A: 28085ce232827301104b5d757af042ec933976f8 sha256 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972 bytes 310612
+protocol.rs blob at A: a2df2841b99cad5d452008a6d4150e9369d07e66
+porcelain after commit: 0 lines
+message:
