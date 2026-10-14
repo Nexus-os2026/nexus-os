@@ -1,0 +1,47 @@
+WITNESS RUN c25_witness_p7_on_the_resulting_world
+worktree: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25
+HEAD: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  branch: HEAD
+porcelain:
+   M crates/nexus-governed-control/src/ledger/protocol.rs
+   M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+model_tests.rs as built: blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba
+protocol.rs as built:    blob 9d4e74b4faf5078a59ff3d2a86a76f26f42953f1 sha256 10de4d2f6c3c655b270f81e79a54a3fef97a7108e3088a5a8c48e01928a26738
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+executable sha256 before: a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6 (8957936 bytes)
+test listing for the selector (--exact):
+  ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test
+  
+  1 test, 0 benchmarks
+command (cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25/crates/nexus-governed-control): /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world --exact --nocapture --test-threads=1
+started: 2026-10-14T01:48:28+01:00
+--------------------------------------------------------------------------------
+
+running 1 test
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]
+    branches ["append_gating: Committed (inserted)"]; word after 0x5 (live 0, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+    VIOLATION step: E4: append_gating said Committed but the record is absent
+    VIOLATION after: P7: G1 was told Committed and is absent
+
+thread 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world' (2751313) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5:
+C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations
+NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))
+OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: ["E4"]
+every violation:
+  step 1 step: E4: append_gating said Committed but the record is absent
+  step 1 after: P7: G1 was told Committed and is absent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+--------------------------------------------------------------------------------
+exit status: 101
+finished: 2026-10-14T01:48:28+01:00
+executable sha256 after: a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6 MATCH

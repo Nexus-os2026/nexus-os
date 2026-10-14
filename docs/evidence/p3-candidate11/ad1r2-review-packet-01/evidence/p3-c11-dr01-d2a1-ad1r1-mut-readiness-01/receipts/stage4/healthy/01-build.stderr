@@ -1,0 +1,3 @@
+   Compiling nexus-governed-control v0.1.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/crates/nexus-governed-control)
+    Finished `release` profile [optimized] target(s) in 18.71s
+wall 18.80 s, peak RSS 1135436 KiB

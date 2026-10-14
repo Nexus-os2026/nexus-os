@@ -1,0 +1,256 @@
+NEXUS OS — P3-C11-DR01-D2A1-F3-QUOTIENT-01 — REPORT
+Executor: Claude Opus 5.5 (claude-opus-5-5), Claude Code, 2026-10-13. No subagents.
+To: ChatGPT GPT-6, Sole Nexus OS Architect.
+Evidence directory: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-f3-quotient-01 (outside the repository)
+
+FINAL STATUS: F3_QUOTIENT_INCOMPLETE
+
+Exactly one quotient F-3 run was made, on the pinned optimised executable at 83816e66, against the unchanged
+30,000,000 PROJECTED-state ceiling, with 16 GiB memory, a 45-minute limit and no swap. The run reached that
+ceiling: 30,000,001 projected states discovered, 28,284,667 expanded, 1,715,334 unexpanded. No property
+failed. No quotient precondition failed. No resource limit fired (memory 23.4%, time 6.6%). No property, D1
+or L1 verdict is established. The original full F-3 graph was NOT explored. This is not contract acceptance,
+not a 8.3 result and not a ceiling amendment.
+
+======================================================================================================
+1. SOURCE AND CONTRACT PROVENANCE  (receipts/stage1/00-STAGE1-SUMMARY.txt, 01-06)
+  Commit       83816e66916c3a217ab7919d7e6a21893e7d579a / tree 74a6a0e5add063dac4d24939b3a62c619847dd3a
+               = GitHub review/p3-c11-d2a1-adm-quotient-01 (branch, git/ref and git/commits APIs). Single parent
+               244c5b23244d1abd8b2b595c9e7654a25029a9f1. One file, model_tests.rs, +1220/-0, 0 deleted lines.
+  Explorer     The first 4,814 lines of model_tests.rs are byte-identical to 244c5b23 (cmp). So explore,
+               successors, step_adm, terminal, FULL_CAP and F3 are unchanged. Every other path has the same blob
+               (git diff --quiet), including protocol.rs, unit_tests.rs, ledger.rs, lib.rs, both Cargo.toml,
+               Cargo.lock and rust-toolchain.toml. mod model_tests is #[cfg(test)].
+  Contract     P3-C11-D2A1-CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+  Reviews      …RESPONSE-02-REVIEW-02.md 6dfb1456…cdce; …RESPONSE-03-REVIEW-01.md 1f964d75…fb35. Package
+               SHA256SUMS fec46e38… is 4/4 OK in all 6 sealed copies and in this directory's contract/.
+  ADM-QUOTIENT-01  42/42 OK, 0 unlisted (SHA256SUMS 459101ef…). The sealed patch's patch-id equals the commit's.
+  Toolchain    rustc 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0 (85eff7c80), LLVM 21.1.8, pinned.
+  Conflicts    none: 0 cargo, rustc or explorer processes; 0 p3c11 scopes; 0 CI runs in progress or queued.
+
+======================================================================================================
+2. FRESH-BUILD EXECUTABLE IDENTITY  (receipts/stage2/00-05)
+  Worktree     /home/nexus/NEXUS/nexus-os-p3-c11-f3-quotient, new and detached at 83816e66. porcelain 0
+               throughout.
+  Target       new CARGO_TARGET_DIR=<worktree>/target, absent before the build. CARGO_INCREMENTAL=0,
+               CARGO_BUILD_JOBS=8, --locked, nice -n 10. No wrapper, no RUSTFLAGS.
+  Build        nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 8
+               --message-format=json-render-diagnostics. Exit 0, 90.7 s, 274 packages compiled, 0 fresh,
+               0 warnings.
+  Source blob  model_tests.rs fad0ffb0ed243bbd445191bc7963b075bde13b5a (sha256 6ce62e24…92bb)
+  Executable   target/release/deps/nexus_governed_control-2faa0b9718d3e6a3, 8,699,288 bytes
+               sha256 96aa8ce41dff6b938675051c7c12fe7b121f899ce830d725267c4b737a6db7c5. Checked before every
+               run. Unchanged after the F-3 run.
+               ADM-QUOTIENT-01's executable for the same commit (cdf262ef…) differs. Same size, same listing,
+               other worktree path; see receipts/stage2/03. NOT CLAIMED: a reproducible build.
+  Listing      304 tests, 31 ignored: 15 full_*, 15 quotient_full_*, rs01_t10. No temporary diagnostic test
+               (listing 0, strings 0). quotient_full_f3 appears exactly once.
+
+======================================================================================================
+3. CHEAP GATES — EXIT CODES  (receipts/stage2/10-35; all on 83816e66, porcelain 0)
+  cargo fmt --all -- --check                                              0
+  git diff --check 244c5b23..83816e66 / b1d535f1..83816e66 / working tree 0 / 0 / 0
+  clippy -p nexus-governed-control --all-targets -D warnings              0   (0 warnings)
+  clippy -p nexus-governed-control --lib -D warnings                      0   (0 warnings)
+  governed-control lib, pinned release executable                         0   273 passed / 0 failed / 31 ignored
+  D2A-1 unit tests, pinned executable                                     0   29 passed
+  cargo test -p nexus-governed-control --locked (dev)                     0   lib 273/0/31, egress 1, doctests 8
+  original X-1..X-5, pinned executable                                    0   5 PASS
+  quotient differential X-1..X-5                                          0   5 passed
+  quotient negative cases (P1, P12, E9, E2)                               0   4 passed
+  observer, 3 precondition refusals, L1 demonstration                     0   5 passed
+  machinery, storage and E8 model tests                                   0   10 passed
+  Gates 30-33 printed exactly what ADM-QUOTIENT-01's sealed receipts printed, apart from timings and OS
+  thread ids. The original X counts equal campaign-01's. No original full configuration was run.
+
+======================================================================================================
+4. ORIGINAL / QUOTIENT DIFFERENTIAL RESULTS  (receipts/stage2/31-33, mapping in 00-STAGE2-SUMMARY.txt)
+             N   original states / trans (fault) / dead     quotient states / trans (fault) / dead   evals (admitted)
+    X-1      1   59,104 / 219,196 (15,026) / 34             29,552 / 94,822 (7,513) / 34             29,552 (194)
+    X-2      1   10,020 /  26,188    (922) / 100             5,010 / 10,589   (461) / 100             5,010 (430)
+    X-3      0   25,617 /  81,573  (2,605) / 44             25,617 / 81,573 (2,605) / 44             0
+    X-4      1    3,106 /  10,097    (816) / 14              1,553 /  4,272   (408) / 14              1,553 (12)
+    X-5      0    3,311 /   7,757    (704) / 28              3,311 /  7,757   (704) / 28              0
+  Each requirement passed on every configuration:
+    - Complete state correspondence: the product holds both ways, and original states = (N+1) x quotient
+      states.
+    - Complete non-ADM edge correspondence: at every original state, the ordered edges are equal in edge
+      code, fault, violations, branches and projected target.
+    - ADM observation correspondence: exactly one ADM edge when a > 0; the observation equals it; ADM
+      edges = N x evaluations.
+    - Admission property preservation: observation violations equal the ADM edge's violations. The P1, P12
+      and E9 negatives fail in both modes at equal depth (3, 14, 7). Forced states report P1+E6, P12+P15
+      and E9.
+    - D1 correspondence: the states with no step are equal, and each terminal judgement is equal.
+    - L1 verdict correspondence: both modes PASS, and nonfault_G = (N+1)·nonfault_Q + N·|Q|. A
+      counter-keeping admission fails L1 in the original.
+    - E2: the second-load negative fails E2 in both modes in 1 step. E2 HOLDS in every X report.
+    - Failure-trace reconstruction: 4 of 4 quotient traces replay in the original semantics to their
+      property.
+  Precondition refusals were observed for the A2-like, counter-keeping and table-writing admissions.
+
+======================================================================================================
+5. F-3 QUOTIENT RUN OUTCOME  (receipts/stage3/quotient-full-F-3.txt; 00-STAGE3-SUMMARY.txt; 00-preflight.txt)
+  A executable          96aa8ce41dff6b938675051c7c12fe7b121f899ce830d725267c4b737a6db7c5 (MATCH before and after)
+  B command             cwd crates/nexus-governed-control; systemd-run --user --scope -p MemoryMax=16G
+                        -p MemorySwapMax=0 -p RuntimeMaxSec=2710 /usr/bin/time -v timeout -s KILL 2700 nice -n 10
+                        <exe> ledger::protocol::model_tests::quotient_full_f3 --exact --nocapture
+                        --test-threads=1 --ignored
+                        Selection proven just before the run: exactly 1 test. A substring filter "full_f3"
+                        would have selected 2.
+                        Exit 101: quotient_full_exploration asserts PASS and got Incomplete. Scope
+                        Result=success.
+                        Printed bounds: both facts conflicting, ENV on, faults 2, admissions 2, gating 2,
+                        "caps 30000000 states, 2700s". Actors [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env].
+  C projected discovered     30,000,001
+  D projected expanded       28,284,667
+  E projected unexpanded      1,715,334   (5.72% of discovered; never checked)
+  F non-ADM transitions     110,893,519
+  G fault transitions        10,194,059
+  H admission evaluations    28,284,667   (one per expanded state)
+  I successful evaluations        6,254
+  J D1                  NOT ESTABLISHED. 15,175 expanded projected states had no enabled non-ADM step. Each was
+                        judged terminal at adm 0, and none failed.
+  K L1                  NOT ESTABLISHED. L1 runs only after a complete search.
+  L properties          see section 6
+  M branch coverage     53 listed labels taken, 37 not taken, and 3 taken outside the list. The 93 lines are
+                        byte-identical to both original F-3 receipts (30M and 60M).
+  N peak memory         RSS 3,943,060 KiB (3.76 GiB). Scope memory.peak 4,026,507,264 B (23.4% of 16 GiB).
+                        Tables 3,264 MiB.
+  O wall time           2:58.50 (explorer 178.1 s), 6.6% of 45 min
+  P termination         The explorer's projected-state ceiling check fired (visited 30,000,001 > 30,000,000,
+                        model_tests.rs:5068). The time and memory limits did not fire.
+  Classification: ceiling reached -> F3_QUOTIENT_INCOMPLETE. STOPPED. No retry and no ceiling change.
+
+======================================================================================================
+6. PROPERTY AND L1 RESULTS
+  P1 P2 P4 P5 P6 P7 P8 P9 P12 P13 P15 D1 L1 E1 E2 E3 E4 E5 E6 E7 E8 E9 E10 E11 KEY: each NOT ESTABLISHED
+  (incomplete). That is all 25 properties.
+  Before the ceiling, no violation was found:
+    - no state property, at any of the 28,284,667 expanded states;
+    - no transition property, on any of the 110,893,519 edges;
+    - no admission property, in any of the 28,284,667 observations;
+    - no D1 failure, among the 15,175 end states.
+  That is not a PASS, and it is not a failure. The unexpanded 1,715,334 states and all states beyond the
+  ceiling are unchecked.
+  L1 did not run. No "quotient inapplicable" assertion fired.
+  The earlier F-3 INCOMPLETE verdicts are not, and were not used as, evidence of any property failure.
+
+======================================================================================================
+7. ACTUAL CPU, MEMORY AND TIME COSTS
+  F-3 run     user 175.53 s, sys 2.93 s, 99% of one CPU (single-threaded); scope cpu.stat 177.35 s; wall 2:58.50
+              RSS 3.76 GiB; cgroup peak 3.75 GiB.
+              Swap: memory.swap.max 0, and memory.swap.current 0 in all 89 samples. oom 0; oom_kill 0.
+              Host MemAvailable never fell below 50,296,152 KiB. No Owner workload was stopped (Ollama,
+              browsers and desktop kept running).
+  Stage 2     release build 90.7 s (user 332 s); clippy 40.5 s; dev suite 95.8 s; all executable gates < 10 s
+  Per expanded state  quotient 6.30 us; original 30M 6.88 us; original 60M 6.47 us
+                      These are observations, not a cost model.
+
+======================================================================================================
+8. PROJECTION ASSUMPTIONS AND LIMITATIONS
+  1. The ceiling counted PROJECTED states. Each projected state stands for N+1 = 3 original states under
+     Theorem 1 (ADM-QUOTIENT-01 section C: nodes(G) = R_Q x {0..N}). This experiment does not amend 8.3,
+     and no cap constant was changed.
+  2. Theorem 1, L-A/L-B and Q1-Q15 are the executor's own proof. They were observed state by state on
+     X-1..X-5 only. They are not independently accepted.
+  3. AQ1-AQ6 apply, in particular:
+     - AQ1: the model as at 244c5b23;
+     - AQ4: step determinism;
+     - AQ5: correspondence claims for complete runs only;
+     - AQ6: model state-safety only — not real executions, ledger durability, A-1/A-2 or contract
+       6.2/6.3.
+     This run is INCOMPLETE, so AQ5 means no equivalence claim is made for it beyond the per-state facts
+     below.
+  4. The runtime guard asserted the preconditions at each of the 28,284,667 expanded states, at counter N
+     only. Steps at lower counters, and unexpanded states, rest on the proof, not on the guard.
+  5. Q12: under the quotient, the first-reported property may differ from the original explorer's, and D1
+     is found N steps earlier. Not relevant here, since nothing failed.
+  6. The guard checks writes, not reads (limitation J.3 of ADM-QUOTIENT-01). One build only. The P3 desktop
+     guards were not run, because no scanned file changed.
+  DERIVED (not measured; valid only under limitations 1-3):
+    - original F-3 has at least 3 x 30,000,001 = 90,000,003 reachable states;
+    - the expanded classes cover 3 x 28,284,667 = 84,854,001 original states;
+    - the frontier stands for 5,146,002 original states;
+    - the covered states have 3 x 110,893,519 + 2 x 28,284,667 = 389,249,891 outgoing original edges,
+      of which 30,582,177 have a fault and 12,508 are admitting ADM edges.
+  The true size of F-3, projected or original, is unknown. Nothing is extrapolated from these numbers.
+
+======================================================================================================
+9. PRIOR F-3 30M / 60M COMPARISON  (campaign-01 full-F-3.txt 5731ed93…; F3-CAP60-01 full-F-3-cap60.txt 49fd65e1…)
+                        original 30M         original 60M         quotient 30M (PROJECTED)
+  counted unit          original states      original states      projected states (3 original each, DERIVED)
+  discovered            30,000,002           60,000,001           30,000,001   (DERIVED >= 90,000,003 original)
+  expanded              25,318,697           53,851,687           28,284,667   (DERIVED 84,854,001 original)
+  unexpanded             4,681,305 (15.6%)    6,148,314 (10.2%)    1,715,334 (5.7%)
+  transitions          126,307,617          257,109,574          110,893,519 non-ADM (ADM evaluated, not edges)
+  with a fault          13,911,325           23,572,207           10,194,059
+  no enabled step            1,775                5,825               15,175 (no non-ADM step; judged at adm 0)
+  peak RSS (KiB)         3,965,668            8,001,236            3,943,060
+  tables (MiB)               3,264                6,528                3,264
+  wall clock              2:54.66              5:49.21              2:58.50
+  verdict               INCOMPLETE           INCOMPLETE           INCOMPLETE
+  branch set            identical in all three (53 taken / 37 not / 3 outside)
+  The rows are not directly comparable: the counted units differ, and the breadth-first orders differ, because
+  the quotient never schedules ADM. The quotient's DERIVED coverage exceeds the original 60M run's measured
+  coverage. It still did not close the search. Ceiling, not resources, ended all three runs.
+
+======================================================================================================
+10. SOURCE AND PROTECTED-REF CONFIRMATION  (receipts/final/01-ref-state-and-evidence-after.txt)
+  GitHub refs   180 by git ls-remote, byte-identical before and after (sha256 504ce1fe…). They also equal
+                ADM-REVIEW-PUBLISH-01's after-list.
+                The first comparison used the API listing (168 refs, without HEAD or peeled tags) by mistake.
+                That is corrected and recorded in receipts/stage1/04.
+  Protected     main 6e15dee6; rebuild/phase0-trust-boundary f727f5c3; repair/p3-candidate11 (Candidate 11)
+                b1d535f1; review/p3-c11-d2a1-source-r2 244c5b23; review/p3-c11-d2a1-adm-quotient-01 83816e66.
+                All unchanged.
+  CI            0 runs dispatched. The latest run is still 38319429125. 0 in progress, 0 queued, 0 on the
+                review branch.
+  Worktrees     The mission worktree is detached at 83816e66, clean. Its 2.2 GB target/ is kept; removal is the
+                Owner's call. These are untouched and clean:
+                  - nexus-os-p3-c11-adm-quotient (local branch, no upstream)
+                  - SOURCE-R2
+                  - campaign-01
+                  - f3-cap60
+                  - the primary checkout
+  Prior evidence  13 D2A-1 directories re-verified at the end; all OK and unchanged:
+                    - adm-quotient-01 42/42
+                    - adm-review-publish-01 11/11
+                    - campaign-01 93/93
+                    - f3-cap60-01 58/58
+                    - f1-cap60-01 46/46
+                    - and eight others
+                  The F-1, F-2, F-3 30M and F-3 60M receipts keep their hashes.
+  Processes     none left running. A pgrep -f self-match is recorded as a correction in final/01.
+
+======================================================================================================
+11. EVIDENCE SHA256 MANIFEST
+  SHA256SUMS in this directory covers every file except itself. Its own sha256 is in the reply that carries
+  this report. The directory is sealed read-only. Key hashes:
+    83816e66916c3a217ab7919d7e6a21893e7d579a / 74a6a0e5add063dac4d24939b3a62c619847dd3a   source commit / tree
+    96aa8ce41dff6b938675051c7c12fe7b121f899ce830d725267c4b737a6db7c5   pinned release test executable
+    6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb   model_tests.rs at 83816e66
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+  The raw run receipt's hash is in SHA256SUMS (receipts/stage3/quotient-full-F-3.txt).
+
+======================================================================================================
+12. INDEPENDENT ARCHITECT REVIEW REQUEST
+  Please review independently:
+  1. receipts/stage3/quotient-full-F-3.txt against section 5. Check the exact-one selection, the pinned hash,
+     the scope limits and the INCOMPLETE classification.
+  2. Whether the DERIVED figures in sections 8 and 9 are acceptable as labelled, or should be withheld until
+     Theorem 1 is independently accepted.
+  3. The decision this result leaves open, which the executor does not make: how, if at all, F-3 (and F-PT
+     and F-B, which derive from F3) is to reach a verdict. Neither the 30M original, the 60M original, nor
+     the 30M projected ceiling completed it.
+  4. The earlier open items are unchanged and were not re-examined:
+     - C1/C25 disposition (ADM-QUOTIENT-01 section I);
+     - R1 CAS wording;
+     - cap check stopping at cap + 1 or 2 (here 30,000,001);
+     - stale mutation-manifest hashes.
+  NOT DONE: no source modification, no production change, no contract rewrite, no cap modification, no F-1
+  or F-2 run, no original F-3 run, no F-PT or F-B, no other full configuration, no mutation control, no
+  C1/C25 implementation, no CI dispatch, no push, no merge, no integration, no ledger activation, no
+  release, no Phase Three closure, and no change to earlier sealed evidence.
+
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect.

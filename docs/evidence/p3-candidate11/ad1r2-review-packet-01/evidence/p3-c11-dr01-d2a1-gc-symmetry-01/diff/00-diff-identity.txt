@@ -1,0 +1,12 @@
+patch: diff/77a146ca-gc-symmetry.patch
+sha256: 8ad134be8e6b6515494beead7a223c53844f026b1b288983a3aeba712c614d15
+patch-id: cf136717c59a9b4c31eb9a694b31a02f6eed3b70 77a146ca606f99329068410b6037721341f00c70
+commit 77a146ca606f99329068410b6037721341f00c70
+tree 21818166ee10a8075ca364bd09f31c7aa64555dd
+parent 83816e66916c3a217ab7919d7e6a21893e7d579a
+author Suresh Karicheti <nexaiceo@gmail.com> Tue Oct 13 22:33:14 2026 +0100
+
+test(experiment): add a gating-caller symmetry quotient beside the explorer
+
+ .../src/ledger/protocol/model_tests.rs             | 1724 ++++++++++++++++++++
+ 1 file changed, 1724 insertions(+)

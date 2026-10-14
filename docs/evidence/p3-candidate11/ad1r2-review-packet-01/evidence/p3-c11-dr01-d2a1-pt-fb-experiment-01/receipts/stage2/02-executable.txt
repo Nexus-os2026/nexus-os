@@ -1,0 +1,109 @@
+STAGE 2 [2] executable — 2026-10-14T00:52:55+01:00
+path: /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+sha256: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+size: 8956968 bytes; mtime 2026-10-14 00:52:37.286735100 +0100
+file: /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=057e2356d6254ca8d7bf7cbd1efea7403deac25b, stripped
+only test executable built for the lib: 1
+closure-prep-01's build of the same commit: 27c922edb9675a76763d353d34421dc3e0919cc322ba7b00dc4007d6fdfee859, 8,956,968 bytes
+listing: 345 tests; ignored listing: 35
+cross-check vs closure-prep-01 sealed listings (names):
+  all:     diff lines 0
+  ignored: diff lines 0
+ignored tests (all must stay ignored):
+   authority::tests::stop_measurement::rs01_t10_the_registry_stop_seen_from_outside_its_lock
+   ledger::protocol::model_tests::full_f1
+   ledger::protocol::model_tests::full_f2
+   ledger::protocol::model_tests::full_f3
+   ledger::protocol::model_tests::full_f4
+   ledger::protocol::model_tests::full_f5
+   ledger::protocol::model_tests::full_f6
+   ledger::protocol::model_tests::full_f7
+   ledger::protocol::model_tests::full_f8
+   ledger::protocol::model_tests::full_fb
+   ledger::protocol::model_tests::full_fb2
+   ledger::protocol::model_tests::full_fd
+   ledger::protocol::model_tests::full_fg
+   ledger::protocol::model_tests::full_fpt
+   ledger::protocol::model_tests::full_fr
+   ledger::protocol::model_tests::full_fw
+   ledger::protocol::model_tests::gc_symmetry_f3
+   ledger::protocol::model_tests::gc_symmetry_fb
+   ledger::protocol::model_tests::gc_symmetry_fpt
+   ledger::protocol::model_tests::gc_symmetry_prefix_f3
+   ledger::protocol::model_tests::quotient_full_f1
+   ledger::protocol::model_tests::quotient_full_f2
+   ledger::protocol::model_tests::quotient_full_f3
+   ledger::protocol::model_tests::quotient_full_f4
+   ledger::protocol::model_tests::quotient_full_f5
+   ledger::protocol::model_tests::quotient_full_f6
+   ledger::protocol::model_tests::quotient_full_f7
+   ledger::protocol::model_tests::quotient_full_f8
+   ledger::protocol::model_tests::quotient_full_fb
+   ledger::protocol::model_tests::quotient_full_fb2
+   ledger::protocol::model_tests::quotient_full_fd
+   ledger::protocol::model_tests::quotient_full_fg
+   ledger::protocol::model_tests::quotient_full_fpt
+   ledger::protocol::model_tests::quotient_full_fr
+   ledger::protocol::model_tests::quotient_full_fw
+required entry points present AND ignored:
+   ledger::protocol::model_tests::gc_symmetry_fpt: listed 1 ignored 1
+   ledger::protocol::model_tests::gc_symmetry_fb: listed 1 ignored 1
+   ledger::protocol::model_tests::gc_symmetry_f3: listed 1 ignored 1
+   ledger::protocol::model_tests::full_fpt: listed 1 ignored 1
+   ledger::protocol::model_tests::full_fb: listed 1 ignored 1
+   ledger::protocol::model_tests::quotient_full_fpt: listed 1 ignored 1
+   ledger::protocol::model_tests::quotient_full_fb: listed 1 ignored 1
+every full_* / quotient_full_* / gc_symmetry_f* / *_prefix_* name is in the ignored list:
+   ignored  ledger::protocol::model_tests::full_f1
+   ignored  ledger::protocol::model_tests::full_f2
+   ignored  ledger::protocol::model_tests::full_f3
+   ignored  ledger::protocol::model_tests::full_f4
+   ignored  ledger::protocol::model_tests::full_f5
+   ignored  ledger::protocol::model_tests::full_f6
+   ignored  ledger::protocol::model_tests::full_f7
+   ignored  ledger::protocol::model_tests::full_f8
+   ignored  ledger::protocol::model_tests::full_fb
+   ignored  ledger::protocol::model_tests::full_fb2
+   ignored  ledger::protocol::model_tests::full_fd
+   ignored  ledger::protocol::model_tests::full_fg
+   ignored  ledger::protocol::model_tests::full_fpt
+   ignored  ledger::protocol::model_tests::full_fr
+   ignored  ledger::protocol::model_tests::full_fw
+   ignored  ledger::protocol::model_tests::gc_symmetry_f3
+   ignored  ledger::protocol::model_tests::gc_symmetry_fb
+   ignored  ledger::protocol::model_tests::gc_symmetry_fpt
+   ignored  ledger::protocol::model_tests::gc_symmetry_prefix_f3
+   ignored  ledger::protocol::model_tests::quotient_full_f1
+   ignored  ledger::protocol::model_tests::quotient_full_f2
+   ignored  ledger::protocol::model_tests::quotient_full_f3
+   ignored  ledger::protocol::model_tests::quotient_full_f4
+   ignored  ledger::protocol::model_tests::quotient_full_f5
+   ignored  ledger::protocol::model_tests::quotient_full_f6
+   ignored  ledger::protocol::model_tests::quotient_full_f7
+   ignored  ledger::protocol::model_tests::quotient_full_f8
+   ignored  ledger::protocol::model_tests::quotient_full_fb
+   ignored  ledger::protocol::model_tests::quotient_full_fb2
+   ignored  ledger::protocol::model_tests::quotient_full_fd
+   ignored  ledger::protocol::model_tests::quotient_full_fg
+   ignored  ledger::protocol::model_tests::quotient_full_fpt
+   ignored  ledger::protocol::model_tests::quotient_full_fr
+   ignored  ledger::protocol::model_tests::quotient_full_fw
+original explorer present (source, unchanged prefix): 3250:fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool { 3805:fn successors( 4932:fn expand( 5038:fn explore_experimental(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally) { 6561:fn explore_symmetric(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally, Mirrors) { 6572:fn explore_symmetric_kept( 8218:fn symmetric_full_exploration(config: &Config) { 
+original X-1..X-5 tests listed: 5
+symmetry tests listed (gc_symmetry_*): 41; admission-quotient tests (quotient_*): 28
+no temporary diagnostic test: #[test] fns in model_tests.rs source = 100; model_tests entries in listing = 100
+  names containing probe|diag|tmp|temp|scratch|debug: 1
+  (any such name):
+     browser::tests::a_probe_failing_while_the_page_changes_is_asked_again: test
+listing files: 03 sha256 116ea856b93785b3d430a230fa771b4d30a2bf449f9d2d9fc864c3c9a9ae3658; 04 sha256 cb2914ec3d7a80492d63d2a57d6de7ab2da3b3b97e25041fcd3c329cc14ee02f
+## NOTES (appended)
+  The original contract explorer is `pub(super) fn explore(config: &Config) -> Report` at model_tests.rs:3882. The
+  '^fn' pattern above missed it because of its visibility prefix. It is present and unchanged: Stage 1 [1] showed the
+  prefix lines 1-6072 are byte-identical to the parent.
+  The one name matching 'probe' is browser::tests::a_probe_failing_while_the_page_changes_is_asked_again
+  (browser/tests.rs:205). It was introduced by 995f8082, long before D2A-1, and is in closure-prep-01's sealed listing
+  (diff 0). It is not a temporary diagnostic test.
+  The executable sha256 differs from closure-prep-01's build of the same commit (27c922ed…, same size 8,956,968).
+  Builds of 77a146ca also differed (gc-sym-f3-01 §3). A reproducible build is NOT claimed.
+PIN: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+     /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3

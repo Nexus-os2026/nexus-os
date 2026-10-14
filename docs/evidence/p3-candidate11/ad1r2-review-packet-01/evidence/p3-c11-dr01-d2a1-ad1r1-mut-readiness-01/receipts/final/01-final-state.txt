@@ -1,0 +1,32 @@
+FINAL STATE  2026-10-14T02:03:57+01:00
+[1] GitHub refs: before 14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c, after 14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c -> IDENTICAL
+    experimental branch on GitHub: 0 refs (not pushed)
+    6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+    f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+    b1d535f1bb634f2075f12a36ace89a595cdb13ba	refs/heads/repair/p3-candidate11
+    2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda	refs/heads/review/p3-c11-d2a1-closure-prep-01
+    Actions: in_progress 0, queued 0; latest 38319429125 b1d535f1 2026-10-12T22:56:02Z (unchanged; no dispatch)
+[2] experimental branch (local only)
+    branch experiment/p3-c11-d2a1-ad1r1-witness-01 -> 42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+    commit 42dd1bd1 tree 7ac6bb21430d15b17e3723b217b20a49dccf8282 parent 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda
+    commits beyond base: 1; files changed: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    numstat: 277	0	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933; protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66
+    format-patch sha256: cc11d486b9f3290853dff6e9dfa64f3ebcbddffba674b169da53dd4abbae179b
+    worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness: HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b porcelain 0; target/ 2.2G (kept; removal is the Owner's call)
+    pinned healthy executable: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53
+[3] protected worktrees and primary checkout
+    primary f727f5c3 rebuild/phase0-trust-boundary porcelain 0
+    /home/nexus/NEXUS/nexus-os-p3-candidate11 HEAD e71b982b porcelain 0
+    /home/nexus/NEXUS/nexus-os-p3-c11-closure-prep HEAD 2d83b74b porcelain 0
+    /home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3 HEAD 77a146ca porcelain 0
+    /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment HEAD 2d83b74b porcelain 0
+    PT-FB pinned executable still: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+    probe worktrees present: 0; worktrees total: 142 (141 before + 1 experimental)
+    local main 4b36f606 / repair/p3-candidate11 e71b982b (untouched)
+[4] earlier sealed evidence
+    20 earlier D2A-1 manifests: 750 OK, 0 not OK
+    AD-1 sealed copies: 01778ac35cf98dfe 01778ac35cf98dfe (both 01778ac3…, unchanged)
+    historical manifest at 42dd1bd1: 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+[5] processes and scopes
+    nexus_governed_control|cargo|rustc|p3c11 processes: 0; p3c11 scopes: 0

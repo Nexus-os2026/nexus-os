@@ -1,0 +1,201 @@
+AD-1-R1 -> AD-1-R2 DIFF REVIEW   2026-10-14T03:00:11+01:00   Claude Code (Claude Opus 5.5); executor self-review, not independent
+AD-1-R1  589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda  45913 bytes  (sealed; unchanged)
+AD-1-R2  53cdb3d6ea8683a11ccaf90a6671a37b42dd5db178b599cfeb421b898a089ebc  81534 bytes
+diff     4767c22994a6e5d90cdbc2149d07729488e5c942788ee0de5be0c7e63dea56b4  13 hunks, 323 lines removed, 698 lines added (diff -u)
+
+METHOD
+ 1. Read AD-1-R2's operative text (sections 0 to Q, open items) as a separate pass after writing it.
+ 2. tools/r1-r2-obligation-scan.py lists every obligation-bearing AD-1-R1 sentence that is not verbatim in AD-1-R2.
+    Each listed sentence was then located in AD-1-R2 by hand, below. A sentence missing verbatim is not a finding by
+    itself; a sentence whose obligation is not carried, or is changed without a ruling, would be.
+ 3. tools/check-ad1r2.py covers the mechanical parts (quotes, table, inventory, identities, numbers, stale phrases).
+
+FINDINGS OF THE FIRST PASS, CORRECTED BEFORE SEALING (draft regenerated; no correction changes a disposition)
+ - C: "A run is within its ceiling as K states" was ambiguous -> "Section K's inclusive rule applies to that key count."
+ - B: the example string reused N (admissions) -> "<n> expanded keys are their own mirror"; complete runs expand every key.
+ - D: how 8.4's "states and transitions" is discharged by a quotient receipt was implicit -> stated (S-9).
+ - F: A4's symmetry was attributed to "AD-1-R1's E-PT" -> CLOSURE-PREP-01's E-PT.
+ - F: C7 without A4: "cannot complete under any approved ceiling" -> "did not complete at 30,000,000 or at 60,000,000 (M)".
+ - G.3(a): full_f1 is ignored, so its selection needs --ignored -> stated.
+ - G.3: "(a), (b), (d) and (e) hold" treated recording as a condition -> "(a), (b) and (d) all hold ...; then recorded as (e)".
+ - O.2: the minimality sentence's scope made precise (every state of smaller depth expanded first; violations judged
+   during expansion).
+ FOUND BY THE SCAN, RESTORED (R1 content that R2 had dropped):
+ - 0: AD-1-R1's statement that the E-PT/E-B source passed an independent source review for the bounded experiments
+   (kept as AD-1-R1's statement, marked not proof acceptance).
+ - G.4: the witnesses' under-a-millisecond / thread-local-hook-only facts and their regression-test role (EXECUTOR-REPORTED).
+ - K: "if and only if".
+ - L: Appendix A's Core has no published-value field (contract lines 1429-1442; checker C2b).
+ - M: "The two kinds of result do not conflict: an INCOMPLETE run asserts nothing."
+ - Open items: independent review of every resolution (A to Q) and of the supersession table.
+
+ANNOTATION OF THE SCAN (numbers refer to the list below)
+   1-3     carried: relation to AD-1/AD-1-R1 and verbatim rule rewritten for R2 (new checker named).
+   4-10    carried in section 0 with provenance labels; 10's "local, not pushed" corrected (published; ARCHITECT-RULED
+           interim source review); 6 restored (see above).
+   11-19   AD-1-R1's ruling table and K-Q list: replaced by 0A.1-0A.3; the earlier rulings are kept by reference (0A.3).
+   20-27   supersession table: effects relabelled per disposition (actual replacements marked REPLACED with scope);
+           S-16..S-18 added; 742/748 moved out of "not superseded" (checker C3g); 27 now also excepts S-16.
+   28-30   A: carried; 29 ("needs the Owner's one-run exception, as before") deliberately replaced: no one-run
+           authorisation is inferred (disposition A).
+   31-34   B: carried; review now against source and build-input closure (N).
+   35-37   B/D: fixed shares: decided by disposition D (no instrumentation; original transitions never as values; BOUND
+           optional and labelled).
+   38-40   C: carried; 40 now "248,528 or more" (inclusive, K).
+   41-45   D: carried and tightened; 44's "unless the run prints it" withdrawn (no per-member instrumentation; not claimed).
+   46      E.1 enforcement: carried in one sentence.
+   47-50   F: carried; named non-explorer tests, C22, diagnostics-not-kills, A4 and C7-without-A4 added.
+   51-58   G: restructured as G.1-G.3; first failure, positive-line witness rule, rejections, healthy replay all kept.
+   59-62   G.4: carried; 61-62 restored.
+   63-68   G: C25's open text resolved by the Architect's ruling (narrow form, G.2); 65-66's argument superseded by the
+           narrow probe (EXECUTOR-REPORTED); 67 satisfied by G.2's proposed definition; 68 carried in G.2.
+   69-85   H: carried in H.1-H.6; "final tree" wording replaced by "the validated tree" and the detached attestation
+           (self-reference removed); 83 carried by H.2 (acceptance requires reviewed alignment).
+   86-88   I: carried; build rule refined (one baseline build; one build per mutant identity).
+   89      J: carried ("No model result establishes ... a real execution, or contract 6.2/6.3").
+   90-97   K: carried; 92 restored; precondition refusal and classification-by-text added.
+   98-101  L: 98-99 carried (99 restored); 100-101 deliberately replaced (disposition L: sentence targeted by its
+           opening words; no one-failure bound, no wait-freedom).
+   102-108 M: carried; history extended to four INCOMPLETE runs and the complete runs.
+   109-113 N: carried; 112 ("do not affect this, provided no earlier line changes") deliberately replaced (disposition N:
+           no inherited approval); build-input closure added.
+   114-117 O: carried in O.5-O.6.
+   118-121 P: carried; 118's "any later change that prints more" withdrawn (disposition D); P.4-P.5 added.
+   122-127 Q: carried in the table, extended to every configuration.
+   128     closed by D.
+   129     restored as open item 2, widened to A-Q.
+
+RESULT: no AD-1-R1 obligation is dropped without a disposition. Every deliberate change traces to the Architect's
+ruling (0A.1) or to a disposition of this mission (0A.2). No contradictory operative rule was found in AD-1-R2.
+
+--------------------------------------------------------------------------------
+468 AD-1-R1 sentences; 129 obligation-bearing sentences not verbatim in AD-1-R2
+  1. AD-1 is not changed and not overwritten.
+  2. A byte copy of it and the diff from it to this file are kept beside this file, each with its own hash.
+  3. A check run before hashing compared each block with those lines (`tools/fill-ad1r1.py`).
+  4. Basis | Item | Identity | Status | |---|---|---| | Production protocol core | `protocol.rs` blob `a2df2841b99c` (sha256 `a5454944…a296`), the same at 244c5b23, 83816e66, 77a146ca, 2d83b74b and 42dd1bd1 | unchanged since SOURCE-R2 | | Contract explorer | `explore` and everything it calls (`successors
+  5. Theorem 1, L-A, L-B, Q1–Q15, AQ1–AQ6; `expand`/`observe_admission`/`explore_experimental` (83816e66) | executor PROVEN; not accepted | | Gating-caller symmetry quotient (SQ) | GC-SYMMETRY-01:
+  6. Lemma E, S1–S15, ASYM-1..6, AS1–AS4 (77a146ca); extension E-PT/E-B with the `SYMMETRIC` allow-list (2d83b74b, CLOSURE-PREP-01) | executor PROVEN; the source extension passed an independent source review for the bounded experiments; the proofs are not contractually accepted | | F-3 composed (AQ ∘ SQ)
+  7. 20,431,851 keys, complete, PASS | experimental; not 8.3 evidence | | F-PT, F-B composed | PT-FB-EXPERIMENT-01 at 2d83b74b:
+  8. 29,751,473 and 3,775,373 keys, complete, PASS | experimental; not 8.3 evidence | | F-1, F-2 original | CAMPAIGN-01 at 244c5b23:
+  9. F-1 PASS 46,524,336 states (60M one-run exception), F-2 PASS 12,602,670 | informational; not final-commit evidence | | F-3 original | CAMPAIGN-01 at 244c5b23:
+ 10. INCOMPLETE at 60,000,001 | INCOMPLETE; establishes nothing | | C1/C25 witnesses | experimental commit 42dd1bd1 (branch `experiment/p3-c11-d2a1-ad1r1-witness-01`, local, not pushed): `c1_witness_p1_at_a_successful_admission`, `c25_witness_p7_on_the_resulting_world`; one exploratory probe each | execu
+ 11. The rulings this draft encodes The Architect's words, from the mission, then the section that writes each one as contract text. | Ruling | Words | Section | |---|---|---| | A | "F-1's 60M original-state ceiling: proposed standing exception, subject to Owner approval." | A | | B | "F-3's completed qu
+ 12. 30M quotient keys for configurations expressly admitted to equivalent-graph validation; time and memory unchanged." | C | | D | "Preserve all property, D1, L1, branch coverage and trace obligations." | D | | E | "Admit only F-3, F-PT and F-B to the composed quotient, subject to final source review, 
+ 13. After restoration, an independently accepted quotient PASS may serve as the unchanged-core restored receipt for F-PT and F-B." | F | | G | "Select C1/C25 Option A: preserve the first E3/E4 failure and separately establish P1/P7 by exact replay." | G | | H | "Preserve the original historical mutation
+ 14. Final Candidate 11 acceptance requires reviewed current-tree manifest alignment, not merely an explanatory supplement." | H | | I | "Select exact-final-commit baseline evidence." Mutant build identity as listed.
+ 15. "Do NOT describe the mutant tree itself as identical to the unchanged baseline." | I | | J | "Preserve storage assumptions A-1/A-2 as undischarged." | J | The mission also asks this draft to resolve eight further items.
+ 16. - M: historical INCOMPLETE receipts against new complete equivalent-graph results;
+ 17. - N: the prerequisites of every quotient claim;
+ 18. - P: test-only boundaries;
+ 19. 24 HOLD and E10 not applicable;
+ 20. - **REPLACED**: the text no longer governs for the stated scope.
+ 21. "reaching" CLARIFIED | A, C, K | | S-2 | 609 | the explorer visits every interleaving | B, E, D | SUPPLEMENTED for F-3, F-PT, F-B only | B, D, E, N | | S-3 | 620 | equal keys are one state | B, E | SUPPLEMENTED for E's configurations | B, N | | S-4 | 831 | run on the exact final commit | I | CLARIFI
+ 22. B/Q-5 | H | SUPPLEMENTED (not replaced): the revision it requires is specified | H | | S-13 | 548 | rule R1 | L | CLARIFIED: the guess | L | | S-14 | 813 | three outcomes | K, M | CLARIFIED:
+ 23. INCOMPLETE is never PASS, kept | K, M | | S-15 | 827 | caps of the default suite | K | CLARIFIED:
+ 24. "under its cap" | K | ### Verbatim text of each superseded clause **S-1, line 855** (verbatim):
+ 25. **S-15, line 827** (verbatim): ### Not superseded The following stay in force exactly as written.
+ 26. They are listed so that no gate is weakened silently.
+ 27. - every property of 7.3 and 7.4, and every row of 7.5 other than the readings of S-7 and S-8;
+ 28. Its time (45 minutes) and memory (16 GiB) ceilings, and every other cap, are unchanged.
+ 29. Until then, every F-1 run needs the Owner's one-run exception, as before.
+ 30. The `F1` constant itself carries `FULL_CAP`, so F-D and every other user of `F1` keep 30,000,000.
+ 31. 1. the exact admission equivalence (Theorem 1 with Q1–Q15, AQ1–AQ6) and the exact symmetry equivalence (Lemma E with S1–S15) have each passed independent review against the exact final source, as equivalences of the original graph and not as bounds;
+ 32. Any refusal ends the run with no verdict;
+ 33. 4. the run completes (no unexpanded key) within C's ceiling, and every applicable property, D1 and L1 hold (Q);
+ 34. Until all five hold, a composed-quotient PASS of F-3 is an experimental result and is not 8.3 evidence." **Exact equivalence basis, printed by the receipt.** K is the quotient's keys;
+ 35. Transition, fault-edge, no-step and admitted counts are exact only if the run prints the self-mirrored shares (`Mirrors.fixed_*`). `symmetric_full_exploration` discards them, so today only bounds exist.
+ 36. **Open (not decided here):** whether the final-commit run must print them.
+ 37. Until it is made, the receipt gives those counts as labelled bounds and never as values. ## C.
+ 38. Reaching any ceiling is INCOMPLETE (K), and an INCOMPLETE quotient run supports no derived statement.
+ 39. For every other configuration, the ceiling counts the original explorer's states." **Margins observed (informational).** F-3:
+ 40. 29,751,473 keys, 99.17%; a model change that adds 248,528 keys makes it INCOMPLETE.
+ 41. Where it cannot discharge one exactly, it says so and does not substitute an estimate." - **Safety.** A quotient PASS establishes the 7.4 safety claims for the original graph only through B(1).
+ 42. - **D1.** Judged at every key with no enabled non-ADM step: with the admissions spent, at the key and at its mirror.
+ 43. - **Branch coverage.** The receipt lists, for each branch, whether the quotient took it.
+ 44. A per-member statement (for example, which batch member a branch took) is NOT ESTABLISHED by a quotient run unless the run prints it.
+ 45. - **Counts.** The receipt reports its own counts as the quotient's, plus the DERIVED original counts of B, each labelled MEASURED, DERIVED or BOUND.
+ 46. - an initial state that is not its own mirror. ## F.
+ 47. 60,000,000 under A; every other:
+ 48. A control is killed only by the original explorer's FAIL of its named property, read under G for C1 and C25.
+ 49. - for F-PT and F-B: either the original explorer's PASS, or an independently accepted composed-quotient PASS of the unchanged core on the exact final commit (B–E, N);
+ 50. A control is never run under a quotient." **What this means for the named rows.** - **C6, C7 (F-PT) and C8 (F-B):** the failing receipt is the original explorer's, on the mutant.
+ 51. C1 and C25 — Option A **Text.** "For C1 and C25 only, the control is killed when all of (a) to (d) hold.
+ 52. (a) **The first failure is preserved as primary.** The unchanged original explorer, run as `full_f1` on the mutant, FAILs.
+ 53. Its first-reported property, its detail and its shortest trace are kept as printed.
+ 54. The receipt must also show:
+ 55. - every step enabled and taking exactly its scheduled choices;
+ 56. - no `WITNESS FIXTURE FAILURE`;
+ 57. It shows no violation at any step or state, and the healthy branch at the changed step:
+ 58. P7 (first failure E4; witness)'." **The witness's required form** (each is a property of the prototype at 42dd1bd1, shown in section 3 of the report):
+ 59. - of every step: those pushed inside it, and its transition properties;
+ 60. - of every state after a step: its state properties and its key's round trip.
+ 61. Each completes in under a millisecond and touches no shared state but the thread-local hook, so it is safe in the default suite.
+ 62. On the unmutated core it is a regression test of the behaviour each control removes.
+ 63. **Open (not decided here):
+ 64. C25's exact mutant text.** Row C25 says only "a gating append answers Committed on `Commit::Unknown`".
+ 65. The witness's P7 depends only on "told Committed" and on the absent row.
+ 66. Under the narrower form P7 is therefore expected too, but that is ARGUED, not probed.
+ 67. The final campaign must fix C25's text before its run.
+ 68. C1's encoding (`count_step` sets `unapplied` to 1 on a step up and 0 on a step down) has no such alternative. ## H.
+ 69. Final Candidate 11 acceptance requires that this manifest be reviewed and found aligned with the exact final tree.
+ 70. The 22 stale entries' 'TEXT UPDATE, SAME PROPERTY' (S-10, S-11) is made only in it." **Specification of the current-tree manifest.** 1.
+ 71. For each control, these are copied from the original and never changed:
+ 72. - `edits`: every `file`, `anchor`, `replacement`, `count`, in order;
+ 73. - `review_status`, `lineage`, `review`. `source_sha256` holds the sha256 of each named file at the exact final tree.
+ 74. - every anchor's occurrence count at the final tree against the manifest's `count`, with its line number;
+ 75. - a statement that the control's anchors, replacements, command and expected failing tests are unchanged;
+ 76. **Alignment check (mechanical).** Every one of these must hold, or the manifest is not aligned:
+ 77. - every recorded `source_sha256` equals the final tree's file;
+ 78. - every anchor occurs exactly `count` times at the final tree;
+ 79. - the control set and every copied field equal the original's.
+ 80. **What is not a text update.** A changed anchor, replacement, count, command or expected test is a redefinition of the control, not a TEXT UPDATE.
+ 81. It needs its own review, as line 912's condition requires.
+ 82. **Restoration** after each control is verified by blob equality with the baseline, never by reversing a replacement.
+ 83. All 22 must be aligned before final Candidate 11 acceptance.
+ 84. **The 22, as recorded at 244c5b23 (CAMPAIGN-01) and re-derived at 42dd1bd1 by this mission's read-only dry run** (`receipts/stage6/01-manifest-dry-run-42dd1bd1.txt`): | File | Controls | Stale since | |---|---|---| | `app/src-tauri/src/phase3_tests.rs` | M32 M78 M79 M80 M89 M112 M113 M141 M143 M153 
+ 85. 42dd1bd1 is not the final tree. ## I.
+ 86. Exact-final-commit baseline evidence, and what identifies a mutant build **Text.** "Every 8.3 run, every 7.5 control (failing and restored receipts), every C1/C25 witness receipt and the A4 comparison is made on the exact final commit of the mission.
+ 87. Each comes from a fresh optimised build, whose test executable's sha256 is pinned and checked before and after each run.
+ 88. The identity is every changed file's blob equal to the baseline's, and nothing else differing from the baseline commit.
+ 89. It is not a real execution, durability, or contract 6.2/6.3.
+ 90. The cap check — what "reaching" a ceiling means **Source fact.** All three explorers check `visited.len() as u64 > config.cap` before expanding each key.
+ 91. That is `explore`, `explore_experimental` and `explore_symmetric_kept`: lines 3907, 5068 and 6609 at 2d83b74b and 42dd1bd1. `visited` counts every distinct key discovered, the initial key included, expanded or not.
+ 92. - A run is within its ceiling if and only if it completes with at most C keys discovered.
+ 93. The explorer's own elapsed-time check is an earlier stop, also INCOMPLETE, and does not extend the ceiling." **Why this reading.** - It is what the frozen code does.
+ 94. A stricter reading (C keys discovered is already INCOMPLETE) would need an explorer change or a receipt rule that overrides the explorer's verdict.
+ 95. - It changes no recorded verdict.
+ 96. - Under the stricter reading the explorer would report PASS for a run that the contract calls INCOMPLETE.
+ 97. That would be a contradiction between the verdict and the contract, which this addendum must not create. ## L.
+ 98. These are the phase, session, latch and cell bits computed from the core when the guard is created, with zero counts and no handover fault.
+ 99. - Appendix A's `Core` has no field holding a published value.
+100. **Text (replaces only the third sentence of R1; the rest of R1 stays as written).** "**The loop needs no load:** it starts from a guess, and takes the present value from a failed exchange.
+101. A wrong guess costs one failed exchange, which the hook observes (T-PB2, T-PB4)." **Effect.** This is wording only.
+102. Historical INCOMPLETE receipts and new complete equivalent-graph results **Text.** "A receipt keeps the verdict it was given.
+103. - F-3 INCOMPLETE at 30,000,002 (CAMPAIGN-01, 244c5b23);
+104. - F-3 INCOMPLETE at 60,000,001 (F3-CAP60-01).
+105. They stay INCOMPLETE, establish no property, and are listed with their verdicts wherever F-3's history is given.
+106. It is not a continuation, completion or relabelling of the INCOMPLETE runs.
+107. It may stand for F-3 in 8.3 only under B–E and N, at the exact final commit (I).
+108. It may say only that it is DERIVED to satisfy the properties, under B(1)." ## N.
+109. Prerequisites of every quotient claim A quotient claim is any of:
+110. The model is unchanged: `initial`, `actors`, every `step_*`, `Io`, `Oracle`, `encode`, `decode`, `state_properties`, `transition_properties`, `admission_properties`, `terminal` and the configuration constants are byte-identical to their audited text.
+111. Otherwise the audits are void (AQ1, AS4) and must be redone.
+112. Lines added after them (for example, the witnesses) do not affect this, provided no earlier line changes.
+113. The run completes with 0 unexpanded keys and verdict PASS, with no runtime-guard refusal ("symmetry inapplicable", "quotient inapplicable").
+114. A quotient FAIL names *a* violated property, never "the first", and is never used as a control's failing receipt (F).
+115. A control's attribution comes only from the original explorer on the mutant (F).
+116. A witness lists every violation by step and by kind (step, after-state).
+117. It does not claim to be the explorer's first failure.
+118. The witnesses, and any later change that prints more (fixed-orbit shares, per-member batch exercise), live only in `model_tests.rs`, a `#[cfg(test)]` module.
+119. They are added after every existing line.
+120. 3. `protocol.rs` production text is never changed by a witness or by a receipt change.
+121. Mutation patches are applied only in disposable worktrees, by a script kept outside the repository (line 750 unchanged), and are never committed. ## Q.
+122. 24 HOLD and E10 not applicable A PASS receipt prints one line for each of the 25 entries of `PROPERTIES`:
+123. - **E10** ('With worker verbs unwinding, D1 and L1 hold') applies only where worker verbs unwind (F-W).
+124. Everywhere else it prints 'not applicable here (worker verbs do not unwind)'.
+125. A PASS there is 24 HOLD (L1's line included) and E10 not applicable.
+126. - **L1** is not claimed for F-D (DROP;
+127. F-D's PASS prints 'not claimed for this configuration'.
+128. Whether the final-commit quotient runs must print the fixed-orbit shares and per-member batch exercise (B, D).
+129. Independent review of every resolution of K to Q.

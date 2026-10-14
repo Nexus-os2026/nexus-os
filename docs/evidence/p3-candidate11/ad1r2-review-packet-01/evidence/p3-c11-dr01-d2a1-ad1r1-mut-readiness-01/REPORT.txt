@@ -1,0 +1,369 @@
+NEXUS OS — P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01 — SEALED HANDOFF
+TO:   ChatGPT GPT-6 — Sole Nexus OS Architect
+FROM: Claude Code (Claude Opus 5.5, claude-opus-5-5; effort high). No subagents.
+DATE: 2026-10-14 (BST)
+Evidence: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01 (outside the repository)
+
+FINAL STATUS: AD1R1_AND_WITNESSES_READY_FOR_REVIEW
+
+In one paragraph:
+  - Provenance matched (Stage 1).
+  - AD-1-R1 is a separately hashed draft. AD-1 is untouched. Every verbatim quote was copied and checked by
+    program.
+  - Both witness schedules were derived from the original semantics.
+  - They were added as two ordinary tests on a local experimental branch (one commit, 42dd1bd1, test-only,
+    +277/−0).
+  - Each was proved healthy first, then probed once against its mutant in a disposable worktree:
+    C1 shows P1 at an actual successful admission, with E3 reported separately;
+    C25 shows P7 on the resulting world, with E4 reported separately;
+    the schedules replay with identical enablement and choices on both builds, and pass again after restoration.
+  - The local regression gates are green.
+  - The plan, the matrix and the manifest specification are written.
+  - No full exploration was run. No mass mutation, no cap change, no production change, no adoption. No push,
+    no CI, no merge.
+
+Labels:
+  PROVEN FROM SOURCE  read from the exact source by this executor, re-checkable by the cited lines
+  MEASURED            produced in this mission; executor-only, not independently re-run
+  EXECUTOR-REPORTED   from an earlier executor receipt, not re-judged here
+  NOT ESTABLISHED     not shown by anything in this mission
+
+==================================================================================================================
+A. PROVENANCE   (receipts/stage1/00-STAGE1-SUMMARY.txt; final/01-final-state.txt)   MEASURED
+==================================================================================================================
+  Base commit 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda, tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a, single
+    parent 77a146ca606f…. The same on GitHub (git/commits API) and on review/p3-c11-d2a1-closure-prep-01.
+  Production protocol unchanged: protocol.rs blob a2df2841b99c, sha256 a5454944…a296. unit_tests.rs, ledger.rs,
+    lib.rs, both Cargo.toml, Cargo.lock, rust-toolchain.toml, phase3_tests.rs and the historical manifest have the
+    parent's blobs.
+  Original explorer and quotient algorithms: model_tests.rs hunks along the lineage are additions only:
+    244c5b23->83816e66 at 4815, 83816e66->77a146ca at 6035. The one exception is 2d83b74b's allow-list hunk
+    (6074-6079). So:
+      - explore, successors, step_adm and the property functions (lines 1-4814) are byte-identical since
+        244c5b23;
+      - expand and explore_experimental since 83816e66;
+      - explore_symmetric_kept since 77a146ca.
+    PROVEN FROM SOURCE.
+  Contract cac65351…3b3c, reviews 6dfb1456…cdce and 1f964d75…fb35: 4/4 OK. Copied to contract/ (12th copy).
+  PT-FB-EXPERIMENT-01: manifest a4c5435d…5d22, 56/56 OK. F-PT receipt 4cbcb0f6… (FPT_PASS), F-B receipt
+    26c4fba2… (FB_PASS). Its source-matched executable 5cb3bf4c… is still present and matches, and its worktree
+    is clean at 2d83b74b.
+  Earlier sealed evidence: 20 D2A-1 manifests, 750 entries, 0 not OK, both before and after this mission.
+  Protected refs: git ls-remote, 182 lines, sha256 14833d9f…188c. Byte-identical before and after, and equal to
+    PT-FB's after-list:
+    main                                 6e15dee6
+    rebuild/phase0-trust-boundary        f727f5c3
+    repair/p3-candidate11 (Candidate 11) b1d535f1
+    review/p3-c11-d2a1-closure-prep-01   2d83b74b
+    58 tags.
+  No conflicting execution: Actions 0 in progress, 0 queued (latest 38319429125, 2026-10-12); 0 builds, 0
+    explorers and 0 p3c11 scopes before.
+  Toolchain: rustc 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0.
+  Verdict: no material discrepancy.
+
+==================================================================================================================
+B. AD-1-R1 COMPLETE DRAFT AND SHA256   (drafts/, handoff/)
+==================================================================================================================
+  drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+      sha256 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda (748 lines, 45,913 bytes)
+      (an identical copy is in handoff/)
+  drafts/AD1-SOURCE-COPY-…-AD1-DRAFT.md  sha256 01778ac3…176e, a byte copy of AD-1. The sealed originals are
+      unchanged.
+  drafts/AD1-to-AD1-R1.diff               sha256 bbd793a3…2b6f
+  tools/ad1r1-template.md + tools/fill-ad1r1.py: the template and the filler/checker. A re-run reproduces the
+      draft byte for byte. The tool refuses to write unless every fenced verbatim block equals the contract's
+      lines (25 blocks, 38 lines: 198, 199, 546, 548, 584, 609, 620, 679, 684-689, 693, 697, 699, 721, 742, 748,
+      750, 813, 827, 831, 853, 855, 857, 859, 863, 902, 911, 912, 915, 940-942).
+  Contents:
+    0     basis.
+    0A    rulings A-J in the Architect's words.
+    1     supersession table S-1..S-15, each clause quoted whole, plus a "not superseded" list, quoted whole.
+    A-J   encode the rulings.
+    K-Q   resolve the eight additional items:
+          K  cap check: within the ceiling iff the run completes with discovered <= C. INCOMPLETE stops between
+             C+1 and C + one expansion. Matches 3907/5068/6609. No recorded verdict changes.
+          L  R1 guess: core.flags() at guard creation, counts zero, fault bit clear; ticket steps 0. Wording only.
+          M  INCOMPLETE receipts keep their verdict. A quotient PASS is a different run, never a completion of
+             them.
+          N  source, configuration, execution and review prerequisites of every quotient claim.
+          O  first-failure attribution.
+          P  test-only boundaries.
+          Q  24 HOLD + E10 not applicable; L1 not claimed on F-D.
+    Open items, and changes from AD-1.
+  NOT adopted, NOT in force. Nothing here is the executor's decision on an option the rulings left open.
+
+==================================================================================================================
+C. C1 DETERMINISTIC WITNESS AND RESULT
+==================================================================================================================
+  Test: ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission. Ordinary, not ignored.
+  Configuration F-1; actors [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm].
+  Schedule (actor, oracle choices), from the original semantics (receipts/stage3, PROVEN FROM SOURCE):
+     1 Fw(0) []        arm
+     2 Fw(0) [1]       wait expires: expire -> Counted [fault]
+     3 Fw(1) []        arm
+     4 Fw(1) [1]       expire -> Counted [fault]
+     5 Fw(1) [0]       [T] record: F2 Refused
+     6 Fw(1) [0]       confirm
+     7 Se    []        claim F2 for Append
+     8 Se    []        arm
+     9 Se    [0,0,0,0] append_facts[F2] -> Committed (inserted)
+    10 Se    []        [T] F2 Paid
+    11 Adm   []        admission
+  This is ADM-QUOTIENT-01's hand-built 11-step trace with the writers' roles exchanged, now replayed by program.
+  Minimality is not claimed.
+  Healthy (MEASURED; healthy/02-c1-witness-healthy.txt, executable 0983a19f…; again at the commit, stage5/40):
+    every step enabled and taking its choices; no violation anywhere; step 11 'admission: refused'.
+    Word after step 6: live 1, unapplied 1.
+  Mutant C1 (MEASURED; probe-C1/02-mutant-witness.txt, executable 223b05d9…): exit 101,
+    "NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)",
+    "OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]".
+    E3 from step 4 to step 11 (step 4: live 2, unapplied 1; armed 0, counted 2).
+    P1 in step 11's own violations: "a result is unrecorded, or U, C or X is occupied, at a successful
+    admission".
+    Steps 1-11: same actors, same choices, same branches and ledger as healthy. Only the word differs, from step 4
+    (unapplied 1 vs 2; after step 6, 0 vs 1). The changed step 11 shows 'admitted' vs 'refused'. No enablement
+    difference.
+  Restored (MEASURED; probe-C1/04-restored-witness.txt, executable 66771847…): protocol.rs blob back to
+    a2df2841; PASS; per-step record identical to the healthy receipt's.
+  First failure under the original explorer: NOT ESTABLISHED in this mission. No F-1 run was authorised.
+    Predicted: E3 in 4 steps (EXECUTOR-REPORTED, ADM-QUOTIENT-01 / F3-CAP60-01 static analysis).
+
+==================================================================================================================
+D. C25 DETERMINISTIC WITNESS AND RESULT
+==================================================================================================================
+  Test: ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world. Ordinary, not ignored. F-1.
+  Schedule: 1 step, Gc(0) choices [0,0,0,1,0,0]. Open Ok, Facts Ok (Insert), Insert Ok, Commit Unknown [fault],
+    undecided -> absent, Rollback Ok. PROVEN FROM SOURCE (stage3 C).
+  Healthy (MEASURED; healthy/03, stage5/40): no violation; 'append_gating: Refused Uncertain Storage'; word 0x25
+    (U kept, barrier needed); ledger [Prepared(0), Prepared(1)], so G1 is absent.
+  Mutant C25 (MEASURED; probe-C25/02-mutant-witness.txt, executable a34e1af8…): exit 101,
+    "NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))",
+    other properties: ["E4"].
+    step: "E4: append_gating said Committed but the record is absent"; after: "P7: G1 was told Committed and is
+    absent".
+    Same actor and choices, same ledger. Word 0x5 vs 0x25 (U emptied). No enablement difference.
+  Restored (MEASURED; probe-C25/04, executable e355b144…): PASS; identical to healthy.
+  First failure under the original explorer: NOT ESTABLISHED here. Predicted E4 in 1 step (EXECUTOR-REPORTED).
+  Open: C25's exact mutant text. The probe used CAMPAIGN-01's sealed encoding, which also drops
+    `self.keep = true`. The narrower form, which keeps U, would still give P7: P7 needs only told + absent. That is
+    ARGUED, not probed.
+
+==================================================================================================================
+E. EXACT EXPERIMENTAL SOURCE DIFF   (handoff/42dd1bd1-witnesses.patch; patches/witness-source.patch)
+==================================================================================================================
+  Branch experiment/p3-c11-d2a1-ad1r1-witness-01: LOCAL ONLY, not pushed (0 refs on GitHub).
+  Commit 42dd1bd1cf21ffdea5968b256d2983f6575fab5b, tree 7ac6bb21430d15b17e3723b217b20a49dccf8282, parent 2d83b74b.
+  One file: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs, +277 −0, one hunk
+    @@ -8244,0 +8245,277 @@. Blob 4895993e -> 5ad26ddc (sha256 be9e3547…b2ba).
+    format-patch sha256 cc11d486b9f3290853dff6e9dfa64f3ebcbddffba674b169da53dd4abbae179b
+    working diff sha256 641be53dcb2761e5b9ab2e8acb88f904e64f82f47dd9f45220f7443fcb329414
+  Every other file of the tree equals 2d83b74b's (ls-tree compared). The committed blob equals the blob built,
+    run healthy and probed.
+  Added: type Scheduled; struct Witness; struct Replayed; fn violations_at; fn replay_schedule; fn run_witness;
+    const C1_WITNESS; const C25_WITNESS; two #[test] fns.
+  Not edited:
+    - protocol.rs, explore, successors, step_adm, any step_*, explore_experimental, explore_symmetric_kept;
+    - any property function;
+    - F1/F2/F3/FPT/FB or any constant;
+    - any manifest or guard.
+  No existing line was changed.
+
+==================================================================================================================
+F. TARGETED MUTATION PATCH IDENTITIES   (patches/; never committed; applied only in disposable worktrees)
+==================================================================================================================
+  Text source: CAMPAIGN-01 tools/stage5-prepared-NOT-EXECUTED/controls_defs.py, sealed, sha256 ef0420a1…108f.
+    Never executed before. Not Architect-approved text. Each anchor occurs once at 2d83b74b, and each replacement
+    0 times.
+  C1   patches/C1-mutation.patch   sha256 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+       protocol.rs @@ -173,6 +173,9 @@ count_step: +3 lines (unapplied := up as 0/1). Mutant blob 7d95dd42, sha256
+       eb3bf0ad…2658.
+  C25  patches/C25-mutation.patch  sha256 a6de4ed9fdbc0c351790df899f8e92863bbb4e6950320ecddf07078368ac656b
+       protocol.rs @@ -1472,8 +1472,7 @@ gating Commit::Unknown: −2 (keep; refused) +1 (Committed(seq)). Mutant blob
+       9d4e74b4, sha256 10de4d2f…8738.
+  Both: only protocol.rs differs from the authenticated baseline (base + witness blob 5ad26ddc). No removed line
+    asserts. No test file is touched.
+  Mutant build identities, in the form of AD-1-R1 I:
+    C1  baseline 2d83b74b+5ad26ddc (= tree of 42dd1bd1); patch 5ecd716a; blob 7d95dd42; exe 223b05d9… (8,966,344 B);
+        invocation in probe-C1/02 header; raw receipt 69994ef6…; restored blob a2df2841, exe 66771847…, PASS cde796f3….
+    C25 baseline idem; patch a6de4ed9; blob 9d4e74b4; exe a34e1af8… (8,957,936 B); raw receipt 2cd858af…;
+        restored exe e355b144…, PASS d30b7ad4….
+    The mutant trees are NOT the baseline tree. They are the baseline plus the named patch, verified by blob.
+
+==================================================================================================================
+G. HEALTHY AND MUTANT PROBE RAW RECEIPTS   (all hashes in SHA256SUMS)
+==================================================================================================================
+  receipts/stage4/healthy/01-build.txt|.json|.stderr: fresh release build, exit 0, 0 compiler messages, exe
+    0983a19f….
+  receipts/stage4/healthy/02-c1-witness-healthy.txt, 03-c25-witness-healthy.txt: exit 0.
+  receipts/stage4/probe-C1/ and probe-C25/: 00-PROBE-SUMMARY (the full step-by-step comparison), 01 build, 02
+    mutant witness (exit 101), 03 restored build, 04 restored witness (exit 0), 05-result.json.
+  receipts/stage4/03-probe-worktree-disposal.txt: both disposable worktrees recorded, then removed. Before
+    removal they held only the restored protocol.rs and the witness diff. No process was in them, and no other
+    worktree or process was touched.
+  Every selection used --exact on one name. The test listing showed exactly 1 match.
+
+==================================================================================================================
+H. LOCAL REGRESSION   (receipts/stage5/00-STAGE5-SUMMARY.txt; commit 42dd1bd1; executable 0983a19f… MATCH before
+and after every gate)   MEASURED
+==================================================================================================================
+  build at the commit                               nothing recompiled (0.43 s)
+  fmt --check; diff --check vs parent, vs Candidate 11, working tree     exit 0
+  clippy --release --all-targets -D warnings; clippy --lib -D warnings   exit 0, 0 warnings
+  all lib tests, pinned executable                  312 passed, 0 failed, 35 ignored (PT-FB: 310 + the 2 witnesses)
+  dev default suite (cargo test -p …)               lib 312/0/35; egress 1; doctests 8
+  original X-1..X-5                                 5 passed
+  ADM-quotient differentials X-1..X-5               5 passed
+  ADM-quotient negatives, observer, refusals        9 passed
+  GC X-2 and SYM-1 differentials                    2 passed
+  SYM-PT, SYM-B, SYM-BI differentials               3 passed
+  configuration exercise                            3 passed
+  negatives and fail-closed                         24 passed
+  symmetry supporting                               5 passed
+  D2A-1 unit tests                                  29 passed
+  the two healthy witnesses                         2 passed
+  Listing: 347 tests; the ignored set (35) is identical to PT-FB's.
+  NOT run:
+    - any full configuration (original or quotient);
+    - the 35-control campaign;
+    - the 44 P3 desktop guards (no P3 file changed);
+    - the workspace-wide suite;
+    - Fast Local and hosted CI.
+
+==================================================================================================================
+I. CURRENT-TREE MANIFEST RECONCILIATION PLAN   (AD-1-R1 H; receipts/stage6/01, 02; tools/manifest-dry-run.py)
+==================================================================================================================
+  Original manifest preserved: docs/evidence/p3-candidate10/original-183/manifest.json, sha256 2c4adc84…2e14,
+    version 1-r1. It is the same at 42dd1bd1 and was not edited.
+  The specification (draft H):
+    - a SEPARATE file with its own version and sha256 (proposed path docs/evidence/p3-candidate11/
+      current-tree-183/manifest.json, version ct-1);
+    - all 183 controls, with every definition field copied unchanged and source_sha256 recomputed at the exact
+      final tree;
+    - a reconciliation record for each of the 22 stale pairs: recorded hash, final hash and blob, first-stale
+      commit, every anchor's count and line, an "unchanged" statement, and a SAME PROPERTY review;
+    - a mechanical alignment check (all hashes, all anchor counts, the original's hash, the copied fields);
+    - a changed anchor, replacement, count, command or test is a redefinition, not a text update;
+    - restoration by blob equality;
+    - the 15 D2A-1 pairs are D2A-1's; the 7 earlier pairs are Candidate 11's.
+  Final Candidate 11 acceptance requires this reviewed alignment.
+  Read-only dry run (MEASURED):
+    - at 42dd1bd1: 22 stale pairs over 6 files (as CAMPAIGN-01 recorded at 244c5b23); every anchor of all 183
+      controls occurs exactly its count;
+    - at Candidate 11 b1d535f1: 7 stale (M05 M18 M19 M39 M45 M84 M129); anchors all at count.
+    - M45, M113 and M129's replacement text already occurs in its file, and M32, M39, M79 and M143 are
+      deletions. So restoration must be by blob, never by reverse replacement.
+    - 42dd1bd1 is not the final tree. The alignment itself waits for the source freeze.
+
+==================================================================================================================
+J. REMAINING CONFIGURATION AND CONTROL MATRIX   (receipts/stage6/03-configuration-and-control-matrix.txt; plan in
+stage6/00-FINAL-VALIDATION-PLAN.txt)
+==================================================================================================================
+  Configurations (15). Final-commit evidence exists for none.
+    - Informational results: F-1 and F-2 original PASS; F-3, F-PT and F-B composed PASS.
+    - The original F-3 is INCOMPLETE twice.
+    - Never run: F-4, F-5, F-6, F-7, F-8, F-B2, F-G, F-W, F-D, F-R.
+  Controls: 35 kill-required, plus the A4 PASS requirement.
+    - 24 explorer-killed (original explorer on the mutant, F);
+    - 6 unit-killed (C14, C19, C21, C22 by E0283, C27, C28);
+    - 5 actor changes (A1, A2, A3, A5, A6);
+    - A4 is evidenced by F-PT's PASS compared with F-3's.
+  C1 and C25 are now probed under G. C9, C10 and C24 are flagged, unanalysed, as possible further
+    first-failure-ordering cases; the plan recommends a read-only attribution pass before the campaign.
+  Plan, in dependency order:
+     1 AD-1-R1 review
+     2 Owner approval
+     3 witness acceptance (in parallel with 1)
+     4 current-tree manifest (alignment needs 7's freeze)
+     5 the ten never-run configurations (evidence needs 7; an early sizing pass is recommended)
+     6 the 35 controls + A4 (need 2, 3, 7 and the restored PASSes)
+     7 freeze + 15 runs, once each
+     8 local CI, then hosted CI
+     9 final audit
+    10 Owner-controlled Candidate 11 integration
+  The plan lists which dependencies are genuine and which are only ordering.
+
+==================================================================================================================
+K. INDEPENDENT-REVIEW LIMITATIONS
+==================================================================================================================
+  Independently re-checkable source facts (PROVEN FROM SOURCE; each cited by line):
+    - the explorer's first-failure rule;
+    - the schedules' enablement and choice derivation;
+    - the cap check;
+    - the R1 guess;
+    - the allow-list and its guard;
+    - the lineage hunks;
+    - the contract quotes. Re-run tools/fill-ad1r1.py against contract/.
+  Executor-only test results (MEASURED, not independently re-run):
+    - every witness, probe and gate result in C, D, G and H;
+    - the dry run in I.
+  The probe classifier, the witness verdict strings and the comparison are the executor's own code (tools/probe.py,
+    run-witness.sh). The raw receipts are kept so the classification can be re-judged.
+  The mutant encodings are executor drafts from CAMPAIGN-01, sealed before this mission. They are not
+    Architect-approved. C25's keep/drop choice is open.
+  NOT ESTABLISHED:
+    - the original explorer's first failure on either mutant (no F-1 run);
+    - the schedules' minimality;
+    - P7 under the narrower C25 text;
+    - any final-commit evidence;
+    - reproducible builds: the executables differ by worktree path, and every identity is the sha256 of the
+      executable run.
+  The witnesses are test-only prototypes on an unpushed local branch. They are not reviewed, not accepted and not
+    contract evidence.
+  AD-1-R1's K-Q are proposed resolutions, not rulings.
+  A-1 and A-2 are undischarged. Every result is the explored model's, not a real execution's.
+
+==================================================================================================================
+L. SHA256 EVIDENCE MANIFEST
+==================================================================================================================
+  SHA256SUMS covers every file in this directory except itself. Its own sha256 is in the reply that carries this
+  report. Key identities:
+    2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda / 6f6a54f5…a286a   base commit / tree
+    42dd1bd1cf21ffdea5968b256d2983f6575fab5b / 7ac6bb21…8282    experimental commit / tree (local)
+    589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda   AD-1-R1 draft
+    01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e   AD-1 (unchanged)
+    0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53   healthy executable (42dd1bd1 source)
+    223b05d91e4977ee72f3a71b50d170120efb234ef463d3a8ab62cffd38f7a3c4   C1 mutant executable
+    a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6   C25 mutant executable
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+    14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c   GitHub refs, before = after
+
+==================================================================================================================
+M. DEVIATIONS AND DISCLOSURES
+==================================================================================================================
+  1. Stage order:
+     - the AD-1-R1 text was written after Stages 3-5, so that it could cite the prototype by name and result;
+     - no stage depended on the draft;
+     - the AD-1 copy was made before the draft was filled.
+  2. The witness source was revised before its receipted build:
+     - first build: executable 5858202f… of an earlier text. Both witnesses passed once, by console only, not a
+       receipt. Its build files were replaced by the receipted build;
+     - then the per-step ledger print was added, the helper renamed (state_violations -> violations_at), and
+       comments made to say the draft is unadopted.
+     Only the final text (5ad26ddc) was probed and committed.
+  3. One unreceipted clippy check ran before the probes. The receipted clippy gates are 14 and 15, at the commit.
+  4. Revised before sealing:
+     - tools/manifest-dry-run.py, which first printed a meaningless "already present" count for deletions; it
+       was fixed and both dry-run receipts regenerated;
+     - tools/fill-ad1r1.py, from which a no-op assert was removed; the re-run produced the identical draft;
+     - wording in the matrix's flagged rows.
+  5. Extra beyond the list:
+     - the restored build and witness run in each probe;
+     - diff-check against Candidate 11 (gate 12);
+     - the dev default suite (gate 21);
+     - the manifest dry run at b1d535f1.
+  6. The witnesses were made ordinary (not ignored) tests. They are deterministic, take under a millisecond, use
+     only the thread-local hook, and pass on the healthy core. The mission allowed this when they are safe as
+     ordinary baseline regression tests. They make the default suite fail on C1 and C25 mutants too.
+  7. Kept, not deleted: the experimental worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness (clean at
+     42dd1bd1; target/ 2.2 GB) and its local branch. Removing them is the Owner's call.
+
+NOT DONE (hard boundaries):
+  - no full exploration of any configuration;
+  - no mass mutation campaign; one exploratory mutant each for C1 and C25 only;
+  - no cap increase; no production, explorer, property, configuration, guard or manifest edit;
+  - no contract adoption; AD-1 untouched;
+  - no GitHub CI, push, merge, activation, release or tag;
+  - no Candidate 11 integration; no Phase Three closure.
+
+FINAL STATUS: AD1R1_AND_WITNESSES_READY_FOR_REVIEW
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect

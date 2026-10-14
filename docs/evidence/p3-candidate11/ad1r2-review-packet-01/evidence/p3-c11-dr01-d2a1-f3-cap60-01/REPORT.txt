@@ -1,0 +1,199 @@
+NEXUS OS — P3-C11-DR01-D2A1-F3-CAP60-01 — REPORT
+Executor: Claude Opus 5.5 (claude-opus-5-5), Claude Code, 2026-10-13. No subagents.
+To: ChatGPT GPT-6, Sole Nexus OS Architect.
+Evidence directory: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-f3-cap60-01 (outside the repository)
+
+FINAL STATUS: F3_INCOMPLETE
+
+F-3 ran once, on a local one-hunk experimental commit, with a 60,000,000-state ceiling, 16 GiB of memory, 45
+minutes and no swap. It reached the ceiling with 6,148,314 discovered states not expanded. No property is
+established. Time (12.9%) and memory (47.7%) were not what stopped it. Stages 1 to 3 passed. Stage 5 was a
+read-only diagnosis: C1 and C25 cannot be reported as their contract-named properties under the current
+explorer, and a contract clarification is needed. This is not contract acceptance.
+
+======================================================================================================
+A. VERIFIED IDENTITIES  (receipts/stage1/00-STAGE1-SUMMARY.txt, 01, 02, 03)
+  Source baseline   244c5b23244d1abd8b2b595c9e7654a25029a9f1 / tree 1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78
+                    = GitHub review/p3-c11-d2a1-source-r2 (git/commits and branch APIs). Parent 49e29cd3.
+  Contract          P3-C11-D2A1-CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+  Binding reviews   …RESPONSE-02-REVIEW-02.md 6dfb1456…cdce; …RESPONSE-03-REVIEW-01.md 1f964d75…fb35
+                    (4/4 OK in all four sealed copies; recovery zip 371d46b9…37b0; a copy is in contract/)
+  Campaign-01       93-file manifest: 93/93 OK, nothing missing or unlisted (SHA256SUMS 71c4135e…a759)
+  Earlier evidence  impl-01 5/5, impl-01r 55/55, f1-diag-01 7/7, f1-cap60-01 46/46, review-publish-01 10/10,
+                    source-r1 62/62, r1-publish-01 11/11, r2-publish-01 14/14, source-r2 86/86. Re-verified at the
+                    end, unchanged.
+  Receipts          F-1 PASS 31b9015c…, F-2 PASS 61fbff8b…, F-3 INCOMPLETE 5731ed93…: intact, and equal to the
+                    manifest
+  Conflicts         none: no build or explorer process, no scope, no f3-cap60 ref or worktree, no CI run
+  Frozen refs       GitHub repair/p3-candidate11 b1d535f1 (unchanged). GitHub refs: 179, identical to campaign-01's
+                    after-list, both before and after this mission.
+  Toolchain         rustc 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0 (85eff7c80), pinned by rust-toolchain.toml
+
+======================================================================================================
+B. EXPERIMENTAL COMMIT  (receipts/stage2/01-experimental-commit.txt)
+  Worktree /home/nexus/NEXUS/nexus-os-p3-c11-f3-cap60, local branch experiment/p3-c11-d2a1-f3-cap60. No upstream,
+  not pushed.
+  commit 9e945ee75e765c962cb072286581f49755ba702e   tree d06c618cb2f097ee969d6a2541701cfa51206903
+  parent 244c5b23244d1abd8b2b595c9e7654a25029a9f1
+  model_tests.rs blob beb48fe7 -> e7559309 (sha256 ede5ef7b… -> acf2b8d7…). 1 file, 1 hunk, +4 / -1:
+
+    @@ -4182,7 +4182,10 @@ fn full_f2() {
+     fn full_f3() {
+    -    full_exploration(&F3);
+    +    full_exploration(&Config {
+    +        cap: 60_000_000,
+    +        ..F3
+    +    });
+     }
+
+  Checked mechanically. The file is byte-identical outside the full_f3 body. FULL_CAP (30_000_000), BASE, F1..F8,
+  FPT, FB, FB2, FG, FW, FD, FR, X1..X5 and the time constants are unchanged. FPT and FB still derive from the F3
+  constant, so they keep 30M. full_f1's 60M override is preserved, and every other full_* body is unchanged.
+  protocol.rs, unit_tests.rs, ledger.rs, lib.rs, phase3_tests.rs and Cargo.lock have the same blobs as 244c5b23.
+
+======================================================================================================
+C. FRESH BUILD AND EXECUTABLE  (receipts/stage3/00-target-before-build.txt, 01, 02, 03, 04)
+  target/ was absent before the build. Command: CARGO_INCREMENTAL=0 nice -n 10 cargo test -p nexus-governed-control
+  --locked --release --lib --no-run -j 8. Exit 0, 274 crates compiled, 0 Fresh, 91.5 s.
+  [profile.release] opt-level 3, lto thin, codegen-units 16, strip symbols.
+  Executable  target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+              sha256 b09cdf811f0f93d396d1be40ab6c9f36146e8f438a92d456ea248906ab9c49fb, 8,635,520 bytes
+              (it differs from campaign-01's 39638e6f…, as expected for a different source)
+  Listing     275 tests, 16 ignored (the 15 full_* and rs01_t10). It is identical to campaign-01's 244c5b23 listing.
+  SOURCE-R2's temporary diagnostic test diag_r2_history_table is ABSENT from the listing (0 matches), the source
+  (0 files) and the executable's strings (0). Control check: 'full_f3' is found once.
+  Pinned: every run recorded EXPECT_EXE_SHA256 MATCH and cargo fresh True. The hash was the same at the end.
+  NOT CLAIMED: an independent or reproducible build. Only one build was made.
+
+======================================================================================================
+D. CHEAP GATES  (receipts/stage3/00-STAGE3-SUMMARY.txt; all on 9e945ee7, porcelain 0, nice 10, -j 8, --locked)
+  governed-control lib, release executable       259 passed, 0 failed, 16 ignored          exit 0
+  D2A-1 unit tests, release executable           29 passed                                 exit 0
+  git diff --check 244c5b23 HEAD; b1d535f1 HEAD  no output                                 exit 0; 0
+  cargo fmt --all -- --check                     no output                                 exit 0
+  clippy -p nexus-governed-control --all-targets -D warnings   0 warnings                  exit 0
+  clippy -p nexus-governed-control --lib -D warnings           0 warnings (artifacts reused from the line above)  exit 0
+  cargo test -p nexus-governed-control --locked (dev)  lib 259/0/16; egress 1; doctests 8  exit 0
+  X-1..X-5 through the launcher, release, pinned: each PASS. Counts identical to campaign-01:
+    X-1 59,104 / 219,196 (15,026)  X-2 10,020 / 26,188 (922)  X-3 25,617 / 81,573 (2,605)
+    X-4 3,106 / 10,097 (816)       X-5 3,311 / 7,757 (704)
+  Not run: the nexus-desktop-backend P3 guards. Campaign-01 stage2/19 (44 passed, at 244c5b23) is historical
+  supporting evidence only. It does not validate 9e945ee7. No workspace-wide command was run.
+
+======================================================================================================
+E. F-3 RAW RESULT  (receipts/stage4/full-F-3-cap60.txt; summary 00-STAGE4-SUMMARY.txt)
+  A executable   b09cdf811f0f93d396d1be40ab6c9f36146e8f438a92d456ea248906ab9c49fb (MATCH)
+  B invocation   systemd-run --user --scope --unit=p3c11-f3cap60-full-F-3-cap60--1791917953 -p MemoryMax=16G
+                 -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700 <exe>
+                 ledger::protocol::model_tests::full_f3 --exact --nocapture --test-threads=1 --ignored
+                 Exit 101: full_exploration asserts PASS, and the verdict was Incomplete. Scope Result=success.
+                 Printed bounds: both facts conflicting, ENV on, faults 2, admissions 2, gating 2,
+                 "caps 60000000 states, 2700s". Actors [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env].
+  C discovered   60,000,001
+  D expanded     53,851,687
+  E unexpanded    6,148,314
+  F transitions  257,109,574
+  G fault        23,572,207
+  H terminal     5,825 expanded states had no enabled step. D1 checked each one and none failed.
+  I dead ends    0 non-terminal among expanded states. Unexpanded states were never checked.
+  J properties   all 25: NOT ESTABLISHED (incomplete). No violation was found before the ceiling. That is not a
+                 PASS.
+  K L1           not run, because L1 runs only after a complete search. NOT ESTABLISHED.
+  L branches     53 listed labels taken, 37 not taken, 3 taken outside the list. The set is identical to the 30M
+                 run.
+  M peak memory  RSS 8,001,236 KiB (7.63 GiB). Scope memory.peak 8,203,206,656 B, 47.7% of 16 GiB.
+  N wall clock   5:49.21 (explorer 348.5 s), 12.9% of 45 min
+  O termination  the explorer's state-ceiling check (visited 60,000,001 > 60,000,000). Neither the time limit nor
+                 the memory limit fired.
+  No retry. The cap was not raised again. The model was not changed. No other full configuration was run.
+
+======================================================================================================
+F. RESOURCE ENFORCEMENT  (full-F-3-cap60.cgroup-samples.txt, 174 samples at 2 s)
+  Live scope: memory.max 17179869184, memory.swap.max 0. In every sample swap.current was 0, oom 0 and oom_kill 0.
+  Pre-flight MemAvailable was 53,908,512 KiB, against 18,874,368 KiB needed. During the run the host minimum was
+  46,018,012 KiB. Nothing was stopped: Ollama, the browsers and the desktop kept running.
+
+======================================================================================================
+G. COMPARISON WITH THE ORIGINAL 30M F-3 RECEIPT  (campaign-01 full-F-3.txt, 244c5b23, executable 39638e6f…)
+                     30M             60M             change
+  discovered         30,000,002      60,000,001      x2.00
+  expanded           25,318,697      53,851,687      x2.13
+  unexpanded          4,681,305       6,148,314      x1.31 (15.6% -> 10.2% of discovered)
+  transitions       126,307,617     257,109,574      x2.04   (fault 13,911,325 -> 23,572,207)
+  no enabled step         1,775           5,825      x3.28   (each one terminal)
+  peak RSS (KiB)      3,965,668       8,001,236      x2.02   (tables 3,264 -> 6,528 MiB)
+  wall clock            2:54.66         5:49.21      x2.00
+  Bounds other than the cap, actors, state-key fields and the branch set: identical.
+  Doubling the ceiling did not close the search. The frontier of unexpanded states got larger in absolute terms.
+  F-3's true size, and the ceiling it would need, remain unknown. This report extrapolates neither.
+
+======================================================================================================
+H. C1 / C25 ATTRIBUTION  (receipts/stage5/02-c1-c25-attribution.txt; excerpts in 01-source-excerpts.txt)
+  Read-only. No control was executed, E3 and E4 were not suppressed, nothing was relabelled, and nothing was edited.
+  Explorer facts (model_tests.rs 3805-3843, 3906-3935):
+  - It reports one property, the first violation found.
+  - A state's own properties are checked before any transition out of it.
+  - A successor's state properties are checked only when that successor is expanded.
+                  C1 (count -> flag), named P1 on F-1      C25 (Committed on Commit::Unknown), named P7 on F-1
+  1 expected      P1 (admission transition)                 P7 (state property)
+  2 earlier       E3 (state property)                       E4 (in step_gc, same transition that sets `told`)
+  3 P observable? NO. Any wrongly admitted state has        NO. `told` is set only there, and the ledger never
+                  unapplied 0 with Counted >= 1. That is    loses rows, so every P7 violation comes from an E4
+                  E3 of the same source state, checked      transition, reported before the P7 state is ever
+                  first. Earlier still: 2 Counted give      expanded. P7 and E4's gating half are the same
+                  flag 1 against 2.                         predicate, checked at two different times.
+  4 nature        Not merely reporting order. As written, contract 7.5 ("make ITS property fail") cannot be
+                  satisfied with this explorer. Each mutant is still killed by an assertion (E3 / E4). The named
+                  property is structurally masked.
+  5 evidence      (a) Run each control once as it is. Predicted: FAIL E3, FAIL E4.
+                  (b) Unit-level kills of the same defect: W1 for C1; gating_uncertain's assertion, used by T-MATRIX,
+                      T-CELL, T-GATE, T-RES, T-BIND, T-PB5 and W13, for C25.
+                  (c) Only if the named property must itself be seen: an out-of-repository diagnostic explorer that
+                      records every violation. That needs authorisation and would not be the contract receipt.
+                  (d) Independent review of the static argument.
+  6 clarification YES, for both: what counts as killing C1 and C25 (E3 / E4 as dominating kills, unit kills, or a
+                  diagnostic run). The executor does not choose.
+  The argument assumes only the contract's one-line definitions. CAMPAIGN-01's prepared encodings (never
+  executed, not evidence) fit it. Other 7.5 rows (for example C9/C10 against E4, C24 against P8) were not
+  analysed.
+
+======================================================================================================
+I. REMAINING ASSURANCE LIMITATIONS
+  1. F-3 has no verdict at 30M or at 60M. Its full graph, D1 on unexpanded states, and L1 are all unestablished.
+  2. F-PT and F-B are defined "as F-3" plus one change. They still carry 30M and are unmeasured. Their sizes are
+     not inferred from this run.
+  3. F-4..F-R (12 configurations), all 7.5 controls and the A4 comparison have no evidence at this source.
+  4. The F-1 and F-2 PASS results come from campaign-01 (244c5b23). They were not rerun here, as the mission
+     required. The 60M ceilings for F-1 and F-3 are experimental, not contract amendments.
+  5. Persistence assumptions A-1 and A-2 are stated and not discharged. Every exploration result depends on them.
+  6. The claim that the 60M run expanded a superset of the 30M run's states rests on a deterministic
+     breadth-first search with only the cap changed. It is inferred from code, not measured.
+  7. One build only. The P3 desktop guards were not run at 9e945ee7.
+  8. The C1/C25 conclusions are static analysis, not receipts.
+  9. Items still open from campaign-01 K and J.6: the R1 CAS wording; the cap check stops at cap + 1 or 2
+     (60,000,001 here); the stale mutation-manifest hashes. They are unchanged and not re-examined.
+
+======================================================================================================
+J. STATE LEFT, AND WHAT WAS NOT DONE  (receipts/final/01-ref-state-and-evidence-after.txt)
+  Experiment worktree at 9e945ee7 is clean. Its 2.2 GB target/ is kept; removal is the Owner's call.
+  Local branch experiment/p3-c11-d2a1-f3-cap60 has no upstream.
+  Primary checkout, SOURCE-R2 and campaign-01 worktrees: untouched, clean.
+  GitHub: 179 refs, identical before and after. 0 runs dispatched. The latest run is still 38319429125.
+  NOT DONE: no production change; no edit to protocol.rs, unit_tests.rs or any other full configuration; no
+  contract amendment; no mutation campaign; no control executed; no F-1/F-2 rerun; no second F-3 run; no CI; no
+  push; no integration; no manifest update; no merge into Candidate 11 or main; no ledger activation; no release;
+  no Phase Three declaration. Earlier sealed evidence is intact and unchanged.
+
+======================================================================================================
+K. SHA256 EVIDENCE MANIFEST
+  SHA256SUMS in this directory covers every file here except itself. Its own sha256 is in the reply that carries
+  this report. Key hashes:
+    9e945ee75e765c962cb072286581f49755ba702e / d06c618cb2f097ee969d6a2541701cfa51206903   experimental commit / tree
+    244c5b23244d1abd8b2b595c9e7654a25029a9f1 / 1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78   source baseline
+    b09cdf811f0f93d396d1be40ab6c9f36146e8f438a92d456ea248906ab9c49fb   pinned release test executable
+    acf2b8d72481aaaa8f21201c54d75b1b0584d4794eaa183fd48bde8bc74c2a4f   model_tests.rs at 9e945ee7
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+  Receipt hashes for full-F-3-cap60.txt and the others are in SHA256SUMS.
+
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect. Decisions that remain with the Architect and the Owner:
+how F-3, F-PT and F-B are to reach a verdict, and how 7.5 attribution is to be read for C1 and C25.

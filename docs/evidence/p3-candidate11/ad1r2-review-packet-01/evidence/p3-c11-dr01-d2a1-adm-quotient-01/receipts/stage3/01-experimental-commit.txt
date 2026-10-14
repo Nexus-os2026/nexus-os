@@ -1,0 +1,26 @@
+STAGE 3 — EXPERIMENTAL COMMIT — 2026-10-13T20:48:53+01:00
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-adm-quotient  branch experiment/p3-c11-d2a1-adm-quotient  upstream: fatal: no upstream configured for branch 'experiment/p3-c11-d2a1-adm-quotient'
+commit 83816e66916c3a217ab7919d7e6a21893e7d579a  tree 74a6a0e5add063dac4d24939b3a62c619847dd3a  parent 244c5b23244d1abd8b2b595c9e7654a25029a9f1
+== files changed vs 244c5b23
+M	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+1220	0	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+== hunks
+@@ -4814,0 +4815,1220 @@ fn e8_holds_for_stale_worker_operations() {
+== deleted or modified baseline lines: 0
+== first 4814 lines of the new file vs the baseline file
+IDENTICAL (explore, successors, step_adm, admission_properties, terminal, every config constant, FULL_CAP, DEFAULT_CAP, full_* bodies)
+model_tests.rs blob beb48fe7 -> fad0ffb0ed243bbd445191bc7963b075bde13b5a; sha256 ede5ef7b… -> 6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb; lines 4814 -> 6034
+== other D2A-1 files: blob equality with 244c5b23
+  crates/nexus-governed-control/src/ledger/protocol.rs a2df2841b99cad5d452008a6d4150e9369d07e66 SAME
+  crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs 55dc66409eaccdaa93e8f0a56f2ccb14be81e114 SAME
+  crates/nexus-governed-control/src/ledger.rs d872b90816fdd18cca8e5d1a0005bb49434aaf2a SAME
+  crates/nexus-governed-control/src/lib.rs b806ed577f8d3472b7187d161246e08d2f1ccd3d SAME
+  app/src-tauri/src/phase3_tests.rs 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83 SAME
+  Cargo.lock 1af53a60aaf6fde5731e63fcd5b6cd11d86f669a SAME
+  Cargo.toml 2c558a4477d1545daaa489f0a0e502b4284ad479 SAME
+  crates/nexus-governed-control/Cargo.toml 2543c745d661203326367962714b94c811e07980 SAME
+  rust-toolchain.toml 726005b29561a04536edea412bf551a9884d6639 SAME
+== git diff --check 244c5b23 HEAD
+  no output, exit 0
+== porcelain (incl. ignored): 0 lines
+== patch: receipts/stage3/0001-experimental-commit.patch sha256 b81600562a525f823bc2fe4b99736320c37a2da690ed6e470a2e396f79d7a160

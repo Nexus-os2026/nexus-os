@@ -1,0 +1,52 @@
+MUTATION-CONTROL MANIFEST — recorded source hashes vs the candidate tree (read only; the manifest is NOT edited)
+manifest docs/evidence/p3-candidate10/original-183/manifest.json at 244c5b23244d1abd8b2b595c9e7654a25029a9f1: sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14 (183 controls; base 9d5fdf95920b)
+  manifest at 9d5fdf95920b (manifest base): absent
+  manifest at 862a11cef284 (D2A-1 contract base): sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+  manifest at b1d535f1bb63 (Candidate 11 (GitHub repair/p3-candidate11)): sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+  manifest at 22ebf9a5c5b1 (D2A-1 commit): sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14
+recorded (control, file) hashes: 184 over 39 files
+
+Stale count at each point (recorded hash != that commit's file):
+  9d5fdf95920b manifest base                                 stale 21
+  862a11cef284 D2A-1 contract base                           stale 3
+  b1d535f1bb63 Candidate 11 (GitHub repair/p3-candidate11)   stale 7
+  22ebf9a5c5b1 D2A-1 commit                                  stale 22
+  244c5b23244d this candidate                                stale 22
+
+STALE AT 244c5b23: 22 recorded hashes in 6 file(s); every other recorded hash matches
+  app/src-tauri/src/phase3_tests.rs
+    recorded       2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+    at 244c5b23    b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8
+    first stale at: D2A-1 commit
+    controls (14): M32 M78 M79 M80 M89 M112 M113 M141 M143 M153 M177 M178 M179 M180
+  crates/nexus-governed-control/src/authority/approval.rs
+    recorded       f34be06d927e59884f219e3b31bc57916ad3da6bc3bc65120d8e8c9fd2252c6c
+    at 244c5b23    34f849b502782f0c6a046c9fd2d5ceb50bf497a54e52e591339630670db49202
+    first stale at: Candidate 11 (GitHub repair/p3-candidate11)
+    controls (1): M84
+  crates/nexus-governed-control/src/authority/mod.rs
+    recorded       f4eca418d66a239148087efba96b88c41547699c60a8929bafcbc89f88e7ae32
+    at 244c5b23    ae99b2f59794470c4899396861c4942ba5db2e2e338fb3aeab8712be6c217013
+    first stale at: Candidate 11 (GitHub repair/p3-candidate11)
+    controls (1): M05
+  crates/nexus-governed-control/src/authority/run.rs
+    recorded       33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725
+    at 244c5b23    394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6
+    first stale at: Candidate 11 (GitHub repair/p3-candidate11)
+    controls (2): M45 M129
+  crates/nexus-governed-control/src/broker.rs
+    recorded       471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e
+    at 244c5b23    353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4
+    first stale at: D2A-1 contract base
+    controls (3): M18 M19 M39
+  crates/nexus-governed-control/src/lib.rs
+    recorded       53c37d97f90ede471aff8cf6da93f9323c6915120626e94554788f45cd5b7f46
+    at 244c5b23    addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d
+    first stale at: D2A-1 commit
+    controls (1): M87
+
+Attribution. gc/lib.rs (M87) and P3 (14 controls) went stale with the D2A-1 commit 22ebf9a5; this is the
+mapping IMPL-01R reported (receipts/05-manifest-stale-mappings.txt), which examined only those two files.
+The other 7 (M05, M18, M19, M39, M45, M84, M129) are stale already at Candidate 11 b1d535f1, before D2A-1;
+D2A-1, SOURCE-R1 and SOURCE-R2 do not touch those files. They were not in IMPL-01R's report. No mutation
+result depending on any stale entry is relied on in this campaign. The manifest is not edited.

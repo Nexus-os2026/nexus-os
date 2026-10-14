@@ -1,0 +1,68 @@
+STAGE 4 [1] independent checks of the F-B receipt — 2026-10-14T01:14:53+01:00
+## [1] receipt identity
+   gc-symmetry-full-F-B.txt sha256 26c4fba2e6f421f193a29ea928005b4bbb6bd33c7d9a5912c661b3db13985fd0, 204 lines
+   gc-symmetry-full-F-B.cgroup-samples.txt sha256 5cac1abc83f48bdac471740890ecdc737f4bc919b4c1a315beab6ac6040815e3, 33 lines
+## [2] selection, pin and test identity
+   commit: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  HEAD: HEAD
+   worktree clean: yes
+   pinned sha256: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af — MATCH
+     selected: ledger::protocol::model_tests::gc_symmetry_fb: test
+   selected test count: 1
+   executable sha256 after the run: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+   worktree clean after the run: yes
+   'running 1 test': 1; test lines: 1 -> test ledger::protocol::model_tests::gc_symmetry_fb
+   EXPLORATION header: EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)
+   no substitution: occurrences of full_fb / SYM-B / SYM-BI in the receipt: 0 / 0 / 0
+## [3] limits in force (live scope values, sampler)
+   scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-ptfb-fb-1791936809.scope
+   memory.max: 17179869184
+   memory.swap.max: 0
+   RuntimeMaxUSec (live): 45min 10s
+## [4] configuration evidence (bounds and actors printed by the run)
+   batch true; A4 false; faults 2; admissions 2; gating 2; caps 30000000 states, 2700s
+   actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm, Env] — one writer Fw(0) (the batch writer carrying members [0,1]) in place of Fw(0), Fw(1)
+   F-3's bounds line differs from F-B's only in 'batch': YES
+   batch steps taken (branch evidence of the two-member path):
+         [taken    ] append_facts: Committed (inserted)
+         [taken    ] append_facts: Committed (already present)
+         [taken    ] append_facts: NotApplied NotWritten Entry(NotHealthy)
+         [taken    ] append_facts: NotApplied NotWritten Entry(Latched)
+         [taken    ] append_facts: NotApplied NotWritten Storage
+         [taken    ] append_facts: NotApplied NotWritten Constraint
+         [taken    ] append_facts: NotApplied Uncertain Constraint
+         [taken    ] append_facts: NotApplied Uncertain Storage
+         [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)
+         [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)
+         [taken    ] append_facts: NotApplied NotWritten Conflict(explained)
+         [taken    ] append_facts: unwound before any insert
+         [taken    ] append_facts: unwound after an insert was issued
+## [5] internal consistency of the printed counts
+   keys discovered K       3775373
+   keys expanded           3775373
+   keys unexpanded         0
+   admission evaluations   3775373   admitted 310
+   self-mirrored keys Kf   156463
+   L1 non-fault edges = transitions - fault edges: 10450200 = 10450200 -> EQUAL; end states 10821 = no-step 10821 -> EQUAL
+   evaluations == keys: YES
+   cap headroom: 30,000,000 - 3,775,373 = 26224627 keys (12.6% of the cap used); time: explorer 51.2 s of 2,700 s (1.9%)
+## [6] guards and failures
+   'symmetry inapplicable' 0; 'quotient inapplicable' 0; 'panicked' 0; FAIL lines 0; INCOMPLETE lines 0; NOT ESTABLISHED 0
+## [7] branches (listed taken excludes only the '(not in the listed set)' lines)
+   F-3 listed taken 53, listed NOT TAKEN 37, outside the list 3
+   F-PT listed taken 52, listed NOT TAKEN 38, outside the list 3
+   F-B listed taken 53, listed NOT TAKEN 37, outside the list 3
+   diff F-3 (<) vs F-B (>):
+     (diff exit 0: 0 = identical)
+   outside-the-list labels (F-B):
+         [taken    ] append_cell C: Refused(Latched) (not in the listed set)
+         [taken    ] append_cell C: Refused(NotHealthy) (not in the listed set)
+         [taken    ] append_cell X: Refused(NotHealthy) (not in the listed set)
+## [8] resources
+   /usr/bin/time: max RSS 488348 KiB; wall 0:51.30; user 50.85 s; sys 0.43 s; CPU 99%; Swaps 0; major faults 0
+   samples 26; memory.peak max 478470144 B (2.8% of 16 GiB); memory.swap.current max 0 B; oom 0 oom_kill 0; host MemAvailable min 53692912 KiB
+   samples with memory.swap.current != 0: 0
+## [9] termination
+   normal completion: queue emptied below the cap, Kahn L1 complete, assertion PASS, exit status: 0; scope Result=success ActiveState=inactive 
+## [10] after the run
+   p3c11 scopes: 0; test executables running: 0
+   pinned executable now 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af; worktree porcelain 0; ollama 1

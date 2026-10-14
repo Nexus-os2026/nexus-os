@@ -1,0 +1,36 @@
+DISPOSAL OF THE TWO DISPOSABLE PROBE WORKTREES  2026-10-14T01:49:02+01:00
+Authorised by the mission (Stage 4: 'After the probes, discard disposable mutant worktrees').
+
+[c1] /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1
+  HEAD 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda (detached: HEAD)
+  porcelain:
+     M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+  protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66 (restored = base a2df2841)
+  model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 (= witness 5ad26ddc)
+  diff vs base equals patches/witness-source.patch: YES
+  commits on it beyond base: 0
+  target/ size: 733M
+  processes with cwd or exe in it: 0
+
+[c25] /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25
+  HEAD 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda (detached: HEAD)
+  porcelain:
+     M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+  protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66 (restored = base a2df2841)
+  model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 (= witness 5ad26ddc)
+  diff vs base equals patches/witness-source.patch: YES
+  commits on it beyond base: 0
+  target/ size: 733M
+  processes with cwd or exe in it: 0
+
+removal:
+  removed /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1
+  absent: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1
+  removed /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25
+  absent: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25
+worktrees now: 142
+/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness                2d83b74b [experiment/p3-c11-d2a1-ad1r1-witness-01]
+/home/nexus/NEXUS/nexus-os-p3-c11-closure-prep                 2d83b74b [experiment/p3-c11-d2a1-closure-prep-01]
+/home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3                    77a146ca (detached HEAD)
+/home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment             2d83b74b (detached HEAD)
+/home/nexus/NEXUS/nexus-os-p3-candidate11                      e71b982b [repair/p3-candidate11]

@@ -1,0 +1,49 @@
+GATE stage5/38-d2a1-unit-tests
+commit: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b  tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282  HEAD: experiment/p3-c11-d2a1-ad1r1-witness-01 (experimental branch expected)
+worktree porcelain: 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+environment: CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target; cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness
+command: nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::unit_tests
+pinned executable before: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+started: 2026-10-14T01:50:50+01:00
+--------------------------------------------------------------------------------
+
+running 29 tests
+test ledger::protocol::unit_tests::t_ack_each_test_refuses_alone ... ok
+test ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger ... ok
+test ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends ... ok
+test ledger::protocol::unit_tests::t_gate_every_re_offer ... ok
+test ledger::protocol::unit_tests::t_limit_every_end ... ok
+test ledger::protocol::unit_tests::t_matrix_cells ... ok
+test ledger::protocol::unit_tests::t_own_tickets_snapshots_and_the_worker_cannot_be_cloned ... ok
+test ledger::protocol::unit_tests::t_pb1_after_the_publication_view_refuses ... ok
+test ledger::protocol::unit_tests::t_pb2_before_the_publication_the_word_is_unchanged ... ok
+test ledger::protocol::unit_tests::t_pb3_expire_counts_at_its_exchange ... ok
+test ledger::protocol::unit_tests::t_pb4_a_concurrent_confirm_is_not_lost ... ok
+test ledger::protocol::unit_tests::t_matrix_every_operation_in_every_state ... ok
+test ledger::protocol::unit_tests::t_res_every_resolve_row ... ok
+test ledger::protocol::unit_tests::t_pb5_every_unwinding_verb_leaves_one_publication ... ok
+test ledger::protocol::unit_tests::t_prec_persistence_of_every_ending ... ok
+test ledger::protocol::unit_tests::the_view_reads_every_field ... ok
+test ledger::protocol::unit_tests::w11_an_unknown_commit_and_a_clean_rollback ... ok
+test ledger::protocol::unit_tests::w2_a_refused_conflict_is_remembered_across_env ... ok
+test ledger::protocol::unit_tests::w13_two_histories_two_exits ... ok
+test ledger::protocol::unit_tests::w10_an_expiry_before_entry ... ok
+test ledger::protocol::unit_tests::w12_a_lookup_conflict_then_explain ... ok
+test ledger::protocol::unit_tests::w3_a_later_explanation_stays_above_the_frontier ... ok
+test ledger::protocol::unit_tests::w4_the_agenda_frontier_covers_both_acknowledgements ... ok
+test ledger::protocol::unit_tests::w6_one_identity_under_two_contents ... ok
+test ledger::protocol::unit_tests::w5_a_late_constraint_and_a_failed_rollback ... ok
+test ledger::protocol::unit_tests::w8_a_resolved_acknowledgement_survives_the_worker ... ok
+test ledger::protocol::unit_tests::w9_a_dropped_counted_ticket ... ok
+test ledger::protocol::unit_tests::w1_admission_waits_for_every_handover ... ok
+test ledger::protocol::unit_tests::w7_an_old_token_is_stale ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 318 filtered out; finished in 0.00s
+
+peak RSS (KiB, /usr/bin/time): 5676; wall: 0.00 s; user 0.00 s; sys 0.00 s
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:50:50+01:00
+pinned executable after: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+worktree porcelain after: 0

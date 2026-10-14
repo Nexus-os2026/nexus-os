@@ -1,0 +1,683 @@
+GATE stage5/21-test-dev-default-suite
+commit: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b  tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282  HEAD: experiment/p3-c11-d2a1-ad1r1-witness-01 (experimental branch expected)
+worktree porcelain: 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+environment: CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target; cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness
+command: nice -n 10 cargo test -p nexus-governed-control --locked -j 8
+pinned executable before: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+started: 2026-10-14T01:51:03+01:00
+--------------------------------------------------------------------------------
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.183
+   Compiling cfg-if v1.0.4
+   Compiling version_check v0.9.5
+   Compiling serde_core v1.0.228
+   Compiling smallvec v1.15.1
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.42
+   Compiling siphasher v1.0.2
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling typenum v1.19.0
+   Compiling generic-array v0.14.9
+   Compiling cc v1.2.57
+   Compiling once_cell v1.21.4
+   Compiling bytes v1.11.1
+   Compiling subtle v2.6.1
+   Compiling bitflags v2.11.0
+   Compiling pin-project-lite v0.2.17
+   Compiling itoa v1.0.17
+   Compiling syn v2.0.117
+   Compiling parking_lot_core v0.9.12
+   Compiling scopeguard v1.2.0
+   Compiling memchr v2.8.0
+   Compiling lock_api v0.4.14
+   Compiling futures-core v0.3.32
+   Compiling vcpkg v0.2.15
+   Compiling getrandom v0.2.17
+   Compiling pkg-config v0.3.32
+   Compiling new_debug_unreachable v1.0.6
+   Compiling rand_core v0.6.4
+   Compiling stable_deref_trait v1.2.1
+   Compiling log v0.4.29
+   Compiling crypto-common v0.1.6
+   Compiling socket2 v0.6.3
+   Compiling mio v1.1.1
+   Compiling futures-sink v0.3.32
+   Compiling parking_lot v0.12.5
+   Compiling phf_shared v0.13.1
+   Compiling precomputed-hash v0.1.1
+   Compiling fastrand v2.3.0
+   Compiling futures-io v0.3.32
+   Compiling slab v0.4.12
+   Compiling phf_generator v0.13.1
+   Compiling siphasher v0.3.11
+   Compiling utf-8 v0.7.6
+   Compiling futures-task v0.3.32
+   Compiling block-buffer v0.10.4
+   Compiling cpufeatures v0.2.17
+   Compiling digest v0.10.7
+   Compiling futures-util v0.3.32
+   Compiling openssl-sys v0.9.116
+   Compiling phf_shared v0.11.3
+   Compiling writeable v0.6.2
+   Compiling httparse v1.10.1
+   Compiling litemap v0.8.1
+   Compiling phf_shared v0.10.0
+   Compiling tracing-core v0.1.36
+   Compiling icu_normalizer_data v2.1.1
+   Compiling try-lock v0.2.5
+   Compiling icu_properties_data v2.1.2
+   Compiling tower-service v0.3.3
+   Compiling crossbeam-utils v0.8.21
+   Compiling want v0.3.1
+   Compiling phf_codegen v0.13.1
+   Compiling string_cache_codegen v0.6.1
+   Compiling futures-channel v0.3.32
+   Compiling ring v0.17.14
+   Compiling tracing v0.1.44
+   Compiling ahash v0.8.12
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.16.1
+   Compiling percent-encoding v2.3.2
+   Compiling web_atoms v0.2.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling http v1.4.0
+   Compiling rand_chacha v0.3.1
+   Compiling mac v0.1.1
+   Compiling openssl v0.10.80
+   Compiling indexmap v2.13.0
+   Compiling rustix v1.1.4
+   Compiling rand v0.8.6
+   Compiling synstructure v0.13.2
+   Compiling syn v1.0.109
+   Compiling semver v1.0.27
+   Compiling fnv v1.0.7
+   Compiling phf_generator v0.10.0
+   Compiling phf_generator v0.11.3
+   Compiling foreign-types-shared v0.1.1
+   Compiling phf_codegen v0.10.0
+   Compiling http v0.2.12
+   Compiling foreign-types v0.3.2
+   Compiling string_cache_codegen v0.5.4
+   Compiling rustc_version v0.4.1
+   Compiling http-body v1.0.1
+   Compiling futf v0.1.5
+   Compiling markup5ever v0.11.0
+   Compiling native-tls v0.2.18
+   Compiling linux-raw-sys v0.12.1
+   Compiling autocfg v1.5.0
+   Compiling untrusted v0.9.0
+   Compiling phf v0.10.1
+   Compiling hashbrown v0.14.5
+   Compiling curve25519-dalek v4.1.3
+   Compiling serde_derive v1.0.228
+   Compiling zerofrom-derive v0.1.6
+   Compiling yoke-derive v0.8.1
+   Compiling tokio-macros v2.6.1
+   Compiling zerovec-derive v0.11.2
+   Compiling displaydoc v0.2.5
+   Compiling tokio v1.50.0
+   Compiling zeroize_derive v1.4.3
+   Compiling phf_macros v0.13.1
+   Compiling openssl-macros v0.1.1
+   Compiling zerofrom v0.1.6
+   Compiling yoke v0.8.1
+   Compiling zerovec v0.11.5
+   Compiling zeroize v1.8.2
+   Compiling zerotrie v0.2.3
+   Compiling phf v0.13.1
+   Compiling rustls-pki-types v1.14.0
+   Compiling num-traits v0.2.19
+   Compiling tinystr v0.8.2
+   Compiling potential_utf v0.1.4
+   Compiling tendril v0.4.3
+   Compiling icu_locale_core v2.1.1
+   Compiling icu_collections v2.1.1
+   Compiling form_urlencoded v1.2.2
+   Compiling tendril v0.5.0
+   Compiling zmij v1.0.21
+   Compiling getrandom v0.4.2
+   Compiling rustls v0.23.45
+   Compiling icu_provider v2.1.1
+   Compiling ipnet v2.12.0
+   Compiling icu_properties v2.1.2
+   Compiling icu_normalizer v2.1.1
+   Compiling utf8_iter v1.0.4
+   Compiling openssl-probe v0.2.1
+   Compiling rustls-webpki v0.103.15
+   Compiling string_cache v0.9.0
+   Compiling string_cache v0.8.9
+   Compiling idna_adapter v1.2.1
+   Compiling idna v1.1.0
+   Compiling tokio-util v0.7.18
+   Compiling markup5ever v0.38.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling http-body v0.4.6
+   Compiling libsqlite3-sys v0.28.0
+   Compiling socket2 v0.5.10
+   Compiling inout v0.1.4
+   Compiling simd-adler32 v0.3.8
+   Compiling pin-utils v0.1.0
+   Compiling serde_json v1.0.149
+   Compiling thiserror v2.0.18
+   Compiling h2 v0.3.27
+   Compiling crossbeam-epoch v0.9.20
+   Compiling crc32fast v1.5.0
+   Compiling httpdate v1.0.3
+   Compiling atomic-waker v1.1.2
+   Compiling ryu v1.0.23
+   Compiling hyper v1.8.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling cipher v0.4.4
+   Compiling url v2.5.8
+   Compiling tokio-native-tls v0.3.1
+   Compiling thiserror-impl v2.0.18
+   Compiling sha2 v0.10.9
+   Compiling universal-hash v0.5.1
+   Compiling sync_wrapper v1.0.2
+   Compiling aho-corasick v1.1.4
+   Compiling rustversion v1.0.22
+   Compiling html5ever v0.26.0
+   Compiling adler2 v2.0.1
+   Compiling opaque-debug v0.3.1
+   Compiling portable-atomic v1.13.1
+   Compiling regex-syntax v0.8.10
+   Compiling base64 v0.22.1
+   Compiling hyper v0.14.32
+   Compiling signature v2.2.0
+   Compiling cfg_aliases v0.2.1
+   Compiling tower-layer v0.3.3
+   Compiling base64 v0.21.7
+   Compiling iana-time-zone v0.1.65
+   Compiling chrono v0.4.44
+   Compiling rustls-pemfile v1.0.4
+   Compiling tower v0.5.3
+   Compiling regex-automata v0.4.18
+   Compiling nix v0.29.0
+   Compiling ed25519 v2.2.3
+   Compiling tokio-rustls v0.26.4
+   Compiling hyper-util v0.1.20
+   Compiling polyval v0.6.2
+   Compiling miniz_oxide v0.8.9
+   Compiling hyper-tls v0.5.0
+   Compiling html5ever v0.38.0
+   Compiling xml5ever v0.38.0
+   Compiling xml5ever v0.17.0
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling webpki-roots v1.0.6
+   Compiling hashlink v0.9.1
+   Compiling encoding_rs v0.8.35
+   Compiling sync_wrapper v0.1.2
+   Compiling mime v0.3.17
+   Compiling winnow v0.7.15
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling toml_write v0.1.2
+   Compiling iri-string v0.7.10
+   Compiling option-ext v0.2.0
+   Compiling fallible-iterator v0.3.0
+   Compiling base64ct v1.8.3
+   Compiling dirs-sys v0.4.1
+   Compiling password-hash v0.5.0
+   Compiling markup5ever_rcdom v0.38.0+unofficial
+   Compiling reqwest v0.11.27
+   Compiling hyper-rustls v0.27.7
+   Compiling markup5ever_rcdom v0.2.0
+   Compiling regex v1.12.3
+   Compiling crossbeam-deque v0.8.6
+   Compiling flate2 v1.1.9
+   Compiling ghash v0.5.1
+   Compiling toml_edit v0.22.27
+   Compiling tower-http v0.6.8
+   Compiling ed25519-dalek v2.2.0
+   Compiling uuid v1.22.0
+   Compiling rusqlite v0.31.0
+   Compiling x25519-dalek v2.0.1
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling xattr v1.6.1
+   Compiling dashmap v6.1.0
+   Compiling http-body-util v0.1.3
+   Compiling crossbeam-queue v0.3.12
+   Compiling crossbeam-channel v0.5.15
+   Compiling hmac v0.12.1
+   Compiling blake2 v0.10.6
+   Compiling aead v0.5.2
+   Compiling filetime v0.2.27
+   Compiling linux-keyutils v0.2.5
+   Compiling spinning_top v0.3.0
+   Compiling no-std-compat v0.4.1
+   Compiling futures-timer v3.0.3
+   Compiling winnow v0.6.26
+   Compiling nexus-kernel v10.6.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/kernel)
+   Compiling nonzero_ext v0.3.0
+   Compiling lazy_static v1.5.0
+   Compiling hex v0.4.3
+   Compiling governor v0.7.0
+   Compiling readability v0.3.0
+   Compiling tempfile v3.27.0
+   Compiling keyring v3.6.3
+   Compiling nexus-persistence v10.6.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/persistence)
+   Compiling crossbeam v0.8.4
+   Compiling tar v0.4.46
+   Compiling argon2 v0.5.3
+   Compiling aes-gcm v0.10.3
+   Compiling hkdf v0.12.4
+   Compiling toml v0.8.23
+   Compiling reqwest v0.12.28
+   Compiling nexus-crypto v0.1.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/crates/nexus-crypto)
+   Compiling cron v0.15.0
+   Compiling arc-swap v1.9.1
+   Compiling htmd v0.5.4
+   Compiling dirs v5.0.1
+   Compiling fdeflate v0.3.7
+   Compiling gethostname v1.1.0
+   Compiling x11rb-protocol v0.13.2
+   Compiling bs58 v0.5.1
+   Compiling png v0.18.1
+   Compiling unicode-segmentation v1.12.0
+   Compiling x11rb v0.13.2
+   Compiling nexus-governed-control v0.1.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/crates/nexus-governed-control)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 45.43s
+     Running unittests src/lib.rs (target/debug/deps/nexus_governed_control-4a8b436531161fa8)
+
+running 347 tests
+test authority::tests::a_commitment_rests_on_a_live_grant_of_its_own_kind ... ok
+test authority::tests::a_declined_approval_denies_the_commitment ... ok
+test authority::tests::a_commitment_is_consumed_exactly_once ... ok
+test authority::tests::a_forged_or_unknown_identity_names_nothing ... ok
+test authority::tests::a_failure_or_an_abandoned_guard_still_finalizes ... ok
+test authority::tests::a_revoked_grant_or_a_moved_policy_generation_ends_unconsumed_commitments ... ok
+test authority::tests::a_parsed_display_identity_grants_nothing_more_than_the_original ... ok
+test authority::tests::a_changed_target_or_parameters_fail_the_start ... ok
+test authority::tests::a_failed_record_leaves_nothing_approved_authorized_or_started ... ok
+test authority::tests::an_approval_keeps_its_identity_apart_from_the_requests_content ... ok
+test authority::tests::a_cancellation_while_the_start_is_recorded_wins ... ok
+test authority::tests::an_expired_grant_is_not_live ... ok
+test authority::tests::an_approval_requested_then_invalidated_during_the_dialog_is_refused ... ok
+test authority::tests::an_approval_cannot_be_replayed_or_survive_a_change ... ok
+test authority::tests::an_unrecorded_authorization_authorizes_nothing ... ok
+test authority::tests::an_emergency_stop_cancels_every_run_and_refuses_new_ones ... ok
+test authority::tests::a_suspended_machine_does_not_extend_a_grant_or_a_commitment ... ok
+test authority::tests::an_expired_commitment_cannot_be_authorized_or_started ... ok
+test authority::tests::a_reentrant_sink_never_deadlocks_the_authority ... ok
+test authority::tests::a_sweep_ends_every_commitment_that_can_no_longer_start ... ok
+test authority::tests::an_r1_commitment_runs_once_and_is_finalized_with_evidence ... ok
+test authority::tests::another_agent_or_another_run_cannot_use_a_commitment ... ok
+test authority::tests::an_executing_commitment_stays_covered_only_while_its_grants_are_live ... ok
+test authority::tests::bounded_summaries_and_bounded_evidence ... ok
+test authority::tests::cancellation_before_the_effect_stops_everything_pending ... ok
+test authority::tests::evidence_carries_parameters_only_salted ... ok
+test authority::tests::finishing_a_run_sets_its_token ... ok
+test authority::tests::cancellation_during_execution_is_seen_and_recorded_truthfully ... ok
+test authority::tests::evidence_comes_first_nothing_unrecorded_is_created_or_started ... ok
+test authority::tests::finishing_a_run_ends_what_it_left_and_releases_what_it_owns ... ok
+test authority::tests::a_panicking_sink_poisons_no_authority_lock ... ok
+test authority::tests::a_slow_start_record_holds_no_lock_and_makes_nothing_executable ... ok
+test authority::tests::identities_are_opaque_and_validated ... ok
+test authority::tests::grant_evidence_keeps_every_line_of_the_scope ... ok
+test authority::tests::no_transition_is_in_effect_before_its_record ... ok
+test authority::tests::rs01_t13_a_resume_whose_record_fails_lifts_nothing ... ok
+test authority::tests::rs01_t1_a_stop_during_the_resume_dialog_is_not_lifted ... ok
+test authority::tests::a_commitment_starts_exactly_once_while_its_start_is_recorded ... ok
+test authority::tests::rs01_t3b_quitting_during_the_resume_dialog_writes_no_record ... ok
+test authority::tests::rs01_t4b_a_resume_after_quitting_is_refused_also_when_not_stopped ... ok
+test authority::tests::rs01_t4_a_resume_after_quitting_asks_nobody ... ok
+test authority::tests::rs01_t5_an_exhausted_stop_number_never_wraps_and_stays_stopped ... ok
+test authority::tests::rs01_t5b_exhaustion_during_the_dialog_refuses_the_resume ... ok
+test authority::tests::rs01_t2_a_stop_while_the_resumed_record_is_written_is_not_lifted ... ok
+test authority::tests::no_wide_or_unusual_blank_is_shown_as_itself ... ok
+test authority::tests::r2_needs_the_native_approval_of_exactly_that_commitment ... ok
+test authority::tests::nothing_the_owner_approves_is_cut_or_disguised ... ok
+test authority::tests::rs01_t3_quitting_while_the_resumed_record_is_written_lifts_nothing ... ok
+test authority::tests::concurrent_starts_consume_a_commitment_once ... ok
+test authority::tests::stop_measurement::rs01_t10_the_registry_stop_seen_from_outside_its_lock ... ignored, RS-01 T10: a diagnostic measurement, run only by its own command after T10a
+test authority::tests::shown_text_cannot_imitate_an_escape_or_draw_over_its_neighbours ... ok
+test authority::tests::rs01_t6_each_stop_says_whether_the_one_before_it_was_lifted ... ok
+test authority::tests::stop_measurement::rs01_t10b_the_controller_accepts_nothing_after_its_deadline ... ok
+test authority::tests::wall_clock_expiry_ends_a_commitment_while_its_grant_stays_live ... ok
+test broker::tests::a_credential_from_the_environment_is_refused ... ok
+test authority::tests::rs01_t12_a_resume_overtaken_by_a_newer_stop_that_was_lifted_is_superseded ... ok
+test authority::tests::rs01_t7_a_second_resume_of_the_same_stop_is_told_the_truth ... ok
+test broker::tests::a_commitment_cannot_release_a_lease_it_does_not_list ... ok
+test authority::tests::rs01_t5c_exhaustion_while_the_record_is_written_refuses_the_resume ... ok
+test broker::tests::a_proposal_refused_before_its_commitment_ends_its_lease ... ok
+test broker::tests::a_lease_ends_with_its_commitment_its_run_or_its_expiry ... ok
+test broker::tests::a_failed_vault_read_leaves_the_lease_unusable ... ok
+test broker::tests::a_lease_that_expires_while_its_release_is_recorded_reads_no_secret ... ok
+test broker::tests::a_lease_is_bound_to_its_origin_agent_and_run ... ok
+test authority::tests::what_the_owner_is_shown_reads_as_exactly_what_it_is ... ok
+test broker::tests::a_lease_releases_its_secret_once_to_its_commitment_only ... ok
+test authority::tests::rs01_t8_the_stop_and_the_compare_and_clear_each_hold_the_runs_lock_once ... ok
+test broker::tests::a_refused_preparation_ends_its_lease ... ok
+test broker::tests::a_run_cancelled_while_the_release_is_recorded_reads_no_secret ... ok
+test broker::tests::an_emergency_stop_while_the_release_is_recorded_reads_no_secret ... ok
+test broker::tests::a_release_refused_after_its_record_ends_its_commitment_cancelled ... ok
+test broker::tests::without_a_vault_every_credential_is_unavailable ... ok
+test browser::cdp::tests::nothing_is_sent_after_a_stop ... ok
+test broker::tests::a_run_cancelled_while_the_vault_is_read_gets_no_header ... ok
+test broker::tests::a_run_finished_while_the_release_is_recorded_reads_no_secret ... ok
+test broker::tests::an_uninterrupted_release_records_once_reads_once_and_returns_its_header ... ok
+test broker::tests::a_sink_reentering_the_authority_and_the_broker_during_the_release_does_not_deadlock ... ok
+test authority::tests::stop_measurement::rs01_t10a_the_receipt_claims_only_what_the_controller_received ... ok
+test browser::tests::a_machine_browser_policy_anywhere_the_browser_reads_one_refuses_it ... ok
+test browser::tests::a_probe_failing_while_the_page_changes_is_asked_again ... ok
+test browser::tests::a_path_others_could_replace_is_named ... ok
+test broker::tests::leases_are_issued_released_and_ended_with_no_lock_held_across_a_record ... ok
+test authority::tests::whatever_ends_a_commitment_while_its_transition_is_recorded_wins ... ok
+test authority::tests::rs01_t11_a_poisoned_runs_lock_lifts_nothing ... ok
+test authority::tests::no_authority_lock_is_held_while_any_record_is_written ... ok
+test browser::tests::a_report_is_cut_on_a_character_boundary ... ok
+test authority::tests::ended_grants_make_room_for_new_ones ... ok
+test browser::cdp::tests::only_target_events_are_kept_and_they_are_bounded ... ok
+test browser::tests::sessions_are_counted_and_capped ... ok
+test browser::tests::the_browser_environment_is_the_sessions_own ... ok
+test browser::tests::an_open_tunnel_ends_with_its_session_within_the_poll_bound ... ok
+test browser::tests::a_production_browser_session_reaches_no_private_address ... ok
+test browser::tests::the_proxy_caps_its_connections_and_ends_them_with_the_session ... ok
+test connector::tests::a_destination_is_its_id_and_what_the_api_says_it_is ... ok
+test connector::tests::a_destination_that_changed_after_approval_fails_the_post_and_sends_nothing ... ok
+test connector::tests::a_failed_preparation_ends_its_lease ... ok
+test connector::tests::a_long_search_query_is_shown_whole ... ok
+test connector::tests::a_read_carries_the_leased_credential_and_never_leaks_it ... ok
+test connector::tests::a_send_shows_one_bare_recipient_and_its_whole_text ... ok
+test connector::tests::a_slack_post_is_approved_and_sent_to_the_destination_slack_identified ... ok
+test connector::tests::a_write_is_r2_and_sends_exactly_what_the_owner_approved ... ok
+test connector::tests::an_operation_never_leaves_its_connectors_origin ... ok
+test connector::tests::migrated_sends_are_exact_and_refuse_header_injection ... ok
+test connector::tests::operations_need_a_grant_naming_them_and_exact_inputs ... ok
+test connector::tests::the_migrated_gmail_read_path_runs_through_the_pipeline ... ok
+test connector::tests::the_production_catalog_is_sound ... ok
+test connector::tests::without_a_vault_a_credentialed_operation_fails_closed_and_sends_nothing ... ok
+test control::tests::a_moved_target_fails_the_effect_before_it_happens ... ok
+test control::tests::agents_cannot_fill_the_places_kept_for_the_owner ... ok
+test control::tests::an_effect_that_completes_while_its_run_is_cancelled_is_recorded_as_done ... ok
+test control::tests::an_effect_whose_parameters_differ_from_the_commitment_is_refused ... ok
+test control::tests::an_emergency_stop_drops_every_pending_effect ... ok
+test control::tests::another_agent_or_run_cannot_execute_a_pending_effect ... ok
+test control::tests::cancelling_during_a_bounded_effect_stops_it_and_reports_cancellation ... ok
+test control::tests::ended_commitments_do_not_hold_pending_effects ... ok
+test control::tests::r2_runs_only_after_the_native_approval ... ok
+test control::tests::racing_proposals_never_exceed_a_runs_places ... ok
+test control::tests::the_pipeline_runs_an_r0_effect_once ... ok
+test display::tests::a_click_needs_an_observation_and_approval_and_lands_on_the_bound_window ... ok
+test browser::tests::the_proxy_stops_when_its_session_may_no_longer_go_out ... ok
+test display::tests::a_queued_start_counts_a_stop_that_came_while_it_waited ... ok
+test display::tests::a_restarted_display_fails_everything_bound_to_the_old_one ... ok
+test display::tests::a_stop_wins_over_a_start_and_nothing_starts_unrecorded ... ok
+test display::tests::a_drag_is_bound_to_where_it_is_dropped ... ok
+test display::tests::a_target_line_shows_a_title_escaped_once ... ok
+test display::tests::a_window_is_bound_by_identity_and_a_title_only_selects_it ... ok
+test display::tests::a_window_title_cannot_close_its_quotes ... ok
+test display::tests::an_interrupted_drag_drops_back_where_it_was_picked_up ... ok
+test display::tests::a_window_appearing_over_the_point_fails_the_click ... ok
+test display::tests::background_keys_and_grabbed_input_are_refused ... ok
+test display::tests::input_steps_are_bounded_by_the_grant ... ok
+test display::tests::observations_need_a_grant_and_leave_only_a_digest_in_evidence ... ok
+test display::tests::only_this_users_socket_in_a_safe_directory_is_trusted ... ok
+test display::tests::pointer_following_focus_never_sends_drag_cleanup_escape_to_another_window ... ok
+test display::tests::prepared_actions_cannot_exceed_the_step_budget ... ok
+test display::tests::the_agent_display_is_private_and_is_not_the_owners ... ok
+test display::tests::the_input_grant_says_what_never_asks ... ok
+test display::tests::the_keyboard_focus_is_on_a_window_only_where_it_is_set ... ok
+test browser::tests::a_proxy_connection_goes_no_further_once_the_session_may_not ... ok
+test display::tests::typing_sends_exactly_the_text_to_the_window_under_the_pointer ... ok
+test display::tests::whatever_an_action_left_pressed_is_released ... ok
+test egress::destination::tests::address_classes ... ok
+test egress::destination::tests::every_resolved_address_must_be_permitted ... ok
+test egress::destination::tests::host_tricks_resolve_to_what_they_really_are ... ok
+test egress::destination::tests::only_plain_https_and_http_urls_become_destinations ... ok
+test egress::destination::tests::redirects_are_checked_like_any_url ... ok
+test egress::tests::a_granted_request_reaches_the_destination_with_nothing_ambient ... ok
+test egress::tests::a_name_rebound_to_this_machines_network_is_refused_before_any_socket ... ok
+test egress::tests::a_refused_address_anywhere_in_an_answer_refuses_it ... ok
+test egress::tests::a_run_cancelled_while_its_credential_is_released_sends_nothing ... ok
+test egress::tests::cancelling_the_run_drops_an_exchange_in_flight ... ok
+test egress::tests::changing_requests_are_r2_carry_their_body_and_never_follow_redirects ... ok
+test egress::tests::grants_name_exactly_one_origin ... ok
+test egress::tests::only_allow_listed_plain_headers_may_be_sent ... ok
+test egress::tests::private_destinations_need_a_grant_that_names_them ... ok
+test egress::tests::rebinding_between_preparation_and_execution_fails_before_any_connection ... ok
+test egress::tests::responses_are_bounded ... ok
+test egress::tests::same_origin_redirects_are_followed_and_checked_others_are_returned ... ok
+test egress::tests::the_connection_goes_only_to_the_checked_addresses ... ok
+test egress::tests::the_owner_sees_the_whole_request ... ok
+test egress::tests::the_system_view_of_the_local_network_is_read ... ok
+test egress::tests::this_machines_addresses_and_link_networks_are_refused_however_public ... ok
+test egress::tests::without_a_grant_nothing_is_sent ... ok
+test egress::transport::tests::a_body_grows_only_into_fresh_buffers ... ok
+test egress::transport::tests::each_form_of_a_credential_is_kept_once_longest_first ... ok
+test egress::transport::tests::methods_are_exact_and_classed ... ok
+test egress::transport::tests::redaction_builds_its_output_without_reallocating ... ok
+test egress::transport::tests::released_credentials_are_redacted_from_responses ... ok
+test executable::tests::a_user_writable_location_is_not_trusted ... ok
+test executable::tests::an_installation_others_could_change_is_refused ... ok
+test executable::tests::system_executables_are_pinned_by_content_and_location ... ok
+test governed::tests::a_detached_run_finishes_when_nothing_of_it_waits ... ok
+test display::tests::an_interrupted_drag_is_let_go_where_it_began_or_on_nothing ... ok
+test governed::tests::a_display_start_is_recorded_with_no_lock_held_and_a_stop_overtakes_it ... ok
+test display::tests::typing_fails_while_another_window_holds_the_focus ... ok
+test governed::tests::an_agent_action_never_runs_in_an_owner_run ... ok
+test governed::tests::an_agent_r2_action_waits_for_the_owner_and_r1_runs_under_the_grant ... ok
+test governed::tests::every_planned_action_has_its_final_classification ... ok
+test governed::tests::governed_mappings_carry_data_and_refuse_side_doors ... ok
+test governed::tests::intents_are_exact_data ... ok
+test governed::tests::quitting_cancels_every_run_and_opens_no_more ... ok
+test governed::tests::a_failed_display_start_is_recorded_as_ended ... ok
+test governed::tests::the_emergency_stop_ends_everything_until_the_owner_resumes ... ok
+test governed::tests::a_display_start_counts_until_its_end_is_recorded ... ok
+test ingress::tests::a_voice_transcript_is_only_text ... ok
+test ingress::tests::an_attachment_is_used_once_and_the_oldest_goes_first ... ok
+test governed::tests::the_front_door_grants_and_runs_a_tool ... ok
+test ingress::tests::attachments_are_data_from_the_native_picker ... ok
+test ingress::tests::commands_are_a_strict_grammar_of_data ... ok
+test launcher::tests::a_session_process_inherits_no_other_descriptor ... ok
+test ledger::protocol::model_tests::a_failed_gating_insert_that_was_written_is_corrected ... ok
+test ledger::protocol::model_tests::a_failed_insert_in_a_batch_may_have_written_unless_the_rollback_undid_it ... ok
+test ledger::protocol::model_tests::a_failed_insert_may_have_written_unless_the_rollback_undid_it ... ok
+test governed::tests::starting_the_agent_display_needs_a_grant_and_is_recorded ... ok
+test ledger::protocol::model_tests::an_unwinding_insert_in_a_batch_may_have_written_its_row_or_not ... ok
+test ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission ... ok
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... ok
+test ledger::protocol::model_tests::e8_holds_for_stale_worker_operations ... ok
+test ledger::protocol::model_tests::e8_key_covers_every_field_of_the_core ... ok
+test ledger::protocol::model_tests::e8_key_marks_which_cells_are_occupied ... ok
+test ledger::protocol::model_tests::e8_key_tells_committed_sequences_apart ... ok
+test ledger::protocol::model_tests::full_f1 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f2 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f3 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f4 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f5 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f6 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f7 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_f8 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fb ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fb2 ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fd ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fg ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fpt ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fr ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::full_fw ... ignored, full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+test ledger::protocol::model_tests::gc_symmetry_allow_list_is_exact ... ok
+test ledger::protocol::model_tests::gc_symmetry_f3 ... ignored, experimental gating-caller symmetry quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::gc_symmetry_fb ... ignored, experimental gating-caller symmetry quotient: run only when an Architect mission names it
+test launcher::tests::a_grace_lets_the_leader_clean_up_and_none_does_not ... ok
+test ledger::protocol::model_tests::gc_symmetry_fpt ... ignored, experimental gating-caller symmetry quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::gc_symmetry_initial_states ... ok
+test ledger::protocol::model_tests::gc_symmetry_l1_on_finite_graphs ... ok
+test ledger::protocol::model_tests::an_admission_that_keeps_its_counter_fails_l1_in_the_original ... ok
+test ledger::protocol::model_tests::gc_symmetry_finds_the_original_l1_cycle ... ok
+test ledger::protocol::model_tests::gc_symmetry_negative_e2_admission_views_twice ... ok
+test ledger::protocol::model_tests::gc_symmetry_negative_p1_admission_ignores_unapplied ... ok
+test ledger::protocol::model_tests::gc_symmetry_negative_p12_on_sym_b ... ok
+test ledger::protocol::model_tests::gc_symmetry_negative_e9_admission_ignores_the_latch ... ok
+test ledger::protocol::model_tests::gc_symmetry_prefix_f3 ... ignored, experimental gating-caller symmetry quotient: a bounded F-3 prefix, run only when an Architect mission names it
+test ledger::protocol::model_tests::gc_symmetry_negative_p1_on_sym_bi ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_a_batch_under_f3s_name - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_a_configuration_not_shown_symmetric - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_a_raised_cap - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_acknowledgements - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_an_acknowledgement_row - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_b - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_bi - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_an_asymmetric_step_on_sym_pt - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_another_shape_under_a_known_name - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_f_b_with_a_raised_time_cap - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_f_b_with_another_actor_change - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_f_g - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_f_pt_with_a_lower_fault_budget - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_f_pt_with_a_raised_cap - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_kept_bits - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_refuses_other_callers - should panic ... ok
+test ledger::protocol::model_tests::gc_symmetry_renames_consistently ... ok
+test ledger::protocol::model_tests::gc_symmetry_negative_p1_on_sym_pt ... ok
+test ledger::protocol::model_tests::gc_symmetry_properties_follow_the_exchange ... ok
+test browser::tests::the_browser_is_identity_pinned ... ok
+test browser::tests::origins_outside_the_grant_and_local_schemes_are_refused_before_launch ... ok
+test browser::tests::a_window_a_step_opens_is_closed_before_the_next_step ... ok
+test browser::tests::a_page_cannot_redefine_what_the_fixed_scripts_see ... ok
+test browser::tests::a_browser_that_goes_around_its_proxy_is_refused ... ok
+test browser::tests::a_page_cannot_take_the_session_elsewhere ... ok
+test ledger::protocol::model_tests::quotient_full_f1 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f2 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f3 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f4 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f5 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f6 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f7 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_f8 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fb ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fb2 ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fd ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fg ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fpt ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fr ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test ledger::protocol::model_tests::quotient_full_fw ... ignored, experimental admission observer quotient: run only when an Architect mission names it
+test browser::tests::a_revoked_grant_ends_the_session_before_its_next_step ... ok
+test browser::tests::a_stop_ends_the_session_between_its_steps ... ok
+test browser::tests::reading_is_r1_and_cancellation_ends_the_browser ... ok
+test browser::tests::a_direct_mode_policy_refuses_the_session_before_any_connection ... ok
+test ledger::protocol::model_tests::quotient_observer_reports_the_admission_properties ... ok
+test ledger::protocol::model_tests::quotient_refuses_an_admission_that_keeps_bits - should panic ... ok
+test ledger::protocol::model_tests::quotient_refuses_an_admission_that_keeps_its_counter - should panic ... ok
+test ledger::protocol::model_tests::quotient_refuses_an_admission_that_writes_the_table - should panic ... ok
+test browser::tests::every_step_is_shown_in_full_and_selector_lists_are_refused ... ok
+test browser::tests::a_session_reaches_only_its_granted_origins_and_interacts_with_approval ... ok
+test browser::tests::a_step_acts_on_exactly_one_element_and_never_on_a_password_field ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym1_matches_the_original ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_b_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_sym_b_takes_the_batch_steps has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_sym_b_matches_the_original ... ok
+test ledger::protocol::model_tests::the_explorer_machinery_is_sound ... ok
+test ledger::protocol::model_tests::the_other_storage_answers_keep_their_meaning ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_b_takes_the_batch_steps ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_bi_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_sym_bi_matches_the_original ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_bi_takes_the_batch_inserts ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_pt_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_sym_pt_takes_the_a4_steps has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_x2_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_negative_e2_admission_views_twice has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_negative_e9_admission_ignores_the_latch has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_negative_p12_admission_ignores_recovery has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_negative_p1_admission_ignores_unapplied has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x1_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x2_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x3_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x4_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x5_matches_the_original has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_sym_pt_matches_the_original ... ok
+test ledger::protocol::model_tests::gc_symmetry_sym_pt_takes_the_a4_steps ... ok
+test ledger::protocol::unit_tests::t_ack_each_test_refuses_alone ... ok
+test ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger ... ok
+test ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends ... ok
+test ledger::protocol::unit_tests::t_gate_every_re_offer ... ok
+test ledger::protocol::unit_tests::t_limit_every_end ... ok
+test ledger::protocol::unit_tests::t_matrix_cells ... ok
+test ledger::protocol::unit_tests::t_matrix_every_operation_in_every_state ... ok
+test ledger::protocol::unit_tests::t_own_tickets_snapshots_and_the_worker_cannot_be_cloned ... ok
+test ledger::protocol::unit_tests::t_pb1_after_the_publication_view_refuses ... ok
+test ledger::protocol::unit_tests::t_pb2_before_the_publication_the_word_is_unchanged ... ok
+test ledger::protocol::unit_tests::t_pb3_expire_counts_at_its_exchange ... ok
+test ledger::protocol::unit_tests::t_pb4_a_concurrent_confirm_is_not_lost ... ok
+test ledger::protocol::unit_tests::t_pb5_every_unwinding_verb_leaves_one_publication ... ok
+test ledger::protocol::unit_tests::t_prec_persistence_of_every_ending ... ok
+test ledger::protocol::unit_tests::t_res_every_resolve_row ... ok
+test ledger::protocol::unit_tests::the_view_reads_every_field ... ok
+test ledger::protocol::unit_tests::w10_an_expiry_before_entry ... ok
+test ledger::protocol::unit_tests::w11_an_unknown_commit_and_a_clean_rollback ... ok
+test ledger::protocol::unit_tests::w12_a_lookup_conflict_then_explain ... ok
+test ledger::protocol::unit_tests::w13_two_histories_two_exits ... ok
+test ledger::protocol::unit_tests::w1_admission_waits_for_every_handover ... ok
+test ledger::protocol::unit_tests::w2_a_refused_conflict_is_remembered_across_env ... ok
+test ledger::protocol::unit_tests::w3_a_later_explanation_stays_above_the_frontier ... ok
+test ledger::protocol::unit_tests::w4_the_agenda_frontier_covers_both_acknowledgements ... ok
+test ledger::protocol::unit_tests::w5_a_late_constraint_and_a_failed_rollback ... ok
+test ledger::protocol::unit_tests::w6_one_identity_under_two_contents ... ok
+test ledger::protocol::unit_tests::w7_an_old_token_is_stale ... ok
+test ledger::protocol::unit_tests::w8_a_resolved_acknowledgement_survives_the_worker ... ok
+test ledger::protocol::unit_tests::w9_a_dropped_counted_ticket ... ok
+test runtime_root::tests::a_root_below_a_directory_others_can_change_is_refused ... ok
+test tool::tests::a_changed_executable_needs_a_new_grant_and_fails_a_pending_run ... ok
+test tool::tests::a_tool_is_not_spawned_once_its_run_is_cancelled ... ok
+test tool::tests::a_tool_runs_end_to_end_in_a_sealed_process_and_leaves_nothing_behind ... ok
+test tool::tests::cancelling_the_run_ends_a_running_tool ... ok
+test tool::tests::nothing_runs_without_a_grant_or_with_untyped_input ... ok
+test tool::tests::output_is_bounded_and_failures_are_recorded ... ok
+test tool::tests::speech_is_synthesized_when_the_local_engine_is_installed ... ok
+test tool::tests::the_deadline_ends_the_whole_process_group ... ok
+test tool::tests::the_environment_is_sealed ... ok
+test tool::tests::the_production_catalog_has_no_shell_interpreter_or_runner ... ok
+test ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission has been running for over 60 seconds
+test ledger::protocol::model_tests::gc_symmetry_x2_matches_the_original ... ok
+test ledger::protocol::model_tests::quotient_negative_e2_admission_views_twice ... ok
+test ledger::protocol::model_tests::quotient_negative_e9_admission_ignores_the_latch ... ok
+test ledger::protocol::model_tests::quotient_negative_p12_admission_ignores_recovery ... ok
+test ledger::protocol::model_tests::quotient_negative_p1_admission_ignores_unapplied ... ok
+test ledger::protocol::model_tests::x2_one_fact_two_gating_callers has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x1_matches_the_original ... ok
+test ledger::protocol::model_tests::quotient_x2_matches_the_original ... ok
+test ledger::protocol::model_tests::x3_one_conflicting_fact_with_env has been running for over 60 seconds
+test ledger::protocol::model_tests::x4_one_conflicting_fact_one_acknowledgement has been running for over 60 seconds
+test ledger::protocol::model_tests::quotient_x3_matches_the_original ... ok
+test ledger::protocol::model_tests::quotient_x4_matches_the_original ... ok
+test ledger::protocol::model_tests::quotient_x5_matches_the_original ... ok
+test ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission ... ok
+test ledger::protocol::model_tests::x2_one_fact_two_gating_callers ... ok
+test ledger::protocol::model_tests::x3_one_conflicting_fact_with_env ... ok
+test ledger::protocol::model_tests::x4_one_conflicting_fact_one_acknowledgement ... ok
+test ledger::protocol::model_tests::x5_one_clean_batch_of_two ... ok
+
+test result: ok. 312 passed; 0 failed; 35 ignored; 0 measured; 0 filtered out; finished in 161.63s
+
+     Running tests/egress_ignores_proxy_environment.rs (target/debug/deps/egress_ignores_proxy_environment-ba8d6f2a43c70f00)
+
+running 1 test
+test proxy_variables_in_the_environment_are_ignored ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests nexus_governed_control
+
+running 8 tests
+test crates/nexus-governed-control/src/lib.rs - (line 50) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 58) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 78) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 90) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 73) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 66) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 83) - compile fail ... ok
+test crates/nexus-governed-control/src/lib.rs - (line 25) ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+peak RSS (KiB, /usr/bin/time): 1941072; wall: 207.88 s; user 836.76 s; sys 40.73 s
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:54:31+01:00
+pinned executable after: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+worktree porcelain after: 0

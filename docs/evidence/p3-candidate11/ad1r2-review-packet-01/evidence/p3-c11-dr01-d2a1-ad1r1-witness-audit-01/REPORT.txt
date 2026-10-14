@@ -1,0 +1,257 @@
+NEXUS OS — P3-C11-DR01-D2A1-AD1R1-WITNESS-AUDIT-01 — FINAL REPORT
+TO:   ChatGPT GPT-6 — Sole Nexus OS Architect
+FROM: Claude Code (Claude Opus 5.5, claude-opus-5-5). The mission header names Claude Sonnet 5.5 (see L.1). No
+      subagents.
+DATE: 2026-10-14 (BST)
+Evidence: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-witness-audit-01 (outside the repository)
+
+FINAL STATUS: READY_FOR_INDEPENDENT_SOURCE_AND_CONTRACT_AUDIT
+
+The original F-1 explorer has NOT yet been run on C1 or C25. Neither control is claimed finally killed. The witness
+results below are executor-only test results.
+
+==================================================================================================================
+A. WITNESS COMMIT / TREE / PARENT   (receipts/stage1/00-STAGE1-AUTHENTICATION.txt: 15/15 PASS)
+==================================================================================================================
+  commit  42dd1bd1cf21ffdea5968b256d2983f6575fab5b (the unique resolution of the prefix)
+  tree    7ac6bb21430d15b17e3723b217b20a49dccf8282
+  parent  2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda (tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a, the same on GitHub)
+  subject "test(experiment): add replay witnesses for controls C1 and C25"
+  Unchanged by this mission: no rebase, amend or extra commit. The local branch, the remote ref and format-patch
+    cc11d486…179b all agree.
+
+==================================================================================================================
+B. VERIFIED SOURCE DIFF AND SOURCE HASHES   (PROVEN FROM SOURCE; re-verified on GitHub, receipts/stage3/03)
+==================================================================================================================
+  One file: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs, +277 −0, one hunk
+    @@ -8244,0 +8245,277 @@.
+  Blob 4895993e1a9ca68762d873e026d42a6e08e49cc9 -> 5ad26ddc727d8be30f4fb8d7478bc69e1c974933
+  sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba, 286,411 bytes.
+  Lines 1-8244 are byte-identical to the parent's whole file. That range contains:
+    - explore 3882, successors 3805, step_adm 3250;
+    - the property functions 3275-3545;
+    - expand 4932, explore_experimental 5038;
+    - SYMMETRIC 6079, explore_symmetric_kept 6572.
+  Every other path of the tree (5,187 entries) equals the parent's.
+  protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66 (sha256 a5454944…a296), unchanged, also on GitHub.
+  Tests present: c1_witness_p1_at_a_successful_admission (8512), c25_witness_p7_on_the_resulting_world (8519).
+  GitHub compare 2d83b74b...42dd1bd1: ahead 1, behind 0, 1 commit, 1 file, +277/−0, blob 5ad26ddc. The remote raw
+    content's sha256 is be9e3547… and it is byte-identical to the local blob.
+
+==================================================================================================================
+C. C1 EXISTING EVIDENCE IDENTITY   (previous mission; re-verified, not re-run)
+==================================================================================================================
+  Evidence directory p3-c11-dr01-d2a1-ad1r1-mut-readiness-01, manifest 10624353…bff3, 73/73 OK.
+  Patch     patches/C1-mutation.patch, sha256 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252.
+  Mutant    protocol.rs blob 7d95dd42; executable 223b05d91e4977ee72f3a71b50d170120efb234ef463d3a8ab62cffd38f7a3c4.
+  Receipts  raw mutant 69994ef6…1ac4: P1 OBSERVED at step 11 (admission: admitted); E3 separate (steps 4-11).
+            healthy  69ec09ff…8137: no violation, 'admission: refused'.
+            restored cde796f3…9cd2: PASS.
+  Status per the ruling: provisionally valid. No new C1 run was made in this mission.
+
+==================================================================================================================
+D. NEW NARROW C25 MUTATION PATCH IDENTITY   (receipts/stage2/probe-C25-narrow/; tools/probe-c25-narrow.py)
+==================================================================================================================
+  Started from the authenticated witness commit: a disposable worktree detached at 42dd1bd1, clean, blobs
+    checked.
+  Target: Publish::gating, Insert::Inserted(seq) => match io.commit(), arm Commit::Unknown.
+  Anchor: CAMPAIGN-01's sealed C25 anchor (controls_defs.py, sha256 ef0420a1…108f). It occurs exactly once; the
+    narrow replacement occurs 0 times; the refusal line alone occurs once.
+  The arm, as built:
+                Commit::Unknown => {
+                    self.failed();
+                    self.rolled(io.rollback());
+                    self.keep = true;
+                    return GatingOutcome::Committed(seq);
+                }
+  patch      patches/C25-narrow-mutation.patch, sha256 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+             One hunk; exactly one line removed and one added:
+               -                    return refused(Persistence::Uncertain, Reason::Storage);
+               +                    return GatingOutcome::Committed(seq);
+             Only protocol.rs changed.
+  original   protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66,
+             sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+  mutant     protocol.rs blob 0456a0c1c1fe40f71593edc6ba5938a3b0c29900,
+             sha256 27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec
+  executable 0c827ceee3aaa5f1d1be1d3520e7f75af10a72bd13c672a6681ce83215d390d2 (8,957,936 bytes); fresh release
+             build, exit 0, 0 compiler messages.
+  invocation (cwd <probe>/crates/nexus-governed-control):
+             <exe> ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world --exact --nocapture
+             --test-threads=1
+             RUST_BACKTRACE=0. The listing showed exactly 1 match.
+  The historical C25 text is NOT redefined as accepted. Neither the historical text nor the narrow text is approved;
+    this probe measures the narrow one. The mutant was never committed. protocol.rs was restored (blob a2df2841,
+    porcelain 0) before the worktree was removed.
+
+==================================================================================================================
+E. NARROW C25 RAW PROBE RESULTS   (MEASURED; 02-mutant-c25-witness.txt sha256 3e21b8678f8877399bb233611fea70494ca25ee7232684e8eab80cabefdda780)
+==================================================================================================================
+  exit status 101 (the test failed); executable sha256 MATCH before and after.
+    C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Committed (inserted)
+        [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]
+        branches ["append_gating: Committed (inserted)"]; word after 0x25 (live 0, unapplied 0)
+        ledger after [Prepared(0), Prepared(1)]
+        VIOLATION step: E4: append_gating said Committed but the record is absent
+        VIOLATION after: P7: G1 was told Committed and is absent
+    C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations
+    NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))
+    OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: ["E4"]
+  Requirements, each checked by the tool against the raw receipts:
+    PASS  A  same initial configuration (F-1)
+    PASS  B  same actor schedule (Gc(0))
+    PASS  C  every step enabled (no WITNESS FIXTURE FAILURE)
+    PASS  D  same oracle choices [0,0,0,1,0,0] and the same verb sequence as healthy
+    PASS  E  the mutant returns Committed
+    PASS  F  the gating record is absent in the modelled outcome (the undecided branch "absent"; ledger without
+             Gating(0))
+    PASS  G  E4 on the mutant's operation
+    PASS  H  P7 on the resulting state
+    PASS  I  self.keep remains true: the source line is in the built arm, and U is kept (word 0x25 has the U bit;
+             with keep false the guard would have emptied U, as the historical probe's 0x5 shows)
+    PASS  J  the healthy witness passes the same schedule
+  All violations and ledger rows are preserved in the raw receipt.
+  Probe evidence was sealed before disposal (PROBE-SHA256SUMS sha256 f9f4c2a7…529b).
+  The one worktree was then removed (receipts/stage2/02-probe-worktree-disposal.txt). No other worktree or process
+  was touched.
+
+==================================================================================================================
+F. HEALTHY BASELINE COMPARISON   (MEASURED; receipts/stage2/01-c25-witness-healthy-42dd1bd1.txt sha256 in SHA256SUMS)
+==================================================================================================================
+  Executable 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53, built from 42dd1bd1's source and
+    MATCHing its prior build receipt. Exit 0.
+  Healthy: 'append_gating G1 -> Refused Uncertain Storage', the same verbs, word 0x25, ledger
+    [Prepared(0), Prepared(1)], no violation.
+                 healthy                                   narrow mutant
+    answer       Refused Uncertain Storage                 Committed (inserted)
+    actor        Gc(0)                                     Gc(0)
+    choices      [0,0,0,1,0,0]                             [0,0,0,1,0,0]
+    verbs        Open Facts Insert Commit:Unknown Rollback (the same)
+    word after   0x25 (U kept, barrier needed)             0x25 (U kept, barrier needed)
+    ledger       G1 absent                                 G1 absent
+    violations   none                                      E4 (step), P7 (after)
+  The only behavioural difference is the returned answer, together with what follows from it: told is set, which
+    gives E4 and P7.
+
+==================================================================================================================
+G. EXACT DIFFERENCES FROM THE OLD C25 PROBE   (patches/C25-historical-vs-narrow.diff sha256 794c4bd0bd0ba2085e81c990d92494f5e32e65f9770b985e557ae36a795bb2a6)
+==================================================================================================================
+  Source: the historical mutant (patch a6de4ed9…656b) lacks one line that the narrow mutant has:
+        @@ -1472,6 +1472,7 @@
+                         Commit::Unknown => {
+                             self.failed();
+                             self.rolled(io.rollback());
+        +                    self.keep = true;
+                             return GatingOutcome::Committed(seq);
+  The historical mutant was rebuilt from the sealed text for this comparison. It is byte-identical to the previous
+    mission's probed mutant (sha256 10de4d2f…8738).
+  Observed:
+    - word 0x5 (U emptied) before -> 0x25 (U kept) now;
+    - the branch, choices, verbs, ledger, E4 and P7 are identical;
+    - executable a34e1af8… before -> 0c827cee… now;
+    - mutant blob 9d4e74b4 before -> 0456a0c1 now.
+  Consequence: P7 does not depend on the removal of `self.keep = true`. The earlier statement that it was "ARGUED,
+    not probed" is now probed once.
+
+==================================================================================================================
+H. ISOLATED REVIEW BRANCH
+==================================================================================================================
+  https://github.com/Nexus-os2026/nexus-os/tree/review/p3-c11-d2a1-ad1r1-witness-01
+  commit: https://github.com/Nexus-os2026/nexus-os/commit/42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+  Push: `git push --porcelain github 42dd1bd1cf21ffdea5968b256d2983f6575fab5b:refs/heads/review/p3-c11-d2a1-ad1r1-witness-01`
+    - one attempt, exit 0, "[new branch]";
+    - not forced; explicit refspec;
+    - the destination was rechecked absent immediately before;
+    - no pre-push hook exists.
+
+==================================================================================================================
+I. REMOTE REF-STATE COMPARISON   (receipts/stage1/github-refs-before.txt; stage3/github-refs-after-push.txt;
+final/github-refs-final.txt)
+==================================================================================================================
+  before 182 lines (sha256 14833d9f…188c, equal to the previous mission's after-list) -> after 183 lines
+    (7aeae2bb…b3a0).
+  The diff is exactly one added line: 42dd1bd1… refs/heads/review/p3-c11-d2a1-ad1r1-witness-01.
+  main 6e15dee6, rebuild/phase0-trust-boundary f727f5c3, repair/p3-candidate11 b1d535f1 (Candidate 11),
+    review/p3-c11-d2a1-closure-prep-01 2d83b74b, every other review ref and the 58 tags are unchanged.
+  Workflows: no push trigger at 42dd1bd1 matches review/** (stage1 item 14).
+    Actions total_count 234 before and after; 0 runs for 42dd1bd1; 0 on the branch; 0 in progress or queued;
+    latest still 38319429125 (2026-10-12).
+
+==================================================================================================================
+J. COMPLETE AD-1-R1 DRAFT  —  DRAFT — NOT ACCEPTED — NOT APPLIED
+==================================================================================================================
+  path    /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/drafts/
+          P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+          (a byte-identical copy is in this directory's handoff/)
+  bytes   45,913 (748 lines)
+  sha256  589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda
+  Not edited, rewritten or applied. The full text is returned verbatim in the reply that carries this report;
+    the file is authoritative.
+  Two statements in it are now overtaken by this mission's facts. The draft is deliberately unchanged:
+    - section 0 calls 42dd1bd1 "local, not pushed"; it is now on the review ref;
+    - section G calls P7 under the narrower C25 form "ARGUED, not probed"; it is now probed once (E).
+
+==================================================================================================================
+K. EVIDENCE HASHES   (SHA256SUMS covers every file in this directory except itself; its own sha256 is in the
+reply)
+==================================================================================================================
+  42dd1bd1cf21ffdea5968b256d2983f6575fab5b / 7ac6bb21430d15b17e3723b217b20a49dccf8282   witness commit / tree
+  5ad26ddc727d8be30f4fb8d7478bc69e1c974933 / be9e3547…b2ba                            model_tests.rs blob / sha256
+  29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732   narrow C25 patch
+  0456a0c1c1fe40f71593edc6ba5938a3b0c29900 / 27c1b9f3…9dec            narrow mutant protocol.rs blob / sha256
+  0c827ceee3aaa5f1d1be1d3520e7f75af10a72bd13c672a6681ce83215d390d2   narrow mutant executable
+  3e21b8678f8877399bb233611fea70494ca25ee7232684e8eab80cabefdda780   narrow mutant raw receipt
+  794c4bd0bd0ba2085e81c990d92494f5e32e65f9770b985e557ae36a795bb2a6   historical-vs-narrow diff
+  0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53   healthy executable
+  589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda   AD-1-R1
+  01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e   AD-1 (unchanged)
+  cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+  106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3   previous mission manifest (73/73 OK)
+  14833d9f…188c -> 7aeae2bb06148e9feb59bf3552c4ced422038e0a13ff75b61556d128c335b3a0   GitHub refs before -> after
+  The 20 earlier D2A-1 manifests verify, 750/750, before and after.
+
+==================================================================================================================
+L. DEVIATIONS AND LIMITATIONS
+==================================================================================================================
+  1. Model: Claude Opus 5.5 executed this mission. The header names Claude Sonnet 5.5.
+  2. Executor-only: the probe tool, its A-J checks and the comparison are the executor's own code. The raw receipts
+     are kept for re-judgement. Nothing was independently re-run.
+  3. NOT ESTABLISHED, and not attempted:
+     - the original F-1 explorer on either mutant, so the first failures E3 (C1) and E4 (C25) remain predictions;
+     - any final-commit evidence;
+     - the minimality of the schedules;
+     - reproducible builds. Executables differ by worktree path; identities are the sha256 of the executable run.
+  4. C25's mutant text is still an Architect decision. Two texts have now each been probed once and give the same
+     named result. Neither is approved.
+  5. The healthy baseline for J was run on the existing pinned executable (0983a19f…, built from 42dd1bd1's
+     source, MATCH). It was not a fresh rebuild. The narrow mutant was not rebuilt restored: the restoration was
+     verified by blob and porcelain, and the healthy executable is the restored-source build.
+  6. The AD-1-R1 text predates this mission. Two of its statements are now overtaken (J). It was not changed.
+  7. Kept, not deleted:
+     - the experimental worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness (clean at 42dd1bd1) and its local
+       branch;
+     - the review ref.
+     Removing them is the Owner's call.
+
+==================================================================================================================
+M. INDEPENDENT ARCHITECT AUDIT REQUEST
+==================================================================================================================
+  1. Source audit of 42dd1bd1 on review/p3-c11-d2a1-ad1r1-witness-01:
+     - the replay is faithful to trace/last_step_violations;
+     - no forced state and real hook counts;
+     - the violation collection is complete;
+     - the fixture-failure path kills nothing;
+     - the named-locus checks are as stated.
+  2. Whether the narrow C25 probe (D-G) settles the single-effect question.
+  3. The choice of C25's final mutant text.
+  4. The C1 witness's provisional validity, confirmed or not.
+  5. AD-1-R1 (J): every ruling area listed by the mission, independently. No acceptance is delegated.
+  6. When to authorise the original-explorer first-failure runs (full_f1 on each mutant) at the final commit.
+
+NOT DONE (prohibitions kept):
+  - no production change committed; no witness source change; no new test;
+  - no full F-1/F-2/F-3/F-PT/F-B run; no mutation campaign; one narrow C25 probe only;
+  - no cap change; no contract adoption; no hosted CI dispatch;
+  - no Candidate 11 or main merge; no activation, release or Phase Three closure.
+
+FINAL STATUS: READY_FOR_INDEPENDENT_SOURCE_AND_CONTRACT_AUDIT
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect

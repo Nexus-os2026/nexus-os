@@ -1,0 +1,261 @@
+STAGE 2 — FORMAL EQUIVALENCE ARGUMENT: THE ADMISSION OBSERVER QUOTIENT
+P3-C11-DR01-D2A1-ADM-QUOTIENT-01. Written 2026-10-13, before any implementation.
+Source read: 244c5b23 (tree 1e0c76d8). model_tests.rs blob beb48fe7 (sha256 ede5ef7b…1b64),
+protocol.rs blob a2df2841 (sha256 a5454944…a296), unit_tests.rs blob 55dc6640. Copies in ../../source/.
+Line numbers below are model_tests.rs unless marked "protocol.rs".
+
+==========================================================================================================
+0. THE MODEL FACTS THE ARGUMENT USES (each read from the source, not inferred)
+
+F1  World (1046-1064) has the field `adm: u8` (admissions left) and `adm_kept: Option<u64>` ("Actor change
+    A2 only"). initial() sets adm = config.admissions, adm_kept = None (1146-1147).
+F2  Every textual occurrence of the identifiers `adm` / `adm_kept` in the file:
+      1056, 1058 (fields); 1146, 1147 (initial); 1691-1697 (encode); 2123-2124, 2160-2161 (decode);
+      3251, 3257 (step_adm); 3556 (terminal: `w.adm == 0`).
+    `config.admissions` is read only at 1146 (initial) and 4033 (the bounds line of the report).
+    No other actor's step, no helper they call, no property and no part of protocol.rs names either.
+    No step writes adm_kept; in the unmutated model it is None in every reachable state.
+F3  encode (1521-1721) writes adm as ONE byte, e.byte(w.adm) at 1691, between the ACK section and adm_kept.
+    No field encoded before or after it depends on adm. decode (1976-2168) reads it as one byte (2123) and
+    nothing decoded later depends on it. So every key factors as
+        key = PRE(pi) || [a] || POST(pi)
+    where pi is "every field of the world except adm" and a = adm. Define
+        set_adm(k, b) := encode(decode(k) with adm := b) = PRE(pi) || [b] || POST(pi).
+F4  step_adm (3250-3272):
+      enabled iff w.adm != 0 (3251), with no other condition;
+      obs.views += 1; one `w.health.view()` (protocol.rs 225-229: one `load`, protocol.rs 189-195:
+        word.load(SeqCst) and, in a test build, one hook event Loaded; no exchange, no store write);
+      admitted := view.admits() && table.debt == 0 && table.h <= table.a — a function of pi only;
+      w.adm -= 1 — its only write to the world;
+      obs.branch("admission: admitted" | "admission: refused"); obs.note (trace text only);
+      if admitted: admission_properties(config, &World, obs) (3275-3321), which takes the world by shared
+        reference, reads ghost.unrecorded, core.u/c/x, rows, word_of(shared) and core.latch — all in pi — and
+        writes only obs.violations (P1, E6, P12, P15, E9).
+    step_adm has no Oracle parameter (step() 3367), so in successors() (3817-3843) the ADM iteration
+    consults no choice: oracle.sequence() = [], oracle.fault = false, oracle.next() = None, w.faults is
+    unchanged. Exactly one successor per state with adm > 0; edge = pack(index_of_Adm, []); not a fault.
+F5  transition_properties (3514-3545) reads the hook counts, obs.{views, ticket_steps, store_ops,
+    explained}, before/after core.latch, the two words, the two refusal tables and after.rows. Not adm.
+    For an ADM edge: loads 1 = views 1, exchanges 0 within [0, 0]; latch, word and table unchanged.
+    So the only violations an ADM edge can carry in the unmutated model are admission_properties'.
+F6  state_properties (3403-3511) reads the word, tickets, ghost, table, core, rows, config.facts/gating.
+    Not adm. The KEY check (3813-3815) compares encode(decode(k)) with k; by F3 its outcome at
+    (pi, a) is the same for every a (the one byte round-trips; the rest does not depend on it).
+F7  terminal (3548-3569) is the only consumer of adm outside step_adm: actors_done requires adm == 0.
+F8  The hook (protocol.rs 2018-2082) keeps thread-local counts. successors() resets them immediately
+    before each step (3823) and reads them immediately after (3825). decode, encode, word_of,
+    state_properties and transition_properties make no hook event (word_of, 1466, loads the atomic
+    directly). No callback is installed in exploration: hook::install occurs only in unit_tests.rs
+    (2187-2299), on those tests' own threads, each followed by hook::remove; model_tests.rs never
+    installs one. A step's counted window therefore holds that step's events and no other's.
+F9  The explorer (3882-4110) is a BFS over keys from k0 = encode(initial(config)), which has adm = N
+    (N = config.admissions). It reports one property: the state's own first violation before its
+    successors; then D1 if the state has no successor; then each successor's first violation in actor
+    order. L1 runs only after a complete search with no failure, over the non-fault edges.
+F10 Determinism: a step is a function of (key, choice prefix). The explorer's own replay (trace,
+    3849-3879) relies on this. No HashMap, no clock, no global state enters a step (R10: no statics).
+
+==========================================================================================================
+1. DEFINITIONS
+
+G       The original graph: nodes = keys reachable from k0; edges = every successor successors() yields,
+        ADM included. A node is written (pi, a).
+Q       The projected (quotient) graph: nodes = keys reachable from k0 using only non-ADM edges; edges =
+        the non-ADM edges; every Q node has adm = N. At every Q node with N > 0 the ADM step is executed
+        as an OBSERVER: its violations and branches are recorded, its successor is discarded.
+~       The equivalence: k ~ k'  iff  set_adm(k, N) = set_adm(k', N),
+        i.e. (pi, a) ~ (pi', a')  iff  pi = pi'  (the keys agree on every byte but the admission byte).
+p       The projection p(k) = set_adm(k, N). It is the identity on Q's nodes.
+lift_a  lift_a(k) = set_adm(k, a).
+
+==========================================================================================================
+2. LEMMAS
+
+L-A (independence of the other actors). For every actor X != Adm, every key k = (pi, a), every prefix:
+    the step's enabledness, its choice points and fault flags, its effect on every field but adm, and
+    its observations (views, store_ops, ticket_steps, explained, branches, violations) depend on pi and
+    the prefix only, and it leaves adm unchanged.
+    Proof: F2 (no read or write of adm / adm_kept / config.admissions in any non-ADM path), F3 (decode
+    gives the same pi for every a), F5, F6, F10.
+
+L-B (ADM is a pure observer). For every k = (pi, a) with a > 0: ADM has exactly one successor,
+    set_adm(k, a-1); it is a non-fault edge with edge code pack(idx_Adm, []); its branches and
+    violations are a function of pi only, call it OBS(pi). For a = 0, ADM has no successor.
+    Proof: F4, F5, F8 (its counted window holds exactly its one load).
+
+THEOREM 1 (product structure).  Let R_Q be Q's node set. Then
+        nodes(G) = { lift_a(k) : k in R_Q, 0 <= a <= N },   and   R_Q = { k in nodes(G) : adm(k) = N }.
+    (⊇) Let k in R_Q via non-ADM path e1..em from k0. From k0 = (pi0, N), take N-a ADM steps (enabled by
+        L-B while the counter is positive) to (pi0, a); then e1..em, each enabled with the same effect on
+        pi at counter a (L-A). This reaches (pi, a).
+    (⊆) Let (pi, a) be reached in G by a path. Delete its ADM edges. By L-A the remaining edges, applied
+        from (pi0, N), are enabled in turn and reach (pi, N) through non-ADM edges only, so (pi, N) is in
+        R_Q. The counter along a G path is N minus the number of ADM edges, so 0 <= a <= N.
+    Hence |nodes(G)| = (N+1)·|R_Q|. (This equality is a CONSEQUENCE of the theorem, not its proof.
+    The F-1 and F-2 totals being divisible by 3 is an observation and is not used.)
+
+COROLLARY 1 (edges). Every G edge is either (a) a non-ADM edge (pi,a)->(pi',a) which is the lift of the
+    Q edge pi->pi' with the same edge code, fault flag, violations and branches; or (b) an ADM edge
+    (pi,a)->(pi,a-1), a >= 1, with OBS(pi). Conversely every Q edge lifts to N+1 G edges and OBS(pi) is
+    carried by exactly N G edges. So, for a COMPLETE run,
+        T_G = (N+1)·T_Q + N·|R_Q|,  F_G = (N+1)·F_Q,  nonfault_G = (N+1)·nonfault_Q + N·|R_Q|.
+    These are relations between different graphs. The quotient does NOT have the original's number of
+    transitions and does NOT have its execution cost.
+
+==========================================================================================================
+3. THE OBLIGATIONS
+
+Q1  ADM changes no protocol, storage, table, fault-budget, token or worker state.            PROVEN
+    F4: its one world write is `w.adm -= 1`; `view` is a load (no exchange, no store write; R1, R5);
+    admission_properties takes &World. No oracle, so no fault budget change (F4).
+    Runtime corroboration built in Stage 3: at every expanded quotient state the ADM step is executed
+    and the result, with adm restored, must encode to the source key byte for byte, or the run aborts.
+
+Q2  ADM changes only its counter, plus test observations.                                    PROVEN
+    F4: world write = adm only; other effects: obs.{views, branches, violations, trace}, the thread-local
+    hook counts (F8). Same runtime check as Q1.
+
+Q3  ADM adds no fault, waits on no actor, and changes no other actor's enabledness or behaviour. PROVEN
+    No fault: F4 (no oracle). No wait: enabled iff adm != 0, whatever pi is (F4). Others' enabledness and
+    next-state behaviour: L-A — no other actor reads adm (F2). ADM changes only adm (Q2), which nobody
+    else reads, so it cannot change another actor's enabledness or successor.
+
+Q4  Every reachable underlying protocol state is reachable with the full admission budget.     PROVEN
+    Theorem 1 (⊆): (pi, a) reachable => (pi, N) reachable by non-ADM steps.
+
+Q5  Every successful admission of G is represented by an observer evaluation of its exact
+    predicate in Q.                                                                           PROVEN
+    An admission in G is an ADM edge from some (pi, a), a >= 1, pi in R_Q (Theorem 1). Its decision and
+    its properties are OBS(pi) (L-B). Q evaluates the identical function step_adm on decode((pi, N)) at
+    every expanded pi when N > 0. Conversely each Q evaluation is the real G edge (pi,N)->(pi,N-1).
+    Condition: the Q run is complete (otherwise not every pi is expanded).
+
+Q6  P1, P12, P15, E6 and E9 are evaluated under the same semantic admission conditions.         PROVEN
+    The observer runs the unchanged step_adm, which calls admission_properties exactly when it admits,
+    on a world that differs from G's post-admission world only in adm (N-1 against a-1), which
+    admission_properties does not read (F2, F4). E9's transition half (latch / fault not cleared) is
+    evaluated by transition_properties on the observer's own before/after, as for a G ADM edge (F5).
+
+Q7  The one-view rule stays checkable, with no added publication and no contaminated counts.    PROVEN
+    The observer brackets the ADM step with hook::take_counts() exactly as successors() does (F8), then
+    applies transition_properties, so E2 compares loads with obs.views for that step alone. view is a
+    load: no exchange, no publication. The observer's own guard check uses encode/word_of, which make no
+    hook event. The next actor's window starts with take_counts(), so nothing leaks into it.
+
+Q8  All other state and transition properties keep their semantics.                          PROVEN
+    State properties and KEY: independent of a (F6); Q evaluates them at every pi in R_Q, which by
+    Theorem 1 is every state of G up to a. Non-ADM transition properties: independent of a (L-A, F5);
+    Q evaluates them on every Q edge, which by Corollary 1 is every non-ADM G edge up to a.
+
+Q9  D1 is preserved, accounting for the remaining admission attempts.                        PROVEN
+    In G, (pi, a) has no enabled step iff a = 0 and pi has no enabled non-ADM step (L-A, L-B). So the
+    dead states of G are exactly {(pi, 0) : pi in R_Q, pi has no Q edge}, and D1 judges them with
+    terminal(pi, adm 0) (F7). The quotient therefore judges D1 at every Q node with no Q edge, by
+    terminal on decode(key) with adm set to 0 — the state reached after spending the N remaining
+    attempts. The count of states with no enabled step is the same in G and Q.
+    A dead pi is found in Q N steps earlier than in G; its trace is completed with N ADM steps (Q11).
+
+Q10 L1 (non-fault cycles) is preserved, both directions.                                      PROVEN
+    (=>) A non-fault cycle pi1 -> ... -> pi1 in Q lifts at counter N (Corollary 1) to a non-fault cycle
+        of G through reachable nodes. So L1 fails in G if it fails in Q.
+    (<=) Let C be a non-fault cycle in G. ADM edges strictly lower the counter and no edge raises it,
+        so a cycle, which returns to its own counter, contains no ADM edge. All its edges are non-ADM,
+        non-fault, at one counter; their projection is a non-fault cycle of Q. So L1 fails in Q if it
+        fails in G.
+    Note: in the quotient graph G/~ taken naively, every ADM edge becomes a non-fault SELF-LOOP. That
+    is why ADM is an observation and not an edge of Q: as edges they would create spurious L1 cycles.
+    L1's end-state clause is D1 (Q9). The non-fault edge counts differ (Corollary 1); the verdict does not.
+
+Q11 Every violation trace of Q maps to an original trace.                                     PROVEN
+    Q's trace to pi is a sequence of non-ADM edges from k0 = (pi0, N); it is literally a G path to
+    (pi, N), replayable by the original trace() (the edge codes index the same actor list, ADM included).
+      - a state violation at pi: the same trace;
+      - a non-ADM transition violation: the same trace plus that edge;
+      - an observer (admission) violation at pi: the trace plus ONE ADM edge pack(idx_Adm, []);
+      - a D1 violation at pi: the trace plus N ADM edges, reaching (pi, 0);
+      - an L1 cycle: the trace to the cyclic state, lifted at counter N.
+    Shortest-trace lengths: for state, transition and admission violations the Q trace length equals
+    the G shortest-trace length (depth_G(pi, a) = depth_Q(pi) + (N - a), minimised at a = N). For D1,
+    the G trace is N steps longer than Q's path, and the mapped trace has exactly that length.
+
+Q12 The reduction removes no counterexample available in G.                                   PROVEN
+    Each kind of G violation has a Q violation of the SAME property: state/KEY (F6), non-ADM transition
+    (L-A), admission (L-B, Q5), D1 (Q9), L1 (Q10). Conversely each Q violation is a G violation (Q11).
+    So, for complete runs, the sets of reachable violated properties are equal and the verdicts
+    (PASS / FAIL) are equal.
+    QUALIFICATION (explicit): the explorer reports only the first violation in BFS order. G and Q visit
+    states in different orders, so when two different properties are violated at the same minimal
+    depth, the property NAMED first may differ. D1 is reached earlier in Q. The quotient preserves the
+    set of reachable violations and the shortest depth of each; it does not preserve "which one is
+    printed first". An INCOMPLETE run of either establishes nothing.
+
+Q13 The quotient's visited key keeps every relevant field except the independent counter.     PROVEN
+    Q's keys are the original keys, produced by the unchanged encode, with the admission byte constant
+    at N. Every other field — word, core, ledger rows, tickets, worker, tokens, snapshots, positions,
+    held results, table, H, A, faults, attempts, replays, adm_kept, ENV, ghost history — is kept.
+    The constant byte carries no information. The key-fields line of the receipt is unchanged.
+
+Q14 The quotient never applies to A2.                                                         PROVEN (by construction)
+    A2 (contract 7.5) splits admission into two steps with "any actor may step in between"; step one
+    keeps its low 16 bits (the World field adm_kept, F1). Then the ADM step writes a field of pi
+    (adm_kept) and its second step decides from bits kept at an earlier state: L-B fails, Q1/Q2 fail,
+    and the intermediate state is a real state that must stay in the key. A2 is NOT implemented in this
+    source (F1/F2: nothing writes adm_kept). The prototype (Stage 3) fails closed for any A2-like
+    admission: it asserts adm_kept = None at every expanded state and that the ADM step, with its
+    counter restored, re-encodes to its source key; a step that keeps bits fails that check and aborts
+    the run (a panic, never a verdict). A2 must be run with the original explorer, which keeps
+    adm_kept in its key.
+
+Q15 Other actor mutants that need admission timing.                                           PROVEN (conditional) — qualified
+    The theorem holds for any mutant M satisfying:
+      M1  M leaves ADM's world write set = {adm} and its enabling condition = (adm > 0);
+      M2  no other actor, helper, property or terminal clause reads adm, adm_kept or config.admissions
+          (terminal's `adm == 0` excepted);
+      M3  the prototype's per-state runtime guard passes for the whole run.
+    Under M1-M3 the quotient evaluates admission at EVERY reachable pi, i.e. at every interleaving point
+    at which G could admit, so mutants whose named property is an admission property keep their
+    timing: A1 (writer confirms before it records; P1 on F-1) and A3 (worker empties X before raising H;
+    P12 on F-5) change only FW / WK; A6 ("recovery required" as a flag) may change ADM's decision but
+    must keep M1. A4 and A5 do not involve admission. The C-controls change protocol.rs; ADM still reads
+    only through `view`, and M3 catches any change that makes `view` write.
+    A2 violates M1 and is excluded (Q14).
+    Attribution: by Q12's qualification, the property printed first under the quotient may differ from
+    the original explorer's. Contract 7.5 judges a control by "its property", as the original explorer
+    reports it. Therefore, unless the contract is amended, EVERY 7.5 control keeps the original
+    explorer. The quotient is offered for the full PASS explorations only. This resolves Q15 in the
+    fail-closed direction the mission allows ("retain the original explorer for those controls").
+
+==========================================================================================================
+4. THE EQUIVALENCE RELATION AND ITS ASSUMPTIONS
+
+  (pi, a) ~ (pi', a')  iff  pi = pi'   — keys equal on every byte except the admission byte.
+  Q is G/~ with ADM edges (self-loops on classes) replaced by the observation OBS(class), D1 judged at
+  the class representative with admissions spent (adm = 0), L1 judged on non-ADM edges only.
+  The relation is a strong bisimulation for the non-ADM transition relation (L-A) and the observation
+  OBS is class-invariant (L-B).
+
+  AQ1 The model is the one at 244c5b23 (blobs above), or a mutant satisfying M1-M3. step_adm is the
+      one-view admission of contract 7.2 / rule R5.
+  AQ2 adm_kept is None in every reachable state (no unmutated step writes it); checked at run time.
+  AQ3 No hook callback is installed in the exploring thread (true for both explorers).
+  AQ4 Determinism of a step given (key, prefix) (F10), on which the original explorer already relies.
+  AQ5 Every verdict claim is for a COMPLETE run. A capped or timed-out run is INCOMPLETE and
+      establishes nothing. One quotient state stands for N+1 original states, so a quotient run under
+      a given state ceiling covers a larger original graph than an original run under that ceiling.
+      The ceiling constants themselves are unchanged.
+  AQ6 This is equivalence of the explored model's state-safety, D1 and L1. It says nothing about a
+      real execution, about real-world ledger durability, or about storage assumptions A-1 and A-2,
+      which remain stated and not discharged (contract 6.3). It does not discharge contract 6.2.
+
+==========================================================================================================
+5. CONSEQUENCES (PROVEN from the above) AND WHAT IS NOT CLAIMED
+
+  - For N >= 1, Q does not depend on N except for the constant admission byte: admissions 1 and 2
+    give the same quotient, verdicts and violation sets. In this model the second admission adds
+    states to G and no behaviour. (No configuration constant is changed because of this.)
+  - For N = 0 (X-3, X-5), ADM is never enabled, the observer never runs, Q = G key for key.
+  - NOT claimed: equal transition counts, equal cost, equal first-reported property, anything about an
+    incomplete run, anything about F-3's size, anything about real executions.
+
+STAGE 2 RESULT: no Q1-Q15 obligation is materially unresolved. Q14 and Q15 are resolved by exclusion
+(A2) and by keeping the original explorer for every 7.5 control. Stage 3 may proceed.

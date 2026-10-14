@@ -1,0 +1,77 @@
+{
+ "verdict": "NARROW C25 CONFIRMED (P7 observed; E4 separate)",
+ "requirements": {
+  "A same initial configuration (F-1)": true,
+  "B same deterministic actor schedule": true,
+  "C every step enabled": true,
+  "D same oracle choice sequence": true,
+  "E mutant returns Committed": true,
+  "F gating record absent in the modelled outcome": true,
+  "G E4 on the mutant's operation": true,
+  "H P7 on the resulting state": true,
+  "I self.keep remains true (source, and U kept: word bit 0x20)": true,
+  "J healthy witness passes the same schedule": true
+ },
+ "mutant_blob": "0456a0c1c1fe40f71593edc6ba5938a3b0c29900",
+ "mutant_exe_sha256": "0c827ceee3aaa5f1d1be1d3520e7f75af10a72bd13c672a6681ce83215d390d2",
+ "patch_sha256": "29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732",
+ "comparison_sha256": "794c4bd0bd0ba2085e81c990d92494f5e32e65f9770b985e557ae36a795bb2a6",
+ "exit": 101,
+ "healthy": {
+  "actor": "Gc(0)",
+  "choices": "[0, 0, 0, 1, 0, 0]",
+  "note": "Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]",
+  "fault": true,
+  "branches": "[\"append_gating: Refused Uncertain Storage\"]",
+  "word": "0x25",
+  "live": "0",
+  "unapplied": "0",
+  "ledger": "[Prepared(0), Prepared(1)]",
+  "verbs": "Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok",
+  "violations": []
+ },
+ "mutant": {
+  "actor": "Gc(0)",
+  "choices": "[0, 0, 0, 1, 0, 0]",
+  "note": "Gc(0): append_gating G1 -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]",
+  "fault": true,
+  "branches": "[\"append_gating: Committed (inserted)\"]",
+  "word": "0x25",
+  "live": "0",
+  "unapplied": "0",
+  "ledger": "[Prepared(0), Prepared(1)]",
+  "verbs": "Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok",
+  "violations": [
+   [
+    "step",
+    "E4: append_gating said Committed but the record is absent"
+   ],
+   [
+    "after",
+    "P7: G1 was told Committed and is absent"
+   ]
+  ]
+ },
+ "previous": {
+  "actor": "Gc(0)",
+  "choices": "[0, 0, 0, 1, 0, 0]",
+  "note": "Gc(0): append_gating G1 -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]",
+  "fault": true,
+  "branches": "[\"append_gating: Committed (inserted)\"]",
+  "word": "0x5",
+  "live": "0",
+  "unapplied": "0",
+  "ledger": "[Prepared(0), Prepared(1)]",
+  "verbs": "Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok",
+  "violations": [
+   [
+    "step",
+    "E4: append_gating said Committed but the record is absent"
+   ],
+   [
+    "after",
+    "P7: G1 was told Committed and is absent"
+   ]
+  ]
+ }
+}

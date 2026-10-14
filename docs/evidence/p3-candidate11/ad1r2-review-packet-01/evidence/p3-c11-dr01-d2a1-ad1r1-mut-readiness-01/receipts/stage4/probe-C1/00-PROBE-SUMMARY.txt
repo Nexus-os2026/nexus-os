@@ -1,0 +1,74 @@
+PROBE C1: the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0
+  definition source: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-campaign-01/tools/stage5-prepared-NOT-EXECUTED/controls_defs.py sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f (CAMPAIGN-01, sealed; never executed before)
+  contract 7.5 row: named property P1 on F-1; this probe selects only c1_witness_p1_at_a_successful_admission
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1: HEAD 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a porcelain 0
+  witness source applied: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 (healthy-run blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933) MATCH; patch sha256 641be53dcb2761e5b9ab2e8acb88f904e64f82f47dd9f45220f7443fcb329414
+  anchor occurrences 1, replacement occurrences before 0
+  mutation patch /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/patches/C1-mutation.patch sha256 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+  protocol.rs mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66 sha256 eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658
+  files differing from the base: ['crates/nexus-governed-control/src/ledger/protocol.rs', 'crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']
+  mutation diff: 0 line(s) removed, 3 added; no test file touched by it
+    | diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+    | index a2df2841..7d95dd42 100644
+    | --- a/crates/nexus-governed-control/src/ledger/protocol.rs
+    | +++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+    | @@ -173,6 +173,9 @@ fn with_field(word: u64, shift: u32, value: u64) -> u64 {
+    |  /// One checked step of a count. A step that would overflow or underflow
+    |  /// sets the handover fault and leaves the count as it is (section 4.3).
+    |  fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+    | +    if shift == UNAPPLIED_SHIFT {
+    | +        return with_field(word, shift, u64::from(up));
+    | +    }
+    |      let now = field(word, shift);
+    |      let next = if up {
+    |          now.checked_add(1).filter(|next| *next <= COUNT_MAX)
+  build: nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 8 --message-format=json-render-diagnostics (cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1; CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1/target)
+  build exit 0; compiler messages 0;     Finished `release` profile [optimized] target(s) in 1m 32s
+  mutant test executable /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 223b05d91e4977ee72f3a71b50d170120efb234ef463d3a8ab62cffd38f7a3c4 (8966344 bytes)
+  mutant witness receipt /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/receipts/stage4/probe-C1/02-mutant-witness.txt sha256 69994ef666e8739bff1551a988aa83445b16ab45c9d507daded69ad618bd1ac4; exit 101
+  test failed: True; fixture failure: False; 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)': True
+  other properties listed separately: ["E3"]; E3 among them: True
+  per-step comparison with the healthy receipt /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/receipts/stage4/healthy/02-c1-witness-healthy.txt (sha256 69ec09ff35cab3300425c1695b952cad48d9aaa9596e65f2289273a32b2a8137):
+    step  1: actor+choices same; note same; branches same; ledger same; word same; healthy violations 0, mutant 0
+    step  2: actor+choices same; note same; branches same; ledger same; word same; healthy violations 0, mutant 0
+    step  3: actor+choices same; note same; branches same; ledger same; word same; healthy violations 0, mutant 0
+    step  4: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Fw(1) choices [1]: Fw(1): the wait expires: expire   [fault] | ["expire: Armed -> Counted"] | word 0x20000020004 (live 2, unapplied 2) | ledger [Prepared(0), Prepared(1)]
+        mutant:  Fw(1) choices [1]: Fw(1): the wait expires: expire   [fault] | ["expire: Armed -> Counted"] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1)]
+        mutant VIOLATION after: E3: live 2, unapplied 1; armed 0, counted 2, dropped 0
+    step  5: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Fw(1) choices [0]: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None }) | [] | word 0x20000020004 (live 2, unapplied 2) | ledger [Prepared(0), Prepared(1)]
+        mutant:  Fw(1) choices [0]: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None }) | [] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1)]
+        mutant VIOLATION after: E3: live 2, unapplied 1; armed 0, counted 2, dropped 0
+    step  6: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Fw(1) choices [0]: Fw(1): confirm | [] | word 0x10000010004 (live 1, unapplied 1) | ledger [Prepared(0), Prepared(1)]
+        mutant:  Fw(1) choices [0]: Fw(1): confirm | [] | word 0x10004 (live 1, unapplied 0) | ledger [Prepared(0), Prepared(1)]
+        mutant VIOLATION after: E3: live 1, unapplied 0; armed 0, counted 1, dropped 0
+    step  7: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Se choices []: Se: [T] claims F2 for Append | [] | word 0x10000010004 (live 1, unapplied 1) | ledger [Prepared(0), Prepared(1)]
+        mutant:  Se choices []: Se: [T] claims F2 for Append | [] | word 0x10004 (live 1, unapplied 0) | ledger [Prepared(0), Prepared(1)]
+        mutant VIOLATION after: E3: live 1, unapplied 0; armed 0, counted 1, dropped 0
+    step  8: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Se choices []: Se: arm -> Armed | [] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1)]
+        mutant:  Se choices []: Se: arm -> Armed | [] | word 0x20004 (live 2, unapplied 0) | ledger [Prepared(0), Prepared(1)]
+        mutant VIOLATION after: E3: live 2, unapplied 0; armed 1, counted 1, dropped 0
+    step  9: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Se choices [0, 0, 0, 0]: Se: append_facts["F2"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok] | ["append_facts: Committed (inserted)"] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant:  Se choices [0, 0, 0, 0]: Se: append_facts["F2"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok] | ["append_facts: Committed (inserted)"] | word 0x20004 (live 2, unapplied 0) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant VIOLATION after: E3: live 2, unapplied 0; armed 1, counted 1, dropped 0
+    step 10: actor+choices same; note same; branches same; ledger same; word differs; healthy violations 0, mutant 1
+        healthy: Se choices []: Se: [T] applies Fact(Committed); releases | [] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant:  Se choices []: Se: [T] applies Fact(Committed); releases | [] | word 0x20004 (live 2, unapplied 0) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant VIOLATION after: E3: live 2, unapplied 0; armed 1, counted 1, dropped 0
+    step 11: actor+choices same; note differs; branches DIFFER; ledger same; word differs; healthy violations 0, mutant 2
+        healthy: Adm choices []: Adm: [T] admission: refused | ["admission: refused"] | word 0x10000020004 (live 2, unapplied 1) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant:  Adm choices []: Adm: [T] admission: ADMITTED | ["admission: admitted"] | word 0x20004 (live 2, unapplied 0) | ledger [Prepared(0), Prepared(1), Fact(1)]
+        mutant VIOLATION step: P1: a result is unrecorded, or U, C or X is occupied, at a successful admission
+        mutant VIOLATION after: E3: live 2, unapplied 0; armed 1, counted 1, dropped 0
+  step-enablement or choice differences: none (every step was asserted enabled and taking its scheduled choices in both runs)
+  VERDICT C1: KILLED BY THE WITNESS (named property observed)
+  restored protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66 (MATCH base); model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933; differing files ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']
+  restored build exit 0;     Finished `release` profile [optimized] target(s) in 18.53s
+  restored test executable sha256 6677184734c067ce91c8eeb0121adcf652d9eaa91c5c2cc9c33d042786ed575f
+  restored witness receipt /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/receipts/stage4/probe-C1/04-restored-witness.txt sha256 cde796f31a8e00996f98bb47bd00ba2e3b202b710524aa5baeb31b2549d39cd2; exit 0; PASS (no violation, healthy branch)
+  restored per-step record identical to the healthy receipt's: True

@@ -1,0 +1,299 @@
+NEXUS OS — P3-C11-DR01-D2A1-ADM-QUOTIENT-01 — REPORT
+Executor: Claude Opus 5.5 (claude-opus-5-5), Claude Code, 2026-10-13. No subagents.
+To: ChatGPT GPT-6, Sole Nexus OS Architect.
+Evidence directory: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-adm-quotient-01 (outside the repository)
+
+FINAL STATUS: QUOTIENT_PROTOTYPE_READY_FOR_ARCHITECT_REVIEW
+
+The admission counter is provably an independent dimension of the explored model. ADM writes only its own
+counter. Apart from ADM itself and the key's encoding, the counter's only reader is terminal's `adm == 0`. Q1-Q15 are resolved; none is materially
+open. Two of them are resolved by exclusion. A2 never uses the quotient. Every 7.5 control keeps the original
+explorer unless the contract is amended.
+An isolated, test-only prototype is committed locally: 83816e66, one hunk, 1,220 lines added, 0 removed, in
+model_tests.rs only. On X-1..X-5 it was held to the original state by state and edge by edge, and every check
+passed. No full configuration was run, so F-3 still has no verdict. This is not contract acceptance.
+
+======================================================================================================
+A. PROVENANCE AND CONTRACT HASHES  (receipts/stage1/*)
+  SOURCE-R2    244c5b23244d1abd8b2b595c9e7654a25029a9f1 / tree 1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78, parent 49e29cd3:
+               local, remote-tracking, GitHub branch API and git/commits API agree.
+  Contract     P3-C11-D2A1-CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+  Reviews      …RESPONSE-02-REVIEW-02.md 6dfb1456…cdce; …RESPONSE-03-REVIEW-01.md 1f964d75…fb35; package SHA256SUMS
+               fec46e38…; 4/4 OK in each of five sealed copies; recovery zip 371d46b9…37b0. A copy is in contract/.
+  Manifests    campaign-01 93/93 OK (71c4135e…); F3-CAP60-01 58/58 OK (226c5ce7…); nine other D2A-1 directories OK.
+               All were verified again at the end and are unchanged.
+  Raw receipts F-1 PASS 31b9015c… (60M experimental cap, 46,524,336 states); F-2 PASS 61fbff8b… (30M);
+               F-3 INCOMPLETE 5731ed93… (30M) and 49fd65e1… (60M). Each equals its manifest entry.
+  Frozen       GitHub refs: 179, byte-identical before and after (and to F3-CAP60-01's after-list).
+               Candidate 11 b1d535f1. 0 runs dispatched; the latest run is still 38319429125.
+  Conflicts    none. Toolchain rustc 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0, pinned.
+
+======================================================================================================
+B. Q1-Q15 MATRIX  (full argument: receipts/stage2/01-formal-argument.txt, written before any code)
+  Q1  ADM changes no protocol/storage/table/budget/token/worker state     PROVEN  (from source) + runtime guard
+  Q2  ADM changes only its counter + observations                         PROVEN  + runtime guard every state
+  Q3  no fault, no wait, no effect on others' enabledness/behaviour      PROVEN  (only reads of adm: step_adm, terminal)
+  Q4  every reachable pi reachable with the full budget                   PROVEN  (Theorem 1)
+  Q5  every successful admission represented by an observer evaluation   PROVEN  (for complete runs)
+  Q6  P1, P12, P15, E6, E9 under the same admission conditions           PROVEN  (same step_adm and admission_properties)
+  Q7  one-view rule checkable, no publication, counts not contaminated   PROVEN  + OBSERVED (E2 negative case)
+  Q8  all other properties keep their semantics                          PROVEN
+  Q9  D1 preserved by spending the remaining admissions                  PROVEN  + OBSERVED (X-1..X-5, D-5)
+  Q10 L1 preserved, both directions                                      PROVEN  (ADM edges lower the counter, so no cycle
+                                                                                  contains one)
+  Q11 every quotient trace maps to an original trace                     PROVEN  (+1 ADM step for an admission violation,
+                                                                                  +N for D1) + OBSERVED (4 replays)
+  Q12 no original counterexample removed                                 PROVEN, QUALIFIED: the set of violated properties and
+                                                                         each one's shortest depth are preserved. Which
+                                                                         property is printed FIRST is not.
+  Q13 key keeps every field but the independent counter                  PROVEN  (unchanged encode; admission byte constant)
+  Q14 never applied to A2                                                PROVEN by construction: A2 breaks Q1/Q2 (adm_kept);
+                                                                         the guard aborts; OBSERVED (A2-like step refused)
+  Q15 other actor mutants needing admission timing                       PROVEN conditionally on M1-M3 (ADM's write set and
+                                                                         enabling unchanged; nobody else reads adm; guard
+                                                                         passes). Q12's qualification applies. Resolved in
+                                                                         the fail-closed direction: every 7.5 control keeps
+                                                                         the original explorer.
+
+======================================================================================================
+C. FORMAL PROJECTION AND TRACE CORRESPONDENCE
+  Key = PRE(pi) || [a] || POST(pi): encode writes adm as one byte, and nothing else depends on it.
+  Equivalence: (pi,a) ~ (pi',a')  iff  pi = pi', i.e. the keys are equal on every byte but the admission byte.
+  Theorem 1 (product). nodes(G) = { (pi,a) : pi in R_Q, 0 <= a <= N }, where R_Q is the set of states reachable
+    without ADM. Proof: delete ADM edges from any path, or prepend N-a ADM steps. Both directions rest on L-A
+    (no other actor reads adm) and L-B (ADM writes only adm, is enabled iff adm > 0, is non-fault, consults no
+    choice, and is observed as OBS(pi)).
+  Quotient Q = G/~ with each ADM edge (a self-loop on its class) replaced by the observation OBS(pi), D1
+    judged at adm 0, and L1 judged on non-ADM edges. As edges, the self-loops would be spurious L1 cycles.
+  Traces. A Q path is literally a G path at counter N; the original trace() replays it. Mapping:
+    state violation       -> the same trace
+    non-ADM transition    -> the same trace plus that edge
+    admission violation   -> the trace plus one ADM edge
+    D1                    -> the trace plus N ADM edges, reaching (pi, 0)
+    L1                    -> the trace to the cyclic state, at counter N
+  Shortest lengths are preserved except D1: the quotient finds a D1 failure N steps earlier, and the mapped
+  trace adds those N steps back.
+  Assumptions: AQ1 the model as at 244c5b23 (or a mutant satisfying M1-M3); AQ2 adm_kept None (checked);
+  AQ3 no hook callback in the exploring thread; AQ4 step determinism; AQ5 complete runs only; AQ6 model
+  state-safety only — not real executions, not ledger durability, not A-1/A-2, not contract 6.2/6.3.
+  Not claimed: equal transition counts, equal cost, an equal first-reported property, anything about an
+  INCOMPLETE run. The relations between the two graphs are T_G = (N+1)T_Q + N|R_Q| and F_G = (N+1)F_Q.
+
+======================================================================================================
+D. EXPERIMENTAL SOURCE  (receipts/stage3/01-experimental-commit.txt; full patch 0001-experimental-commit.patch,
+   sha256 b81600562a525f823bc2fe4b99736320c37a2da690ed6e470a2e396f79d7a160)
+  Worktree /home/nexus/NEXUS/nexus-os-p3-c11-adm-quotient, local branch experiment/p3-c11-d2a1-adm-quotient, no
+  upstream, not pushed.
+  commit 83816e66916c3a217ab7919d7e6a21893e7d579a  tree 74a6a0e5add063dac4d24939b3a62c619847dd3a  parent 244c5b23
+  model_tests.rs blob beb48fe7 -> fad0ffb0 (sha256 ede5ef7b… -> 6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb).
+  One hunk: @@ -4814,0 +4815,1220 @@. The first 4,814 lines are byte-identical to 244c5b23 (cmp). So explore,
+  successors, step_adm, admission_properties, terminal, every Config constant, FULL_CAP, DEFAULT_CAP and
+  every full_* body are unchanged. protocol.rs, unit_tests.rs, ledger.rs, lib.rs, phase3_tests.rs, Cargo.toml,
+  Cargo.lock and rust-toolchain.toml have the same blobs. No dependency, guard, production or runtime change.
+  Added (test-only, #[cfg(test)] module):
+    AdmStep, Mode {Full, Quotient}, Next {Edge, Admission}; step_with; with_admissions;
+    observe_admission — runs ADM exactly as successors() runs a step: take_counts bracket,
+      transition_properties, then asserts (fail closed, "quotient inapplicable: …"):
+        enabled == (admissions > 0); spent exactly one; adm_kept None (A2); with adm restored the world
+        re-encodes to the source key byte for byte;
+    expand — successors() with ADM played by `adm`. In Quotient mode, ADM becomes an observation and every
+      state is asserted to hold N admissions and no kept bits;
+    explore_experimental(config, adm, mode) — explore()'s loop. In Quotient mode, D1 is judged on
+      decode(key) with adm = 0 and its trace is completed with N ADM edges. Observations are counted, their
+      branches are added to coverage, and their violations are reported with path + ADM edge. L1 runs on
+      non-ADM edges. Report header: "(admission observer quotient: experimental, not the contract's
+      explorer)", plus a quotient line;
+    15 #[ignore] entries quotient_full_{f1..fr}, using the accepted constants unchanged (F-1 at 30M; no new
+      ceiling);
+    differential machinery and tests (Section E), negative cases, forced-state observer test, guard tests.
+  Core excerpt (observer guard), as committed:
+      let enabled = adm(config, &mut w, &mut obs);            // inside a take_counts() bracket
+      assert_eq!(enabled, config.admissions > 0, "quotient inapplicable: …");
+      transition_properties(base, &w, &mut obs, counts);
+      assert_eq!(w.adm.checked_add(1), Some(config.admissions), "quotient inapplicable: …");
+      assert!(w.adm_kept.is_none(), "quotient inapplicable: ADM kept bits in the world (A2)");
+      w.adm = config.admissions;
+      assert!(encode(config, &w) == key, "quotient inapplicable: ADM changed the world beyond its counter");
+  Not done: admissions were not set to zero, admission_properties was not touched, no predicate was removed,
+  no fault budget was lowered, no constant or ceiling was changed.
+
+======================================================================================================
+E. DIFFERENTIAL RESULTS AND EXIT CODES  (receipts/stage4/00-STAGE4-SUMMARY.txt and 01-30)
+  Clean build: target/ was absent. Exit 0, 274 crates compiled, 0 Fresh, 0 warnings, 90.8 s.
+  Executable sha256 cdf262efed38382ebbfd7739a92118b527a7815d3a7efab5235644e13158df89; the same after all runs.
+  Listing: 304 tests, 31 ignored. No test of 244c5b23 is missing.
+  All runs were at 83816e66 with porcelain 0:
+    lib (release exe)            273 passed / 0 failed / 31 ignored   exit 0
+    D2A-1 unit tests             29 passed                            exit 0
+    original X-1..X-5            5 PASS; counts, L1 and branch sections identical to campaign-01   exit 0
+    quotient differential X1-5   5 passed                             exit 0
+    negative cases               4 passed                             exit 0
+    observer + guards + L1 demo  5 passed                             exit 0
+    machinery / storage / E8     10 passed                            exit 0
+    fmt --check; diff --check vs 244c5b23 and vs b1d535f1             exit 0, 0, 0
+    clippy --all-targets -D warnings; clippy --lib -D warnings        exit 0, 0 (0 warnings)
+    dev suite (cargo test -p nexus-governed-control --locked)         273/0/31, egress 1, doc 8   exit 0
+  Per configuration. The original graph was built with the UNCHANGED successors() and compared with the
+  quotient state by state:
+             N  original states / trans (fault) / dead   quotient states / trans (fault) / dead   evals (admitted)
+    X-1      1  59,104 / 219,196 (15,026) / 34            29,552 / 94,822 (7,513) / 34             29,552 (194)
+    X-2      1  10,020 /  26,188    (922) / 100            5,010 / 10,589   (461) / 100             5,010 (430)
+    X-3      0  25,617 /  81,573  (2,605) / 44            25,617 / 81,573 (2,605) / 44             0
+    X-4      1   3,106 /  10,097    (816) / 14             1,553 /  4,272   (408) / 14              1,553 (12)
+    X-5      0   3,311 /   7,757    (704) / 28             3,311 /  7,757   (704) / 28              0
+  What was matched, beyond counts:
+    - the experimental full mode equals successors() at every original state;
+    - set equality of the product: every original key projects into the quotient, and every quotient key with
+      every admission count 0..N is an original key;
+    - at every original state: its own violations, its ordered non-ADM edges (edge code, fault flag,
+      violations, branches, projected target), its ADM edge against the observation, D1 membership and the
+      terminal judgement;
+    - explore()'s whole report equals the full mode's, apart from elapsed time;
+    - against the quotient report: verdict, every property line but L1's, every branch line, the bounds,
+      actors and key-fields lines, and the taken-branch sets;
+    - with N = 0 (X-3, X-5): identical key sets and reports, apart from the header, the quotient line and
+      elapsed time.
+  Configurations without admissions remain semantically identical: OBSERVED on X-3 and X-5, and PROVEN in
+  general.
+  Counterexample correspondence: there are none in the real model (all PASS). It was demonstrated on the
+  negative cases.
+  Behaviour not covered by the equivalence: the first-reported property, D1 depth, transition and edge
+  counts, cost, INCOMPLETE runs, A2.
+
+======================================================================================================
+F. D1 / L1 PRESERVATION
+  D1. G's dead states are exactly {(pi,0) : pi has no Q edge}. The quotient judges terminal(pi, adm 0).
+    OBSERVED: dead-state counts are equal on X-1..X-5, every terminal judgement is equal, and D-5 checks this
+    at every original state.
+    Test validity: planting "D1 without spending admissions" made X-1, X-2 and X-4 fail (receipts/stage4/30).
+  L1. (=>) a Q cycle lifts at counter N. (<=) a G cycle cannot contain an ADM edge, because the counter
+    strictly falls on an ADM edge and never rises; its projection is a Q cycle.
+    OBSERVED: L1 HOLDS in both on X-1, X-2 and X-4, with nonfault_G = (N+1)·nonfault_Q + N·|Q| (X-1: 204,170 =
+    2·87,309 + 29,552). A step that keeps its counter makes a self-loop: the full mode then fails L1, and the
+    quotient aborts ("did not spend exactly one admission").
+
+======================================================================================================
+G. ADMISSION PROPERTY AND E2 PRESERVATION EVIDENCE
+  Each defective admission below was run in BOTH modes:
+    ignores `unapplied`         X-1   FAIL P1 in both    shortest trace 3 = 3    quotient trace replays to P1
+    ignores H above A           X-4   FAIL P12 in both   14 = 14                  replays to P12
+    ignores the latch and debt  X-1   FAIL E9 in both    7 = 7                    replays to E9
+    makes a second load         X-1   FAIL E2 in both    1 = 1                    replays to E2
+  Each replay runs in the original semantics with every step enabled and exactly its recorded choices.
+  Forced states (not reachable) show the observer reporting P1 and E6 (batch), P12 and P15, and E9 (latch).
+  A debt makes it refuse, and then nothing is reported.
+  E2: the observer's take_counts() bracket is the same as successors(). The E2 negative proves the one-view
+  rule is still checked, and the X differentials show 1 load per evaluation (E2 never fails).
+  Test-validity probe: planting "the observer skips transition properties" is caught ONLY by the E2
+  negative. The real model never violates E2, E9 or E11 on an ADM edge, so the X differentials cannot see
+  that omission. Recorded as a coverage fact.
+  Guard refusals were OBSERVED for: an A2-like step that keeps bits, a counter-keeping step, and a
+  table-writing step.
+
+======================================================================================================
+H. RESOURCE AND COVERAGE IMPLICATIONS  (observed or derived; no cost claim)
+  - One quotient state stands for N+1 original states, and keys have the same length. Every full
+    configuration has N >= 1: F-1, F-2, F-3, F-4, F-5, F-6, F-8, F-PT, F-B, F-G, F-W, F-D and F-R have N = 2,
+    and F-7 and F-B2 have N = 1. A quotient run under a given state ceiling therefore covers up to (N+1)
+    times as many original states. The ceiling constants are unchanged, but their meaning changes when
+    applied to quotient states. This must be ruled on before any quotient run is cited.
+  - Measured on X-1 only: the explorer's tables went from 6 to 3 MiB and the time from 0.2 to 0.1 s.
+    Nothing about F-configurations is extrapolated from this.
+  - F-3: the 60M-state original run stopped with 6,148,314 states unexpanded. A complete quotient run would
+    need |R_Q| = |F-3 states| / 3, a number nobody knows. Whether the quotient completes F-3, F-PT or F-B
+    under 30M quotient states (up to 90M original states) is NOT ESTABLISHED. No full run was made.
+  - PROVEN consequence: for N >= 1 the quotient does not depend on N except through the constant admission
+    byte. In this model the second admission of F-1, F-2 and F-3 adds states and no behaviour. No constant
+    was changed because of this.
+  - Coverage: admission is evaluated at every expanded state. On X-1, 194 of 29,552 states admit; the
+    admission-property checks fire only at those. The taken-branch sets are equal in both modes.
+
+======================================================================================================
+I. C1 / C25 PROPOSED CONTRACT DISPOSITION  (receipts/stage5/01-c1-c25-contract-diagnosis.txt; read-only)
+  C1 ("the count becomes a flag"; P1 on F-1). Effect verified: unapplied changes only at a counted publication,
+    at expire and at a Counted confirm. Under C1, one confirm clears it while another result is unrecorded.
+    Earliest failure: E3 at depth 4 (two expires: live 2, unapplied 1, counted 2). Predicted first failure:
+    FAIL E3, 4 steps.
+    P1 witness: an 11-step constructed trace. FW0 counts, FW1 counts, FW0 records and confirms (the flag is
+    cleared), SE settles F1 to Paid, and the admission then succeeds with F2 unrecorded. Minimality is argued,
+    not proven. E3 holds at that source state, so P1 can never be printed first.
+  C25 (Committed on Commit::Unknown; P7 on F-1). Effect verified at protocol.rs 1470-1477. Earliest failure:
+    E4 at depth 1 (Gc(0), Commit Unknown, the absent branch). P7 holds of that same successor state.
+    `told` has one writer and rows are never removed, so every P7 failure is entered by an E4 transition.
+  Neither is a reporting accident. A targeted deterministic witness is sufficient for each, and a
+  multi-violation diagnostic is needed only if search is required. Neither suppresses or relabels E3/E4.
+  The first-failure receipt stays primary.
+  A later control receipt needs: R1 mutant identity; R2 the unchanged explorer's first failure (FAIL E3 in
+  4 steps / FAIL E4 in 1 step); R3 a replayed witness that reports every violation and asserts P1 / P7; R4
+  the same replay on the unmutated build failing nothing; R5 a classification line.
+  Minimal amendment (proposed, not made). Option A, recommended: a 7.5 clause that, for C1 and C25 only,
+  accepts (a) the unchanged first failure plus (b) the deterministic witness of the named property, with
+  the rows annotated "P1 (first failure E3; witness)" and "P7 (first failure E4; witness)".
+  Option B: change the cells to E3/E4. That is a reclassification and the Architect's alone.
+  Option C: Option A with a contract-defined multi-violation diagnostic in place of the witness.
+  The executor accepts neither E3 as P1 nor E4 as P7.
+
+======================================================================================================
+J. REMAINING LIMITATIONS AND COUNTEREXAMPLES
+  1. No counterexample to the equivalence was found. The differential covers X-1..X-5 only; the general
+     claim rests on the proof (Section B), which requires independent review.
+  2. Q12 qualification: under the quotient, the property printed first may differ, and D1 is reached N steps
+     earlier. Hence the original explorer stays mandatory for every 7.5 control.
+  3. Q3's "no other actor reads adm" is a textual fact of this source. For any mutant it must be rechecked on
+     the actual diff (M2). The runtime guard checks writes, not reads.
+  4. The guard is the prototype's own code. Its teeth were checked by planted defects (receipts/stage4/30),
+     not by an independent implementation.
+  5. F-3, F-PT and F-B have no verdict. The quotient has not been run on any full configuration, so
+     completing F-3 is NOT ESTABLISHED.
+  6. Using a quotient result for the contract would need an Architect ruling and probably an amendment: the
+     contract (7.1) names the explorer and its state key, and the ceiling would count quotient states.
+  7. A-1/A-2 remain stated and not discharged. The equivalence is about the explored model's state-safety,
+     D1 and L1, not real executions or ledger durability.
+  8. One build only, not an independent reproduction. The nexus-desktop-backend P3 guards were not run: they
+     are unaffected, because the confinement scan skips files named *tests.rs and no scanned file changed.
+  9. The C1/C25 conclusions are static analysis. The C1 11-step witness was constructed by hand; no program
+     replayed it.
+  10. Items still open from earlier reports: the stale mutation-manifest hashes, the R1 CAS wording, and the
+      cap check stopping at cap + 1 or 2. They are unchanged and were not re-examined.
+  PROVEN         Theorem 1 and Q1-Q15 as marked, from the 244c5b23 source; the C1/C25 masking arguments.
+  OBSERVED       X-1..X-5 state-by-state equivalence; original counts identical to campaign-01; the 4
+                 negative cases; the 3 guard refusals; the L1 demonstration; the 3 planted-defect probes;
+                 every gate in E.
+  ASSUMED        AQ3 (no callback while exploring), AQ4 (determinism, as the original explorer already
+                 assumes), A-1/A-2; the C1 witness's minimality.
+  NOT ESTABLISHED any F-configuration verdict; the size of F-3; the quotient's cost on F-configurations; any
+                 7.5 control outcome; contract acceptance.
+
+======================================================================================================
+K. SHA256 EVIDENCE MANIFEST
+  SHA256SUMS in this directory covers every file except itself. Its own sha256 is given in the reply that
+  carries this report. Key hashes:
+    83816e66916c3a217ab7919d7e6a21893e7d579a / 74a6a0e5add063dac4d24939b3a62c619847dd3a   experimental commit / tree
+    244c5b23244d1abd8b2b595c9e7654a25029a9f1 / 1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78   source baseline
+    cdf262efed38382ebbfd7739a92118b527a7815d3a7efab5235644e13158df89   pinned release test executable
+    6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb   model_tests.rs at 83816e66
+    b81600562a525f823bc2fe4b99736320c37a2da690ed6e470a2e396f79d7a160   0001-experimental-commit.patch
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+
+======================================================================================================
+L. INDEPENDENT ARCHITECT REVIEW REQUEST
+  Please review, independently of this executor:
+  1. receipts/stage2/01-formal-argument.txt: Theorem 1, L-A/L-B and Q9/Q10 in particular. Check against
+     model_tests.rs at 244c5b23 that `adm` and `adm_kept` occur only at 1056-1058 (fields), 1146-1147
+     (initial), 1691-1697 (encode), 2123-2124 and 2160-2161 (decode), 3251 and 3257 (step_adm) and 3556
+     (terminal), and that `config.admissions` is read only at 1146 and 4033.
+  2. Whether Q12's qualification, Q15's resolution (all 7.5 controls stay on the original explorer) and the
+     A2 exclusion are acceptable.
+  3. The patch (receipts/stage3/0001-experimental-commit.patch): the guard in observe_admission, D1 at adm 0
+     with N appended steps, and that the original 4,814 lines are untouched.
+  4. Whether, and under what amendment and ceiling semantics, a later mission may run quotient_full_f3 (and
+     F-PT, F-B). Nothing here authorises it.
+  5. The C1/C25 disposition (Section I): Option A, B or C.
+  State left: worktree /home/nexus/NEXUS/nexus-os-p3-c11-adm-quotient at 83816e66, clean. Its 3.1 GB target/
+  is kept; removing it is the Owner's call. Local branch experiment/p3-c11-d2a1-adm-quotient has no upstream.
+  The primary checkout and the SOURCE-R2, campaign-01 and f3-cap60 worktrees are untouched and clean.
+  NOT DONE: no push, no CI, no merge, no contract rewrite, no production change, no ceiling change, no full
+  exploration (original or quotient), no F-PT or F-B, no 7.5 control, no mutant, no ledger activation, no
+  release, no Phase Three closure, no change to sealed evidence, no cleanup of other worktrees or caches.
+
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect.

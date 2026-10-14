@@ -1,0 +1,157 @@
+STAGE 5 — C1 / C25 CONTRACT DIAGNOSIS (read-only)
+P3-C11-DR01-D2A1-ADM-QUOTIENT-01, 2026-10-13. No mutant was written, applied, built or run. No control was
+executed. E3 and E4 were not suppressed, ignored or reclassified. Source: 244c5b23 (protocol.rs a2df2841,
+model_tests.rs beb48fe7); copies in ../../source/. Builds on F3-CAP60-01 receipts/stage5/02 (sha256 90751447…),
+re-checked here against the source, and extends it with items 2, 5, 6 and 7 the mission asks for.
+
+Explorer facts used (model_tests.rs): it reports ONE property, the first found (3917-3919, 3935-3939); a state's
+own properties (state_properties, 3403-3511) are checked before any transition out of it (3812, 3917); a
+successor's state properties are checked only when that successor is itself expanded.
+
+==========================================================================================================
+C1 — "the count becomes a flag" — contract 7.5: fails P1 on F-1
+==========================================================================================================
+1. Mutant effect (verified against protocol.rs; there is no Architect-approved mutant text).
+   `unapplied` (bits 40-63 of the word) changes in exactly three places, all through count_step:
+     +1 at a counted publication (protocol.rs 1996-2001), +1 at expire of an Armed ticket (366-371),
+     -1 at confirm of a Counted ticket (355-358).
+   CAMPAIGN-01's prepared, never-executed encoding makes count_step, for UNAPPLIED_SHIFT only, set the field to
+   1 on a step up and 0 on a step down. Effect: with two or more Counted tickets the field reads 1, and ONE
+   confirm clears it while another Counted result is still unrecorded. Nothing else changes (live, the flag
+   bits and every store operation are untouched; R3: store operations never read the word).
+
+2. Earliest violating state/step on F-1 (analytic).
+   E3 (state property; model_tests.rs 3426-3434): unapplied = Counted held + dropped.
+   With at most one Counted ticket the flag equals the count, so the mutant graph agrees with the original's
+   (which PASSES F-1) on every state with fewer than two Counted tickets, and on every transition out of
+   them. Two Counted tickets need two arms and two counted results; the cheapest counted result in F-1 is
+   expire (one fault; F-1 has no conflict, so no fault-free refusal exists). So the first violation is
+     depth 4:  Fw(0) arm; Fw(0) expire [fault]; Fw(1) arm; Fw(1) expire [fault]
+     state:    live 2, unapplied 1; armed 0, counted 2, dropped 0  ->  E3
+   Predicted first failure of the unchanged explorer: FAIL E3, shortest trace 4 steps, 2 faults.
+   (Any depth-4 state with two Counted tickets gives the same property; BFS insertion order picks which.)
+
+   Earliest P1 (transition property inside step_adm, 3276-3284) — a constructed 11-step witness:
+      1 Fw(0) arm -> Armed
+      2 Fw(0) the wait expires: expire [fault] -> Counted(NotWritten); F1 unrecorded; unapplied 1
+      3 Fw(1) arm -> Armed
+      4 Fw(1) expire [fault] -> Counted; F2 unrecorded; unapplied stays 1   <- E3 from here on
+      5 Fw(0) [T] records Counted -> F1 Refused (debt 1)
+      6 Fw(0) confirm -> unapplied 0 under C1 (1 under the original core)
+      7 Se [T] claims F1 for Append (Healthy, not latched, no handover fault)
+      8 Se arm -> Armed
+      9 Se append_facts[F1] -> Committed (inserted) [Open Ok, Facts Ok, Insert Ok, Commit Ok] (not counted)
+     10 Se [T] applies Committed -> F1 Paid (debt 0)
+     11 Adm [T] one view: admits (flags open, unapplied 0), debt 0, H 0 <= A 0 -> ADMITTED; F2 unrecorded -> P1
+   Under the original core step 6 leaves unapplied 1, so step 11 is refused and nothing fails.
+   Minimality of 11 is ARGUED, not proven: a successful admission needs debt 0, every counted result leaves
+   a debt class until settlement (>= 4 steps for a Refused fact), and the flag must be cleared by a confirm
+   of a different Counted ticket after the unrecorded one was counted.
+
+3. Why P1 cannot be the reported property (structural, as F3-CAP60-01 B3 found; re-checked).
+   P1 needs an admitting view (unapplied 0) while ghost.unrecorded != 0, and unrecorded != 0 implies a
+   Counted ticket is held (it is set only with a Counted result, 2387-2399, and cleared at recording, which
+   precedes confirm; F-1 has no DROP). So the source state of every P1 transition has unapplied 0 < Counted,
+   an E3 violation of that same state, checked first. P1 is never the first failure under C1.
+   How P1 can be shown WITHOUT suppressing, ignoring or reclassifying E3: evaluate the named property on a
+   trace whose earlier states are allowed to (and do) report E3:
+     (a) a targeted witness: replay the 11-step trace above in the explorer's own step semantics on F-1,
+         reporting every state and transition property along it (E3 at states 4..10 included) and asserting
+         that step 11 fails P1; or
+     (b) a multi-violation diagnostic explorer: BFS that records, for each property, its first witness with
+         its shortest trace, and keeps expanding after a violation (until the named property is witnessed).
+
+4. Which is necessary. ONE of them. The targeted witness is sufficient to show P1 failing by assertion on
+   F-1 under C1. It is deterministic, small, and leaves the explorer and its first-failure rule untouched.
+   A multi-violation diagnostic is necessary only if the Architect requires P1 to be FOUND BY SEARCH
+   (the shortest P1 trace over the whole mutant graph). It changes how an explorer reports, so it would be
+   a new, separately reviewed test-only mode, and its receipt could not replace the first-failure receipt.
+   The admission observer quotient does not help: E3 is a state property of the same source state there too.
+
+5. First-failure evidence to preserve. The unchanged explorer's receipt (FAIL E3, its detail line, its
+   4-step trace, states expanded at failure, executable hash) is the PRIMARY record and is kept as it is.
+   The witness is ADDITIONAL; it never replaces, relabels or reorders the first failure.
+
+6. The proof and receipt a later control execution must produce (C1 on F-1):
+   R1 mutant identity: the exact one-hunk patch to protocol.rs (count_step), its sha256, the base commit, a
+      fresh build, the executable's sha256; nothing else changed (blob comparison).
+   R2 first failure: `full_f1` with the unchanged explorer, pinned executable. Expected: FAIL, failed =
+      {E3}, detail "live 2, unapplied 1; armed 0, counted 2, dropped 0", shortest trace 4 steps. If any other
+      property or trace comes first, report it as it is and stop.
+   R3 named-property witness: a deterministic test (outside the contract's explorer) that replays a stated
+      F-1 trace from the initial state under C1, asserts every step is enabled with exactly its recorded
+      choices, evaluates state_properties at every state and transition_properties at every step, prints
+      every violation (E3 included), and asserts P1 among the violations of the last step.
+   R4 differential: the same replay on the unmutated build — the trace up to the last step is valid, the
+      last step does not admit, and no property fails anywhere on it. This shows the P1 failure is C1's.
+   R5 classification line: "C1 killed: first failure E3 (R2); named property P1 witnessed (R3, R4)".
+   (If the Architect chooses the diagnostic instead of R3/R4: the diagnostic receipt must list E3's first
+   witness at depth 4 and P1's first witness with its shortest trace, depth <= 11.)
+
+7. Minimal contract amendment required — see section "AMENDMENT" below (shared with C25).
+
+==========================================================================================================
+C25 — "a gating append answers Committed on Commit::Unknown" — contract 7.5: fails P7 on F-1
+==========================================================================================================
+1. Mutant effect (verified). protocol.rs 1470-1477, gating append after a successful insert:
+     Commit::Unknown => { self.failed(); self.rolled(io.rollback()); self.keep = true;
+                          return refused(Persistence::Uncertain, Reason::Storage); }
+   The prepared encoding returns GatingOutcome::Committed(seq) instead and drops `keep = true` (the one
+   rollback is still issued; U is then emptied by the guard). In the simulation, Commit::Unknown explores
+   the record absent and present (Io::undecided 688-694).
+
+2. Earliest violating step on F-1 (analytic). From the initial state, Gc(0): append_gating G1 with
+   Open Ok, Facts Ok, Insert Ok, Commit Unknown [fault], undecided -> absent, Rollback Ok.
+   Under C25 the answer is Committed: step_gc sets told (3059) and finds the record absent -> E4
+   "append_gating said Committed but the record is absent" (3060-3065), on that transition.
+   Depth 1; the steps of Fw(0), Fw(1), Se and Wk from the initial state are unaffected by C25 and clean
+   (the original F-1 passes). Predicted first failure: FAIL E4, shortest trace 1 step, 1 fault.
+   P7 (state property, 3474-3476): "G1 was told Committed and is absent" holds of that same successor S1,
+   at depth 1. The present branch breaks nothing.
+
+3. Why P7 cannot be the reported property (structural; re-checked). `told` is written only at 3059, on a
+   Committed answer, and the simulated ledger never loses a row (writers: 693, 736, 3328; initial rows
+   1090-1097; nothing removes). So a P7 violation exists only in a state entered by a step_gc transition
+   that answered Committed while the record was absent — and that transition fails E4. The explorer stops
+   at E4 before expanding S1. P7 and the gating half of E4 are one predicate evaluated at two times.
+   Shown without suppressing E4: (a) targeted witness — replay the 1-step trace, report the transition's
+   violations (E4) and then evaluate state_properties of S1 (P7); or (b) the multi-violation diagnostic.
+
+4. Necessary: one of them; the targeted witness suffices (1 step). The quotient does not change this.
+
+5. First-failure evidence to preserve: the unchanged explorer's FAIL E4 receipt with its 1-step trace.
+
+6. Receipt a later control execution must produce (C25 on F-1):
+   R1 mutant identity as for C1 (one hunk in the gating append's Commit::Unknown arm).
+   R2 first failure: `full_f1`, unchanged explorer. Expected FAIL, failed = {E4}, detail "append_gating said
+      Committed but the record is absent", shortest trace 1 step (Gc(0), Commit Unknown, absent).
+   R3 witness: replay that trace under C25; report E4 on the step; evaluate state_properties of the
+      resulting state and assert P7 among them.
+   R4 differential: the same replay on the unmutated build answers "Refused Uncertain Storage", sets no
+      `told`, and no property fails.
+   R5 classification line: "C25 killed: first failure E4 (R2); named property P7 witnessed (R3, R4)".
+
+==========================================================================================================
+AMENDMENT — the minimal change to P3-C11-D2A1-CONTRACT-02-R1 (proposed, not made)
+==========================================================================================================
+A (recommended; keeps P1 and P7 as the named properties). In 7.5, after "It must make its property fail by
+  assertion.", add:
+    "For C1 and C25 the explorer's first failure is a property that the named one implies on the same trace
+     (C1: E3 at the source state of every P1 failure; C25: E4 on the transition into every P7 failure). For
+     these two controls the receipt holds both: (a) the unchanged explorer's run on the named configuration,
+     its first failure and shortest trace recorded as they are; and (b) a deterministic witness on the same
+     configuration: a stated trace replayed in the explorer's own step semantics, every step enabled with its
+     recorded choices, every state and transition property evaluated and reported, in which the named
+     property fails by assertion under the control and not under the unchanged core. The control is killed
+     on its named property when (a) fails by assertion and (b) shows the named property."
+  and annotate the two rows: C1 "P1 (first failure E3; witness)", C25 "P7 (first failure E4; witness)".
+B (alternative; textually smaller, changes attribution). Change the "Fails" cells to E3 (C1) and E4 (C25),
+  recording P1 / P7 as dominated. This is a reclassification; it may be made only by the Architect,
+  explicitly. The executor does not accept E3 as P1 or E4 as P7.
+C (if search is required). As A, with (b) replaced by a multi-violation diagnostic explorer mode, defined in
+  the contract, that records each property's first witness and shortest trace.
+
+LIMITS. Static analysis; no receipts. The mutant texts are CAMPAIGN-01's unapproved encodings plus the
+contract's one-line definitions. The 11-step C1 witness was constructed by hand and replay-checked by no
+program; its minimality is argued. Other 7.5 rows with the same pattern (for example C9/C10/C11/C17 against
+E4, C24 against P8) were not analysed.

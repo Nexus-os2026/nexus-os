@@ -1,0 +1,204 @@
+RECEIPT gc-symmetry-full-F-B (gating-caller symmetry quotient composed with the admission observer quotient; experimental;
+         not the contract's explorer)
+started: 2026-10-14T01:13:29+01:00
+commit: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  HEAD: HEAD
+worktree clean: yes
+model_tests.rs blob: 4895993e1a9ca68762d873e026d42a6e08e49cc9
+compiler (that built the executable): rustc 1.94.0 (4a4ef493e 2026-03-02)
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+executable size: 8956968 bytes; mtime 2026-10-14 00:52:37.286735100 +0100
+executable sha256: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+pinned sha256: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af — MATCH
+selection: /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_fb --exact --ignored --list --format terse
+  selected: ledger::protocol::model_tests::gc_symmetry_fb: test
+selected test count: 1
+pre-flight 2026-10-14T01:13:29+01:00:
+  MemTotal 65077588 KiB; MemAvailable 53811588 KiB (needed 18874368 KiB = 16 GiB cap + 2 GiB margin)
+  SwapTotal 16777212 KiB; SwapFree 7430628 KiB (the run's scope has swap disabled)
+  load average: 0.92 1.39 1.70; online CPUs: 16
+  disk free on the worktree filesystem: 58G
+  cargo/rustc/clippy processes: 0; governed-control test executables running: 0; other p3c11 scopes: 0
+  ollama processes: 1 (not touched)
+  largest resident processes (comm only; none is stopped by this launcher):
+        826480 KiB  brave
+        805256 KiB  python
+        732400 KiB  2.1.281
+        677668 KiB  chrome
+        659132 KiB  brave
+        569696 KiB  chrome
+        530960 KiB  claude
+        507252 KiB  chrome
+scope unit: p3c11-ptfb-fb-1791936809.scope
+cwd: /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-ptfb-fb-1791936809 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_fb --exact --nocapture --test-threads=1 --ignored
+--------------------------------------------------------------------------------
+
+running 1 test
+test ledger::protocol::model_tests::gc_symmetry_fb ... EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)
+  outcome: PASS
+  bounds: facts 2 conflicting [true, true] ENV true batch true faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+  actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm, Env]
+  quotient: ADM is not scheduled; its one step is evaluated at every expanded state (3775373 evaluations, 310 admitted) and its successor discarded; every key holds 2 admissions left; D1 is judged with them spent. The states and transitions below are the quotient's, not the original graph's, and the state cap counts quotient states.
+  symmetry: G1 and G2 exchanged; each key stands for itself and its mirror, the smaller kept; every expanded key's mirror was expanded and held to the exchange; 156463 expanded keys are their own mirror. The states and transitions below are the symmetry quotient's, and the state cap counts them.
+  states 3775373 (expanded 3775373), transitions 11404590 (with a fault 954390), states with no enabled step 10821
+  elapsed 51.2 s; explorer tables 392 MiB
+  P1: HOLDS
+  P2: HOLDS
+  P4: HOLDS
+  P5: HOLDS
+  P6: HOLDS
+  P7: HOLDS
+  P8: HOLDS
+  P9: HOLDS
+  P12: HOLDS
+  P13: HOLDS
+  P15: HOLDS
+  D1: HOLDS
+  L1: HOLDS: 10450200 non-fault edges, no cycle; 10821 end states, each terminal (D1)
+  E1: HOLDS
+  E2: HOLDS
+  E3: HOLDS
+  E4: HOLDS
+  E5: HOLDS
+  E6: HOLDS
+  E7: HOLDS
+  E8: HOLDS
+  E9: HOLDS
+  E10: not applicable here (worker verbs do not unwind)
+  E11: HOLDS
+  KEY: HOLDS
+  branches:
+    [taken    ] append_facts: Committed (inserted)
+    [taken    ] append_facts: Committed (already present)
+    [taken    ] append_facts: NotApplied NotWritten Entry(NotHealthy)
+    [taken    ] append_facts: NotApplied NotWritten Entry(Latched)
+    [taken    ] append_facts: NotApplied NotWritten Storage
+    [taken    ] append_facts: NotApplied NotWritten Constraint
+    [taken    ] append_facts: NotApplied Uncertain Constraint
+    [taken    ] append_facts: NotApplied Uncertain Storage
+    [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)
+    [taken    ] append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)
+    [taken    ] append_facts: NotApplied NotWritten Conflict(explained)
+    [taken    ] append_facts: unwound before any insert
+    [taken    ] append_facts: unwound after an insert was issued
+    [taken    ] expire: Armed -> Counted
+    [taken    ] append_gating: Committed (inserted)
+    [taken    ] append_gating: Refused NotWritten Entry(NotHealthy)
+    [taken    ] append_gating: Refused NotWritten Entry(CellsBusy)
+    [taken    ] append_gating: Refused NotWritten Entry(Latched)
+    [taken    ] append_gating: Refused NotWritten Storage
+    [taken    ] append_gating: Refused NotWritten Constraint
+    [taken    ] append_gating: Refused Uncertain Storage
+    [taken    ] append_gating: Refused Uncertain Constraint
+    [NOT TAKEN] append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)
+    [taken    ] append_gating: unwound after an insert (U kept, Unwound)
+    [taken    ] append_gating: unwound before any insert (U emptied)
+    [taken    ] lookup: Present
+    [taken    ] lookup: Absent
+    [NOT TAKEN] lookup: Conflict(cause)
+    [NOT TAKEN] lookup: Conflict(explained)
+    [taken    ] lookup: Refused(NotHealthy)
+    [taken    ] lookup: Refused(Latched)
+    [taken    ] lookup: Failed
+    [taken    ] lookup: unwound
+    [taken    ] explain: Explained
+    [taken    ] explain: Pending
+    [taken    ] explain: Busy
+    [NOT TAKEN] explain: Unknown
+    [taken    ] explain: Refused(Latched)
+    [taken    ] explain: unwound
+    [NOT TAKEN] snapshot: Taken
+    [NOT TAKEN] snapshot: Nothing
+    [NOT TAKEN] snapshot: NotNow(NotHealthy)
+    [NOT TAKEN] snapshot: NotNow(Latched)
+    [NOT TAKEN] snapshot: Failed
+    [NOT TAKEN] snapshot: unwound
+    [NOT TAKEN] append_acknowledgement: Committed
+    [NOT TAKEN] append_acknowledgement: Refused(Stale)
+    [NOT TAKEN] append_acknowledgement: Refused(Empty)
+    [NOT TAKEN] append_acknowledgement: Refused(Future)
+    [NOT TAKEN] append_acknowledgement: Refused(Set)
+    [NOT TAKEN] append_acknowledgement: Refused(NotNow(NotHealthy))
+    [NOT TAKEN] append_acknowledgement: Refused(NotNow(CellsBusy))
+    [NOT TAKEN] append_acknowledgement: Refused(NotNow(Latched))
+    [NOT TAKEN] append_acknowledgement: NotApplied(NotWritten)
+    [NOT TAKEN] append_acknowledgement: NotApplied(Uncertain)
+    [NOT TAKEN] append_acknowledgement: unwound after an insert (U kept)
+    [NOT TAKEN] append_acknowledgement: unwound before any insert (U emptied)
+    [taken    ] barrier: Passed
+    [taken    ] barrier: Failed
+    [NOT TAKEN] barrier: unwound
+    [taken    ] resolve: Absent
+    [taken    ] resolve: Corrected
+    [NOT TAKEN] resolve: ConflictPlaced
+    [NOT TAKEN] resolve: Acknowledged
+    [taken    ] resolve: Retained
+    [NOT TAKEN] resolve: Inconsistent
+    [NOT TAKEN] resolve: Stale
+    [taken    ] resolve: Refused(Latched)
+    [NOT TAKEN] resolve: unwound
+    [taken    ] append_cell C: Committed (inserted)
+    [taken    ] append_cell C: Committed (present)
+    [taken    ] append_cell C: NotWritten
+    [taken    ] append_cell C: Uncertain
+    [NOT TAKEN] append_cell C: Stale
+    [NOT TAKEN] append_cell C: unwound
+    [taken    ] append_cell X: Committed (inserted)
+    [taken    ] append_cell X: Committed (present)
+    [taken    ] append_cell X: NotWritten
+    [taken    ] append_cell X: Uncertain
+    [NOT TAKEN] append_cell X: Stale
+    [taken    ] append_cell X: Refused(Latched)
+    [NOT TAKEN] append_cell X: unwound
+    [taken    ] empty: Done
+    [NOT TAKEN] empty: Stale
+    [taken    ] admission: admitted
+    [taken    ] admission: refused
+    [NOT TAKEN] DROP: a Counted ticket dropped
+    [NOT TAKEN] malformed snapshot: future
+    [NOT TAKEN] malformed snapshot: set
+    [NOT TAKEN] malformed snapshot: empty
+    [taken    ] append_cell C: Refused(Latched) (not in the listed set)
+    [taken    ] append_cell C: Refused(NotHealthy) (not in the listed set)
+    [taken    ] append_cell X: Refused(NotHealthy) (not in the listed set)
+  state key fields: word (low 16 bits, live, unapplied; recomposed exactly); core: phase, session, latch cause, U/C/X occupancy numbers and occupants (records, exits, sets, nonces, causes, stage), the three occupancy counters, every refusal-table entry with its cause, the qualified frontier, worker_taken, and the fixed limits (asserted); the simulated ledger's rows beyond the initial ones; every ticket's state and holder (FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number (the worker's agenda step and its last token for REPLAY); every snapshot's values and nonce; each actor's position and any result it holds but has not applied; the test's table (classes, debt counter, H, A); every remaining budget (faults, admissions, attempts, replays); the A2 kept bits; ENV fired; history facts (conflicted, conflicted for E6, unrecorded results, gating insert issued, gating told Committed, Counted tickets dropped)
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 344 filtered out; finished in 51.30s
+
+	Command being timed: "timeout -s KILL 2700 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_fb --exact --nocapture --test-threads=1 --ignored"
+	User time (seconds): 50.85
+	System time (seconds): 0.43
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:51.30
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 488348
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 129345
+	Voluntary context switches: 6
+	Involuntary context switches: 836
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 24
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:14:22+01:00
+scope after the run: Result=success ActiveState=inactive 
+executable sha256 after the run: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+worktree clean after the run: yes
+peak memory (maximum resident set size, KiB, as /usr/bin/time reports it): 488348
+peak memory of the scope cgroup (memory.peak, last sample, bytes): 478470144
+maximum memory.swap.current over all samples (bytes): 0
+cgroup oom_kill events (last sample): 0
+wall clock (as /usr/bin/time reports it): 0:51.30
+OUTCOME: FB_PASS

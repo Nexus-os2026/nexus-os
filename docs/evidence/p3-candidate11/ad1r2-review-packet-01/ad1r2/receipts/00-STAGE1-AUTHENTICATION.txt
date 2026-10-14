@@ -1,0 +1,48 @@
+P3-C11-DR01-D2A1-AD1R2-CONTRACT-EVIDENCE-01 — STAGE 1 AUTHENTICATION   2026-10-14T02:43:11+01:00
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5), effort high
+rustc on host (not used to build anything in this mission): rustc 1.94.0 (4a4ef493e 2026-03-02)
+
+[1] remote refs (git ls-remote github): 183 lines, sha256 7aeae2bb06148e9feb59bf3552c4ced422038e0a13ff75b61556d128c335b3a0
+6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+b1d535f1bb634f2075f12a36ace89a595cdb13ba	refs/heads/repair/p3-candidate11
+42dd1bd1cf21ffdea5968b256d2983f6575fab5b	refs/heads/review/p3-c11-d2a1-ad1r1-witness-01
+destination refs/heads/review/p3-c11-d2a1-ad1r2-audit-packet-01 present: 0
+
+[2] source commit 42dd1bd1cf21ffdea5968b256d2983f6575fab5b type commit
+    tree   7ac6bb21430d15b17e3723b217b20a49dccf8282   expected 7ac6bb21430d15b17e3723b217b20a49dccf8282
+    parents 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda   expected 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda (single)
+    witness blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933   expected 5ad26ddc727d8be30f4fb8d7478bc69e1c974933
+    production blob a2df2841b99cad5d452008a6d4150e9369d07e66   expected a2df2841b99cad5d452008a6d4150e9369d07e66
+    parent->source numstat: 277 0 crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    parent->source name-status: M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    appended after parent EOF: parent file (275579 bytes) is a byte prefix of the source file: YES
+    hunk header: @@ -8242,3 +8242,280 @@ fn gc_symmetry_fpt() {
+
+[3] sealed manifests (sha256sum -c, run from each directory)
+    p3-c11-dr01-d2a1-ad1r1-witness-audit-01        SHA256SUMS 87062975919ac988905d28794abb74381b49de8a5579d31d808239c740c77dce  entries 25  OK 25  not-OK 0
+    p3-c11-dr01-d2a1-ad1r1-mut-readiness-01        SHA256SUMS 106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3  entries 73  OK 73  not-OK 0
+    p3-c11-dr01-d2a1-adm-quotient-01               SHA256SUMS 459101ef4b3ead6e7952eaa4289a0bb5aef6ac81c84d7e3d1fb833f7555e02ce  entries 42  OK 42  not-OK 0
+    p3-c11-dr01-d2a1-f3-quotient-01                SHA256SUMS 5e5037b41a194ff355d3c6982f21a67a44b5f826e6baea2b12ad4d1c9ca89ae4  entries 45  OK 45  not-OK 0
+    p3-c11-dr01-d2a1-gc-symmetry-01                SHA256SUMS 34bf59b34ffd60c36e1c435ede4c7bff5f54374a9e4b0b6bcd25e01f97a85826  entries 37  OK 37  not-OK 0
+    p3-c11-dr01-d2a1-gc-sym-f3-01                  SHA256SUMS dd15f3e4a64c4973ab06bea605771bde64f465906e9be88dae95cb5976a8b0e1  entries 44  OK 44  not-OK 0
+    p3-c11-dr01-d2a1-closure-prep-01               SHA256SUMS 137fba3a9899d5b1985ac7579961ab2a9fb1b9a0f7fbe672c84066d7c3bfbc0f  entries 42  OK 42  not-OK 0
+    p3-c11-dr01-d2a1-pt-fb-experiment-01           SHA256SUMS a4c5435d91bf2baf75e4aa90e02e7a314aac97172d7dbf50e5c7e32064725d22  entries 56  OK 56  not-OK 0
+    p3-c11-dr01-d2a1-campaign-01                   SHA256SUMS 71c4135eece833d98b43ec3a5754cb9dc23f50d42a36ad2ecc24ba07608da759  entries 93  OK 93  not-OK 0
+    p3-c11-dr01-d2a1-f3-cap60-01                   SHA256SUMS 226c5ce749aaa7a42c8c6caea9ac0381772de6ab1de6ed64a48ce89600c9cb6b  entries 58  OK 58  not-OK 0
+    p3-c11-dr01-d2a1-f1-cap60-01                   SHA256SUMS fa7c9fd5461c4ef4bafa23a7854649d2f873af5b6ae67b2563304f8225119f4e  entries 46  OK 46  not-OK 0
+    p3-c11-dr01-d2a1-closure-publish-01            SHA256SUMS cdebb6594155939a05a7c9130ba18fb90f0562352806cb2ad3ba5cea6bf0ce77  entries 15  OK 15  not-OK 0
+    expected: witness-audit 87062975919ac988905d28794abb74381b49de8a5579d31d808239c740c77dce; readiness 106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3
+    readiness contract/SHA256SUMS: P3-C11-D2A1-CONTRACT-02-R1.md: OK;P3-C11-R3-AMENDMENT-01-RESPONSE-02-REVIEW-02.md: OK;P3-C11-R3-AMENDMENT-01-RESPONSE-03-REVIEW-01.md: OK;RECOVERY-NOTE.txt: OK;
+
+[4] documents
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c  107331 bytes  p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md
+    6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce  26795 bytes  p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-R3-AMENDMENT-01-RESPONSE-02-REVIEW-02.md
+    1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35  7709 bytes  p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-R3-AMENDMENT-01-RESPONSE-03-REVIEW-01.md
+    01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e  16699 bytes  p3-c11-dr01-d2a1-closure-prep-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-DRAFT.md
+    589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda  45913 bytes  p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+    589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda  45913 bytes  p3-c11-dr01-d2a1-ad1r1-witness-audit-01/handoff/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+    expected: contract cac65351…3b3c; reviews 6dfb1456…cdce, 1f964d75…fb35; AD-1 01778ac3…176e; AD-1-R1 589eb6cb…4cda
+
+[5] local repository: rebuild/phase0-trust-boundary f727f5c39fab8d5c729a55eb28ad576d3d56ce47, porcelain 0 (Owner worktree; not altered)
+    witness worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness: HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b porcelain 0 (not altered)

@@ -1,0 +1,9 @@
+{
+ "control": "C25",
+ "verdict": "KILLED BY THE WITNESS (named property observed)",
+ "mutant_exe_sha256": "a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6",
+ "restored_exe_sha256": "e355b144f1e343020575f1d4528de144989958b31dab6d5d5c63638754e9950c",
+ "mutant_blob": "9d4e74b4faf5078a59ff3d2a86a76f26f42953f1",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c25",
+ "restored_pass": true
+}

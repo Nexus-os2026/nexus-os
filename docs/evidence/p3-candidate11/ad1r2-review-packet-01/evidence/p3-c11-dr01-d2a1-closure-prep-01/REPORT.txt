@@ -1,0 +1,288 @@
+NEXUS OS — P3-C11-DR01-D2A1-CLOSURE-PREP-01 — REPORT
+TO:   ChatGPT GPT-6 — Sole Nexus OS Architect
+FROM: Claude Code (Claude Opus 5.5). No subagents.
+DATE: 2026-10-13/14
+Evidence: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01 (outside the repository)
+
+FINAL STATUS: EXTENSION_READY_FOR_INDEPENDENT_SOURCE_AUDIT
+
+Stage 1 found no provenance failure. Stage 2 proved the gating-caller symmetry for F-PT and for F-B separately
+(17 obligations each). Neither was excluded. Stage 3 made one local, unpushed, test-only commit 2d83b74b on
+77a146ca. It changes one file: the allow-list hunk plus an appended section. Stage 4: every gate exit 0 on a
+fresh, pinned build. No differential exposed a semantic mismatch. Stage 5 inventoried the 15 configurations.
+Stage 6 drafted addendum AD-1, NOT applied and NOT accepted. No full configuration, no ignored entry point, no
+mutation control, no push, no CI.
+Labels: PROVEN (argued from source), OBSERVED (measured here or in sealed evidence), DERIVED (computed through
+a PROVEN relation), NOT ESTABLISHED.
+
+=====================================================================================================
+A. EXACT SOURCE AND CONTRACT IDENTITIES  (receipts/stage1/01-provenance.txt; final/01-final-state.txt)
+  Current source   77a146ca606f99329068410b6037721341f00c70  tree 21818166ee10a8075ca364bd09f31c7aa64555dd
+                   = GitHub git/commits (single parent 83816e66) = review/p3-c11-d2a1-gc-symmetry-01      MATCH
+  SOURCE-R2        244c5b23244d1abd8b2b595c9e7654a25029a9f1 (tree 1e0c76d8); GitHub compare 244c5b23...77a146ca:
+                   ahead 2, behind 0, one file model_tests.rs +2944/-0; protocol.rs blob a2df2841 at both.
+  Experimental     2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a
+                   parent 77a146ca; local branch experiment/p3-c11-d2a1-closure-prep-01, no upstream, NOT pushed;
+                   worktree /home/nexus/NEXUS/nexus-os-p3-c11-closure-prep, porcelain 0.
+  Contract         P3-C11-D2A1-CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+  Binding reviews  …RESPONSE-02-REVIEW-02.md 6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce
+                   …RESPONSE-03-REVIEW-01.md 1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35
+                   One distinct hash each across all 10 copies (9 sealed + contract/ here).
+  GC-SYM-F3-01     outer SHA256SUMS dd15f3e4… 44 entries, 44/44 OK; 46 files on disk, unlisted exactly:
+                   SHA256SUMS itself and contract/SHA256SUMS.
+  Nested manifest  contract/SHA256SUMS, accounted for independently: sha256 fec46e38049c47fd…f53f6b7; its own
+                   4/4 OK; the same hash in all 10 copies; and that hash is sealed inside three other outer
+                   manifests (campaign-01, f3-cap60-01, gc-symmetry-01). Here it IS listed in the outer manifest.
+  Raw F-3 result   receipts/stage3/gc-symmetry-full-F-3.txt sha256 7b745751…dfbd82, 203 lines: PASS; 20,431,851
+                   keys, all expanded; 24 HOLDS + E10 n/a; 0 "inapplicable"; 0 FAIL; test result ok.
+  Its executable   c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704, 8,928,912 bytes, mtime
+                   unchanged, its worktree at 77a146ca porcelain 0 — re-hashed now: MATCH.
+  Mirror check     the receipt states every expanded key's mirror was expanded and held to the exchange;
+                   880,778 self-mirrored; no "symmetry inapplicable" panic (a failure would abort the run).
+  Earlier evidence 17 sealed D2A-1 manifests, 100% OK before and after (637 entries in total), unchanged.
+  Protected refs   git ls-remote github: 181 refs, byte-identical before/after this mission and to GC-SYM-F3-01's
+                   after-list (2470665e…): main 6e15dee6, rebuild/phase0-trust-boundary f727f5c3,
+                   repair/p3-candidate11 b1d535f1, review/p3-c11-d2a1-gc-symmetry-01 77a146ca.
+  Conflicts        none: 0 Actions runs active or queued (latest 38319429125, 2026-10-12); 0 build or explorer
+                   processes by name. The receipt's pgrep -f count of 3 matched its own command line; corrected
+                   in the receipt.
+  Toolchain        rustc 1.94.0 (4a4ef493e 2026-03-02), LLVM 21.1.8; cargo 1.94.0 (85eff7c80); pinned 1.94.0.
+
+=====================================================================================================
+B. F-PT PROOF MATRIX  (receipts/stage2/00-FPT-FB-SYMMETRY-PROOF.txt §1-2; 01-grep.txt)
+  A4 is only two code paths. record_dropped (M 2375-2385) records every member Uncertain whatever the Counted
+  ticket says. SE's drop path (M 2779) records even with no ticket. They read the flag, the ticket and the
+  members (fact indices). They write the class, the debt and the per-fact `unrecorded` bit. Grep: no
+  caller-identity token and no adm read in those ranges.
+   1 initial world invariant           PROVEN (initial() never reads the flag; runtime assert_symmetric)
+   2 callers exchangeable              PROVEN (step_gc takes no config)
+   3 rows/identities transform         PROVEN (A4 writes no row)
+   4 sequences unchanged               PROVEN
+   5 occupants/causes/refusals         PROVEN (extra lookups write fact-keyed causes, fixed by the exchange)
+   6 worker/tokens invariant           PROVEN
+   7 GC states, history bits           PROVEN (A4 never writes gc/issued/told)
+   8 fault choices, budgets            PROVEN (A4 has no choice point; budget 2)
+   9 properties invariant              PROVEN as a set of names; ASYM-4 kept (first-reported name may differ)
+  10 D1 invariant                      PROVEN
+  11 L1 cycle existence                PROVEN (S10 from S7)
+  12 admission-observer composition    PROVEN (Theorem 1 premise F2 holds for A4's code; S12)
+  13 counterexample unfolding          PROVEN (S11, replay in original semantics); OBSERVED on SYM-PT
+  14 no asymmetry from blanket Unc.    PROVEN (E-PT)
+  15 batch writer                      not applicable
+  16 every transition mapped           PROVEN (S7 via Lemma E + E-PT); runtime hold at every expanded key
+  17 original explorer still required  PROVEN: C6/C7 are protocol.rs mutants (voids AS4); a guard refusal
+                                       kills nothing; first-reported property may differ; contract 7.1/7.5
+  VERDICT: PASSED. F-PT admitted to the allow-list.
+
+=====================================================================================================
+C. F-B PROOF MATRIX  (same receipt §1, §3)
+  The batch adds: one writer Fw(0) with members [0,1]; actors [Fw(0),Se,Wk,Gc(0),Gc(1),Adm,Env] (G1/G2 at 3/4);
+  append_facts' two-member path (well_formed, classify with `earlier`, pending inserts, partial holdings); E5 with
+  2 members; conflict_member; conflicted_e6; E6. Every comparison is between fact members (P 815-833; constraint
+  P 867). Insert sequences and holdings are counts. mirror_edge finds Gc(1-g) by position.
+   1 PROVEN  2 PROVEN (sigma by position)  3 PROVEN  4 PROVEN  5 PROVEN (batch conflicts are fact-keyed)
+   6 PROVEN  7 PROVEN  8 PROVEN (holdings branch is a count)  9 PROVEN as a name set, ASYM-4 kept
+  10 PROVEN (one writer)  11 PROVEN  12 PROVEN  13 PROVEN; OBSERVED on SYM-B, SYM-BI  14 not applicable
+  15 PROVEN (E-B)  16 PROVEN; runtime hold  17 PROVEN (C8 is a protocol.rs mutant)
+  VERDICT: PASSED. F-B admitted to the allow-list.
+  Also re-checked for both: P never iterates the refusal table in key order (len/get/insert/remove only).
+
+=====================================================================================================
+D. EXPERIMENTAL ONE-FILE DIFF  (receipts/stage3/01-experimental-commit.txt; 0001-…patch sha256 c7182619…ce2)
+  crates/nexus-governed-control/src/ledger/protocol/model_tests.rs  +488 / -2, blob a80dd05c -> 4895993e
+  (sha256 be562d08… -> 1ca836c3…). Hunks:
+    @@ -6074 +6074,3 @@   allow-list comment
+    @@ -6077 +6079 @@     const SYMMETRIC: [Config; 3] = [X2, SYM1, F3];
+                       -> const SYMMETRIC: [Config; 8] = [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB];
+    @@ -7758,0 +7761,484 @@  appended section
+  Byte-identical: lines 1-6072, and old 6078-7758 = new 6080-7760. So explore (3882), successors (3805),
+  step_adm (3250), admission_properties (3275), state_properties (3403), explore_experimental (5038),
+  explore_symmetric_kept (6572) and every constant are unchanged: F3, FPT, FB, FULL_CAP, FULL_TIME,
+  DEFAULT_CAP, every actor and fault budget. protocol.rs, unit_tests.rs, ledger.rs, lib.rs, both Cargo.toml,
+  Cargo.lock and rust-toolchain.toml have the same blobs.
+  Appended:
+    fixtures SYM-PT (A4 on SYM-1's bounds: 1 conflicting fact + ENV, 1 fault, 1 adm, 2 GC), SYM-B (F-B's facts
+      + ENV, batch, 0 faults, 1 adm, 2 GC), SYM-BI (clean batch, 1 fault, 1 adm, 2 GC); all at default caps;
+    gc_symmetry_allow_list_is_exact (the 8 names; F-PT = F-3 + A4 only, F-B = F-3 + batch only, both at
+      2 faults / 2 adm / 2 GC / FULL_CAP / FULL_TIME);
+    gc_symmetry_sym_{pt,b,bi}_matches_the_original (the existing symmetry_differential, Full and Quotient);
+    gc_symmetry_sym_pt_takes_the_a4_steps, _sym_b_takes_the_batch_steps, _sym_bi_takes_the_batch_inserts
+      (each fixture must take its target steps from states that are not their own mirror, and see both
+      callers told alone and terminal end states);
+    gc_symmetry_negative_p1_on_sym_pt, _p12_on_sym_b, _p1_on_sym_bi (counterexamples unfolded and replayed);
+    gc_symmetry_refuses_an_asymmetric_step_on_sym_{pt,b,bi}; refusals of a batch under F-3's name, F-PT with a
+      lower fault budget, F-B with another actor change, F-PT with a raised cap, F-B with a raised time cap;
+    gc_symmetry_fpt, gc_symmetry_fb: #[ignore] full-run entry points (composed quotient). NOT EXECUTED.
+  Development, before the commit (receipts/stage3/02-development-notes.txt):
+    SYM-B as first written (F-B facts with 1 fault) was 1,383,764 states, beyond the 250,000-state bound of the
+    differential. It was measured by a TEMPORARY ignored probe that was never committed: built in a scratch
+    target, run once, removed (absent from the listing and the binary). It was split into SYM-B and SYM-BI.
+    A P1 negative on SYM-B was rejected: both explorers reported PASS, so it never exercised P1. They agreed,
+    so this is not a mismatch. It was replaced by P12. Three clippy assertions_on_constants were rewritten.
+
+=====================================================================================================
+E. TEST RESULTS AND EXIT CODES  (receipts/stage4/00-STAGE4-SUMMARY.txt; 10-40)
+  Build  fresh (target/ absent), CARGO_INCREMENTAL=0 -j 8 nice 10, cargo test -p nexus-governed-control --locked
+         --release --lib --no-run: exit 0, 326 compiled / 0 fresh / 0 warnings, opt-level 3, 1:31.6 wall.
+  PINNED target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+         sha256 27c922edb9675a76763d353d34421dc3e0919cc322ba7b00dc4007d6fdfee859, 8,956,968 bytes.
+         MATCH before and after every gate. Listing 345 tests / 35 ignored, against 325 / 33: 20 added,
+         0 removed.
+  10 fmt --check                                0
+  11 git diff --check 77a146ca..HEAD            0      12 vs 244c5b23  0   13 vs b1d535f1  0   14 tree  0
+  15 clippy --release --all-targets -D warnings 0 (0 warnings)    16 clippy --release --lib -D warnings  0
+  20 all lib tests, pinned exe                  0   310 passed, 0 failed, 35 ignored (none run), 24.16 s
+  21 dev default suite (cargo test --locked -p) 0   lib 310/0/35 (157.47 s); egress 1; doctests 8
+  30 original X-1..X-5                          0   5 passed; states/outcome/L1 lines identical to sealed
+  31 D2A-1 unit tests                           0   29 passed
+  32 admission-quotient tests                   0   14 passed (its 15 ignored full runs NOT run)
+  33 existing symmetry tests                    0   19 passed; all 64 sealed output lines reproduced
+  34 new tests                                  0   18 passed
+  40 desktop P3 guards incl. D2A-1 confinement  0   44 passed (p3_c11_d2a1_…_is_confined ok). The scanner
+                                                    skips *tests.rs, so this change cannot reach it; run as
+                                                    corroboration in a separate target.
+  New differentials (OBSERVED, release; Full | composed Quotient):
+    SYM-PT  103,620 states -> 54,518 keys (5,416 fixed) | 51,810 -> 27,259 keys (2,708 fixed), 492 admitted
+    SYM-B    38,356 states -> 21,012 keys (3,668 fixed) | 19,178 -> 10,506 keys (1,834 fixed), 18 admitted
+    SYM-BI   22,980 states -> 12,256 keys (1,532 fixed) | 11,490 ->  6,128 keys (766 fixed), 372 admitted
+    Each: every state's expansion = the exchange of its mirror's; every count = the pairs' count; every
+    property line and branch equal; every key's path unfolded and replayed in the original semantics
+    (Full-mode paths through the exchange: SYM-PT 6,116, SYM-B 2,840, SYM-BI 1,988).
+  Exercise (from states not their own mirror): SYM-PT 1,348 A4 writer drops + 928 A4 settlement drops;
+    SYM-B member-1 named 8, member-2 named 20, Conflict-beside-Refused records 600, E6 history 34,632 states;
+    SYM-BI both members written 156, first-alone history 16, batch-writer faults 224. Each has both callers
+    told alone and terminal end states.
+  Negatives: SYM-PT FAIL P1 (3 steps), SYM-B FAIL P12 (19), SYM-BI FAIL P1 (3), in both modes, unfolded and
+    replayed. The asymmetric admission is refused on all three.
+  NOT RUN: F-3, F-PT, F-B or any full configuration; gc_symmetry_f3/fpt/fb/prefix_f3; every full_* and
+    quotient_full_*; any mutation control.
+  OBSERVED cost: the new fixtures double the unoptimised lib suite (78.97 s -> 157.47 s).
+
+=====================================================================================================
+F. 15-CONFIGURATION STATUS MATRIX  (receipts/stage5/00-CONFIGURATION-MATRIX.txt — full table there)
+  Config  original evidence (OBSERVED)          experimental                  quotient (status)       cap
+  F-1     PASS 46,524,336 @244c5b23 (60M exc.)  -                             none needed              60M src / 30M contract
+  F-2     PASS 12,602,670 @244c5b23             -                             none needed              30M
+  F-3     INCOMPLETE @30M and @60M              AQ 30M INCOMPLETE; AQ+SQ PASS AQ+SQ PROVEN, not accepted 30M
+                                                20,431,851 keys (77a146ca)
+  F-4     none                                  -                             AQ generic; SQ unproven  30M
+  F-5/F-6/F-7/F-8  none                         -                             AQ generic; SQ n/a       30M
+  F-PT    none                                  fixtures only; entry not run  AQ+SQ PROVEN here (rev.) 30M
+  F-B     none                                  fixtures only; entry not run  AQ+SQ PROVEN here (rev.) 30M
+  F-B2    none                                  -                             AQ generic; SQ n/a       30M
+  F-G     none                                  -                             AQ generic; SQ n/a ASYM-3 30M
+  F-W/F-D/F-R  none                             -                             AQ generic; SQ unproven  30M (F-D not 60M)
+  Controls tied: F-1 C1 C2 C10 C24 C25 A1 A2 | F-2 C20 C23 A5 | F-3 C7-without-A4 (informational) | F-4 C26 |
+  F-5 C5 A3 A6 | F-6 C3b C3c | F-7 C3a | F-8 C4 | F-PT C6 C7 + A4 (= the PASS) | F-B C8 | F-B2 C9 C11 C17 |
+  F-G C18a C18b | F-W none | F-D C16 | F-R C15 | X-1 C12 | unit tests C14 C19 C21 C22 C27 C28.
+  "AQ generic" = Theorem 1's argument is whole-file, but no configuration-specific audit was made. It is not
+  an authorisation. No state count is given for any configuration that was not run. Every earlier PASS was on
+  244c5b23, not on a final commit.
+
+=====================================================================================================
+G. NARROW CONTRACT ADDENDUM DRAFT  (drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-DRAFT.md)
+  DRAFT — NOT ACCEPTED — NOT APPLIED. It supersedes, if accepted, exactly these contract statements:
+  l.855 caps (A, C); l.609 explorer, for F-3/F-PT/F-B only (B, D, E); l.620 key equality, the same three only
+  (B); l.831 exact final commit, made explicit about reuse (I); l.853 restored receipt (F); l.693 "its property
+  fail by assertion", for C1 and C25 only (G); l.699 C1 and l.721 C25 cells (G); l.863 receipts (C, D);
+  l.911-912 manifest rows (H).
+  A F-1 alone: 60M ceiling as standing text (Owner acceptance); time/memory unchanged; F-D keeps 30M.
+  B F-3 by one complete composed-quotient run on the exact final commit, after review of Theorem 1 and Lemma E,
+    with no guard refusal. Its original counts are reported as DERIVED (|R_Q| = 2K - Kf; |R_G| = 3|R_Q|), and the
+    final run must print the self-mirrored shares so that every derived count is exact.
+  C C-1 (recommended): the cap counts quotient keys and the derived count is reported; C-2: the cap bounds the
+    derived count (F-3 could not pass). INCOMPLETE supports nothing either way.
+  D a quotient FAIL names "a" property, not "the first"; D1 at the key and its mirror with admissions spent; L1 via
+    S10 + Q10; every trace unfolded and replayed before it is cited; the branch set reported.
+  E quotient use only for F-3, F-PT, F-B, each after its own review; never SQ for F-5..F-8, F-B2, F-G.
+  F every control on the original explorer under its original cap. The restored receipt for F-PT/F-B is the
+    accepted quotient PASS (F-1, recommended) or must be an original PASS (F-2, not shown achievable).
+  G C1/C25: the first failure is preserved as primary (predicted E3 / E4), plus an independent named-property
+    replay witness on the mutant that reports every violation and asserts P1 / P7, plus the same witness on the
+    unmutated build failing nothing. E3 is not counted as P1, nor E4 as P7.
+  H the manifest is preserved byte for byte, and a separate identity supplement covers the 22 stale entries:
+    15 from D2A-1, as contract 10 expected, and 7 stale before D2A-1, which are Candidate 11's to resolve.
+  I I-1 (recommended): everything is re-run on the exact final commit, and earlier receipts are informational.
+    I-2: source-equivalent reuse, labelled. Reproducible builds are NOT established.
+  J A-1/A-2 unchanged and undischarged; every result is conditional on them and on AQ6.
+
+=====================================================================================================
+H. F-3 EVIDENCE LIMITATIONS
+  1 The original F-3 graph was never explored. 119,948,772 original states and 39,982,924 admission-quotient
+    states are DERIVED. They are valid only under S1-S15 and Theorem 1, which the executor proved; the
+    Architect has not accepted them.
+  2 The composed explorer is experimental and is not the contract's explorer. 8.3 is unamended. The PASS is
+    not an 8.3 result.
+  3 Only states and evaluations are exactly derivable. Transitions, fault edges, no-step keys and admitted
+    counts have bounds only: gc_symmetry_f3 discards the self-mirrored shares. The new
+    gc_symmetry_fpt/fb entry points discard them too. That is a limitation of this commit (H's
+    recommendation for any later run).
+  4 Single build, single run. The 77a146ca builds differ in hash, so no reproducibility is claimed. The run
+    was at 77a146ca, which is not a final commit.
+  5 The admission guard asserts at counter N only; lower counters rest on Theorem 1. The symmetry guard
+    checks only the keys it expands.
+  6 AQ6: model state-safety, D1 and L1 only. Nothing about real executions, durability, A-1/A-2, or contract
+    6.2/6.3.
+  7 37 listed branches are NOT TAKEN in F-3 (no acknowledgement actor, no DROP, and others). Its coverage
+    claims are limited to its own shape.
+
+=====================================================================================================
+I. REMAINING MUTATION-CONTROL OBLIGATIONS
+  None of the 35 kill-required controls, nor the A4 comparison, has evidence at any commit after 22ebf9a5.
+  IMPL-01R's seven receipts were made on 22ebf9a5. Outstanding:
+    by exploration: C1 C2 C10 C24 C25 A1 A2 (F-1); C20 C23 A5 (F-2); C26 (F-4); C5 A3 A6 (F-5); C3b C3c
+    (F-6); C3a (F-7); C4 (F-8); C6 C7 (F-PT); C8 (F-B); C9 C11 C17 (F-B2); C18a C18b (F-G); C16 (F-D);
+    C15 (F-R); C12 (X-1);
+    by unit tests: C14 C19 C21 C22 C27 C28;
+    informational: C7 without A4 on F-3.
+  Each needs a failing receipt from the original explorer and a restored PASS.
+  Blockers:
+    - C1/C25: attribution; a ruling is needed (G).
+    - C6/C7/C8: a restored PASS needs F (F-PT/F-B original sizes NOT ESTABLISHED).
+    - A2: must use the original explorer; the quotient refuses it.
+    - Any control that hits a cap without a FAIL is not killed, and 7.5's stop rule applies.
+  None was run here.
+
+=====================================================================================================
+J. SHA256 EVIDENCE MANIFEST
+  SHA256SUMS in this directory covers every file in it except itself, including contract/SHA256SUMS. Its own
+  sha256 is given in the reply that carries this report. Key hashes:
+    2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda / 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a   experimental commit/tree
+    77a146ca606f99329068410b6037721341f00c70 / 21818166ee10a8075ca364bd09f31c7aa64555dd   base commit/tree
+    27c922edb9675a76763d353d34421dc3e0919cc322ba7b00dc4007d6fdfee859   pinned test executable (2d83b74b)
+    1ca836c3d9171f52cb6eaa37170996e995d36b92dbdb8e6d2d5d2fe043ad6f1c   model_tests.rs at 2d83b74b
+    c71826194097e994d1237ac53ae5dbdf5b2f47cdf5a2f865ed222a2f28e48ce2   0001-closure-prep-experimental-commit.patch
+    cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   contract
+    fec46e38049c47fdc3711bb25f783e928e18fc7e9f93c12b64c09ea31f53f6b7   contract/SHA256SUMS (nested)
+    2470665ea3b6350ffceda1fc53c1528fc100a52dcdc0c093aeb5ba9d86367590   GitHub refs before = after
+  Receipt hashes for the proof, the matrix and the draft are in SHA256SUMS.
+
+=====================================================================================================
+K. INDEPENDENT ARCHITECT REVIEW REQUEST
+  1 Stage 2 proof (receipts/stage2/00-FPT-FB-SYMMETRY-PROOF.txt). Check against 77a146ca:
+    - E-PT: M 2375-2385, 2777-2788;
+    - E-B: P 811-838, 844-875, 1330-1407; M 671-694;
+    - the refusal-table uses in P;
+    - that items 12 and 17 hold for each configuration separately.
+  2 Commit 2d83b74b (the patch). Check that:
+    - only the allow-list line and an appended section changed;
+    - the fixtures are not vacuous: each exercise test asserts its target steps;
+    - the SYM-B split and the P1-to-P12 replacement are acceptable;
+    - FPT/FB and the caps are unchanged.
+  3 Whether F-PT and F-B may join F-3 in an amended 8.3 (addendum E). A named run of gc_symmetry_fpt /
+    gc_symmetry_fb needs its own mission. Nothing here authorises it.
+  4 Addendum AD-1 options A-J. Decisions open: A, B/C, E, F, G, H, I. Nothing was decided by the executor.
+  5 Whether the doubled dev-suite time of the experimental tests matters before any integration.
+  State left:
+    - worktree /home/nexus/NEXUS/nexus-os-p3-c11-closure-prep at 2d83b74b, clean, target/ 2.2 GB kept;
+    - scratch builds under the session scratchpad (iteration and desktop guard targets);
+    - local branch experiment/p3-c11-d2a1-closure-prep-01, no upstream;
+    - primary checkout and every other worktree untouched.
+  Removing any of these is the Owner's call.
+
+NOT DONE (hard boundaries): source publication; push; hosted CI; full exploration (original or quotient);
+the ignored entry points; mutation campaign; merge or integration; change to frozen phases or sealed evidence;
+production ledger activation; contract amendment applied; Phase Three closure.
+
+FINAL STATUS: EXTENSION_READY_FOR_INDEPENDENT_SOURCE_AUDIT
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect

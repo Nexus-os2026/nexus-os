@@ -1,0 +1,315 @@
+NEXUS OS — P3-C11-DR01-D2A1-GC-SYMMETRY-01 — REPORT
+TO:   ChatGPT GPT-6 — Sole Nexus OS Architect
+FROM: Claude Code (Claude Opus 5.5), implementation. No subagents.
+DATE: 2026-10-13
+
+FINAL STATUS: SYMMETRY_PROTOTYPE_READY_FOR_ARCHITECT_REVIEW
+
+One-paragraph result. Exchanging the two gating callers G1 and G2 is PROVEN (from
+source, every identity use enumerated) to be an automorphism of F-3's reachable graph
+that fixes its initial state. The same holds for X-2. A test-only symmetry quotient
+was built in one file, append-only: 1,724 lines after line 6034, 0 deletions. It
+composes with the admission observer quotient. As a runtime guard it expands every
+kept key's mirror and compares the two expansions item by item; any difference aborts
+with no verdict.
+Exhaustive differentials were run on the whole of X-2 and of a supplementary
+configuration SYM-1, alone and composed with the admission quotient. Every count,
+property line and branch matched (OBSERVED). Every quotient key's path unfolds into an
+original trace with the callers' own names and replays in the original semantics. No
+difference was found. The F-3 prefix diagnostic (100,000 keys) is INCOMPLETE by
+construction and establishes nothing about F-3.
+
+Labels: PROVEN / OBSERVED / ASSUMED / NOT ESTABLISHED / DERIVED (arithmetic from
+OBSERVED figures through a PROVEN relation; never measured).
+
+=====================================================================================
+A. EXACT SOURCE AND CONTRACT PROVENANCE
+=====================================================================================
+Baseline commit 83816e66916c3a217ab7919d7e6a21893e7d579a, tree
+74a6a0e5add063dac4d24939b3a62c619847dd3a (VERIFIED locally, worktree clean; GitHub
+review/p3-c11-d2a1-adm-quotient-01 at the same SHA). Rust 1.94.0 (4a4ef493e).
+Contract P3-C11-D2A1-CONTRACT-02-R1.md sha256
+cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c; binding reviews
+RESPONSE-02-REVIEW-02 6dfb1456... and RESPONSE-03-REVIEW-01 1f964d75...; identical
+in all 7 sealed copies. Copied to contract/ here and verified (8th copy).
+Prior evidence: all 14 sealed manifests verify 100% before and after this mission
+(receipts/stage1/00-STAGE1-AUTHENTICATION.txt [4], receipts/final/01-final-state.txt
+[7]). F3-QUOTIENT-01: 45/45, SHA256SUMS 5e5037b4..., REPORT.txt 798f192c...,
+status F3_QUOTIENT_INCOMPLETE. ADM-QUOTIENT-01: 42/42, status
+QUOTIENT_PROTOTYPE_READY_FOR_ARCHITECT_REVIEW.
+GitHub: git ls-remote (180 lines) byte-identical to F3-QUOTIENT-01's after-list
+(sha256 504ce1fe...) at start AND at end. main 6e15dee6,
+rebuild/phase0-trust-boundary f727f5c3, repair/p3-candidate11 b1d535f1, review refs
+83816e66 / 49e29cd3 / 244c5b23 / 243501f0: unmoved. No CI run in progress or queued;
+latest run 38319429125 (2026-10-12) — none triggered by this mission.
+Conflicting execution: none (0 cargo/rustc/test processes by name, 0 p3c11 scopes).
+Stage 1 receipt notes two clarifications: the only unlisted file in five old
+manifests is the nested contract/SHA256SUMS (as sealed); a pgrep -f self-match.
+
+Experimental commit (LOCAL ONLY, not pushed):
+  77a146ca606f99329068410b6037721341f00c70  tree 21818166ee10a8075ca364bd09f31c7aa64555dd
+  parent 83816e66; branch experiment/p3-c11-d2a1-gc-symmetry (no upstream);
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-gc-symmetry.
+
+=====================================================================================
+B. S1-S15 PROOF / DISPROOF MATRIX
+=====================================================================================
+Full argument: receipts/stage2/00-FORMAL-SYMMETRY-ANALYSIS.txt (written before any
+code). The receipt lists 13 identity entry points (I1-I13), the transformation, and
+Lemma E: one step is equivariant. The grep behind it is in
+receipts/stage2/01-identity-grep.txt.
+Conditions: gating = 2, no gating conflict, no ACK actor (acks = 0, ack_attempts = 0,
+malformed = false), no A2 kept bits. F-3 and X-2 satisfy them.
+
+S1  PROVEN.   pi(init) = init (F-3 rows [Prepared(F2), Holder(F2)], gc [Start,Start],
+              ghost 0). OBSERVED at runtime for X-2, SYM-1, F-3 (gc_symmetry_initial_states).
+S2  PROVEN.   G2's program is the pi-image of G1's through the full transitive closure
+              (core, Io verbs, properties), not merely the shared source function.
+S3  PROVEN.   Ids/digests (typed by first byte), U record, C correction subject, X original
+              and cause, refusal keys and causes, ledger rows, settlement's held cause,
+              obs.explained. OBSERVED: row/key/part consistency and involution for every
+              row kind (gc_symmetry_renames_consistently).
+S4  PROVEN.   Rows renamed in place; every stored sequence keeps pointing at its row.
+S5  PROVEN.   gc[0]<->gc[1]; issued/told bit 0<->1; no other caller-bearing history.
+S6  PROVEN.   Every map is an involution. OBSERVED at every key of X-2/SYM-1 (both modes)
+              and at every expanded key of every run (runtime assert).
+S7  PROVEN.   Lemma E + induction from S1. OBSERVED: every state of X-2 and SYM-1, both
+              modes: the mirror's expansion is the exchange of the state's, per actor, in
+              order (so multiplicities), with equal choices, fault flag, violation names,
+              branches and mirrored successor.
+S8  PROVEN with a reporting qualification. Violation-name SETS are invariant; P7/P8 map
+              G1<->G2. OBSERVED non-vacuously on 60,120 forced states (receipt 32). The
+              FIRST-reported property may differ when one state violates two properties
+              attributed to different callers (ASYM-4); verdicts do not.
+S9  PROVEN.   OBSERVED: dead states and terminal() equal for each state and its mirror
+              (X-2: 100 dead states; SYM-1: 531).
+S10 PROVEN both directions (closed walk => cycle; lifting with at most two laps).
+              OBSERVED: L1 HOLDS identically on X-2/SYM-1 in both modes; 20,000 generated
+              involution-closed finite graphs (9,499 cyclic, 10,501 acyclic) judged alike
+              in graph and quotient, plus deliberate cases (state -> its mirror = quotient
+              self-loop; a cycle closing only after two quotient laps; merged acyclic
+              branches); the model's ADM self-loop (adm_keeping_its_counter) found as L1 by
+              both explorers.
+S11 PROVEN by construction (unfold) and OBSERVED: every key of the X-2 and SYM-1
+              quotients (both modes; 5,340 + 2,670 + 49,518 + 24,759 paths) unfolds into an
+              original path that replays in the original semantics into its pair; 690 / 345
+              / 5,218 / 2,609 of them needed the exchange. Example: quotient [Gc(0), Gc(0)]
+              unfolds to [Gc(0), Gc(1)] (receipt 30).
+S12 PROVEN.   pi leaves adm alone; ADM and its properties are invariant; composition
+              is pi acting on the admission quotient. OBSERVED: composed differentials
+              (X-2, SYM-1) match the admission quotient's counts, evaluations and admitted
+              counts by the pairs relation; observations are compared at each key AND its
+              mirror; E2 (one view) still fails a viewing-twice admission in composed mode.
+S13 PROVEN.   canonical(k) = byte-smaller of two full keys; k1, k2 share it iff k2 is k1
+              or its mirror. OBSERVED: every canonical key of X-2/SYM-1 stands for exactly
+              {k, mirror k}; the quotient's key set equals the pairs' key set exactly.
+S14 PROVEN restriction. F-G is not symmetric (G2 alone seeded: pi(init) != init, OBSERVED).
+              The prototype accepts only the exact shapes X-2, SYM-1, F-3 with caps no
+              higher than their own; refuses F-G, F-1 (not shown), any changed shape under
+              a known name, a raised cap, acknowledgements, other caller counts, A2 bits,
+              acknowledgement rows (9 refusal tests, OBSERVED).
+S15 PROVEN by construction. explore, explore_experimental, successors, expand and every
+              existing test are byte-for-byte unchanged (first 6,034 lines identical); the
+              symmetry path is reached only from new tests; no mutation control was run or
+              routed through it.
+
+Result: no obligation failed; none remains materially unproved for F-3. DESIGN_BLOCKED
+does not apply.
+
+=====================================================================================
+C. COMPLETE TRANSFORMATION DEFINITION
+=====================================================================================
+sigma (callers) g -> 1-g; sigma (originals) 0,1 fixed, 2<->3.
+mirror_x32 on a 32-byte simulation value, typed by its first byte: 2 (gating record /
+  G's other content) and 6 (correction about G): second byte g -> 1-g; 5 (explanation
+  of original o): o -> sigma(o); 1, 3, 4, 9 (fact, holder, Prepared, commitment):
+  unchanged; anything else (7 = acknowledgement, or unknown): refused.
+RecordKey: id and digest by mirror_x32. Member: key, part's commitment. Cause: every
+  id/digest by mirror_x32, every key by RecordKey, every sequence kept. Occupant: Gating
+  record, Correction about, Explanation original+cause; Acknowledgement refused.
+SimRow: Gating(g), Correction(g,e), Other(g) -> 1-g; Explanation(o) -> sigma(o);
+  Prepared/Holder/Fact unchanged; Acknowledgement refused. Rows stay in place.
+World (destructured whole, so a new field breaks the build until placed): core U/C/X
+  occupants; refusal table rebuilt (size asserted); every row; settlement's held
+  Lookup::Conflict(Known::Cause); gc.swap(0,1); ack must be empty; adm_kept must be None;
+  ghost.issued, ghost.told bits 0<->1; all else unchanged.
+Keys: mirror(k) = encode(mirror_world(decode(k))). canonical = min_bytes(k, mirror k).
+Edges: actor Gc(g) -> Gc(1-g) by position in actors(config); choices kept.
+Guard: at every expanded key, mirror(mirror(key)) == key; expand(key) and
+  expand(mirror(key)); per actor, the second's items must equal the first's with edge
+  actor exchanged, same fault, same sorted violation names, same branches, successor
+  mirrored; same state-violation names; D1 judged alike. Difference: panic
+  "symmetry inapplicable: ..." with the unfolded shortest witness (BFS order makes it a
+  shortest one); no verdict.
+
+=====================================================================================
+D. ONE-FILE EXPERIMENTAL DIFF
+=====================================================================================
+diff/77a146ca-gc-symmetry.patch  (git format-patch; sha256
+  8ad134be8e6b6515494beead7a223c53844f026b1b288983a3aeba712c614d15;
+  patch-id cf136717c59a9b4c31eb9a694b31a02f6eed3b70)
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: +1724 / -0, one hunk
+  @@ -6034,0 +6035,1724 @@. No other file. protocol.rs, unit_tests.rs, Cargo.toml,
+  Cargo.lock, rust-toolchain.toml: same blobs as 83816e66 (receipt stage4/00).
+New items: SYM1, SYMMETRIC, shape, assert_symmetric, other_caller, mirror_x32,
+  mirror_key/part/member/cause/occupant/row/bits/world, mirror, canonical, mirror_edge,
+  Image, names, by_actor, hold, replay, unfold, witness, kahn, Mirrors, Kept,
+  explore_symmetric(_kept); tests: 19 ordinary + 2 ignored (gc_symmetry_f3,
+  gc_symmetry_prefix_f3; "run only when an Architect mission names it"). Neither name
+  contains "full_f3" or "quotient_full".
+SYM-1 is NEW and SUPPLEMENTARY (not a contract configuration): X-2's two callers beside
+  one conflicting fact whose Prepared record ENV supplies (F-3's F1), so that
+  explanations, the X cell, settlement's explain path and CellsBusy refusals of gating
+  are exercised under the exchange. X-2 alone exercises none of these.
+
+=====================================================================================
+E. ORIGINAL / SYMMETRIC GRAPH CORRESPONDENCE (OBSERVED, exhaustive)
+=====================================================================================
+                      reference                          symmetry quotient
+X-2 Full    states 10,020  trans 26,188 (922 f)     keys 5,340 (660 self)  trans 14,208 (618 f)
+            no-step 100    L1 25,266 non-fault       no-step 53             L1 13,590 non-fault
+X-2 ADM-Q   states 5,010   trans 10,589 (461 f)     keys 2,670 (330 self)  trans 5,769 (309 f)
+            evals 5,010 (430 admitted)               evals 2,670 (224 admitted), no-step 53
+SYM-1 Full  states 94,916  trans 294,698 (11,128 f) keys 49,518 (4,120 self) trans 155,577 (6,752 f)
+            no-step 531    L1 283,570 non-fault      no-step 275            L1 148,825 non-fault
+SYM-1 ADM-Q states 47,458  trans 123,620 (5,564 f)  keys 24,759 (2,060 self) trans 65,409 (3,376 f)
+            evals 47,458 (962 admitted)              evals 24,759 (492 admitted), no-step 275
+Every reference count equals 2 x quotient - (share of keys that are their own mirror),
+asserted for states, transitions, fault edges, non-fault edges, dead states,
+evaluations and admitted. The keys that are their own mirror and their shares were
+counted independently over the whole graph and equal the quotient's own tally.
+Chain: X-2 original 10,020 = 2 x ADM-Q 5,010 = 2 x (2 x 2,670 - 330).
+Property lines and branch sets identical to the reference in all four. Admitted counts
+(read from the receipts' quotient lines): X-2 430 = 2 x 224 - 18, SYM-1 962 = 2 x 492 -
+22, where 18 and 22 are the admitting observations at keys that are their own mirror
+(asserted in the test, which compares both sides of each relation).
+Original X-1..X-5 and ADM-quotient differentials re-run from this build: report bodies
+and DIFFERENTIAL lines byte-identical to sealed F3-QUOTIENT-01 receipts (stage4/36-38).
+
+=====================================================================================
+F. TRACE-REPLAY VERIFICATION (OBSERVED)
+=====================================================================================
+- Every key of the four quotients above: BFS path unfolded; each unfolded step replayed
+  in the original semantics (enabled, exact choices) and inside the original graph; end
+  state in the key's pair. 82,287 paths; 8,862 needed the exchange.
+- Negative counterexamples (existing defective admissions, X-2, both modes): P1
+  (3 steps), E9 (5 steps), E2 (1 step) fail in reference and symmetry quotient with the
+  same property and equal shortest-trace length; each quotient path unfolds to the
+  reported trace, and last_step_violations (original semantics, unchanged) replays it
+  to the property.
+- Guard witness: an asymmetric admission (test-only adm_favouring_g2) aborts at the
+  first differing key with its unfolded trace (1 step: "Gc(0): append_gating G1 ->
+  Committed"), no verdict.
+- None of these negative traces passes through an exchanged gating edge. Name
+  translation is shown by the exhaustive path unfolding above.
+
+=====================================================================================
+G. D1 / L1 PRESERVATION EVIDENCE
+=====================================================================================
+D1 PROVEN (S9); OBSERVED invariant at all 631 dead states of X-2/SYM-1 and their
+mirrors (D1 HOLDS in all reports). Composed mode judges D1 with admissions spent,
+for the key and its mirror.
+L1 PROVEN (S10). OBSERVED: L1 HOLDS identically (quotient non-fault edge counts satisfy
+the pairs relation); the finite-graph battery uses the same kahn() routine as the
+explorer, against an independent DFS; a quotient self-loop is reported as a cycle; the
+model's ADM self-loop is found as L1 by both explorers.
+
+=====================================================================================
+H. NEGATIVE TESTS AND LIMITATIONS
+=====================================================================================
+Refusal tests (should_panic, OBSERVED): F-G (conflict seeded for G2 alone), F-1 (not
+shown symmetric), F-3 shape with A4 under the name "F-3", F-3 with cap 30,000,001,
+X-2 with an ACK actor, X-4 (not two callers), A2 kept bits, an acknowledgement row, an
+asymmetric admission (guard).
+Limitations:
+ L-1 Reporting (ASYM-4): the explorer reports the first violation it meets. Between a
+     state and its mirror, or in BFS order, the first-reported property may differ when
+     violations are attributed to different callers. Verdicts and violation-name sets
+     are invariant. Mutation controls must stay on the original explorer (S15).
+ L-2 Not applicable to any configuration with an ACK actor (ASYM-1: the snapshot digest
+     is a mask indexed by original; ASYM-2: malform drops the lowest mask bit, which is
+     not equivariant), nor to F-G (ASYM-3), F-PT, F-B or any other configuration.
+ L-3 Lemma E is an inspection of source at 83816e66 (AS4). Any model change voids it.
+     The runtime guard then aborts on a difference only where it expands.
+ L-4 The guard doubles expansion work per key (both members of a pair are expanded).
+     Memory per kept key is unchanged.
+ L-5 The cap counts symmetry-quotient keys (composed: keys of Q_A/pi). The inherited cap
+     check stops one key past the cap (visited.len() > cap), hence the prefix cap of 99,999.
+ L-6 The negative counterexamples do not route through an exchanged gating edge (see F).
+ L-7 SYM-1 is a test-only configuration added by this mission; it is on the allowlist.
+
+F-3 BOUNDED PREFIX DIAGNOSTIC (run once; receipts/stage4/40-f3-prefix-diagnostic.txt)
+ - INCOMPLETE by construction. Composed mode, cap 99,999: 100,000 keys (61,565
+   expanded, 14,892 of the expanded keys their own mirror), 314,971 transitions
+   (68,016 fault), 61,565 evaluations (273 admitted), 0 dead states. 1.31 s wall, peak
+   RSS 18,236 KiB, cgroup MemoryMax 4G, swap 0, exit 0.
+ - OBSERVED: the guard held at all 61,565 expanded keys and their mirrors; no
+   asymmetry; no violation met; 41 listed branches + 1 outside the list taken.
+ - DERIVED (not measured; only for the expanded prefix): it stands for 2 x 61,565 -
+   14,892 = 108,238 admission-quotient keys = 324,714 original states (Theorem 1, N = 2).
+ - NOT ESTABLISHED: any F-3 property, F-3's size, whether the composed quotient completes
+   F-3 under 30M or any cap. The prefix is NOT proof of complete F-3. No extrapolation
+   is made.
+
+=====================================================================================
+I. BUILD AND TEST EXIT CODES (receipts/stage4)
+=====================================================================================
+00 provenance; 01 release build (fresh target, --locked, CARGO_INCREMENTAL=0,
+   CARGO_BUILD_JOBS=8): EXIT 0, 0 warnings.
+10 cargo fmt --all -- --check: EXIT 0
+11 git diff --check (vs 83816e66, vs 244c5b23, working tree): EXIT 0 x3
+12 clippy -p nexus-governed-control --all-targets -D warnings: EXIT 0, 0 warnings
+13 clippy -p nexus-governed-control --lib -D warnings: EXIT 0
+03/04 listings: 325 tests, 33 ignored (31 prior + 2 new)
+20 all lib tests, pinned release exe: 292 passed, 0 failed, 33 ignored, EXIT 0
+21 dev-profile default suite: lib 292 passed / 33 ignored, egress 1 passed, doc 8
+   passed, EXIT 0
+30-35 new tests with captured output: all EXIT 0 (1, 1, 1, 2, 3, 11 tests)
+36-38 original X-1..X-5, ADM differentials, ADM negatives/observer/refusals: EXIT 0
+40 F-3 prefix (single-run launcher, exact selection = 1): EXIT 0, INCOMPLETE
+No test was skipped, weakened, or filtered beyond --exact selection.
+
+=====================================================================================
+J. ACTUAL SOURCE AND EXECUTABLE HASHES
+=====================================================================================
+model_tests.rs @77a146ca: sha256 be562d08c6efe88c54cbd90e83734623ad81c3a1bcafd74d8577ed80236197f7,
+  blob a80dd05cbc6a90ddd97bfa4dba754ec5569eec21
+model_tests.rs @83816e66: sha256 6ce62e24e5f1a502183041298d4a96acd718e117286a1e6689f480f2eac892bb
+protocol.rs (unchanged): sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+Executable (built from 77a146ca in detached worktree
+  /home/nexus/NEXUS/nexus-os-p3-c11-gc-symmetry-build, fresh target):
+  target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+  sha256 b59b3569771f526f4d569fcc3c3c45197a1e576f385c9dd2a15455c1dfe04f26, 8,928,912 bytes.
+  Pinned by tools/run-pinned.sh and tools/run-prefix-f3.sh; unchanged after every run.
+Patch sha256 8ad134be...; patch-id cf136717c59a9b4c31eb9a694b31a02f6eed3b70.
+
+=====================================================================================
+K. SHA256 EVIDENCE MANIFEST
+=====================================================================================
+SHA256SUMS at the root of this directory lists every file except itself; the tree is
+sealed read-only after writing.
+
+=====================================================================================
+L. INDEPENDENT ARCHITECT REVIEW REQUEST
+=====================================================================================
+Requested decisions (none taken by the executor):
+ 1. Accept or reject Lemma E and the S1-S15 matrix (stage2/00) as the basis for an
+    exact G1/G2 symmetry reduction of F-3.
+ 2. Accept or reject the runtime guard (mirror expansion compared at every kept key) as
+    the required fail-closed safeguard, and its 2x expansion cost.
+ 3. Accept or reject SYM-1 as a supplementary differential configuration on the
+    allowlist.
+ 4. ASYM-4 / L-1: confirm that verdict-level equivalence suffices for F-3 itself, and
+    that every mutation control stays on the original explorer.
+ 5. Whether a symmetric or composed count can stand as contract evidence, and how the
+    cap (30M) applies to composed-quotient keys. Contract amendment is the Architect's;
+    none was made.
+ 6. Whether to publish 77a146ca to a review branch for independent source audit
+    (separate mission; nothing was pushed).
+ 7. Whether, and under what caps, a future mission may run gc_symmetry_f3. It was not
+    run here.
+
+NOT DONE (hard boundaries respected): full F-3 (original, admission quotient,
+symmetric); F-PT; F-B; any mutation control or campaign; state-cap increase;
+production edit; contract amendment; GitHub CI; push; merge; ledger activation;
+Phase Three closure. Prior sealed evidence untouched.

@@ -1,0 +1,117 @@
+DRY RUN at 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (tree 7ac6bb21430d15b17e3723b217b20a49dccf8282)
+historical manifest docs/evidence/p3-candidate10/original-183/manifest.json: sha256 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14, 183 controls, version '1-r1'
+recorded (control, file) hashes: 184 over 39 files; stale 22
+
+STALE PAIRS, with every edit of the control checked against the file at this commit:
+  M05 crates/nexus-governed-control/src/authority/mod.rs
+     recorded f4eca418d66a239148087efba96b88c41547699c60a8929bafcbc89f88e7ae32
+     current  ae99b2f59794470c4899396861c4942ba5db2e2e338fb3aeab8712be6c217013 (blob c1dfe9f5af9f50b84c5400df0306d4c6f577fb48)
+     edit 1 on crates/nexus-governed-control/src/authority/mod.rs: anchor occurs 1 (manifest count 1) OK at line(s) [335]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-governed-control --locked --lib -- authority::tests::an_emergency_stop_cancels_every_run governed::tests::the_emergency_stop_ends_everything; expected failing tests ['authority::tests::an_emergency_stop_cancels_every_run_and_refuses_new_ones', 'governed::tests::the_emergency_stop_ends_everything_until_the_owner_resumes']
+  M18 crates/nexus-governed-control/src/broker.rs
+     recorded 471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e
+     current  353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4 (blob eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2)
+     edit 1 on crates/nexus-governed-control/src/broker.rs: anchor occurs 1 (manifest count 1) OK at line(s) [403]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-governed-control --locked --lib -- broker::tests::a_commitment_cannot_release_a_lease_it_does_not_list; expected failing tests ['broker::tests::a_commitment_cannot_release_a_lease_it_does_not_list']
+  M19 crates/nexus-governed-control/src/broker.rs
+     recorded 471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e
+     current  353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4 (blob eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2)
+     edit 1 on crates/nexus-governed-control/src/broker.rs: anchor occurs 1 (manifest count 1) OK at line(s) [425]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-governed-control --locked --lib -- broker::tests::a_lease_releases_its_secret_once; expected failing tests ['broker::tests::a_lease_releases_its_secret_once_to_its_commitment_only']
+  M32 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4665]; replacement empty (a deletion)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_08; expected failing tests ['phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified']
+  M39 crates/nexus-governed-control/src/broker.rs
+     recorded 471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e
+     current  353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4 (blob eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2)
+     edit 1 on crates/nexus-governed-control/src/broker.rs: anchor occurs 1 (manifest count 1) OK at line(s) [120]; replacement empty (a deletion)
+     test command: cargo test -p nexus-governed-control --locked --lib -- broker::tests::a_credential_from_the_environment_is_refused; expected failing tests ['broker::tests::a_credential_from_the_environment_is_refused']
+  M45 crates/nexus-governed-control/src/authority/run.rs
+     recorded 33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725
+     current  394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6 (blob 83e2c42e306872fe35d2674dc3e1bc4ce52b05f1)
+     edit 1 on crates/nexus-governed-control/src/authority/run.rs: anchor occurs 1 (manifest count 1) OK at line(s) [376]; replacement text already occurs 1 time(s)
+     test command: cargo test -p nexus-governed-control --locked --lib -- authority::tests::finishing_a_run_ends_what_it_left_and_releases_what_it_owns; expected failing tests ['authority::tests::finishing_a_run_ends_what_it_left_and_releases_what_it_owns']
+  M78 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [5025]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_12; expected failing tests ['phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M79 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [5123]; replacement empty (a deletion)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_12 p3_g6_08; expected failing tests ['phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M80 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4697]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_08 p3_g6_12; expected failing tests ['phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified', 'phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M84 crates/nexus-governed-control/src/authority/approval.rs
+     recorded f34be06d927e59884f219e3b31bc57916ad3da6bc3bc65120d8e8c9fd2252c6c
+     current  34f849b502782f0c6a046c9fd2d5ceb50bf497a54e52e591339630670db49202 (blob 19e3ace99a7f24c9d182354c2cfcdc388729af4d)
+     edit 1 on crates/nexus-governed-control/src/authority/approval.rs: anchor occurs 1 (manifest count 1) OK at line(s) [194]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_02; expected failing tests ['phase3_tests::p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer']
+  M87 crates/nexus-governed-control/src/lib.rs
+     recorded 53c37d97f90ede471aff8cf6da93f9323c6915120626e94554788f45cd5b7f46
+     current  addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d (blob b806ed577f8d3472b7187d161246e08d2f1ccd3d)
+     edit 1 on crates/nexus-governed-control/src/lib.rs: anchor occurs 1 (manifest count 1) OK at line(s) [50]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_15; expected failing tests ['phase3_tests::p3_g6_15_the_compile_fail_doctests_are_pinned_with_their_errors']
+  M89 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [2874]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_16; expected failing tests ['phase3_tests::p3_g6_16_test_only_features_are_enabled_only_by_tests']
+  M112 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4591]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_04 p3_g6_08 p3_g6_12; expected failing tests ['phase3_tests::p3_g6_04_the_mechanisms_are_confined_to_their_modules', 'phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified', 'phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M113 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4653]; replacement text already occurs 1 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_12; expected failing tests ['phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M129 crates/nexus-governed-control/src/authority/run.rs
+     recorded 33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725
+     current  394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6 (blob 83e2c42e306872fe35d2674dc3e1bc4ce52b05f1)
+     edit 1 on crates/nexus-governed-control/src/authority/run.rs: anchor occurs 1 (manifest count 1) OK at line(s) [229]; replacement text already occurs 2 time(s)
+     test command: cargo test -p nexus-governed-control --locked --lib -- governed::tests::quitting_cancels_every_run_and_opens_no_more; expected failing tests ['governed::tests::quitting_cancels_every_run_and_opens_no_more']
+  M141 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [5048]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_12; expected failing tests ['phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M143 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4562]; replacement empty (a deletion)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_08 p3_g6_12; expected failing tests ['phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified', 'phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M153 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [4596]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g6_12; expected failing tests ['phase3_tests::p3_g6_12_the_inventory_fails_closed']
+  M177 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [8908]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g10_01; expected failing tests ['phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock']
+  M178 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [8910]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g10_01; expected failing tests ['phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock']
+  M179 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [8991]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g10_01; expected failing tests ['phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock']
+  M180 app/src-tauri/src/phase3_tests.rs
+     recorded 2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae
+     current  b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8 (blob 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83)
+     edit 1 on app/src-tauri/src/phase3_tests.rs: anchor occurs 1 (manifest count 1) OK at line(s) [8919]; replacement text already occurs 0 time(s)
+     test command: cargo test -p nexus-desktop-backend --locked --lib -- p3_g10_01; expected failing tests ['phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock']
+
+controls with any anchor count different from the manifest at this commit: 0

@@ -1,0 +1,10 @@
+--- historical C25 mutant (CAMPAIGN-01 sealed text)
++++ narrow C25 mutant (this probe)
+@@ -1472,6 +1472,7 @@
+                 Commit::Unknown => {
+                     self.failed();
+                     self.rolled(io.rollback());
++                    self.keep = true;
+                     return GatingOutcome::Committed(seq);
+                 }
+             },

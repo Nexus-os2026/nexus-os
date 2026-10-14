@@ -1,0 +1,12 @@
+BUILD (healthy witness source)
+HEAD 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda porcelain:  M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933
+env CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target
+command: nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 8 --message-format=json-render-diagnostics
+started 2026-10-14T01:42:36+01:00
+exit 0, finished 2026-10-14T01:42:55+01:00
+   Compiling nexus-governed-control v0.1.0 (/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/crates/nexus-governed-control)
+    Finished `release` profile [optimized] target(s) in 18.71s
+wall 18.80 s, peak RSS 1135436 KiB
+compiler messages: 0
+executable 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53  /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 8962488 bytes

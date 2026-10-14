@@ -1,0 +1,14 @@
+REMOTE VERIFICATION  2026-10-14T02:17:52+01:00
+[ref] ls-remote: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b	refs/heads/review/p3-c11-d2a1-ad1r1-witness-01
+[ref] API: refs/heads/review/p3-c11-d2a1-ad1r1-witness-01 42dd1bd1cf21ffdea5968b256d2983f6575fab5b commit
+[commit] API: sha 42dd1bd1cf21ffdea5968b256d2983f6575fab5b tree 7ac6bb21430d15b17e3723b217b20a49dccf8282 parents 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda message: test(experiment): add replay witnesses for controls C1 and C25
+[compare] 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda...42dd1bd1cf21ffdea5968b256d2983f6575fab5b: status ahead ahead 1 behind 0 commits 1 files 1
+  file crates/nexus-governed-control/src/ledger/protocol/model_tests.rs status modified +277 -0 changes 277 blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933
+[blob] API contents at 42dd1bd1cf21ffdea5968b256d2983f6575fab5b: sha 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 size 286411
+[blob] remote raw content sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba (local be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba); git hash-object 5ad26ddc727d8be30f4fb8d7478bc69e1c974933; byte-identical to local blob: YES
+[protocol.rs] API blob at 42dd1bd1cf21ffdea5968b256d2983f6575fab5b: a2df2841b99cad5d452008a6d4150e9369d07e66 (expected a2df2841b99cad5d452008a6d4150e9369d07e66)
+[refs] before 182 lines, after 183 lines; diff:
+    91a92
+    > 42dd1bd1cf21ffdea5968b256d2983f6575fab5b	refs/heads/review/p3-c11-d2a1-ad1r1-witness-01
+[actions] total_count 234 (234 before); latest 38319429125 b1d535f1 2026-10-12T22:56:02Z; runs for head_sha 42dd1bd1cf21ffdea5968b256d2983f6575fab5b: 0; runs on branch: 0; in_progress 0, queued 0
+[url] https://github.com/Nexus-os2026/nexus-os/tree/review/p3-c11-d2a1-ad1r1-witness-01 ; commit https://github.com/Nexus-os2026/nexus-os/commit/42dd1bd1cf21ffdea5968b256d2983f6575fab5b

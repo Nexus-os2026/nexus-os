@@ -1,0 +1,28 @@
+STAGE 4 — LIMITED IMPLEMENTATION AND PROBES
+
+Branch experiment/p3-c11-d2a1-ad1r1-witness-01 (local, from 2d83b74b), worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness.
+Witness source: model_tests.rs +277/-0, appended after line 8244; blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933, sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba; patch patches/witness-source.patch sha256 641be53dcb2761e5b9ab2e8acb88f904e64f82f47dd9f45220f7443fcb329414.
+
+HEALTHY FIRST (before any mutant):
+  build: exit 0, finished 2026-10-14T01:42:55+01:00
+  build: compiler messages: 0
+  build: executable 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53  /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 8962488 bytes
+  healthy/02-c1-witness-healthy.txt: exit status: 0 | 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused'
+  healthy/03-c25-witness-healthy.txt: exit status: 0 | 1 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating: Refused Uncertain Storage'
+
+PROBES (one per control, CAMPAIGN-01's sealed encodings; each in its own disposable worktree from 2d83b74b + the witness blob):
+  C1: KILLED BY THE WITNESS (named property observed) | mutant exe 223b05d91e4977ee72f3a71b50d170120efb234ef463d3a8ab62cffd38f7a3c4 | mutant protocol.rs blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66 | restored PASS True | restored exe 6677184734c067ce91c8eeb0121adcf652d9eaa91c5c2cc9c33d042786ed575f
+      NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)
+      OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]
+      step-enablement or choice differences: none (every step was asserted enabled and taking its scheduled choices in both runs)
+  C25: KILLED BY THE WITNESS (named property observed) | mutant exe a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6 | mutant protocol.rs blob 9d4e74b4faf5078a59ff3d2a86a76f26f42953f1 | restored PASS True | restored exe e355b144f1e343020575f1d4528de144989958b31dab6d5d5c63638754e9950c
+      NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))
+      OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: ["E4"]
+      step-enablement or choice differences: none (every step was asserted enabled and taking its scheduled choices in both runs)
+  mutation patches: C1 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252, C25 a6de4ed9fdbc0c351790df899f8e92863bbb4e6950320ecddf07078368ac656b
+
+Disposal: 03-probe-worktree-disposal.txt (both removed after their diffs and receipts were saved; no other worktree or process touched).
+Commit after the probes: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (tree 7ac6bb21…), committed blob = probed blob 5ad26ddc. Not pushed.
+
+STATUS: both witnesses establish their named property on their mutant, preserve E3/E4 as separate violations,
+replay identically (every step enabled, same choices) on healthy and mutant builds, and pass on the restored build.

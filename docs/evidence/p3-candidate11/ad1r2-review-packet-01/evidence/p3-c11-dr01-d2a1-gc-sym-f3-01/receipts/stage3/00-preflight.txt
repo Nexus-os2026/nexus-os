@@ -1,0 +1,58 @@
+STAGE 3 — pre-flight  2026-10-13T23:14:24+01:00
+## memory and host headroom
+   MemTotal:       65077588 kB
+   MemAvailable:   54029792 kB
+   SwapTotal:      16777212 kB
+   SwapFree:        7339616 kB
+   needed: 16 GiB cap + 2 GiB margin = 18874368 KiB; available - needed = 35155424 KiB left for Owner workloads
+   load 1.60 3.09 2.39 3/2967 2544526; CPUs 16; disk 69G
+   expected scale (observed, not a bound): F3-QUOTIENT-01 at the same 30M cap: RSS 3.76 GiB, 2:58 wall
+## Owner workloads (not stopped; recorded only):
+       902964 KiB  python
+       822824 KiB  brave
+       723920 KiB  2.1.281
+       672820 KiB  chrome
+       642260 KiB  brave
+       563208 KiB  chrome
+       528432 KiB  claude
+       503432 KiB  chrome
+       385312 KiB  claude-desktop
+       310420 KiB  chrome
+   ollama: 1 process(es); browsers: 55; claude: 21
+## enforcement probe: a transient scope with the same properties, running only a shell that reads its own cgroup
+   cgroup /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-gcsymf3-probe-1791929664.scope
+   memory.max 17179869184  memory.swap.max 0  memory.high max
+   parent memory.max max  parent memory.swap.max max
+   probe exit 0; RuntimeMaxSec of probe unit as set: infinity
+   16 GiB = 17179869184 bytes
+## time enforcement: timeout (GNU coreutils) 9.4; /usr/bin/time: time (GNU Time) UNKNOWN; systemd systemd 255 (255.4-1ubuntu8.17)
+   primary: timeout -s KILL 2700 around the executable; backstop: scope RuntimeMaxSec=2710; plus the explorer's own FULL_TIME (45 min) check
+## pinned executable: c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704 (pin c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704)
+## selection proof (the launcher repeats it immediately before the run):
+   full ignored listing: 33 tests
+   substring 'gc_symmetry' (--ignored): gc_symmetry_f3 gc_symmetry_prefix_f3 
+   substring 'full_f3' (--ignored): full_f3 quotient_full_f3 
+   substring 'f3' (--ignored): full_f3 gc_symmetry_f3 gc_symmetry_prefix_f3 quotient_full_f3 
+   substring 'gc_symmetry_f3' (--ignored): gc_symmetry_f3 
+   exact selection: /home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_f3 --exact --ignored --list
+     ledger::protocol::model_tests::gc_symmetry_f3: test
+   exact selection count: 1
+   NOT selected (exact): gc_symmetry_prefix_f3, quotient_full_f3, full_f3 and every other ignored test
+## bound the test runs with (source, unchanged prefix): F3 { ..BASE } -> cap FULL_CAP = 30,000,000, time FULL_TIME = 45 min;
+   gc_symmetry_f3 calls explore_symmetric(&F3, step_adm, Mode::Quotient) (composed quotient); the cap counts composed-quotient keys
+## worktree: HEAD 77a146ca606f99329068410b6037721341f00c70 porcelain 0; receipt exists: no
+## conflicts: cargo/rustc/clippy 0; p3c11 scopes 0; test executables running 0
+
+## CORRECTION (appended): the 'RuntimeMaxSec of probe unit as set: infinity' line above was read after the probe scope had
+   exited, so systemctl reported the default of a gone unit. It is not evidence. Re-probed while the scope is alive:
+   live scope p3c11-gcsymf3-probe2-1791929678: RuntimeMaxUSec=45min 10s MemoryMax=17179869184 MemorySwapMax=0
+## kill-mechanism probes (sleep only; scaled-down durations):
+/bin/bash: line 29: 2544783 Killed                  timeout -s KILL 2 sleep 10
+   timeout -s KILL 2 sleep 10 -> exit 137 after 2.00 s (137 = killed by SIGKILL)
+Terminated
+   scope RuntimeMaxSec=2 running sleep 10 -> exit 143 after 2.26 s; scope Result: timeout
+   p3c11 scopes left: 1
+## lingering probe unit:
+   ● p3c11-gcsymf3-probe3-1791929680.scope loaded failed failed /usr/bin/sleep 10
+   procs in it: 
+   reset-failed p3c11-gcsymf3-probe3-1791929680.scope (this mission's own probe; record only) -> p3c11 scopes now: 0

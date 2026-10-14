@@ -1,0 +1,264 @@
+NEXUS OS — P3-C11-DR01-D2A1-F1-CAP60-01 — REPORT
+Executor: Claude Opus 5.5 (claude-opus-5-5), Claude Code, 2026-10-13. No subagents.
+To: ChatGPT GPT-6, Sole Architect.
+
+FINAL STATUS: EXPERIMENTAL_F1_PASS
+
+F-1 was explored exhaustively at the experimental commit under a nominal ceiling of 60,000,000 states:
+46,524,336 states were discovered, and all of them were expanded. Every property the contract requires
+of F-1 holds, and so does L1. The run took 4 min 04 s and peaked at 5.41 GiB, inside the enforced limits
+of 45 min and 16 GiB.
+
+This is not contract acceptance. The run is above contract 8.3's 30,000,000-state cap. It ran on an
+experimental commit, not on the mission's final commit. The 14 other full explorations and the 7.5
+controls were not run. No push, no CI, no integration, no amendment, no activation, no Phase Three claim.
+
+============================================================================================
+A. BASELINE IDENTITY (receipts/01-provenance.txt)
+  Candidate      22ebf9a5c5b16bb6f5169daf3731a3417c5289d3   tree b4a93dc6604a2a4e8cf5ae9fe455d8185b40f01b  MATCHES
+  Its parent     b1d535f1bb634f2075f12a36ace89a595cdb13ba   (= GitHub candidate 11; github repair/p3-candidate11)
+  Six-file delta b1d535f1..22ebf9a5, +9495 -0, as recorded:
+    M app/src-tauri/src/phase3_tests.rs
+    A crates/nexus-governed-control/src/ledger.rs
+    A crates/nexus-governed-control/src/ledger/protocol.rs
+    A crates/nexus-governed-control/src/ledger/protocol/model_tests.rs   (blob e928e25f…)
+    A crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs
+    M crates/nexus-governed-control/src/lib.rs
+  Prior evidence, re-verified before and after this mission, unmodified:
+    IMPL-01R    SHA256SUMS 7fbb1ee9e7d9d5a605c7f91f56ea10c2c8bb13d91bdf19b7659ac40172f563b6   55/55 OK
+    F1-DIAG-01  SHA256SUMS 4b9318725112597fcc6a81e812066584794d0da2ec3faa8717f5b50d56f42ff4    7/7 OK
+  Contract digest:
+    P3-C11-D2A1-CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c   MATCHES
+    The other three files in the contract package also verify.
+  Conflicting implementation: none. Only interim/p3-c11-ledger-core contained 22ebf9a5 before this mission.
+    No experiment or cap60 branch existed, and no cargo or rustc process was running.
+  Protected refs: none moved, before or after (receipts/05-ref-state-after.txt).
+    local  main 4b36f606, repair/p3-candidate11 e71b982b, interim/p3-c11-ledger-core 22ebf9a5,
+           rebuild/phase0-trust-boundary f727f5c3, dep/p3-c11-dep01 b1d535f1
+    github main 6e15dee6, repair/p3-candidate11 b1d535f1, rebuild/phase0-trust-boundary f727f5c3
+  Cap implementation read (model_tests.rs at 22ebf9a5):
+    l.78   const FULL_CAP: u64 = 30_000_000;    shared by all 15 full configurations through BASE (l.100)
+    l.155  const F1 = Config { name "F-1", faults 3, admissions 2, gating 2, ..BASE }   (no cap field of its own)
+    l.248  const FD = Config { name "F-D", faults 2, drop true, l1 false, ..F1 }        (F-D inherits from F1)
+    l.3889 the only use of config.cap that matters: `if visited.len() as u64 > config.cap`, checked at the top
+           of the BFS loop (l.3890 and l.4026 print it). The cap sizes no allocation and changes no search order.
+
+B. EXPERIMENTAL DIFF (receipts/03-experimental-diff-attribution.txt; source/*)
+  Worktree /home/nexus/NEXUS/nexus-os-p3-c11-f1-cap60, new local branch experiment/p3-c11-d2a1-f1-cap60,
+  created from exactly 22ebf9a5. The branch has no upstream and is not on GitHub.
+  Experimental commit 243501f08a575541444564f58f61ef3846affef0
+            tree      ced955234f8c6e0b084a2d8e76a154d2c37bea06    parent 22ebf9a5. 1 file, +4 -1:
+    @@ -4152 +4152,4 @@ fn full_f1() {
+    -    full_exploration(&F1);
+    +    full_exploration(&Config {
+    +        cap: 60_000_000,
+    +        ..F1
+    +    });
+  Why not a literal-only change: there is no F-1 literal to edit.
+    - Editing FULL_CAP would raise all 15 full configurations.
+    - Adding `cap:` to the F1 constant would also raise F-D, through `..F1`.
+    So the only F-1-only edit is an override inside the full_f1 test body. The F1 constant, F-D and every other
+    configuration are byte-identical: lines 1-260 of the file are identical at both commits.
+  Untouched, as required: protocol.rs, unit_tests.rs, ledger.rs, lib.rs, phase3_tests.rs, every Cargo.toml,
+    Cargo.lock, every guard. Every other blob in the tree is identical to 22ebf9a5.
+  Unchanged: actors, program counters, state key, equality, history bits, fault budgets, exploration order,
+    property predicates, terminal conditions, L1, worker interleaving, admission operations, and the time cap.
+    The bounds line of the run differs from the original receipt only in "caps 60000000 states" (section G).
+  Options B1-B4 were not implemented.
+  For independent inspection: source/0001-experimental-f1-cap60.patch and
+    source/experiment-p3-c11-d2a1-f1-cap60.bundle. The bundle verifies and requires 22ebf9a5.
+
+C. LOCAL VALIDATION ON 243501f0 (receipts/local/*, receipts/04-default-explorations-comparison.txt)
+  Every gate below exited 0, with 0 warning or error diagnostics. The worktree was clean for every gate.
+    10  cargo fmt --all -- --check
+    11a git diff --check 22ebf9a5 HEAD          11b git diff --check b1d535f1 HEAD
+    12  cargo clippy -p nexus-governed-control --locked --all-targets -- -D warnings
+    13  cargo clippy -p nexus-governed-control --locked --lib -- -D warnings
+    14  cargo clippy -p nexus-desktop-backend --locked --all-targets -- -D warnings
+    15  cargo test -p nexus-governed-control --locked
+          250 lib + 1 integration (egress_ignores_proxy_environment) + 8 doctests pass, 0 fail, 16 ignored (the 15 full explorations and 1 diagnostic).
+          Identical to IMPL-01R.
+    16  cargo test -p nexus-desktop-backend --locked --lib
+          581 pass, 0 fail, 5 ignored. Identical to IMPL-01R.
+          This includes phase3_tests::p3_c11_d2a1_the_ledger_protocol_core_is_confined ... ok
+    17  cargo build -p nexus-governed-control --locked
+  X-1..X-5 were run through the launcher (dev profile, as in IMPL-01R). Each is PASS.
+  Against IMPL-01R's receipts, each of these is identical: bounds line (cap 250,000 unchanged), actors,
+  state-key fields, branch coverage, states, expanded, transitions, fault transitions and end states:
+    X-1 59,104 / 219,156 / 14,986 / 34      X-2 10,020 / 26,188 / 922 / 100     X-3 25,617 / 81,573 / 2,605 / 44
+    X-4 3,106 / 10,097 / 816 / 14           X-5 3,311 / 7,752 / 699 / 28
+  The complete full exploration campaign was not run.
+
+D. F-1 RESULT (receipts/explorations/full-F-1-cap60.txt)
+   1. Source        commit 243501f08a575541444564f58f61ef3846affef0, tree ced955234f8c6e0b084a2d8e76a154d2c37bea06.
+                    The worktree was clean.
+   2. Executable    /home/nexus/NEXUS/nexus-os-p3-c11-f1-cap60/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+                    sha256 1c16891f097d2329069b5ac8db649779d9efea2e92f62884c6b4d74f3060835c, 8,591,632 bytes
+      Invocation    cwd crates/nexus-governed-control; started 2026-10-13T13:35:47+01:00:
+                    systemd-run --user --scope --unit=p3c11-cap60-full-F-1-cap60--1791894856 -p MemoryMax=16G
+                      -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700 <exe>
+                      ledger::protocol::model_tests::full_f1 --exact --nocapture --test-threads=1 --ignored
+   3. Toolchain     rustc 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0 (85eff7c80 2026-01-15), host x86_64-unknown-linux-gnu
+      Profile       release: opt-level 3, lto thin, codegen-units 16, strip symbols, --locked
+   4. Bounds        facts 2, conflicting [false,false], ENV false, batch false, faults 3, admissions 2,
+                    gating callers 2, gating conflict false, acknowledgement actors 0, attempts 0,
+                    malformed false, cell constraint false, worker verbs unwind false, DROP false, REPLAY 0,
+                    A4 false; ticket limit 8, refusal limit 4; settlement and the worker on;
+                    caps 60000000 states, 2700 s.
+      Actors        [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+                    These match contract 8.3's F-1 row: two facts, none conflicts, 3 faults, 2 admissions,
+                    2 gating callers, 0 acknowledgements.
+   5. States discovered       46,524,336
+   6. States expanded         46,524,336
+   7. Unexpanded              0
+   8. Transitions             209,123,584
+   9. Fault transitions       21,060,795 (10.07%). Non-fault: 188,062,789, which equals L1's edge count.
+  10. End states              8,696 states have no enabled step, and every one passed D1's terminal check.
+                              So there are 8,696 terminal states and 0 non-terminal dead ends.
+                              L1: 188,062,789 non-fault edges, no cycle, 8,696 end states, each terminal.
+  11. Properties (contract 7.3, 7.4)
+                    P1 P2 P4 P5 P6 P7 P8 P9 P12 P13 P15 D1 E1 E2 E3 E4 E5 E6 E7 E8 E9 E11 KEY: HOLDS
+                    L1: HOLDS
+                    E10: not applicable. 7.4 states it as "With worker verbs unwinding, D1 and L1 hold"; worker
+                      verbs unwind only in F-W. D1 and L1 themselves hold here.
+                    Contract 7.4's claim table requires, for every configuration, P1-P15 as kept, E1-E9 and E11;
+                    and L1 for every configuration without DROP. All of these hold.
+  12. Branch coverage       42 taken lines: 39 of the 90 listed labels, plus 3 labels outside the list
+                              (append_cell C: Refused(Latched); append_cell C: Refused(NotHealthy);
+                              resolve: Refused(NotHealthy)).
+                            51 listed labels not taken: append_acknowledgement 12, append_cell X 7, explain 6,
+                              snapshot 6, resolve 5, append_facts (conflicts) 3, malformed snapshot 3,
+                              append_cell C 2, empty 2, lookup (conflicts) 2, append_gating (conflict) 1,
+                              barrier unwound 1, DROP 1.
+                            F-1's configuration (no conflicts, no acknowledgements, no DROP or malformed
+                              snapshots) cannot reach these. They are other configurations' to cover.
+  13. Peak memory           5,669,760 KiB (5.41 GiB) maximum RSS (/usr/bin/time).
+                            Scope cgroup memory.peak: 5,815,324,672 B (5.42 GiB). Explorer tables: 3,776 MiB.
+  14. Wall clock            4:03.72 (243.72 s) by /usr/bin/time; 243.2 s by the explorer's own clock.
+                            User 239.58 s, system 4.08 s, 99% of one CPU.
+  15. Termination           The search was exhaustive: the BFS loop ended because every discovered state had been
+                            expanded. The L1 pass then ran. No cap was reached: neither the state cap (46.5M of
+                            60M), nor time, nor memory. Test result: 1 passed. Exit status 0.
+                            Scope Result=success. OOM and oom_kill events: 0. Swap used: 0.
+  Cap accounting: the off-by-two behaviour was NOT observed. The `>` check at l.3889 never fired, because the
+    search ended at 46,524,336 states, below the ceiling. The behaviour is still in the code, unchanged and
+    unrepaired. Its last observation is the original receipt: 30,000,002 states against a cap of 30,000,000.
+
+E. ACTUAL RESOURCE USAGE (receipts/02-launcher-selftest.txt; full-F-1-cap60.cgroup-samples.txt)
+  Enforcement was verified in practice, not just reported:
+    - Read back from the live scope during the run: memory.max 17179869184 and memory.swap.max 0.
+    - Self-test of each mechanism with tiny processes:
+        a 64 MiB scope was OOM-killed (exit 137, Result=oom-kill);
+        timeout -s KILL 2 killed a child at 2.00 s;
+        the RuntimeMaxSec=2 backstop ended a scope at 2.06 s (Result=timeout).
+  Pre-flight (13:35:47):
+    MemAvailable 53,915,280 KiB, against 18,874,368 needed (the 16 GiB cap plus 2 GiB margin).
+    Swap: 9.2 GiB used by other workloads; the run's scope had swap disabled.
+    Load average 4.10 on 16 CPUs; 108 GB of disk free.
+    Nothing was stopped: Ollama, browsers, the desktop and the Owner's other workloads all kept running.
+  Scheduling: nice 0 and affinity 0-15, as in the previous receipts. The explorer is single-threaded (one test
+    thread). Builds were bounded by the repository's .cargo/config.toml (jobs = 8).
+  During the run: 122 samples, one every 2 s.
+    memory.current rose roughly linearly: 1.44 GB at +1 min, 2.89 GB at +2, 4.18 GB at +3, 5.62 GB at +4,
+      and a peak of 5.81 GB in the L1 pass.
+    Host MemAvailable never fell below 48,233,052 KiB.
+  Headroom used: 33.8% of the 16 GiB cap and 9.0% of the 45 min cap.
+  Costs: 124.8 bytes per state, including the L1 pass; 5.23 µs per state.
+
+F. COVERAGE AND OMITTED WORK
+  Covered: F-1, exhaustively, with every required property checked on all 46,524,336 states and
+    209,123,584 transitions.
+  Omitted by this mission's scope:
+    - F-2 through F-R (14 full explorations), at any ceiling, at either commit.
+    - All 7.5 controls. This includes those assigned to F-1 (C1, C2, C10, C24, C25, A1, A2): their failing
+      and restored receipts on F-1 do not exist.
+    - Workspace-wide tests, Fast Local and hosted CI.
+    - Any rerun.
+  Disclosures:
+    - Invocation. The launcher runs the built test executable directly, not through `cargo test`, so the
+      executable can be hashed and the time limit signals the explorer itself. Arguments, cwd and the release
+      build are otherwise as IMPL-01R's. One effect: max RSS for the X runs is now 13-18 MB instead of
+      ~130 MB, because IMPL-01R's figure was cargo's own RSS. The F-1 figures are dominated by the explorer in
+      both runs, so they compare directly.
+    - Time limit. TERM became SIGKILL (`timeout -s KILL`), and a RuntimeMaxSec backstop was added. Neither fired.
+    - The 2 s cgroup sampler misses runs shorter than one interval (X-4, X-5). /usr/bin/time is the
+      authoritative peak for those runs.
+    - The experiment worktree and its local branch are kept; nothing was deleted. Its target directory
+      (12 GB of build cache) is also kept.
+
+G. COMPARISON WITH THE ORIGINAL F-1 RECEIPT (IMPL-01R receipts/explorations/full-F-1.txt, at 22ebf9a5)
+                         original (cap 30,000,000)          this run (cap 60,000,000)
+    outcome              INCOMPLETE (state cap)             PASS (exhaustive)
+    discovered           30,000,002                         46,524,336
+    expanded             26,950,179                         46,524,336
+    unexpanded           3,049,823                          0
+    transitions          129,379,515                        209,123,584
+    fault transitions    17,092,117                         21,060,795
+    no enabled step      3,826                              8,696 (all terminal)
+    elapsed / wall       145.4 s / 2:26.02                  243.2 s / 4:03.72
+    peak RSS             3,363,028 KiB                      5,669,760 KiB
+    explorer tables      3,264 MiB                          3,776 MiB
+    properties           none established                   all required hold; L1 holds
+  Identical in both: the bounds line apart from the cap, the actors, the state-key field list, the set of
+    branch labels, and the taken/not-taken mark of every branch (42/51). No branch was newly taken.
+  The original lower bound (>= 30,000,002) is confirmed. The total is 1.551 x the contract's 30,000,000 cap;
+    the run finished 13,475,664 states (22.5%) below the 60M ceiling.
+  Against F1-DIAG-01's figures:
+    - 5.23 µs per state, against 5.40 then.
+    - 124.8 B per state including L1. DIAG-01 projected 185.5 B from F-2's pre-commit ratio.
+    - The total, 46,524,336, is divisible by 3 (15,508,112 x 3). That is consistent with DIAG-01's exact x3
+      admission-observer claim, but it is not a proof of it.
+
+H. REMAINING R1 / SOURCE-REVIEW OBLIGATIONS (none discharged by this mission)
+  1. Contract 8.3: every full run must be PASS on the exact final commit, under the contract's caps. F-1 needs
+     more than 30,000,000 states, so it cannot PASS under 8.3 as written. That needs an Architect amendment and
+     Owner acceptance of the cost. This run is experimental evidence, not that run.
+  2. F-2 to F-R have not been run at the candidate. F-D derives from F-1 (2 faults, DROP on, no L1). Its size is
+     unknown, and it keeps the 30,000,000 cap.
+  3. 7.5 controls: IMPL-01R ran 7 (C12, C14, C19, C21, C22, C27, C28). The rest are open, including the F-1
+     controls C1, C2, C10, C24, C25, A1 and A2.
+  4. F1-DIAG-01 E.1: item 1 (CAS first-expected-value wording, R1 against Appendix A) is a potential mismatch
+     for the Architect to rule on. Items 2, 5 and 6 (lookup's second read of `explained`; take_worker
+     publishing nothing; the answers on occupancy overflow) need independent verification.
+  5. Residual assumptions A-1 and A-2 (persistence) are stated, not discharged. Every exploration result,
+     this one included, is conditional on them (contract R-a to R-e).
+  6. 15 manifest mappings in docs/evidence/p3-candidate10/original-183/manifest.json are stale (hash drift,
+     classified TEXT UPDATE, SAME PROPERTY). They are unchanged and not edited.
+  7. The explorer's cap-overshoot behaviour (`>` at l.3889) is unrepaired. It cannot produce a false PASS.
+  8. Codex's and the Architect's independent review of the six-file source, of IMPL-01R's evidence and of this
+     run. The implementer does not accept its own work.
+
+I. EVIDENCE SHA256 MANIFEST
+  Directory ~/nexus-audits/claude-architect/p3-c11-dr01-d2a1-f1-cap60-01/. Its SHA256SUMS covers every file
+  in the directory except itself:
+    receipts/ (01 provenance, 02 launcher self-test, 03 diff attribution, 04 X comparison, 05 ref state after,
+      local/ gates, explorations/ receipts and cgroup samples), tools/, source/, and this report.
+  Verify with: cd <dir> && sha256sum -c SHA256SUMS
+
+J. RECOMMENDATION FOR THE NEXT ARCHITECT DECISION
+  1. The evidence supports a formal F-1-specific ceiling amendment, and does not require a model change.
+     - F-1's exact size at this source is 46,524,336 states.
+     - It completes in about 4 min and 5.4 GiB, well inside the unchanged 45 min and 16 GiB.
+     - A ceiling of 60,000,000 leaves 22.5% margin. Any formal value should be stated against this measured total.
+  2. Admission-actor equivalence (B1) is NOT needed for F-1 to complete within the existing resource limits.
+     It stays an optional cost reduction (DIAG-01: an exact ÷3). Its contract amendments to 7.2, 7.3, 7.5 and
+     8.3 would change what is checked, so I recommend not pursuing it on F-1's account.
+  3. Decide the scope of any amendment deliberately. This run measures F-1 only.
+     - The other 14 configurations have not been run at the candidate.
+     - F-D inherits F-1's actors with DROP on.
+     - F-B2 also has 3 faults.
+     - Any of them may also exceed 30,000,000.
+     An amendment confined to F-1 keeps the remaining runs' INCOMPLETE rule meaningful. A general raise would
+     be a separate decision without evidence behind it.
+  4. If the amendment is made, an acceptance mission should:
+     - put the ceiling into the source in its approved form;
+     - run all 15 full explorations and the 7.5 controls, on the exact final commit, through an enforcing
+       launcher;
+     - leave this experimental branch unintegrated.
+
+AUTHORITY BOUNDARIES KEPT:
+  - One F-1 run only: no rerun, resume or expansion.
+  - No push, no GitHub CI, no merge or integration, no contract amendment, no ledger activation, no Phase Three
+    closure.
+  - No prior sealed evidence altered; no protected ref moved; no workload stopped.
+  - The only repository change is the 4-line test-only diff in one local experimental commit.

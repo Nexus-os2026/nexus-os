@@ -1,0 +1,19 @@
+FINAL STATE  2026-10-14T02:18:46+01:00
+[refs] before 14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c (182); final 7aeae2bb06148e9feb59bf3552c4ced422038e0a13ff75b61556d128c335b3a0 (183); after-push list identical to final: YES
+       before -> final diff (expected: exactly the one review ref added):
+         91a92
+         > 42dd1bd1cf21ffdea5968b256d2983f6575fab5b	refs/heads/review/p3-c11-d2a1-ad1r1-witness-01
+       6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+       f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+       b1d535f1bb634f2075f12a36ace89a595cdb13ba	refs/heads/repair/p3-candidate11
+       42dd1bd1cf21ffdea5968b256d2983f6575fab5b	refs/heads/review/p3-c11-d2a1-ad1r1-witness-01
+       2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda	refs/heads/review/p3-c11-d2a1-closure-prep-01
+[actions] total_count 234 (234 before push); runs for 42dd1bd1cf21ffdea5968b256d2983f6575fab5b: 0; on the review branch: 0; in_progress 0; queued 0; latest 38319429125 b1d535f1 2026-10-12T22:56:02Z
+[witness] local branch 42dd1bd1cf21ffdea5968b256d2983f6575fab5b; remote review ref 42dd1bd1cf21ffdea5968b256d2983f6575fab5b; format-patch cc11d486b9f3290853dff6e9dfa64f3ebcbddffba674b169da53dd4abbae179b
+          worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b porcelain 0; healthy exe 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53
+[worktrees] probe worktrees: 0; total 142 (142 at start)
+          primary f727f5c3 porcelain 0; candidate11 e71b982b porcelain 0; closure-prep 2d83b74b; pt-fb 2d83b74b; local main 4b36f606, repair/p3-candidate11 e71b982b
+[evidence] previous mission: 73/73 OK, manifest 106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3
+           20 earlier manifests: 750 OK, 0 not OK
+           AD-1-R1 sealed 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda; AD-1 01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e
+[processes] nexus_governed_control|cargo|rustc|p3c11: 0; p3c11 scopes 0

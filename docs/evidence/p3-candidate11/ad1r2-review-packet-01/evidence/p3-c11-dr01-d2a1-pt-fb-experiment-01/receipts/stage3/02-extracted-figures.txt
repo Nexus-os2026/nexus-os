@@ -1,0 +1,70 @@
+receipt /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-pt-fb-experiment-01/receipts/stage3/gc-symmetry-full-F-PT.txt
+  outcome line            PASS
+  OUTCOME (launcher)      FPT_PASS
+  exit status             0
+  test result             test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 344 filtered out; finished in 484.61s
+  bounds                  facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+  actors                  [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+  keys discovered K       29751473
+  keys expanded           29751473
+  keys unexpanded         0
+  transitions (non-ADM)   113252841   with a fault 7396731   without 105856110
+  admission evaluations   29751473   admitted 3182
+  self-mirrored keys Kf   1698028
+  no enabled step         16131
+  L1 line                 HOLDS: 105856110 non-fault edges, no cycle; 16131 end states, each terminal (D1)
+  L1 non-fault edges = transitions - fault edges: 105856110 = 105856110 -> EQUAL; end states 16131 = no-step 16131 -> EQUAL
+  elapsed/tables          elapsed 484.3 s; explorer tables 3264 MiB
+  property lines          25
+    P1: HOLDS
+    P2: HOLDS
+    P4: HOLDS
+    P5: HOLDS
+    P6: HOLDS
+    P7: HOLDS
+    P8: HOLDS
+    P9: HOLDS
+    P12: HOLDS
+    P13: HOLDS
+    P15: HOLDS
+    D1: HOLDS
+    L1: HOLDS: 105856110 non-fault edges, no cycle; 16131 end states, each terminal (D1)
+    E1: HOLDS
+    E2: HOLDS
+    E3: HOLDS
+    E4: HOLDS
+    E5: HOLDS
+    E6: HOLDS
+    E7: HOLDS
+    E8: HOLDS
+    E9: HOLDS
+    E10: not applicable here (worker verbs do not unwind)
+    E11: HOLDS
+    KEY: HOLDS
+  branches                listed taken 52, listed NOT TAKEN 38, taken outside the list 3
+  'symmetry inapplicable' 0; 'quotient inapplicable' 0; panicked 0; FAIL lines 0; INCOMPLETE lines 0
+  /usr/bin/time Maximum resident set size (KiB): 4030220
+  /usr/bin/time Elapsed wall clock: 8:04.61
+  /usr/bin/time User time (s): 481.13
+  /usr/bin/time System time (s): 3.35
+  /usr/bin/time Percent of CPU: 99%
+  /usr/bin/time Swaps: 0
+  /usr/bin/time Exit status: 0
+  scope after             Result=success ActiveState=inactive 
+  exe sha256 after        5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+  samples                 241 (2 s cadence) 01:03:50..01:11:54
+  memory.peak (last)      4131786752 B; max memory.current 4131786752 B
+  max memory.swap.current 0 B; oom 0 oom_kill 0
+  min host MemAvailable   49573164 KiB
+  cpu.usage_usec (last)   483633526
+  scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-ptfb-fpt-1791936230.scope
+  memory.max: 17179869184
+  memory.swap.max: 0
+  RuntimeMaxUSec (live): 45min 10s
+  DERIVED (valid only under S1-S15 [symmetry, GC-SYMMETRY-01 + CLOSURE-PREP-01 E-PT/E-B] and Theorem 1 [ADM-QUOTIENT-01]):
+    admission-quotient states |R_Q| = 2K - Kf = 2 x 29751473 - 1698028 = 57804918
+    original states |R_G| = (N+1)|R_Q| = 3 x 57804918 = 173414754
+    evaluations = K (one per key), so ADM-Q evaluations = 2 x 29751473 - 1698028 = 57804918 = |R_Q|; original ADM edges = N x |R_Q| = 115609836
+  DERIVED bounds only (the fixed-orbit shares of edges, no-step keys and admitted evaluations are not printed):
+    ADM-Q non-ADM transitions T_Q in [113252841, 226505682]; fault edges F_Q in [7396731, 14793462]; no-step in [16131, 32262]; admitted in [3182, 6364]
+    original non-ADM+ADM T_G = (N+1)T_Q + N|R_Q| in [455368359, 795126882]; F_G = (N+1)F_Q in [22190193, 44380386]

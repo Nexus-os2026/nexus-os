@@ -1,0 +1,6 @@
+AD-1-R1 HANDOFF  2026-10-14T02:18:19+01:00
+label: DRAFT — NOT ACCEPTED — NOT APPLIED
+sealed path: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+  bytes 45913; lines 748; sha256 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda (recorded 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda); listed in that mission's SHA256SUMS: 1
+copy: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-witness-audit-01/handoff/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md sha256 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda; identical: YES
+not edited, not rewritten, not applied. Statements in it that this mission's facts now supersede (the draft is NOT changed): (1) section 0's 'local, not pushed' for 42dd1bd1 — now published to review/p3-c11-d2a1-ad1r1-witness-01; (2) section G's 'narrower form ... ARGUED, not probed' — now probed once (receipts/stage2/probe-C25-narrow).

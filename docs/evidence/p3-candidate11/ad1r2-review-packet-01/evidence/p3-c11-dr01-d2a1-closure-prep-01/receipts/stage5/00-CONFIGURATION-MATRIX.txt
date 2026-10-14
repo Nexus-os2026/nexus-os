@@ -1,0 +1,158 @@
+STAGE 5 — CONTRACT SECTION 8.3: THE 15 REQUIRED CONFIGURATIONS — READ-ONLY INVENTORY
+P3-C11-DR01-D2A1-CLOSURE-PREP-01, 2026-10-14. Nothing was run for this stage.
+Sources: contract P3-C11-D2A1-CONTRACT-02-R1.md (cac65351…) sections 7.5 and 8.3; model_tests.rs at
+2d83b74b (constants M 155-259 and the full_* entry points M 4167-4258, unchanged since 244c5b23); sealed
+REPORTs of campaign-01, F1-CAP60-01, F3-CAP60-01, ADM-QUOTIENT-01, F3-QUOTIENT-01, GC-SYMMETRY-01,
+GC-SYM-F3-01; this mission's Stage 2 proof.
+Labels: PROVEN, OBSERVED (measured in a sealed run), DERIVED, NOT ESTABLISHED.
+
+------------------------------------------------------------------------------------------------------
+QUOTIENT APPLICABILITY, AS IT STANDS
+  AQ  admission observer quotient. Theorem 1 / Q1-Q15 (ADM-QUOTIENT-01) is argued for the unmutated model
+      at 244c5b23 with no A2; its premise F2 (no non-ADM path reads adm, adm_kept or config.admissions) is
+      a whole-file fact, so the argument is not specific to one configuration. PROVEN by the executor;
+      NOT accepted by the Architect. Every 8.3 configuration has N >= 1 (F-7, F-B2: N = 1; the rest N = 2).
+      Exercised on full scale: F-3 only (F3-QUOTIENT-01, INCOMPLETE; GC-SYM-F3-01, composed, PASS).
+      Configuration-specific source audit: F-3 (ADM-QUOTIENT-01), F-PT and F-B (this mission, Stage 2
+      item 12). For the other 12: NOT audited per configuration (see matrix).
+  SQ  gating-caller symmetry quotient. Needs gating = 2, no gating conflict, acks = 0, no malformation,
+      and a configuration-specific Lemma E check of its own paths. PROVEN: F-3 (GC-SYMMETRY-01), F-PT and
+      F-B (this mission, Stage 2; pending independent review). Inapplicable: F-5, F-6, F-7, F-B2 (0
+      callers), F-8 (1 caller, an ACK actor), F-G (ASYM-3: G2 alone seeded). Preconditions hold but NOT
+      proven (each has paths outside Lemma E's F-3/F-PT/F-B audit): F-1, F-2, F-4 (cell constraint),
+      F-W (worker unwinds), F-D (DROP; no L1), F-R (REPLAY). The guard refuses all of these.
+  No quotient is authorised for any 8.3 result by this inventory.
+
+ORIGINAL CAP, EVERY CONFIGURATION (contract 8.3): 30,000,000 states counted by the explorer; 45 min and
+16 GiB by the starting command. In source: FULL_CAP (M 78) through BASE, except full_f1's in-source
+override cap 60,000,000 (M 4169-4173; added at 243501f0, the Owner's one-run investigation exception, not
+an amendment). F-D derives from the F1 constant, so it keeps 30M.
+The cap check is `visited.len() > cap` (M 3907): runs stop at cap + 1 or + 2 (open item).
+
+------------------------------------------------------------------------------------------------------
+ #  CONFIG  BOUNDS (8.3)                         COMPLETED ORIGINAL EVIDENCE (OBSERVED)
+------------------------------------------------------------------------------------------------------
+ 1  F-1     2 facts none conflicting, 3 faults,  PASS 46,524,336 states, 209,297,440 transitions, L1
+            2 adm, 2 GC                          HOLDS, at 244c5b23 (campaign-01, under the 60M
+                                                 exception); same state count at 243501f0 (F1-CAP60-01).
+                                                 ABOVE the contract's 30M cap. Not on the final commit.
+ 2  F-2     F2 conflicts, 2 faults, 2 adm, 2 GC  PASS 12,602,670 states, 54,214,081 transitions, L1
+                                                 HOLDS, at 244c5b23 (campaign-01). Within 30M. Not on
+                                                 the final commit.
+ 3  F-3     both conflict, ENV, 2 faults, 2 adm, INCOMPLETE at 30M (campaign-01, 244c5b23: 30,000,002
+            2 GC                                 discovered, 4,681,305 unexpanded) and at 60M
+                                                 (F3-CAP60-01, 9e945ee7: 60,000,001 / 6,148,314). No
+                                                 original verdict.
+ 4  F-4     as F-2 + cell constraint             none
+ 5  F-5     both conflict, 2 faults, 2 adm, 0 GC, none
+            1 ACK x 2 attempts
+ 6  F-6     as F-5 + malformed snapshots         none
+ 7  F-7     both conflict, 1 fault, 1 adm, 0 GC, none
+            2 ACK x 1 attempt
+ 8  F-8     F1 conflicts, 2 faults, 2 adm, 1 GC, none
+            1 ACK
+ 9  F-PT    as F-3 + A4 ("every property must    none
+            hold")
+10  F-B     as F-3 + one batch writer            none
+11  F-B2    2 facts none conflicting, 3 faults,  none
+            1 adm, 0 GC, 0 ACK, one batch
+12  F-G     1 fact, 2 GC one conflicting,        none
+            2 faults, 2 adm
+13  F-W     as F-2 + worker verbs unwind         none
+14  F-D     as F-1 with 2 faults + DROP; no L1   none
+15  F-R     as F-2 + REPLAY x 3                  none
+
+------------------------------------------------------------------------------------------------------
+ #  CONFIG  EXPERIMENTAL EQUIVALENT-GRAPH        UNEXECUTED OBLIGATIONS (8.3 + 7.5)
+            EVIDENCE
+------------------------------------------------------------------------------------------------------
+ 1  F-1     none needed for size; SQ unproven    final-commit run (8.3 "exact final commit"); controls
+                                                 C1 C2 C10 C24 C25 A1 A2 (failing + restored receipts)
+ 2  F-2     none                                 final-commit run; C20 C23 A5
+ 3  F-3     ADM-Q 30M INCOMPLETE (83816e66);     a contract-valid verdict (needs amendment B/C/E); the
+            composed AQ+SQ PASS, 20,431,851 keys informational C7-without-A4 receipt (7.5); final-
+            complete (77a146ca, GC-SYM-F3-01).   commit run of whatever is accepted
+            DERIVED under S1-S15 + Theorem 1:
+            39,982,924 ADM-Q states; 119,948,772
+            original states.
+ 4  F-4     none                                 full run; C26
+ 5  F-5     none                                 full run; C5 A3 A6
+ 6  F-6     none                                 full run; C3b C3c
+ 7  F-7     none                                 full run; C3a
+ 8  F-8     none                                 full run; C4
+ 9  F-PT    none run. SQ PROVEN this mission     full run (PASS required, which is also the A4 control);
+            (pending review); fixtures SYM-PT    C6 C7 (P6, "with A4"), each with a restored-PASS receipt
+            differential OBSERVED (Stage 4).
+            gc_symmetry_fpt added, NOT run.
+10  F-B     none run. SQ PROVEN this mission     full run; C8 (E5) with a restored-PASS receipt
+            (pending review); fixtures SYM-B,
+            SYM-BI differential OBSERVED.
+            gc_symmetry_fb added, NOT run.
+11  F-B2    none                                 full run; C9 C11 C17
+12  F-G     none (SQ inapplicable, ASYM-3)       full run; C18a C18b
+13  F-W     none                                 full run (E10 applies only here); no 7.5 control
+14  F-D     none                                 full run (no L1); C16
+15  F-R     none                                 full run; C15
+ -  X-1     default suite (PASS at 2d83b74b)     C12 (E2) on X-1
+ -  unit    T-* tests pass at 2d83b74b           C14 C19 C21 C22 C27 C28 (killed by unit tests)
+
+------------------------------------------------------------------------------------------------------
+ #  CONFIG  SAFE QUOTIENT, IF PROVED   ORIGINAL CAP   KNOWN BLOCKERS                 NEXT REQUIRED VALIDATION
+------------------------------------------------------------------------------------------------------
+ 1  F-1     none needed (original      60M in source  above the 30M cap; the 60M     ruling on the 60M ceiling
+            completes); SQ not proven  (exception);   ceiling is a one-run           (addendum A); original
+                                       contract 30M   exception; C1/C25 attribution  run on the final commit;
+                                                      (G); A2 must use the original  then controls
+ 2  F-2     none needed                30M            none known                     original run on the final
+                                                                                     commit; then controls
+ 3  F-3     AQ+SQ (composed) PROVEN    30M            original infeasible at 30M/60M; addendum B/C/E ruling;
+            for F-3 by the executor;                  composed PASS is experimental  final-commit composed run
+            not accepted                              and DERIVED for the original   if accepted
+ 4  F-4     AQ generic (not audited);  30M            size unknown                   original run under 30M; if
+            SQ not proven                                                            INCOMPLETE, a per-config
+                                                                                     audit before any quotient
+ 5  F-5     AQ generic (not audited);  30M            size unknown; ACK actor        original run
+            SQ inapplicable
+ 6  F-6     AQ generic (not audited);  30M            size unknown; malformation     original run
+            SQ inapplicable                           (ASYM-2 class)
+ 7  F-7     AQ generic (not audited);  30M            size unknown; 2 ACK actors     original run
+            SQ inapplicable
+ 8  F-8     AQ generic (not audited);  30M            size unknown                   original run
+            SQ inapplicable
+ 9  F-PT    AQ+SQ PROVEN this mission  30M            F-3's shape: original likely   independent review of the
+            (pending review)                          beyond 30M (inference only,    Stage 2 proof and the
+                                                      NOT ESTABLISHED); controls C6  commit; ruling (E); then a
+                                                      C7 need the original explorer  named run of gc_symmetry_fpt
+                                                      and a restored-PASS receipt    and the original-explorer
+                                                      (addendum F)                   controls
+10  F-B     AQ+SQ PROVEN this mission  30M            as F-PT; C8 needs the          as F-PT, gc_symmetry_fb
+            (pending review)                          original explorer (F)
+11  F-B2    AQ generic (not audited);  30M            size unknown                   original run
+            SQ inapplicable
+12  F-G     AQ generic (not audited);  30M            size unknown; asymmetric       original run
+            SQ inapplicable (ASYM-3)
+13  F-W     AQ generic (not audited);  30M            size unknown (F-2-sized base,  original run
+            SQ not proven                             12.6M, plus unwinding: not a
+                                                      prediction)
+14  F-D     AQ generic (not audited);  30M (not the   size unknown; DROP; no L1      original run
+            SQ not proven              60M override)
+15  F-R     AQ generic (not audited);  30M            size unknown                   original run
+
+------------------------------------------------------------------------------------------------------
+MUTATION CONTROLS AND THE EXPLORER (all 35 kill-required controls of 7.5 + the A4 comparison: NONE RUN on
+any D2A-1 candidate after 22ebf9a5; IMPL-01R's seven receipts were on 22ebf9a5 and are not evidence here)
+  Every 7.5 control stays on the ORIGINAL explorer (ADM-QUOTIENT-01 Q15; GC-SYMMETRY-01 S15; this
+  mission's Stage 2 item 17), for three reasons: a control is a model change, which voids Lemma E and
+  Theorem 1's audit; under a quotient the first-reported property may differ (Q12, ASYM-4); contract 7.1
+  and 7.5 name the explorer and judge a control by its property as that explorer reports it.
+  A FAILING control receipt under the original explorer can be valid in a graph the explorer cannot
+  finish: the BFS stops at the first violation, with its shortest trace. Whether a given control fails
+  before the cap is NOT ESTABLISHED for any control.
+  The RESTORED receipt ("the unchanged core passes that configuration") is a full PASS of the
+  configuration. For F-3-shaped configurations (C6, C7 on F-PT; C8 on F-B) the original explorer has not
+  completed F-3 at 60M; only a quotient PASS could serve, and only under amendment (addendum F).
+  C1 and C25 (F-1): the unchanged explorer's first failure is predicted E3 (C1) and E4 (C25), not P1/P7
+  (campaign-01 J.5, ADM-QUOTIENT-01 I; static analysis, never executed). Addendum G.
+
+DO NOT READ THIS MATRIX AS: a state count for any unexecuted run (none is given); a quotient
+authorisation for any configuration; a statement that F-PT or F-B is larger or smaller than F-3.

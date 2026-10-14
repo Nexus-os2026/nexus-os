@@ -1,0 +1,52 @@
+STAGE 3 — THE ONE QUOTIENT F-3 RUN  P3-C11-DR01-D2A1-F3-QUOTIENT-01
+Raw receipt: quotient-full-F-3.txt; cgroup samples: quotient-full-F-3.cgroup-samples.txt (89 samples at 2 s);
+pre-flight: 00-preflight.txt. Every count below is a count of PROJECTED (quotient) states/edges unless marked DERIVED.
+
+ A executable        96aa8ce41dff6b938675051c7c12fe7b121f899ce830d725267c4b737a6db7c5 — MATCH before; identical after
+ B command           cwd crates/nexus-governed-control;
+                     systemd-run --user --scope --unit=p3c11-f3quotient-1791923888 -p MemoryMax=16G -p MemorySwapMax=0
+                     -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700 nice -n 10 <exe>
+                     ledger::protocol::model_tests::quotient_full_f3 --exact --nocapture --test-threads=1 --ignored
+                     selection proven immediately before: exactly 1 test (ledger::protocol::model_tests::quotient_full_f3)
+                     exit 101 = quotient_full_exploration's assert verdict == Pass failed on verdict Incomplete
+                     ("left: Incomplete, right: Pass"); test result 0 passed / 1 failed / 303 filtered out.
+                     scope Result=success (not an OOM kill, not a runtime kill)
+ C discovered        30,000,001 projected states
+ D expanded          28,284,667 projected states
+ E unexpanded         1,715,334 projected states (5.72% of discovered) — never expanded or checked
+ F non-ADM transitions 110,893,519 (edges out of expanded states; ADM is an observation, not an edge)
+ G fault transitions  10,194,059 (among F)
+ H admission evaluations 28,284,667 (= D: one observation per expanded state, admissions 2 > 0)
+ I successful admission evaluations 6,254 ("admission: admitted")
+ J D1                NOT ESTABLISHED (incomplete). 15,175 expanded projected states had no enabled non-ADM step; each was
+                     judged terminal with its admissions spent (adm 0) and none failed. Unexpanded states were never judged.
+ K L1                NOT ESTABLISHED: L1 runs only after a complete search; it did not run.
+ L properties        all 25 (P1 P2 P4 P5 P6 P7 P8 P9 P12 P13 P15 D1 L1 E1-E11 KEY): NOT ESTABLISHED (incomplete).
+                     No violation was found before the ceiling: no state property at any expanded state, no transition
+                     property on any of the 110,893,519 edges, no admission property in any of the 28,284,667
+                     observations. That is not a PASS.
+                     No quotient precondition failed: no "quotient inapplicable" assertion fired at any expanded state.
+ M branch coverage   53 listed labels taken, 37 not taken, 3 taken outside the list (append_cell C: Refused(Latched),
+                     append_cell C: Refused(NotHealthy), append_cell X: Refused(NotHealthy)). The 93 branch lines are
+                     byte-identical to the original F-3 30M (campaign-01) and 60M (F3-CAP60-01) receipts.
+ N peak memory       RSS 3,943,060 KiB (3.76 GiB, /usr/bin/time); scope memory.peak 4,026,507,264 B = 23.4% of 16 GiB;
+                     explorer tables 3,264 MiB
+ O wall clock        2:58.50 (explorer 178.1 s) = 6.6% of 45 min. CPU: user 175.53 s, sys 2.93 s, 99% of one CPU;
+                     scope cpu.stat usage 177.35 s. Single-threaded.
+ P termination       the explorer's own state-ceiling check (visited 30,000,001 > cap 30,000,000; model_tests.rs 5068).
+                     Neither the time limit nor the memory limit fired. Swap: memory.swap.max 0 and memory.swap.current
+                     0 in all 89 samples; oom 0, oom_kill 0 throughout. Host MemAvailable never below 50,296,152 KiB.
+                     No Owner workload was stopped.
+
+MISSION CLASSIFICATION: the projected-state ceiling was reached -> F3_QUOTIENT_INCOMPLETE. STOPPED. No retry, no ceiling
+change, no other configuration, no original full run.
+
+DERIVED (not measured; valid only under Theorem 1 of ADM-QUOTIENT-01 section C — nodes(G) = R_Q x {0..N} — which is the
+executor's own proof, observed state-by-state on X-1..X-5 only, and not yet independently accepted; N = 2):
+  original F-3 states represented by the 30,000,001 discovered projected states   3 x 30,000,001 = 90,000,003
+     => DERIVED lower bound: the original F-3 graph has at least 90,000,003 reachable states.
+  original states whose outgoing edges and own properties the expanded classes cover  3 x 28,284,667 = 84,854,001
+  original states represented by the unexpanded frontier                             3 x 1,715,334 = 5,146,002
+  original edges out of those covered states   3 x 110,893,519 + 2 x 28,284,667 = 389,249,891 (fault 3 x 10,194,059 = 30,582,177;
+                                               ADM 56,569,334, of which admitting 2 x 6,254 = 12,508)
+  The true size of F-3 (original or projected) remains unknown. Nothing is extrapolated from these numbers.

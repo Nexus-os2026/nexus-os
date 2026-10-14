@@ -1,0 +1,18 @@
+WORKTREE AUTHENTICATION  2026-10-14T02:42:40+01:00
+path: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r2-packet-01
+realpath: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r2-packet-01
+owner uid=1000 (nexus) gid=1000 mode=775 inode=62259201 dev=66310
+toplevel: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r2-packet-01
+git-dir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-ad1r2-packet-01
+common-dir: /home/nexus/NEXUS/nexus-os/.git
+gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-ad1r2-packet-01
+HEAD: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282
+branch: refs/heads/evidence/p3-c11-d2a1-ad1r2-audit-packet-01
+porcelain lines: 0
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-ad1r2-packet-01
+HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b
+branch refs/heads/evidence/p3-c11-d2a1-ad1r2-audit-packet-01
+
+packet prefix exists before writing: no
+docs/evidence/p3-candidate11 entries before: 

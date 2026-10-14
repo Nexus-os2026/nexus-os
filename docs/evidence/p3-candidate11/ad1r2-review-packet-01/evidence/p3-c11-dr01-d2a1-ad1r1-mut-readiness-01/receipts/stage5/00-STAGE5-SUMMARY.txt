@@ -1,0 +1,28 @@
+STAGE 5 — LOCAL REGRESSION SUMMARY  (commit 42dd1bd1cf21ffdea5968b256d2983f6575fab5b, tree 7ac6bb21430d15b17e3723b217b20a49dccf8282)
+pinned release test executable 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 (8,962,488 bytes), built from model_tests.rs blob 5ad26ddc
+(the build at the commit, 01, compiled nothing: same source, Finished in 0.43 s)
+
+receipt                                      exit   pin-before   pin-after    result
+01-build-at-commit                           0      MATCH        MATCH        
+10-fmt-check                                 0      MATCH        MATCH        
+11-diff-check-vs-parent                      0      MATCH        MATCH        
+12-diff-check-vs-candidate11                 0      MATCH        MATCH        
+13-diff-check-working-tree                   0      MATCH        MATCH        
+14-clippy-all-targets                        0      MATCH        MATCH        
+15-clippy-lib-nontest                        0      MATCH        MATCH        
+20-lib-all-pinned-exe                        0      MATCH        MATCH        ok. 312 passed; 0 failed; 35 ignored,  23.98s|
+21-test-dev-default-suite                    0      MATCH        MATCH        ok. 312 passed; 0 failed; 35 ignored,  161.63s|ok. 1 passed; 0 failed; 0 ignored,  0.00s|ok. 8 passed; 0 failed; 0 ignored,  0.48s|
+30-original-x1-x5                            0      MATCH        MATCH        ok. 5 passed; 0 failed; 0 ignored,  0.30s|
+31-adm-quotient-differential-x1-x5           0      MATCH        MATCH        ok. 5 passed; 0 failed; 0 ignored,  2.21s|
+32-adm-quotient-negatives-observer-refusals  0      MATCH        MATCH        ok. 9 passed; 0 failed; 0 ignored,  0.11s|
+33-gc-x2-sym1-symmetry-differentials         0      MATCH        MATCH        ok. 2 passed; 0 failed; 0 ignored,  6.26s|
+34-sym-pt-b-bi-differentials                 0      MATCH        MATCH        ok. 3 passed; 0 failed; 0 ignored,  10.61s|
+35-configuration-exercise                    0      MATCH        MATCH        ok. 3 passed; 0 failed; 0 ignored,  1.18s|
+36-negatives-and-fail-closed                 0      MATCH        MATCH        ok. 24 passed; 0 failed; 0 ignored,  0.30s|
+37-symmetry-supporting                       0      MATCH        MATCH        ok. 5 passed; 0 failed; 0 ignored,  0.18s|
+38-d2a1-unit-tests                           0      MATCH        MATCH        ok. 29 passed; 0 failed; 0 ignored,  0.00s|
+40-witnesses-healthy                         0      MATCH        MATCH        ok. 2 passed; 0 failed; 0 ignored,  0.00s|
+
+clippy warnings: 15-clippy-lib-nontest.txt:0 14-clippy-all-targets.txt:0 
+listing: 347 tests, 0 benchmarks; ignored 35; vs PT-FB-EXPERIMENT-01: +2 names (the witnesses), ignored set identical
+Not run (outside this mission): any full configuration; any quotient full run; the 35-control campaign; the 44 P3 desktop guards (no P3 file changed; historical support only); the workspace-wide suite; Fast Local; hosted CI.

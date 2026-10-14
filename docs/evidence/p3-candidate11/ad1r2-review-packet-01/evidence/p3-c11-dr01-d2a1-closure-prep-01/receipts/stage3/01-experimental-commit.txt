@@ -1,0 +1,19 @@
+STAGE 3 — EXPERIMENTAL COMMIT — 2026-10-13T23:53:46+01:00
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-closure-prep (git worktree add -b experiment/p3-c11-d2a1-closure-prep-01 at 77a146ca; no upstream; not pushed)
+commit 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  parents 77a146ca606f99329068410b6037721341f00c70
+branch experiment/p3-c11-d2a1-closure-prep-01; upstream: fatal: no upstream configured for branch 'experiment/p3-c11-d2a1-closure-prep-01'
+porcelain (incl. ignored): 0
+files changed: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs 
+ 1 file changed, 488 insertions(+), 2 deletions(-)
+hunks:
+@@ -6074 +6074,3 @@ const SYM1: Config = default_run(Config {
+@@ -6077 +6079 @@ const SYM1: Config = default_run(Config {
+@@ -7758,0 +7761,484 @@ fn gc_symmetry_refuses_an_acknowledgement_row() {
+model_tests.rs blob a80dd05cbc6a90ddd97bfa4dba754ec5569eec21 -> 4895993e1a9ca68762d873e026d42a6e08e49cc9; sha256 be562d08c6efe88c54cbd90e83734623ad81c3a1bcafd74d8577ed80236197f7 -> 1ca836c3d9171f52cb6eaa37170996e995d36b92dbdb8e6d2d5d2fe043ad6f1c
+unchanged regions: lines 1-6072 BYTE-IDENTICAL; old 6078-7758 vs new 6080-7760 BYTE-IDENTICAL
+retained functions (byte-identical bodies, as both lie in the unchanged regions): explore 3882, successors 3805, step_adm 3250, admission_properties 3275, state_properties 3403, explore_experimental 5038, explore_symmetric_kept 6572
+other blobs identical to 77a146ca: protocol.rs=same unit_tests.rs=same ledger.rs=same lib.rs=same Cargo.toml=same Cargo.toml=same Cargo.lock=same rust-toolchain.toml=same 
+constants unchanged (lines in new file): 76:const DEFAULT_CAP: u64 = 250_000; 77:const DEFAULT_TIME: Duration = Duration::from_secs(180); 78:const FULL_CAP: u64 = 30_000_000; 79:const FULL_TIME: Duration = Duration::from_secs(45 * 60); 170:const F3: Config = Config { 217:const FPT: Config = Config { 222:const FB: Config = Config { 
+#[test] fns: 80 -> 100; #[ignore]: 32 -> 34
+new ignored entry points: gc_symmetry_fpt gc_symmetry_fb (NOT EXECUTED)
+patch: 0001-closure-prep-experimental-commit.patch sha256 c71826194097e994d1237ac53ae5dbdf5b2f47cdf5a2f865ed222a2f28e48ce2

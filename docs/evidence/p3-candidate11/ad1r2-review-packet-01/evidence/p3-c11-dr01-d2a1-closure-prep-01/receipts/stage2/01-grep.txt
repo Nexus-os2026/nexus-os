@@ -1,0 +1,79 @@
+STAGE 2 GREP RECEIPT at 77a146ca (worktree 77a146ca606f99329068410b6037721341f00c70, porcelain 0)
+[1] blanket|batch uses, M 1-6034:
+45:    /// One writer offers every fact as one batch.
+46:    batch: bool,
+66:    /// Actor change A4: the drop paths record a blanket Uncertain (F-PT).
+67:    blanket_uncertain: bool,
+86:    batch: false,
+98:    blanket_uncertain: false,
+147:/// X-5: one clean batch of two, 2 faults.
+150:    batch: true,
+219:    blanket_uncertain: true,
+224:    batch: true,
+229:    batch: true,
+939:/// FW: a first writer of one fact or of one batch.
+1034:    /// ... by a batch append or a lookup (E6).
+1109:    let fw = if config.batch {
+1170:(FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number \
+2040:    let writers = if config.batch { 1 } else { config.facts };
+2054:        let members = if config.batch {
+2333:    let writers = if config.batch { 1 } else { config.facts };
+2374:/// Under actor change A4: a blanket Uncertain.
+2377:        Some(counted) if !config.blanket_uncertain => record_counted(w, members, counted),
+2394:            if config.batch {
+2414:    let batch: Vec<FactRecord> = members
+2421:    let outcome = run_op(|| core.append_facts(ticket, &batch, &mut io));
+2426:    if let Err(order) = verb_order(&log, batch.len()) {
+2779:            if counted.is_some() || config.blanket_uncertain {
+3281:        if config.batch {
+3282:            obs.fail("E6", "P1 fails for a member of a batch");
+3465:                        "P6 fails for F{}, a batch member or a lookup conflict",
+4024:        "  bounds: facts {} conflicting {:?} ENV {} batch {} faults {} admissions {} gating callers {} \
+4031:        config.batch,
+4043:        config.blanket_uncertain,
+4163:fn x5_one_clean_batch_of_two() {
+4303:    let batch: Vec<FactRecord> = members
+4316:        let _ = run_op(|| core.append_facts(&mut ticket, &batch, &mut io));
+4390:/// The same, for a batch of two. When the second insert fails, the first
+4393:fn a_failed_insert_in_a_batch_may_have_written_unless_the_rollback_undid_it() {
+4419:/// and both are explored (section 7.1). When the second insert of a batch
+4423:fn an_unwinding_insert_in_a_batch_may_have_written_its_row_or_not() {
+5226:        "  bounds: facts {} conflicting {:?} ENV {} batch {} faults {} admissions {} gating callers {} \
+5233:        config.batch,
+5245:        config.blanket_uncertain,
+5978:    // P1, and E6 for a batch: a result is unrecorded.
+5979:    let batch = Config {
+5983:    let mut w = initial(&batch);
+5985:    let s = observe(&batch, &w);
+[2] adm/adm_kept/config.admissions, M 1-4815:
+1056:    adm: u8,
+1058:    adm_kept: Option<u64>,
+1146:        adm: config.admissions,
+1147:        adm_kept: None,
+1691:    e.byte(w.adm);
+1692:    match w.adm_kept {
+2123:    let adm = d.byte();
+2124:    let adm_kept = d.b().then(|| d.u());
+2160:        adm,
+2161:        adm_kept,
+3251:    if w.adm == 0 {
+3257:    w.adm -= 1;
+3556:        && w.adm == 0
+4033:        config.admissions,
+[3] caller-identity tokens inside A4/batch-specific ranges (M 2361-2399, 2510-2638, 2777-2788):
+  range 2361,2399: matches 0
+  range 2510,2638: matches 0
+  range 2777,2788: matches 0
+[4] refusals uses in protocol.rs:
+100:    pub(super) refusals: u32,
+781:    refusals: BTreeMap<RecordKey, Cause>,
+904:            refusals: BTreeMap::new(),
+905:            refusal_limit: limits.refusals.max(1),
+1156:        self.refusals.len() >= usize::try_from(self.refusal_limit).unwrap_or(usize::MAX)
+1162:        if let Some(cause) = self.refusals.get(key) {
+1221:        self.refusals.insert(member.key, cause);
+1533:                self.core.refusals.insert(*key, cause);
+1560:                self.core.refusals.remove(key);
+1575:            None => match core.refusals.get(key).copied() {
+1943:                self.core.refusals.remove(&original);
+[5] blanket/batch in protocol.rs: 0

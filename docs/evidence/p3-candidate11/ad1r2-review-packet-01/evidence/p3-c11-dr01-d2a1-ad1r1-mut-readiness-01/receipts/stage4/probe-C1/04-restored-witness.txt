@@ -1,0 +1,61 @@
+WITNESS RUN c1_witness_p1_at_a_successful_admission
+worktree: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1
+HEAD: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  branch: HEAD
+porcelain:
+   M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+model_tests.rs as built: blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba
+protocol.rs as built:    blob a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+executable sha256 before: 6677184734c067ce91c8eeb0121adcf652d9eaa91c5c2cc9c33d042786ed575f (8962488 bytes)
+test listing for the selector (--exact):
+  ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test
+  
+  1 test, 0 benchmarks
+command (cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1/crates/nexus-governed-control): /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-probe-c1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission --exact --nocapture --test-threads=1
+started: 2026-10-14T01:46:46+01:00
+--------------------------------------------------------------------------------
+
+running 1 test
+test ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission ... C1 WITNESS F-1 step  1/11 Fw(0) choices []: Fw(0): arm -> Armed
+    branches []; word after 0x10004 (live 1, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  2/11 Fw(0) choices [1]: Fw(0): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  3/11 Fw(1) choices []: Fw(1): arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  4/11 Fw(1) choices [1]: Fw(1): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  5/11 Fw(1) choices [0]: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None })
+    branches []; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  6/11 Fw(1) choices [0]: Fw(1): confirm
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  7/11 Se choices []: Se: [T] claims F2 for Append
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  8/11 Se choices []: Se: arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  9/11 Se choices [0, 0, 0, 0]: Se: append_facts["F2"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok]
+    branches ["append_facts: Committed (inserted)"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 10/11 Se choices []: Se: [T] applies Fact(Committed); releases
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 11/11 Adm choices []: Adm: [T] admission: refused
+    branches ["admission: refused"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1: 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused'
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:46:46+01:00
+executable sha256 after: 6677184734c067ce91c8eeb0121adcf652d9eaa91c5c2cc9c33d042786ed575f MATCH

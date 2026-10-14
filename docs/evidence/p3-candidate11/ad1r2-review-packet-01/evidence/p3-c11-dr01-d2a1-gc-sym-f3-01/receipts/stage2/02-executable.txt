@@ -1,0 +1,12 @@
+EXECUTABLE IDENTITY 2026-10-13T23:07:45+01:00
+source: commit 77a146ca606f99329068410b6037721341f00c70 tree 21818166ee10a8075ca364bd09f31c7aa64555dd porcelain 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02); LLVM version: 21.1.8
+profile: release (opt-level 3 per cargo JSON; test harness; debuginfo 0)
+build: nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 8 --message-format=json-render-diagnostics
+       CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3/target (new); exit 0 (receipt 01)
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+size: 8928912 bytes; mtime 2026-10-13 23:07:27.569529110 +0100
+PINNED sha256: c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704
+file: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, fo
+test executables in target/release/deps: 1
+comparison (not a reproducibility claim): GC-SYMMETRY-01 build of the same commit in another worktree: b59b3569771f526f4d569fcc3c3c45197a1e576f385c9dd2a15455c1dfe04f26 8,928,912 bytes; DIFFERENT

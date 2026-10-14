@@ -1,0 +1,128 @@
+STAGE 1 — PROVENANCE  (P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01)  2026-10-14T01:37:12+01:00
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5). No subagents.
+
+[1] commit / tree / parent (local object store)
+tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a
+parent 77a146ca606f99329068410b6037721341f00c70
+author Suresh Karicheti <nexaiceo@gmail.com> 1791932006 +0100
+[1b] GitHub git/commits/2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda:
+  sha 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda
+  tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a
+  parents 77a146ca606f99329068410b6037721341f00c70
+  expected tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a
+
+[2] production protocol and pinned files at base vs parent (blob ids)
+  crates/nexus-governed-control/src/ledger/protocol.rs base a2df2841b99cad5d452008a6d4150e9369d07e66 parent a2df2841b99cad5d452008a6d4150e9369d07e66 SAME
+  crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs base 55dc66409eaccdaa93e8f0a56f2ccb14be81e114 parent 55dc66409eaccdaa93e8f0a56f2ccb14be81e114 SAME
+  crates/nexus-governed-control/src/ledger.rs base d872b90816fdd18cca8e5d1a0005bb49434aaf2a parent d872b90816fdd18cca8e5d1a0005bb49434aaf2a SAME
+  crates/nexus-governed-control/src/lib.rs base b806ed577f8d3472b7187d161246e08d2f1ccd3d parent b806ed577f8d3472b7187d161246e08d2f1ccd3d SAME
+  crates/nexus-governed-control/Cargo.toml base 2543c745d661203326367962714b94c811e07980 parent 2543c745d661203326367962714b94c811e07980 SAME
+  Cargo.toml base 2c558a4477d1545daaa489f0a0e502b4284ad479 parent 2c558a4477d1545daaa489f0a0e502b4284ad479 SAME
+  Cargo.lock base 1af53a60aaf6fde5731e63fcd5b6cd11d86f669a parent 1af53a60aaf6fde5731e63fcd5b6cd11d86f669a SAME
+  rust-toolchain.toml base 726005b29561a04536edea412bf551a9884d6639 parent 726005b29561a04536edea412bf551a9884d6639 SAME
+  app/src-tauri/src/phase3_tests.rs base 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83 parent 5d79c7c38b04a7ea480e144850cfb1a1e38d1e83 SAME
+  docs/evidence/p3-candidate10/original-183/manifest.json base 65fa69dcc0742e04658a3360c42e051e38ebbf5b parent 65fa69dcc0742e04658a3360c42e051e38ebbf5b SAME
+  crates/nexus-governed-control/src/ledger/protocol/model_tests.rs base 4895993e1a9ca68762d873e026d42a6e08e49cc9 parent a80dd05cbc6a90ddd97bfa4dba754ec5569eec21 CHANGED
+  protocol.rs sha256 at base: a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296 (expected a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296)
+  model_tests.rs sha256 at base: 1ca836c3d9171f52cb6eaa37170996e995d36b92dbdb8e6d2d5d2fe043ad6f1c
+  historical mutation manifest sha256 at base: 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14 (expected 2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14)
+  diff --stat parent..base:
+     .../src/ledger/protocol/model_tests.rs             | 490 ++++++++++++++++++++-
+     1 file changed, 488 insertions(+), 2 deletions(-)
+
+[3] original explorer and quotient algorithms: model_tests.rs hunks along the lineage (all additions except 2d83b74b's allow-list hunk)
+  244c5b23 -> 83816e66:
+    @@ -4814,0 +4815,1220 @@ fn e8_holds_for_stale_worker_operations() {
+  83816e66 -> 77a146ca:
+    @@ -6034,0 +6035,1724 @@ fn an_admission_that_keeps_its_counter_fails_l1_in_the_original() {
+  77a146ca -> 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda:
+    @@ -6074 +6074,3 @@ const SYM1: Config = default_run(Config {
+    @@ -6077 +6079 @@ const SYM1: Config = default_run(Config {
+    @@ -7758,0 +7761,484 @@ fn gc_symmetry_refuses_an_acknowledgement_row() {
+  function lines at base:
+    3019:fn step_gc(w: &mut World, g: u8, o: &mut Oracle, obs: &mut Obs) -> bool {
+    3250:fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    3275:fn admission_properties(config: &Config, w: &World, obs: &mut Obs) {
+    3403:fn state_properties(config: &Config, w: &World, obs: &mut Obs) {
+    3514:fn transition_properties(before: &World, after: &World, obs: &mut Obs, counts: hook::Counts) {
+    3805:fn successors(
+    3882:pub(super) fn explore(config: &Config) -> Report {
+    4932:fn expand(
+    5038:fn explore_experimental(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally) {
+    6561:fn explore_symmetric(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally, Mirrors) {
+    6572:fn explore_symmetric_kept(
+  => explore/successors/step_adm/properties lie in lines 1-4814, unchanged since 244c5b23 (SOURCE-R2);
+     expand/explore_experimental in 4815-6034 (added 83816e66), unchanged since; explore_symmetric_kept in the 77a146ca block,
+     whose only later edit is 2d83b74b's allow-list hunk at 6074-6079 (SYMMETRIC), reviewed under CLOSURE-PREP-01.
+  cap checks (all three explorers, same form):
+    3907:        if visited.len() as u64 > config.cap {
+    5068:        if visited.len() as u64 > config.cap {
+    6609:        if visited.len() as u64 > config.cap {
+
+[4] contract and binding reviews (copied from PT-FB-EXPERIMENT-01 contract/, 12th copy)
+  P3-C11-D2A1-CONTRACT-02-R1.md: OK
+  P3-C11-R3-AMENDMENT-01-RESPONSE-02-REVIEW-02.md: OK
+  P3-C11-R3-AMENDMENT-01-RESPONSE-03-REVIEW-01.md: OK
+  RECOVERY-NOTE.txt: OK
+  cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c  P3-C11-D2A1-CONTRACT-02-R1.md
+  6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce  P3-C11-R3-AMENDMENT-01-RESPONSE-02-REVIEW-02.md
+  1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35  P3-C11-R3-AMENDMENT-01-RESPONSE-03-REVIEW-01.md
+
+[5] PT-FB-EXPERIMENT-01 evidence manifest and its source-matched executable
+  SHA256SUMS sha256 a4c5435d91bf2baf75e4aa90e02e7a314aac97172d7dbf50e5c7e32064725d22; entries 56; check: 56 OK, 0 not OK
+  4cbcb0f63dc82b3e3305724331c5604aba7decd409e51d8f4b00b76bbf7c3622  receipts/stage3/gc-symmetry-full-F-PT.txt
+  26c4fba2e6f421f193a29ea928005b4bbb6bd33c7d9a5912c661b3db13985fd0  receipts/stage4/gc-symmetry-full-F-B.txt
+  receipts/stage4/gc-symmetry-full-F-B.txt:OUTCOME: FB_PASS
+  receipts/stage3/gc-symmetry-full-F-PT.txt:OUTCOME: FPT_PASS
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment: HEAD 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda, porcelain 0
+  pinned executable: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af  /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 (8956968 bytes; expected 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af)
+
+[6] earlier sealed evidence: every D2A-1 manifest
+  p3-c11-dr01-d2a1-adm-quotient-01/ 42 OK / 0 not OK; manifest 459101ef4b3ead6e
+  p3-c11-dr01-d2a1-adm-review-publish-01/ 11 OK / 0 not OK; manifest 01e4cd651d0c0072
+  p3-c11-dr01-d2a1-campaign-01/ 93 OK / 0 not OK; manifest 71c4135eece833d9
+  p3-c11-dr01-d2a1-closure-prep-01/ 42 OK / 0 not OK; manifest 137fba3a9899d5b1
+  p3-c11-dr01-d2a1-closure-publish-01/ 15 OK / 0 not OK; manifest cdebb6594155939a
+  p3-c11-dr01-d2a1-f1-cap60-01/ 46 OK / 0 not OK; manifest fa7c9fd5461c4ef4
+  p3-c11-dr01-d2a1-f1-diag-01/ 7 OK / 0 not OK; manifest 4b9318725112597f
+  p3-c11-dr01-d2a1-f3-cap60-01/ 58 OK / 0 not OK; manifest 226c5ce749aaa7a4
+  p3-c11-dr01-d2a1-f3-quotient-01/ 45 OK / 0 not OK; manifest 5e5037b41a194ff3
+  p3-c11-dr01-d2a1-gc-sym-f3-01/ 44 OK / 0 not OK; manifest dd15f3e4a64c4973
+  p3-c11-dr01-d2a1-gc-symmetry-01/ 37 OK / 0 not OK; manifest 34bf59b34ffd60c3
+  p3-c11-dr01-d2a1-gc-sym-publish-01/ 11 OK / 0 not OK; manifest 2f8894ef4a0f3eb2
+  p3-c11-dr01-d2a1-impl-01/ 5 OK / 0 not OK; manifest b4675333403eca47
+  p3-c11-dr01-d2a1-impl-01r/ 55 OK / 0 not OK; manifest 7fbb1ee9e7d9d5a6
+  p3-c11-dr01-d2a1-pt-fb-experiment-01/ 56 OK / 0 not OK; manifest a4c5435d91bf2baf
+  p3-c11-dr01-d2a1-r1-publish-01/ 11 OK / 0 not OK; manifest d589d3d5e3749d73
+  p3-c11-dr01-d2a1-r2-publish-01/ 14 OK / 0 not OK; manifest a305d656c5675f38
+  p3-c11-dr01-d2a1-review-publish-01/ 10 OK / 0 not OK; manifest 15093f2ae5d1aecc
+  p3-c11-dr01-d2a1-source-r1/ 62 OK / 0 not OK; manifest bfd0abf376dc585d
+  p3-c11-dr01-d2a1-source-r2/ 86 OK / 0 not OK; manifest 3ed2879eec7c99cb
+  total 750 OK, 0 not OK
+
+[7] Candidate 11 and protected refs (git ls-remote github: 182 lines, sha256 14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c)
+  6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+  f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+  b1d535f1bb634f2075f12a36ace89a595cdb13ba	refs/heads/repair/p3-candidate11
+  2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda	refs/heads/review/p3-c11-d2a1-closure-prep-01
+  equals PT-FB-EXPERIMENT-01 github-refs-after.txt: YES
+  review/p3-c11-* refs: 8; tags: 58
+  local: main 4b36f606 / repair/p3-candidate11 e71b982b (differ from GitHub as recorded earlier; not touched)
+  primary checkout f727f5c3 rebuild/phase0-trust-boundary, porcelain 0
+  worktree /home/nexus/NEXUS/nexus-os-p3-candidate11 HEAD e71b982b porcelain 0
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-closure-prep HEAD 2d83b74b porcelain 0
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3 HEAD 77a146ca porcelain 0
+  worktree /home/nexus/NEXUS/nexus-os-p3-c11-pt-fb-experiment HEAD 2d83b74b porcelain 0
+  worktrees total: 141
+
+[8] conflicting execution
+  Actions: in_progress 0, queued 0; latest 38319429125 completed success b1d535f1 2026-10-12T22:56:02Z
+  processes matching nexus_governed_control|cargo|rustc|p3c11: 0
+  user scopes p3c11*: 0
+  rustc: rustc 1.94.0 (4a4ef493e 2026-03-02); cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  MemTotal:       65077588 kB
+  MemAvailable:   53942936 kB
+
+VERDICT: no material discrepancy. Base commit/tree/parent match locally and on GitHub; production protocol unchanged (a2df2841);
+explorers unchanged in their reviewed ranges; contract and both binding reviews hash as accepted; PT-FB manifest and its pinned
+executable intact; all earlier sealed manifests verify; protected refs equal the previous mission's after-list; no conflicting run.

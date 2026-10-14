@@ -1,0 +1,103 @@
+STAGE 3 — C1 / C25 WITNESS DESIGN (derived from the original semantics; then replayed in Stage 4)
+P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01. Source: 2d83b74b. model_tests.rs blob 4895993e (the witnesses' own lines
+were later appended at 8245+; nothing above them changed). protocol.rs blob a2df2841.
+
+==================================================================================================================
+A. DEFINITIONS READ
+==================================================================================================================
+Contract 7.5 (verbatim, lines 697, 699, 721):
+  | Id | Change | Fails | On |
+  | C1 | the count becomes a flag | P1 | F-1 |
+  | C25 | a gating append answers Committed on `Commit::Unknown` | P7 | F-1 |
+Concrete encodings: CAMPAIGN-01 tools/stage5-prepared-NOT-EXECUTED/controls_defs.py. It is sealed, sha256
+ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f, never executed before this mission, and not
+Architect-approved. At 2d83b74b, each anchor occurs exactly once in protocol.rs and each replacement 0 times.
+  C1:  count_step (protocol.rs 175) gains, at its top, `if shift == UNAPPLIED_SHIFT { return with_field(word,
+       shift, u64::from(up)); }`. Every step of `unapplied` then sets it to 1 (up) or 0 (down). `live` is
+       unchanged. These are the named effect: the publication's +1 (2000), expire (370) and confirm (357).
+  C25: in Publish::gating (1470-1477), on `Commit::Unknown`, `self.keep = true; return refused(Uncertain,
+       Storage);` becomes `return GatingOutcome::Committed(seq);`. failed() and the one rollback are kept. Dropping
+       `keep` empties U, as on a Committed answer. The narrower form, which keeps U, is not probed. This is an open
+       item.
+
+The explorer's safety checks (model_tests.rs at 2d83b74b):
+  state_properties 3403-3511: E1, E3, P2, P4, P5, P6/E6, P7, P8, P9, P13, E11. KEY is at successors 3813.
+  admission_properties 3275-3321: P1/E6, P12, P15, E9. These are called inside step_adm (3250) only when the
+    admission succeeds.
+  step_gc 3019-3105: E5, E4 (said Committed but absent; Not written but changed), E7.
+  fact_append 2406-2501: E5, E4.
+  transition_properties 3514-3545: E2, E9, E11.
+  explore 3882-3956: a state's violations are judged before its transitions. The first violation ends the run.
+
+==================================================================================================================
+B. C1 SCHEDULE (F-1; actors [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]; faults 3, admissions 2)
+==================================================================================================================
+Goal: a successful admission (admits() 259-261: low 16 bits exactly SESSION_OPEN and unapplied 0; debt 0; H <= A)
+while ghost.unrecorded != 0 (admission_properties 3276). That is P1.
+Reasoning:
+  - U, C and X occupied all refuse admits() while E1 holds, and C1 does not change the flags. So the only route
+    is an unrecorded result with unapplied 0.
+  - unrecorded is set by note_fact_result (2389) and cleared by recording (2361, 2375, 2579).
+  - Recording a Counted result makes a debt (Refused, Uncertain or Conflict; 2363-2367), so settlement must pay
+    it.
+  - The flag is cleared only by a Counted confirm (357). That needs a second Counted ticket.
+  - expire (2540-2549; one fault each) counts a ticket without a store operation, so the phase stays Healthy.
+  step  actor  choices      why the step is enabled and what it does (source)
+   1    Fw(0)  []           FwPos::Start -> arm (2514-2527); no oracle choice
+   2    Fw(0)  [1]          FwPos::Armed: expires(o) = choose([false,true]) pick 1 = fault (2505, 2540);
+                            expire -> Counted(NotWritten); unrecorded F1
+   3    Fw(1)  []           arm
+   4    Fw(1)  [1]          expire -> Counted. Under C1, unapplied stays 1 with 2 Counted held: E3 (3426)
+   5    Fw(1)  [0]          FwPos::Got: choose([false,true]) pick 0 = record (2570-2588); F2 Refused, debt 1
+   6    Fw(1)  [0]          FwPos::Recorded: pick 0 = confirm (2606-2614). C1: unapplied 0; healthy: 1
+   7    Se     []           Idle: one view; F2 alone is claimable for Append (Healthy) (2641-2716); branch(1),
+                            no choice
+   8    Se     []           Claimed(F2, Append) -> arm (2717-2730)
+   9    Se     [0,0,0,0]    Armed -> fact_append[F2]: Open Ok, Facts Ok, Insert Ok, Commit Ok; the holdings
+                            branch has 1 option and makes no choice (730-737). F2 classifies Insert: Prepared(1)
+                            present, no holder. Committed, not counted
+  10    Se     []           Got(F2, Committed) -> F2 Paid, debt 0 (2757-2775)
+  11    Adm    []           view: C1 admits (open, unapplied 0), debt 0, H 0 <= A 0 -> ADMITTED; F1 unrecorded:
+                            P1. Healthy: unapplied 1 -> refused
+This is ADM-QUOTIENT-01's hand-built 11-step trace with the writers' roles exchanged (F2 recorded and paid; F1
+unrecorded). It is now replayed by a program. Minimality is not claimed.
+Predicted healthy run: no violation; step 11 'admission: refused'. Predicted C1 run: E3 at every state from step 4;
+P1 at step 11.
+
+==================================================================================================================
+C. C25 SCHEDULE (F-1)
+==================================================================================================================
+Goal: told Committed with the record absent. That is P7 (3473-3476), checked on the world after the step. The same
+predicate is E4, checked inside step_gc on the step (3058-3066).
+  step  actor  choices        source
+   1    Gc(0)  [0,0,0,1,0,0]  append_gating G1. The entry passes (open, Healthy, cells empty). Open Ok [0];
+                              Facts Ok [0], classified Insert; Insert Ok [0] (constraint and failure offered, 704-728);
+                              Commit [1] = Unknown, a fault (730-743). undecided(): outcomes [absent, present],
+                              branch(2) pick 0 = absent (688-694). Rollback Ok [0] (746-751).
+                              Healthy: Refused Uncertain Storage, U kept (returned uncertain), phase barrier needed.
+                              C25: Committed(seq) -> told G1, record absent -> E4 on the step, P7 after.
+Predicted healthy run: no violation. P8 does not fire: the attempt issued an insert and was not told, but the
+record is absent. Predicted C25 run: E4 at step 1, and P7 on the world after it.
+
+==================================================================================================================
+D. WITNESS REQUIREMENTS (mission Stage 3) AND HOW THE DESIGN MEETS THEM
+==================================================================================================================
+   1 real operations, original transitions: `step` (3357), with step_adm as ADM, exactly as trace (3849) and
+     last_step_violations (5868)
+   2 no forced state: the replay starts from initial(F1); each step runs on decode(previous key)
+   3 no fabricated hook counts: hook::take_counts() before and after the step goes into transition_properties
+   4 no altered predicates: state_properties, transition_properties and the step-internal checks are called
+     unchanged
+   5 deterministic: Oracle::new(schedule choices, world faults)
+   6 every step enabled: asserted
+   7 the expected choices occur: oracle.sequence() == schedule (asserted); fixed branch labels asserted at every
+     step except the changed one
+   8 every violation is collected: of the initial state; of each step (its own and its transition properties); of
+     the state after each step (state properties + KEY). None stops the replay
+   9 the exact named violation: P1 in step 11's own violations with 'admission: admitted'; P7 in the after-state
+     of step 1 with 'append_gating: Committed (inserted)'
+  10 healthy replay: no violation anywhere, and the healthy branch at the changed step (asserted)
+  11 differing behaviour is printed per step (branches, word, ledger), and the probe compares it with the healthy
+     receipt. A divergence of a fixed step is a FIXTURE FAILURE, which kills nothing; it is not absorbed.
+Design verdict: both schedules exist from the original semantics. Neither needs a substitute mutation. Proceed to
+Stage 4.

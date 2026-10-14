@@ -1,0 +1,286 @@
+P3-C11-DR01-D2A1-GC-SYMMETRY-01 — STAGE 2 FORMAL SYMMETRY ANALYSIS
+Written before any code change. Source: 83816e66916c3a217ab7919d7e6a21893e7d579a
+(tree 74a6a0e5add063dac4d24939b3a62c619847dd3a). Line numbers below are at that commit:
+  P  = crates/nexus-governed-control/src/ledger/protocol.rs
+  M  = crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+Both files were read in full for this analysis (P 1-2083, M 1-6034).
+
+Labels: PROVEN (argued from source, every use enumerated), OBSERVED (seen in a run),
+ASSUMED (stated, not discharged), NOT ESTABLISHED.
+
+=====================================================================================
+0. THE OBJECT
+=====================================================================================
+A state is a key k = encode(config, w) (M 1521). KEY (M 3813) holds that
+encode(decode(k)) = k on every expanded key. A transition is (k, i, ch) -> k' produced
+by `successors` (M 3805): decode(k), `step` of actor all[i] (M 2332) with the oracle
+replaying choice sequence ch, fault flag = oracle.fault, plus the step's violations
+and branch labels, plus transition_properties. The state's own violations come from
+state_properties and KEY. Fault classification = oracle.fault (a fault option taken).
+
+F-3 (M 170): facts 2, conflict [true,true], env true, faults 2, admissions 2,
+gating 2, gating_conflict false, acks 0, ack_attempts 0, malformed false,
+batch false, l1 true. Actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+(indices 0..7; G1 = Gc(0) = index 4, G2 = Gc(1) = index 5).
+X-2 (M 120): facts 1, faults 1, admissions 1, gating 2, everything else BASE.
+Actors: [Fw(0), Se, Wk, Gc(0), Gc(1), Adm] (G1 = index 3, G2 = index 4).
+
+=====================================================================================
+1. EVERY PLACE A GATING CALLER'S IDENTITY ENTERS THE STATE OR THE SEMANTICS
+=====================================================================================
+(Exhaustive grep of M 1-4814 and P for gating_key, gating_member, gating_of,
+original_of, SimRow::{Gating,Correction,Other,Explanation}, Actor::Gc, w.gc,
+ghost.issued/told, g + 2, bit(, 1 <<, digest[0], wrapping_neg, config.gating, plus every
+ordering operation (.cmp, sort, min, max, BTreeMap iteration). Output in
+01-identity-grep.txt.)
+
+I1  gating_key(g) = {id bytes(2,g,0), digest bytes(2,g,1)} (M 279); gating_member(g)
+    has part None (M 300).
+I2  SimRow::Gating(g) (row key = gating_key(g)), SimRow::Correction(g, exit) (id
+    bytes(6,g,exit_code), digest bytes(6,g,1)), SimRow::Other(g) (id gating id, digest
+    bytes(2,g,9)), SimRow::Explanation(o) with o = g+2 for gating originals (id
+    bytes(5,o,0), digest bytes(5,o,1)) (M 336-386).
+I3  original_of maps facts to 0,1 and gating records to 2,3 (M 308); gating_of (M 314).
+I4  Core (P 772-785): U/C/X occupants may hold Occupant::Gating{record, exit},
+    Occupant::Correction{about, seq, exit}, Occupant::Explanation{original, cause};
+    `refusals: BTreeMap<RecordKey, Cause>`; Cause kinds carry ids, digests, holder ids,
+    offered keys and sequences (P 420-441). Occupancy numbers/counters, phase,
+    session, latch, frontier, worker_taken: no identity.
+I5  World (M 1046): rows; gc: Vec<GcPos> (positions of G1, G2); ghost.issued and
+    ghost.told: one bit per gating caller (M 1039-1041); SePos::Got may hold
+    Lookup::Conflict(Known::Cause(cause)) (fact causes); obs.explained: Vec<RecordKey>.
+    Fw/Se tickets, positions, Held/Counted, worker tokens (cell + occupancy number),
+    agenda actions, table, budgets, env, replays, adm, adm_kept: no identity.
+I6  step_gc(w, g) (M 3019-3105): gating_key(g), gating_member(g), Explanation(g+2),
+    bit(g) into issued/told, gc[g], text "G{g+1}" (trace notes only).
+I7  state_properties P7/P8 loop `for g in 0..config.gating` (M 3472-3493).
+I8  admission_properties P12 mask: covered = OR of Acknowledgement rows' digest[0],
+    tested with bit(o) for every Explanation(o) row (M 3285-3303).
+I9  explanations() digest: mask |= 1 << o (M 434-447), used by survey (M 449) and
+    recheck (M 822) -- the AckTxn verbs only, i.e. only inside step_ack.
+I10 malform "set" (M 3117-3122): removes the LOWEST set bit of the mask.
+I11 initial_rows: SimRow::Other(1) when gating_conflict (M 1096-1098) -- G2 only.
+I12 transition_properties E11 loop iterates before.core.refusals in BTreeMap order
+    (M 3533); encode_core iterates refusals in BTreeMap order (M 1513).
+I13 actors(): Gc(0) is listed before Gc(1) (M 2337); successors enumerates actors in
+    list order and the explorer keeps the first violation it meets (M 3917, 3935).
+
+No other identity use exists. In particular no Ord comparison of RecordKey or of a
+gating index exists outside BTreeMap ordering, and every lookup on identity-bearing
+data is an equality: Vec::contains / find / position / rposition, BTreeMap
+get / contains_key / insert / remove, ==.
+
+=====================================================================================
+2. THE TRANSFORMATION (type-directed, defined on decoded worlds)
+=====================================================================================
+sigma on gating indices: g -> 1-g. sigma on originals: 0->0, 1->1, 2->3, 3->2.
+mx (a 32-byte value of this simulation, whose first byte says what it is):
+  first byte 2 (gating record / G's other content)  : second byte g -> 1-g
+  first byte 6 (correction about G)                 : second byte g -> 1-g
+  first byte 5 (explanation of original o)          : second byte o -> sigma(o)
+  first bytes 1, 3, 4, 9 (fact, holder, Prepared, commitment): unchanged
+  anything else (incl. 7 = acknowledgement)         : outside the exchange (refuse)
+pi on RecordKey: (id, digest) -> (mx id, mx digest). On Member: key by pi, part's
+commitment by mx (unchanged). On Cause: every id/digest field by mx, every key by pi,
+every sequence unchanged. On Occupant: Gating{record,exit} -> record by pi, exit kept;
+Correction{about,seq,exit} -> about by pi; Explanation{original,cause} -> both by pi;
+Acknowledgement -> refuse (its SetFacts digest is a mask indexed by original, I9).
+On SimRow: Gating(g)->Gating(1-g), Correction(g,e)->Correction(1-g,e),
+Other(g)->Other(1-g), Explanation(o)->Explanation(sigma o), Prepared/Holder/Fact kept,
+Acknowledgement -> refuse.
+pi on World: core.u/c/x occupants by pi (occupancy numbers, stage, counters kept);
+refusals rebuilt as {pi(k) : pi(cause)} (re-sorted by the map); every row by pi IN
+PLACE (positions, hence every sequence number, kept); gc[0] <-> gc[1]; issued/told
+bits 0 <-> 1; SePos::Got(.., Lookup(Conflict(Known::Cause(c)))) by pi; ack must be
+empty; adm_kept must be None (A2); everything else unchanged.
+pi on keys: pi_K(k) = encode(pi(decode(k))). sigma on edges: actor index of Gc(g) ->
+index of Gc(1-g); every other actor and every choice kept.
+canonical(k) = min_bytes(k, pi_K(k)).
+
+=====================================================================================
+3. LEMMA E (equivariance of one step) -- PROVEN for configurations with
+   acks = 0, ack_attempts = 0, malformed = false, gating_conflict = false, gating = 2,
+   adm_kept never set (no A2)
+=====================================================================================
+Claim: for a reachable world w, actor a and choice sequence ch,
+step(pi w, sigma a, ch) runs the same control-flow path as step(w, a, ch), takes the
+same (choice, options) sequence and the same fault flag, makes the same number of word
+loads and exchanges (hook counts), and ends in pi(w'); its branch labels are equal;
+its violations have equal property names (details rename "G1"/"G2", "original 2/3");
+obs.explained is renamed by pi.
+Argument (by inspection of every branch condition on the step's path, transitively
+through P and the Io verbs):
+ (a) conditions on identity-free data (phase, session, latch, word, counts, cell
+     presence, occupancy numbers, sequences, classes, budgets, positions, oracle
+     answers) are unchanged by pi;
+ (b) equalities between identity-bearing values are preserved because mx and pi are
+     injective (each is an involution): row_by_id (M 411), member_facts (M 466: row,
+     explained via original_of, corrected via gating_of, holder/prepared on facts),
+     row_for_member (M 499), row_for_occupant (M 509), Io::explained (M 792),
+     Io::present (M 856), classify/known/constraint (P 845-876, 1161-1226), gating
+     (P 1413), lookup (P 1492), explain (P 1548), resolve_gating (P 1765), cell
+     (P 1859), settle (P 1934), step_gc's known_before / u_holds_it / x_holds /
+     rows != before / rows.contains (M 3019-3105), state_properties (M 3403),
+     transition_properties (M 3514);
+     SimRow::key commutes with pi: key(pi r) = pi(key r) for every non-ack row;
+     original_of(pi k) = sigma(original_of k); gating_of(pi k) = 1 - gating_of(k);
+ (c) map semantics of `refusals` depend only on key equality (get / contains_key /
+     insert / remove / len); its iteration order is used only by encode (applied to
+     the transformed world, so the key is that world's own key) and by E11's loop
+     (order of E11 entries only, same property name);
+ (d) step_gc(w, g) on pi w with actor Gc(1-g): gc[1-g], bit(1-g), gating_key(1-g),
+     Explanation((1-g)+2) = Explanation(sigma(g+2)) are the pi-images of what the
+     step reads and writes for g on w;
+ (e) choice points: every oracle.choose / branch call has an option vector fixed by
+     the verb kind, the operation's unwinds/constraint flags and the remaining budget,
+     or a count (holdings: pending rows; SE: eligible facts; WK: allowed worker
+     steps), all identity-free -- so the same choices are offered and taken;
+ (f) values written (rows inserted, occupants placed, causes built, keys pushed to
+     obs.explained, ghost bits set) are built from pi-images, hence are pi-images;
+ (g) the exceptions I8, I9, I10, I11 are unreachable under the stated conditions:
+     I9's mask is computed only by survey/recheck, called only from step_ack (acks =
+     0: no ACK actor, no snapshot, no Acknowledgement row or occupant); I8's covered
+     mask is then always 0 and P12's test `covered & bit(o) == 0` is true for every
+     Explanation row whatever o -- invariant; I10 needs malformed and an ACK actor;
+     I11 needs gating_conflict.
+Branch labels never contain a caller name (M 2475-2489, 3043-3055, 2668-2689,
+2870-2935, 3258-3261): labels are invariant.
+
+=====================================================================================
+4. S1-S15 MATRIX
+=====================================================================================
+S1  PROVEN. initial_rows(F-3) = [Prepared(F2), Holder(F2)] (F1's Prepared is missing,
+    ENV supplies it), no gating row; gc = [Start, Start]; ghost all zero; core fresh
+    with empty cells and table. Every component is fixed by pi, so pi(init) = init.
+    Same for X-2 (rows [Prepared(F1)]). Runtime: asserted by the prototype for every
+    supported configuration before exploring.
+S2  PROVEN. Both GC actors run the one function step_gc with g as the only parameter;
+    by Lemma E (d) the program for G2 is the pi-image of the program for G1. Proof does
+    not rest on the source identity alone: Lemma E covers the transitive closure (core
+    operations, Io verbs, properties).
+S3  PROVEN. Section 2 renames: record ids and digests (mx), U's gating record,
+    C's correction subject, X's explanation original and its cause, every refusal key
+    and cause, every ledger row naming a caller, settlement's held lookup cause,
+    obs.explained. Every "retained reference" other than these is a sequence number
+    (Cause.existing.seq, Holder.seq, Correction.seq, Stage::Committed, Present,
+    Explained, Known::Explained, table H and A, frontiers, WkPos seq) or a cell token
+    (cell + occupancy number); none names a caller.
+S4  PROVEN. Rows are renamed in place: row r at sequence s becomes pi(r) at s. Every
+    sequence number stored anywhere keeps pointing at the row it pointed at, whose
+    content is renamed consistently. Inserted sequences are rows.len() + pending.len()
+    (M 718), identity-free. durable_frontier/survey depend on Acknowledgement rows only
+    (none under acks = 0).
+S5  PROVEN. gc[0] <-> gc[1]; ghost.issued and ghost.told bits 0 <-> 1. The other
+    ghost fields (conflicted, conflicted_e6, unrecorded: per fact; dropped: a count)
+    name no caller. ADM, ENV, REPLAY, adm_kept name no caller.
+S6  PROVEN. mx, sigma, the row map, the bit swap and the gc swap are involutions; so
+    pi(pi(w)) = w and pi_K(pi_K(k)) = k on keys satisfying KEY. Runtime: asserted at
+    every expanded key by the prototype; tested over every key of X-2.
+S7  PROVEN (Lemma E + induction from S1): for every reachable k and transition
+    k --(i,ch)--> k' with fault f, pi_K(k) --(sigma i, ch)--> pi_K(k') with fault f,
+    equal branch labels and equal violation names; multiplicities are equal because
+    the per-actor enumeration of choice sequences is identical. pi_K maps the
+    reachable set R onto itself. Runtime: the prototype expands the mirror of every key
+    it expands and compares the two expansions item by item (aborts on difference).
+S8  PROVEN, with one reporting qualification. The SET of violated property names at a
+    state / on a transition is invariant. P7 and P8 are per-caller: "G(g+1) told
+    Committed and absent" at w iff "G(2-g) ..." at pi w (same property name). The
+    explorer keeps only the FIRST violation (M 3917, 3935); the P7/P8 loop runs g = 0
+    then g = 1 (I7) and E11 follows BTreeMap order (I12), so when one state violates
+    two different properties attributed to different callers, w and pi w may report a
+    different FIRST property. Verdict FAIL/PASS is invariant; the reported property
+    may differ (cf. ADM-QUOTIENT-01 Q12).
+S9  PROVEN. Enabledness of every actor is invariant (Lemma E), so "no enabled step" is
+    invariant; terminal() (M 3548) reads gc.all(Done), positions, tickets, latch, word
+    fault bit, cells, phase and fact classes -- all fixed by pi.
+S10 PROVEN (both directions, finite quotient). Non-fault edges are preserved with
+    their fault flag (S7).
+    (=>) A non-fault cycle k0 -> ... -> k0 in R maps edge-wise to canonical keys,
+         giving a closed walk of positive length in the quotient Q; a closed walk
+         contains a cycle (a self-loop counts). Kahn's algorithm (M 3957-4001, reused)
+         counts a self-loop in the in-degree, so it reports it.
+    (<=) Let c0 -> c1 -> ... -> cm = c0 be a non-fault cycle in Q. Each quotient edge
+         c_j -> c_{j+1} is the image of an actual edge c_j -> t_j with canonical(t_j)
+         = c_{j+1}. Lift from s0 = c0: if s_j = c_j take that edge; if s_j = pi(c_j)
+         take its sigma-image, which by S7 goes to pi(t_j). Either way s_{j+1} is in
+         {c_{j+1}, pi c_{j+1}}, and every lifted edge is non-fault. After one lap s_m is
+         c0 (a cycle in R) or pi(c0); in the latter case the second lap, the pi-image
+         of the first, returns to pi(pi c0) = c0. The closed walk of length m or 2m in
+         R contains a non-fault cycle.
+    Composed with the admission quotient: ADM-QUOTIENT-01 Theorem 1 gives
+    L1(G) <=> L1(Q_A); pi acts on Q_A (below, S12), so L1(Q_A) <=> L1(Q_A/pi).
+S11 PROVEN (construction). A quotient path is a list of edges between canonical keys.
+    Unfolding keeps the original state s_j in {c_j, pi c_j}: from c_j the edge is
+    taken as stored, from pi(c_j) its sigma-image (G1 <-> G2) is taken. Every unfolded
+    step is replayed in the ORIGINAL semantics (step_with / last_step_violations, both
+    unchanged) and must reach c_{j+1} or its mirror; the result is an original trace
+    with the callers' own names. The quotient needs no stored swap bit: the
+    orientation is recomputed by replay.
+S12 PROVEN. pi does not touch adm, and step_adm (M 3250) and admission_properties
+    (M 3275) read only identity-free data plus P12's mask (invariant under acks = 0,
+    Lemma E (g)). So with_admissions(pi_K k, a) = pi_K(with_admissions(k, a)), the ADM
+    observation at pi(c) equals the one at c (same admitted bit, branches, violation
+    names), and pi is an automorphism of the admission quotient Q_A (non-ADM edges +
+    observations + D1 with admissions spent). The composed quotient Q_A/pi keeps one
+    observation per expanded key AND evaluates the mirror's observation in the
+    runtime guard; no admission property (P1, P12, P15, E6, E9, E2 one-view count) and
+    no non-ADM transition is removed -- each is checked at a representative of its
+    orbit.
+S13 PROVEN. canonical(k) is the byte-wise smaller of two full keys, each holding every
+    field of the world (KEY_FIELDS, M 1166; E8/KEY tests). canonical(k1) =
+    canonical(k2) iff k2 in {k1, pi_K k1} (canonical(k) is in {k, pi_K k} and pi_K is
+    an involution), so distinct orbits never share a key. Runtime: KEY is evaluated
+    at both the key and its mirror; X-2 test groups every original key by canonical key
+    and requires each group to be exactly {k, pi_K k}.
+S14 PROVEN restriction. F-G seeds SimRow::Other(1) (G2 only) and so pi(init) != init:
+    F-G is NOT symmetric (asymmetry ASYM-3). Any configuration with an ACK actor is
+    outside Lemma E (ASYM-1, ASYM-2). The prototype accepts only gating = 2, no gating
+    conflict, acks = 0, ack_attempts = 0, malformed = false, AND a name on an explicit
+    list of configurations whose symmetry the mission demonstrated (X-2, F-3, plus any
+    supplementary differential configuration that passes the same exhaustive test);
+    it refuses everything else, F-1, F-2, F-PT, F-B, F-G and every X- other than X-2
+    included.
+S15 PROVEN by construction. explore, explore_experimental, successors, expand and all
+    existing tests stay byte-for-byte; the symmetry path is a new function reached
+    only from new tests. A2's kept bits make the transformation refuse. No mutation
+    control is run or routed through the symmetry path.
+
+=====================================================================================
+5. SEMANTIC ASYMMETRIES RECORDED
+=====================================================================================
+ASYM-1  SetFacts digest = mask of originals with bits 2,3 for G1,G2 (I9). Not invariant
+        unless the mask's bits are exchanged; unreachable with acks = 0. Refused.
+ASYM-2  malform "set" removes the LOWEST set mask bit (I10): with both gating
+        explanations covered and no fact bit below them it removes G1's for both w and
+        pi w -- NOT equivariant. Needs malformed + ACK actor + gating explanations.
+        Refused (and unreachable in F-3).
+ASYM-3  F-G's initial ledger seeds G2's identity with other content (I11):
+        pi(init) != init. Refused.
+ASYM-4  (reporting only) first-reported property among simultaneous violations
+        attributed to different callers (I7, I12), and which violating state BFS meets
+        first at equal depth (I13). Verdict and violation-name sets invariant.
+ASYM-5  (presentation only) trace notes and violation details name G1/G2 and
+        originals 2/3.
+ASYM-6  (enumeration only) actor order Gc(0) before Gc(1); BTreeMap order of
+        gating keys (I12, I13).
+None of these is reachable as a semantic difference in F-3.
+
+=====================================================================================
+6. ASSUMED / NOT ESTABLISHED
+=====================================================================================
+ASSUMED  AS1: KEY holds on every expanded key (checked at runtime at the key and its
+         mirror, as `successors` does).
+ASSUMED  AS2: no hook callback installed in the explorer thread (as AQ3 of
+         ADM-QUOTIENT-01).
+ASSUMED  AS3: the step function is deterministic for a given key and choice prefix
+         (as AQ4).
+ASSUMED  AS4: Lemma E's inspection is complete for the source at 83816e66 only; any
+         later model change voids it (the runtime guard then aborts on a difference
+         it meets, but cannot speak for unexplored states).
+NOT ESTABLISHED: F-3's size, any F-3 verdict, any statement about F-PT, F-B, F-G or
+         other configurations; whether the composed quotient completes F-3 under any
+         cap.
+
+CONCLUSION: every obligation S1-S15 is PROVEN for F-3 (and X-2) under the stated
+conditions; the exchange of G1 and G2 is an automorphism of F-3's reachable graph
+fixing its initial state. Stage 3 is permitted.

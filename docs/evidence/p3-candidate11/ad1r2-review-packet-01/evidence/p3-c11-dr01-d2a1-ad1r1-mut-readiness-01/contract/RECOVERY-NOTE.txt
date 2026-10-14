@@ -1,0 +1,27 @@
+NEXUS OS — D2A-1 CONTRACT RECOVERY
+13 October 2026
+
+Recovered byte-identical source documents from the Owner's ChatGPT file library.
+The original contract is not reconstructed or edited. SHA256SUMS records all three
+original files and this note. Verify with: sha256sum -c SHA256SUMS
+
+Authority order:
+(1) P3-C11-D2A1-CONTRACT-02-R1.md (107331 bytes) — protocol spec.
+(2) P3-C11-R3-AMENDMENT-01-RESPONSE-02-REVIEW-02.md — binding acceptance conditions.
+(3) P3-C11-R3-AMENDMENT-01-RESPONSE-03-REVIEW-01.md — R1 controlled baseline confirmation.
+
+Historical contract section 3.1 named base 862a11cef284c5e3c34234dfd2677a5462c86d5d.
+Architect execution baseline replaces that old SHA with
+b1d535f1bb634f2075f12a36ace89a595cdb13ba ONLY for the current isolated
+implementation mission. GitHub compare verified that the updated candidate is
+five commits ahead; lib.rs and phase3_tests.rs are byte-identical at both bases.
+All other binding contract terms, exclusions, six-file scope and stop conditions
+remain unchanged. No contract text itself has been modified.
+
+Historical 'implementation not authorized' statements predate current Owner
+instructions. The current ChatGPT Sole Architect mission supplies bounded
+implementation authority, but no push, integration, hosted CI, ledger activation,
+or modification outside the six-file scope.
+
+Review and implementation must distinguish contract-level approval from code
+acceptance. The original documents remain the immutable evidence of design intent.

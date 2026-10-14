@@ -1,0 +1,147 @@
+STAGE 5 — C1 / C25 ATTRIBUTION DIAGNOSIS (read-only)
+P3-C11-DR01-D2A1-F3-CAP60-01. Nothing was executed for this stage. No mutation was applied, built or run. No
+mutation worktree exists. E3 and E4 were not suppressed. The contract, the properties and the explorer were not
+changed. This diagnosis does not authorise Stage 5 of CAMPAIGN-01.
+
+Inputs, all read at 244c5b23 (the line numbers are the same at 9e945ee7 because every cited line comes before
+the one changed hunk; 01-source-excerpts.txt shows each excerpt with that check):
+  contract    P3-C11-D2A1-CONTRACT-02-R1.md (sha256 cac65351…3b3c): 7.3 P1 and P7, 7.4 E3 and E4, 7.5, 7.1, 8.1
+  core        crates/nexus-governed-control/src/ledger/protocol.rs (blob a2df2841)
+  explorer    crates/nexus-governed-control/src/ledger/protocol/model_tests.rs (blob beb48fe7 at 244c5b23)
+  unit tests  crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs (blob 55dc6640)
+  mutants     There is no Architect-approved mutant text. The contract defines C1 as "the count becomes a flag" and
+              C25 as "a gating append answers Committed on Commit::Unknown". CAMPAIGN-01 wrote candidate encodings
+              into tools/stage5-prepared-NOT-EXECUTED/controls_defs.py. Its README says they are not evidence.
+              They are read here only to check that the argument also holds for them. The argument below does not
+              depend on them.
+
+==================================================================================================================
+A. HOW THE EXPLORER CHOOSES WHAT IT REPORTS  (model_tests.rs 3805-3843, 3906-3935, 2190-2196)
+==================================================================================================================
+A1. Breadth first. States are expanded in discovery order, so in order of breadth-first depth.
+A2. When it expands state S, successors() first runs state_properties(S) (E1, E3, P2, P4, P5, P6, P7, P8, P9,
+    P13, …) and the KEY check. explore() looks at those state violations BEFORE any transition out of S, and
+    stops at the first one (`state_violations.into_iter().next()` … `break`).
+A3. Only if S is clean does it look at S's successors, in actor order and then oracle order. A transition
+    violation is anything the step pushed into Obs (P1 comes from admission_properties inside step_adm; E4 is
+    pushed inside step_gc and the append steps), plus transition_properties. The explorer stops at the first
+    violation of the first violating successor.
+A4. It reports exactly one property per run. `Report.failed` holds that one, together with its shortest trace.
+    Nothing after the first violation is evaluated.
+A5. A successor's state properties are evaluated only when that successor is expanded itself. That happens later
+    in breadth-first order, or not at all if the run has already stopped.
+
+==================================================================================================================
+B. C1 — "the count becomes a flag" — contract: fails P1 on F-1
+==================================================================================================================
+B1. Expected named failure: P1. At a successful admission, a result is unrecorded, or U, C or X is occupied
+    (model_tests.rs 3276-3284, evaluated inside step_adm, so it is a transition property).
+
+B2. Potential earlier failure: E3. A state property: `unapplied` must equal the Counted tickets held plus the
+    Counted tickets dropped (model_tests.rs 3402-3437).
+
+B3. Is P1 still observable? NO. Under this explorer it cannot be reported in any configuration, for any
+    encoding of "the count becomes a flag". The argument, from the source:
+    (i)   The count is the word's `unapplied` field (protocol.rs 156-158). admits() is true only if the flag
+          bits equal SESSION_OPEN AND that field is 0 (protocol.rs 259-261). The U, C and X bits are part of
+          FLAGS (protocol.rs 150-154). So while E1 holds, an admission with U, C or X occupied is refused.
+          C1 does not change the flag bits.
+    (ii)  ghost.unrecorded is set by note_fact_result only for a failing result that carries a Counted
+          ticket (model_tests.rs 2387-2393). It is cleared when that result is recorded, which happens before
+          the writer confirms (record_counted 2359-2371; FW Got → record at 2563-2586, confirm only later at FwPos::Recorded 2605-2614). So a non-zero unrecorded means a Counted ticket is held
+          (F-1 has no DROP).
+    (iii) Under the original core, a successful admission with unrecorded ≠ 0 would need unapplied = 0 while
+          Counted ≥ 1. With a flag in place of the count, this is the case after a confirm has cleared the
+          flag while another Counted ticket is still held. That is how C1 makes P1 fail.
+    (iv)  In that very source state S, unapplied (0) ≠ Counted held (≥ 1). That is an E3 violation of S.
+          By A2, E3 is reported when S is expanded, before the admission transition out of S is looked at.
+    (v)   In fact the first E3 violation comes earlier. With a flag, the second Counted ticket leaves
+          unapplied at 1 while Counted is 2. The P1 trace needs at least that state, then a record and a
+          confirm, and only then the admission. So E3 is reached at a smaller breadth-first depth.
+    The prepared encoding sets the field to 1 on any step up and to 0 on any step down. It is one instance of
+    (iii) and (iv). The argument also holds for any encoding in which admits() can succeed while a Counted
+    ticket exists, because E3 reads the same field that admits() reads.
+
+B4. Classification: not only a matter of reporting order. As written, the contract cannot be satisfied.
+    - The mutant is still killed by an assertion: E3 fails. In the mutant's own state graph the P1 violation is
+      still reachable, so semantically the defect is still caught.
+    - Contract 7.5 says "It must make ITS property fail by assertion", and C1's "Fails" column is P1. The
+      contract's own explorer (7.1: a shortest trace for a violation; 8.1: FAIL with its trace) evaluates E3
+      first. E3 is a property the contract added (7.4: "P3 is replaced by E3"). E3 strictly dominates every P1
+      failure that C1 can cause. So the named outcome cannot be observed without one of these: changing how
+      the explorer collects or orders failures, suppressing E3, or relabelling the outcome. All three are
+      prohibited.
+    - Read literally, 7.5 would therefore report C1 as "not killed on its property" and stop the campaign,
+      even though the mutation is detected.
+
+B5. Targeted evidence that would settle it (none was gathered. Each item needs a separate authorisation):
+    (a) Run C1 once on F-1 with the explorer as it is. Prediction: FAIL E3, with a short trace (two writers
+        Counted, unapplied 1 against counted 2), well before any admission.
+    (b) A deterministic witness of the P1 failure mode, without exploration: W1
+        (unit_tests.rs 2447-2470) confirms one of two Counted tickets and asserts that admission stays
+        refused. Under C1 the flag is 0 after that confirm, so W1 would fail at exactly that assertion. That
+        is a unit-level kill of the P1 mode, not "P1 on F-1".
+    (c) If the Architect wants P1 itself seen on F-1: a diagnostic explorer variant, kept outside the
+        repository, that records every violation and stops only at a P1 violation. Its receipt would show P1
+        reachable and E3 earlier. It changes explorer reporting, so it needs explicit authorisation, and it
+        could not count as the contract's control receipt.
+    (d) This static argument, B3, reviewed independently.
+
+B6. Contract clarification needed: YES. A ruling has to say what counts as killing C1. Options include:
+    E3 is accepted as the kill, citing B3 (the 7.5 row becomes "E3 (P1 dominated)"); or E3 plus the W1 unit
+    kill; or a diagnostic run as in B5(c). The executor may not choose between them.
+
+==================================================================================================================
+C. C25 — "a gating append answers Committed on Commit::Unknown" — contract: fails P7 on F-1
+==================================================================================================================
+C1'. Expected named failure: P7. A gating caller told Committed has its record in the ledger. It is a state
+     property (model_tests.rs 3471-3477).
+
+C2'. Potential earlier failure: E4. "If it says Committed, every member is in it". For a gating append it is
+     checked inside step_gc, on the transition (model_tests.rs 3054-3066:
+     `w.ghost.told |= bit(g); if !w.rows.contains(&SimRow::Gating(g)) { obs.fail("E4", …) }`).
+
+C3'. Is P7 still observable? NO. Under this explorer it cannot be reported, for the following reasons:
+     (i)   ghost.told is set in one place only, step_gc on a Committed answer (grep: line 3059 is the only
+           writer).
+     (ii)  The simulated ledger only grows. Rows are added at a durable commit, at an undecided outcome, or by
+           ENV (Io::undecided 688-694, Io::do_commit 730-744, Io::do_rollback 746-758; ENV at 3328). No step removes a row.
+           Pending rows belong to the transaction only. So a record that was present when told stays present.
+     (iii) So every P7 violation needs the transition that set told while the record was absent. That same
+           transition pushes E4, so E4 is a violation of the transition out of the source state S.
+     (iv)  By A3, E4 is reported when S is expanded. P7 belongs to the successor state, so by A5 it would be
+           evaluated only when that successor is expanded, and the run has already stopped. The present branch
+           of Commit::Unknown (Io::undecided explores absent and present) breaks no property. The absent
+           branch always shows E4 first.
+     The prepared encoding returns GatingOutcome::Committed(seq) on Commit::Unknown and keeps the one
+     rollback. It fits (iii).
+
+C4'. Classification: the same structural case as C1, and stricter. P7 and the gating half of E4 are the same
+     predicate ("told Committed, and the record is absent"), checked at two different times: E4 on the
+     transition and P7 on the next state. E4 always comes first. The mutant is killed by assertion (E4). The
+     contract's named property cannot be reported. Read literally, 7.5 would again stop the campaign.
+
+C5'. Targeted evidence that would settle it (none was gathered):
+     (a) Run C25 once on F-1 with the explorer as it is. Prediction: FAIL E4 "append_gating said Committed but
+         the record is absent", at the first gating append that meets Commit::Unknown on the absent branch.
+     (b) Unit level: gating_uncertain (unit_tests.rs 316-328) asserts that a gating append meeting
+         Commit::Unknown answers Refused Uncertain/Storage. T-MATRIX, T-CELL, T-GATE, T-RES, T-BIND, T-PB5,
+         W13 and the_view_reads_every_field all use it, so under C25 they would fail at that assertion. That
+         is a unit kill, not "P7 on F-1".
+     (c) If P7 itself must be seen: the same diagnostic variant as B5(c), with the same limits.
+     (d) The static argument C3', reviewed independently.
+
+C6'. Contract clarification needed: YES, for the same reason as B6. A natural reading is that C25's property
+     is E4, and that P7 is implied by E4 because P7's only way to fail is through E4's predicate.
+
+==================================================================================================================
+D. LIMITS OF THIS DIAGNOSIS
+==================================================================================================================
+  - It is a reading of source. No control ran, so B3 and C3' are arguments, not receipts.
+  - The exact mutant text has not been approved. The conclusions assume only the contract's one-line
+    definitions, plus E1 and E3 (or E4) being unchanged.
+  - Only C1 and C25 were examined. Other 7.5 rows may have the same pattern, where a transition property
+    precedes a state property or the reverse. Examples to check: C10 and C9 against E4, C24 against P8.
+    They were not analysed.
+  - Whether a kill by a stronger property satisfies 7.5 is an interpretation the Architect must make. This
+    report does not make it, and it relabels nothing.

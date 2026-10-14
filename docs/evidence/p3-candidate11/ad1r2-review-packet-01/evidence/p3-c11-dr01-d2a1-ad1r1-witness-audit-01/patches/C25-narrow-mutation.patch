@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841..0456a0c1 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1473,7 +1473,7 @@ impl<'a> Publish<'a> {
+                     self.failed();
+                     self.rolled(io.rollback());
+                     self.keep = true;
+-                    return refused(Persistence::Uncertain, Reason::Storage);
++                    return GatingOutcome::Committed(seq);
+                 }
+             },
+             Insert::Constraint => {

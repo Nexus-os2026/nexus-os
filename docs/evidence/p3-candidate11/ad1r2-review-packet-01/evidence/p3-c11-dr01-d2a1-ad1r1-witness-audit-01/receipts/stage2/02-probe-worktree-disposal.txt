@@ -1,0 +1,7 @@
+DISPOSAL OF THE ONE MISSION-OWNED PROBE WORKTREE  2026-10-14T02:17:05+01:00
+probe evidence sealed first: receipts/stage2/probe-C25-narrow/PROBE-SHA256SUMS sha256 f9f4c2a70a623aaa45e41e55387c1aa81dad0799e9d1d43fc0b2773e217c529b
+/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-audit-probe-c25: HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (detached), porcelain 0, protocol.rs blob a2df2841b99cad5d452008a6d4150e9369d07e66, commits beyond witness 0, target/ 733M, processes inside 0
+removed /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-audit-probe-c25
+absent: /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-audit-probe-c25
+worktrees now: 142 (142 before)
+the mutant was never committed: no ref points to it; witness branch still 42dd1bd1cf21ffdea5968b256d2983f6575fab5b

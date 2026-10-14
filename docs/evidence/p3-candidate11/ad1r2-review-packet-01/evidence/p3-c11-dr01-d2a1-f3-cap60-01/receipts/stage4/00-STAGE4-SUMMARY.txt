@@ -1,0 +1,58 @@
+STAGE 4 — ONE F-3 EXPLORATION AT A 60,000,000-STATE CEILING — SUMMARY
+Receipt: receipts/stage4/full-F-3-cap60.txt; samples: full-F-3-cap60.cgroup-samples.txt; build: full-F-3-cap60.txt.build(.json)
+Pre-flight: receipts/stage4/00-preflight-host.txt and the receipt's own pre-flight (MemAvailable 53,908,512 KiB; 18,874,368 needed)
+
+RESULT: F3_INCOMPLETE — the 60,000,000-state ceiling was reached. No property is established.
+Ran exactly once. No retry, no cap increase, no model change. No other full configuration was run.
+
+A  executable sha256   b09cdf811f0f93d396d1be40ab6c9f36146e8f438a92d456ea248906ab9c49fb (pinned; MATCH; cargo fresh True)
+                       source 9e945ee75e765c962cb072286581f49755ba702e / tree d06c618cb2f097ee969d6a2541701cfa51206903, clean
+B  invocation          (cwd crates/nexus-governed-control) systemd-run --user --scope --unit=p3c11-f3cap60-full-F-3-cap60--1791917953
+                       -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700
+                       <exe> ledger::protocol::model_tests::full_f3 --exact --nocapture --test-threads=1 --ignored   (launched under nice 10)
+                       exit status 101: full_exploration asserts Verdict::Pass and the verdict was Incomplete (panic at model_tests.rs:4133:5)
+                       launcher exit 0; scope Result=success
+   bounds printed      facts 2, conflicting [true, true], ENV true, batch false, faults 2, admissions 2, gating callers 2, gating
+                       conflict false, acks 0, ...; ticket limit 8, refusal limit 4; caps 60000000 states, 2700s
+   actors              [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+C  discovered states   60,000,001
+D  expanded states     53,851,687
+E  unexpanded states    6,148,314
+F  transitions        257,109,574
+G  fault transitions   23,572,207
+H  valid terminal      5,825 expanded states had no enabled step. Each was checked by D1 when it was expanded, and none
+                       failed (a failure would have stopped the run as FAIL). The 6,148,314 unexpanded states were never checked.
+I  non-terminal dead ends  0 among the expanded states. Not established for the unexpanded states.
+J  property verdicts   all 25 (P1 P2 P4 P5 P6 P7 P8 P9 P12 P13 P15 D1 L1 E1..E11 KEY): NOT ESTABLISHED (incomplete).
+                       No violation was found among the states expanded before the ceiling. That is not a PASS.
+                       (E10 would not apply in any case: worker verbs do not unwind in F-3.)
+K  L1 cycle check      NOT RUN. The explorer runs L1 only after a complete search. NOT ESTABLISHED.
+L  branch coverage     53 listed labels taken, 37 listed labels not taken, 3 labels taken outside the list
+                       (append_cell C: Refused(Latched), append_cell C: Refused(NotHealthy), append_cell X: Refused(NotHealthy)).
+                       This is coverage of a partial search only.
+M  peak memory         RSS 8,001,236 KiB (7.63 GiB; /usr/bin/time); scope memory.peak 8,203,206,656 B (7.64 GiB). 47.7% of 16 GiB.
+                       memory.max 17179869184, memory.swap.max 0, swap.current 0 in all 174 samples, oom 0, oom_kill 0.
+                       Host MemAvailable never fell below 46,018,012 KiB. No Owner workload was stopped; Ollama and the
+                       browsers kept running.
+N  wall clock          5:49.21 (explorer elapsed 348.5 s), 12.9% of 2700 s; user 343.48 s, sys 5.63 s; explorer tables 6,528 MiB
+O  termination         the explorer's own state-ceiling check (`visited.len() > cap`, with visited = 60,000,001) ended the
+                       search; INCOMPLETE. Neither the time limit nor the memory limit fired.
+
+COMPARISON WITH THE ORIGINAL 30,000,000 F-3 RECEIPT (campaign-01 receipts/explorations/full-F-3.txt, sha256 5731ed93…,
+executable 39638e6f… built from 244c5b23)
+                         30M (244c5b23)       60M (9e945ee7)       change
+  outcome                INCOMPLETE           INCOMPLETE
+  discovered             30,000,002           60,000,001           +30,000,000 (x2.00)
+  expanded               25,318,697           53,851,687           +28,532,990 (x2.13)
+  unexpanded              4,681,305            6,148,314           +1,467,009 (x1.31); 15.6% -> 10.2% of discovered
+  transitions           126,307,617          257,109,574           x2.04
+  fault transitions      13,911,325           23,572,207           x1.69
+  no enabled step             1,775                5,825           x3.28 (every one terminal, D1)
+  peak RSS (KiB)          3,965,668            8,001,236           x2.02
+  explorer tables (MiB)       3,264                6,528           x2.00
+  wall clock              2:54.66              5:49.21             x2.00
+  bounds (except cap), actors, state-key fields, branch labels taken/not taken: IDENTICAL
+  Every expanded state of the 30M run is among the expanded states here. The search is breadth first and
+  deterministic, and only the cap differs. That is inferred from the explorer's code, not measured.
+  At 60M the unexpanded frontier is still larger than it was at 30M. No conclusion about F-3's true size, or
+  about the ceiling it would need, is drawn from this run.

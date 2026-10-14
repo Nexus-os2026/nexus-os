@@ -1,0 +1,203 @@
+NEXUS OS — P3-C11-DR01-D2A1-GC-SYM-F3-01 — REPORT
+TO:   ChatGPT GPT-6 — Sole Nexus OS Architect
+FROM: Claude Code (Claude Opus 5.5; the mission header names Sonnet 5.5 — see 13.10). No subagents.
+DATE: 2026-10-13
+Evidence: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-gc-sym-f3-01 (outside the repository)
+
+FINAL STATUS: EXPERIMENTAL_SYMMETRY_F3_PASS
+
+One gc_symmetry_f3 run was made, on the pinned fresh optimised executable built from 77a146ca, under the
+unchanged 30,000,000 cap (counting composed-quotient keys), 16 GiB memory, no swap, 45 minutes. The combined
+admission-observer + G1/G2 symmetry quotient of F-3 was explored COMPLETELY: 20,431,851 keys discovered,
+20,431,851 expanded, 0 unexpanded. Every applicable property HOLDS, D1 HOLDS, L1 HOLDS (no non-fault cycle).
+The runtime mirror check passed at every expanded key; no symmetry or admission-quotient precondition failed.
+Exit 0, 5:36 wall, peak RSS 2.73 GiB, swap 0, OOM 0.
+The ORIGINAL F-3 graph was NOT explored. Statements about it below are DERIVED through S1-S15 and Theorem 1.
+This is not component acceptance, not a contract amendment, and not a §8.3 result.
+
+=====================================================================================================
+1. PROVENANCE AND SOURCE IDENTITIES  (receipts/stage1/00-STAGE1-SUMMARY.txt, 01-03; 11/11 PASS)
+  Commit 77a146ca606f99329068410b6037721341f00c70, tree 21818166ee10a8075ca364bd09f31c7aa64555dd = GitHub
+  (git/commits API; review/p3-c11-d2a1-gc-symmetry-01 head). Single parent 83816e66916c3a217ab7919d7e6a21893e7d579a.
+  One file, model_tests.rs +1724/-0, one hunk @@ -6034,0 +6035,1724 @@. First 194,288 bytes / 6,034 lines
+  byte-identical to the parent: explore (3882), successors (3805), expand (4932), explore_experimental (5038),
+  FULL_CAP = 30,000,000 (78), FULL_TIME = 45 min (79), F3 (170). protocol.rs, unit_tests.rs, ledger.rs, lib.rs,
+  both Cargo.toml, Cargo.lock, rust-toolchain.toml: same blobs. model_tests.rs blob a80dd05c…, sha256 be562d08….
+  Rust 1.94.0 (4a4ef493e 2026-03-02), cargo 1.94.0, LLVM 21.1.8.
+  Sealed evidence: GC-SYMMETRY-01 37/37 (34bf59b3…; proof receipt 2e6feb4f…), GC-SYM-PUBLISH-01 11/11 (2f8894ef…),
+  F3-QUOTIENT-01 45/45, ADM-QUOTIENT-01 42/42, F3-CAP60-01 58/58, campaign-01 93/93 and 10 others: all OK before
+  and after the run (receipts/final/01 [5]).
+
+2. CONTRACT IDENTITIES
+  P3-C11-D2A1-CONTRACT-02-R1.md       cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+  …RESPONSE-02-REVIEW-02.md           6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce
+  …RESPONSE-03-REVIEW-01.md           1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35
+  One distinct hash each across all 8 sealed copies; package manifests 4/4 OK; copied to contract/ (9th copy).
+
+3. EXECUTABLE PROVENANCE  (receipts/stage2/00-02, 05)
+  Worktree /home/nexus/NEXUS/nexus-os-p3-c11-gc-sym-f3: new, detached at 77a146ca, porcelain 0 throughout.
+  New CARGO_TARGET_DIR=<worktree>/target; CARGO_INCREMENTAL=0; -j 8 / CARGO_BUILD_JOBS=8; --locked; nice -n 10.
+  nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 8: exit 0, 91.7 s,
+  326 artifacts compiled, 0 fresh, 0 warnings; one test executable, opt-level 3.
+  PINNED target/release/deps/nexus_governed_control-2faa0b9718d3e6a3, 8,928,912 bytes,
+         sha256 c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704 — checked before every run,
+         at launch (MATCH), after the run and at the end (unchanged sha256, size, mtime).
+  GC-SYMMETRY-01's build of the same commit in another worktree (b59b3569…) differs at equal size; a
+  reproducible build is NOT claimed.
+  Listing 325 tests / 33 ignored, name sets identical to GC-SYMMETRY-01's sealed listings; 80 model_tests #[test]
+  fns in source = 80 listed; no temporary diagnostic test.
+
+4. CHEAP GATES  (receipts/stage2/00-STAGE2-SUMMARY.txt; every gate exit 0)
+  fmt --check 0 | git diff --check 83816e66..77a146ca, b1d535f1..77a146ca, working tree 0/0/0
+  clippy --release --all-targets -D warnings 0 (0 warnings) | clippy --release --lib -D warnings 0
+  all lib tests on the pinned executable: 292 passed / 0 failed / 33 ignored
+  dev suite cargo test --locked -p nexus-governed-control: lib 292/0/33, egress 1, doctests 8
+  original X-1..X-5 5 | ADM-quotient differentials X-1..X-5 5 | ADM-quotient negatives/observer/refusals 9
+  GC X-2 differential 1 | GC SYM-1 differential 1 | forced property invariance 1 | finite-graph L1 + model cycle 2
+  counterexample unfolding/replay 3 | runtime-guard refusals (incl. asymmetric step) + renaming + initial 11
+  The differentials compare against the ORIGINAL explorers: explore() (contract explorer) in Full mode and
+  explore_experimental(.., Quotient) in composed mode, plus whole_graph over the original successors(); DIFFERENTIAL
+  lines print both sides (X-2: reference 10,020 / quotient 5,340 keys; SYM-1: 94,916 / 49,518).
+  Outputs equal GC-SYMMETRY-01's sealed receipts after removing timings and OS thread ids (receipts/stage2/39).
+
+5. FULL COMBINED F-3 OUTCOME  (receipts/stage3/gc-symmetry-full-F-3.txt sha256 7b745751…; 00-preflight.txt; 01)
+  A invocation   cwd crates/nexus-governed-control; systemd-run --user --scope --unit=p3c11-gcsymf3-1791929700
+                 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 /usr/bin/time -v timeout -s KILL 2700
+                 nice -n 10 <exe> ledger::protocol::model_tests::gc_symmetry_f3 --exact --nocapture
+                 --test-threads=1 --ignored.  Exact selection proven = 1 (substring 'f3' would select 4,
+                 'gc_symmetry' 2, 'full_f3' 2). EXIT 0; test result ok, 1 passed; scope Result=success.
+                 Printed bounds: facts 2 conflicting [true,true] ENV true faults 2 admissions 2 gating 2,
+                 gating conflict false, acks 0; caps 30000000 states, 2700s.
+                 Actors [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env].
+  B executable   c7fdb06859b04c7b9468c943832bbf23a2fd9022e47a2679a2ecea7e5f825704 MATCH (before and after)
+  C discovered   20,431,851 composed-quotient keys (68.1% of the 30,000,000 cap)
+  D expanded     20,431,851
+  E unexpanded   0
+  F non-ADM transitions 77,342,551 (non-fault 71,308,381 = 77,342,551 - 6,034,170 = L1 line)
+  G fault transitions    6,034,170
+  H admission evaluations 20,431,851 (one per expanded key)
+  I admitted              3,182
+  J self-mirrored keys    880,778 (expanded keys that are their own mirror; all keys were expanded, so all of them)
+  S termination  normal completion: the BFS queue emptied below the cap, L1 (Kahn) ran over the whole quotient,
+                 the test asserted PASS, process exit 0. Neither the explorer's state/time caps, nor timeout, nor
+                 RuntimeMaxSec, nor the memory limit fired.
+  T failed precondition / counterexample: none. 0 panics; 0 "symmetry inapplicable"; 0 "quotient inapplicable";
+                 0 FAIL lines; 0 INCOMPLETE lines.
+
+6. ALL PROPERTY RESULTS (K)
+  P1 P2 P4 P5 P6 P7 P8 P9 P12 P13 P15: HOLDS.  D1: HOLDS.  L1: HOLDS.
+  E1 E2 E3 E4 E5 E6 E7 E8 E9 E11: HOLDS.  KEY: HOLDS.
+  E10: "not applicable here (worker verbs do not unwind)" — printed by the explorer for F-3's configuration
+  (worker_unwinds false); the same rule as the contract explorer's (model_tests.rs:4081, unchanged prefix).
+  24 HOLDS + 1 not applicable = all 25 property lines. Verdicts are for the composed quotient (see 11, 13).
+
+7. MIRROR RUNTIME-CHECK RESULTS (N)
+  At each of the 20,431,851 expanded keys the loop (model_tests.rs@77a146ca lines 6606-6733, in
+  explore_symmetric_kept at 6570) checked mirror(mirror(k)) == k,
+  expanded k AND mirror(k), and held the second expansion to the exchange of the first (per actor, in order:
+  edge actor exchanged, same choices, fault, sorted violation names, branches, successor mirrored; same state
+  violations); D1 judged alike for k and mirror(k) at every no-step key. No check failed (a failure panics with
+  "symmetry inapplicable", none present). 880,778 of the checks were at self-mirrored keys. The admission-quotient
+  guard (expand, Mode::Quotient) raised no "quotient inapplicable" either. Coverage is every EXPANDED key —
+  here every key; successors are canonicalised, not re-expanded beyond their own key.
+
+8. D1 / L1 AND COUNTEREXAMPLE EVIDENCE (L, M)
+  D1: 13,996 keys with no enabled non-ADM step, each judged terminal with admissions spent, for the key and its
+      mirror; 0 non-terminal.
+  L1: "HOLDS: 71308381 non-fault edges, no cycle; 13996 end states, each terminal (D1)" — Kahn over the complete
+      quotient removed every key. Under S10 (proven both directions in GC-SYMMETRY-01, observed on X-2/SYM-1 and
+      20,000 finite graphs) a quotient without a non-fault cycle implies none in the admission quotient; under
+      ADM-QUOTIENT-01's L1 relation, none in the original. Both transfers are proof-dependent (DERIVED).
+  Counterexamples: none — nothing to unfold or replay. The unfolding/replay machinery was exercised in Stage 2
+  (P1, E9, E2 negatives; 82,287-path exhaustive unfold in GC-SYMMETRY-01).
+
+9. ACTUAL RESOURCE MEASUREMENTS (O-R)
+  O branches  53 listed taken, 37 listed NOT TAKEN, 3 taken outside the list — BYTE-IDENTICAL to the original 30M,
+              original 60M and admission-quotient 30M F-3 receipts (receipts/stage3/01 [4]). NOT TAKEN includes
+              all snapshot/acknowledgement/malformed (F-3 has no acknowledgement actor), DROP, append_gating
+              Conflict(IdentityContent), lookup Conflict(cause|explained), explain Unknown, several Stale/unwound.
+  P memory    peak RSS 2,858,296 KiB (2.73 GiB, /usr/bin/time); scope memory.peak 2,929,405,952 B (17.1% of 16 GiB).
+              Explorer printed "tables 3264 MiB" (same figure as the earlier 30M runs; relation to RSS not examined).
+  Q wall      5:36.10 (/usr/bin/time; 12.4% of 45 min); explorer 335.8 s; user 333.51 s, sys 2.48 s, 99% of one CPU.
+  R swap/OOM  memory.swap.max 0; memory.swap.current 0 in all 167 samples (2 s cadence); "Swaps: 0"; oom 0,
+              oom_kill 0. Host MemAvailable never below 51,375,668 KiB. Ollama, browsers and desktop untouched.
+  Limits verified live before the run: memory.max 17179869184, memory.swap.max 0, RuntimeMaxUSec 45min 10s;
+  timeout -s KILL and RuntimeMaxSec both shown to fire on sleep probes (receipts/stage3/00-preflight.txt).
+
+10. COMPARISON WITH PREVIOUS F-3 EXPERIMENTS
+                 original 30M    original 60M    ADM-quotient 30M      composed quotient (this run)
+  counted unit   original        original        ADM-Q state           composed key
+  discovered     30,000,002      60,000,001      30,000,001            20,431,851
+  expanded       25,318,697      53,851,687      28,284,667            20,431,851
+  unexpanded      4,681,305       6,148,314       1,715,334            0
+  transitions   126,307,617     257,109,574     110,893,519 non-ADM    77,342,551 non-ADM
+  with a fault   13,911,325      23,572,207      10,194,059             6,034,170
+  no step             1,775           5,825          15,175                13,996
+  evaluations             -               -      28,284,667 (6,254 adm) 20,431,851 (3,182 adm)
+  peak RSS KiB    3,965,668       8,001,236       3,943,060             2,858,296
+  wall            2:54.66         5:49.21         2:58.50               5:36.10
+  verdict         INCOMPLETE      INCOMPLETE      INCOMPLETE            PASS (complete)
+  Rows are not directly comparable (different units and BFS orders). Per expanded key: 16.4 us here vs 6.30 us
+  ADM-Q (the guard expands every key twice) — observation, not a cost model.
+
+11. DERIVED VERSUS DIRECTLY MEASURED
+  MEASURED (this run): every figure in 5-9.
+  DERIVED — exact, valid only under S1-S15 (GC-SYMMETRY-01) and Theorem 1 (ADM-QUOTIENT-01), N = 2:
+    admission-quotient reachable states |R_Q| = 2 x 20,431,851 - 880,778 = 39,982,924
+    original F-3 reachable states          = (N+1) x |R_Q| = 3 x 39,982,924 = 119,948,772
+    admission-quotient evaluations         = 2 x 20,431,851 - 880,778 = 39,982,924 (= |R_Q|, one each)
+  Consistent with the earlier measured lower bounds: original > 60,000,001 (60M run INCOMPLETE); ADM-Q >
+  30,000,001 (ADM-Q run INCOMPLETE).
+  DERIVED — bounds only: gc_symmetry_f3 prints the self-mirrored share of keys (880,778) but not the shares of
+  transitions, fault edges, no-step keys or admitted evaluations (it discards Tally/Mirrors), so for ADM-Q:
+    non-ADM transitions in [77,342,551, 154,685,102]   fault edges in [6,034,170, 12,068,340]
+    no-step states in [13,996, 27,992]                 admitted in [3,182, 6,364]
+  and the original edge counts (T_G = 3 T_Q + 2|R_Q|, F_G = 3 F_Q) inherit those ranges. Exact values would
+  need those shares; obtaining them would need another run or a test change, neither authorised.
+  NOT CLAIMED: that the original graph, or the admission-only quotient, was explored. Neither was.
+
+12. PROTECTED-REF STATE  (receipts/final/01; github-refs-after.txt)
+  git ls-remote github: 181 refs, byte-identical before and after (2470665e…). main 6e15dee6;
+  rebuild/phase0-trust-boundary f727f5c3; repair/p3-candidate11 (Candidate 11) b1d535f1;
+  review/p3-c11-d2a1-gc-symmetry-01 77a146ca; all other review refs and the 7 frozen-checkpoint refs unchanged.
+  No Actions run since 2026-10-12 (latest 38319429125). No push, PR, merge, tag. Mission worktree kept
+  (detached, clean, target/ 2.2 GB); its removal is the Owner's call.
+
+13. REMAINING CONTRACT LIMITATIONS
+  1. Explorer: experimental composed quotient, not the contract's explorer. The 30M cap was applied to composed
+     keys as this mission authorised; §8.3 and FULL_CAP are unchanged; no contract amendment.
+  2. Transfer to the original graph rests on executor proofs: Lemma E / S1-S15 (passed independent source review
+     for this bounded experiment only) and Theorem 1 / Q1-Q15 / AQ1-AQ6 (status as recorded in F3-QUOTIENT-01 §8;
+     unchanged here). A model change voids Lemma E (L-3); the guard then aborts only where it expands.
+  3. AQ6: model state-safety only — not real executions, ledger durability, A-1/A-2, or contract 6.2/6.3.
+  4. The admission guard asserts at counter N on expanded keys; lower counters rest on Theorem 1
+     (F3-QUOTIENT-01 limitation 4).
+  5. ASYM-4 / L-1: the first-reported property could differ from the original explorer's; moot here (none failed).
+     Mutation controls must stay on the original explorer.
+  6. Scope: F-3 only. Not F-1, F-2, F-PT, F-B, F-G or any acknowledgement configuration (symmetry not applicable:
+     L-2, ASYM-1..3). 37 listed branches are not reached by F-3 at all.
+  7. Single build, single run; no repeat or reproducibility claim.
+  8. Only states and evaluations are exactly derivable (11).
+  9. Earlier open items unchanged and not examined: C1/C25 disposition, R1 CAS wording, cap check stopping at
+     cap + 1, stale mutation-manifest hashes.
+  10. Deviations: model Opus 5.5 vs header Sonnet 5.5; corrections appended in place to receipts — stage2/39
+      (thread-id-only differences), stage3/00-preflight (RuntimeMaxSec first read after the probe had exited;
+      re-probed live; one failed probe-scope record of this mission cleared). Dev suite and both diff-checks vs
+      candidate 11 / working tree run in addition to the listed gates.
+
+14. INDEPENDENT ARCHITECT REVIEW REQUEST
+  1. receipts/stage3/gc-symmetry-full-F-3.txt against section 5: exact-one selection, pin, scope limits, PASS.
+  2. Whether this composed-quotient PASS can stand as F-3 evidence, given that its transfer to the original graph
+     depends on Lemma E/S1-S15 and Theorem 1 (13.2), and how §8.3's cap is to be read for it.
+  3. Whether the DERIVED original count (119,948,772) is acceptable as labelled.
+  4. What, if anything, follows for F-PT and F-B (derived from F3; not run; symmetry applicability unshown).
+  5. Disposition of the open items in 13.9.
+  None of these decisions was taken by the executor.
+
+NOT DONE (hard boundaries): source/test/production change; new dependency; contract amendment; mutation
+campaign; F-1/F-2 rerun; original or admission-only full F-3; gc_symmetry_prefix_f3; F-PT; F-B; any other full
+configuration; GitHub CI; push or PR; merge or integration; tag or release; ledger activation; Phase Three
+closure. Earlier evidence not rewritten.
+
+FINAL STATUS: EXPERIMENTAL_SYMMETRY_F3_PASS
+RETURN TO: ChatGPT GPT-6 — Sole Nexus OS Architect

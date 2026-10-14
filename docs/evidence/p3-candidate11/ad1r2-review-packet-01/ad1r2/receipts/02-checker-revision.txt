@@ -1,0 +1,61 @@
+CHECKER REVISION before its receipted run  2026-10-14T02:56:24+01:00
+The first run (not receipted) reported 11 failures. Each was inspected against the draft and the source:
+ - C4b: nine inventory rows end with an empty cell '| |', which the row pattern did not match; the rows exist (rows 2,4-8,11,12,15).
+ - C5b (9): tests with a multi-line #[should_panic(...)] attribute; the attribute pattern did not span lines. Each is #[test], not ignored; gates 36 ran them (24 passed, 0 ignored).
+ - C9c: matched G.3's conditional criterion 'the control is killed when all of ...', which is not a kill claim.
+No draft text was changed for these. The fix makes the patterns parse; it removes no check. Added: C4 'every inventory-looking row parses' and C9e.
+v1 sha256 aae8179fb8867cec801f251b8dd07ca47a079159f162cdc98a6b62fefa096863; v2 sha256 46764de3237c985fd537f4995c1f92dfd9ca03f320f2f747838bdd8eb604df2d
+
+--- /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6387ac48-7e9c-43f3-a48b-b00a89e1a991/scratchpad/check-ad1r2.v1.py	2026-10-14 02:56:24.134693612 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r2-contract-evidence-01/tools/check-ad1r2.py	2026-10-14 02:56:24.154456076 +0100
+@@ -110,7 +110,10 @@
+                     break
+             else:
+                 fails.append(f"FAIL  C4 an #[ignore] at {f}:{i + 1} has no fn within 8 lines")
+-inv = re.findall(r"^\| (\d+) \| `([a-z0-9_]+)` \((\d+)\) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]*) \|$", draft, flags=re.M)
++inv = [tuple(c.strip() for c in r) for r in
++       re.findall(r"^\| (\d+) \| `([a-z0-9_]+)` \((\d+)\) \|([^|]+)\|([^|]+)\|([^|]+)\|([^|]*)\|$", draft, flags=re.M)]
++check(len(inv) == len([l for l in D if re.match(r"^\| \d+ \| `[a-z0-9_]+` \(\d+\) \|", l)]),
++      "C4 every inventory-looking row parses")
+ inv_names = {r[1]: r for r in inv}
+ check(len(inv) == len(inv_names), f"C4a inventory names unique ({len(inv)} rows)")
+ check(set(inv_names) == set(src_ignored),
+@@ -148,8 +151,9 @@
+     gate_names += re.findall(r"model_tests::([a-z0-9_]+)", cmd)
+ check(len(gate_names) == len(set(gate_names)) == 51, f"C5a gates 31-37 select 51 distinct tests ({len(gate_names)})")
+ for n in gate_names:
+-    m = re.search(rf"((?:#\[[^\n]*\]\n)*)fn {n}\(\)", mt)
+-    check(bool(m) and "#[ignore" not in m.group(1) and "#[test]" in m.group(1), f"C5b {n} is an ordinary #[test]")
++    m = re.search(rf"\n((?:[ \t]*(?:#\[|\)\]|expected = )[^\n]*\n)*)fn {n}\(\)", mt)
++    attrs = m.group(1) if m else ""
++    check(bool(m) and "#[ignore" not in attrs and "#[test]" in attrs, f"C5b {n} is an ordinary #[test]")
+ named_in_d = set(re.findall(r"`((?:quotient|gc_symmetry|an_admission)[a-z0-9_]*)`",
+                             draft.split("**Diagnostic tests kept.**", 1)[1].split("## E.", 1)[0]))
+ named_in_d -= {"quotient_x1_matches_the_original", "quotient_x5_matches_the_original"} - set(gate_names)
+@@ -279,8 +283,10 @@
+     check(not bad, f"C9b operative text has no '{pat}' outside its allowed context ({why}); hits {len(hits)}")
+ for phrase in ("killed finally", "finally killed", "is accepted by this draft", "ADOPTED.", "IN FORCE."):
+     pass
+-check(not re.search(r"\b(C1|C25)\b[^.\n]{0,60}\b(is|are) (finally )?killed\b", operative),
+-      "C9c no sentence says C1 or C25 is killed")
++claims = re.findall(r"\b(?:C1|C25)(?: and C25)? (?:is|are|was|were|has been|have been) (?:now |finally )?killed\b", operative)
++check(not claims, f"C9c no sentence claims C1 or C25 is killed ({claims})")
++check(draft.count("No final kill") >= 2 and "No final mutation kill is established" in draft,
++      "C9e 'no final kill' stated for C1 and C25")
+ check("It may be used" not in operative and "now in force" not in operative, "C9d nothing is declared in force")
+ 
+ print()
+--- /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/6387ac48-7e9c-43f3-a48b-b00a89e1a991/scratchpad/check-ad1r2.v2.py	2026-10-14 02:59:13.994833170 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r2-contract-evidence-01/tools/check-ad1r2.py	2026-10-14 02:59:14.013618451 +0100
+@@ -68,6 +68,10 @@
+ for n, frag in INLINE:
+     check(frag in L[n - 1] and frag in draft, f"C2 inline quotation of line {n} present in contract and draft: {frag!r}")
+ 
++check(L[1428].strip() == "pub(super) struct Core {" and L[1441].strip() == "}"
++      and not any("publish" in l for l in L[1429:1441]) and "contract lines 1429–1442" in draft,
++      "C2b Appendix A's Core (lines 1429-1442) has no field naming a published value, as L states")
++
+ # ---- C3 supersession table -------------------------------------------------------------------------------------------
+ rows = re.findall(r"^\| (S-\d+) \| ([0-9, ]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", draft, flags=re.M)
+ ids = [r[0] for r in rows]
+(second revision above: adds check C2b for L's Appendix A statement; removes nothing)

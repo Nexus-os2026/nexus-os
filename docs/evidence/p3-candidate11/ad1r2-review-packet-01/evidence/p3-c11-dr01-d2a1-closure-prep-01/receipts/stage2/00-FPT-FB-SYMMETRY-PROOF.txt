@@ -1,0 +1,196 @@
+P3-C11-DR01-D2A1-CLOSURE-PREP-01 — STAGE 2 — F-PT AND F-B SYMMETRY PROOF
+Written 2026-10-13, before any code change. Source: 77a146ca606f99329068410b6037721341f00c70
+(tree 21818166ee10a8075ca364bd09f31c7aa64555dd). Line numbers below are at that commit:
+  P = crates/nexus-governed-control/src/ledger/protocol.rs   (blob a2df2841, unchanged since 244c5b23)
+  M = crates/nexus-governed-control/src/ledger/protocol/model_tests.rs (blob a80dd05c)
+Read for this stage: M 1-4110 (model, actors, properties, explorer), M 4816-6034 (admission observer
+quotient), M 6035-7758 (symmetry construction, its tests and guards) in full; P 800-880, 1140-1240,
+1330-1600, 1920-1960 (batch validation, constraint, classify/known, append_facts, gating, lookup, explain,
+settle) and every `refusals` use in P. Inherited proofs, read in full:
+  GC-SYMMETRY-01 receipts/stage2/00-FORMAL-SYMMETRY-ANALYSIS.txt (Lemma E, S1-S15, ASYM-1..6, AS1-AS4)
+  ADM-QUOTIENT-01 receipts/stage2/01-formal-argument.txt (Theorem 1, L-A, L-B, Q1-Q15, AQ1-AQ6)
+Labels: PROVEN (argued from source, every use enumerated), OBSERVED (seen in a run), DERIVED (computed from
+measurements through a PROVEN relation), ASSUMED, NOT ESTABLISHED.
+
+=====================================================================================================
+0. WHAT F-PT AND F-B ARE, AND WHAT THEY CHANGE RELATIVE TO F-3
+=====================================================================================================
+F3  (M 170)  facts 2, conflict [true,true], env true, faults 2, admissions 2, gating 2, everything else BASE.
+FPT (M 217)  Config { name "F-PT", blanket_uncertain: true, ..F3 }      (contract 8.3: A4 on; every
+             property must hold; also the configuration of controls C6 and C7, contract 7.5)
+FB  (M 222)  Config { name "F-B",  batch: true, ..F3 }                 (contract 8.3: one writer offers both
+             facts as one batch; also the configuration of control C8, contract 7.5)
+Both keep: gating 2, gating_conflict false, acks 0, ack_attempts 0, malformed false, faults 2, admissions 2,
+cap FULL_CAP 30,000,000, time 45 min, l1 true, worker_unwinds false, drop false, replays 0. So every
+precondition of Lemma E (gating = 2, no gating conflict, no ACK actor, no malformation, no A2 bits) holds
+for both, as it does for F-3.
+
+Every source use of the two flags (exhaustive grep `blanket\|batch` over M 1-6034):
+  blanket_uncertain: field M 67; BASE M 98; FPT M 219; record_dropped M 2377; step_se Dropping M 2779;
+                     report bounds lines M 4043, M 5245 (and M 6808, the symmetry report).   Not in P.
+  batch:             field M 46; BASE M 86; X5/FB/FB2 M 150/224/229; initial M 1109 (one writer of all facts);
+                     decode M 2040, 2054 (writer count, members); actors M 2333 (writer count);
+                     note_fact_result M 2394 (conflicted_e6); admission_properties M 3281 (E6 beside P1);
+                     report bounds lines; the X-5/T-PREC unit histories M 4390-4440.               Not in P.
+P has no configuration: the batch is simply the slice the test passes to append_facts.
+
+F-PT's new behaviour (A4), complete:
+  A4-1  record_dropped (M 2375-2385): with blanket_uncertain, a Counted ticket no longer records its classes
+        (record_counted); every member becomes Uncertain and its `unrecorded` bit is cleared. Called from
+        FwPos::Dropping (M 2620-2625) and SePos::Dropping (M 2777-2788).
+  A4-2  SePos::Dropping (M 2779): with blanket_uncertain, settlement records (Uncertain) even when it holds
+        no Counted ticket, i.e. after a lookup or explain unwound (SE holds no ticket for those claims).
+  Nothing else differs. Downstream, more facts are Uncertain, so SE claims Lookup more often; those lookups
+  run the same P::lookup that F-3 runs.
+F-B's new behaviour, complete:
+  B-1   one writer Fw(0) with members [0, 1] (M 1109-1114, 2040-2063); actors [Fw(0), Se, Wk, Gc(0), Gc(1),
+        Adm, Env] (M 2332-2347): G1 is index 3, G2 index 4 (F-3: 4 and 5).
+  B-2   fact_append with a two-member batch (M 2406-2501) -> P::append_facts batch path (P 1330-1407):
+        well_formed (P 811-838), classify with `earlier` = the batch's earlier members (P 1161-1226,
+        constraint P 844-875), the pending-insert loop, holdings with a partial transaction (M 671-694).
+  B-3   E5's verb order checked with members = 2 (M 2426, 2243-2316).
+  B-4   record_counted / FwPos::NoTicket over both members; conflict_member names the member index (M 2361-2371).
+  B-5   note_fact_result sets conflicted_e6 (M 2394); admission_properties adds E6 when P1 fails (M 3281);
+        state_properties' E6 under P6 (M 3461) reads conflicted_e6.
+
+=====================================================================================================
+1. LEMMA E CARRIES OVER — the new paths read and write only caller-free data
+=====================================================================================================
+Lemma E (GC-SYMMETRY-01 section 3) was argued by inspection of every branch condition, every equality on
+identity-bearing data and every choice point of `step`, transitively through P, for any reachable world of a
+configuration meeting its preconditions; only clause (g) uses reachability, and (g) depends only on acks = 0,
+malformed = false and gating_conflict = false. F-PT and F-B meet those. What remains is to show that the code
+paths F-PT and F-B reach and F-3 does not (A4-1, A4-2, B-1..B-5) are themselves caller-free.
+
+E-PT  A4-1/A4-2 read: config.blanket_uncertain; the writer's or settlement's ticket (Counted{persistence,
+      conflict_member}: no caller); the members (fact indices 0/1). They write: table.class[f], table.debt
+      (via set_class), ghost.unrecorded bit f. pi fixes all of these (pi touches no fact, table, ticket or
+      `unrecorded`: GC-SYMMETRY-01 S5, mirror_world M 6266-6344). No oracle call, no hook event, no store
+      verb. Mechanical check: M 2375-2385, 2389-2399, 2510-2638, 2777-2788 contain no gating_key,
+      gating_member, gating_of, original_of, Gating/Correction/Other/Explanation row, Actor::Gc, w.gc,
+      ghost.issued/told, bit(g) or adm read (grep, receipts/stage2/01).                          PROVEN
+E-B   B-2 compares only fact identities: well_formed tests id equality and Part equality between batch
+      members (all facts; P 815-833); constraint's `earlier.any(|m| m.part == prepared)` (P 867) compares fact
+      parts (commitment kind 9, fixed by mx). classify's other reads are Lemma E (b) equalities already
+      covered (row, known, refusals.get, X's original). Insert sequences are rows.len() + pending.len()
+      (M 718), caller-free. Holdings (M 671-694) branch on the count of pending fact rows. Members are
+      visited in batch order 0, 1 (fact order, fixed by pi). B-1, B-3, B-4, B-5 read and write only fact
+      indices, the writer's position/ticket, conflicted_e6 and config.batch. The actor list depends on
+      config.batch only; mirror_edge (M 6363-6373) finds Gc(1-g) by position, so G1/G2 at 3/4 is handled.
+                                                                                                  PROVEN
+E-R   P never iterates the refusal table in key order: its uses are len (P 1156), get (1162, 1575), insert
+      (1221, 1533), remove (1560, 1943) — key equality only (re-checked for this stage). The only ordered
+      iterations stay encode (M 1513) and E11's loop (M 3533), as GC-SYMMETRY-01 I12 records.   PROVEN
+Hence Lemma E holds for F-PT and for F-B: for every reachable w, actor a, choice sequence ch,
+step(pi w, sigma a, ch) takes the same path, choices and fault flag, makes the same hook counts, ends in
+pi(w'), with equal branch labels and equal violation names.                                       PROVEN
+
+=====================================================================================================
+2. F-PT PROOF MATRIX (17 obligations)
+=====================================================================================================
+ 1 initial world invariant     PROVEN. initial() does not read blanket_uncertain (grep). initial_rows(FPT)
+                               = [Prepared(F2), Holder(F2)] as F-3; gc [Start, Start]; ghost 0; fresh core.
+                               Every component fixed by pi. (Runtime: assert_symmetric checks pi(init) =
+                               init before exploring; Stage 4 test.)
+ 2 callers exchangeable        PROVEN. step_gc(w, g, o, obs) (M 3019) takes no config; A4 does not reach it;
+                               Lemma E (d) unchanged.
+ 3 rows/identities transform   PROVEN. A4 adds no row kind and writes no row. SimRow vocabulary = F-3's;
+                               mirror_row / SimRow::key commute (GC-SYMMETRY-01 S3; test
+                               gc_symmetry_renames_consistently).
+ 4 sequences unchanged         PROVEN. Rows renamed in place; A4 inserts nothing; durable_frontier depends on
+                               acknowledgement rows only, none (acks 0).
+ 5 occupants/causes/refusals   PROVEN. A4 does not touch the core. The extra lookups A4 causes run P::lookup,
+                               whose table write (P 1533) is keyed by the looked-up FACT key and holds an
+                               IdentityContent cause of fact ids/digests: fixed by pi. (Branch "lookup:
+                               Conflict(cause)" is NOT TAKEN in F-3; whether F-PT takes it is NOT ESTABLISHED
+                               and does not matter: both outcomes are pi-fixed.)
+ 6 worker/retained tokens      PROVEN. A4 does not reach step_wk/worker_op/step_replay; tokens are (cell,
+                               occupancy number).
+ 7 GC states and history bits  PROVEN. A4 writes only class/debt/unrecorded (per fact); never gc, issued, told.
+ 8 fault choices and budgets   PROVEN. A4 has no oracle call; the SE drop path offers no choice; option
+                               vectors elsewhere unchanged; budget 2 as F-3.
+ 9 every property invariant    PROVEN (names-set). Property code is unchanged; A4 changes which worlds are
+                               reached, not how they are judged. P2/P5/P6/E6 per fact (fixed); P7/P8 per
+                               caller (renamed, same name); E11/P12/P15 as S8. Qualification ASYM-4 kept:
+                               the FIRST-reported name may differ when one state violates two properties
+                               attributed to different callers.
+10 D1 invariant                PROVEN. terminal() (M 3548) reads positions, tickets, gc.all(Done), latch,
+                               fault bit, cells, phase, fact classes: all fixed by pi; enabledness invariant
+                               (Lemma E).
+11 L1 cycle existence          PROVEN. S10 (both directions) needs only S7 (edge-wise automorphism
+                               preserving the fault flag), which Lemma E gives for F-PT.
+12 admission-observer comp.    PROVEN. Theorem 1's premise F2 (no non-ADM path reads adm/adm_kept/
+                               config.admissions) holds for A4's code (grep: the only reads are M 1146, 3251,
+                               3257, 3556, 4033, as at 244c5b23). pi does not touch adm, so S12 holds: pi is
+                               an automorphism of F-PT's admission quotient; observations at k and pi k agree.
+13 counterexample unfolding    PROVEN (construction S11): unfold/replay use step_with in the original
+                               semantics with F-PT's config, so A4 is replayed as it is explored.
+14 no new asymmetry from A4    PROVEN (E-PT): A4 is a function of the ticket, the members and the flag only.
+15 FB batch writer             not applicable to F-PT (batch false).
+16 every original transition   PROVEN (S7 for F-PT via Lemma E + E-PT): each (k, i, ch) -> k' has
+   has a mapped transition     (pi k, sigma i, ch) -> pi k', same fault, labels, violation names,
+                               multiplicity. Runtime: explore_symmetric_kept expands k and pi k and holds
+                               them item by item (hold, M 6408); a difference aborts with no verdict.
+17 original explorer required  PROVEN that it stays required: (i) C6 and C7 run on F-PT are protocol.rs
+   for control attribution     mutants; Lemma E is a property of this source only (AS4) and a mutant's
+                               asymmetry would end the run "symmetry inapplicable", which kills nothing;
+                               (ii) ASYM-4 and ADM-QUOTIENT-01 Q12: the first-reported property may differ;
+                               contract 7.5 judges a control by its property as the original explorer
+                               reports it; (iii) contract 7.1 names the explorer. Nothing here routes a
+                               control through the quotient.
+F-PT VERDICT: all applicable obligations PROVEN. F-PT is admitted to the allow-list (Stage 3).
+
+=====================================================================================================
+3. F-B PROOF MATRIX (17 obligations)
+=====================================================================================================
+ 1 initial world invariant     PROVEN. initial(FB): one writer, members [0, 1], Start, no ticket; rows
+                               [Prepared(F2), Holder(F2)]; gc [Start, Start]; ghost 0. pi fixes the writer
+                               (no caller in it) and the rest as F-3. (Runtime check as for F-PT.)
+ 2 callers exchangeable        PROVEN. step_gc unchanged; the batch changes the actor list's length, and
+                               sigma is defined by position lookup (mirror_edge), so G1 at 3 <-> G2 at 4.
+                               unpack/pack keep the choices; pack's actor < 16 holds (7 actors).
+ 3 rows/identities transform   PROVEN. Batch rows are Fact(0), Fact(1): fixed. No new row kind.
+ 4 sequences unchanged         PROVEN. A partial transaction's holdings (M 671-694) and the inserted
+                               sequence rows.len() + pending.len() are counts; rows renamed in place.
+ 5 occupants/causes/refusals   PROVEN. A batch member's conflict places Explanation{original: fact key,
+                               cause: DuplicateRole/MissingPrepared over fact ids} in X and a table entry
+                               keyed by the fact (P 1221-1224): fixed by pi. A batch never holds a gating
+                               record (batch = facts only, row_for_member M 499).
+ 6 worker/retained tokens      PROVEN. Unchanged from F-3.
+ 7 GC states and history bits  PROVEN. The batch writer writes no gc/issued/told.
+ 8 fault choices and budgets   PROVEN. Batch choice points: per-verb option vectors (fixed by verb kind and
+                               flags) and the holdings branch (a count of pending fact rows): caller-free.
+                               Budget 2 as F-3.
+ 9 every property invariant    PROVEN (names-set), with the same ASYM-4 qualification. E6 (config.batch and
+                               per-fact conflicted_e6) is fixed by pi. E5 with members = 2 reads the verb log.
+10 D1 invariant                PROVEN. terminal() over one writer: fw.iter().all(Done) is caller-free.
+11 L1 cycle existence          PROVEN. S10 via S7.
+12 admission-observer comp.    PROVEN. Batch code reads no adm (grep); S12 holds.
+13 counterexample unfolding    PROVEN (S11), actors indexed by FB's own list (unfold/replay call actors(config)).
+14 FPT blanket Uncertain       not applicable to F-B (blanket_uncertain false).
+15 no new asymmetry from batch PROVEN (E-B).
+16 every original transition   PROVEN (S7 for F-B via Lemma E + E-B); runtime hold as for F-PT.
+   has a mapped transition
+17 original explorer required  PROVEN that it stays required: C8 ("members are classified and inserted one
+   for control attribution     at a time", E5 on F-B) is a protocol.rs mutant; same reasons (i)-(iii).
+F-B VERDICT: all applicable obligations PROVEN. F-B is admitted to the allow-list (Stage 3).
+
+=====================================================================================================
+4. CONDITIONS, LIMITS AND WHAT IS NOT ESTABLISHED
+=====================================================================================================
+C-1  Both proofs inherit AS1-AS4 (GC-SYMMETRY-01) and AQ1-AQ6 (ADM-QUOTIENT-01) unchanged. In particular
+     AS4/L-3: the inspection is valid for the source at 77a146ca only; a model change voids it, and the
+     runtime guard then checks only the keys it expands.
+C-2  The runtime guard (hold at every expanded key and its mirror; D1 judged alike; involution check;
+     assert_symmetric on shape, cap and initial state) remains the backstop, unchanged.
+C-3  No full F-PT or F-B run is made by this mission. Their sizes, verdicts, and whether either completes
+     under any cap are NOT ESTABLISHED. Nothing is derived for them.
+C-4  Being in the allow-list is the precondition for a later, separately authorised experimental run. It is
+     not acceptance under contract 8.3 and not a contract amendment.
+C-5  Stage 3 will hold the proof to exhaustive small differentials (FPT- and FB-shaped fixtures with two
+     gating callers), each required to exercise the behaviour it targets, both callers, the exchange, the
+     admission observer, fault histories, D1 and L1. Those are OBSERVATIONS on finite fixtures, not a
+     substitute for the proof on F-PT/F-B.
+C-6  ASYM-1..ASYM-6 of GC-SYMMETRY-01 are unchanged; none is reachable in F-PT or F-B (no ACK actor, no
+     malformation, no gating conflict). No new asymmetry was found.
+RESULT: neither configuration fails its proof. Not DESIGN_BLOCKED. Proceed to Stage 3 for both.

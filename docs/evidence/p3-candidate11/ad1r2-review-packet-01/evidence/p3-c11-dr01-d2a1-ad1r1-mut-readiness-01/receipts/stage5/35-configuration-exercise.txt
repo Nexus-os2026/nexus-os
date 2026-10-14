@@ -1,0 +1,26 @@
+GATE stage5/35-configuration-exercise
+commit: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b  tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282  HEAD: experiment/p3-c11-d2a1-ad1r1-witness-01 (experimental branch expected)
+worktree porcelain: 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+environment: CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target; cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness
+command: nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::gc_symmetry_sym_pt_takes_the_a4_steps ledger::protocol::model_tests::gc_symmetry_sym_b_takes_the_batch_steps ledger::protocol::model_tests::gc_symmetry_sym_bi_takes_the_batch_inserts --exact --nocapture --test-threads=1
+pinned executable before: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+started: 2026-10-14T01:50:48+01:00
+--------------------------------------------------------------------------------
+
+running 3 tests
+test ledger::protocol::model_tests::gc_symmetry_sym_b_takes_the_batch_steps ... EXERCISED SYM-B: 38356 states (34688 not their own mirror), 0 fault edges, 125 with no enabled step, each terminal; both callers told Committed alone; from states not their own mirror: BatchSteps { named: [8, 20], mixed: 600, both: 0, first_alone: 0, writer_faults: 0, marked: 34632 }
+ok
+test ledger::protocol::model_tests::gc_symmetry_sym_bi_takes_the_batch_inserts ... EXERCISED SYM-BI: 22980 states (21448 not their own mirror), 1002 fault edges, 214 with no enabled step, each terminal; both callers told Committed alone; from states not their own mirror: BatchSteps { named: [0, 0], mixed: 0, both: 156, first_alone: 16, writer_faults: 224, marked: 0 }
+ok
+test ledger::protocol::model_tests::gc_symmetry_sym_pt_takes_the_a4_steps ... EXERCISED SYM-PT: 103620 states (98204 not their own mirror), 11128 fault edges, 531 with no enabled step, each terminal; both callers told Committed alone; from states not their own mirror, 1348 writer drops recording a Not-written Counted ticket as Uncertain (A4) and 928 settlement drops without a ticket recording Uncertain over another class (A4)
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 344 filtered out; finished in 1.18s
+
+peak RSS (KiB, /usr/bin/time): 121236; wall: 1.19 s; user 1.06 s; sys 0.12 s
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:50:50+01:00
+pinned executable after: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+worktree porcelain after: 0

@@ -1,0 +1,446 @@
+STAGE 5 — SOURCE EXCERPTS READ FOR THE C1/C25 ATTRIBUTION ANALYSIS (read-only; nothing executed) — 2026-10-13T20:03:24+01:00
+Contract 7.5 lines 691-750 of P3-C11-D2A1-CONTRACT-02-R1.md (sha256 cac65351...) are quoted in 02-c1-c25-attribution.txt.
+
+---- crates/nexus-governed-control/src/ledger/protocol.rs:140-160 (at 244c5b23; blob a2df2841b99cad5d452008a6d4150e9369d07e66; identical at 9e945ee7: yes)
+   140	// The word's layout (section 4.2). The low 16 bits are written only by a
+   141	// store operation's publication, from the core's state, except the sticky
+   142	// handover fault, which belongs to ticket accounting. Unused bits are zero.
+   143	const PHASE_NEED_BARRIER: u64 = 0x1;
+   144	const PHASE_RESOLVING: u64 = 0x2;
+   145	const PHASE_MASK: u64 = 0x3;
+   146	const SESSION_OPEN: u64 = 0x4;
+   147	const SESSION_SEALED: u64 = 0x8;
+   148	const SESSION_MASK: u64 = 0xC;
+   149	const LATCHED: u64 = 0x10;
+   150	const U_OCCUPIED: u64 = 0x20;
+   151	const C_OCCUPIED: u64 = 0x40;
+   152	const X_OCCUPIED: u64 = 0x80;
+   153	const HANDOVER_FAULT: u64 = 0x100;
+   154	const FLAGS: u64 = 0xFFFF;
+   155	/// `live`, tickets alive: 24 bits from bit 16.
+   156	const LIVE_SHIFT: u32 = 16;
+   157	/// `unapplied`, results not yet taken over: 24 bits from bit 40.
+   158	const UNAPPLIED_SHIFT: u32 = 40;
+   159	const COUNT_MAX: u64 = 0xFF_FFFF;
+   160	const TICKET_LIMIT_MAX: u32 = 0xFF_FFFF;
+
+---- crates/nexus-governed-control/src/ledger/protocol.rs:163-189 (at 244c5b23; blob a2df2841b99cad5d452008a6d4150e9369d07e66; identical at 9e945ee7: yes)
+   163	fn field(word: u64, shift: u32) -> u64 {
+   164	    word.checked_shr(shift).unwrap_or(0) & COUNT_MAX
+   165	}
+   166	
+   167	/// `word` with a count field replaced.
+   168	fn with_field(word: u64, shift: u32, value: u64) -> u64 {
+   169	    let mask = COUNT_MAX.checked_shl(shift).unwrap_or(0);
+   170	    (word & !mask) | (value.checked_shl(shift).unwrap_or(0) & mask)
+   171	}
+   172	
+   173	/// One checked step of a count. A step that would overflow or underflow
+   174	/// sets the handover fault and leaves the count as it is (section 4.3).
+   175	fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+   176	    let now = field(word, shift);
+   177	    let next = if up {
+   178	        now.checked_add(1).filter(|next| *next <= COUNT_MAX)
+   179	    } else {
+   180	        now.checked_sub(1)
+   181	    };
+   182	    match next {
+   183	        Some(next) => with_field(word, shift, next),
+   184	        None => word | HANDOVER_FAULT,
+   185	    }
+   186	}
+   187	
+   188	/// The one load of the word (rule R1). Only `view` calls it.
+   189	fn load(shared: &Shared) -> u64 {
+
+---- crates/nexus-governed-control/src/ledger/protocol.rs:255-262 (at 244c5b23; blob a2df2841b99cad5d452008a6d4150e9369d07e66; identical at 9e945ee7: yes)
+   255	
+   256	impl HealthView {
+   257	    /// Exactly Healthy and open with nothing else set, and no result
+   258	    /// waiting to be taken over.
+   259	    pub(super) fn admits(self) -> bool {
+   260	        self.word & FLAGS == SESSION_OPEN && field(self.word, UNAPPLIED_SHIFT) == 0
+   261	    }
+   262	
+
+---- crates/nexus-governed-control/src/ledger/protocol.rs:345-372 (at 244c5b23; blob a2df2841b99cad5d452008a6d4150e9369d07e66; identical at 9e945ee7: yes)
+   345	        }
+   346	    }
+   347	
+   348	    /// One exchange on the ticket's own ledger. Counted: `unapplied` and
+   349	    /// `live` each - 1. Armed: `live` - 1.
+   350	    pub(super) fn confirm(mut self) {
+   351	        match self.state {
+   352	            TicketState::Armed => {
+   353	                exchange(&self.shared, 0, |word| count_step(word, LIVE_SHIFT, false));
+   354	            }
+   355	            TicketState::Counted(_) => {
+   356	                exchange(&self.shared, 0, |word| {
+   357	                    count_step(count_step(word, UNAPPLIED_SHIFT, false), LIVE_SHIFT, false)
+   358	                });
+   359	            }
+   360	            TicketState::Settled => {}
+   361	        }
+   362	        self.state = TicketState::Settled;
+   363	    }
+   364	
+   365	    /// For the shell only: the wait to enter the store ran out. An Armed
+   366	    /// ticket is counted as Not written; any other is a handover fault.
+   367	    pub(super) fn expire(&mut self) -> FactOutcome {
+   368	        if self.state == TicketState::Armed {
+   369	            exchange(&self.shared, 0, |word| {
+   370	                count_step(word, UNAPPLIED_SHIFT, true)
+   371	            });
+   372	            let counted = Counted {
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:1030-1040 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  1030	#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+  1031	struct Ghost {
+  1032	    /// Fact f was once refused as a conflict, by an append or a lookup.
+  1033	    conflicted: u8,
+  1034	    /// ... by a batch append or a lookup (E6).
+  1035	    conflicted_e6: u8,
+  1036	    /// A failing result for fact f exists and has not been recorded.
+  1037	    unrecorded: u8,
+  1038	    /// Gating attempt g issued an insert.
+  1039	    issued: u8,
+  1040	    /// Gating caller g was told Committed.
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:2190-2196 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  2190	
+  2191	impl Obs {
+  2192	    fn fail(&mut self, property: &'static str, detail: impl Into<String>) {
+  2193	        self.violations.push((property, detail.into()));
+  2194	    }
+  2195	
+  2196	    fn note(&mut self, text: impl FnOnce() -> String) {
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:2359-2393 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  2359	
+  2360	/// Section 4.3: the classes a Counted ticket records, member by member.
+  2361	fn record_counted(w: &mut World, members: &[u8], counted: Counted) {
+  2362	    for (k, &f) in members.iter().enumerate() {
+  2363	        let class = match (counted.persistence, counted.conflict_member) {
+  2364	            (Persistence::Uncertain, _) => Class::Uncertain,
+  2365	            (Persistence::NotWritten, Some(member)) if member as usize == k => Class::Conflict,
+  2366	            (Persistence::NotWritten, _) => Class::Refused,
+  2367	        };
+  2368	        set_class(&mut w.table, f, class);
+  2369	        w.ghost.unrecorded &= !bit(f);
+  2370	    }
+  2371	}
+  2372	
+  2373	/// A drop path: classes from the ticket, or Uncertain if it is not Counted.
+  2374	/// Under actor change A4: a blanket Uncertain.
+  2375	fn record_dropped(config: &Config, w: &mut World, members: &[u8], ticket: Option<Counted>) {
+  2376	    match ticket {
+  2377	        Some(counted) if !config.blanket_uncertain => record_counted(w, members, counted),
+  2378	        _ => {
+  2379	            for &f in members {
+  2380	                set_class(&mut w.table, f, Class::Uncertain);
+  2381	                w.ghost.unrecorded &= !bit(f);
+  2382	            }
+  2383	        }
+  2384	    }
+  2385	}
+  2386	
+  2387	/// A failing fact result: its members are unrecorded, and a named conflict
+  2388	/// is remembered (P6, E6).
+  2389	fn note_fact_result(config: &Config, w: &mut World, members: &[u8], counted: Counted) {
+  2390	    for (k, &f) in members.iter().enumerate() {
+  2391	        w.ghost.unrecorded |= bit(f);
+  2392	        if counted.conflict_member == Some(k as u16) {
+  2393	            w.ghost.conflicted |= bit(f);
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3250-3284 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3250	fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+  3251	    if w.adm == 0 {
+  3252	        return false;
+  3253	    }
+  3254	    obs.views += 1;
+  3255	    let view = w.health.view();
+  3256	    let admitted = view.admits() && w.table.debt == 0 && w.table.h <= w.table.a;
+  3257	    w.adm -= 1;
+  3258	    obs.branch(format!(
+  3259	        "admission: {}",
+  3260	        if admitted { "admitted" } else { "refused" }
+  3261	    ));
+  3262	    obs.note(|| {
+  3263	        format!(
+  3264	            "[T] admission: {}",
+  3265	            if admitted { "ADMITTED" } else { "refused" }
+  3266	        )
+  3267	    });
+  3268	    if admitted {
+  3269	        admission_properties(config, w, obs);
+  3270	    }
+  3271	    true
+  3272	}
+  3273	
+  3274	/// P1, P12, P15, E6 and E9 at a successful admission.
+  3275	fn admission_properties(config: &Config, w: &World, obs: &mut Obs) {
+  3276	    if w.ghost.unrecorded != 0 || w.core.u.is_some() || w.core.c.is_some() || w.core.x.is_some() {
+  3277	        obs.fail(
+  3278	            "P1",
+  3279	            "a result is unrecorded, or U, C or X is occupied, at a successful admission",
+  3280	        );
+  3281	        if config.batch {
+  3282	            obs.fail("E6", "P1 fails for a member of a batch");
+  3283	        }
+  3284	    }
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3402-3437 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3402	/// Properties of every state.
+  3403	fn state_properties(config: &Config, w: &World, obs: &mut Obs) {
+  3404	    let word = word_of(&w.core.shared);
+  3405	    if word & FLAGS & !HANDOVER_FAULT != expected_flags(&w.core) {
+  3406	        obs.fail(
+  3407	            "E1",
+  3408	            format!(
+  3409	                "word bits {:#x}, core {:#x}",
+  3410	                word & FLAGS,
+  3411	                expected_flags(&w.core)
+  3412	            ),
+  3413	        );
+  3414	    }
+  3415	    let tickets = w.fw.iter().map(|fw| &fw.ticket).chain([&w.se.ticket]);
+  3416	    let (mut armed, mut counted) = (0u64, 0u64);
+  3417	    for ticket in tickets.flatten() {
+  3418	        match ticket.state {
+  3419	            TicketState::Armed => armed += 1,
+  3420	            TicketState::Counted(_) => counted += 1,
+  3421	            TicketState::Settled => {}
+  3422	        }
+  3423	    }
+  3424	    let dropped = u64::from(w.ghost.dropped);
+  3425	    let (live, unapplied) = (field(word, LIVE_SHIFT), field(word, UNAPPLIED_SHIFT));
+  3426	    if unapplied != counted + dropped
+  3427	        || live != armed + counted + dropped
+  3428	        || live > u64::from(TICKET_LIMIT)
+  3429	    {
+  3430	        obs.fail(
+  3431	            "E3",
+  3432	            format!("live {live}, unapplied {unapplied}; armed {armed}, counted {counted}, dropped {dropped}"),
+  3433	        );
+  3434	    }
+  3435	    let debts = w.table.class[..config.facts as usize]
+  3436	        .iter()
+  3437	        .filter(|c| is_debt(**c))
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3471-3477 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3471	    }
+  3472	    for g in 0..config.gating {
+  3473	        let record_in = w.rows.contains(&SimRow::Gating(g));
+  3474	        if w.ghost.told & bit(g) != 0 && !record_in {
+  3475	            obs.fail("P7", format!("G{} was told Committed and is absent", g + 1));
+  3476	        }
+  3477	        if w.ghost.issued & bit(g) != 0 && w.ghost.told & bit(g) == 0 {
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3054-3066 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3054	    };
+  3055	    obs.branch(format!("append_gating: {label}"));
+  3056	    obs.note(|| format!("append_gating G{} -> {label} [{}]", g + 1, log_label(&log)));
+  3057	    match &outcome {
+  3058	        Some(GatingOutcome::Committed(_)) => {
+  3059	            w.ghost.told |= bit(g);
+  3060	            if !w.rows.contains(&SimRow::Gating(g)) {
+  3061	                obs.fail(
+  3062	                    "E4",
+  3063	                    "append_gating said Committed but the record is absent",
+  3064	                );
+  3065	            }
+  3066	        }
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:685-694 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+   685	    /// issued, and after an unwind once an insert was issued: the records are
+   686	    /// present or absent, and both are explored. Every holding of the
+   687	    /// transaction is explored as present.
+   688	    fn undecided(&mut self) {
+   689	        let mut outcomes = self.holdings();
+   690	        outcomes.retain(|rows| !rows.is_empty());
+   691	        outcomes.insert(0, Vec::new());
+   692	        let pick = self.oracle.branch(outcomes.len());
+   693	        self.rows.append(&mut outcomes.swap_remove(pick));
+   694	    }
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:728-763 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+   728	    }
+   729	
+   730	    fn do_commit(&mut self) -> Commit {
+   731	        match self.pick(Verb::Commit, &[Answer::Unknown]) {
+   732	            Answer::Ok => {
+   733	                // A-2: the records. Every holding is explored.
+   734	                let mut holdings = self.holdings();
+   735	                let pick = self.oracle.branch(holdings.len());
+   736	                self.rows.append(&mut holdings.swap_remove(pick));
+   737	                Commit::Durable
+   738	            }
+   739	            _ => {
+   740	                self.undecided();
+   741	                Commit::Unknown
+   742	            }
+   743	        }
+   744	    }
+   745	
+   746	    fn do_rollback(&mut self) -> Rollback {
+   747	        match self.pick(Verb::Rollback, &[Answer::Unknown]) {
+   748	            Answer::Ok => {
+   749	                // A-1: no COMMIT issued and the rollback Undone: nothing.
+   750	                self.pending.clear();
+   751	                Rollback::Undone
+   752	            }
+   753	            _ => {
+   754	                self.undecided();
+   755	                Rollback::Unknown
+   756	            }
+   757	        }
+   758	    }
+   759	
+   760	    fn do_open(&mut self) -> Read<()> {
+   761	        self.read(Verb::Open, |_| ())
+   762	    }
+   763	}
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3805-3843 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3805	fn successors(
+  3806	    config: &Config,
+  3807	    all: &[Actor],
+  3808	    key: &[u8],
+  3809	) -> (Vec<Successor>, Vec<(&'static str, String)>) {
+  3810	    let base = decode(config, key);
+  3811	    let mut state = Obs::default();
+  3812	    state_properties(config, &base, &mut state);
+  3813	    if encode(config, &base) != key {
+  3814	        state.fail("KEY", "a key does not survive decoding");
+  3815	    }
+  3816	    let mut out = Vec::new();
+  3817	    for (index, &actor) in all.iter().enumerate() {
+  3818	        let mut prefix = Vec::new();
+  3819	        loop {
+  3820	            let mut w = decode(config, key);
+  3821	            let mut oracle = Oracle::new(prefix, w.faults);
+  3822	            let mut obs = Obs::default();
+  3823	            hook::take_counts();
+  3824	            let enabled = step(config, &mut w, actor, &mut oracle, &mut obs);
+  3825	            let counts = hook::take_counts();
+  3826	            if !enabled {
+  3827	                break;
+  3828	            }
+  3829	            w.faults = oracle.faults;
+  3830	            transition_properties(&base, &w, &mut obs, counts);
+  3831	            out.push(Successor {
+  3832	                key: encode(config, &w),
+  3833	                fault: oracle.fault,
+  3834	                edge: pack(index, &oracle.sequence()),
+  3835	                violations: obs.violations,
+  3836	                branches: obs.branches,
+  3837	            });
+  3838	            match oracle.next() {
+  3839	                Some(next) => prefix = next,
+  3840	                None => break,
+  3841	            }
+  3842	        }
+  3843	    }
+
+---- crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:3906-3935 (at 244c5b23; blob beb48fe7059c14f5b4cbc0ac25148d53cbe7c05e; identical at 9e945ee7: yes)
+  3906	    while (id as usize) < visited.len() {
+  3907	        if visited.len() as u64 > config.cap {
+  3908	            incomplete = Some(format!("the state cap of {} was reached", config.cap));
+  3909	            break;
+  3910	        }
+  3911	        if start.elapsed() > config.time {
+  3912	            incomplete = Some(format!("the time cap of {:?} was reached", config.time));
+  3913	            break;
+  3914	        }
+  3915	        let key = visited.key(id).to_vec();
+  3916	        let (next, state_violations) = successors(config, &all, &key);
+  3917	        if let Some((property, detail)) = state_violations.into_iter().next() {
+  3918	            failure = Some((property, detail, path_to(&parent, id)));
+  3919	            break;
+  3920	        }
+  3921	        if next.is_empty() {
+  3922	            no_step += 1;
+  3923	            if !terminal(config, &decode(config, &key)) {
+  3924	                failure = Some((
+  3925	                    "D1",
+  3926	                    "a state with no enabled step is not terminal".into(),
+  3927	                    path_to(&parent, id),
+  3928	                ));
+  3929	                break;
+  3930	            }
+  3931	        }
+  3932	        for successor in next {
+  3933	            transitions += 1;
+  3934	            taken.extend(successor.branches);
+  3935	            if let Some((property, detail)) = successor.violations.into_iter().next() {
+
+---- crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:316-328 (at 244c5b23; blob 55dc66409eaccdaa93e8f0a56f2ccb14be81e114; identical at 9e945ee7: yes)
+   316	/// Leaves a gating record in U, its append having returned Uncertain.
+   317	fn gating_uncertain(core: &mut Core, n: u8) {
+   318	    let mut io = Script::new();
+   319	    io.commit.push_back(Commit::Unknown);
+   320	    let outcome = core.append_gating(&gating(n), &mut io);
+   321	    assert_eq!(
+   322	        outcome,
+   323	        GatingOutcome::Refused {
+   324	            persistence: Persistence::Uncertain,
+   325	            reason: Reason::Storage
+   326	        }
+   327	    );
+   328	}
+
+---- crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:2445-2470 (at 244c5b23; blob 55dc66409eaccdaa93e8f0a56f2ccb14be81e114; identical at 9e945ee7: yes)
+  2445	/// too. Both orders.
+  2446	#[test]
+  2447	fn w1_admission_waits_for_every_handover() {
+  2448	    for first in [0, 1] {
+  2449	        let (mut core, health, mut worker) = open_core();
+  2450	        let mut tickets = [health.arm().expect("one"), health.arm().expect("two")];
+  2451	        for (n, ticket) in tickets.iter_mut().enumerate() {
+  2452	            let mut io = Script::new();
+  2453	            io.open.push_back(Read::Failed);
+  2454	            assert!(matches!(
+  2455	                core.append_facts(ticket, &[fact(n as u8)], &mut io),
+  2456	                FactOutcome::NotApplied { .. }
+  2457	            ));
+  2458	        }
+  2459	        pass_barrier(&mut core, &mut worker);
+  2460	        let [a, b] = tickets;
+  2461	        let (one, two) = if first == 0 { (a, b) } else { (b, a) };
+  2462	        one.confirm();
+  2463	        assert!(
+  2464	            !health.view().admits(),
+  2465	            "admission stays refused until the other has confirmed too"
+  2466	        );
+  2467	        two.confirm();
+  2468	        assert!(health.view().admits());
+  2469	    }
+  2470	}
+
+---- prepared (NOT EXECUTED, not evidence) C1 and C25 definitions: campaign-01 tools/stage5-prepared-NOT-EXECUTED/controls_defs.py
+14:    "C1": ("the count becomes a flag: a publication or expire sets `unapplied` to 1, a confirm sets it to 0",
+15-           CORE, [(
+16-        """fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+17-    let now = field(word, shift);""",
+18-        """fn count_step(word: u64, shift: u32, up: bool) -> u64 {
+19-    if shift == UNAPPLIED_SHIFT {
+20-        return with_field(word, shift, u64::from(up));
+21-    }
+22-    let now = field(word, shift);""")], "explore", "full_f1", ["P1"]),
+23-    "C2": ("the gating entry rule does not test C and X", CORE, [(
+67:    "C25": ("a gating append answers Committed on Commit::Unknown (its one rollback is still issued)", CORE, [(
+68-        """                Commit::Unknown => {
+69-                    self.failed();
+70-                    self.rolled(io.rollback());
+71-                    self.keep = true;
+72-                    return refused(Persistence::Uncertain, Reason::Storage);
+73-                }""",
+74-        """                Commit::Unknown => {
+75-                    self.failed();
+76-                    self.rolled(io.rollback());
+77-                    return GatingOutcome::Committed(seq);
+78-                }""")], "explore", "full_f1", ["P7"]),
+79-    "C12": ("the publication is two exchanges: bits, then count", CORE, [(
+80-        """        exchange(&self.core.shared, self.guess, |word| {
+81-            let carried = (word & !FLAGS) | (word & HANDOVER_FAULT) | flags;
+(controls_defs.py sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f; listed in campaign-01 SHA256SUMS: 1)

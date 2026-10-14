@@ -1,0 +1,53 @@
+STAGE 1 — AUTHENTICATION  (P3-C11-DR01-D2A1-AD1R1-WITNESS-AUDIT-01)  2026-10-14T02:13:35+01:00
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); the mission header names Claude Sonnet 5.5 (deviation, disclosed).
+
+[1] unique resolution of 42dd1bd1: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (count 1)
+[2] commit 42dd1bd1cf21ffdea5968b256d2983f6575fab5b; tree 7ac6bb21430d15b17e3723b217b20a49dccf8282 (expected 7ac6bb21430d15b17e3723b217b20a49dccf8282); parents: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda (expected 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda)
+    parent tree 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a (expected 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a); parent on GitHub: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a
+    subject: test(experiment): add replay witnesses for controls C1 and C25; author/committer dates 2026-10-14 01:49:19 +0100 / 2026-10-14 01:49:19 +0100
+[3] files changed vs parent: 1: 277	0	crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    format-patch sha256 cc11d486b9f3290853dff6e9dfa64f3ebcbddffba674b169da53dd4abbae179b (recorded cc11d486b9f3290853dff6e9dfa64f3ebcbddffba674b169da53dd4abbae179b)
+    hunks:
+      @@ -8244,0 +8245,277 @@ fn gc_symmetry_fb() {
+[4] previous source lines: parent model_tests.rs has 8244 lines; first 8244 lines of the witness file identical: YES; witness file 8521 lines
+    model_tests.rs blob parent 4895993e1a9ca68762d873e026d42a6e08e49cc9 -> witness 5ad26ddc727d8be30f4fb8d7478bc69e1c974933 (recorded 5ad26ddc727d8be30f4fb8d7478bc69e1c974933), sha256 be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba (recorded be9e3547f06d66d5541bc33660745dd2167b844fdc5000072118309b0b56b2ba)
+    every other path: IDENTICAL (5187 entries)
+[5] protocol.rs blob at witness a2df2841b99cad5d452008a6d4150e9369d07e66 (expected a2df2841b99cad5d452008a6d4150e9369d07e66), sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[6] explorer and quotients: lines 1-8244 unchanged (item 4) include explore 3882, successors 3805, step_adm 3250, property functions 3275-3545, expand 4932, explore_experimental 5038, explore_symmetric_kept 6572, SYMMETRIC 6079:
+      3250:fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+      3805:fn successors(
+      3882:pub(super) fn explore(config: &Config) -> Report {
+      4932:fn expand(
+      5038:fn explore_experimental(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally) {
+      6079:const SYMMETRIC: [Config; 8] = [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB];
+      6572:fn explore_symmetric_kept(
+[7] witness tests present:
+      8466:const C1_WITNESS: Witness = Witness {
+      8498:const C25_WITNESS: Witness = Witness {
+      8512:fn c1_witness_p1_at_a_successful_admission() {
+      8519:fn c25_witness_p7_on_the_resulting_world() {
+[8] AD-1 and AD-1-R1 digests:
+      01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-prep-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-DRAFT.md
+      01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-closure-publish-01/handoff/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-DRAFT.md
+      01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/drafts/AD1-SOURCE-COPY-P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-DRAFT.md
+      589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+      589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/handoff/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R1-DRAFT.md
+      expected AD-1 01778ac35cf98dfe97935dfc0ed413cbdfc18cb953b9d426822bef430061176e; AD-1-R1 589eb6cb24626585862749fed3fa619d2261cdbc8b08c56e7139c6d12bc04cda
+[9] previous mission manifest: SHA256SUMS sha256 106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3 (recorded 106243539f31aae6cc0f6026b40c280af954f51af4a9907a2f7f0d063b7bbff3); entries 73; 73 OK, 0 not OK; unlisted files: 0
+[10] earlier sealed manifests:
+      20 manifests: 750 OK, 0 not OK
+[11] protected refs: ls-remote 182 lines sha256 14833d9fd7fba163ae732987189a99bb1625489cacaa407defd71d8bcc0c188c; equals previous mission's after-list: YES
+      6e15dee613ea35823d1adbf6d8917ed59eeda583	refs/heads/main
+      f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+      b1d535f1bb634f2075f12a36ace89a595cdb13ba	refs/heads/repair/p3-candidate11
+      2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda	refs/heads/review/p3-c11-d2a1-closure-prep-01
+[12] conflicting runs: processes nexus_governed_control|cargo|rustc|p3c11: 0; p3c11 scopes: 0; probe worktrees: 0
+[13] destination refs/heads/review/p3-c11-d2a1-ad1r1-witness-01 on GitHub: 0 (absent = 0); direct query: 0; any ref containing 'ad1r1': 0
+[14] workflow triggers at the witness commit (push): audit main; ci-fast-local implement/** repair/**; ci main; local-runner-smoke rebuild/phase0-trust-boundary (paths); release tags v*; others dispatch only. None matches review/**.
+      Actions: in_progress 0, queued 0; latest 38319429125 completed b1d535f1 2026-10-12T22:56:02Z
+[15] rustc 1.94.0 (4a4ef493e 2026-03-02); cargo 1.94.0 (85eff7c80 2026-01-15); rust-toolchain.toml blob 726005b29561a04536edea412bf551a9884d6639
+      prior healthy build receipt: executable 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53  /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 8962488 bytes
+      on disk now: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 (recorded 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53)
+      witness worktree HEAD 42dd1bd1cf21ffdea5968b256d2983f6575fab5b, porcelain 0; working model_tests.rs blob 5ad26ddc727d8be30f4fb8d7478bc69e1c974933
+      prior probe receipts: C1 mutant exe 223b05d91e4977ee72f3a71b50d170120efb234ef463d3a8ab62cffd38f7a3c4, C25 mutant exe a34e1af86cf3a74badff863290e28804ad326807958f93a23f6bbbc52d4857c6 (hash-verified by item 9)
+      other worktrees: primary f727f5c3 porcelain 0; candidate11 e71b982b porcelain 0; worktrees total 142

@@ -1,0 +1,60 @@
+GATE stage5/40-witnesses-healthy
+commit: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b  tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282  HEAD: experiment/p3-c11-d2a1-ad1r1-witness-01 (experimental branch expected)
+worktree porcelain: 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+environment: CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target; cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness
+command: nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world --exact --nocapture --test-threads=1
+pinned executable before: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+started: 2026-10-14T01:51:02+01:00
+--------------------------------------------------------------------------------
+
+running 2 tests
+test ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission ... C1 WITNESS F-1 step  1/11 Fw(0) choices []: Fw(0): arm -> Armed
+    branches []; word after 0x10004 (live 1, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  2/11 Fw(0) choices [1]: Fw(0): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  3/11 Fw(1) choices []: Fw(1): arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  4/11 Fw(1) choices [1]: Fw(1): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  5/11 Fw(1) choices [0]: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None })
+    branches []; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  6/11 Fw(1) choices [0]: Fw(1): confirm
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  7/11 Se choices []: Se: [T] claims F2 for Append
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  8/11 Se choices []: Se: arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  9/11 Se choices [0, 0, 0, 0]: Se: append_facts["F2"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok]
+    branches ["append_facts: Committed (inserted)"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 10/11 Se choices []: Se: [T] applies Fact(Committed); releases
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 11/11 Adm choices []: Adm: [T] admission: refused
+    branches ["admission: refused"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1: 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused'
+ok
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]
+    branches ["append_gating: Refused Uncertain Storage"]; word after 0x25 (live 0, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+C25 WITNESS F-1: 1 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating: Refused Uncertain Storage'
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 345 filtered out; finished in 0.00s
+
+peak RSS (KiB, /usr/bin/time): 4988; wall: 0.00 s; user 0.00 s; sys 0.00 s
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:51:03+01:00
+pinned executable after: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+worktree porcelain after: 0

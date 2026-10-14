@@ -1,0 +1,285 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 4895993e..5ad26ddc 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -8242,3 +8242,280 @@ fn gc_symmetry_fpt() {
+ fn gc_symmetry_fb() {
+     symmetric_full_exploration(&FB);
+ }
++
++// ---- named-property witnesses for controls C1 and C25 -------------------------------------------
++
++/// One scheduled step of a witness: the actor; every choice its oracle must
++/// take, in order; and the branch labels the step must show on any core, or
++/// `None` at the step whose outcome the control changes.
++type Scheduled = (Actor, &'static [u8], Option<&'static [&'static str]>);
++
++/// A fixed schedule that makes one control's named property fail, where the
++/// explorer reports another property first (contract 7.5, controls C1 and
++/// C25). Experimental: the form the AD-1-R1 draft proposes, not adopted.
++struct Witness {
++    control: &'static str,
++    config: Config,
++    steps: &'static [Scheduled],
++    /// The named property, and the step at which it must be observed: in
++    /// that step's own violations, or in the state after it.
++    named: &'static str,
++    at: usize,
++    in_step: bool,
++    /// At that step: the branch the healthy core shows, and the branch the
++    /// named violation needs.
++    healthy: &'static str,
++    changed: &'static str,
++}
++
++/// What one replayed step showed.
++struct Replayed {
++    /// The step's description, as `trace` writes it.
++    note: String,
++    fault: bool,
++    branches: Vec<String>,
++    /// Violations pushed by the step itself (E4 to E9, and P1, P12, P15 at
++    /// an admission) and its transition properties (E2, E9, E11).
++    step: Violations,
++    /// Violations of the state after it, as `successors` finds them when it
++    /// expands that state: its state properties and its key's round trip.
++    after: Violations,
++    word: u64,
++    rows: Vec<SimRow>,
++}
++
++/// The violations `successors` finds at the state of `key` before any of
++/// its steps.
++fn violations_at(config: &Config, key: &[u8]) -> Violations {
++    let base = decode(config, key);
++    let mut state = Obs::default();
++    state_properties(config, &base, &mut state);
++    if encode(config, &base) != key {
++        state.fail("KEY", "a key does not survive decoding");
++    }
++    state.violations
++}
++
++/// Replays `steps` from the initial world of `config` in the original
++/// semantics, as `trace` and `last_step_violations` do: each step runs on a
++/// world decoded from the last key, with `step_adm` as admission, and must be
++/// enabled and take exactly its scheduled choices; anything else is a fixture
++/// failure and kills nothing. Unlike the explorer it does not stop at the
++/// first violation: it keeps every violation of every step and of every state
++/// on the path. Returns the initial state's violations and each step's.
++fn replay_schedule(config: &Config, steps: &[Scheduled]) -> (Violations, Vec<Replayed>) {
++    let all = actors(config);
++    let mut key = encode(config, &initial(config));
++    let initial_violations = violations_at(config, &key);
++    let mut replayed = Vec::new();
++    for (n, &(actor, choices, _)) in steps.iter().enumerate() {
++        assert!(
++            all.contains(&actor),
++            "WITNESS FIXTURE FAILURE (kills nothing): step {} names {actor:?}, not an actor of {}",
++            n + 1,
++            config.name
++        );
++        let base = decode(config, &key);
++        let mut w = decode(config, &key);
++        let mut oracle = Oracle::new(choices.to_vec(), w.faults);
++        let mut obs = Obs {
++            trace: Some(String::new()),
++            ..Obs::default()
++        };
++        hook::take_counts();
++        let enabled = step(config, &mut w, actor, &mut oracle, &mut obs);
++        let counts = hook::take_counts();
++        assert!(
++            enabled,
++            "WITNESS FIXTURE FAILURE (kills nothing): step {} ({actor:?}) is not enabled",
++            n + 1
++        );
++        assert_eq!(
++            oracle.sequence(),
++            choices,
++            "WITNESS FIXTURE FAILURE (kills nothing): step {} ({actor:?}) took other choices",
++            n + 1
++        );
++        w.faults = oracle.faults;
++        transition_properties(&base, &w, &mut obs, counts);
++        key = encode(config, &w);
++        replayed.push(Replayed {
++            note: obs.trace.unwrap_or_default(),
++            fault: oracle.fault,
++            branches: obs.branches,
++            step: obs.violations,
++            after: violations_at(config, &key),
++            word: word_of(&w.core.shared),
++            rows: w.rows.clone(),
++        });
++    }
++    (initial_violations, replayed)
++}
++
++/// Runs a witness on whatever core this build holds. Every step must be
++/// enabled, take exactly its choices and show its fixed branches, or the
++/// replay is a fixture failure. Every step and every violation is printed.
++/// With no violation the core behaved as the healthy core, and the changed
++/// step must show the healthy branch. With any violation the test fails; its
++/// message says whether the named property was observed where the control
++/// must produce it, and lists every property violated, each separately: a
++/// property the explorer reports first is never counted as the named one.
++fn run_witness(witness: &Witness) {
++    let config = &witness.config;
++    let total = witness.steps.len();
++    let (initial_violations, replayed) = replay_schedule(config, witness.steps);
++    let mut lines = Vec::new();
++    for (property, detail) in &initial_violations {
++        lines.push(format!("initial state: {property}: {detail}"));
++    }
++    for (n, (record, &(actor, choices, fixed))) in replayed.iter().zip(witness.steps).enumerate() {
++        println!(
++            "{} WITNESS {} step {:>2}/{total} {actor:?} choices {choices:?}: {}{}",
++            witness.control,
++            config.name,
++            n + 1,
++            record.note,
++            if record.fault { "   [fault]" } else { "" }
++        );
++        println!(
++            "    branches {:?}; word after {:#x} (live {}, unapplied {})",
++            record.branches,
++            record.word,
++            field(record.word, LIVE_SHIFT),
++            field(record.word, UNAPPLIED_SHIFT)
++        );
++        println!("    ledger after {:?}", record.rows);
++        for (place, violations) in [("step", &record.step), ("after", &record.after)] {
++            for (property, detail) in violations {
++                println!("    VIOLATION {place}: {property}: {detail}");
++                lines.push(format!("step {} {place}: {property}: {detail}", n + 1));
++            }
++        }
++        if let Some(fixed) = fixed {
++            assert_eq!(
++                record.branches,
++                fixed,
++                "WITNESS FIXTURE FAILURE (kills nothing): step {} shows other branches",
++                n + 1
++            );
++        }
++    }
++    let at = &replayed[witness.at - 1];
++    let place = if witness.in_step { &at.step } else { &at.after };
++    let named_seen = at.branches.iter().any(|label| label == witness.changed)
++        && place.iter().any(|(property, _)| *property == witness.named);
++    if lines.is_empty() {
++        assert_eq!(
++            at.branches,
++            [witness.healthy],
++            "WITNESS: no violation, but step {} does not show the healthy core's branch",
++            witness.at
++        );
++        println!(
++            "{} WITNESS {}: {total} steps, each enabled and taking its choices; no violation; step {} shows \
++             the healthy core's '{}'",
++            witness.control, config.name, witness.at, witness.healthy
++        );
++        return;
++    }
++    let mut properties: Vec<&str> = initial_violations
++        .iter()
++        .chain(replayed.iter().flat_map(|r| r.step.iter().chain(&r.after)))
++        .map(|(property, _)| *property)
++        .collect();
++    properties.sort_unstable();
++    properties.dedup();
++    let others: Vec<&str> = properties
++        .iter()
++        .copied()
++        .filter(|property| *property != witness.named)
++        .collect();
++    let seen = if named_seen {
++        "OBSERVED"
++    } else {
++        "NOT OBSERVED"
++    };
++    let locus = if witness.in_step {
++        "at"
++    } else {
++        "on the world after"
++    };
++    panic!(
++        "{} WITNESS {}: {total} steps, each enabled and taking its choices; {} violations\n\
++         NAMED PROPERTY {}: {seen} {locus} step {} ({})\n\
++         OTHER PROPERTIES VIOLATED, each reported separately and not counted as {}: {others:?}\n\
++         every violation:\n  {}",
++        witness.control,
++        config.name,
++        lines.len(),
++        witness.named,
++        witness.at,
++        witness.changed,
++        witness.named,
++        lines.join("\n  ")
++    );
++}
++
++/// C1, "the count becomes a flag", named P1 on F-1. Two writers' results are
++/// Counted at once (each wait expires); the second is recorded and confirmed;
++/// settlement pays its fact; then admission. On the healthy core `unapplied`
++/// is still 1 for the first writer's unrecorded result, so admission is
++/// refused. With a flag, the confirm cleared it: admission succeeds with a
++/// result unrecorded, which P1 forbids. Under C1, E3 also fails on this
++/// path, from step 4; it is reported as itself, never as P1.
++const C1_WITNESS: Witness = Witness {
++    control: "C1",
++    config: F1,
++    steps: &[
++        (Actor::Fw(0), &[], Some(&[])),
++        (Actor::Fw(0), &[1], Some(&["expire: Armed -> Counted"])),
++        (Actor::Fw(1), &[], Some(&[])),
++        (Actor::Fw(1), &[1], Some(&["expire: Armed -> Counted"])),
++        (Actor::Fw(1), &[0], Some(&[])),
++        (Actor::Fw(1), &[0], Some(&[])),
++        (Actor::Se, &[], Some(&[])),
++        (Actor::Se, &[], Some(&[])),
++        (
++            Actor::Se,
++            &[0, 0, 0, 0],
++            Some(&["append_facts: Committed (inserted)"]),
++        ),
++        (Actor::Se, &[], Some(&[])),
++        (Actor::Adm, &[], None),
++    ],
++    named: "P1",
++    at: 11,
++    in_step: true,
++    healthy: "admission: refused",
++    changed: "admission: admitted",
++};
++
++/// C25, "a gating append answers Committed on `Commit::Unknown`", named P7 on
++/// F-1. One gating append whose commit answers Unknown, with the record
++/// absent afterwards. The healthy core answers Uncertain and keeps the record
++/// in U. Answering Committed tells the caller so while the record is absent:
++/// E4 fails on the step, and P7 on the world it leaves.
++const C25_WITNESS: Witness = Witness {
++    control: "C25",
++    config: F1,
++    steps: &[(Actor::Gc(0), &[0, 0, 0, 1, 0, 0], None)],
++    named: "P7",
++    at: 1,
++    in_step: false,
++    healthy: "append_gating: Refused Uncertain Storage",
++    changed: "append_gating: Committed (inserted)",
++};
++
++/// On the healthy core the C1 schedule violates nothing and its admission is
++/// refused. Under control C1 the test fails, with P1 at the admission.
++#[test]
++fn c1_witness_p1_at_a_successful_admission() {
++    run_witness(&C1_WITNESS);
++}
++
++/// On the healthy core the C25 schedule violates nothing and its append is
++/// Uncertain. Under control C25 the test fails, with P7 after the append.
++#[test]
++fn c25_witness_p7_on_the_resulting_world() {
++    run_witness(&C25_WITNESS);
++}

@@ -1,0 +1,105 @@
+STAGE 3 [1] independent checks of the F-PT receipt — 2026-10-14T01:12:44+01:00
+## [1] receipt identity
+   gc-symmetry-full-F-PT.txt sha256 4cbcb0f63dc82b3e3305724331c5604aba7decd409e51d8f4b00b76bbf7c3622, 204 lines
+   gc-symmetry-full-F-PT.cgroup-samples.txt sha256 ad4782f29435514f3be897c306127249502e6d737491995e6b21cf8aeebcb11c, 248 lines
+## [2] selection, pin and test identity
+   commit: 2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda  tree: 6f6a54f5c85d6a3102cd034c67e5791cb5a0286a  HEAD: HEAD
+   worktree clean: yes
+   pinned sha256: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af — MATCH
+     selected: ledger::protocol::model_tests::gc_symmetry_fpt: test
+   selected test count: 1
+   executable sha256 after the run: 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af
+   worktree clean after the run: yes
+   'running 1 test': 1; test lines: 1 -> test ledger::protocol::model_tests::gc_symmetry_fpt
+   EXPLORATION header: EXPLORATION F-PT (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)
+   the original explorer's F-PT entry point (full_fpt) was NOT run: 'full_fpt' occurrences in the receipt: 0
+## [3] limits in force (live scope values, sampler)
+   scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-ptfb-fpt-1791936230.scope
+   memory.max: 17179869184
+   memory.swap.max: 0
+   RuntimeMaxUSec (live): 45min 10s
+   command: command: systemd-run --user --scope --unit=p3c11-ptfb-fpt-1791936230 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /usr/bin/time -v timeout -s KILL 2700 nice -n 10 /home/nexus/NEXU…
+## [4] configuration evidence (bounds printed by the run)
+   A4 true (blanket-Uncertain on); batch false; faults 2; admissions 2; gating 2; caps caps 30000000 states, 2700s
+   F-3's bounds line differs from F-PT's only in 'A4': YES; actors identical to F-3: YES
+## [5] internal consistency of the printed counts
+   keys discovered K       29751473
+   keys expanded           29751473
+   keys unexpanded         0
+   admission evaluations   29751473   admitted 3182
+   self-mirrored keys Kf   1698028
+   L1 non-fault edges = transitions - fault edges: 105856110 = 105856110 -> EQUAL; end states 16131 = no-step 16131 -> EQUAL
+   evaluations == keys (one ADM observation per expanded key): YES
+   cap headroom: 30,000,000 - 29,751,473 = 248527 keys (99.17% of the cap used); the stop condition (visited > cap) never fired
+   time: explorer elapsed 484.3 s of 2,700 s (17.9%)
+## [6] guards and failures
+   'symmetry inapplicable' 0; 'quotient inapplicable' 0; 'panicked' 0; FAIL lines 0; INCOMPLETE lines 0; NOT ESTABLISHED 0
+## [7] branches: F-PT vs GC-SYM-F3-01's F-3 (both composed quotient)
+   F-PT: listed taken 31, listed NOT TAKEN 38, outside the list 3
+   F-3:  listed taken 31, listed NOT TAKEN 37, outside the list 3
+   diff (< F-3, > F-PT):
+     2c2
+     <     [taken    ] append_facts: Committed (already present)
+     ---
+     >     [NOT TAKEN] append_facts: Committed (already present)
+   outside-the-list labels (F-PT):
+         [taken    ] append_cell C: Refused(Latched) (not in the listed set)
+         [taken    ] append_cell C: Refused(NotHealthy) (not in the listed set)
+         [taken    ] append_cell X: Refused(NotHealthy) (not in the listed set)
+   NOT TAKEN (F-PT):
+     append_facts: Committed (already present)
+     append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)
+     lookup: Conflict(cause)
+     lookup: Conflict(explained)
+     explain: Unknown
+     snapshot: Taken
+     snapshot: Nothing
+     snapshot: NotNow(NotHealthy)
+     snapshot: NotNow(Latched)
+     snapshot: Failed
+     snapshot: unwound
+     append_acknowledgement: Committed
+     append_acknowledgement: Refused(Stale)
+     append_acknowledgement: Refused(Empty)
+     append_acknowledgement: Refused(Future)
+     append_acknowledgement: Refused(Set)
+     append_acknowledgement: Refused(NotNow(NotHealthy))
+     append_acknowledgement: Refused(NotNow(CellsBusy))
+     append_acknowledgement: Refused(NotNow(Latched))
+     append_acknowledgement: NotApplied(NotWritten)
+     append_acknowledgement: NotApplied(Uncertain)
+     append_acknowledgement: unwound after an insert (U kept)
+     append_acknowledgement: unwound before any insert (U emptied)
+     barrier: unwound
+     resolve: ConflictPlaced
+     resolve: Acknowledged
+     resolve: Inconsistent
+     resolve: Stale
+     resolve: unwound
+     append_cell C: Stale
+     append_cell C: unwound
+     append_cell X: Stale
+     append_cell X: unwound
+     empty: Stale
+     DROP: a Counted ticket dropped
+     malformed snapshot: future
+     malformed snapshot: set
+     malformed snapshot: empty
+## [8] resources
+   /usr/bin/time: max RSS 4030220 KiB; wall 8:04.61; user 481.13 s; sys 3.35 s; CPU 99%; Swaps 0; major faults 0
+   samples 241; memory.peak max 4131786752 B (24.1% of 16 GiB); memory.swap.current max 0 B in every sample; oom 0 oom_kill 0; host MemAvailable min 49573164 KiB
+   samples with memory.swap.current != 0: 0
+## [9] termination
+   normal completion: the BFS queue emptied below the cap, Kahn's L1 ran over the whole quotient, the test asserted PASS and the
+   process exited 0 (exit status: 0); scope  Result=success ActiveState=inactive . timeout, RuntimeMaxSec, the memory limit and
+   the explorer's own caps did not fire.
+## [10] after the run
+   p3c11 scopes: 0; test executables running: 0
+   pinned executable now 5cb3bf4ce78260ccddaf3dc06ca2e3b3c82b202b040ee71199c9d08965dba4af; worktree porcelain 0
+   ollama: 1 process(es), untouched
+## CORRECTION (appended 2026-10-14T01:12:53+01:00): the 'listed taken 31' counts in [7] are wrong for both runs. The pattern '.*[^)]$'
+   dropped every listed label that ends in ')', for example 'append_facts: Committed (already present)'. Recounted, excluding
+   only the '(not in the listed set)' lines:
+   F-PT: listed taken 52, listed NOT TAKEN 38, listed total 90, outside the list 3
+   F-3:  listed taken 53, listed NOT TAKEN 37, listed total 90, outside the list 3
+   (These agree with tools/extract-run.py: F-PT 52/38/3, F-3 53/37/3.) The diff in [7] and the NOT TAKEN list are unaffected.

@@ -1,0 +1,119 @@
+STAGE 6 — FINAL VALIDATION PLAN (read-only; nothing here is started)
+P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01
+
+Every item below needs its own Architect-authorised mission. This plan starts nothing. Under ruling I, every
+evidence run is made at the exact final commit. Anything run earlier is risk discovery and is informational.
+
+==================================================================================================================
+A. THE TEN ITEMS, IN DEPENDENCY ORDER
+==================================================================================================================
+Notation: "needs" = a genuine dependency (the item cannot be valid without it); "after" = an ordering choice
+that saves rework but is not logically required.
+
+ 1. AD-1-R1 independent Architect review
+    needs:  nothing. The draft, the AD-1 copy, the diff and the verbatim-check tool are in drafts/ and tools/.
+    scope:  A–J as ruled; K–Q as proposed resolutions; the verbatim quotes; the open items.
+    output: AD-1-R1 accepted, amended (new draft R2, R1 kept) or rejected.
+
+ 2. Owner approval of the final contract change
+    needs:  1 (an Architect-reviewed text).
+    covers: A (F-1 60M standing exception), and the addendum as a whole (B–Q).
+    Until 2, every F-1 run needs a one-run exception, and no quotient result is 8.3 evidence (B(5), E).
+
+ 3. C1/C25 witness acceptance
+    needs:  the review itself needs nothing. It can run in parallel with 1. The kill-reading it supports (G) is
+            contractual only after 2.
+    scope:  source review of 42dd1bd1 (model_tests.rs +277/−0); the healthy and probe receipts; the C25 mutant
+            text decision (keep or drop `self.keep = true`); whether the witnesses stay ordinary tests.
+    output: the witnesses accepted for carriage to the final commit, or a revised witness (a new mission).
+
+ 4. Versioned current-tree mutation-manifest reconciliation (H)
+    needs:  the specification, reviewed as part of 1, approved as part of 2. The alignment against the exact final
+            tree needs 7's source freeze. The manifest pins file hashes, so it cannot be aligned to a tree that
+            will still change.
+    also:   the Architect's assignment of the 7 pre-D2A-1 entries (M05, M18, M19, M39, M45, M84, M129) to
+            Candidate 11's validation.
+    after:  the record format can be prepared at any time. This mission's dry run at 42dd1bd1 shows the method
+            (22 stale; every anchor of 183 controls at its count).
+    output: a new manifest file with its own version and sha256, aligned with the final tree and reviewed. The
+            original (2c4adc84…2e14) is untouched.
+
+ 5. The ten original full configurations never run: F-4, F-5, F-6, F-7, F-8, F-B2, F-G, F-W, F-D, F-R
+    needs (evidence): 7, the exact final commit. Their PASS at that commit is the 8.3 evidence.
+    needs (sizing):   nothing contractual, but an authorised mission. RECOMMENDED before the source freeze: one
+                      exploratory run of each on the original explorer, at the 30,000,000 ceiling, one at a time.
+                      These are informational, and would find out early whether any is INCOMPLETE. Their sizes are
+                      unknown, and none of them is admitted to a quotient (E). An INCOMPLETE one is a section 12
+                      stop that returns the design to the Architect. F-D (as F-1 with 2 faults, DROP on) and F-W /
+                      F-R / F-4 (as F-2 with added behaviour) are the most likely to be large. This is not
+                      measured.
+
+ 6. The 35 kill-required controls and the A4 PASS comparison
+    needs:
+      - 7: failing and restored receipts at the exact final commit (I);
+      - F: the original explorer on every mutant;
+      - G and 3: for C1 and C25;
+      - the restored receipts, which are the 8.3 PASSes of each control's configuration (5 and 7). For C6, C7
+        and C8 the restored receipt may be F-PT's or F-B's accepted quotient PASS, which needs B(1), N and 2;
+      - for the A4 comparison: F-PT's and F-3's final PASSes (7).
+    after:  RECOMMENDED before the campaign: a read-only attribution pass over the 24 explorer-killed rows. C10
+            and C9 against E4, and C24 against P8, could have the C1/C25 pattern; that is unanalysed. Each
+            control must be KILLED AS NAMED or the campaign stops (line 693), so any such row needs a ruling
+            before it runs, not after.
+    form:   one mutant per control, in a disposable worktree. The 7-part identity of I. Each control's
+            failing receipt, then its restored identity and receipt. Stop at the first control not killed as named.
+
+ 7. Final source freeze and exact-commit 15-run verification, without intermediate repeats
+    needs:  every source change done and reviewed: the witnesses (3), any receipt-printing change chosen under
+            B/D (fixed-orbit shares, per-member batch exercise), and nothing else. Also 2, so the runs are made
+            under the amended contract.
+    runs:   once each, one at a time, on one pinned executable, no repeat:
+              original: F-1 (60M), F-2, F-4, F-5, F-6, F-7, F-8, F-B2, F-G, F-W, F-D, F-R;
+              composed quotient (E): F-3, F-PT, F-B.
+            A FAIL or INCOMPLETE stops the series and goes to the Architect (section 12). It is not re-run.
+    order:  7's freeze comes before 4's alignment, 6's evidence runs, and 8. 7's runs come before 6's restored
+            receipts are cited.
+
+ 8. Local CI before hosted CI
+    needs:  7's freeze (the exact final commit).
+    local:  fmt; clippy -D warnings; the workspace default suite, which includes the two witnesses; the 44 P3
+            guards; the manifest alignment check of 4; the Fast Local gate.
+    hosted: only after local is green, on the same SHA, and only by Owner-authorised push and dispatch.
+    note:   8 can run alongside 7's long runs; it does not depend on their results.
+
+ 9. Final D2A-1 independent audit
+    needs:  4, 6, 7, 8. Every receipt, at one SHA.
+
+10. Owner-controlled Candidate 11 integration
+    needs:  9; 4 complete for all 22 entries, the 7 pre-D2A-1 ones included; Candidate 11's own validation; the
+            Owner's decision.
+
+==================================================================================================================
+B. WHAT GENUINELY DEPENDS ON WHAT
+==================================================================================================================
+  1 -> 2
+  2 -> 7 (the runs are evidence only under the amended contract)
+  3 -> 7 (the witnesses must be in the frozen source)
+  2 -> 6 (G, F, I readings)    3 -> 6 (C1, C25)
+  7 -> 4 (alignment)           7 -> 5 (evidence)            7 -> 6 (evidence)          7 -> 8
+  4, 6, 7, 8 -> 9 -> 10
+
+  Not genuine (may be run in parallel or earlier):
+    - 1 with 3;
+    - 4's record format with 1;
+    - the sizing of 5 before everything;
+    - the attribution pass of 6 before everything;
+    - 8's local gates alongside 7's long runs.
+
+==================================================================================================================
+C. RISKS THAT CAN STOP THE PLAN (none is measured)
+==================================================================================================================
+  R1  A never-run configuration of 5 is INCOMPLETE at 30M. That is a section 12 stop, and the design comes back to
+      the Architect. Only F-3, F-PT and F-B have a quotient.
+  R2  F-PT's margin is 0.83%. Any model change that adds 248,528 keys makes it INCOMPLETE under C-1.
+  R3  Another control has the C1/C25 pattern. That stops 6 unless it is ruled on first.
+  R4  A control on F-PT or F-B survives to the 30M original ceiling. That is INCOMPLETE, not killed: the
+      original F-PT is DERIVED at about 173M states and F-B at about 22M. C6, C7 and C8 are expected to fail
+      early, but that is not measured.
+  R5  Reproducible builds are not established. Every identity is the sha256 of the executable actually run (I).
+  R6  The 7 pre-D2A-1 stale manifest entries have no owner yet (4, 10).

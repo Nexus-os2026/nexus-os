@@ -1,0 +1,16 @@
+GATE stage5/14-clippy-all-targets
+commit: 42dd1bd1cf21ffdea5968b256d2983f6575fab5b  tree: 7ac6bb21430d15b17e3723b217b20a49dccf8282  HEAD: experiment/p3-c11-d2a1-ad1r1-witness-01 (experimental branch expected)
+worktree porcelain: 0
+compiler: rustc 1.94.0 (4a4ef493e 2026-03-02)
+environment: CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness/target; cwd /home/nexus/NEXUS/nexus-os-p3-c11-ad1r1-witness
+command: nice -n 10 cargo clippy -p nexus-governed-control --locked --release --all-targets -j 8 -- -D warnings
+pinned executable before: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+started: 2026-10-14T01:50:03+01:00
+--------------------------------------------------------------------------------
+    Finished `release` profile [optimized] target(s) in 0.36s
+peak RSS (KiB, /usr/bin/time): 129872; wall: 0.46 s; user 0.27 s; sys 0.16 s
+--------------------------------------------------------------------------------
+exit status: 0
+finished: 2026-10-14T01:50:03+01:00
+pinned executable after: 0983a19fc380b71250bb908844752a5b1121e29277a7181192906047e77d4f53 MATCH
+worktree porcelain after: 0

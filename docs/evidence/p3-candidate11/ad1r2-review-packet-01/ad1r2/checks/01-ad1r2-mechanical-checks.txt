@@ -1,0 +1,334 @@
+AD-1-R2 MECHANICAL CHECKS — tools/check-ad1r2.py (sha256 a243bf6da4a34e19d9ada8f7064d0c573b0ec09f45a53dd99c570d4ea5ec4581)
+run: 2026-10-14T02:59:14+01:00 by Claude Code (Claude Opus 5.5); Python 3.12.3
+command: python3 tools/check-ad1r2.py <draft> <contract> /home/nexus/NEXUS/nexus-os 42dd1bd1cf21ffdea5968b256d2983f6575fab5b /home/nexus/nexus-audits/claude-architect
+--------------------------------------------------------------------------------
+draft /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r2-contract-evidence-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R2-DRAFT.md
+  sha256 53cdb3d6ea8683a11ccaf90a6671a37b42dd5db178b599cfeb421b898a089ebc  bytes 81534  lines 1125
+contract /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md
+  lines 1462
+  verbatim lines quoted: 41 (39 distinct)
+  rows with an actual replacement: S-1, S-2, S-3, S-4, S-5, S-6, S-7, S-8, S-9, S-10, S-11, S-13
+  inventory dispositions: {'REQUIRED_FINAL_RUN': 12, 'REPLACED_BY': 3, 'EXPERIMENTAL_NOT_REQUIRED': 16, 'REQUIRED_FINAL_RUN, if E.1 holds': 3}
+
+PASS  C0 contract bytes sha256 = cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+PASS  C1a every text fence follows a VERBATIM marker (27 pairs, 27 fences, 27 markers)
+PASS  C1b block 855: 1 line(s) byte-equal to contract lines [855]
+PASS  C1b block 609: 1 line(s) byte-equal to contract lines [609]
+PASS  C1b block 620: 1 line(s) byte-equal to contract lines [620]
+PASS  C1b block 831: 1 line(s) byte-equal to contract lines [831]
+PASS  C1b block 853: 1 line(s) byte-equal to contract lines [853]
+PASS  C1b block 693: 1 line(s) byte-equal to contract lines [693]
+PASS  C1b block 697,699: 2 line(s) byte-equal to contract lines [697, 699]
+PASS  C1b block 697,721: 2 line(s) byte-equal to contract lines [697, 721]
+PASS  C1b block 863: 1 line(s) byte-equal to contract lines [863]
+PASS  C1b block 902,911: 2 line(s) byte-equal to contract lines [902, 911]
+PASS  C1b block 902,912: 2 line(s) byte-equal to contract lines [902, 912]
+PASS  C1b block 915: 1 line(s) byte-equal to contract lines [915]
+PASS  C1b block 546,548: 2 line(s) byte-equal to contract lines [546, 548]
+PASS  C1b block 813: 1 line(s) byte-equal to contract lines [813]
+PASS  C1b block 827: 1 line(s) byte-equal to contract lines [827]
+PASS  C1b block 737,742: 2 line(s) byte-equal to contract lines [737, 742]
+PASS  C1b block 748: 1 line(s) byte-equal to contract lines [748]
+PASS  C1b block 923: 1 line(s) byte-equal to contract lines [923]
+PASS  C1b block 198,199: 2 line(s) byte-equal to contract lines [198, 199]
+PASS  C1b block 584: 1 line(s) byte-equal to contract lines [584]
+PASS  C1b block 684,685,686,687,688,689: 6 line(s) byte-equal to contract lines [684, 685, 686, 687, 688, 689]
+PASS  C1b block 679: 1 line(s) byte-equal to contract lines [679]
+PASS  C1b block 750: 1 line(s) byte-equal to contract lines [750]
+PASS  C1b block 857: 1 line(s) byte-equal to contract lines [857]
+PASS  C1b block 859: 1 line(s) byte-equal to contract lines [859]
+PASS  C1b block 865: 1 line(s) byte-equal to contract lines [865]
+PASS  C1b block 940,941,942: 3 line(s) byte-equal to contract lines [940, 941, 942]
+PASS  C2 inline quotation of line 548 present in contract and draft: 'The loop needs no load'
+PASS  C2 inline quotation of line 548 present in contract and draft: 'The word is touched in exactly two private functions'
+PASS  C2 inline quotation of line 609 present in contract and draft: 'so that a violation has a shortest trace'
+PASS  C2 inline quotation of line 813 present in contract and draft: 'a cap was reached'
+PASS  C2 inline quotation of line 855 present in contract and draft: 'Reaching one'
+PASS  C2 inline quotation of line 827 present in contract and draft: 'under its cap'
+PASS  C2 inline quotation of line 831 present in contract and draft: 'Missing evidence for any of them is a failed mission'
+PASS  C2 inline quotation of line 831 present in contract and draft: 'every one'
+PASS  C2 inline quotation of line 863 present in contract and draft: 'states and transitions'
+PASS  C2 inline quotation of line 863 present in contract and draft: 'with the receipt that shows it ran'
+PASS  C2 inline quotation of line 699 present in contract and draft: 'the count becomes a flag'
+PASS  C2 inline quotation of line 721 present in contract and draft: 'a gating append answers Committed on `Commit::Unknown`'
+PASS  C2 inline quotation of line 742 present in contract and draft: 'nothing may fail'
+PASS  C2 inline quotation of line 731 present in contract and draft: 'E0283'
+PASS  C2 inline quotation of line 912 present in contract and draft: 'TEXT UPDATE, SAME PROPERTY'
+PASS  C2 inline quotation of line 923 present in contract and draft: 'every control is killed'
+PASS  C2 inline quotation of line 748 present in contract and draft: 'C7 without A4 is expected to fail E11 on F-3'
+PASS  C2 inline quotation of line 813 present in contract and draft: 'INCOMPLETE is never PASS'
+PASS  C2 inline quotation of line 750 present in contract and draft: 'a script kept outside the repository'
+PASS  C2b Appendix A's Core (lines 1429-1442) has no field naming a published value, as L states
+PASS  C3a supersession ids S-1..S-18, unique, in order (18 rows)
+PASS  C3b sections A..Q each present once (ABCDEFGHIJKLMNOPQ)
+PASS  C3c S-1 effect names an allowed kind
+PASS  C3d S-1 sections ['A', 'C', 'K'] exist
+PASS  C3e S-1 (line 855) has its own verbatim block containing that line
+PASS  C3c S-2 effect names an allowed kind
+PASS  C3d S-2 sections ['B', 'E', 'O'] exist
+PASS  C3e S-2 (line 609) has its own verbatim block containing that line
+PASS  C3c S-3 effect names an allowed kind
+PASS  C3d S-3 sections ['B', 'D', 'N'] exist
+PASS  C3e S-3 (line 620) has its own verbatim block containing that line
+PASS  C3c S-4 effect names an allowed kind
+PASS  C3d S-4 sections ['E', 'I'] exist
+PASS  C3e S-4 (line 831) has its own verbatim block containing that line
+PASS  C3c S-5 effect names an allowed kind
+PASS  C3d S-5 sections ['F', 'I'] exist
+PASS  C3e S-5 (line 853) has its own verbatim block containing that line
+PASS  C3c S-6 effect names an allowed kind
+PASS  C3d S-6 sections ['F', 'G'] exist
+PASS  C3e S-6 (line 693) has its own verbatim block containing that line
+PASS  C3c S-7 effect names an allowed kind
+PASS  C3d S-7 sections ['G'] exist
+PASS  C3e S-7 (line 699) has its own verbatim block containing that line
+PASS  C3c S-8 effect names an allowed kind
+PASS  C3d S-8 sections ['G'] exist
+PASS  C3e S-8 (line 721) has its own verbatim block containing that line
+PASS  C3c S-9 effect names an allowed kind
+PASS  C3d S-9 sections ['D', 'E'] exist
+PASS  C3e S-9 (line 863) has its own verbatim block containing that line
+PASS  C3c S-10 effect names an allowed kind
+PASS  C3d S-10 sections ['H'] exist
+PASS  C3e S-10 (line 911) has its own verbatim block containing that line
+PASS  C3c S-11 effect names an allowed kind
+PASS  C3d S-11 sections ['H'] exist
+PASS  C3e S-11 (line 912) has its own verbatim block containing that line
+PASS  C3c S-12 effect names an allowed kind
+PASS  C3d S-12 sections ['H'] exist
+PASS  C3e S-12 (line 915) has its own verbatim block containing that line
+PASS  C3c S-13 effect names an allowed kind
+PASS  C3d S-13 sections ['L'] exist
+PASS  C3e S-13 (line 548) has its own verbatim block containing that line
+PASS  C3c S-14 effect names an allowed kind
+PASS  C3d S-14 sections ['K', 'M'] exist
+PASS  C3e S-14 (line 813) has its own verbatim block containing that line
+PASS  C3c S-15 effect names an allowed kind
+PASS  C3d S-15 sections ['K'] exist
+PASS  C3e S-15 (line 827) has its own verbatim block containing that line
+PASS  C3c S-16 effect names an allowed kind
+PASS  C3d S-16 sections ['E', 'F'] exist
+PASS  C3e S-16 (line 742) has its own verbatim block containing that line
+PASS  C3c S-17 effect names an allowed kind
+PASS  C3d S-17 sections ['F'] exist
+PASS  C3e S-17 (line 748) has its own verbatim block containing that line
+PASS  C3c S-18 effect names an allowed kind
+PASS  C3d S-18 sections ['E', 'F', 'G'] exist
+PASS  C3e S-18 (line 923) has its own verbatim block containing that line
+PASS  C3f no line is both superseded and 'not superseded' (not superseded: [198, 199, 584, 679, 684, 685, 686, 687, 688, 689, 750, 857, 859, 865, 940, 941, 942])
+PASS  C3g line 742 moved from AD-1-R1's 'not superseded' list to S-16
+PASS  C3g line 748 moved from AD-1-R1's 'not superseded' list to S-17
+PASS  C4 every inventory-looking row parses
+PASS  C4a inventory names unique (34 rows)
+PASS  C4b inventory = every #[ignore] in both files at 42dd1bd1 (34 in source: model_tests.rs 34, unit_tests.rs 0)
+PASS  C4c full_f1: cited line 4169 = fn line 4169
+PASS  C4d full_f1: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f2: cited line 4178 = fn line 4178
+PASS  C4d full_f2: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f3: cited line 4184 = fn line 4184
+PASS  C4d full_f3: disposition 'REPLACED_BY `gc_symmetry_f3`' is allowed
+PASS  C4e full_f3 REPLACED_BY gc_symmetry_f3: target listed as conditional REQUIRED_FINAL_RUN; fallback stated
+PASS  C4c full_f4: cited line 4190 = fn line 4190
+PASS  C4d full_f4: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f5: cited line 4196 = fn line 4196
+PASS  C4d full_f5: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f6: cited line 4202 = fn line 4202
+PASS  C4d full_f6: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f7: cited line 4208 = fn line 4208
+PASS  C4d full_f7: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_f8: cited line 4214 = fn line 4214
+PASS  C4d full_f8: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_fpt: cited line 4220 = fn line 4220
+PASS  C4d full_fpt: disposition 'REPLACED_BY `gc_symmetry_fpt`' is allowed
+PASS  C4e full_fpt REPLACED_BY gc_symmetry_fpt: target listed as conditional REQUIRED_FINAL_RUN; fallback stated
+PASS  C4c full_fb: cited line 4226 = fn line 4226
+PASS  C4d full_fb: disposition 'REPLACED_BY `gc_symmetry_fb`' is allowed
+PASS  C4e full_fb REPLACED_BY gc_symmetry_fb: target listed as conditional REQUIRED_FINAL_RUN; fallback stated
+PASS  C4c full_fb2: cited line 4232 = fn line 4232
+PASS  C4d full_fb2: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_fg: cited line 4238 = fn line 4238
+PASS  C4d full_fg: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_fw: cited line 4244 = fn line 4244
+PASS  C4d full_fw: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_fd: cited line 4250 = fn line 4250
+PASS  C4d full_fd: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c full_fr: cited line 4256 = fn line 4256
+PASS  C4d full_fr: disposition 'REQUIRED_FINAL_RUN' is allowed
+PASS  C4c quotient_full_f1: cited line 5355 = fn line 5355
+PASS  C4d quotient_full_f1: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f1: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f2: cited line 5361 = fn line 5361
+PASS  C4d quotient_full_f2: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f2: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f3: cited line 5367 = fn line 5367
+PASS  C4d quotient_full_f3: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f3: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f4: cited line 5373 = fn line 5373
+PASS  C4d quotient_full_f4: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f4: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f5: cited line 5379 = fn line 5379
+PASS  C4d quotient_full_f5: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f5: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f6: cited line 5385 = fn line 5385
+PASS  C4d quotient_full_f6: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f6: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f7: cited line 5391 = fn line 5391
+PASS  C4d quotient_full_f7: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f7: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_f8: cited line 5397 = fn line 5397
+PASS  C4d quotient_full_f8: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_f8: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fpt: cited line 5403 = fn line 5403
+PASS  C4d quotient_full_fpt: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fpt: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fb: cited line 5409 = fn line 5409
+PASS  C4d quotient_full_fb: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fb: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fb2: cited line 5415 = fn line 5415
+PASS  C4d quotient_full_fb2: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fb2: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fg: cited line 5421 = fn line 5421
+PASS  C4d quotient_full_fg: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fg: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fw: cited line 5427 = fn line 5427
+PASS  C4d quotient_full_fw: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fw: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fd: cited line 5433 = fn line 5433
+PASS  C4d quotient_full_fd: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fd: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c quotient_full_fr: cited line 5439 = fn line 5439
+PASS  C4d quotient_full_fr: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f quotient_full_fr: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c gc_symmetry_f3: cited line 6933 = fn line 6933
+PASS  C4d gc_symmetry_f3: disposition 'REQUIRED_FINAL_RUN, if E.1 holds' is allowed
+PASS  C4c gc_symmetry_prefix_f3: cited line 6951 = fn line 6951
+PASS  C4d gc_symmetry_prefix_f3: disposition 'EXPERIMENTAL_NOT_REQUIRED' is allowed
+PASS  C4f gc_symmetry_prefix_f3: EXPERIMENTAL_NOT_REQUIRED has a stated reason
+PASS  C4c gc_symmetry_fpt: cited line 8234 = fn line 8234
+PASS  C4d gc_symmetry_fpt: disposition 'REQUIRED_FINAL_RUN, if E.1 holds' is allowed
+PASS  C4c gc_symmetry_fb: cited line 8242 = fn line 8242
+PASS  C4d gc_symmetry_fb: disposition 'REQUIRED_FINAL_RUN, if E.1 holds' is allowed
+PASS  C5a gates 31-37 select 51 distinct tests (51)
+PASS  C5b quotient_x1_matches_the_original is an ordinary #[test]
+PASS  C5b quotient_x2_matches_the_original is an ordinary #[test]
+PASS  C5b quotient_x3_matches_the_original is an ordinary #[test]
+PASS  C5b quotient_x4_matches_the_original is an ordinary #[test]
+PASS  C5b quotient_x5_matches_the_original is an ordinary #[test]
+PASS  C5b quotient_negative_e2_admission_views_twice is an ordinary #[test]
+PASS  C5b quotient_negative_e9_admission_ignores_the_latch is an ordinary #[test]
+PASS  C5b quotient_negative_p12_admission_ignores_recovery is an ordinary #[test]
+PASS  C5b quotient_negative_p1_admission_ignores_unapplied is an ordinary #[test]
+PASS  C5b quotient_observer_reports_the_admission_properties is an ordinary #[test]
+PASS  C5b quotient_refuses_an_admission_that_keeps_bits is an ordinary #[test]
+PASS  C5b quotient_refuses_an_admission_that_keeps_its_counter is an ordinary #[test]
+PASS  C5b quotient_refuses_an_admission_that_writes_the_table is an ordinary #[test]
+PASS  C5b an_admission_that_keeps_its_counter_fails_l1_in_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_x2_matches_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_sym1_matches_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_pt_matches_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_b_matches_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_bi_matches_the_original is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_pt_takes_the_a4_steps is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_b_takes_the_batch_steps is an ordinary #[test]
+PASS  C5b gc_symmetry_sym_bi_takes_the_batch_inserts is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_p1_on_sym_pt is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_p12_on_sym_b is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_p1_on_sym_bi is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_e2_admission_views_twice is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_e9_admission_ignores_the_latch is an ordinary #[test]
+PASS  C5b gc_symmetry_negative_p1_admission_ignores_unapplied is an ordinary #[test]
+PASS  C5b gc_symmetry_allow_list_is_exact is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_a_batch_under_f3s_name is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_an_asymmetric_step_on_sym_pt is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_an_asymmetric_step_on_sym_b is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_an_asymmetric_step_on_sym_bi is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_f_pt_with_a_lower_fault_budget is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_f_pt_with_a_raised_cap is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_f_b_with_another_actor_change is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_f_b_with_a_raised_time_cap is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_acknowledgements is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_a_configuration_not_shown_symmetric is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_an_acknowledgement_row is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_an_asymmetric_step is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_another_shape_under_a_known_name is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_a_raised_cap is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_f_g is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_kept_bits is an ordinary #[test]
+PASS  C5b gc_symmetry_refuses_other_callers is an ordinary #[test]
+PASS  C5b gc_symmetry_finds_the_original_l1_cycle is an ordinary #[test]
+PASS  C5b gc_symmetry_initial_states is an ordinary #[test]
+PASS  C5b gc_symmetry_l1_on_finite_graphs is an ordinary #[test]
+PASS  C5b gc_symmetry_properties_follow_the_exchange is an ordinary #[test]
+PASS  C5b gc_symmetry_renames_consistently is an ordinary #[test]
+PASS  C5c every test D names is one of the 51 (25 named explicitly)
+PASS  C6a review-02 sha256 = mission's expected 6dfb1456…
+PASS  C6a review-03 sha256 = mission's expected 1f964d75…
+PASS  C6a AD-1 sha256 = mission's expected 01778ac3…
+PASS  C6a AD-1-R1 sha256 = mission's expected 589eb6cb…
+PASS  C6b full sha256 01778ac35cf9… in draft is a computed identity (AD-1)
+PASS  C6b full sha256 1f964d7515d9… in draft is a computed identity (review-03)
+PASS  C6b full sha256 29a2c1e571b4… in draft is a computed identity (C25 narrow patch)
+PASS  C6b full sha256 2c4adc84121c… in draft is a computed identity (historical manifest)
+PASS  C6b full sha256 589eb6cb2462… in draft is a computed identity (AD-1-R1)
+PASS  C6b full sha256 5ecd716a8f12… in draft is a computed identity (C1 patch)
+PASS  C6b full sha256 6dfb14560a8b… in draft is a computed identity (review-02)
+PASS  C6b full sha256 a5454944368d… in draft is a computed identity (protocol.rs)
+PASS  C6b full sha256 cac6535115fb… in draft is a computed identity (contract)
+PASS  C6c abbreviated sha256 a6de4ed9…656b matches C25 historical patch
+PASS  C6c abbreviated sha256 29a2c1e5…d732 matches C25 narrow patch
+PASS  C6c abbreviated sha256 2c4adc84…2e14 matches historical manifest
+PASS  C6d blob a2df2841b99c = crates/nexus-governed-control/src/ledger/protocol.rs at 42dd1bd1 (a2df2841b99c)
+PASS  C6d blob 5ad26ddc = crates/nexus-governed-control/src/ledger/protocol/model_tests.rs at 42dd1bd1 (5ad26ddc727d)
+PASS  C6d blob 55dc6640 = crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs at 42dd1bd1 (55dc66409eac)
+PASS  C6d blob d872b908 = crates/nexus-governed-control/src/ledger.rs at 42dd1bd1 (d872b90816fd)
+PASS  C6d blob b806ed57 = crates/nexus-governed-control/src/lib.rs at 42dd1bd1 (b806ed577f8d)
+PASS  C6d blob 726005b2 = rust-toolchain.toml at 42dd1bd1 (726005b29561)
+PASS  C6d blob 1af53a60 = Cargo.lock at 42dd1bd1 (1af53a60aaf6)
+PASS  C6d blob 2543c745 = crates/nexus-governed-control/Cargo.toml at 42dd1bd1 (2543c745d661)
+PASS  C6d blob 2c558a44 = Cargo.toml at 42dd1bd1 (2c558a4477d1)
+PASS  C6d blob 05a42b50 = .cargo/config.toml at 42dd1bd1 (05a42b50174e)
+PASS  C6d blob 65fa69dc = docs/evidence/p3-candidate10/original-183/manifest.json at 42dd1bd1 (65fa69dcc074)
+PASS  C6e 244c5b23 names a commit in the repository
+PASS  C6e 83816e66 names a commit in the repository
+PASS  C6e 77a146ca names a commit in the repository
+PASS  C6e 2d83b74b names a commit in the repository
+PASS  C6e 42dd1bd1 names a commit in the repository
+PASS  C6e 243501f0 names a commit in the repository
+PASS  C6e 9e945ee7 names a commit in the repository
+PASS  C6e 22ebf9a5 names a commit in the repository
+PASS  C6e 862a11ce names a commit in the repository
+PASS  C6e b1d535f1 names a commit in the repository
+PASS  C6f source tree is 7ac6bb21
+PASS  C7a B table F-3: K 20431851, Kf 880778, 2K-Kf 39982924, (N+1)(2K-Kf) 119948772 (N=2)
+PASS  C7a B table F-PT: K 29751473, Kf 1698028, 2K-Kf 57804918, (N+1)(2K-Kf) 173414754 (N=2)
+PASS  C7a B table F-B: K 3775373, Kf 156463, 2K-Kf 7394283, (N+1)(2K-Kf) 22182849 (N=2)
+PASS  C7b M history table has 10 rows (expected 10)
+PASS  C7c M row F-3, original `explore` / CAMPAIGN-01: INCOMPLETE 30000002 (25318697 expanded) cap 30000000 at 244c5b23
+PASS  C7c M row F-3, original `explore` / F3-CAP60-01: INCOMPLETE 60000001 (53851687 expanded) cap 60000000 at 9e945ee7
+PASS  C7c M row F-3, admission observer quotient alone (`quotient_full_f3`) / F3-QUOTIENT-01: INCOMPLETE 30000001 (28284667 expanded) cap 30000000 at 83816e66
+PASS  C7c M row F-3, composed quotient prefix (`gc_symmetry_prefix_f3`) / GC-SYMMETRY-01: INCOMPLETE 100000 (61565 expanded) cap 99999 at 77a146ca
+PASS  C7c M row F-3, composed quotient (`gc_symmetry_f3`) / GC-SYM-F3-01: PASS 20431851 (20431851 expanded) cap 30000000 at 77a146ca
+PASS  C7c M row F-PT, composed quotient / PT-FB-EXPERIMENT-01: PASS 29751473 (29751473 expanded) cap 30000000 at 2d83b74b
+PASS  C7c M row F-B, composed quotient / PT-FB-EXPERIMENT-01: PASS 3775373 (3775373 expanded) cap 30000000 at 2d83b74b
+PASS  C7c M row F-1, original / CAMPAIGN-01: PASS 46524336 (46524336 expanded) cap 60000000 at 244c5b23
+PASS  C7c M row F-1, original / F1-CAP60-01: PASS 46524336 (46524336 expanded) cap 60000000 at 243501f0
+PASS  C7c M row F-2, original / CAMPAIGN-01: PASS 12602670 (12602670 expanded) cap 30000000 at 244c5b23
+PASS  C8 worker_unwinds true only in ['FW']; l1 false only in ['FD']
+PASS  C9a status line: DRAFT — NOT ACCEPTED — NOT ADOPTED — NOT APPLIED
+PASS  C9b operative text has no 'local, not pushed' outside its allowed context (witness commit is published); hits 0
+PASS  C9b operative text has no 'ARGUED, not probed' outside its allowed context (the narrow form was probed once); hits 0
+PASS  C9b operative text has no 'wrong guess costs one failed exchange' outside its allowed context (no one-failure bound); hits 0
+PASS  C9b operative text has no 'replaces only the third sentence' outside its allowed context (R1 sentence targeted by its opening words); hits 0
+PASS  C9b operative text has no 'third sentence' outside its allowed context (only as history); hits 0
+PASS  C9b operative text has no 'final_tree' outside its allowed context (manifest self-reference removed); hits 1
+PASS  C9b operative text has no 'Open \(not decided here\)' outside its allowed context (AD-1-R1's open items are resolved or listed in Open items); hits 0
+PASS  C9b operative text has no 'needs the Owner's one-run exception, as before' outside its allowed context (no one-run authorisation inferred); hits 0
+PASS  C9b operative text has no 'do not affect this, provided no earlier line changes' outside its allowed context (no inherited approval); hits 0
+PASS  C9b operative text has no 'must print them' outside its allowed context (no new instrumentation); hits 0
+PASS  C9b operative text has no 'C25'?s? (?:exact )?mutant text is (?:still )?open' outside its allowed context (narrow C25 selected); hits 0
+PASS  C9c no sentence claims C1 or C25 is killed ([])
+PASS  C9e 'no final kill' stated for C1 and C25
+PASS  C9d nothing is declared in force
+
+SUMMARY: 319 passed, 0 failed
+exit status: 0

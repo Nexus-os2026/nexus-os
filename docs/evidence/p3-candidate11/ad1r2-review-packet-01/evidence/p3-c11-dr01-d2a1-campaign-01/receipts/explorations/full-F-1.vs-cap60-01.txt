@@ -1,0 +1,22 @@
+F-1 at 244c5b23 (this campaign) vs F-1 at 243501f0 (CAP60-01, same 60M override)
+  commit   now:  244c5b23244d1abd8b2b595c9e7654a25029a9f1  tree: 1e0c76d8ba6aa437d5d02367c81c4de9d46ffc78
+           then: 243501f08a575541444564f58f61ef3846affef0  tree: ced955234f8c6e0b084a2d8e76a154d2c37bea06  [differs]
+  exe      now:  39638e6fae7ca77339430be81a2432270ff7896be30349e50e0adaafd1088917
+           then: 1c16891f097d2329069b5ac8db649779d9efea2e92f62884c6b4d74f3060835c  [differs]
+  outcome  now:  PASS
+           then: PASS  [same]
+  bounds   now:  facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+           then: facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s  [same]
+  actors   now:  [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+           then: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]  [same]
+  states   now:  46524336 (expanded 46524336), transitions 209297440 (with a fault 21234651), states with no enabled step 8696
+           then: 46524336 (expanded 46524336), transitions 209123584 (with a fault 21060795), states with no enabled step 8696  [differs]
+  elapsed  now:  243.1 s; explorer tables 3776 MiB
+           then: 243.2 s; explorer tables 3776 MiB  [differs]
+  rss      now:  5669940
+           then: 5669760  [differs]
+  wall     now:  4:03.66
+           then: 4:03.72  [differs]
+  property verdicts identical: True
+  branch labels taken identical: True (42 vs 42)
+  state key field list identical: True

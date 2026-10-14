@@ -1,0 +1,76 @@
+STAGE 6 — REMAINING CONFIGURATION AND CONTROL MATRIX (read-only)
+P3-C11-DR01-D2A1-AD1R1-MUT-READINESS-01. Source: contract 7.5 and 8.3 (cac65351…3b3c); model_tests.rs at 42dd1bd1.
+"Final-commit evidence" is NONE for every row. Under ruling I no earlier receipt counts. "Earlier" columns are
+informational.
+
+==================================================================================================================
+1. THE 15 FULL CONFIGURATIONS (8.3)
+==================================================================================================================
+Id    Explorer for 8.3      Ceiling        Earlier result (informational)                  Controls on it
+F-1   original              60M (A)        PASS 46,524,336 states, 244c5b23 and 243501f0  C1 C2 C10 C24 C25 A1 A2
+F-2   original              30M            PASS 12,602,670, 244c5b23                      C20 C23 A5
+F-3   composed quotient(E)  30M keys (C)   original INCOMPLETE (30,000,002; 60,000,001);   (C7 without A4: E11,
+                                           composed PASS 20,431,851 keys, 77a146ca          extra, not kill-required)
+F-4   original              30M            never run                                       C26
+F-5   original              30M            never run                                       C5 A3 A6
+F-6   original              30M            never run                                       C3b C3c
+F-7   original              30M            never run                                       C3a
+F-8   original              30M            never run                                       C4
+F-PT  composed quotient(E)  30M keys (C)   composed PASS 29,751,473 keys, 2d83b74b         C6 C7; A4 (nothing may fail)
+F-B   composed quotient(E)  30M keys (C)   composed PASS 3,775,373 keys, 2d83b74b          C8
+F-B2  original              30M            never run                                       C9 C11 C17
+F-G   original              30M            never run                                       C18a C18b
+F-W   original              30M            never run (the only E10 HOLD)                   —
+F-D   original              30M            never run (L1 not claimed)                      C16
+F-R   original              30M            never run                                       C15
+Remaining never-run original configurations: F-4 F-5 F-6 F-7 F-8 F-B2 F-G F-W F-D F-R (ten).
+Every one of the 15 is to be run once at the exact final commit (plan item 7).
+
+==================================================================================================================
+2. THE 35 KILL-REQUIRED CONTROLS, AND A4
+==================================================================================================================
+Explorer-killed (24): the original explorer on the mutant (F). Restored receipt: the configuration's final PASS.
+For F-PT and F-B it may be the accepted quotient PASS.
+  Id    Change (contract 7.5)                                         Named    On     Attribution note
+  C1    the count becomes a flag                                      P1       F-1    G: first failure E3;
+                                                                                         witness P1 (probed here)
+  C2    the gating entry rule does not test C and X                   P4       F-1    unanalysed
+  C3a   acknowledgement test 2 removed                                P13|P15  F-7    unanalysed
+  C3b   acknowledgement test 4 removed                                P13|P12  F-6    unanalysed
+  C3c   acknowledgement test 5 removed                                P12      F-6    unanalysed
+  C4    acknowledgement test 1 removed                                P4, P8   F-8    unanalysed
+  C5    resolve raises the frontier unchecked (ack in U)              P13      F-5    unanalysed
+  C6    row b ignores the refusal table, with A4                      P6       F-PT   original explorer only (F)
+  C7    Explained removes every table entry, with A4                  P6       F-PT   original explorer only (F)
+  C8    members classified and inserted one at a time                 E5       F-B    original explorer only (F)
+  C9    Rollback::Unknown treated as Undone                           E4       F-B2   flagged (F3-CAP60-01): ordering
+  C10   Commit::Unknown + Rollback::Undone gives Not written          E4       F-1    flagged (F3-CAP60-01): ordering
+  C11   constraint failure gives Not written whatever the rollback    E4       F-B2   unanalysed
+  C12   the publication is two exchanges                              E2       X-1    default exploration, 250k
+  C15   a cell operation ignores the occupancy number                 E8       F-R    unanalysed
+  C16   the drop of a Counted ticket lowers the count                 E3       F-D    unanalysed
+  C17   the guard reports Not written after an insert                 E4       F-B2   unanalysed
+  C18a  a refused gating append leaves U occupied                     E7       F-G    unanalysed
+  C18b  a gating conflict makes a table entry                         E7       F-G    unanalysed
+  C20   an explanation found present is not marked committed          L1       F-2    L1 runs only after a complete
+                                                                                         search
+  C23   the publication omits the X bit                               E1       F-2    unanalysed
+  C24   resolve empties U without placing the correction              P8       F-1    flagged (F3-CAP60-01): ordering
+  C25   a gating append answers Committed on Commit::Unknown          P7       F-1    G: first failure E4;
+                                                                                         witness P7 (probed here);
+                                                                                         exact text open
+  C26   a passed barrier clears the latch                             E9       F-4    unanalysed
+Unit-killed (6): the named test fails on the mutant (C22: build failure E0283 at the assertion's line).
+  C14 T-BIND   C19 T-CELL   C21 W6   C22 T-OWN (E0283)   C27 T-PREC   C28 T-RES
+Actor changes (5) and A4:
+  A1  the writer confirms before it records                           P1       F-1    unanalysed
+  A2  admission split into two steps under two holds                  P1       F-1    unanalysed (ADM-quotient
+                                                                                         negatives exercise it)
+  A3  the worker empties X before it raises H                         P12      F-5    unanalysed
+  A5  settlement claims a Conflict while not Healthy                  L1       F-2    L1 after a complete search
+  A6  "recovery required" is a flag                                   P12|P15  F-5    unanalysed
+  A4  the drop paths record a blanket Uncertain                       nothing  F-PT   evidenced by F-PT's 8.3 PASS,
+                                                                       may fail         compared with F-3's PASS
+Count: 24 + 6 + 5 = 35 kill-required; A4 is a PASS requirement, not a kill.
+"unanalysed" means that no one has checked whether another property is reported first. "flagged" marks a row that
+F3-CAP60-01 named as a candidate for the C1/C25 pattern; it is not established.

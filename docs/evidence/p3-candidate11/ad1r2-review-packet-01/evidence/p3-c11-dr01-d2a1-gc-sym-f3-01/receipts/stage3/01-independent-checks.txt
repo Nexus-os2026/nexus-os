@@ -1,0 +1,24 @@
+STAGE 3 — INDEPENDENT CHECKS ON THE RUN RECEIPT  2026-10-13T23:21:59+01:00
+receipt: receipts/stage3/gc-symmetry-full-F-3.txt sha256 7b74575155684fc82c4020e130e84e382029940a24b2c661fa0bd8196dfbfd82
+[1] guard / failure markers: panicked 0; 'symmetry inapplicable' 0; 'quotient inapplicable' 0; '  FAIL' 0; 'INCOMPLETE' 0
+[2] outcome: outcome: PASS; harness: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 324 filtered out; finished in 336.10s
+[3] count identities (all from the printed report):
+    unexpanded = states 20,431,851 - expanded 20,431,851 = 0
+    non-fault = transitions 77,342,551 - fault 6,034,170 = 71,308,381 = L1 line's non-fault edges
+    admission evaluations 20,431,851 = expanded keys (one ADM evaluation per expanded key)
+    L1 end states 13,996 = states with no enabled (non-ADM) step 13,996, each terminal (D1)
+[4] branch coverage, first report copy of each receipt (earlier INCOMPLETE receipts print the report twice:
+    once by println!, once in the failed assertion's message; this PASS receipt prints it once)
+    sym      lines 93  listed taken 53  listed NOT TAKEN 37  taken outside the list 3  sha256 2e49b614390771cd
+    orig30M  lines 93  listed taken 53  listed NOT TAKEN 37  taken outside the list 3  sha256 2e49b614390771cd
+    orig60M  lines 93  listed taken 53  listed NOT TAKEN 37  taken outside the list 3  sha256 2e49b614390771cd
+    admq30M  lines 93  listed taken 53  listed NOT TAKEN 37  taken outside the list 3  sha256 2e49b614390771cd
+    sym vs orig30M : BYTE-IDENTICAL
+    sym vs orig60M : BYTE-IDENTICAL
+    sym vs admq30M : BYTE-IDENTICAL
+    (the earlier first-pass comparison over whole receipts reported DIFFER only because of the second copy; scratch only, not sealed)
+    NOT TAKEN in the complete run (37): snapshot x6 and append_acknowledgement x12 and malformed snapshot x3 (F-3 has no
+    acknowledgement actor); DROP; append_gating Conflict(IdentityContent) (no gating conflict in F-3); lookup Conflict(cause),
+    Conflict(explained); explain Unknown; barrier unwound; resolve ConflictPlaced, Acknowledged, Inconsistent, Stale, unwound;
+    append_cell C Stale, unwound; append_cell X Stale, unwound; empty Stale.
+    count check: 37

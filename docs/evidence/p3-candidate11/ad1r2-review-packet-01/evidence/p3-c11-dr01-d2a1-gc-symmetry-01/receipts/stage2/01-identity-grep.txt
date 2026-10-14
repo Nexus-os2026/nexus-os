@@ -1,0 +1,119 @@
+Identity and ordering grep at 83816e66 (model_tests.rs lines 1-4814 = original region; protocol.rs whole)
+== model_tests.rs identity uses
+279:fn gating_key(g: u8) -> RecordKey {
+300:fn gating_member(g: u8) -> Member {
+302:        key: gating_key(g),
+308:fn original_of(key: &RecordKey) -> Option<u8> {
+311:        .or_else(|| (0..2).find(|&g| gating_key(g) == *key).map(|g| g + 2))
+314:fn gating_of(key: &RecordKey) -> Option<u8> {
+315:    (0..2).find(|&g| gating_key(g) == *key)
+345:    /// An explanation of an original (see `original_of`); it requires
+367:            SimRow::Other(g) => RecordKey {
+368:                id: gating_key(g).id,
+372:            SimRow::Gating(g) => gating_key(g),
+373:            SimRow::Explanation(o) => RecordKey {
+377:            SimRow::Correction(g, exit) => RecordKey {
+439:        if let SimRow::Explanation(o) = row {
+441:                mask |= 1 << o;
+454:        .rposition(|row| matches!(row, SimRow::Explanation(_)))
+486:        explained: original_of(&key)
+487:            .and_then(|o| find_seq(rows, |row| *row == SimRow::Explanation(o))),
+488:        corrected: gating_of(&key).and_then(|g| {
+491:                |row| matches!(row, SimRow::Correction(h, _) if *h == g),
+503:    if let Some(g) = gating_of(&member.key) {
+504:        return SimRow::Gating(g);
+511:        Occupant::Correction { about, exit, .. } => SimRow::Correction(
+512:            gating_of(about).expect("a correction about a gating record"),
+516:            SimRow::Explanation(original_of(original).expect("an explanation of a known original"))
+794:            original_of(key).and_then(|o| find_seq(rows, |row| *row == SimRow::Explanation(o)))
+1081:fn bit(i: u8) -> u8 {
+1082:    1 << i
+1096:    if config.gating_conflict {
+1097:        rows.push(SimRow::Other(1));
+1138:        gc: vec![GcPos::Start; config.gating as usize],
+1563:            SimRow::Gating(g) => {
+1567:            SimRow::Explanation(o) => {
+1571:            SimRow::Correction(g, exit) => {
+1664:    for gc in &w.gc {
+2031:            2 => SimRow::Gating(d.byte()),
+2032:            3 => SimRow::Explanation(d.byte()),
+2033:            4 => SimRow::Correction(d.byte(), exit_from(d.byte())),
+2094:    let gc = (0..config.gating)
+2337:    all.extend((0..config.gating).map(Actor::Gc));
+2369:        w.ghost.unrecorded &= !bit(f);
+2381:                w.ghost.unrecorded &= !bit(f);
+2391:        w.ghost.unrecorded |= bit(f);
+2393:            w.ghost.conflicted |= bit(f);
+2395:                w.ghost.conflicted_e6 |= bit(f);
+2582:                                w.ghost.unrecorded &= !bit(f);
+2692:            w.ghost.conflicted |= bit(f);
+2693:            w.ghost.conflicted_e6 |= bit(f);
+3020:    if w.gc[g as usize] == GcPos::Done {
+3023:    let record = GatingRecord::new(gating_member(g));
+3024:    let key = gating_key(g);
+3026:        w.core.known(&key, None).is_some() || w.rows.contains(&SimRow::Explanation(g + 2));
+3036:        w.ghost.issued |= bit(g);
+3059:            w.ghost.told |= bit(g);
+3060:            if !w.rows.contains(&SimRow::Gating(g)) {
+3103:    w.gc[g as usize] = GcPos::Done;
+3118:            let mask = set.digest[0];
+3119:            let lowest = mask & mask.wrapping_neg();
+3120:            set.digest[0] = mask & !lowest;
+3289:            SimRow::Acknowledgement { set, .. } => Some(set.digest[0]),
+3295:        if let SimRow::Explanation(o) = row {
+3296:            if covered & bit(*o) == 0 {
+3365:        Actor::Gc(g) => step_gc(w, g, o, obs),
+3450:        if class == Class::Retired && !w.rows.contains(&SimRow::Explanation(f)) {
+3456:        if class == Class::Paid && w.ghost.conflicted & bit(f) != 0 {
+3461:            if w.ghost.conflicted_e6 & bit(f) != 0 {
+3472:    for g in 0..config.gating {
+3473:        let record_in = w.rows.contains(&SimRow::Gating(g));
+3474:        if w.ghost.told & bit(g) != 0 && !record_in {
+3477:        if w.ghost.issued & bit(g) != 0 && w.ghost.told & bit(g) == 0 {
+3478:            let key = gating_key(g);
+3485:                .any(|row| matches!(row, SimRow::Correction(h, _) if *h == g));
+3538:                let o = original_of(key).unwrap_or(u8::MAX);
+3539:                if !obs.explained.contains(key) || !after.rows.contains(&SimRow::Explanation(o)) {
+3552:        && w.gc.iter().all(|gc| *gc == GcPos::Done)
+3622:            slots: vec![EMPTY; 1 << 16],
+4034:        config.gating,
+4035:        config.gating_conflict,
+4508:    let record = GatingRecord::new(gating_member(0));
+4542:            w.ghost.issued |= bit(0);
+4544:            let in_ledger = w.rows.contains(&SimRow::Gating(0));
+4618:            record: GatingRecord::new(gating_member(0)),
+4625:            about: gating_key(1),
+4676:            record: GatingRecord::new(gating_member(0)),
+== model_tests.rs ordering ops
+1105:        refusals: REFUSAL_LIMIT,
+1512:    e.u(core.refusals.len() as u64);
+1513:    for (key, cause) in &core.refusals {
+2005:    let mut refusals = BTreeMap::new();
+2008:        refusals.insert(key, d.cause());
+2021:        refusals,
+2988:            w.table.a = w.table.a.max(frontier);
+2990:                w.table.h = w.table.h.max(*seq);
+3010:            w.table.h = w.table.h.max(seq);
+3085:                    if w.core.u.is_some() || !x_holds || w.core.refusals.contains_key(&key) {
+3121:            set.count = set.count.saturating_sub(1).max(1);
+3241:            w.table.a = w.table.a.max(n);
+3508:    if w.core.refusals.len() > REFUSAL_LIMIT as usize {
+3533:    for (key, cause) in &before.core.refusals {
+3534:        match after.core.refusals.get(key) {
+4584:    refusals: REFUSAL_LIMIT,
+4632:    core.refusals.insert(fact_key(1), duplicate_role(1, 2));
+4746:            c.refusals.insert(fact_key(0), duplicate_role(0, 2));
+4748:        ("refusal entry removed", |c| c.refusals.clear()),
+4750:            c.refusals.insert(fact_key(1), duplicate_role(1, 3));
+== protocol.rs ordering ops and refusal-table uses
+100:    pub(super) refusals: u32,
+781:    refusals: BTreeMap<RecordKey, Cause>,
+904:            refusals: BTreeMap::new(),
+905:            refusal_limit: limits.refusals.max(1),
+1156:        self.refusals.len() >= usize::try_from(self.refusal_limit).unwrap_or(usize::MAX)
+1162:        if let Some(cause) = self.refusals.get(key) {
+1221:        self.refusals.insert(member.key, cause);
+1533:                self.core.refusals.insert(*key, cause);
+1560:                self.core.refusals.remove(key);
+1575:            None => match core.refusals.get(key).copied() {
+1943:                self.core.refusals.remove(&original);
