@@ -1,0 +1,212 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R2-01 — INPUT AUTHENTICATION (read-only)
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); mission effort: High
+
+[1] frozen baseline Candidate C (mission 3, 9.A)
+    OK        type: commit
+    OK        tree: 51bac5fd335999cc995c0ab9f582a30244973ef0
+    OK        parents (single): 71264aa81a40b86189783facc8437e0427887c16
+    OK        protocol.rs blob at C: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        protocol.rs at the R1 evidence commit equals C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        protocol/model_tests.rs blob at C: 28085ce232827301104b5d757af042ec933976f8
+    OK        protocol/model_tests.rs at the R1 evidence commit equals C's: 28085ce232827301104b5d757af042ec933976f8
+    OK        protocol/unit_tests.rs blob at C: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        protocol/unit_tests.rs at the R1 evidence commit equals C's: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        protocol.rs content hashes to its blob: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        input copy inputs/C-protocol.rs sha256: a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+    OK        protocol/model_tests.rs content hashes to its blob: 28085ce232827301104b5d757af042ec933976f8
+    OK        input copy inputs/C-protocol-model_tests.rs sha256: 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972
+    OK        protocol/unit_tests.rs content hashes to its blob: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        input copy inputs/C-protocol-unit_tests.rs sha256: 841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159
+
+[2] the R1 evidence commit, the required evidence parent (mission 1, 9.B, 13)
+    OK        type: commit
+    OK        tree: 234ca0990434485f59ebda0ceff3086d4e66d797
+    OK        single parent: 59df21036f7c0183fa17d76b6e0886f8f5784685
+    OK        the R1 parent's tree: 12d5dd2405c59ce9a83c225c0e42b6585d8da107
+    OK        Candidate C is an ancestor: 0
+    OK        paths outside docs/evidence/ differing between C and the R1 evidence commit: []
+    OK        the R1 commit adds only its packet (72 files, all added): True
+    OK        R1 catalog.json blob: 56d4424397be7740cefd8d89b3530aab4b25d3ed
+    OK        R1 catalog.json sha256: a73d5721ec59a5d14abf5c31db72d1da1d34962d1db7294347797dd677ae6479
+    OK        input copy inputs/r1/catalog.json sha256: a73d5721ec59a5d14abf5c31db72d1da1d34962d1db7294347797dd677ae6479
+    OK        R1 definitions record blob: b947621bb0d56e1e14780853e886c7e832d7f6a3
+    OK        R1 definitions record sha256: beb9f5e3129bbd559dfa375251bddeac17f78d3f1b79082a42767944d7d48bf0
+    OK        input copy inputs/r1/ARCHITECT-CONTROL-DEFINITIONS-R1.md sha256: beb9f5e3129bbd559dfa375251bddeac17f78d3f1b79082a42767944d7d48bf0
+    OK        R1 packet SHA256SUMS: all 71 listed files verify at f8115904: []
+    OK        R1 SHA256SUMS lists every packet file except itself: 71
+    OK        R1 SHA256SUMS lists the R1 catalog with its sha256: a73d5721ec59a5d14abf5c31db72d1da1d34962d1db7294347797dd677ae6479
+    OK        R1 SHA256SUMS lists the R1 definitions record with its sha256: beb9f5e3129bbd559dfa375251bddeac17f78d3f1b79082a42767944d7d48bf0
+    OK        R1 catalog version: d2a1-controls-v1-r1-candidate
+    OK        R1 catalog status: CANDIDATE — INDEPENDENT ARCHITECT REVIEW PENDING
+    OK        R1 catalog counts: {'architect_defined': 21, 'blocked': 0, 'candidate_ready': 35, 'carried_forward': 14, 'comparison': 1, 'kill_required': 35}
+    OK        R1 kill-required ids (contract order, A4 excluded): ['C1', 'C2', 'C3a', 'C3b', 'C3c', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'C12', 'C15', 'C16', 'C17', 'C18a', 'C18b', 'C20', 'C23', 'C24', 'C25', 'C26', 'C14', 'C19', 'C21', 'C22', 'C27', 'C28', 'A1', 'A2', 'A3', 'A5', 'A6']
+    OK        R1 patch C1.patch sha256 equals its catalog record: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        R1 patch C1.patch equals its catalog patch text: True
+    OK        R1 C1 listed in R1 SHA256SUMS: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        input copy inputs/r1/patches/C1.patch sha256: 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252
+    OK        R1 patch C2.patch sha256 equals its catalog record: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        R1 patch C2.patch equals its catalog patch text: True
+    OK        R1 C2 listed in R1 SHA256SUMS: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        input copy inputs/r1/patches/C2.patch sha256: f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d
+    OK        R1 patch C3a.patch sha256 equals its catalog record: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        R1 patch C3a.patch equals its catalog patch text: True
+    OK        R1 C3a listed in R1 SHA256SUMS: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        input copy inputs/r1/patches/C3a.patch sha256: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        R1 patch C3b.patch sha256 equals its catalog record: 614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4
+    OK        R1 patch C3b.patch equals its catalog patch text: True
+    OK        R1 C3b listed in R1 SHA256SUMS: 614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4
+    OK        input copy inputs/r1/patches/C3b.patch sha256: 614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4
+    OK        R1 patch C3c.patch sha256 equals its catalog record: 1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85
+    OK        R1 patch C3c.patch equals its catalog patch text: True
+    OK        R1 C3c listed in R1 SHA256SUMS: 1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85
+    OK        input copy inputs/r1/patches/C3c.patch sha256: 1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85
+    OK        R1 patch C4.patch sha256 equals its catalog record: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        R1 patch C4.patch equals its catalog patch text: True
+    OK        R1 C4 listed in R1 SHA256SUMS: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        input copy inputs/r1/patches/C4.patch sha256: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+    OK        R1 patch C5.patch sha256 equals its catalog record: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        R1 patch C5.patch equals its catalog patch text: True
+    OK        R1 C5 listed in R1 SHA256SUMS: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        input copy inputs/r1/patches/C5.patch sha256: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        R1 patch C6.patch sha256 equals its catalog record: 5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e
+    OK        R1 patch C6.patch equals its catalog patch text: True
+    OK        R1 C6 listed in R1 SHA256SUMS: 5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e
+    OK        input copy inputs/r1/patches/C6.patch sha256: 5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e
+    OK        R1 patch C7.patch sha256 equals its catalog record: b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+    OK        R1 patch C7.patch equals its catalog patch text: True
+    OK        R1 C7 listed in R1 SHA256SUMS: b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+    OK        input copy inputs/r1/patches/C7.patch sha256: b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+    OK        R1 patch C8.patch sha256 equals its catalog record: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        R1 patch C8.patch equals its catalog patch text: True
+    OK        R1 C8 listed in R1 SHA256SUMS: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        input copy inputs/r1/patches/C8.patch sha256: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        R1 patch C9.patch sha256 equals its catalog record: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        R1 patch C9.patch equals its catalog patch text: True
+    OK        R1 C9 listed in R1 SHA256SUMS: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        input copy inputs/r1/patches/C9.patch sha256: cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b
+    OK        R1 patch C10.patch sha256 equals its catalog record: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        R1 patch C10.patch equals its catalog patch text: True
+    OK        R1 C10 listed in R1 SHA256SUMS: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        input copy inputs/r1/patches/C10.patch sha256: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        R1 patch C11.patch sha256 equals its catalog record: 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768
+    OK        R1 patch C11.patch equals its catalog patch text: True
+    OK        R1 C11 listed in R1 SHA256SUMS: 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768
+    OK        input copy inputs/r1/patches/C11.patch sha256: 913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768
+    OK        R1 patch C12.patch sha256 equals its catalog record: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        R1 patch C12.patch equals its catalog patch text: True
+    OK        R1 C12 listed in R1 SHA256SUMS: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        input copy inputs/r1/patches/C12.patch sha256: d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803
+    OK        R1 patch C15.patch sha256 equals its catalog record: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        R1 patch C15.patch equals its catalog patch text: True
+    OK        R1 C15 listed in R1 SHA256SUMS: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        input copy inputs/r1/patches/C15.patch sha256: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        R1 patch C16.patch sha256 equals its catalog record: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        R1 patch C16.patch equals its catalog patch text: True
+    OK        R1 C16 listed in R1 SHA256SUMS: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        input copy inputs/r1/patches/C16.patch sha256: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        R1 patch C17.patch sha256 equals its catalog record: 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0
+    OK        R1 patch C17.patch equals its catalog patch text: True
+    OK        R1 C17 listed in R1 SHA256SUMS: 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0
+    OK        input copy inputs/r1/patches/C17.patch sha256: 37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0
+    OK        R1 patch C18a.patch sha256 equals its catalog record: 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa
+    OK        R1 patch C18a.patch equals its catalog patch text: True
+    OK        R1 C18a listed in R1 SHA256SUMS: 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa
+    OK        input copy inputs/r1/patches/C18a.patch sha256: 7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa
+    OK        R1 patch C18b.patch sha256 equals its catalog record: 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2
+    OK        R1 patch C18b.patch equals its catalog patch text: True
+    OK        R1 C18b listed in R1 SHA256SUMS: 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2
+    OK        input copy inputs/r1/patches/C18b.patch sha256: 830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2
+    OK        R1 patch C20.patch sha256 equals its catalog record: 5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f
+    OK        R1 patch C20.patch equals its catalog patch text: True
+    OK        R1 C20 listed in R1 SHA256SUMS: 5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f
+    OK        input copy inputs/r1/patches/C20.patch sha256: 5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f
+    OK        R1 patch C23.patch sha256 equals its catalog record: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        R1 patch C23.patch equals its catalog patch text: True
+    OK        R1 C23 listed in R1 SHA256SUMS: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        input copy inputs/r1/patches/C23.patch sha256: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        R1 patch C24.patch sha256 equals its catalog record: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        R1 patch C24.patch equals its catalog patch text: True
+    OK        R1 C24 listed in R1 SHA256SUMS: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        input copy inputs/r1/patches/C24.patch sha256: 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44
+    OK        R1 patch C25.patch sha256 equals its catalog record: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        R1 patch C25.patch equals its catalog patch text: True
+    OK        R1 C25 listed in R1 SHA256SUMS: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        input copy inputs/r1/patches/C25.patch sha256: 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732
+    OK        R1 patch C26.patch sha256 equals its catalog record: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        R1 patch C26.patch equals its catalog patch text: True
+    OK        R1 C26 listed in R1 SHA256SUMS: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        input copy inputs/r1/patches/C26.patch sha256: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        R1 patch C14.patch sha256 equals its catalog record: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        R1 patch C14.patch equals its catalog patch text: True
+    OK        R1 C14 listed in R1 SHA256SUMS: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        input copy inputs/r1/patches/C14.patch sha256: 2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4
+    OK        R1 patch C19.patch sha256 equals its catalog record: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        R1 patch C19.patch equals its catalog patch text: True
+    OK        R1 C19 listed in R1 SHA256SUMS: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        input copy inputs/r1/patches/C19.patch sha256: 066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f
+    OK        R1 patch C21.patch sha256 equals its catalog record: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        R1 patch C21.patch equals its catalog patch text: True
+    OK        R1 C21 listed in R1 SHA256SUMS: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        input copy inputs/r1/patches/C21.patch sha256: 65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8
+    OK        R1 patch C22.patch sha256 equals its catalog record: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        R1 patch C22.patch equals its catalog patch text: True
+    OK        R1 C22 listed in R1 SHA256SUMS: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        input copy inputs/r1/patches/C22.patch sha256: e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6
+    OK        R1 patch C27.patch sha256 equals its catalog record: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        R1 patch C27.patch equals its catalog patch text: True
+    OK        R1 C27 listed in R1 SHA256SUMS: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        input copy inputs/r1/patches/C27.patch sha256: bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f
+    OK        R1 patch C28.patch sha256 equals its catalog record: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+    OK        R1 patch C28.patch equals its catalog patch text: True
+    OK        R1 C28 listed in R1 SHA256SUMS: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+    OK        input copy inputs/r1/patches/C28.patch sha256: 519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868
+    OK        R1 patch A1.patch sha256 equals its catalog record: e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507
+    OK        R1 patch A1.patch equals its catalog patch text: True
+    OK        R1 A1 listed in R1 SHA256SUMS: e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507
+    OK        input copy inputs/r1/patches/A1.patch sha256: e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507
+    OK        R1 patch A2.patch sha256 equals its catalog record: 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2
+    OK        R1 patch A2.patch equals its catalog patch text: True
+    OK        R1 A2 listed in R1 SHA256SUMS: 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2
+    OK        input copy inputs/r1/patches/A2.patch sha256: 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2
+    OK        R1 patch A3.patch sha256 equals its catalog record: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        R1 patch A3.patch equals its catalog patch text: True
+    OK        R1 A3 listed in R1 SHA256SUMS: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        input copy inputs/r1/patches/A3.patch sha256: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        R1 patch A5.patch sha256 equals its catalog record: 913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32
+    OK        R1 patch A5.patch equals its catalog patch text: True
+    OK        R1 A5 listed in R1 SHA256SUMS: 913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32
+    OK        input copy inputs/r1/patches/A5.patch sha256: 913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32
+    OK        R1 patch A6.patch sha256 equals its catalog record: 02e1fd1b60d4b1255079f5533072f5a213a92f8db9214984eb8b527975b76e86
+    OK        R1 patch A6.patch equals its catalog patch text: True
+    OK        R1 A6 listed in R1 SHA256SUMS: 02e1fd1b60d4b1255079f5533072f5a213a92f8db9214984eb8b527975b76e86
+    OK        input copy inputs/r1/patches/A6.patch sha256: 02e1fd1b60d4b1255079f5533072f5a213a92f8db9214984eb8b527975b76e86
+    OK        R1 tools/section6.txt (mission R1 section 6 as received) listed in R1 SHA256SUMS: 514ef5c54602590ab438faacf6038d8297990d9740faf28af8db3073bfb0063a
+    OK        input copy inputs/r1/section6.txt sha256: 514ef5c54602590ab438faacf6038d8297990d9740faf28af8db3073bfb0063a
+
+[3] blocked catalog, contract, AD-1-R4, AD-1-R5 (sources the R1 catalog cites; read by the checkers)
+    OK        blocked catalog.json sha256 (at the R1 parent): a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747
+    OK        input copy inputs/blocked/catalog.json sha256: a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747
+    OK        contract sha256 (at c2c69e3a): cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        input copy inputs/CONTRACT-02-R1.md sha256: cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        AD-1-R4 sha256 (at the R1 commit): 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    OK        input copy inputs/AD1-R4.md sha256: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    OK        AD-1-R5 sha256 (at the R1 commit): 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        input copy inputs/AD1-R5.md sha256: 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        AD-1-R5 Owner-adoption record sha256: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        input copy inputs/R5-OWNER-ADOPTION.md sha256: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        R1 catalog cites these sources' sha256: ('00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693', '4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473', 'a0cdef7976bbb1715a7da25ad2900c978a32c6b3d9029b46f16872eda66b4747')
+
+[4] pinned unchanged-baseline executable (hashed and sized only; never run)
+    OK        executable sha256: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+    OK        executable size: 8984464
+
+[5] remote and local refs (git ls-remote github; read-only)
+    info      remote refs 194
+    OK        remote refs/heads/review/p3-c11-d2a1-control-definitions-r1-01 (the R1 review ref): f81159046bf0b62666851bc1185992318302d31f
+    OK        remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-01: 59df21036f7c0183fa17d76b6e0886f8f5784685
+    OK        destination refs/heads/review/p3-c11-d2a1-control-definitions-r2-01 absent on the remote: False
+    OK        destination refs/heads/review/p3-c11-d2a1-control-definitions-r2-01 absent locally: None
+    info      remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+    info      remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+
+RESULT: ALL CHECKS OK

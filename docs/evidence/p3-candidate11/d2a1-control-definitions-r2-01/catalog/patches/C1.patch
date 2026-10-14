@@ -1,0 +1,14 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841..7d95dd42 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -173,6 +173,9 @@ fn with_field(word: u64, shift: u32, value: u64) -> u64 {
+ /// One checked step of a count. A step that would overflow or underflow
+ /// sets the handover fault and leaves the count as it is (section 4.3).
+ fn count_step(word: u64, shift: u32, up: bool) -> u64 {
++    if shift == UNAPPLIED_SHIFT {
++        return with_field(word, shift, u64::from(up));
++    }
+     let now = field(word, shift);
+     let next = if up {
+         now.checked_add(1).filter(|next| *next <= COUNT_MAX)

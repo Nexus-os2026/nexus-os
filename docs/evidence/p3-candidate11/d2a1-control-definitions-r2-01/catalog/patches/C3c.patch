@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..5cc9c09ac96062c5d348e86ace8cb0ac2225e83d 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1667,8 +1667,6 @@ impl<'a> Publish<'a> {
+             Some(AckRefusal::Empty)
+         } else if set.top > set.head || set.head > now.head {
+             Some(AckRefusal::Future)
+-        } else if now.count != set.count || now.digest != set.digest {
+-            Some(AckRefusal::Set)
+         } else {
+             None
+         };

@@ -1,0 +1,89 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R2-01 — mission sections 1 and 4 as received (transcribed by the executor from
+the mission text; the mission text is not a repository artifact)
+
+============================================================
+1. ARCHITECT RULING
+============================================================
+
+The independent review of:
+
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R1-01
+
+found ONE blocking defect.
+
+The semantic encodings of all 21 newly defined controls pass
+source review.
+
+The 34 documentary patches other than A6 pass review unchanged.
+
+A6's semantic encoding passes review:
+
+- recovery_required is added to Table;
+- initialized false;
+- encoded;
+- decoded;
+- set when H actually increases;
+- cleared when A actually increases;
+- used instead of H <= A by admission;
+- numeric H/A and P12/P15 remain unchanged.
+
+The defect is only this:
+
+A6 adds recovery_required to the state key but does not update
+KEY_FIELDS, which every exploration report prints.
+
+Therefore:
+
+- R1 catalog is NOT accepted or frozen.
+- No mutation execution is authorized.
+- Only the A6 receipt-metadata repair below is authorized.
+
+============================================================
+4. EXACT A6 REPAIR
+============================================================
+
+Start from the exact R1 A6 patch.
+
+Preserve byte-for-byte all of its existing semantic changes:
+
+- Table.recovery_required;
+- initialization;
+- encoding;
+- decoding;
+- H event update;
+- A event update;
+- WkPos::RaiseH update;
+- AckPos::Applying update;
+- admission predicate.
+
+Add exactly one additional hunk in:
+
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+
+Item:
+
+KEY_FIELDS
+
+Replace only:
+
+the test's table (classes, debt counter, H, A);
+
+with:
+
+the test's table (classes, debt counter, H, A, recovery_required);
+
+No other text in KEY_FIELDS may change.
+
+Do not:
+
+- rename the field;
+- alter the key layout;
+- move its encoded position;
+- change a property;
+- change a transition;
+- change a trace;
+- change a branch label;
+- alter another control.
+
+The KEY_FIELDS hunk is receipt metadata.
+It is not a second semantic mutation.

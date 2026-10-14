@@ -1,0 +1,760 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R2-01 — STATIC CHECKER B (strict diff engine + tokenizer)
+pass inputs <inputs> CONTRACT-02-R1.md sha256
+pass inputs <inputs> AD1-R4.md sha256
+pass inputs <inputs> AD1-R5.md sha256
+pass inputs <inputs> blocked/catalog.json sha256
+pass inputs <inputs> ls-tree C crates/nexus-governed-control/src/ledger/protocol.rs -> a2df2841, content hashes to it
+pass inputs <inputs> ls-tree C crates/nexus-governed-control/src/ledger/protocol/model_tests.rs -> 28085ce2, content hashes to it
+pass inputs <inputs> ls-tree C crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs -> 55dc6640, content hashes to it
+== identity
+pass catalog <ids> contract ids: 36 distinct (C13 absent)
+pass catalog <ids> catalog ids == contract ids, same order, no duplicate, none missing :: []
+pass catalog <ids> 35 kill-required = 36 minus A4
+pass A4 <a4> A4: one separate accepted comparison, counted nowhere as a mutation
+pass catalog <counts> version; counts 35/1/35/0; carried 14 + defined 21 = 35
+pass catalog <wording> no frozen / ready-for-execution claim; 'architect accepted' only as A4's status :: []
+== per control
+pass C1 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C1 <property> property and configuration equal the contract row
+pass C1 <property> a section-5 carried-forward id
+pass C1 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C1 <patch> patch file sha256 and text as catalogued
+pass C1 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C1 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C1 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C1 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C1 <identity> mutant blob and sha256 as catalogued
+pass C1 <distinct> patch and mutant distinct from all earlier controls
+pass C2 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C2 <property> property and configuration equal the contract row
+pass C2 <property> a section-5 carried-forward id
+pass C2 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C2 <patch> patch file sha256 and text as catalogued
+pass C2 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C2 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C2 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C2 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C2 <identity> mutant blob and sha256 as catalogued
+pass C2 <distinct> patch and mutant distinct from all earlier controls
+pass C3a <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C3a <property> property and configuration equal the contract row
+pass C3a <property> file, property and configuration equal mission section 6
+pass C3a <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C3a <patch> patch file sha256 and text as catalogued
+pass C3a <single-file> exactly one file section, a/ and b/ of the named source file
+pass C3a <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C3a <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C3a <identity> mutant blob and sha256 as catalogued
+pass C3a <distinct> patch and mutant distinct from all earlier controls
+pass C3b <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C3b <property> property and configuration equal the contract row
+pass C3b <property> file, property and configuration equal mission section 6
+pass C3b <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C3b <patch> patch file sha256 and text as catalogued
+pass C3b <single-file> exactly one file section, a/ and b/ of the named source file
+pass C3b <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C3b <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C3b <identity> mutant blob and sha256 as catalogued
+pass C3b <distinct> patch and mutant distinct from all earlier controls
+pass C3c <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C3c <property> property and configuration equal the contract row
+pass C3c <property> file, property and configuration equal mission section 6
+pass C3c <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C3c <patch> patch file sha256 and text as catalogued
+pass C3c <single-file> exactly one file section, a/ and b/ of the named source file
+pass C3c <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C3c <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C3c <identity> mutant blob and sha256 as catalogued
+pass C3c <distinct> patch and mutant distinct from all earlier controls
+pass C4 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C4 <property> property and configuration equal the contract row
+pass C4 <property> a section-5 carried-forward id
+pass C4 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C4 <patch> patch file sha256 and text as catalogued
+pass C4 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C4 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C4 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C4 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C4 <identity> mutant blob and sha256 as catalogued
+pass C4 <distinct> patch and mutant distinct from all earlier controls
+pass C5 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C5 <property> property and configuration equal the contract row
+pass C5 <property> file, property and configuration equal mission section 6
+pass C5 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C5 <patch> patch file sha256 and text as catalogued
+pass C5 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C5 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C5 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C5 <identity> mutant blob and sha256 as catalogued
+pass C5 <distinct> patch and mutant distinct from all earlier controls
+pass C6 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C6 <property> property and configuration equal the contract row
+pass C6 <property> file, property and configuration equal mission section 6
+pass C6 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C6 <patch> patch file sha256 and text as catalogued
+pass C6 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C6 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C6 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C6 <identity> mutant blob and sha256 as catalogued
+pass C6 <distinct> patch and mutant distinct from all earlier controls
+pass C7 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C7 <property> property and configuration equal the contract row
+pass C7 <property> file, property and configuration equal mission section 6
+pass C7 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C7 <patch> patch file sha256 and text as catalogued
+pass C7 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C7 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C7 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C7 <identity> mutant blob and sha256 as catalogued
+pass C7 <distinct> patch and mutant distinct from all earlier controls
+pass C8 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C8 <property> property and configuration equal the contract row
+pass C8 <property> file, property and configuration equal mission section 6
+pass C8 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C8 <patch> patch file sha256 and text as catalogued
+pass C8 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C8 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C8 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C8 <identity> mutant blob and sha256 as catalogued
+pass C8 <distinct> patch and mutant distinct from all earlier controls
+pass C9 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C9 <property> property and configuration equal the contract row
+pass C9 <property> a section-5 carried-forward id
+pass C9 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C9 <patch> patch file sha256 and text as catalogued
+pass C9 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C9 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C9 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C9 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C9 <identity> mutant blob and sha256 as catalogued
+pass C9 <distinct> patch and mutant distinct from all earlier controls
+pass C10 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C10 <property> property and configuration equal the contract row
+pass C10 <property> a section-5 carried-forward id
+pass C10 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C10 <patch> patch file sha256 and text as catalogued
+pass C10 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C10 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C10 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C10 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C10 <identity> mutant blob and sha256 as catalogued
+pass C10 <distinct> patch and mutant distinct from all earlier controls
+pass C11 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C11 <property> property and configuration equal the contract row
+pass C11 <property> file, property and configuration equal mission section 6
+pass C11 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C11 <patch> patch file sha256 and text as catalogued
+pass C11 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C11 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C11 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C11 <identity> mutant blob and sha256 as catalogued
+pass C11 <distinct> patch and mutant distinct from all earlier controls
+pass C12 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C12 <property> property and configuration equal the contract row
+pass C12 <property> a section-5 carried-forward id
+pass C12 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C12 <patch> patch file sha256 and text as catalogued
+pass C12 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C12 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C12 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C12 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C12 <identity> mutant blob and sha256 as catalogued
+pass C12 <distinct> patch and mutant distinct from all earlier controls
+pass C15 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C15 <property> property and configuration equal the contract row
+pass C15 <property> file, property and configuration equal mission section 6
+pass C15 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C15 <patch> patch file sha256 and text as catalogued
+pass C15 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C15 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C15 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C15 <identity> mutant blob and sha256 as catalogued
+pass C15 <distinct> patch and mutant distinct from all earlier controls
+pass C16 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C16 <property> property and configuration equal the contract row
+pass C16 <property> file, property and configuration equal mission section 6
+pass C16 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C16 <patch> patch file sha256 and text as catalogued
+pass C16 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C16 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C16 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C16 <identity> mutant blob and sha256 as catalogued
+pass C16 <distinct> patch and mutant distinct from all earlier controls
+pass C17 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C17 <property> property and configuration equal the contract row
+pass C17 <property> file, property and configuration equal mission section 6
+pass C17 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C17 <patch> patch file sha256 and text as catalogued
+pass C17 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C17 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C17 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C17 <identity> mutant blob and sha256 as catalogued
+pass C17 <distinct> patch and mutant distinct from all earlier controls
+pass C18a <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C18a <property> property and configuration equal the contract row
+pass C18a <property> file, property and configuration equal mission section 6
+pass C18a <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C18a <patch> patch file sha256 and text as catalogued
+pass C18a <single-file> exactly one file section, a/ and b/ of the named source file
+pass C18a <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C18a <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C18a <identity> mutant blob and sha256 as catalogued
+pass C18a <distinct> patch and mutant distinct from all earlier controls
+pass C18b <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C18b <property> property and configuration equal the contract row
+pass C18b <property> file, property and configuration equal mission section 6
+pass C18b <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C18b <patch> patch file sha256 and text as catalogued
+pass C18b <single-file> exactly one file section, a/ and b/ of the named source file
+pass C18b <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C18b <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C18b <identity> mutant blob and sha256 as catalogued
+pass C18b <distinct> patch and mutant distinct from all earlier controls
+pass C20 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C20 <property> property and configuration equal the contract row
+pass C20 <property> file, property and configuration equal mission section 6
+pass C20 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C20 <patch> patch file sha256 and text as catalogued
+pass C20 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C20 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C20 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C20 <identity> mutant blob and sha256 as catalogued
+pass C20 <distinct> patch and mutant distinct from all earlier controls
+pass C23 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C23 <property> property and configuration equal the contract row
+pass C23 <property> file, property and configuration equal mission section 6
+pass C23 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C23 <patch> patch file sha256 and text as catalogued
+pass C23 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C23 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C23 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C23 <identity> mutant blob and sha256 as catalogued
+pass C23 <distinct> patch and mutant distinct from all earlier controls
+pass C24 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C24 <property> property and configuration equal the contract row
+pass C24 <property> a section-5 carried-forward id
+pass C24 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C24 <patch> patch file sha256 and text as catalogued
+pass C24 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C24 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C24 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C24 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C24 <identity> mutant blob and sha256 as catalogued
+pass C24 <distinct> patch and mutant distinct from all earlier controls
+pass C25 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C25 <property> property and configuration equal the contract row
+pass C25 <property> a section-5 carried-forward id
+pass C25 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C25 <patch> patch file sha256 and text as catalogued
+pass C25 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C25 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C25 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C25 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C25 <identity> mutant blob and sha256 as catalogued
+pass C25 <distinct> patch and mutant distinct from all earlier controls
+pass C26 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C26 <property> property and configuration equal the contract row
+pass C26 <property> file, property and configuration equal mission section 6
+pass C26 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C26 <patch> patch file sha256 and text as catalogued
+pass C26 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C26 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C26 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C26 <identity> mutant blob and sha256 as catalogued
+pass C26 <distinct> patch and mutant distinct from all earlier controls
+pass C14 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C14 <property> a section-5 carried-forward id
+pass C14 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C14 <patch> patch file sha256 and text as catalogued
+pass C14 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C14 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C14 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C14 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C14 <identity> mutant blob and sha256 as catalogued
+pass C14 <distinct> patch and mutant distinct from all earlier controls
+pass C19 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C19 <property> a section-5 carried-forward id
+pass C19 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C19 <patch> patch file sha256 and text as catalogued
+pass C19 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C19 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C19 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C19 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C19 <identity> mutant blob and sha256 as catalogued
+pass C19 <distinct> patch and mutant distinct from all earlier controls
+pass C21 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C21 <property> a section-5 carried-forward id
+pass C21 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C21 <patch> patch file sha256 and text as catalogued
+pass C21 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C21 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C21 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C21 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C21 <identity> mutant blob and sha256 as catalogued
+pass C21 <distinct> patch and mutant distinct from all earlier controls
+pass C22 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C22 <property> a section-5 carried-forward id
+pass C22 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C22 <patch> patch file sha256 and text as catalogued
+pass C22 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C22 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C22 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C22 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C22 <identity> mutant blob and sha256 as catalogued
+pass C22 <distinct> patch and mutant distinct from all earlier controls
+pass C27 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C27 <property> a section-5 carried-forward id
+pass C27 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C27 <patch> patch file sha256 and text as catalogued
+pass C27 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C27 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C27 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C27 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C27 <identity> mutant blob and sha256 as catalogued
+pass C27 <distinct> patch and mutant distinct from all earlier controls
+pass C28 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass C28 <property> a section-5 carried-forward id
+pass C28 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass C28 <patch> patch file sha256 and text as catalogued
+pass C28 <carried> patch, anchor, replacement and mutant blob equal the blocked catalog's
+pass C28 <single-file> exactly one file section, a/ and b/ of the named source file
+pass C28 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass C28 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass C28 <identity> mutant blob and sha256 as catalogued
+pass C28 <distinct> patch and mutant distinct from all earlier controls
+pass A1 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass A1 <property> property and configuration equal the contract row
+pass A1 <property> file, property and configuration equal mission section 6
+pass A1 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass A1 <patch> patch file sha256 and text as catalogued
+pass A1 <single-file> exactly one file section, a/ and b/ of the named source file
+pass A1 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass A1 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass A1 <identity> mutant blob and sha256 as catalogued
+pass A1 <distinct> patch and mutant distinct from all earlier controls
+pass A2 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass A2 <property> property and configuration equal the contract row
+pass A2 <property> file, property and configuration equal mission section 6
+pass A2 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass A2 <patch> patch file sha256 and text as catalogued
+pass A2 <single-file> exactly one file section, a/ and b/ of the named source file
+pass A2 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass A2 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass A2 <identity> mutant blob and sha256 as catalogued
+pass A2 <distinct> patch and mutant distinct from all earlier controls
+pass A3 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass A3 <property> property and configuration equal the contract row
+pass A3 <property> file, property and configuration equal mission section 6
+pass A3 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1), (1, 1)]
+pass A3 <patch> patch file sha256 and text as catalogued
+pass A3 <single-file> exactly one file section, a/ and b/ of the named source file
+pass A3 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass A3 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass A3 <identity> mutant blob and sha256 as catalogued
+pass A3 <distinct> patch and mutant distinct from all earlier controls
+pass A5 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass A5 <property> property and configuration equal the contract row
+pass A5 <property> file, property and configuration equal mission section 6
+pass A5 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1)]
+pass A5 <patch> patch file sha256 and text as catalogued
+pass A5 <single-file> exactly one file section, a/ and b/ of the named source file
+pass A5 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass A5 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass A5 <identity> mutant blob and sha256 as catalogued
+pass A5 <distinct> patch and mutant distinct from all earlier controls
+pass A6 <status> definition CANDIDATE_READY, review pending, execution NOT_ATTEMPTED
+pass A6 <property> property and configuration equal the contract row
+pass A6 <property> file, property and configuration equal mission section 6
+pass A6 <anchor> every anchor's count at C equals its expected cardinality 1 and starts a line :: [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)]
+pass A6 <patch> patch file sha256 and text as catalogued
+pass A6 <single-file> exactly one file section, a/ and b/ of the named source file
+pass A6 <apply> strict forward application (no fuzz, no offset) gives the edits' bytes
+pass A6 <restoration> strict reverse application to the recorded mutant gives C's blob
+pass A6 <identity> mutant blob and sha256 as catalogued
+pass A6 <distinct> patch and mutant distinct from all earlier controls
+== R1 -> R2 (from the R1 evidence commit's git objects)
+pass catalog <r1-equality> R1 catalog read at f8115904 hashes to the mission's R1 sha256
+pass catalog <r1-equality> same 36 ids in the same order as R1
+pass catalog <r1-equality> R2 names R1 as the candidate it supersedes
+pass C1 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C1 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C1 <r1-equality> entry = R1's entry (canonical JSON)
+pass C2 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C2 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C2 <r1-equality> entry = R1's entry (canonical JSON)
+pass C3a <r1-equality> patch file bytes = the R1 blob's bytes
+pass C3a <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C3a <r1-equality> entry = R1's entry (canonical JSON)
+pass C3b <r1-equality> patch file bytes = the R1 blob's bytes
+pass C3b <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C3b <r1-equality> entry = R1's entry (canonical JSON)
+pass C3c <r1-equality> patch file bytes = the R1 blob's bytes
+pass C3c <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C3c <r1-equality> entry = R1's entry (canonical JSON)
+pass C4 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C4 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C4 <r1-equality> entry = R1's entry (canonical JSON)
+pass C5 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C5 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C5 <r1-equality> entry = R1's entry (canonical JSON)
+pass C6 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C6 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C6 <r1-equality> entry = R1's entry (canonical JSON)
+pass C7 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C7 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C7 <r1-equality> entry = R1's entry (canonical JSON)
+pass C8 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C8 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C8 <r1-equality> entry = R1's entry (canonical JSON)
+pass C9 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C9 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C9 <r1-equality> entry = R1's entry (canonical JSON)
+pass C10 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C10 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C10 <r1-equality> entry = R1's entry (canonical JSON)
+pass C11 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C11 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C11 <r1-equality> entry = R1's entry (canonical JSON)
+pass C12 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C12 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C12 <r1-equality> entry = R1's entry (canonical JSON)
+pass C15 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C15 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C15 <r1-equality> entry = R1's entry (canonical JSON)
+pass C16 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C16 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C16 <r1-equality> entry = R1's entry (canonical JSON)
+pass C17 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C17 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C17 <r1-equality> entry = R1's entry (canonical JSON)
+pass C18a <r1-equality> patch file bytes = the R1 blob's bytes
+pass C18a <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C18a <r1-equality> entry = R1's entry (canonical JSON)
+pass C18b <r1-equality> patch file bytes = the R1 blob's bytes
+pass C18b <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C18b <r1-equality> entry = R1's entry (canonical JSON)
+pass C20 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C20 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C20 <r1-equality> entry = R1's entry (canonical JSON)
+pass C23 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C23 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C23 <r1-equality> entry = R1's entry (canonical JSON)
+pass C24 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C24 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C24 <r1-equality> entry = R1's entry (canonical JSON)
+pass C25 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C25 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C25 <r1-equality> entry = R1's entry (canonical JSON)
+pass C26 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C26 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C26 <r1-equality> entry = R1's entry (canonical JSON)
+pass C14 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C14 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C14 <r1-equality> entry = R1's entry (canonical JSON)
+pass C19 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C19 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C19 <r1-equality> entry = R1's entry (canonical JSON)
+pass C21 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C21 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C21 <r1-equality> entry = R1's entry (canonical JSON)
+pass C22 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C22 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C22 <r1-equality> entry = R1's entry (canonical JSON)
+pass C27 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C27 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C27 <r1-equality> entry = R1's entry (canonical JSON)
+pass C28 <r1-equality> patch file bytes = the R1 blob's bytes
+pass C28 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass C28 <r1-equality> entry = R1's entry (canonical JSON)
+pass A1 <r1-equality> patch file bytes = the R1 blob's bytes
+pass A1 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass A1 <r1-equality> entry = R1's entry (canonical JSON)
+pass A2 <r1-equality> patch file bytes = the R1 blob's bytes
+pass A2 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass A2 <r1-equality> entry = R1's entry (canonical JSON)
+pass A3 <r1-equality> patch file bytes = the R1 blob's bytes
+pass A3 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass A3 <r1-equality> entry = R1's entry (canonical JSON)
+pass A4 <r1-equality> A4 = R1's A4 (canonical JSON)
+pass A5 <r1-equality> patch file bytes = the R1 blob's bytes
+pass A5 <r1-equality> patch, sha256, mutant blob/sha256, source file, property, test, configuration, receipt type, restoration, restored receipt, special rules = R1's :: []
+pass A5 <r1-equality> entry = R1's entry (canonical JSON)
+pass A6 <r1-equality> A6 differs from R1 only in fields derived from the KEY_FIELDS hunk :: []
+pass A6 <r1-equality> A6 source file, property, test, configuration, receipt type, restoration and special rules = R1's
+pass A6 <r1-equality> A6 edits: R1's eight first, unchanged (canonical JSON); one more, the KEY_FIELDS line, role receipt_metadata
+pass A6 <r2-a6> B's parser: R2's hunks = R1's 8 hunks (header, numbers, body) in order + exactly 1
+pass A6 <r2-a6> file header: same diff/---/+++ lines; index line differs only in the mutant blob
+pass A6 <r2-a6> the added hunk: one line of KEY_FIELDS removed and re-added with only the phrase changed
+pass A6 <r2-a6> strict application: R1 mutant and R2 mutant differ in one line, KEY_FIELDS'
+pass catalog <r1-equality> 34 controls identical to R1 (patch bytes and entry) :: 34
+== section 6 (token level)
+pass C3a <semantic> named items found once in C and in the mutant :: []
+pass C3a <confine-item> every changed base line lies inside a named item
+pass C3a <confine-item> tokens outside the named items identical
+pass C3a <semantic> item = healthy item with the whole clause `if set.frontier != now.frontier { Some(AckRefusal::Stale) } else` removed and nothing else
+pass C3a <semantic> the other three tests remain, each once
+pass C3a <semantic> recheck, rollback, insert and commit verbs remain
+pass C3b <semantic> named items found once in C and in the mutant :: []
+pass C3b <confine-item> every changed base line lies inside a named item
+pass C3b <confine-item> tokens outside the named items identical
+pass C3b <semantic> item = healthy item with the whole clause `else if set.top > set.head || set.head > now.head { Some(AckRefusal::Future) }` removed and nothing else
+pass C3b <semantic> the other three tests remain, each once
+pass C3b <semantic> recheck, rollback, insert and commit verbs remain
+pass C3c <semantic> named items found once in C and in the mutant :: []
+pass C3c <confine-item> every changed base line lies inside a named item
+pass C3c <confine-item> tokens outside the named items identical
+pass C3c <semantic> item = healthy item with the whole clause `else if now.count != set.count || now.digest != set.digest { Some(AckRefusal::Set) }` removed and nothing else
+pass C3c <semantic> the other three tests remain, each once
+pass C3c <semantic> recheck, rollback, insert and commit verbs remain
+pass C5 <semantic> named items found once in C and in the mutant :: []
+pass C5 <confine-item> every changed base line lies inside a named item
+pass C5 <confine-item> tokens outside the named items identical
+pass C5 <semantic> signature unchanged; body = raise frontier, empty U, Healthy, Acknowledged(set.top); no read
+pass C5 <semantic> io and nonce appear only in the signature
+pass C5 <semantic> caller resolve unchanged
+pass C6 <semantic> named items found once in C and in the mutant :: []
+pass C6 <confine-item> every changed base line lies inside a named item
+pass C6 <confine-item> tokens outside the named items identical
+pass C6 <semantic> row b: Known from X's explanation of this original, else facts.explained; refusal table not read
+pass C6 <semantic> Core::known and Publish::lookup unchanged
+pass C7 <semantic> named items found once in C and in the mutant :: []
+pass C7 <confine-item> every changed base line lies inside a named item
+pass C7 <confine-item> tokens outside the named items identical
+pass C7 <semantic> explain's Explained arm clears the table instead of removing one key; nothing else
+pass C7 <semantic> Publish::settle unchanged
+pass C8 <semantic> named items found once in C and in the mutant :: []
+pass C8 <confine-item> every changed base line lies inside a named item
+pass C8 <confine-item> tokens outside the named items identical
+pass C8 <semantic> no pending array, no BATCH_MAX, one for-loop, one insert verb
+pass C8 <semantic> everything before Step 3 (Steps 0 to 2) unchanged
+pass C8 <semantic> Step 6 onward unchanged
+pass C8 <semantic> in one member-order loop: facts, classify, then the insert at once (healthy Step-5 outcomes)
+pass C8 <semantic> refusal: conflict, one rollback, Not written with the classification reason
+pass C8 <semantic> no insert: the empty-transaction rollback and Committed after the loop
+pass C8 <semantic> facts read and its failure arm carried unchanged
+pass C11 <semantic> named items found once in C and in the mutant :: []
+pass C11 <confine-item> every changed base line lies inside a named item
+pass C11 <confine-item> tokens outside the named items identical
+pass C11 <semantic> fact Step-5 Constraint arm only: latch, failed, one rollback ignored, NotWritten + Constraint
+pass C11 <semantic> gating, acknowledgement and cell unchanged
+pass C15 <semantic> named items found once in C and in the mutant :: []
+pass C15 <confine-item> every changed base line lies inside a named item
+pass C15 <confine-item> tokens outside the named items identical
+pass C15 <semantic> names = same allocation && same cell; no occupancy test of any kind
+pass C16 <semantic> named items found once in C and in the mutant :: []
+pass C16 <confine-item> every changed base line lies inside a named item
+pass C16 <confine-item> tokens outside the named items identical
+pass C16 <semantic> Counted arm: count_step(word | HANDOVER_FAULT, UNAPPLIED_SHIFT, false); nothing else
+pass C16 <semantic> Ticket::confirm unchanged
+pass C17 <semantic> named items found once in C and in the mutant :: []
+pass C17 <confine-item> every changed base line lies inside a named item
+pass C17 <confine-item> tokens outside the named items identical
+pass C17 <semantic> unwind persistence always NotWritten; keep, phase, conflict, U, exit, publication unchanged
+pass C18a <semantic> named items found once in C and in the mutant :: []
+pass C18a <confine-item> every changed base line lies inside a named item
+pass C18a <confine-item> tokens outside the named items identical
+pass C18a <semantic> keep = true only in the classification-refused arm, before its rollback; nothing else
+pass C18a <semantic> the guard unchanged
+pass C18b <semantic> named items found once in C and in the mutant :: []
+pass C18b <confine-item> every changed base line lies inside a named item
+pass C18b <confine-item> tokens outside the named items identical
+pass C18b <semantic> gating branch: X explanation kept, table entry added, same conflict returned; nothing else
+pass C20 <semantic> named items found once in C and in the mutant :: []
+pass C20 <confine-item> every changed base line lies inside a named item
+pass C20 <confine-item> tokens outside the named items identical
+pass C20 <semantic> present path: settle only for C; Committed(seq) for both; Durable path unchanged
+pass C20 <semantic> Publish::settle unchanged
+pass C23 <semantic> named items found once in C and in the mutant :: []
+pass C23 <confine-item> every changed base line lies inside a named item
+pass C23 <confine-item> tokens outside the named items identical
+pass C23 <semantic> flags = healthy flags without the X bit term
+pass C26 <semantic> named items found once in C and in the mutant :: []
+pass C26 <confine-item> every changed base line lies inside a named item
+pass C26 <confine-item> tokens outside the named items identical
+pass C26 <semantic> latch cleared only after a run that returned true, before the phase assignment
+pass A1 <semantic> named items found once in C and in the mutant :: []
+pass A1 <confine-item> every changed base line lies inside a named item
+pass A1 <confine-item> tokens outside the named items identical
+pass A1 <semantic> Got with a ticket: option 0 confirms, records nothing, keeps Got(held); options, unwind and DROP unchanged; Got without a ticket: the healthy record block verbatim, then Done, no choice
+pass A1 <semantic> settlement unchanged; no new FwPos variant
+pass A2 <semantic> named items found once in C and in the mutant :: []
+pass A2 <confine-item> every changed base line lies inside a named item
+pass A2 <confine-item> tokens outside the named items identical
+pass A2 <semantic> two steps keyed by adm_kept: step one keeps view & FLAGS, enabled, no decrement/branch/property; step two keeps only unapplied, decides with the healthy expression, clears, decrements once
+pass A2 <semantic> World unchanged (no new field)
+pass A3 <semantic> named items found once in C and in the mutant :: []
+pass A3 <confine-item> every changed base line lies inside a named item
+pass A3 <confine-item> tokens outside the named items identical
+pass A3 <semantic> Seen raises no H; Act: worker_op, then RaiseH(seq) for EmptyX else Idle; RaiseH unchanged
+pass A3 <semantic> no new WkPos variant
+pass A5 <semantic> named items found once in C and in the mutant :: []
+pass A5 <confine-item> every changed base line lies inside a named item
+pass A5 <confine-item> tokens outside the named items identical
+pass A5 <semantic> Conflict guard loses only the Healthy conjunct; X-empty, Explain and the other arms unchanged
+pass A6 <semantic> named items found once in C and in the mutant :: []
+pass A6 <confine-item> every changed base line lies inside a named item
+pass A6 <confine-item> tokens outside the named items identical
+pass A6 <semantic> Table: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> initial: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> encode: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> decode: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> step_wk: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> step_ack: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> step_adm: the section-6.21 rule as a token transformation, nothing else
+pass A6 <semantic> P12/P15 admission properties unchanged
+pass A6 <keyfields> KEY_FIELDS is `const KEY_FIELDS: &str = <one string literal>;` in C and in the mutant
+pass A6 <keyfields> KEY_FIELDS string token = C's token with the one phrase replaced, nothing else
+pass A6 <keyfields> KEY_FIELDS evaluated: C's value with only the table's description changed
+pass A6 <keyfields> KEY_FIELDS evaluated: recovery_required named exactly once; the R1 description gone
+pass A6 <keyfields> the state key's table: Table's fields = the fields encode writes = the fields decode reads = the names KEY_FIELDS prints, one each, in one order
+pass A6 <keyfields> three report sites print KEY_FIELDS, unchanged; each would print the new table description
+== tests, receipts, special rules
+pass catalog <receipt> AD-1-R4 F.1 defines types (a), (b), (d), (e1), (e2), (e4)
+pass C1 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass C1 <receipt> mutant receipt (a), restored (e1)
+pass C1 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C2 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass C2 <receipt> mutant receipt (a), restored (e1)
+pass C2 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C3a <test> full_f7: #[test] at C, ignore status as catalogued, runs F-7's constant, listed in the pinned executable
+pass C3a <receipt> mutant receipt (a), restored (e1)
+pass C3a <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C3b <test> full_f6: #[test] at C, ignore status as catalogued, runs F-6's constant, listed in the pinned executable
+pass C3b <receipt> mutant receipt (a), restored (e1)
+pass C3b <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C3c <test> full_f6: #[test] at C, ignore status as catalogued, runs F-6's constant, listed in the pinned executable
+pass C3c <receipt> mutant receipt (a), restored (e1)
+pass C3c <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C4 <test> full_f8: #[test] at C, ignore status as catalogued, runs F-8's constant, listed in the pinned executable
+pass C4 <receipt> mutant receipt (a), restored (e1)
+pass C4 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C5 <test> full_f5: #[test] at C, ignore status as catalogued, runs F-5's constant, listed in the pinned executable
+pass C5 <receipt> mutant receipt (a), restored (e1)
+pass C5 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C6 <test> full_fpt: #[test] at C, ignore status as catalogued, runs F-PT's constant, listed in the pinned executable
+pass C6 <receipt> mutant receipt (a), restored (e1)
+pass C6 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C7 <test> full_fpt: #[test] at C, ignore status as catalogued, runs F-PT's constant, listed in the pinned executable
+pass C7 <receipt> mutant receipt (a), restored (e1)
+pass C7 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C8 <test> full_fb: #[test] at C, ignore status as catalogued, runs F-B's constant, listed in the pinned executable
+pass C8 <receipt> mutant receipt (a), restored (e1)
+pass C8 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C9 <test> full_fb2: #[test] at C, ignore status as catalogued, runs F-B2's constant, listed in the pinned executable
+pass C9 <receipt> mutant receipt (a), restored (e1)
+pass C9 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C10 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass C10 <receipt> mutant receipt (a), restored (e1)
+pass C10 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C11 <test> full_fb2: #[test] at C, ignore status as catalogued, runs F-B2's constant, listed in the pinned executable
+pass C11 <receipt> mutant receipt (a), restored (e1)
+pass C11 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C12 <test> x1_two_facts_two_writers_one_admission: #[test] at C, ignore status as catalogued, runs X-1's constant, listed in the pinned executable
+pass C12 <receipt> mutant receipt (a), restored (e1)
+pass C12 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C15 <test> full_fr: #[test] at C, ignore status as catalogued, runs F-R's constant, listed in the pinned executable
+pass C15 <receipt> mutant receipt (a), restored (e1)
+pass C15 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C16 <test> full_fd: #[test] at C, ignore status as catalogued, runs F-D's constant, listed in the pinned executable
+pass C16 <receipt> mutant receipt (a), restored (e1)
+pass C16 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C17 <test> full_fb2: #[test] at C, ignore status as catalogued, runs F-B2's constant, listed in the pinned executable
+pass C17 <receipt> mutant receipt (a), restored (e1)
+pass C17 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C18a <test> full_fg: #[test] at C, ignore status as catalogued, runs F-G's constant, listed in the pinned executable
+pass C18a <receipt> mutant receipt (a), restored (e1)
+pass C18a <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C18b <test> full_fg: #[test] at C, ignore status as catalogued, runs F-G's constant, listed in the pinned executable
+pass C18b <receipt> mutant receipt (a), restored (e1)
+pass C18b <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C20 <test> full_f2: #[test] at C, ignore status as catalogued, runs F-2's constant, listed in the pinned executable
+pass C20 <receipt> mutant receipt (a), restored (e1)
+pass C20 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C23 <test> full_f2: #[test] at C, ignore status as catalogued, runs F-2's constant, listed in the pinned executable
+pass C23 <receipt> mutant receipt (a), restored (e1)
+pass C23 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C24 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass C24 <receipt> mutant receipt (a), restored (e1)
+pass C24 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C25 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass C25 <receipt> mutant receipt (a), restored (e1)
+pass C25 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C26 <test> full_f4: #[test] at C, ignore status as catalogued, runs F-4's constant, listed in the pinned executable
+pass C26 <receipt> mutant receipt (a), restored (e1)
+pass C26 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C14 <test> t_bind_every_bound_value_belongs_to_one_ledger: unit test fn at C, listed
+pass C14 <receipt> mutant receipt (b), restored (e2)
+pass C14 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C19 <test> t_cell_worker_operations_and_cell_appends: unit test fn at C, listed
+pass C19 <receipt> mutant receipt (b), restored (e2)
+pass C19 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C21 <test> w6_one_identity_under_two_contents: unit test fn at C, listed
+pass C21 <receipt> mutant receipt (b), restored (e2)
+pass C21 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C22 <test> t_own_tickets_snapshots_and_the_worker_cannot_be_cloned: unit test fn at C, listed
+pass C22 <receipt> mutant receipt (d), restored (e4)
+pass C22 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C27 <test> t_prec_persistence_of_every_ending: unit test fn at C, listed
+pass C27 <receipt> mutant receipt (b), restored (e2)
+pass C27 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C28 <test> t_res_every_resolve_row: unit test fn at C, listed
+pass C28 <receipt> mutant receipt (b), restored (e2)
+pass C28 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass A1 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass A1 <receipt> mutant receipt (a), restored (e1)
+pass A1 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass A2 <test> full_f1: #[test] at C, ignore status as catalogued, runs F-1's constant, listed in the pinned executable
+pass A2 <receipt> mutant receipt (a), restored (e1)
+pass A2 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass A3 <test> full_f5: #[test] at C, ignore status as catalogued, runs F-5's constant, listed in the pinned executable
+pass A3 <receipt> mutant receipt (a), restored (e1)
+pass A3 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass A5 <test> full_f2: #[test] at C, ignore status as catalogued, runs F-2's constant, listed in the pinned executable
+pass A5 <receipt> mutant receipt (a), restored (e1)
+pass A5 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass A6 <test> full_f5: #[test] at C, ignore status as catalogued, runs F-5's constant, listed in the pinned executable
+pass A6 <receipt> mutant receipt (a), restored (e1)
+pass A6 <quotient> never a quotient: not a gc_symmetry/quotient/experimental test
+pass C7 <receipt> F-3 comparison without A4: original explorer full_f3, not required to kill, same patch
+pass C15 <receipt> AD-1-R5: mutant on original full_fr at 30,000,000; restored side = discharge record only after verified restoration
+pass C22 <c22> the Stage-1 build command (as recorded) has no -j 2 :: ['cargo test -p nexus-governed-control --locked --release --lib --no-run']
+pass C22 <c22> C22 restored e4: PENDING_EXACT_COMMAND_HEALTHY_BUILD, exact future command, not run, Stage-1 build not cited as the receipt
+pass C1 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass C2 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass C3a <restored> restored e1 receipt 67-full-F-7 at 89326b85 is CLASSIFICATION: PASS
+pass C3b <restored> restored e1 receipt 66-full-F-6 at 89326b85 is CLASSIFICATION: PASS
+pass C3c <restored> restored e1 receipt 66-full-F-6 at 89326b85 is CLASSIFICATION: PASS
+pass C4 <restored> restored e1 receipt 64-full-F-8 at 89326b85 is CLASSIFICATION: PASS
+pass C5 <restored> restored e1 receipt 65-full-F-5 at 89326b85 is CLASSIFICATION: PASS
+pass C6 <restored> restored e1 receipt 44-full-F-PT at f023cc3d is CLASSIFICATION: PASS
+pass C7 <restored> restored e1 receipt 44-full-F-PT at f023cc3d is CLASSIFICATION: PASS
+pass C8 <restored> restored e1 receipt 42-full-F-B at f023cc3d is CLASSIFICATION: PASS
+pass C9 <restored> restored e1 receipt 61-full-F-B2 at 89326b85 is CLASSIFICATION: PASS
+pass C10 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass C11 <restored> restored e1 receipt 61-full-F-B2 at 89326b85 is CLASSIFICATION: PASS
+pass C12 <restored> restored side stated
+pass C15 <restored> restored side stated
+pass C16 <restored> restored e1 receipt 68-full-F-D at 89326b85 is CLASSIFICATION: PASS
+pass C17 <restored> restored e1 receipt 61-full-F-B2 at 89326b85 is CLASSIFICATION: PASS
+pass C18a <restored> restored e1 receipt 60-full-F-G at 89326b85 is CLASSIFICATION: PASS
+pass C18b <restored> restored e1 receipt 60-full-F-G at 89326b85 is CLASSIFICATION: PASS
+pass C20 <restored> restored e1 receipt 41-full-F-2 at f023cc3d is CLASSIFICATION: PASS
+pass C23 <restored> restored e1 receipt 41-full-F-2 at f023cc3d is CLASSIFICATION: PASS
+pass C24 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass C25 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass C26 <restored> restored e1 receipt 62-full-F-4 at 89326b85 is CLASSIFICATION: PASS
+pass C14 <restored> restored side stated
+pass C19 <restored> restored side stated
+pass C21 <restored> restored side stated
+pass C22 <restored> restored side stated
+pass C27 <restored> restored side stated
+pass C28 <restored> restored side stated
+pass A1 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass A2 <restored> restored e1 receipt 45-full-F-1 at f023cc3d is CLASSIFICATION: PASS
+pass A3 <restored> restored e1 receipt 65-full-F-5 at 89326b85 is CLASSIFICATION: PASS
+pass A5 <restored> restored e1 receipt 41-full-F-2 at f023cc3d is CLASSIFICATION: PASS
+pass A6 <restored> restored e1 receipt 65-full-F-5 at 89326b85 is CLASSIFICATION: PASS
+
+checks 750; failing 0
+CHECKER B: PASS
+VERDICTS {"A1": "PASS", "A2": "PASS", "A3": "PASS", "A4": "PASS", "A5": "PASS", "A6": "PASS", "C1": "PASS", "C10": "PASS", "C11": "PASS", "C12": "PASS", "C14": "PASS", "C15": "PASS", "C16": "PASS", "C17": "PASS", "C18a": "PASS", "C18b": "PASS", "C19": "PASS", "C2": "PASS", "C20": "PASS", "C21": "PASS", "C22": "PASS", "C23": "PASS", "C24": "PASS", "C25": "PASS", "C26": "PASS", "C27": "PASS", "C28": "PASS", "C3a": "PASS", "C3b": "PASS", "C3c": "PASS", "C4": "PASS", "C5": "PASS", "C6": "PASS", "C7": "PASS", "C8": "PASS", "C9": "PASS", "catalog": "PASS", "inputs": "PASS"}

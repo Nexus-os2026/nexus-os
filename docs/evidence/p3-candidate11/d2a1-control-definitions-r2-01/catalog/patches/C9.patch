@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1291,7 +1291,7 @@ impl<'a> Publish<'a> {
+             Rollback::Undone => Persistence::NotWritten,
+             Rollback::Unknown => {
+                 self.failed();
+-                Persistence::Uncertain
++                Persistence::NotWritten
+             }
+         }
+     }

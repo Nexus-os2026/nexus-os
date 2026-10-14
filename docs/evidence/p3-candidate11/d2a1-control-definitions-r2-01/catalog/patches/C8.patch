@@ -1,0 +1,70 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..fd6abbd8a80dc8a01620981c76427ca76a9e1f7d 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1345,11 +1345,9 @@ impl<'a> Publish<'a> {
+             self.failed();
+             return self.not_applied(Persistence::NotWritten, Reason::Storage);
+         }
+-        // Step 3: every member classified before any insert.
+-        let mut pending = [false; BATCH_MAX];
+-        let mut any = false;
++        let mut any_inserted = false;
+         let members = || batch.iter().map(FactRecord::member);
+-        for (index, (member, slot)) in members().zip(pending.iter_mut()).enumerate() {
++        for (index, member) in members().enumerate() {
+             let at = member_index(index);
+             let facts = match io.facts(at, member) {
+                 Read::Got(facts) => facts,
+@@ -1365,8 +1363,19 @@ impl<'a> Publish<'a> {
+             {
+                 Verdict::Present(_) => {}
+                 Verdict::Insert => {
+-                    *slot = true;
+-                    any = true;
++                    self.issued = true;
++                    any_inserted = true;
++                    let reason = match io.insert(at, member) {
++                        Insert::Inserted(_) => continue,
++                        Insert::Constraint => {
++                            self.core.latch(LatchCause::Constraint);
++                            Reason::Constraint
++                        }
++                        Insert::Failed => Reason::Storage,
++                    };
++                    self.failed();
++                    let persistence = self.rolled(io.rollback());
++                    return self.not_applied(persistence, reason);
+                 }
+                 Verdict::Refused(reason, conflict) => {
+                     self.conflict = conflict;
+@@ -1376,28 +1385,10 @@ impl<'a> Publish<'a> {
+             }
+         }
+         // Step 4.
+-        if !any {
++        if !any_inserted {
+             self.rolled(io.rollback());
+             return FactOutcome::Committed;
+         }
+-        // Step 5.
+-        for (index, (member, slot)) in members().zip(pending.iter()).enumerate() {
+-            if !*slot {
+-                continue;
+-            }
+-            self.issued = true;
+-            let reason = match io.insert(member_index(index), member) {
+-                Insert::Inserted(_) => continue,
+-                Insert::Constraint => {
+-                    self.core.latch(LatchCause::Constraint);
+-                    Reason::Constraint
+-                }
+-                Insert::Failed => Reason::Storage,
+-            };
+-            self.failed();
+-            let persistence = self.rolled(io.rollback());
+-            return self.not_applied(persistence, reason);
+-        }
+         // Step 6.
+         match io.commit() {
+             Commit::Durable => FactOutcome::Committed,

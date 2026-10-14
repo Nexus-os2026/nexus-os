@@ -1,0 +1,74 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R2-01 — DEVELOPMENT LOG
+Executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5), effort High. Every failed development run is kept here as
+found. No Cargo, rustc, build, test, explorer or mutant execution happened at any step. The only external program
+run on Rust text was rustfmt with --check (it never writes), always on disposable copies outside every worktree.
+
+D0  Setup and authentication.
+    Mission directory /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-control-definitions-r2-01.
+    Repository state at start: /home/nexus/NEXUS/nexus-os on rebuild/phase0-trust-boundary, HEAD f727f5c3, clean.
+    The R1 evidence commit f8115904 (tree 234ca099, parent 59df2103), its local branch, its clean worktree and its
+    review ref were found; the R2 destination ref was absent on the remote and locally.
+    tools/authenticate.py: 195 checks, ALL CHECKS OK (receipts/00-authentication.txt): Candidate C (commit, tree,
+    single parent, three blobs, also at the R1 commit); the R1 commit's lineage and its 72 added packet files; the
+    R1 catalog (blob 56d44243, sha256 a73d5721) and definitions record (blob b947621b, sha256 beb9f5e3); the R1
+    SHA256SUMS (all 71 listed files verify); every one of the 35 R1 patch files equal to its catalog record and to
+    its SHA256SUMS line; R1's section 6 as received; the blocked catalog, contract, AD-1-R4, AD-1-R5 and its
+    adoption record; the pinned executable (hashed and sized only); remote and local refs. Byte copies were written
+    to inputs/ only; inputs/ is not in the packet.
+
+D1  The A6 correction (tools/a6_correction.py) and the R2 derivation (tools/derive_catalog.py).
+    The correction is one edit: anchor = the whole KEY_FIELDS line at C that holds the table's description (line
+    1172, exactly once, at a line start); replacement = that line with "the test's table (classes, debt counter,
+    H, A);" replaced by "the test's table (classes, debt counter, H, A, recovery_required);" and nothing else.
+    The deriver first regenerates the R1 A6 patch from R1's eight edits and requires it byte for byte equal to the
+    R1 patch file (it is), then appends the KEY_FIELDS edit and generates the R2 patch with R1's generator
+    (git diff --no-index, the same neutral configuration). It requires: the eight R1 hunks byte for byte in the R2
+    patch, in order, plus exactly one; the header unchanged but for the index line's mutant blob; the added hunk
+    exactly the one KEY_FIELDS line; and that the A6 entry changes only in the expected set of fields. The 34
+    other entries and A4 are copied as whole objects, their patch files byte for byte.
+    The added hunk's @@ line ends in git's default function-context text (the nearest earlier line beginning with
+    a letter, line 1168, a continuation line of the same string, cut at 80 bytes); patch tools ignore it.
+    First run: A6 patch sha256 0700052e..., mutant blob 51e54aed...; 34 unchanged; changed [A6].
+
+D2  Syntax check (tools/syntax_check.py, R1's tool with the mission name changed): first run PASS; all 21
+    SYNTAX_CHECKED_NOT_TYPECHECKED, A6 in its R2 form included. The KEY_FIELDS line becomes 128 characters;
+    rustfmt leaves string literals as written (format_strings and error_on_line_overflow are off by default) and
+    C already has 102-112-character lines in that constant.
+
+D3  Checker A, first run: FAILED (development/checker-a-dev1-FAILED-catalog-wording.txt). 1 failing check, a real
+    catalog defect: the R2 catalog's supersedes_as_candidate.status read "immutable review history (not accepted,
+    not frozen; ...)". The catalog-wording rule kept from R1 forbids the word "frozen" anywhere in the catalog,
+    negated or not. Fix in derive_catalog.py: "immutable review history (a candidate in which the Architect's
+    review found one blocking defect, A6's receipt metadata: mission R2 section 1); neither authoritative nor
+    edited". Diff: development/catalog-dev1-to-dev2.diff (that one line). No patch or identity changed.
+    Second run: PASS, 923 checks.
+
+D4  Checker B, first run: FAILED (development/checker-b-dev1-FAILED-checker-defect.txt). 1 failing check, a
+    checker B defect in a new R2 check ("the added hunk: one line of KEY_FIELDS removed and re-added"): it required
+    the two line numbers that B's changed_base_lines reports for the hunk to be equal, but that function reports a
+    '+' line as the base line before which it is inserted, which after a one-line removal is L + 1 (here 1172 and
+    1173). The check now requires [L, L + 1] with L the removed line, inside the KEY_FIELDS item. No catalog change.
+    Second run: PASS, 750 checks; per-id verdict map identical to checker A's (38 ids, all PASS).
+
+D5  Negative controls (tools/negative_controls.py): R1's 29 seeds kept unchanged, 13 added (R2-1 to R2-12, with
+    R2-6 in two forms). The seeding helper now keeps the KEY_FIELDS edit's role when it re-derives a seeded A6, so
+    that a seed carries only its own defect. First run: PASS — 42 seeds, each detected by both checkers in the
+    expected check classes, both verdicts for the seeded id FAIL; positive control's verdict maps identical.
+
+D6  Documents (render_docs.py, render_index.py), corrected before the freeze, with no catalog change:
+    - the quoted mission text began with a blank line inside its fence (removed);
+    - two sentences of the A6 correction were tightened to claim only what was checked: state identity is stated
+      as a static reading of encode and decode; the repaired receipt is said to name the flag in the table's
+      description (not that KEY_FIELDS names every field the key holds, which was not checked beyond the table);
+    - the INDEX limitation on R1-mission wording kept in the 34 unchanged entries was corrected after locating
+      its 12 occurrences (the restored-receipt status of C12, C14, C19, C21, C27 and C28, each repeated in its
+      restoration record).
+
+D7  Final receipts on the final catalog: receipts/00-authentication.txt (195 OK), 20-checker-a.txt (PASS, 923),
+    21-checker-b.txt (PASS, 750), 30-syntax-check.txt (all 21 SYNTAX_CHECKED_NOT_TYPECHECKED), 40-negative-
+    controls.txt (42 seeds, each detected by both). Across both catalog revisions the 35 patch sha256 values and
+    mutant blobs are identical; only the one supersedes sentence changed.
+
+D8  A rehearsal of the freeze record and the final gate on a disposable copy of the mission directory
+    (dev-local/rehearsal, not the frozen packet): FINAL GATE PASS, 25 checks. Then this log was written, the freeze
+    record taken, and the final gate run once on the frozen mission directory (receipts/50, receipts/60).

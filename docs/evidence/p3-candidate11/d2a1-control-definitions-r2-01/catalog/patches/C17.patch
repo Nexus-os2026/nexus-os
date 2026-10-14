@@ -1,0 +1,17 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..4dfed9e1600a82b38f3326d26a47c4c41f513ac3 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1969,11 +1969,7 @@ impl Drop for Publish<'_> {
+             // Unwound: a state at least as closed as the truth.
+             self.core.phase = Phase::NeedBarrier;
+             if self.ticket.is_some() && self.count.is_none() {
+-                let persistence = if self.issued && self.conflict.is_none() {
+-                    Persistence::Uncertain
+-                } else {
+-                    Persistence::NotWritten
+-                };
++                let persistence = Persistence::NotWritten;
+                 self.count = Some(Counted {
+                     persistence,
+                     conflict_member: self.conflict,

@@ -1,0 +1,24 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1995,13 +1995,13 @@ impl Drop for Publish<'_> {
+         let flags = self.core.flags();
+         let counted = self.ticket.is_some() && self.count.is_some();
+         exchange(&self.core.shared, self.guess, |word| {
+-            let carried = (word & !FLAGS) | (word & HANDOVER_FAULT) | flags;
+-            if counted {
+-                count_step(carried, UNAPPLIED_SHIFT, true)
+-            } else {
+-                carried
+-            }
++            (word & !FLAGS) | (word & HANDOVER_FAULT) | flags
+         });
++        if counted {
++            exchange(&self.core.shared, self.guess, |word| {
++                count_step(word, UNAPPLIED_SHIFT, true)
++            });
++        }
+         if let (Some(ticket), Some(counted)) = (self.ticket.as_mut(), self.count) {
+             ticket.state = TicketState::Counted(counted);
+         }

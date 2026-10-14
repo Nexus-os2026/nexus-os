@@ -1,0 +1,53 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1816,43 +1816,12 @@ impl<'a> Publish<'a> {
+     }
+ 
+     fn resolve_ack(&mut self, set: &SetFacts, nonce: &[u8; 16], io: &mut impl Reads) -> Resolve {
+-        match io.acknowledgement(set, nonce) {
+-            Read::Got(None) => {
+-                self.core.u = None;
+-                self.core.phase = Phase::Healthy;
+-                Resolve::Absent
+-            }
+-            Read::Got(Some(_)) => match io.frontier() {
+-                Read::Got(durable) if durable >= set.top => {
+-                    if set.top > self.core.frontier {
+-                        self.core.frontier = set.top;
+-                    }
+-                    self.core.u = None;
+-                    self.core.phase = Phase::Healthy;
+-                    Resolve::Acknowledged(set.top)
+-                }
+-                Read::Got(_) => {
+-                    self.core.latch(LatchCause::Inconsistent);
+-                    Resolve::Inconsistent
+-                }
+-                Read::Failed => {
+-                    self.failed();
+-                    Resolve::Retained
+-                }
+-                Read::Corrupt => {
+-                    self.core.latch(LatchCause::Corrupt);
+-                    Resolve::Refused(Entry::Latched)
+-                }
+-            },
+-            Read::Failed => {
+-                self.failed();
+-                Resolve::Retained
+-            }
+-            Read::Corrupt => {
+-                self.core.latch(LatchCause::Corrupt);
+-                Resolve::Refused(Entry::Latched)
+-            }
++        if set.top > self.core.frontier {
++            self.core.frontier = set.top;
+         }
++        self.core.u = None;
++        self.core.phase = Phase::Healthy;
++        Resolve::Acknowledged(set.top)
+     }
+ 
+     /// Section 4.7: appends C's or X's own occupant.

@@ -1,0 +1,24 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..6dde859cb243b9f4304cda61b0917b1fc555dde3 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1194,7 +1194,18 @@ impl Core {
+                 return Verdict::Present(row.seq);
+             }
+         }
+-        if let Some(known) = self.known(&member.key, facts.explained) {
++        let known = match &self.x {
++            Some((_, Occupant::Explanation { original, cause }, stage))
++                if *original == member.key =>
++            {
++                Some(match stage {
++                    Stage::Built => Known::Cause(*cause),
++                    Stage::Committed(seq) => Known::Explained(*seq),
++                })
++            }
++            _ => facts.explained.map(Known::Explained),
++        };
++        if let Some(known) = known {
+             return Verdict::Refused(Reason::Conflict { member: at, known }, Some(at));
+         }
+         if self.session == Session::Sealed {

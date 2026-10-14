@@ -1,0 +1,4 @@
+4628c4628
+<   "status": "immutable review history (not accepted, not frozen; one blocking defect in A6's receipt metadata); neither authoritative nor edited",
+---
+>   "status": "immutable review history (a candidate in which the Architect's review found one blocking defect, A6's receipt metadata: mission R2 section 1); neither authoritative nor edited",

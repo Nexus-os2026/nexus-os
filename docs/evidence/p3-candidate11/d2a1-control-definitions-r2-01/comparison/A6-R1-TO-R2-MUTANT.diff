@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 85d262dbdc445569951ec43e914de4c192ea675d..51e54aed7cc33ebc8348a74fe6c881c057336ee7 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -1171,7 +1171,7 @@ occupancy counters, every refusal-table entry with its cause, the qualified fron
+ fixed limits (asserted); the simulated ledger's rows beyond the initial ones; every ticket's state and holder \
+ (FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number \
+ (the worker's agenda step and its last token for REPLAY); every snapshot's values and nonce; each actor's \
+-position and any result it holds but has not applied; the test's table (classes, debt counter, H, A); every \
++position and any result it holds but has not applied; the test's table (classes, debt counter, H, A, recovery_required); every \
+ remaining budget (faults, admissions, attempts, replays); the A2 kept bits; ENV fired; history facts \
+ (conflicted, conflicted for E6, unrecorded results, gating insert issued, gating told Committed, Counted \
+ tickets dropped)";

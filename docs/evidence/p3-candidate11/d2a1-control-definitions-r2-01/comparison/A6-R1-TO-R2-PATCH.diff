@@ -1,0 +1,27 @@
+diff --git a/catalog/patches/A6.patch b/catalog/patches/A6.patch
+index 4d10d0c2f2cbec4d53782f4e664a9cd08e8b6acb..150c8d66d74bbfbe32d2708602af03ac4dc152c5 100644
+--- a/catalog/patches/A6.patch
++++ b/catalog/patches/A6.patch
+@@ -1,5 +1,5 @@
+ diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+-index 28085ce232827301104b5d757af042ec933976f8..85d262dbdc445569951ec43e914de4c192ea675d 100644
++index 28085ce232827301104b5d757af042ec933976f8..51e54aed7cc33ebc8348a74fe6c881c057336ee7 100644
+ --- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+ +++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+ @@ -914,6 +914,7 @@ struct Table {
+@@ -18,6 +18,15 @@ index 28085ce232827301104b5d757af042ec933976f8..85d262dbdc445569951ec43e914de4c1
+          },
+          faults: config.faults,
+          ghost: Ghost::default(),
++@@ -1169,7 +1171,7 @@ occupancy counters, every refusal-table entry with its cause, the qualified fron
++ fixed limits (asserted); the simulated ledger's rows beyond the initial ones; every ticket's state and holder \
++ (FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number \
++ (the worker's agenda step and its last token for REPLAY); every snapshot's values and nonce; each actor's \
++-position and any result it holds but has not applied; the test's table (classes, debt counter, H, A); every \
+++position and any result it holds but has not applied; the test's table (classes, debt counter, H, A, recovery_required); every \
++ remaining budget (faults, admissions, attempts, replays); the A2 kept bits; ENV fired; history facts \
++ (conflicted, conflicted for E6, unrecorded results, gating insert issued, gating told Committed, Counted \
++ tickets dropped)";
+ @@ -1705,6 +1707,7 @@ fn encode(config: &Config, w: &World) -> Vec<u8> {
+      e.byte(w.table.debt);
+      e.u(w.table.h);

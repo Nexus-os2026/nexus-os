@@ -1,0 +1,12 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..cd50b40ce632d4edcb95fff89389246b0d75c51e 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1082,7 +1082,6 @@ impl Core {
+             | bit(self.latch.is_some(), LATCHED)
+             | bit(self.u.is_some(), U_OCCUPIED)
+             | bit(self.c.is_some(), C_OCCUPIED)
+-            | bit(self.x.is_some(), X_OCCUPIED)
+     }
+ 
+     /// Latches the store. A latch is never cleared; its first cause stays.

@@ -1,0 +1,30 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce232827301104b5d757af042ec933976f8..72bab79d71687a1c056afe18ab7a938edc20f4a9 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -2986,9 +2986,6 @@ fn step_wk(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> boo
+         }
+         WkPos::Seen(frontier, action) => {
+             w.table.a = w.table.a.max(frontier);
+-            if let Action::EmptyX(_, seq) = &action {
+-                w.table.h = w.table.h.max(*seq);
+-            }
+             obs.note(|| {
+                 "[T] A becomes the larger of A and the agenda's frontier; H before X is emptied"
+                     .into()
+@@ -3001,10 +2998,14 @@ fn step_wk(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> boo
+         }
+         WkPos::Act(action) => {
+             worker_op(config, w, &action, o, obs);
++            let next = match &action {
++                Action::EmptyX(_, seq) => WkPos::RaiseH(*seq),
++                _ => WkPos::Idle,
++            };
+             if config.replays > 0 && !matches!(action, Action::Barrier | Action::Nothing) {
+                 w.wk.last = Some(action);
+             }
+-            w.wk.pos = WkPos::Idle;
++            w.wk.pos = next;
+         }
+         WkPos::RaiseH(seq) => {
+             w.table.h = w.table.h.max(seq);

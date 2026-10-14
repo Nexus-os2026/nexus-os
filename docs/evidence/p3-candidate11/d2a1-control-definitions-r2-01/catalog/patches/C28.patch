@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..446d0365e1472efc40321d259a6f1171d3fe716c 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1823,7 +1823,7 @@ impl<'a> Publish<'a> {
+                 Resolve::Absent
+             }
+             Read::Got(Some(_)) => match io.frontier() {
+-                Read::Got(durable) if durable >= set.top => {
++                Read::Got(_) => {
+                     if set.top > self.core.frontier {
+                         self.core.frontier = set.top;
+                     }

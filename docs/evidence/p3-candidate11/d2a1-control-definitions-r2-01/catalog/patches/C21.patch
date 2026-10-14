@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..80662d4c7f8b0c25a0d8a038a9e8b28a0e469826 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1332,7 +1332,7 @@ impl<'a> Publish<'a> {
+             Some(Entry::Latched)
+         } else if self.core.phase != Phase::Healthy {
+             Some(Entry::NotHealthy)
+-        } else if !well_formed(batch) {
++        } else if false && !well_formed(batch) {
+             Some(Entry::Malformed)
+         } else {
+             None

@@ -1,0 +1,15 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841b99cad5d452008a6d4150e9369d07e66..33f0d257df3e126c589becd0b1c5760c57085be8 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -395,7 +395,9 @@ impl Drop for Ticket {
+                 exchange(&self.shared, 0, |word| count_step(word, LIVE_SHIFT, false));
+             }
+             TicketState::Counted(_) => {
+-                exchange(&self.shared, 0, |word| word | HANDOVER_FAULT);
++                exchange(&self.shared, 0, |word| {
++                    count_step(word | HANDOVER_FAULT, UNAPPLIED_SHIFT, false)
++                });
+             }
+             TicketState::Settled => {}
+         }

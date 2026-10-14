@@ -1,0 +1,31 @@
+P3-C11-DR01-D2A1-CONTROL-DEFINITIONS-R2-01 — FINAL GATE (frozen; run once; no build, no test)
+OK   G0 every packet file equals the freeze record: 68 files
+OK   G1 input authentication re-run: ALL CHECKS OK
+OK   G2 two fresh derivations (catalog and comparison) are byte-identical: 41 files
+OK   G2 the derivation equals the catalog and comparison to be published
+OK   G3 checker A re-run: exit 0 and output byte-identical to receipts/20-checker-a.txt
+OK   G3 checker B re-run: exit 0 and output byte-identical to receipts/21-checker-b.txt
+OK   G3 syntax check re-run: exit 0 and output byte-identical to receipts/30-syntax-check.txt
+OK   G3 the two checkers' per-id verdict maps are identical and all PASS (checker agreement)
+OK   G3 all 21 SYNTAX_CHECKED_NOT_TYPECHECKED (A6 in its R2 form)
+OK   G4 negative controls re-run: exit 0 and output byte-identical to receipts/40-negative-controls.txt
+OK   G4 42 seeds (R1's 29, R2's 13), each detected by both checkers; positive control agrees
+OK   G5 documents and INDEX re-rendered byte-identical
+[baseline, R1 evidence, repository and executable]
+OK   G6 Candidate C unchanged (commit, tree)
+OK   G6 the owner checkout is untouched: HEAD, branch and a clean status
+OK   G6 the owner checkout's index has nothing staged
+OK   G7 R1 evidence unchanged: commit tree, local branch, worktree HEAD and a clean worktree
+OK   G8 34 patches byte-identical to the R1 commit's patch blobs; A6's the only one different: same 34, differ ['A6']
+OK   G8 35 entries (34 controls and A4) equal R1's; A6's differs
+OK   G9 no Architect-defined mutant blob (R1's 21, R2's A6) exists in the object store (never written, staged or committed): []
+OK   G9 pinned baseline executable untouched (sha256, size, inode, mtime as Stage 2 recorded)
+OK   G9 counts: 35 kill-required controls plus A4; no blocked definition; nothing executed
+[wording and cited values]
+OK   G10 no forbidden status wording; 'architect accepted' only for A4: []
+OK   G11 INDEX.md cites the catalog's and the definitions record's sha256 and blob, the version, the status, C22's status and the R1 catalog: []
+OK   G11 INDEX.md cites all 35 patch sha256 values
+OK   G11 the definitions record is labelled and states the A6 points of mission section 8
+
+failing 0
+FINAL GATE: PASS
