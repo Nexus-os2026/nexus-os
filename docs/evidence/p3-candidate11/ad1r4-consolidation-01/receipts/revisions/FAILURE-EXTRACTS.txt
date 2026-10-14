@@ -1,0 +1,48 @@
+P3-C11-DR01-D2A1-AD1R4-CONSOLIDATION-01 — FAILURE EXTRACTS of every development run that failed (before the freeze)
+The full outputs are kept in the local evidence directory (receipts/revisions/); the development log explains each.
+
+== receipts/revisions/check-ad1r4.v1-on-dev2.txt (sha256 14566bf47879d8a894204225fd27f5319c3eae9b8b7e6f015a0c3c57cb57ea3d)
+FAIL  C2 inline quotation of P line 1289 present in source and draft: 'fn rolled(&mut self, answer: Rollback) -> Persistence'
+FAIL  C2f rolled (1289), facts (1309), gating (1413), acknowledgement (1619) and resolve_gating (1765) are methods of Publish (impl 1257-1965)
+FAIL  C18c every defined type is referred to somewhere (['f'])
+FAIL  C19a every NOT PRODUCED BY DESIGN is in a C22, explorer-field or never-erases context (9 hits; bad 1)
+FAIL  C23 checker could not evaluate this category: ValueError: not a literal
+SUMMARY: 673 passed, 5 failed
+
+== receipts/revisions/check-ad1r4.v2-on-dev2.txt (sha256 f4131e83ba9c57d3bc3d63363fb6491bf40b4e7fe4eef90954ca76e381c9c5d8)
+FAIL  C2f rolled (1289), facts (1309), gating (1413), acknowledgement (1619) and resolve_gating (1765) are methods of Publish (impl 1257-1965)
+SUMMARY: 681 passed, 1 failed
+
+== receipts/revisions/contradiction-scan.v1-on-dev2.txt (sha256 c47e3fd013b6882e84453b5b2d70ab4204cbf84854f0b03aef7c6b420234e67e)
+AD-1-R4 CONTRADICTION SCAN (operative text; quotations excluded)
+    CONTRADICTION names both executables, each with its own role: | C4 prototype gate (C4-WITNESS-01) | EXECUTOR-REPORTED: the healthy witness PASSed on the healthy executable `f72a09a3…`; the mutant witness showed P4 and P8 OBSERVED on…
+    CONTRADICTION a healthy-role unit names the baseline executable (or F.2's rule): For a test that is not an exploration (F.1 (b), (c), (e2) and (e3)), point 2 needs no configuration bounds and point 7 no discovered count; point 1's executable is the on…
+    CONTRADICTION names both executables, each with its own role: | 3 | C1/C25 witness on the mutant: the witness's own panic with the exact positive line at its locus, the header and the line of other properties; `1 failed`; exit 101 b…
+    CONTRADICTION NOT PRODUCED BY DESIGN in a C22-mutant, explorer-field or general-rule context: An artifact or field that does exist is recorded as it is: no NOT PRODUCED BY DESIGN marking ever erases it.
+    CONTRADICTION NOT PRODUCED BY DESIGN in a C22-mutant, explorer-field or general-rule context: None is marked NOT PRODUCED BY DESIGN.
+    CONTRADICTION NOT PRODUCED BY DESIGN beside (e4) only as its negation or the mutant build's: | 6 | C22: the build of the mutant source exits nonzero with `error[E0283]` at the designated T-OWN line and no other error; the healthy build succeeds (case 12); 
+    CONTRADICTION an either-or form only as a rejection: - If it names neither P4 nor P8, that is reported as it is and not reinterpreted.
+    CONTRADICTION a quotient only for admitted unchanged-core runs, never for a control: Every result above is conditional on them, and on AQ6 where a quotient is used: original or quotient runs, PASS or FAIL, explorer or witness.
+CONTRADICTION SCAN: 8 contradiction(s)
+
+== receipts/revisions/contradiction-scan.v2-on-dev2.txt (sha256 7a5203f8e25f36fd8abdd0770f48be3a2ac3ec8d50fb3a5be3958a68814f9d5a)
+AD-1-R4 CONTRADICTION SCAN (operative text; quotations excluded)
+    CONTRADICTION a healthy-role clause on a mutant executable: | R3-01 | witness artifact identity by role: a mutant witness on its control's pinned mutant executable, a healthy witness on the pinned unchanged-baseline executable; co…
+    CONTRADICTION a healthy-role clause on a mutant executable: | C4 prototype gate (C4-WITNESS-01) | EXECUTOR-REPORTED: the healthy witness PASSed on the healthy executable `f72a09a3…`; the mutant witness showed P4 and P8 OBSERVED on…
+CONTRADICTION SCAN: 2 contradiction(s)
+
+== receipts/revisions/negative-controls-r4.v1-on-dev5.txt (sha256 ecd26611c7131b36f97fc95c7f31eb0b0c4d00d5e0e6be6ce7a863eb6846ad17)
+DETECTED  contradiction-scan / a healthy witness on the mutant executable: exit 1; X1 CONTRADICTION units 1
+DETECTED  contradiction-scan / an undivided type (e) reference: exit 1; X2 CONTRADICTION units 1
+DETECTED  contradiction-scan / a healthy build's executable not produced: exit 1; X3 CONTRADICTION units 1
+DETECTED  contradiction-scan / either P4 or P8 suffices: exit 1; X4 CONTRADICTION units 1
+DETECTED  contradiction-scan / E3 counted as P1: exit 1; X5 CONTRADICTION units 1
+DETECTED  contradiction-scan / C9-a selected: exit 1; X6 CONTRADICTION units 1
+DETECTED  contradiction-scan / Codex as reviewer: exit 1; X7 CONTRADICTION units 1
+DETECTED  contradiction-scan / an INCOMPLETE run counted as PASS: exit 1; X8 CONTRADICTION units 1
+DETECTED  contradiction-scan / a control under a quotient: exit 1; X9 CONTRADICTION units 1
+DETECTED  contradiction-scan / prototype results as final-baseline evidence: exit 1; X10 CONTRADICTION units 1
+DETECTED  contradiction-scan / C4 claimed killed: exit 1; X11 CONTRADICTION units 1
+DETECTED  contradiction-scan / full_f8 authorised: exit 1; X12 CONTRADICTION units 2
+MISSED    check-matrix / an AD-1-R3 verbatim obligation dropped from the draft: exit 1; M2 FAIL lines 0
+NEGATIVE CONTROLS: 47 as required, 1 missed, broken or not set up (26 checker, 12 scan, 6 matrix, 2 cases, 2 baselines)

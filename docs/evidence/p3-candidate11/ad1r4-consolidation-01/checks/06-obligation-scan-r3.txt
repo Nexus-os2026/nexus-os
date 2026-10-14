@@ -1,0 +1,376 @@
+R3: 840 sentences; 375 distinct obligation-bearing; 331 verbatim in AD-1-R4; 44 not verbatim in AD-1-R4
+R3-eecf4b0210 NOT-VERBATIM It repairs AD-1-R2 as that mission directs (0A.2: typed receipts, process-aware classification, review roles, trace wording), carries the Architect's rulings (0A.1), and keeps AD-1-R2's dispositions A to Q otherwise unchanged.
+R3-7f05b14d38 NOT-VERBATIM The Owner keeps authority over every contract amendment.
+R3-17dc51ad40 VERBATIM Until the Architect has reviewed this text and the Owner has approved it, contract P3-C11-D2A1-CONTRACT-02-R1 (sha256 `cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c`) applies unchanged, with its binding reviews (`6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce`, `1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35`).
+R3-5579d8bba6 NOT-VERBATIM The diff from AD-1-R2 to this file is kept beside it.
+R3-3a56bbae81 NOT-VERBATIM A checker run against those bytes compares every such block, and every inline quotation listed in it, with those lines (`tools/check-ad1r3.py`; its output is in the review packet).
+R3-4f1fc9cba5 VERBATIM - counts an INCOMPLETE run as PASS;
+R3-f494965f75 VERBATIM --- ## Provenance labels | Label | Meaning | |---|---| | PROVEN FROM SOURCE | read by the executor from the exact source commit named; re-checkable at the cited lines | | ARCHITECT-RULED | stated by the Sole Architect's ruling carried into the mission named | | EXECUTOR-REPORTED | an earlier executor receipt or report; not independently re-run; the raw receipt is in the review packet | | NOT ESTAB
+R3-a72a887d0b VERBATIM Basis | Item | Identity | Status | |---|---|---| | Production protocol core | `protocol.rs` blob `a2df2841b99c`, sha256 `a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296`; the same blob at 244c5b23, 83816e66, 77a146ca, 2d83b74b and 42dd1bd1 | PROVEN FROM SOURCE; unchanged since SOURCE-R2 | | Contract explorer | `explore` and everything it calls: `model_tests.rs` lines 1–4814, byte-
+R3-e682c5f64b VERBATIM Theorem 1, L-A, L-B, Q1–Q15, AQ1–AQ6 (83816e66) | executor proof; not accepted | | Gating-caller symmetry quotient (SQ) | GC-SYMMETRY-01:
+R3-3505ca6f14 VERBATIM Lemma E, S1–S15, ASYM-1..6, AS1–AS4 (77a146ca); extension E-PT/E-B and the `SYMMETRIC` allow-list (CLOSURE-PREP-01, 2d83b74b) | executor proof; not accepted.
+R3-c443845e69 VERBATIM AD-1-R1 recorded that the extension's source passed an independent source review for the bounded experiments; that is not proof acceptance.
+R3-10236dcc26 VERBATIM 20,431,851 keys, complete, PASS | EXECUTOR-REPORTED; experimental; not 8.3 evidence | | F-PT, F-B composed | PT-FB-EXPERIMENT-01 at 2d83b74b:
+R3-de09c9baa7 VERBATIM 29,751,473 and 3,775,373 keys, complete, PASS | EXECUTOR-REPORTED; experimental; not 8.3 evidence | | F-1, F-2 original | CAMPAIGN-01 at 244c5b23:
+R3-cf67d84436 VERBATIM F-2 PASS 12,602,670 | EXECUTOR-REPORTED; informational; not final-commit evidence | | F-3 history | four INCOMPLETE runs (M) | INCOMPLETE; establish nothing | | C1/C25 witness source | commit 42dd1bd1 (tree 7ac6bb21), published on `refs/heads/review/p3-c11-d2a1-ad1r1-witness-01` | PROVEN FROM SOURCE (ref, commit, tree and blobs read back);
+R3-f2ff6430d6 VERBATIM ARCHITECT-RULED: interim source review passed, no blocking source defect | | C1/C25 probes | C1 probe and the historical compound C25 probe (AD1R1-MUT-READINESS-01); the narrow C25 probe (AD1R1-WITNESS-AUDIT-01) | EXECUTOR-REPORTED raw receipts.
+R3-1bdb3e1f99 NOT-VERBATIM Historical, not final-baseline evidence; no final mutation kill (G) | ## 0A.
+R3-d21fe7484e VERBATIM The old compound C25 definition is historical only. | G | | Pending | Final AQ/SQ proof acceptance, the Owner's adoption of the amendment, final baseline selection, the full campaigns and integration. | B, I, N | **The earlier ruling, on the witness audit (carried by AD-1-R2):** | Subject | Ruling | Section | |---|---|---| | Witness delta 42dd1bd1 | No blocking source defect identified.
+R3-d096060ff8 VERBATIM The old compound mutation is historical evidence only.
+R3-cc4b1e9dcb NOT-VERBATIM S-6 no longer applies G.3(c) to every failing receipt; the witness-only rules apply only to the C1/C25 witness invocation | 1 (S-6), F.1, G.3 | | R2-02 | process-aware, fail-closed classification in place of "classification by text, never by exit status"; raw outcome kept apart from admissibility;
+R3-9c8df5702c VERBATIM INCOMPLETE — BUDGET EXCEEDED; classification table | 1 (S-1, S-14), F, G.3, K | | AU | the contract's and the binding reviews' Lead Architect, First Architect and Codex review roles mapped to the Owner's current arrangement | 1 (S-20, S-21), R | | TR | line 609's trace phrase replaced by one scoped, explicit statement;
+R3-e0039b72e5 NOT-VERBATIM O.4 has one operative reading | 1 (S-2, S-19), O | Every other disposition below (A to Q) is carried unchanged, except where these four items name its text. ### 0A.3 Dispositions of AD1R2-CONTRACT-EVIDENCE-01, carried | Disposition | Subject | Section | |---|---|---| | A | F-1 ceiling: standing 60M proposal, not effective until Owner approval; no one-run authorisation inferred | A | | B | F-3 equi
+R3-411d806378 VERBATIM C7 without A4 | F | | G | C1/C25: narrow C25 definition; first failure, named-property witness, healthy replay; positive-line rule; provenance | G | | H | historical manifest preserved; proposed current-tree manifest; self-reference resolved by a detached attestation | H | | I | exact-final-baseline evidence; build identity; proposed receipt linking | I | | J | A-1/A-2 undischarged | J | | K | inc
+R3-1f7d65f058 VERBATIM This draft keeps each of them and narrows them where the dispositions above direct.
+R3-3e6a5e0cea VERBATIM Supersession table Each clause **stays in force** except as the "Effect" column states.
+R3-c085a92be3 VERBATIM - **REPLACED**: the text no longer governs for the stated scope; this draft's text governs there instead.
+R3-d32761fac3 VERBATIM - **CLARIFIED**: the text governs as written; the addendum states its one reading and changes no obligation.
+R3-457f5f7422 NOT-VERBATIM S-1, S-2, S-6 and S-14 are amended by this draft (0A.2). | # | Line(s) | Clause (short name) | Effect, with its scope | Section | |---|---|---|---|---| | S-1 | 855 | caps of a full run | REPLACED for F-1's state ceiling (A; only once the Owner approves).
+R3-08821703a1 VERBATIM SUPPLEMENTED: a raw FAIL found once the discovered count exceeds the ceiling is kept as printed, and its outer gate is INCOMPLETE — BUDGET EXCEEDED (K.1);
+R3-b6e95a3c42 VERBATIM Time, memory, every other configuration and every INCOMPLETE cause: unchanged. | A, C, K | | S-2 | 609 | the explorer visits every interleaving | REPLACED for F-3, F-PT and F-B as the means of their unchanged-core 8.3 evidence: the admitted run visits one representative of each equivalence class (B, E).
+R3-ba68a9ba39 VERBATIM Otherwise unchanged for every original run. | B, E | | S-3 | 620 | equal keys are one state | REPLACED for E's quotient runs: the admission counter and the gating callers' orientation are left out of the quotient key by the equivalence, not by omission (B, N); the receipt names both.
+R3-6ac87e6fdb VERBATIM Unchanged for every original run. | B, D, N | | S-4 | 831 | run on the exact final commit, every one | REPLACED for the unchanged-core runs of F-3, F-PT and F-B:
+R3-1ee7de25e8 VERBATIM "every one" is discharged by E's inventory.
+R3-af638aaf2f VERBATIM "Missing evidence for any of them is a failed mission": unchanged. | E, I | | S-5 | 853 | failing and restored receipts | REPLACED for the form of the restored receipt on F-PT and F-B, and for the unchanged-core side of the C7-without-A4 comparison (F).
+R3-327d5c9248 VERBATIM PROPOSED CLARIFICATION: receipt linking (I). | F, I | | S-6 | 693 | a control must make its property fail | REPLACED for C1 and C25 only: the kill criterion is G.3.
+R3-6bcec5accf VERBATIM SUPPLEMENTED for every control: each receipt meets the requirements of its own type (F.1) and is classified by K.2.
+R3-0090cdb04f NOT-VERBATIM G.3(c) applies only to the C1/C25 witness invocation, never to any other receipt.
+R3-b51a179ed3 VERBATIM Named-property attribution, the rejection of fixture and unrelated failures, the C22 exception as contracted, and the stop rule: unchanged. | F, G, K | | S-7 | 699 | row C1 | REPLACED: the cell "P1" is read as "P1 (first failure E3; witness)".
+R3-a87f081e82 VERBATIM CLARIFIED: the cell's change has the exact narrow definition of G.2. | G | | S-9 | 863 | receipts of every run | REPLACED for E's quotient runs:
+R3-db05281437 VERBATIM SUPPLEMENTED: count labels and replay (D). | D, E | | S-10 | 911 | manifest control M87 | REPLACED as to *how* the text update is made: only in the current-tree manifest | H | | S-11 | 912 | manifest controls of `P3` | REPLACED as to *how* the text update is made; its condition kept | H | | S-12 | 915 | D2A-1 does not edit the manifest;
+R3-9f7512e6e0 VERBATIM B/Q-5 | SUPPLEMENTED (not replaced): the revision it requires, and its detached attestation, are specified | H | | S-13 | 548 | rule R1 | REPLACED: only the sentence beginning "The loop needs no load".
+R3-f5a4305212 VERBATIM The other sentences of R1 stay as written. | L | | S-14 | 813 | three outcomes | CLARIFIED:
+R3-3f1dafd4da VERBATIM A quotient precondition refusal is INCOMPLETE — VERIFICATION INVALID, and a raw FAIL beyond the authorised cardinality is INCOMPLETE — BUDGET EXCEEDED (K.1).
+R3-9084b9cae8 VERBATIM "INCOMPLETE is never PASS": unchanged. | K, M | | S-15 | 827 | caps of the default suite | CLARIFIED:
+R3-ea64257a56 VERBATIM No other actor or core change may run under a quotient. | E, F | | S-17 | 748 | C7 without A4 on F-3 | SUPPLEMENTED (second sentence only): the mutant runs on the original explorer; its unchanged-core side may cite an accepted exact-final-baseline F-3 quotient PASS (F).
+R3-5f60f24fda VERBATIM It is still added to the receipts and still not required to kill.
+R3-bedd132f03 VERBATIM The first sentence: unchanged. | F | | S-18 | 923 | the label's first condition | CLARIFIED (consequential):
+R3-5d56b7aa06 VERBATIM "every run of 8.3" reads per E's inventory;
+R3-932078ce07 NOT-VERBATIM "every control is killed" reads per G for C1 and C25 and per F for A4.
+R3-c08b7003f8 VERBATIM Using the label remains the Owner's decision. | E, F, G | | S-19 | 609 | the trace phrase "so that a violation has a shortest trace" | REPLACED, for every run (original or quotient, healthy or mutant), by O.4's statement: a shortest breadth-first parent path to the checked state, with the offending transition appended where applicable.
+R3-f9338130e1 VERBATIM No global counterexample minimality and no shortest cycle witness is claimed.
+R3-9a545d1dce VERBATIM The printed trace wording and the replay requirement (D) are unchanged. | O, D | | S-20 | 923, 928, 976 | the evidence reviewer named Codex | REPLACED as to who reviews: the Sole Architect (ChatGPT) reviews Claude Code's evidence independently (R).
+R3-3d1a7a02ef VERBATIM Unchanged: the review must actually pass; a reviewer does not accept a repair it wrote; the Owner decides whether the label is used. | R | | S-21 | 4, 5 | the Lead Architect and the First Architect | CLARIFIED: these role names, and their other occurrences listed in R, read under the Owner's current arrangement (R).
+R3-a703e36a38 NOT-VERBATIM Historical authorship, dates and acceptances are unchanged. | R | ### Verbatim text of each superseded clause **S-1, line 855** (verbatim):
+R3-002e9b6c24 NOT-VERBATIM **S-21, line 4 and 5** (verbatim; the contract's header): ### Not superseded The following stay in force exactly as written.
+R3-d5e8b9400e VERBATIM They are quoted so that no gate is weakened silently.
+R3-01be0c4b83 NOT-VERBATIM They are not a control script, are never applied from the repository, and add nothing to the mutation-control manifest.
+R3-95058c2ea9 VERBATIM - **Line 865.** The receipts stay in directories outside the repository.
+R3-bfd0ce252f VERBATIM The originals stay authoritative.
+R3-371f42fb00 VERBATIM - **Line 942.** It applies to every run of 8.2 or 8.3 made at the final commit, whether or not E's inventory requires that run (E.4).
+R3-f4de22ece0 VERBATIM The historical INCOMPLETE runs of M predate the final commit.
+R3-b0a757d56f VERBATIM They are not runs of the final mission's evidence gate.
+R3-f06b878bd3 NOT-VERBATIM - every property of 7.3 and 7.4, and every row of 7.5 other than the readings of S-7, S-8 and S-16;
+R3-8c3174d691 VERBATIM - each control's configuration;
+R3-f6d98712da VERBATIM - the bounds of every row of 8.3;
+R3-94ab44c380 VERBATIM - section 14's other preconditions, and section 15, read under S-21 (role names only);
+R3-1cab2aef88 VERBATIM - every stop condition of section 12.
+R3-732b647d18 VERBATIM Its time (45 minutes) and memory (16 GiB) ceilings, and every other cap of every configuration, are unchanged.
+R3-f3eab8962e VERBATIM It is not a measured or accepted cost.
+R3-0bef970466 VERBATIM It is a standing exception to 8.3's 30,000,000, in force only once the Owner approves it.
+R3-3cacd4112e VERBATIM Once in force, it applies to every F-1 run, healthy or mutant.
+R3-9d2995a4ae VERBATIM No further one is inferred: not from those exceptions, not from this draft, and not from the test source.
+R3-60bd1c109e VERBATIM The `F1` constant carries `FULL_CAP` (line 78, 30,000,000), so F-D and every other user of `F1` keep 30,000,000.
+R3-75f5ffe91f VERBATIM A cap in test source is not an approval.
+R3-89034be0d3 VERBATIM F-1 needs no quotient. ## B.
+R3-64e7c6f5ee VERBATIM F-3's completed quotient — conditionally recognizable **Text.** "F-3's full exploration may be established by one complete run of the composed quotient — the admission observer quotient composed with the gating-caller symmetry quotient, `explore_symmetric(&F3, step_adm, Mode::Quotient)` as `gc_symmetry_f3` runs it — on the exact final commit, if and only if:
+R3-7d9fc2d943 VERBATIM 1. the exact admission equivalence (Theorem 1 with Q1–Q15, AQ1–AQ6) and the exact symmetry equivalence (Lemma E with S1–S15) have each passed independent review against the exact final source and its build-input closure (N), as equivalences of the original graph and not as bounds;
+R3-f2c9b5b1b9 VERBATIM 2. every prerequisite of N holds at that commit;
+R3-f5ff3eb024 VERBATIM 3. the run's runtime guards raise no refusal.
+R3-bc7bfe30af VERBATIM - the admission observer's checks at every expanded key;
+R3-240cd98a03 VERBATIM - the symmetry guard: involution; the expansion of each key's mirror held to the exchange;
+R3-bbba5a145f VERBATIM Any refusal ends the run with no verdict (K);
+R3-395a1c72e0 VERBATIM 4. the run completes (no unexpanded key) within C's ceiling, and every applicable property line, D1 and L1 hold (Q);
+R3-405598d65e VERBATIM The receipt states that the original graph was not explored.
+R3-350591a482 VERBATIM Until all five hold, a composed-quotient PASS of F-3 is an experimental result and is not 8.3 evidence." No proof is accepted by this draft or by the mission that produced it.
+R3-ee29cce6f3 VERBATIM Kf is the number of expanded keys that are their own mirror; the run prints it ("<n> expanded keys are their own mirror"), and in a complete run every key is expanded.
+R3-2e4c5c7890 VERBATIM For the experimental runs these give (DERIVED, conditional on B(1); informational, not claims): | Run | K | Kf | 2K − Kf | (N+1)·(2K − Kf) | |---|---|---|---|---| | F-3 at 77a146ca | 20,431,851 | 880,778 | 39,982,924 | 119,948,772 | | F-PT at 2d83b74b | 29,751,473 | 1,698,028 | 57,804,918 | 173,414,754 | | F-B at 2d83b74b | 3,775,373 | 156,463 | 7,394,283 | 22,182,849 | The original graph's transi
+R3-a796115f84 VERBATIM C-1 — what a ceiling counts for an equivalent-graph run **Text.** "For F-3, F-PT and F-B, and only when E admits them, the 30,000,000-state ceiling of 8.3 counts the keys of the composed quotient as that explorer counts them (K).
+R3-a55d005976 VERBATIM DERIVED original counts (B, D) are reported beside it and do not consume that ceiling.
+R3-070db6207f VERBATIM They are enforced by the command that starts the run, and are unchanged.
+R3-d8000bb30f VERBATIM Reaching any ceiling is INCOMPLETE, and an INCOMPLETE quotient run supports no derived statement.
+R3-0436e3a9c4 VERBATIM For every other configuration, and for every mutant run, the ceiling counts the original explorer's states." **Margins observed (informational).** F-3:
+R3-1438be52b4 VERBATIM 29,751,473 keys, 99.17%; a model change that adds 248,528 or more keys makes it INCOMPLETE (K).
+R3-c1c4909bf2 VERBATIM Obligations kept under a quotient **Text.** "A quotient run carries every obligation of 7.3, 7.4, 8.1 and 8.4 that an original run carries.
+R3-32c223fb59 VERBATIM Where it cannot discharge one exactly, it says so, and does not substitute an estimate." - **Safety.** A quotient PASS establishes the 7.4 safety claims for the original graph only through B(1).
+R3-1fed3f6d7e VERBATIM - **D1.** Judged at every key with no enabled non-ADM step, with the admissions spent, at the key and at its mirror.
+R3-1ac4cdcd03 VERBATIM ADM steps are observations, never edges.
+R3-b1f62c8542 VERBATIM L1 stays "not claimed" where 7.4 does not claim it (Q).
+R3-d736cd1295 VERBATIM - **Branch coverage.** 8.4 requires, for each branch of each operation, whether any run took it.
+R3-d2790c713e VERBATIM Branches no run takes are listed NOT TAKEN, as now.
+R3-a10e8aa5d7 VERBATIM Per-member statements (for example, which member of F-B's batch took a branch) are NOT ESTABLISHED by aggregate labels and are not claimed.
+R3-574465d3ec VERBATIM 8.4 does not require them.
+R3-0993f2b861 VERBATIM Mandatory and exact: keys (states), expanded keys, transitions, fault edges, no-step keys, non-fault edges (L1's line), admission evaluations, admitted, and Kf.
+R3-210a6f7f03 VERBATIM Exact, and stated only where B(1) and N hold.
+R3-b1cea55a59 VERBATIM A bound never replaces a required MEASURED or DERIVED value and is never written as a value.
+R3-17c2d631ff VERBATIM The original graph's transitions are not given as values (S-9).
+R3-60c765ebdd VERBATIM - **No new instrumentation.** No fixed-share count (the self-mirrored share of transitions or edges) and no full-run per-member instrumentation is added.
+R3-70284590bd VERBATIM **Diagnostic tests kept.** These ordinary tests of `model_tests.rs` are prerequisites of every quotient claim (N.8).
+R3-81641c93a2 VERBATIM They must pass at the exact final commit on the pinned build.
+R3-398ef1e64d VERBATIM They are diagnostic evidence for the proofs, not section 7.5 kill receipts (F).
+R3-52420f7ae4 VERBATIM Each may do so only when all of these hold:
+R3-478cca3d47 VERBATIM The gating-caller symmetry is never available to:
+R3-10f2584a15 VERBATIM No mutation control is ever run under a quotient (F)." **Enforcement (PROVEN FROM SOURCE).** The `SYMMETRIC` allow-list (`model_tests.rs` line 6079 at 42dd1bd1) and `assert_symmetric` (lines 6095–6128) refuse, before exploring: an unlisted shape; a raised cap or time cap; a seeded G2 conflict or acknowledgements; an initial state that is not its own mirror. ### E.2 Sections 8.3 and 8.4 under quoti
+R3-b9eaa70a3f VERBATIM It binds quotient runs as it binds original runs: one at a time, the memory check first, no other workload stopped. | | 859 | Unchanged.
+R3-b4abb39dd9 VERBATIM The listing of every `#[ignore]`:
+R3-8235be81d0 VERBATIM E.3. | | 865 | Unchanged (section 1's note). | ### E.3 Inventory of every `#[ignore]` in the two test files Taken at 42dd1bd1 (PROVEN FROM SOURCE). `model_tests.rs` has 34 ignored tests; `unit_tests.rs` has none.
+R3-2bf5b48880 VERBATIM Under the contract as written, line 831 requires the fifteen `full_*` tests, and line 863 requires every one of the 34 to be listed with a receipt that shows it ran.
+R3-aa7025f97a VERBATIM The proposed dispositions below change that only if the Owner approves this addendum (E.4).
+R3-63a8e9281f VERBATIM - **REQUIRED_FINAL_RUN**: run on the unchanged core at the exact final commit, with its receipt.
+R3-6f0a23db02 VERBATIM - **REPLACED_BY X**: its unchanged-core 8.3 run is discharged by the named run X, approved as an equivalent-graph run under B to E and N.
+R3-8d523f2341 VERBATIM If X's conditions do not hold, the test is REQUIRED_FINAL_RUN.
+R3-bf99f16bcf VERBATIM - **EXPERIMENTAL_NOT_REQUIRED**: not run at the evidence gate unless an Architect mission names it, for the reason given.
+R3-9b2d0f3062 VERBATIM A disposition never changes them. | # | Test (line at 42dd1bd1) | Runs | Proposed disposition | Mutant runs (F) | Reason or condition | |---|---|---|---|---|---| | 1 | `full_f1` (4169) | `explore`, F-1, cap 60,000,000 | REQUIRED_FINAL_RUN | C1, C2, C10, C24, C25, A1, A2 | under A once approved;
+R3-56fad91282 VERBATIM F-1 cannot complete under 30,000,000 | | 2 | `full_f2` (4178) | `explore`, F-2 | REQUIRED_FINAL_RUN | C20, C23, A5 | | | 3 | `full_f3` (4184) | `explore`, F-3 | REPLACED_BY `gc_symmetry_f3` | C7 without A4 (not required to kill) | if E.1 does not hold:
+R3-e393999596 VERBATIM REQUIRED_FINAL_RUN; the history (M) indicates it cannot complete under any approved ceiling, and an INCOMPLETE run stops the mission (942) | | 4 | `full_f4` (4190) | `explore`, F-4 | REQUIRED_FINAL_RUN | C26 | | | 5 | `full_f5` (4196) | `explore`, F-5 | REQUIRED_FINAL_RUN | C5, A3, A6 | | | 6 | `full_f6` (4202) | `explore`, F-6 | REQUIRED_FINAL_RUN | C3b, C3c | | | 7 | `full_f7` (4208) | `explore`
+R3-882d48c8c4 VERBATIM REQUIRED_FINAL_RUN | | 10 | `full_fb` (4226) | `explore`, F-B | REPLACED_BY `gc_symmetry_fb` | C8 | if E.1 does not hold:
+R3-8400c28558 VERBATIM REQUIRED_FINAL_RUN | | 11 | `full_fb2` (4232) | `explore`, F-B2 | REQUIRED_FINAL_RUN | C9, C11, C17 | | | 12 | `full_fg` (4238) | `explore`, F-G | REQUIRED_FINAL_RUN | C18a, C18b | | | 13 | `full_fw` (4244) | `explore`, F-W | REQUIRED_FINAL_RUN | none | the only configuration where E10 applies (Q) | | 14 | `full_fd` (4250) | `explore`, F-D | REQUIRED_FINAL_RUN | C16 | L1 not claimed (Q) | | 15 | `
+R3-603835df9f VERBATIM E admits no configuration to it | | 17 | `quotient_full_f2` (5361) | `explore_experimental`, F-2 | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 18 | `quotient_full_f3` (5367) | `explore_experimental`, F-3 | EXPERIMENTAL_NOT_REQUIRED | none | as 16;
+R3-7bdde8a553 VERBATIM INCOMPLETE at 30,000,001 keys (M) | | 19 | `quotient_full_f4` (5373) | `explore_experimental`, F-4 | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 20 | `quotient_full_f5` (5379) | `explore_experimental`, F-5 | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 21 | `quotient_full_f6` (5385) | `explore_experimental`, F-6 | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 22 | `quotient_full_f7` (5391) | `expl
+R3-3f077bc684 VERBATIM F-B's admitted form is the composed quotient | | 26 | `quotient_full_fb2` (5415) | `explore_experimental`, F-B2 | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 27 | `quotient_full_fg` (5421) | `explore_experimental`, F-G | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 28 | `quotient_full_fw` (5427) | `explore_experimental`, F-W | EXPERIMENTAL_NOT_REQUIRED | none | as 16 | | 29 | `quotient_full_fd` (
+R3-bea9ae8ab7 VERBATIM EXPERIMENTAL_NOT_REQUIRED | | 32 | `gc_symmetry_prefix_f3` (6951) | `explore_symmetric`, F-3, cap 99,999 | EXPERIMENTAL_NOT_REQUIRED | none | INCOMPLETE by construction and asserts so; establishes nothing about F-3.
+R3-ac88c13405 VERBATIM Its check (each expanded key's mirror expanded and held to the exchange) is made on every expanded key by 31 (B(3)). | | 33 | `gc_symmetry_fpt` (8234) | `explore_symmetric`, F-PT | REQUIRED_FINAL_RUN, if E.1 holds | none | the replacing run of 9; if E.1 does not hold:
+R3-7bb63252a3 VERBATIM EXPERIMENTAL_NOT_REQUIRED | | 34 | `gc_symmetry_fb` (8242) | `explore_symmetric`, F-B | REQUIRED_FINAL_RUN, if E.1 holds | none | the replacing run of 10; if E.1 does not hold:
+R3-b33338e5cb VERBATIM EXPERIMENTAL_NOT_REQUIRED | Control C12 is on X-1, a default exploration (8.2), not an ignored test.
+R3-60e694a582 VERBATIM Whether the experimental tests are kept at the final commit is not decided here.
+R3-f972c8e2ed VERBATIM A REPLACED_BY disposition takes effect only when its replacing run's conditions hold.
+R3-2047a74c32 VERBATIM Any run at the final commit that ends INCOMPLETE or FAIL on the unchanged core is reported, and the mission stops for an Architect ruling (lines 940 and 942, unchanged).
+R3-480f66790b VERBATIM It approves skipping no test the contract now requires.
+R3-858fa05321 VERBATIM 60,000,000 once A is in force; every other:
+R3-aca6ffdec2 NOT-VERBATIM A control is killed only by an admissible receipt of its own type (F.1, K.2): the original explorer's FAIL of its named property, read under G for C1 and C25; its named test's failure; or, for C22 alone, that build failure.
+R3-44a4d17ae5 VERBATIM A control run that reaches a ceiling without a FAIL, or whose FAIL is found beyond its ceiling (K.1), is not killed, and 7.5's stop rule applies.
+R3-9da13b3a74 NOT-VERBATIM After restoration (I), the restored receipt that shows the unchanged core passes the configuration is:
+R3-3c5bda42c0 VERBATIM - for F-PT and F-B: either the original explorer's PASS, or an independently accepted composed-quotient PASS of the unchanged core on the exact final commit (B to E, N);
+R3-2257b5f168 VERBATIM - for every other configuration: the original explorer's PASS on the exact final commit.
+R3-afe729d2cb VERBATIM A quotient run is never a failing receipt.
+R3-a550804f35 VERBATIM A control is never run under a quotient.
+R3-2f18ae9522 VERBATIM An approved quotient diagnostic test (D) is never a 7.5 kill receipt, whatever it shows on a mutant." **A4.** A4 is not a change to the core.
+R3-ac6c1fd3fd VERBATIM It is not permission to run any source mutant, or any other actor change, under a quotient.
+R3-1c8db1024f VERBATIM **C7 without A4 (line 748).** The run is kept and its execution does not move.
+R3-cba9fb2620 VERBATIM It is added to the receipts and is not required to kill.
+R3-cdf4a6ed9f VERBATIM Its comparison needs the unchanged core's F-3 result.
+R3-54dc45f5e8 VERBATIM That side may cite the accepted exact-final-baseline F-3 composed-quotient PASS, under the same B to E and N prerequisites, because the original F-3 did not complete at 30,000,000 or at 60,000,000 (M).
+R3-72105959e5 VERBATIM If the mutant run ends INCOMPLETE, that is recorded as it is and reported (E.4 rule 3).
+R3-b74701a109 NOT-VERBATIM - the first-reported property may differ (O). ### F.1 Receipt types: what each must show Every receipt is first classified under K.2.
+R3-56e4728990 VERBATIM It must then show what its own type requires below, and nothing of another type is required of it.
+R3-fb59a56d08 VERBATIM A field that a type does not produce is recorded as NOT PRODUCED BY DESIGN.
+R3-06d5311785 VERBATIM Common to every type, as the contract and AD-1-R2 already require:
+R3-eb58d22d43 VERBATIM The process exited 101, by a normal exit and not by a signal.
+R3-173ef27f35 NOT-VERBATIM For C4, the reading of "P4, P8" is not settled here (open item 10).
+R3-48b3a6ab1e VERBATIM It is not their kill's attribution, which comes from G.3(b).
+R3-6d1d871ed2 VERBATIM - Not required: any witness line, witness locus or witness verdict.
+R3-f5004befb1 VERBATIM - Not required: an explorer outcome line, or any witness line.
+R3-49497101bd NOT-VERBATIM The exact positive line, the header, the witness locus, the line of other properties and the rejections of G.3(c) apply to this invocation and only to it.
+R3-1c06ae325d NOT-VERBATIM They do not apply to the primary receipt of C1 or C25 (type (a)), or to any other control.
+R3-5c641b6a7f VERBATIM No executable hash is invented, and no witness is required.
+R3-17800793b0 NOT-VERBATIM **(e) Unchanged-core PASS receipt.** Every required run of 8.2 and 8.3 (E), and every restored receipt of 7.5 (I).
+R3-531bfdb1fd VERBATIM The process exited 0, by a normal exit and not by a signal.
+R3-eac5f48b4d VERBATIM The launching command records no kill, timeout or out-of-memory event, and time and memory stayed within its limits.
+R3-e9a17dd8f5 VERBATIM PASS`, every property line of Q, the counts of D and the branch list.
+R3-2127587a7d VERBATIM For a quotient run, every prerequisite of N, and no refusal.
+R3-c824766bac NOT-VERBATIM It is evidence for A4 only, and it is not a kill receipt. ## G.
+R3-ce45c4082a VERBATIM Historical evidence, not a final-baseline receipt.
+R3-c3b9e5e016 VERBATIM It is not the control's definition. | | C25 narrow probe (AD1R1-WITNESS-AUDIT-01, patch `29a2c1e5…d732`) | EXECUTOR-REPORTED:
+R3-3981004ed3 VERBATIM ARCHITECT-RULED (AD1R3-READINESS-01): the retrieved patch and the authenticated historical receipts support P7 with `self.keep = true` preserved; no additional probe is justified.
+R3-fc9b331abb VERBATIM They are not approved final campaign controllers.
+R3-2c5910777d NOT-VERBATIM They are not modified or run again. | | First failures under the original explorer (E3 for C1, E4 for C25) | NOT ESTABLISHED.
+R3-a877638049 VERBATIM NOT APPLIED here) Each is applied only in a disposable worktree, by a script kept outside the repository (line 750), at the exact final baseline, and never committed.
+R3-79dee34091 VERBATIM - **C1, "the count becomes a flag".** At the head of `count_step` (`protocol.rs` line 175 at 42dd1bd1), for the `unapplied` field only, the step sets the field to 1 on a step up and 0 on a step down: `if shift == UNAPPLIED_SHIFT { return with_field(word, shift, u64::from(up)); }`.
+R3-7802b72676 VERBATIM - **C25, "a gating append answers Committed on `Commit::Unknown`".** Within `Publish::gating` (`protocol.rs` line 1413 at 42dd1bd1), in the arm `Insert::Inserted(seq)` → `Commit::Unknown`, preserve `self.failed();`, `self.rolled(io.rollback());` and `self.keep = true;`, and replace ONLY `return refused(Persistence::Uncertain, Reason::Storage);` (line 1476, its only occurrence in the file) with `re
+R3-d19e5066db NOT-VERBATIM The compound mutation that also drops `self.keep = true` is historical evidence only. ### G.3 The kill criterion, for C1 and C25 only "For C1 and C25 only, the control is killed when (a), (b) and (d) all hold and none of (c) occurs; it is then recorded as (e) states.
+R3-14d7e1206e VERBATIM (a) **The first failure is preserved as primary.** The unchanged original explorer, run as `full_f1` selected alone with `--exact` (and `--ignored`, since it is an ignored test) on the mutant executable, FAILs.
+R3-9b53872290 VERBATIM Its raw report is kept unedited: the line `outcome:
+R3-2574c712b7 VERBATIM - If it reports otherwise, that is reported as it is and not reinterpreted.
+R3-625eaa4055 VERBATIM The control is then not recorded as killed under this clause until the Architect rules.
+R3-bcb7aa734c VERBATIM - E3 is never counted as P1, and E4 never as P7.
+R3-b404d9c39d VERBATIM - An INCOMPLETE run is not a FAIL, and neither is a FAIL found beyond the ceiling (K.1).
+R3-8dd26d26b8 VERBATIM No witness line is required of it.
+R3-8c9ecacfae NOT-VERBATIM (b) **The named property is established by exact replay.** The control's witness test, selected alone with `--exact` on the same pinned mutant executable as (a), with a listing that shows exactly one match, FAILs, and its raw output contains the exact positive line at the required locus:
+R3-ab367f1844 VERBATIM The same output must also show:
+R3-1511129b2c VERBATIM 11 steps, each enabled and taking its choices; <n> violations`, or `C25 WITNESS F-1:
+R3-7c946f5c8c VERBATIM 1 steps, each enabled and taking its choices; <n> violations`;
+R3-e69294818a VERBATIM - E3 (C1) or E4 (C25) in the line `OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: [...]` (or `… as P7: [...]`).
+R3-42df5e608c NOT-VERBATIM (c) **Rejections of the witness receipt.** They apply only to the witness invocations of (b) and (d) (F.1 type (c)), never to the primary receipt of (a) or to any other control's receipt.
+R3-a784c9abba VERBATIM - a panic or failure whose message is not the witness's own verdict (an unrelated panic);
+R3-b614275ffd VERBATIM - a selection other than exactly the one named test: another test, zero or several matches, or no `--exact`;
+R3-d6fe47f481 VERBATIM Only C22 is killed by a build failure, and it has no witness.
+R3-7f8f0f2aff VERBATIM 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused'`;
+R3-13709bef56 VERBATIM 1 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating:
+R3-274e7a3288 VERBATIM Each of the three receipts must also be admissible under K.2. ### G.4 The witness's required form Each is a property of the prototype at 42dd1bd1 (`replay_schedule`, `run_witness`;
+R3-543afefb92 VERBATIM No forced state: the replay starts from `initial(F1)`, and each step runs on a world decoded from the previous key.
+R3-995e920ec3 VERBATIM Real hook counts: `hook::take_counts` around each step, passed to `transition_properties`.
+R3-a6590fae42 VERBATIM Deterministic replay of every scheduled actor step and every oracle choice.
+R3-9db6fdbbf4 VERBATIM The fixed branch labels are asserted at every step except the one the control changes.
+R3-fc12f2b79b VERBATIM Every violation is collected: of the initial state; of every step (those pushed inside it, and its transition properties); of every state after a step (its state properties and its key's round trip).
+R3-7a2273ec21 VERBATIM P1 must be in step 11's own violations, with `admission: admitted`.
+R3-e20966223e VERBATIM P7 must be in the after-state of step 1, with `append_gating:
+R3-606d53773f VERBATIM On the healthy core the same schedule must show no violation and the healthy branch.
+R3-1c6dbd5f53 VERBATIM Differing behaviour is printed as evidence, step by step (branches, word, ledger), never absorbed into the fixture.
+R3-7246b02f5a VERBATIM **Location.** Two ordinary (not ignored) tests at the end of `model_tests.rs`: `c1_witness_p1_at_a_successful_admission` and `c25_witness_p7_on_the_resulting_world`.
+R3-6a27f0b34b VERBATIM Each completes in under a millisecond and touches no shared state but the thread-local hook (EXECUTOR-REPORTED), so it is safe in the default suite.
+R3-a2331e692c VERBATIM On the unmutated core each is a regression test of the behaviour its control removes.
+R3-a6ba9797a1 VERBATIM The schedules' minimality is not claimed (O). ## H.
+R3-3c5f0001dd VERBATIM It is not edited, regenerated or overwritten. ### H.2 The proposed current-tree manifest A separate file, proposed (selected by the Architect as the proposal):
+R3-2f51133117 VERBATIM It is not an explanatory supplement.
+R3-6c48e3225f VERBATIM Final Candidate 11 acceptance requires that it be reviewed and found aligned with the exact final tree.
+R3-526ebe3ffa VERBATIM The 22 stale entries' 'TEXT UPDATE, SAME PROPERTY' (S-10, S-11) is made only in it.
+R3-69f02ae0f6 VERBATIM **This draft neither creates nor approves it.** Making it needs its own authorised mission; the test-only allowance of P does not cover it. ### H.3 What the committed manifest holds 1. `name`, `version` (`ct-1`), and `derived_from`: the original's path, sha256 and version.
+R3-c9c8051127 VERBATIM For each, these definition fields are copied from the original and never changed: `id`, `category`, the two meanings; `edits` (every `file`, `anchor`, `replacement`, `count`, in order); `command`, `cwd`, `expected_failure_tests`.
+R3-636a730665 VERBATIM For each control, the original's `review_status`, `lineage` and `review`, copied unchanged and marked historical.
+R3-4c8dc81bc4 VERBATIM They are not current-tree approval.
+R3-7a522b09cb VERBATIM For each control, a separate current review status.
+R3-dfcb39ea17 VERBATIM Acceptance exists only as the Architect's own recorded decision, bound by the attestation of H.6.
+R3-c1f8abe422 VERBATIM 5. `source_sha256`: the sha256, at the tree being validated, of each file the control names.
+R3-2938af80a7 VERBATIM **No self-reference.** The manifest records no commit or tree hash of the commit that contains it, and requires none.
+R3-6b07480011 VERBATIM They stay identified in two sets:
+R3-778366c63c VERBATIM Each gets its own reconciliation record: control id; file; the original's recorded hash; the validated tree's sha256 and git blob; the commit at which it first went stale; every anchor's occurrence count against the manifest's `count`, with its line number; a statement that the control's anchors, replacements, command and expected failing tests are unchanged; and the reviewer's finding (SAME PROPE
+R3-657c995325 VERBATIM At 42dd1bd1 a read-only dry run (EXECUTOR-REPORTED, AD1R1-MUT-READINESS-01 stage6/01) found the same 22 stale pairs, and every anchor of all 183 controls at its `count`.
+R3-cda42f0af4 VERBATIM 42dd1bd1 is not the final tree. ### H.5 Alignment check (mechanical) Every one must hold, or the manifest is not aligned: every recorded `source_sha256` equals the validated tree's file; every anchor occurs exactly `count` times there; the original manifest's sha256 there is still `2c4adc84…2e14`; the control set and every copied field equal the original's.
+R3-0effccb45f VERBATIM A changed anchor, replacement, count, command or expected test is a redefinition of the control, not a TEXT UPDATE, and needs its own review (line 912's condition).
+R3-abe0f8711c VERBATIM Restoration after each control is verified by blob equality with the baseline, never by reversing a replacement (M45, M113 and M129's replacements already occur in their files;
+R3-9d62c1e65e VERBATIM M32, M39, M79 and M143 are deletions). ### H.6 The detached attestation Created after the source freeze, and not inside the source commit whose identity it records.
+R3-51c369275b VERBATIM - the actual current review decisions, each with its source.
+R3-2e493d7450 VERBATIM It may live in the final evidence directory, or in a later evidence-only commit whose parent is the final commit.
+R3-b5c67b904e VERBATIM It is never placed in the commit it attests. ## I.
+R3-ffc1e98948 NOT-VERBATIM Exact-final-baseline evidence, builds and restoration **Text.** "Every required 8.3 run (E), every 7.5 failing and restored receipt, every C1/C25 witness receipt, the A4 comparison and the C7-without-A4 run is made against the exact final baseline commit, or a mutant of it.
+R3-16b7e162ef VERBATIM The following are informational and are not 8.3 or 7.5 evidence:
+R3-4f02b96fd8 VERBATIM Its sha256 is checked before and after each run.
+R3-462fe3b828 NOT-VERBATIM The same pinned mutant executable serves every invocation of that mutant: its original-explorer run and, for C1 and C25, its witness run.
+R3-8783ea0cf4 VERBATIM 1. the final unchanged baseline commit and tree;
+R3-1d2622f07b VERBATIM 3. the exact mutation source blob or blobs: git blob id and sha256 of every file the patch changes, as built;
+R3-c03891bf0f NOT-VERBATIM 7. the restored baseline identity (every changed file's blob equal to the baseline's, the worktree clean, nothing else differing from the baseline commit) and the restored PASS receipt (for C22, it includes the healthy build evidence of F.1 (d)).
+R3-da45d3125d VERBATIM A mutant tree is not the baseline tree, and no receipt describes it as identical to it.
+R3-ab855584bd VERBATIM Reproducible builds are not established: two builds of one source have differed in sha256.
+R3-77ca31a983 VERBATIM Every identity is the sha256 of the executable actually run." **Proposed receipt linking (PROPOSED CLARIFICATION, S-5).** One accepted full unchanged-core receipt per exact baseline, configuration, build identity (the pinned baseline executable's sha256) and execution policy (command, flags, limits, environment) may be linked by several control records as their restored receipt, provided each cont
+R3-eff0709a8b VERBATIM It is not permission to omit a restored run the contract now requires.
+R3-068f7d6db2 VERBATIM A-1 and A-2 (4.1, lines 198–199) stay stated and undischarged until the real storage and shell contract (6.3;
+R3-323ed321af VERBATIM Section 11's scope sentence is unchanged. ## K.
+R3-83418b2c80 VERBATIM Ceilings, and runs that end without a verdict **Source fact (PROVEN FROM SOURCE).** All three explorers check `visited.len() as u64 > config.cap` before expanding each key: `explore`, `explore_experimental` and `explore_symmetric_kept`, at `model_tests.rs` lines 3907, 5068 and 6609 at 42dd1bd1. `visited` counts every distinct key discovered, the initial key included, expanded or not.
+R3-d6db408e86 VERBATIM - The cardinality is inclusive: a run is within its ceiling if and only if it completes with at most C keys discovered.
+R3-6205c0e774 VERBATIM The run then stops INCOMPLETE.
+R3-98c886193e VERBATIM Because the check is made only at expansion boundaries, the discovered count can overshoot C by at most the new keys of one expansion (observed:
+R3-520955a4ce VERBATIM It is not extra budget: any run that discovers more than C keys does not complete.
+R3-992f687b69 VERBATIM - An INCOMPLETE receipt prints the discovered count as it is.
+R3-0ca2c29724 VERBATIM - For a FAIL, two facts are kept apart.
+R3-4845859b5a VERBATIM The raw outcome: the explorer's FAIL, with its property, detail, counterexample trace and printed count, kept exactly as printed and never discarded.
+R3-ac3eabbf65 VERBATIM Its admissibility: the FAIL is within the authorised cardinality only if its printed discovered count is at most C.
+R3-b4f955578b VERBATIM Unless a separate, explicit authorisation names that run, its outer gate is **INCOMPLETE — BUDGET EXCEEDED**: it is not a final mutation-kill receipt and not the verdict of a complete run, and the overshoot is still not budget.
+R3-1adbc07089 VERBATIM - The time ceiling (45 minutes) and the memory ceiling (16 GiB) are the launching command's, and are not extended.
+R3-5e2188145d VERBATIM The explorer's own elapsed-time check is an earlier stop, also INCOMPLETE.
+R3-7554d699a4 VERBATIM A runtime quotient-precondition refusal — any panic whose message begins 'quotient inapplicable' or 'symmetry inapplicable' — ends the run with no property verdict.
+R3-00512a03db VERBATIM Its outer receipt is unsuccessful and reads **INCOMPLETE — VERIFICATION INVALID**, with the raw refusal text and the stop.
+R3-ff9ba4356e VERBATIM It is never PASS, never FAIL of a property, and never a mutation kill.
+R3-4127772c50 VERBATIM It changes no recorded verdict: every complete run so far ended below its ceiling (the closest is F-PT, at 29,751,473 against 30,000,000).
+R3-0863556d47 VERBATIM A stricter reading would have the explorer report PASS for a run that the contract calls INCOMPLETE, a contradiction this addendum must not create.
+R3-ae34bef0be VERBATIM Raw outcomes are kept as printed;
+R3-380a6bacb0 VERBATIM K.1 and K.2 decide only what a receipt may be used as. ### K.2 Classification of a receipt — process-aware and fail-closed AD-1-R2's rule "classification is by text, never by exit status" is withdrawn.
+R3-4a03daad3c VERBATIM A full test asserts PASS, so FAIL, INCOMPLETE, a refusal and any other panic all exit 101 (EXECUTOR-REPORTED in the historical receipts); and a PASS already printed when the process is stopped from outside is not a completed run.
+R3-fe313f6e7f VERBATIM A receipt is admissible only if all of these agree:
+R3-329a9cf217 VERBATIM 3. the complete raw output, with the named-property evidence that its type requires (F.1);
+R3-a411bc8b8d VERBATIM 6. the launching command's termination and resource-limit records: no kill, timeout or out-of-memory event, and time and memory within its limits;
+R3-ced3c4f1a3 NOT-VERBATIM For a test that is not an exploration (F.1 (b) and (c)), point 2 needs no configuration bounds and point 7 no discovered count.
+R3-d26a3557f9 VERBATIM No executable, test selection or test run is required of it, since none is produced by design.
+R3-a5df72ba88 VERBATIM PASS text followed by a kill, a timeout, an out-of-memory kill, an incomplete termination, an identity mismatch or missing completion evidence is not PASS.
+R3-2bd0297b55 VERBATIM For an intended assertion failure, the receipt must show the expected, completed failure of the named test, with the correct property evidence; a nonzero status alone shows nothing.
+R3-079e639ef0 VERBATIM Each receipt records two facts separately: its raw outcome, unchanged, with any counterexample; and its admissibility under the authorisation it ran under.
+R3-9b5b23399e VERBATIM A receipt that is not admissible is never PASS and never a kill.
+R3-dfdf01c286 VERBATIM INCOMPLETE (with its cause);
+R3-9140a7ffa3 VERBATIM INCOMPLETE — BUDGET EXCEEDED (K.1);
+R3-47d999313f VERBATIM INCOMPLETE — VERIFICATION INVALID (K.1, a quotient refusal);
+R3-854dbb5ee0 NOT-VERBATIM **Classification cases** (document and checker cases, not Nexus executions; the packet's checker applies these rules to each): | # | Case | Raw outcome kept | Outer classification | Kill evidence | |---|---|---|---|---| | 1 | Unchanged-core run: `outcome:
+R3-71b5243c6d VERBATIM PASS` and every line of Q; `test result: ok.
+R3-e0e6e4076b VERBATIM 1 passed`; exit 0, no signal; no event of the launching command; identities match; count at most C | PASS | PASS | — | | 2 | `outcome:
+R3-e274e3b8e7 VERBATIM PASS` printed, and then the launching command kills the process (a signal, the time limit, an out-of-memory kill), or the completion evidence is missing | PASS, as printed | INCOMPLETE: a run killed from outside (line 855); never PASS | no | | 3 | C1/C25 witness on the mutant: the witness's own panic with the exact positive line at its locus, the header and the line of other properties; `1 failed`
+R3-9275a98dd8 VERBATIM G.3(b) holds | a part only: with G.3(a) and G.3(d) | | 4 | A panic whose message is not the named test's own verdict (a fixture failure, `WITNESS FIXTURE FAILURE`, an `expect` in setup), or a nonzero exit with no completed failure of the named test | as printed | NOT ADMISSIBLE (unrelated failure).
+R3-20ef5a507d VERBATIM On an unchanged-core run it is not PASS: that run's evidence is missing (line 831); it is reported and the mission stops for a ruling | no | | 5 | Original explorer on a mutant: `outcome:
+R3-9faddff297 NOT-VERBATIM E4: …`, no witness line; `failed: {"E4"}`; exit 101, no signal; count at most C; identities match | FAIL E4 | FAIL, admissible (F.1 type (a)); no witness marker is required | yes where E4 is the control's named property (for example C10); for C25 only the primary receipt of G.3(a) | | 6 | C22: the build of the mutant source exits nonzero with `error[E0283]` at the designated T-OWN line and no othe
+R3-060d822c80 NOT-VERBATIM FAIL` with a printed count above C, found during the overshoot | FAIL, with its counterexample | INCOMPLETE — BUDGET EXCEEDED, unless a separate, explicit authorisation names that run | no | ## L.
+R3-60f52bfc8e VERBATIM Rule R1 — the exchange loop's first expected value **Target.** The sentence of row R1 (line 548) beginning "The loop needs no load".
+R3-71bf2d205e VERBATIM AD-1-R1 called it the third sentence; it is the fourth, and it is identified here by its opening words, not by an ordinal.
+R3-da3a05fa40 VERBATIM **Kept unchanged** (the other sentences of R1): the word is touched in exactly two private functions, one that loads it, used only by `view`, and one that runs a compare-and-exchange loop; both use sequentially consistent ordering, for success and for failure; nothing else in the file names the word.
+R3-c25540d441 VERBATIM - Store operations: `Publish::new` sets `guess = core.flags()` (lines 1258–1259): the phase, session, latch and cell bits from the core when the guard is created, with zero counts and no handover fault (`flags`, line 1068).
+R3-ff25821f0e VERBATIM Each step computes the value from the present value only; `arm`'s step also sets a local flag, which every attempt overwrites.
+R3-bac70465e3 VERBATIM - Appendix A's `Core` (contract lines 1429–1442) has no field holding a published value.
+R3-04aa4f5090 VERBATIM **Text (replaces only the sentence beginning "The loop needs no load"; the rest of R1 stays as written).** "**The loop needs no load:** it starts from a guess and takes the present value from a failed exchange.
+R3-769e0c51d7 VERBATIM Starting from a guess is safe only because of how each attempt is made: the value to publish is recomputed from the value the attempt compares against, by a step that depends on nothing but that value and inputs fixed before the loop; a failed attempt leaves behind nothing that the next attempt does not overwrite; and the step cannot unwind (R8) and has no effect outside the attempt (no storage ve
+R3-ea1ebd7bdb VERBATIM One failed exchange then suffices only if no other thread changes the word before the retry; otherwise it fails again.
+R3-b37428397c VERBATIM No bound on the number of failed exchanges, and no wait-freedom, is claimed (6.3)." **Effect.** Wording only, and safety-neutral.
+R3-91c44c1052 VERBATIM Appendix A and the code are unchanged.
+R3-512fac1b56 VERBATIM The test-only hook reports each failed exchange (line 215), which T-PB4 uses; the hook is not evidence for R8 (6.4).
+R3-86959ec611 VERBATIM The second review's reading of R1 is not otherwise affected. ## M.
+R3-b22b6c53e0 VERBATIM Historical INCOMPLETE receipts and later complete equivalent-graph results **Text.** "A receipt keeps the verdict it was given.
+R3-4747a86b2e VERBATIM A later complete run of an equivalent graph never changes an earlier receipt's verdict.
+R3-caa230bab1 VERBATIM Every INCOMPLETE run below stays INCOMPLETE, establishes no property, and is listed with its verdict wherever F-3's history is given.
+R3-93e52882df VERBATIM It is not a continuation, completion or relabelling of any of them.
+R3-4eb7348ebd VERBATIM The two kinds of result do not conflict: an INCOMPLETE run asserts nothing.
+R3-c0622ad7be VERBATIM It may stand for F-3 in 8.3 only under B to E and N, at the exact final commit (I).
+R3-82df3a44cb VERBATIM It may say only that it is DERIVED to satisfy the properties, under B(1)." **History inventory** (from existing receipts;
+R3-c099a54bad VERBATIM EXECUTOR-REPORTED; nothing rerun or relabelled): | Configuration and explorer | Mission | Commit | Ceiling | Discovered (expanded) | Verdict | |---|---|---|---|---|---| | F-3, original `explore` | CAMPAIGN-01 | 244c5b23 | 30,000,000 | 30,000,002 (25,318,697) | INCOMPLETE | | F-3, original `explore` | F3-CAP60-01 | 9e945ee7 | 60,000,000 | 60,000,001 (53,851,687) | INCOMPLETE | | F-3, admission obse
+R3-516dc6ee84 VERBATIM The prefix run was INCOMPLETE by design and asserted to be so; it was a diagnostic of the exchange, not an attempt at F-3. ## N.
+R3-1e5ba69215 VERBATIM Prerequisites of every quotient claim — proof and executable binding A quotient claim is any of:
+R3-befafd667c VERBATIM 'F-3, F-PT or F-B PASS by the composed quotient'; any DERIVED original count; a quotient PASS used as a restored receipt or as the unchanged-core side of a comparison.
+R3-d6f8f8796b VERBATIM If any one fails, the claim is not made.
+R3-06dbd68702 VERBATIM "As at the final commit" is not evidence that an unreviewed change preserves a proof.
+R3-502d68c20e VERBATIM A change to a proof-relevant input inherits no approval.
+R3-3d7dba3961 VERBATIM An addition after the audited text is such a change: it needs review that it does not alter the meaning of the audited code (for example: no new trait implementation on a model type, no item or import that changes name resolution, no attribute or `cfg` reaching earlier items, no global state the explorers use, no change to the hook).
+R3-0b2389725f VERBATIM The Architect's interim source review of 42dd1bd1 is that ruling's scope; whether it also covers non-interference with the AQ and SQ proofs is for the Architect to state, and is not inferred here.
+R3-f41bee2aed VERBATIM **Source closure.** 1. `protocol.rs`, including its test-only hook (blob `a2df2841b99c` at 42dd1bd1).
+R3-e779370400 VERBATIM The model in `model_tests.rs`: `initial`, `actors`, every `step_*`, `Io`, `Oracle`, `encode`, `decode`, `state_properties`, `transition_properties`, `admission_properties`, `terminal`, `PROPERTIES`, `BRANCHES` and the configuration constants (audits void otherwise:
+R3-4888994e36 VERBATIM 6. `Cargo.lock` (`1af53a60`); the crate's `Cargo.toml` (`2543c745`; no features declared); the workspace `Cargo.toml` (`2c558a44`; release profile `opt-level = 3`, `lto = "thin"`, `codegen-units = 16`, `strip = "symbols"`; the panic strategy is the default, unwind, on which `catch_unwind` in the explorer depends); `.cargo/config.toml` (`05a42b50`; `[build] jobs = 8`, `[env] CARGO_PROFILE_TEST_DEBU
+R3-9ec3c7fe9a VERBATIM The build command and environment: `cargo test -p nexus-governed-control --locked --release --lib --no-run`; any `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_PROFILE_*`, `CARGO_BUILD_*`, `RUSTC_WRAPPER` or target setting; the enabled features and `cfg`.
+R3-1c794bcebd VERBATIM The run completes with 0 unexpanded keys and verdict PASS, with no runtime-guard refusal (K).
+R3-ab58277f8f VERBATIM A state's properties are judged when it is expanded, before its transitions; then D1 if it has no enabled step; then its transitions, in actor order, then oracle order.
+R3-ef3d8be8ec VERBATIM That property, its detail and its trace are the primary record of a FAIL, and the raw report is kept with its text.
+R3-53471241e7 VERBATIM So every trace, in the key graph the explorer searches, that ends in a violation judged during expansion has at least d steps, d being the depth of that state, and the printed one has d or d + 1 steps.
+R3-a961b8d2e2 VERBATIM **What is NOT ESTABLISHED.** - That the printed trace is the shortest trace exhibiting the reported property, or any violation: a state violation at depth d expanded later in the same layer gives d steps where a step violation reported first gives d + 1.
+R3-61018dd425 VERBATIM - Anything about other violations at the same depth: only the first found is reported.
+R3-d976eae1a3 VERBATIM It is not a cycle, and not a shortest witness of one.
+R3-2ce0514793 VERBATIM Q11's statement that lifted lengths equal original shortest lengths is an executor proof, not accepted, and holds only under B(1).
+R3-a8d89db19c VERBATIM **Line 609's phrase "so that a violation has a shortest trace" is REPLACED (S-19).** The one operative text, for every run, original or quotient, healthy or mutant:
+R3-e84b004613 VERBATIM "so that the trace printed for a reported violation is a shortest breadth-first parent path, in the key graph that run's explorer searched, from the initial state to the checked state, with the offending transition appended where the violation is of a transition." The claims NOT ESTABLISHED in 3 stay not established: no global counterexample minimality, and no shortest cycle witness.
+R3-edabc4b001 VERBATIM The explorer's printed wording (`shortest trace (<n> steps):`, and its unfolded form) is raw output: it is kept unedited in every receipt and read under this text.
+R3-1760b2ce1a VERBATIM The replay requirement of D (unfold, then replay in the original semantics before a trace is cited) is unchanged.
+R3-7e93bb7c17 VERBATIM A quotient FAIL names *a* violated property, never "the first", and is never a control's failing receipt (F).
+R3-e8bf1fdf41 NOT-VERBATIM **Controls.** A control's attribution comes only from the original explorer on the mutant (F), and for C1 and C25 also from the witness (G).
+R3-1b6e09342e VERBATIM E3 is never counted as P1, and E4 never as P7.
+R3-ff9c084b65 VERBATIM A witness lists every violation by step and by kind.
+R3-3bf445c1b2 VERBATIM Its order is a listing order, not a priority.
+R3-9be2b0a5e2 VERBATIM It does not claim to be the explorer's first failure, and claims nothing about any configuration beyond its own schedule. ## P.
+R3-8fcf3b8aae NOT-VERBATIM The witnesses live only in `model_tests.rs`, a `#[cfg(test)]` module, added after every existing line (42dd1bd1).
+R3-8b769b1e91 VERBATIM 2. `protocol.rs` production text is never changed by a witness or by a receipt change.
+R3-dd73f5dfd0 VERBATIM The one test-only item in it, the hook, is used as it is.
+R3-add476a5b5 VERBATIM The witness-only source allowance (1 and 2) authorises nothing else.
+R3-f432d1f9e2 VERBATIM In particular it does not authorise the current-tree manifest (H), any later printing change (D adds none), or carrying the witnesses to the final commit.
+R3-d11818767d NOT-VERBATIM The review packet that carries this draft adds files only under `docs/evidence/p3-candidate11/ad1r3-review-01/`, in one documentation-only commit whose parent is the earlier evidence-transport commit 8693e3a7.
+R3-b82a8564e3 NOT-VERBATIM The earlier packet, `docs/evidence/p3-candidate11/ad1r2-review-packet-01/`, is not changed.
+R3-ce5b30c200 VERBATIM Mutation patches are applied only in disposable worktrees, by a script kept outside the repository (line 750 unchanged), and are never committed applied.
+R3-35e249e607 VERBATIM Property lines by configuration A PASS receipt prints one line for each of the 25 entries of `PROPERTIES` (`model_tests.rs` line 3694):
+R3-2cf732c0b5 VERBATIM A FAIL receipt prints only its failing property and trace.
+R3-a43b549aad VERBATIM An INCOMPLETE receipt prints every line as "NOT ESTABLISHED (incomplete)".
+R3-a4108495b8 VERBATIM **Text.** "A configuration PASSes when every applicable line HOLDS.
+R3-12c326f42f VERBATIM A line that is not applicable, or not claimed, is printed as such.
+R3-d181135c9a VERBATIM It is never counted as HOLDS, and never as a failure.
+R3-11c8e9d5d4 VERBATIM The individual lines are authoritative: a summary count is a check on them, never a substitute." Expected successful formats (PROVEN FROM SOURCE: `worker_unwinds` is true only for F-W and `l1` is false only for F-D).
+R3-df6de6f1da VERBATIM These are formats, not claims that any run has completed: | Configuration | HOLDS | Not applicable | Not claimed | |---|---|---|---| | X-1 to X-5 | 24 | E10:
+R3-a05cd68117 VERBATIM "not applicable here (worker verbs do not unwind)" | — | | F-1, F-2, F-4, F-5, F-6, F-7, F-8, F-B2, F-G, F-R | 24 | E10 | — | | F-3, F-PT, F-B (original or admitted quotient) | 24 | E10 | — | | F-W | 25, when every applicable check succeeds | — | — | | F-D | 23 | E10 | L1:
+R3-3b0d39a1da VERBATIM "not claimed for this configuration" | L1's line, where it holds, reads "HOLDS: <n> non-fault edges, no cycle; <m> end states, each terminal (D1)".
+R3-193f1feab0 VERBATIM E10 is established only by F-W's PASS. ## R.
+R3-08f30f464a VERBATIM Neither Claude Chat nor Codex has a role in it, and this draft requires neither.
+R3-6524112679 VERBATIM **Mapping** (proposed; no original is edited; the contract's own lines are quoted under S-20 and S-21): | Where | Old operational role | Read under the current arrangement | |---|---|---| | contract line 4, and line 5 of each review:
+R3-2b826f5c27 VERBATIM "Claude — Lead Architect" | wrote the contract; coordinates the work around it | Authorship stays historical.
+R3-5a345d05f4 VERBATIM The coordinating functions belong to the Sole Architect. | | contract lines 5, 8, 31, 972 and 982 ("First Architect"), and line 4 of each review ("ChatGPT — First Architect / Independent Auditor") | audits and accepts designs and contracts | The Sole Architect.
+R3-41553119db VERBATIM The acceptances recorded there stay as dated. | | contract line 923, "Codex's review of the evidence passes" | independent review of the implementation evidence | The Sole Architect's independent review of Claude Code's evidence passes. | | contract line 928, "only after the evidence and Codex's review have actually passed" | the same | The same.
+R3-f1d48e9de6 VERBATIM The Owner's decision on the label is unchanged. | | contract line 976, "Codex, under that arrangement" | reviewer of the implementation evidence | The Sole Architect.
+R3-397eb95d12 VERBATIM The line's second sentence is unchanged. | | REVIEW-02 line 238 | Claude:
+R3-04e2e82c2c VERBATIM Its last sentence is unchanged. | | REVIEW-03 line 81 | Claude assembles the authorisation request and coordinates authorised work | The Sole Architect. | | REVIEW-03 line 83, "Implementation review remains independent." | — | Unchanged:
+R3-bbce9b8245 VERBATIM Claude Code's implementation is reviewed by the Sole Architect, independently of the executor. | **Kept.** The obligation of independent review; the Owner's authority over adoption, scope, authorisation and the label (line 928); the rule that a reviewer does not accept a repair it wrote (line 976;
+R3-12e935c6c3 VERBATIM REVIEW-02 line 238); and that Claude Code never approves its own work.
+R3-41aeb80b24 VERBATIM **Not resolved here.** If the Sole Architect is the author of a repair, those rules apply to it unchanged.
+R3-16d4157906 NOT-VERBATIM Independent review of every resolution in this draft, A to R, and of the supersession table.
+R3-6693dc6d97 NOT-VERBATIM That ruling establishes no final mutation kill.
+R3-a01f878033 VERBATIM Acceptance of E's inventory dispositions and of the S-9 replacement of line 863's listing sentence; and whether the experimental tests are kept at the final commit.
+R3-66660660b6 NOT-VERBATIM C9, C10, C24 and C4 were analysed read-only in AD1R3-READINESS-01's attribution preflight (in its review packet).
+R3-232e55fcff NOT-VERBATIM Its findings are source-supported predictions, not measurements.
+R3-31ddd5b2e1 NOT-VERBATIM Whether C4's "P4, P8" is a list or a conjunction, and so whether the original explorer, which reports one property, can show what the row requires, needs the Architect's decision.
+R3-6442cc854c NOT-VERBATIM G applies to C1 and C25 only; nothing here extends it to any other control.
+R3-5a277daa29 NOT-VERBATIM The typed receipt requirements (F.1) and the process-aware classification (K.2), including INCOMPLETE — BUDGET EXCEEDED and the separate authorisation that it names.

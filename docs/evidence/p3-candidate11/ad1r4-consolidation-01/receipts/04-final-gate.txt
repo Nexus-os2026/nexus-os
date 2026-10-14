@@ -1,0 +1,74 @@
+P3-C11-DR01-D2A1-AD1R4-CONSOLIDATION-01 — FINAL GATE   2026-10-14T10:44:51+01:00
+gate script sha256 24d2456b7a20a8edfbf34179e5167b2c42851f7f499d43046273b6d7202566a2
+
+[F] frozen files vs receipts/03-freeze.txt (sha256sum -c)
+    exit 0: every frozen file matches (57 entries)
+    OK  CONTRACT-02-R1.md cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK  REVIEW-02.md 6dfb14560a8b2d22fe4e6d517891491b926423941179d0965eb38bc52aeecdce
+    OK  REVIEW-03-01.md 1f964d7515d94f3d21e55d53f23b67fb99a67cb6307b6aacef2c585dcd39fb35
+    OK  AD1-R3.md 485d9256932220644d7368d64b7b9b4d8df8a3a5c65aba4a1c5fcdf390ae286e
+    OK  DISPOSITION-01.md a8a6d29376cf6f393a7eaa9047923719a339377caa554527a8878760cbdcf11c
+    OK  protocol.rs.42dd1bd1 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+    OK  controls_defs.py.txt ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f
+    OK  protocol.rs at 42dd1bd1cf21ffdea5968b256d2983f6575fab5b (git object) = inputs copy
+    OK  controls_defs.py copy = CAMPAIGN-01 sealed original
+    OK  evidence commit B tree e1f3e48f
+
+[G1-fill] $ python3 tools/fill-ad1r4.py tools/ad1r4-template.md /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/CONTRACT-02-R1.md /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-02.md /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-03-01.md /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/protocol.rs.42dd1bd1 /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/controls_defs.py.txt /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md
+verbatim blocks 41; written /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md
+  L: quoted lines 58 (50 distinct): [4, 5, 198, 199, 434, 437, 546, 548, 584, 609, 620, 679, 684, 685, 686, 687, 688, 689, 693, 697, 699, 704, 709, 710, 720, 721, 737, 742, 748, 750, 813, 827, 831, 853, 855, 857, 859, 863, 865, 902, 911, 912, 915, 923, 928, 940, 941, 942, 970, 976]
+  R2: quoted lines 1 (1 distinct): [238]
+  R3: quoted lines 2 (2 distinct): [81, 83]
+  P: quoted lines 29 (29 distinct): [1292, 1293, 1294, 1295, 1619, 1620, 1621, 1622, 1623, 1624, 1625, 1626, 1627, 1628, 1629, 1630, 1631, 1632, 1633, 1634, 1635, 1636, 1637, 1638, 1639, 1640, 1641, 1642, 1643]
+  D: quoted lines 30 (30 distinct): [37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66]
+    exit 0 (expected 0): OK
+    AD-1-R4 sha256 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693 bytes 143220 lines 1859
+
+[G2-diff] $ sh -c diff -u --label AD-1-R3/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R3-DRAFT.md --label AD-1-R4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/AD1-R3.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' > drafts/AD1-R3-to-AD1-R4.diff
+    exit 1 (expected 1): OK
+    diff sha256 2ec8254e2904572f602d636ac646ba3e36c62258a33adb74b2e99d248d31b69d; +495 -89 lines
+
+[G3-check] $ sh -c python3 tools/check-ad1r4.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/CONTRACT-02-R1.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-02.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-03-01.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/protocol.rs.42dd1bd1' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/controls_defs.py.txt' '/home/nexus/NEXUS/nexus-os' 42dd1bd1cf21ffdea5968b256d2983f6575fab5b '/home/nexus/nexus-audits/claude-architect' a464a36621523f539d2554a6b176d678c7f885ea > checks/01-check-ad1r4.txt 2>&1
+    exit 0 (expected 0): OK
+    SUMMARY: 684 passed, 0 failed
+
+[G4-contradiction-scan] $ sh -c python3 tools/contradiction-scan.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' > checks/02-contradiction-scan.txt 2>&1
+    exit 0 (expected 0): OK
+    CONTRADICTION SCAN: 0 contradiction(s)
+
+[G5-matrix] $ sh -c python3 tools/check-matrix.py matrix/CONSOLIDATION-MATRIX.tsv '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/AD1-R3.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/DISPOSITION-01.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' tools/obligation-scan.py > checks/03-check-matrix.txt 2>&1
+    exit 0 (expected 0): OK
+    MATRIX: 242 rows (part A 60, DISP 138, R3 44); AD-1-R3 obligation sentences carried verbatim: 331; 264 passed, 0 failed
+
+[G6-classification-cases] $ sh -c python3 tools/classify-cases-r4.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' > checks/04-classification-cases.txt 2>&1
+    exit 0 (expected 0): OK
+    CASES: 32 as expected, 0 not
+
+[G7-negative-controls] $ sh -c python3 tools/negative-controls-r4.py tools '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' matrix/CONSOLIDATION-MATRIX.tsv '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/AD1-R3.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/DISPOSITION-01.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/CONTRACT-02-R1.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-02.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/REVIEW-03-01.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/protocol.rs.42dd1bd1' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/controls_defs.py.txt' '/home/nexus/NEXUS/nexus-os' 42dd1bd1cf21ffdea5968b256d2983f6575fab5b '/home/nexus/nexus-audits/claude-architect' a464a36621523f539d2554a6b176d678c7f885ea > checks/05-negative-controls.txt 2>&1
+    exit 0 (expected 0): OK
+    NEGATIVE CONTROLS: 48 as required, 0 missed, broken or not set up (26 checker, 12 scan, 6 matrix, 2 cases, 2 baselines)
+
+[G8-obligation-scan-r3] $ sh -c python3 tools/obligation-scan.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/AD1-R3.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' R3 > checks/06-obligation-scan-r3.txt 2>&1
+    exit 0 (expected 0): OK
+    R3: 840 sentences; 375 distinct obligation-bearing; 331 verbatim in AD-1-R4; 44 not verbatim in AD-1-R4
+
+[G8b-obligation-scan-disposition] $ sh -c python3 tools/obligation-scan.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/DISPOSITION-01.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' DISP all > checks/07-obligation-scan-disposition.txt 2>&1
+    exit 0 (expected 0): OK
+    DISP: 142 sentences; 138 distinct sentences (all counted); 16 verbatim in AD-1-R4; 122 not verbatim in AD-1-R4
+
+[G9-review-coverage] $ sh -c python3 tools/check-review.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/AD1-R3.md' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' review/R3-TO-R4-SEMANTIC-REVIEW.md > checks/08-review-coverage.txt 2>&1
+    exit 0 (expected 0): OK
+    REVIEW COVERAGE: COMPLETE
+
+[G10-defs-anchor] $ sh -c python3 tools/defs-anchor-check.py '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/controls_defs.py.txt' '/home/nexus/NEXUS/nexus-os' 42dd1bd1cf21ffdea5968b256d2983f6575fab5b C10 C24 C9 C4 > checks/09-defs-anchor-check.txt 2>&1
+    exit 0 (expected 0): OK
+    ANCHOR CHECK: every anchor occurs exactly once and no replacement occurs
+
+[G11-render-matrix] $ python3 tools/render-matrix.py matrix/CONSOLIDATION-MATRIX.tsv checks/06-obligation-scan-r3.txt checks/07-obligation-scan-disposition.txt matrix/CONSOLIDATION-MATRIX.md
+rendered matrix/CONSOLIDATION-MATRIX.md: part A 60, DISP 138, R3 44 rows; source texts found 182
+    exit 0 (expected 0): OK
+
+[G12-authored-text-hygiene] $ sh -c ! grep -n '[[:space:]]$' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' review/R3-TO-R4-SEMANTIC-REVIEW.md matrix/CONSOLIDATION-MATRIX.tsv matrix/CONSOLIDATION-MATRIX.md matrix/README.md && ! grep -c -P '\x00' '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/drafts/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md' review/*.md matrix/* >/dev/null
+    exit 0 (expected 0): OK
+
+FINAL GATE: PASS (every step exited as expected)

@@ -1,0 +1,12 @@
+--- check-ad1r4.v4.py
++++ check-ad1r4.py
+@@ -848,7 +848,8 @@
+             "(D) **The unchanged core's F-8 PASS.**", "type (e1)", "(E) **Identity, restoration and review.**",
+             "Sole Architect's independent review",
+             "(F) **Recording.** Only then is the row recorded as 'C4: P4, P8 (first failure <exact property printed>; witness)'.",
+-            "historical supporting evidence only", "discharge none of (A) to (E)", "any breach of G.6"]
++            "historical supporting evidence only", "discharge none of (A) to (E)", "any breach of G.6",
++            "They are kept in the raw output, and they are not further conditions of (B)"]
+     for x in need:
+         check(x in g5f, f"C20d G.5: {x[:80]}…")
+     for x in ("G.3 applies to C1 and C25 only. G.5 and G.6 apply to C4 only. Neither is an exception for any other control",):

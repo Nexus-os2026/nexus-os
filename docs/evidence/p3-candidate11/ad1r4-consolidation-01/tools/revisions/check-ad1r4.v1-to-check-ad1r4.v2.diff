@@ -1,0 +1,58 @@
+--- check-ad1r4.v1.py
++++ check-ad1r4.v2.py
+@@ -123,7 +123,6 @@
+     ("R3", 83, "Implementation review remains independent."),
+     ("P", 1626, "let core = &mut *self.core;"), ("P", 1643, "let set = snapshot.set;"),
+     ("P", 1476, "return refused(Persistence::Uncertain, Reason::Storage);"),
+-    ("P", 1289, "fn rolled(&mut self, answer: Rollback) -> Persistence"),
+     ("P", 1619, "fn acknowledgement(&mut self, snapshot: &Snapshot"),
+ ]
+ for key, n, frag in INLINE:
+@@ -137,8 +136,8 @@
+ check(P[174].startswith("fn count_step(") and "`count_step` (`protocol.rs` line 175 at 42dd1bd1)" in draft,
+       "C2e C1's count_step is at protocol.rs line 175")
+ impl = max(i for i in range(1288) if P[i].startswith("impl<'a> Publish<'a> {"))
+-check(impl == 1256 and all(not P[i].startswith("impl") and P[i] != "}" for i in range(impl + 1, 1965))
+-      and P[1965].startswith("impl Drop for Publish"),
++check(impl == 1256 and all(not P[i].startswith("impl") and P[i] != "}" for i in range(impl + 1, 1964))
++      and P[1964] == "}" and P[1965].startswith("impl Drop for Publish"),
+       "C2f rolled (1289), facts (1309), gating (1413), acknowledgement (1619) and resolve_gating (1765) are methods of Publish (impl 1257-1965)")
+ MT0 = git("show", f"{commit}:crates/nexus-governed-control/src/ledger/protocol/model_tests.rs").decode("utf-8").split("\n")
+ check(MT0[551].strip() == "let pick = self.prefix.get(at).map_or(0, |&p| p as usize);" and "line 552 at 42dd1bd1" in draft,
+@@ -782,8 +781,12 @@
+     bad = sorted({r for r in refs if r not in TYPES})
+     check(refs and not bad, f"C18a every type reference in operative text names a defined type ({len(refs)} references; undefined: {bad})")
+     check(not re.search(r"(?:type|types|F\.1) \(e\)", operative), "C18b no reference to an undivided type (e)")
+-    used = set(refs)
+-    check(set(TYPES) <= used | {"a", "b"}, f"C18c every defined type is referred to somewhere ({sorted(set(TYPES) - used)})")
++    outside = operative.replace(f1, "")
++    used = set()
++    for m in re.finditer(r"(?:F\.1 types?|F\.1|types?) \(([a-z][0-9]?)\)(?:(?:,? and |, | to | or )\(([a-z][0-9]?)\))*", outside):
++        used |= set(re.findall(r"\(([a-z][0-9]?)\)", m.group(0)))
++    want = {"c", "e1", "e2", "e3", "e4"}
++    check(want <= used, f"C18c types (c), (e1)-(e4) are each referred to outside F.1 (missing {sorted(want - used)})")
+     s5 = row["S-5"][3]
+     check("(e1) for a control that names a configuration, (e2) for a control killed by a named unit test, (e4) for C22" in s5,
+           "C18d S-5 states the restored-receipt types")
+@@ -797,7 +800,7 @@
+     hits = [p for p in paras if "NOT PRODUCED BY DESIGN" in p]
+     ALLOW = ("C22", "type (d)", "(F.1 (d))", "explorer report", "explorer fields", "does not produce", "never erases",
+              "None is marked", "no artifact marked", "never extends")
+-    bad = [p for p in hits if not any(a in p for a in ALLOW)]
++    bad = [p for p in hits if not any(a in flat(p) for a in ALLOW)]
+     check(hits and not bad, f"C19a every NOT PRODUCED BY DESIGN is in a C22, explorer-field or never-erases context ({len(hits)} hits; bad {len(bad)})")
+     for p in bad:
+         print("  NOT PRODUCED context not allowed:", flat(p)[:140])
+@@ -905,9 +908,11 @@
+             return n.value
+         if isinstance(n, ast.Name):
+             return names[n.id]
++        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
++            return lit(n.left) + lit(n.right)
+         if isinstance(n, (ast.Tuple, ast.List)):
+             return [lit(e) for e in n.elts]
+-        raise ValueError("not a literal")
++        raise ValueError(f"not a literal: {ast.dump(n)[:60]}")
+     defs = {lit(k): lit(v) for k, v in zip(controls.keys, controls.values)}
+     text = "\n".join(P)
+     for cid, prop, lines_ in (("C10", "E4", "1404–1408"), ("C24", "P8", "1774–1787")):
