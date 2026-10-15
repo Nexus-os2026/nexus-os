@@ -1,0 +1,42 @@
+{
+ "control": "A6",
+ "type": "e1",
+ "reference": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))",
+ "checks": [
+  [
+   "the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 in 89326b85's SHA256SUMS",
+   true,
+   "[]"
+  ],
+  [
+   "its classification blob and raw output identity are the catalog's",
+   true,
+   ""
+  ],
+  [
+   "accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it)",
+   true,
+   "['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS']"
+  ],
+  [
+   "exact configuration: the same test and flags as this control's run (F-5)",
+   true,
+   "['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f5', '--exact', '--ignored', '--nocapture', '--test-threads=1']"
+  ],
+  [
+   "exact Candidate C: the source exactly C before and after",
+   true,
+   ""
+  ],
+  [
+   "execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s",
+   true,
+   ""
+  ],
+  [
+   "artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now",
+   true,
+   "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+  ]
+ ]
+}

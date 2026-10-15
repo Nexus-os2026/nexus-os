@@ -1,0 +1,121 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-15, Europe/London (+01:00). Official receipts are under receipts/; development runs are under
+dev-local/ (kept on the machine, not published) and in a disposable clone in the session scratchpad (outside every
+evidence root); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build, test or executable; development used git objects, the
+previous packets, synthetic files and synthetic evidence roots only)
+
+ 1. 00:17  Read the mission, AGENTS.md and CLAUDE.md. Main worktree clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Accepted Tranche-1 evidence commit ebe42009 present locally (tree 7d8ab59e,
+           parent 3695a817); remote review ref tranche1-continue-02 -> ebe42009; destination ref absent. Host: 16 CPUs,
+           MemAvailable about 51 GB, 39 GiB free disk; no p3c11-* scope, cargo, rustc or governed-control executable
+           running.
+ 2. 00:20  Read the accepted Tranche-1 tooling (CONTINUE-02's tools/ and the RESUME-01 tools it ran unchanged; the
+           PUBLISH-04 publication tools), the CONTINUE-02 development log and stop history, the R2 duplicate-policy
+           ruling, the frozen catalog entries of the ten controls and the linked Stage-1/Stage-2/R5 evidence.
+           Catalog-required differences identified: C3a and A6 name two properties (special_attribution_rules
+           "AD-1-R4 F.1(a): either property the row names"); A6's receipt must print the corrected KEY_FIELDS (catalog
+           R2 receipt_metadata_item); A3 and A6 mutate model_tests.rs, which holds the explorer, so their panic is
+           reported at the mutant's line (4134 and 4149 instead of C's 4133); C8 runs full_fb on the original explorer
+           while its restored side is the Stage-1 composed-quotient F-B PASS; C15's restored side is the AD-1-R5 F
+           discharge record. Static note (not acted on: only execution decides): C3a leaves AckRefusal::Stale
+           unconstructed and C5 leaves `nonce` and `io` unused, so rustc may warn, and every build here must be free of
+           warnings (no C28-style exception).
+ 3. 00:26  Mission evidence root created (absent before; every mission worktree path, the local evidence branch and the
+           remote destination ref also absent). original-tools/ (27) and original-publication-tools/ (16) extracted
+           from the git objects of ebe42009, each sha256 checked against its packet's SHA256SUMS and against the
+           CONTINUE-02 local root's copy (all equal).
+ 4. 00:28  common.py written (mission identities; the mt2x worktree namespace and p3c11-mt2x scope prefix; the order;
+           the control matrix of section 4; the linked identities; publication paths; 48 MiB). Every name the reused
+           tools import keeps its accepted value. The seven tools carried byte for byte copied unchanged.
+ 5. 00:29  expectations.py: the ten controls from the catalog, cross-checked against the matrix; each mutant's bytes
+           from the frozen patch in a temporary directory outside every repository (never an object store); the A3/A6
+           verdict-assertion location from the mutant; A6's KEY_FIELDS from the mutant (the parser validated on C
+           against the key fields the accepted Stage-2 F-5 receipt printed); C8's original-explorer F-B bounds checked
+           against the Stage-1 F-B receipt; the restored sides from the catalog.
+ 6. 00:30  authenticate.py. Dev run 1 FAILED two checks (development/authentication-dev1-FAILED-c28-apply-and-status-
+           slice.txt): C28's apply receipt is RESUME-01's, not CONTINUE-02's; a status-line slice cut the closing
+           `**`. Fixed (authenticate.dev1-to-dev2.diff). Dev run 2: ALL CHECKS HOLD (566 OK).
+ 7. 00:32  classify.py: the catalog-required change, classify_a only (permitted_properties; A6 key_fields), both gated
+           on expectation fields absent for every other control.
+ 8. 00:35  control.py assembled from the accepted functions (git, apply_patch, restored_check, restore, finish, main
+           unchanged but for main's leading refusal) and the new gate() and link().
+ 9. 00:36  documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md and CAMPAIGN-STATUS-BEFORE-TRANCHE2.md written from
+           mission section 1 and git objects (dev-local/gen_documents.py; read-only after writing).
+10. 00:38  t2_controls.py. Rehearsal r1 (a disposable copy of the root, dev-local/rehearse.py) FAILED one control: the
+           C8 link's quotient-header check read the wrong line (development/t2-controls-dev1-FAILED-C8-link-header-line-
+           index.txt; control.dev1-to-dev2.diff). Rehearsal r2: 73 of 73 as expected (section D held back).
+11. 00:42  tool_diff.py, render.py, build_packet.py (exact-path duplicate and zero-length policy modelled on ruling
+           R2), rehearsals.py, record_freeze.py, pre_exec_gate.py, final_gate.py, worktree.py, publish_checks.py,
+           finalize.py, push.py written.
+12. 00:47  Rehearsal r3, tool diff dev run 1 FAILED (development/tool-diff-dev1-FAILED-lazy-import-and-argv-names.txt):
+           classify_e1's lazy `import normalize` (Tranche 1's, never called) was counted as an import of a tool not
+           carried, and argument lists held in a name were not resolved. Fixed (tool_diff.dev1-to-dev2.diff). Dev run 2:
+           ALL CHECKS HOLD.
+13. 00:50  Rehearsal r3: supervision self-test ALL OK; authentication ALL CHECKS HOLD. rehearsals.py dev run 1 FAILED
+           (development/rehearsals-dev1-FAILED-selftest-binding-time-v-coincidence-blank-eof.txt): the synthetic roots'
+           self-test copy named another root; self-test 3's GNU time record was byte-equal to Stage 1's (the previous
+           packets already hold such a coincidental pair); render.py ended two files with a blank line. Fixed
+           (build_packet, render, rehearsals .dev1-to-dev2.diff): the SELFTEST_TIME_RECORD class (exact paths; every
+           equal previous file a time record of the same case; the record times exactly that case's command); the
+           synthetic copy's self-test names its own root; one final newline. Dev run 2 FAILED: the copy was truncated
+           before it was read (development/rehearsals-dev2-FAILED-selftest-copy-truncated-before-read.txt;
+           rehearsals.dev2-to-dev3.diff). Dev run 3: ALL AS EXPECTED.
+14. 00:53  Section D rehearsed in r3 with a development-named worktree (nexus-os-p3-c11-mt2x-dev-rehearsal-r3, created
+           and locked with its role; kept): 17 of 17 as expected (synthetic comment-only patches of protocol.rs and
+           model_tests.rs applied, verified, perturbed, restored; the worktree exactly C at the end).
+15. 00:54  Rehearsal r3: freeze recorded (151 files); pre-execution gate ALL CHECKS HOLD; control.gate (C23 open, C10
+           and C15 closed) and control.main's refusals (C22, C1, A4, C28) exercised read-only; final gate as designed
+           (its one failure: no control attempted and no stop record).
+16. 00:56  Publication rehearsal r4 on a disposable clone in the session scratchpad (push URL disabled; outside every
+           evidence root): build_packet STAGED (481 files with the synthetic controls); finalize committed a rehearsal
+           commit at the required parent (git diff --cached --check equal to the builder's whitespace rule); the
+           pre-push checks ALL CHECKS HOLD; preflight ALL CHECKS HOLD.
+17. 00:58  post/actions readback exercised against the published Tranche-1 commit ebe42009 (dev-local/r5-post-
+           readback): Actions readback ALL CHECKS HOLD; post dev run 1 crashed on a key file absent from that packet
+           (development/publish-checks-dev1-FAILED-post-crash-on-missing-key-file.txt); fixed so an absent file is a
+           failed check (publish_checks.dev1-to-dev2.diff); dev run 2 reports the absent files as failures, no crash.
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the synthetic and historical controls, the development worktree's synthetic patches and the rehearsals)
+18. 00:58-00:59  receipts/00-authentication.txt (ALL CHECKS HOLD, 566 OK); receipts/01-supervision-selftest (ALL OK;
+           supervise.py unchanged; non-Nexus processes); receipts/02-EXPECTATIONS.json (DERIVED — ALL CROSS-CHECKS HOLD;
+           byte-equal to the rehearsal's); receipts/03-t2-controls (90 of 90 as expected; section D created the
+           development worktree nexus-os-p3-c11-mt2x-dev-rehearsal, locked with its role, exactly C at the end);
+           receipts/04-tool-diff (ALL CHECKS HOLD, 44 checks); receipts/04b-rehearsals (17 of 17 as expected).
+19. 00:59  Read-only scan of the real receipts, documents, development records and tools against every previous-packet
+           blob: the only duplicates are the enumerated self-test records (one SELFTEST_TIME_RECORD coincidence again,
+           self-test 3) and the seven tools carried byte for byte (referenced, never staged).
+20. 01:00  Tools made read-only. Freeze recorded (receipts/05-FREEZE.json, 151 files, sha256 389f6ce6…3955).
+21. 01:00  Static pre-execution gate: ALL CHECKS HOLD (E1-E11; E1 554 OK).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changes after the freeze; nothing retried)
+22. 01:01  C23 started (control.py C23, once).
+23. 01:03  C23: KILL_EVIDENCE_CANDIDATE — E1 at 671 states (of 30,000,000); BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-1 F-2).
+24. 01:03  C10 started (control.py C10, once).
+25. 01:06  C10: KILL_EVIDENCE_CANDIDATE — E4 at 42 states (of 60,000,000); BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-1 F-1).
+26. 01:06  C16 started (control.py C16, once).
+27. 01:09  C16: KILL_EVIDENCE_CANDIDATE — E3 at 1,513 states (of 30,000,000); BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-D).
+28. 01:09  C26 started (control.py C26, once).
+29. 01:12  C26: KILL_EVIDENCE_CANDIDATE — E9 at 3,478 states (of 30,000,000); BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-4).
+30. 01:12  C3a started (control.py C3a, once).
+31. 01:16  C3a: KILL_EVIDENCE_CANDIDATE — P13 (permitted P13 or P15; the assertion message names P13) at 746,152 states (of 30,000,000); BUILD: PINNED (no warning diagnostic: the static dead-code concern of entry 2 did not occur); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-7).
+32. 01:16  C5 started (control.py C5, once).
+33. 01:20  C5: MUTATION_CONTROL_BLOCKED. APPLY: EXACTLY_C_PLUS_PATCH; the one build exited 0 with five warning
+           diagnostics (unused variables nonce and io at protocol.rs:1818; methods acknowledgement and frontier never
+           used; variant Inconsistent never constructed; variants Acknowledgement and Frontier never constructed), so
+           the frozen build classifier said BUILD: NOT OK (17 of 18 checks); no run; RESTORE: EXACTLY_C. The catalog
+           names this possibility for C5. Per mission sections 6, 9 and 14 the tranche stops: A3, A6, C8 and C15 are
+           not attempted. Nothing was retried, rebuilt or repaired.
+34. 01:20  receipts/80-STOP-RECORD.md written (authored; a record, not a ruling).
+35. 01:20  Final gate: ALL CHECKS HOLD (57; receipts/90-final-gate.txt): the attempted controls a prefix of the order,
+           only C5 unsuccessful, the stop record present; every attempted worktree exactly C and locked; A3, A6, C8,
+           C15 without receipt or worktree; the twelve Tranche-1 worktrees exactly C (read-only); no mutant blob in the
+           object store; no mutant source copy under the evidence root (19,831 files); no cargo, rustc or test running.
+
+PUBLICATION (the frozen packet and publication tools; their consoles after the packet build are kept in the local
+evidence root, publication/, because a receipt of a commit cannot be inside it)
+36. 01:22  Publication preflight, the evidence worktree at ebe42009 on the local evidence branch, and the packet build
+           into it; then finalize (stage, commit), the pre-push checks, one explicit-refspec push, the remote readback
+           and the Actions readback, as the final report records.

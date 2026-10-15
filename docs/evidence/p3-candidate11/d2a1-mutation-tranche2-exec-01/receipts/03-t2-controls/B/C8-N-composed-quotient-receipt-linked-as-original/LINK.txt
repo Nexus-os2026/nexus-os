@@ -1,0 +1,10 @@
+LINK: FAILED
+control C8: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-B unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+FAIL accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS']
+FAIL exact configuration: the same test and flags as this control's run (F-B): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::gc_symmetry_fb', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c

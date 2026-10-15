@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control SYN-protocol: SYNTHETIC comment-only change of crates/nexus-governed-control/src/ledger/protocol.rs (t2_controls.py)
+patch: receipts/03-t2-controls/D/protocol/synthetic.patch (the frozen R2 packet's synthetic (not a catalog patch)), sha256 2b10ae1f82d5f5e4aaeba743485e3658c6c4e83ae869b8b87ef06a4f8b79de95 (catalog 2b10ae1f82d5f5e4aaeba743485e3658c6c4e83ae869b8b87ef06a4f8b79de95)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob ca62b05ec949be65cfc40a8c63daeccbc09b6e76 (expected ca62b05ec949be65cfc40a8c63daeccbc09b6e76), sha256 b3ad25261d3f1b9406a62f6ffdb8abacf4b64196ad5f4f9711095cc676c73c07 (expected b3ad25261d3f1b9406a62f6ffdb8abacf4b64196ad5f4f9711095cc676c73c07); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

@@ -1,0 +1,722 @@
+[
+ {
+  "control": "C23",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C23",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C10",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E4",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C10",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C16",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E3",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C16",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C26",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E9",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C26",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C3a",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P15: P13 (permitted: P13 or P15)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C5",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C5",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "A3",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A3",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "A6",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12 or P15: P12 (permitted: P12 or P15)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C8",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E5",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C8",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C15",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E8",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C15",
+  "case": "A P-first-permitted-property \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C3a",
+  "case": "A P-second-permitted-property-P15",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P15: P15",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P15: P15 (permitted: P13 or P15)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A6",
+  "case": "A P-second-permitted-property-P15",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12 or P15: P15",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12 or P15: P15 (permitted: P12 or P15)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3a",
+  "case": "A N-property-outside-the-pair-P12",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P12, not a permitted property (P13 or P15): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P12, not a permitted property (P13 or P15): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A6",
+  "case": "A N-property-outside-the-pair-P13",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P13, not a permitted property (P12 or P15): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P13, not a permitted property (P12 or P15): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3a",
+  "case": "A N-message-names-the-other-property",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the assertion message names the printed property): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A6",
+  "case": "A N-key-fields-of-C-without-recovery_required",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the printed state key fields are the mutant's KEY_FIELDS",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the printed state key fields are the mutant's KEY_FIELDS and name recovery_required (catalog R2)): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A6",
+  "case": "A N-verdict-assertion-at-C's-line-4133",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the panic is the explorer's own verdict assertion",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4149:5)): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A3",
+  "case": "A N-verdict-assertion-at-C's-line-4133",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the panic is the explorer's own verdict assertion",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4134:5)): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A3",
+  "case": "A N-verdict-assertion-at-C's-line-4133 \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C23",
+  "case": "A N-wrong-property-E2",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of E2, not the named property E1: kills nothing (no attribution exception)",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of E2, not the named property E1: kills nothing (no attribution exception)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C23",
+  "case": "A N-wrong-property-E2 \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C10",
+  "case": "A P-at-the-60M-ceiling",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E4",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E4",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C10",
+  "case": "A P-at-the-60M-ceiling \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C10",
+  "case": "A N-beyond-the-60M-ceiling",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C10",
+  "case": "A N-beyond-the-60M-ceiling \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C15",
+  "case": "A N-FAIL-beyond-the-30M-ceiling",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C15",
+  "case": "A N-FAIL-beyond-the-30M-ceiling \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C15",
+  "case": "A P-FAIL-at-the-30M-ceiling",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E8",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property E8",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C15",
+  "case": "A P-FAIL-at-the-30M-ceiling \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C15",
+  "case": "A N-INCOMPLETE-at-the-cap",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C15",
+  "case": "A N-INCOMPLETE-at-the-cap \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C8",
+  "case": "A N-composed-quotient-header",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (header 'EXPLORATION F-B' exactly",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (header 'EXPLORATION F-B' exactly (the original explorer; no quotient or symmetry line)): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C8",
+  "case": "A N-composed-quotient-header \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C23",
+  "case": "A N-PASS-on-the-mutant",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / PASS on the mutant (the control survives F-2): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / PASS on the mutant (the control survives F-2): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C23",
+  "case": "A N-PASS-on-the-mutant \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C26",
+  "case": "A N-killed-from-outside",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (killed from outside or abnormal termination): kills nothing",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (killed from outside or abnormal termination): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C26",
+  "case": "A N-killed-from-outside \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C16",
+  "case": "A N-source-not-the-mutant",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob 33f0d257df3e126c589becd0b1c5760c57085be8)): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C16",
+  "case": "A N-source-not-the-mutant \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C5",
+  "case": "A N-another-executable",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (executable is the pinned one",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (executable is the pinned one (path, sha256, size) before, at selection and after): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C5",
+  "case": "A N-another-executable \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C23",
+  "case": "A N-another-test-full_f1",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1; selection listing (--exact --list) shows exactly that one test; ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored; the harness ran exactly that one test; harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in \u2026' and the failures list names exactly that test; exactly one panic, of that test's thread): kills nothing",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C23",
+  "case": "A N-another-test-full_f1 \u2014 Tranche-1 classify.py on an identical copy: byte-identical outputs",
+  "expected": "CHECKS.txt CLASSIFICATION.txt PARSED-RECEIPT.json identical",
+  "got": "identical ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json']",
+  "as_expected": true,
+  "detail": "old classifier rc 0 "
+ },
+ {
+  "control": "C23",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d"
+ },
+ {
+  "control": "C10",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d"
+ },
+ {
+  "control": "C16",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D at 8"
+ },
+ {
+  "control": "C26",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4 at 8"
+ },
+ {
+  "control": "C3a",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7 at 8"
+ },
+ {
+  "control": "C5",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 8"
+ },
+ {
+  "control": "A3",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 8"
+ },
+ {
+  "control": "A6",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 8"
+ },
+ {
+  "control": "C8",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B at f023cc3d"
+ },
+ {
+  "control": "C15",
+  "case": "B link on the real authenticated inputs",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "the AD-1-R5 F refinement discharge record (not a run; no outcome line; never PASS): Candid"
+ },
+ {
+  "control": "C23",
+  "case": "B N-raw-output-byte-changed",
+  "expected": "LINK: FAILED with the check 'its classification blob and raw output identity are the catalog's\u2026' failing",
+  "got": "LINK: FAILED; 2 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL its classification blob and raw output identity are the catalog's\"]"
+ },
+ {
+  "control": "C16",
+  "case": "B N-another-test-in-the-expectation",
+  "expected": "LINK: FAILED with the check 'exact configuration: the same test and flags as this control's run (F-\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL exact configuration: the same test and flags as this control's run (F-D): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fd', '--exact', '--ignored', '--nocapture', '--test-threads=1']\"]"
+ },
+ {
+  "control": "C8",
+  "case": "B N-other-bounds-in-the-expectation",
+  "expected": "LINK: FAILED with the check 'F-B's restored side (AD-1-R4 F)\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL F-B's restored side (AD-1-R4 F): the composed-quotient test with the same flags, the same F-B configuration (bounds) as this control's original-explorer full_fb run: ['ledger::protocol::model_tests::gc_symmetry_fb']; mutant run ledger::protocol::model_tests::full_fb\"]"
+ },
+ {
+  "control": "C8",
+  "case": "B N-composed-quotient-receipt-linked-as-original",
+  "expected": "LINK: FAILED with the check 'accepted exact-final unchanged-core original-explorer PASS\u2026' failing",
+  "got": "LINK: FAILED; 2 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core composed-quotient PASS']\"]"
+ },
+ {
+  "control": "C15",
+  "case": "B N-proof-changed",
+  "expected": "LINK: FAILED with the check 'the accepted F-R proof: sha256 and blob as the catalog and the adoptio\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "['FAIL the accepted F-R proof: sha256 and blob as the catalog and the adoption record give them: 08f1c43ee4689a4a7015aaa3e9de692c1a2f06caea8f74f6579037219e1a30ab']"
+ },
+ {
+  "control": "C15",
+  "case": "B N-adoption-record-changed",
+  "expected": "LINK: FAILED with the check 'the Owner adoption of AD-1-R5\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL the Owner adoption of AD-1-R5: sha256 as the catalog gives it; adopted in full; the recording and the proof's sha256: 8f8703148324c7f921de20131304745216ab9a6ba62c6df4c6aa8eebd5e1d3c2\"]"
+ },
+ {
+  "control": "C15",
+  "case": "B N-F-R-receipt-recorded-as-PASS",
+  "expected": "LINK: FAILED with the check 'F-R's own receipt stays INCOMPLETE\u2026' failing",
+  "got": "LINK: FAILED; 2 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL F-R's own receipt stays INCOMPLETE (30,000,001 discovered, 26,539,923 expanded, at the cap): never PASS: ['CLASSIFICATION: PASS']\"]"
+ },
+ {
+  "control": "C26",
+  "case": "B N-another-baseline-executable-hash",
+  "expected": "LINK: FAILED with the check 'artifact identity at this control's restoration\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c\"]"
+ },
+ {
+  "control": "C15",
+  "case": "B N-prohibited-F-R-wording",
+  "expected": "LINK: FAILED with the check 'prohibited F-R wording present\u2026' failing",
+  "got": "LINK: FAILED; 3 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL prohibited F-R wording present: ['F-R PASS']\"]"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-catalog-copy-changed",
+  "expected": "PROBLEMS \u2014 STOP naming 'authenticated catalog copy sha256'",
+  "got": "rc 1; 2 problems",
+  "as_expected": true,
+  "detail": "['authenticated catalog copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-patch-copy-changed",
+  "expected": "PROBLEMS \u2014 STOP naming 'C26 authenticated patch copy sha256'",
+  "got": "rc 1; 2 problems",
+  "as_expected": true,
+  "detail": "['C26 authenticated patch copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C P-real-inputs",
+  "expected": "DERIVED, equal to receipts/02-EXPECTATIONS.json",
+  "got": "rc 0; equal True",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "\u2014",
+  "case": "D create the development worktree",
+  "expected": "created and locked",
+  "got": "OK",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "\u2014",
+  "case": "D authenticate the development worktree",
+  "expected": "exactly C, locked with its role",
+  "got": "OK",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D apply (crates/nexus-governed-control/src/ledger/protocol.rs)",
+  "expected": "APPLY: EXACTLY_C_PLUS_PATCH",
+  "got": "APPLY: EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D verify_mutant: exactly C plus the synthetic patch",
+  "expected": "EXACTLY_C_PLUS_PATCH",
+  "got": "EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D verify_mutant: the wrong expected blob",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D verify_mutant: an untracked file beside the mutant",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": "[' M crates/nexus-governed-control/src/ledger/protocol.rs', '?? crates/nexus-governed-control/src/ledger/protocol/synthetic_extra.rs']"
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D verify_mutant: a second changed file",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": "[' M crates/nexus-governed-control/src/ledger/protocol.rs', ' M crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs']"
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D every perturbation undone: exactly C plus the synthetic patch again",
+  "expected": "EXACTLY_C_PLUS_PATCH",
+  "got": "EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-protocol",
+  "case": "D restore (crates/nexus-governed-control/src/ledger/protocol.rs): git apply -R; verify_tree.py; path-aware policy",
+  "expected": "RESTORE: EXACTLY_C",
+  "got": "RESTORE: EXACTLY_C",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-model",
+  "case": "D apply (crates/nexus-governed-control/src/ledger/protocol/model_tests.rs)",
+  "expected": "APPLY: EXACTLY_C_PLUS_PATCH",
+  "got": "APPLY: EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-model",
+  "case": "D verify_mutant: exactly C plus the synthetic patch",
+  "expected": "EXACTLY_C_PLUS_PATCH",
+  "got": "EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-model",
+  "case": "D verify_mutant: the wrong expected blob",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-model",
+  "case": "D verify_mutant: an untracked file beside the mutant",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": "[' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', '?? crates/nexus-governed-control/src/ledger/protocol/synthetic_extra.rs']"
+ },
+ {
+  "control": "SYN-model",
+  "case": "D verify_mutant: a second changed file",
+  "expected": "NOT_THE_MUTANT",
+  "got": "NOT_THE_MUTANT",
+  "as_expected": true,
+  "detail": "[' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', ' M crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs']"
+ },
+ {
+  "control": "SYN-model",
+  "case": "D every perturbation undone: exactly C plus the synthetic patch again",
+  "expected": "EXACTLY_C_PLUS_PATCH",
+  "got": "EXACTLY_C_PLUS_PATCH",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "SYN-model",
+  "case": "D restore (crates/nexus-governed-control/src/ledger/protocol/model_tests.rs): git apply -R; verify_tree.py; path-aware policy",
+  "expected": "RESTORE: EXACTLY_C",
+  "got": "RESTORE: EXACTLY_C",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "\u2014",
+  "case": "D the development worktree is exactly C at the end",
+  "expected": "EXACTLY_C",
+  "got": "EXACTLY_C",
+  "as_expected": true,
+  "detail": ""
+ }
+]

@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C23: the publication omits the X bit
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 3549e576ab943bad1cb9ee0a2d96d073924b5225dc0b24abc399b5d6db2b98b9 size 8985352
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E1
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))

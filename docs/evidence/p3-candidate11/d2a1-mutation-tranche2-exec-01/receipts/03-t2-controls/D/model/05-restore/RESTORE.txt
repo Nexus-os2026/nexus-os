@@ -1,0 +1,7 @@
+RESTORE: EXACTLY_C
+control SYN-model: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-dev-rehearsal
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: before restoration git blob f8b1fb6deea4c692b83e077b65de0149fc3910df sha256 8cddf7fc5a792092ade738b4a2797ba40d98525e8a618771b3be6eb0332dab48
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: after restoration git blob 28085ce232827301104b5d757af042ec933976f8 sha256 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972 (C: 28085ce232827301104b5d757af042ec933976f8 / 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries []; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 0 records, 0 ignored entries beneath the worktree-local real target; shown []; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory

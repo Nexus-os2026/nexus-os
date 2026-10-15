@@ -1,0 +1,42 @@
+{
+ "control": "C8",
+ "type": "e1",
+ "reference": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-B unchanged-core composed-quotient PASS, type (e1))",
+ "checks": [
+  [
+   "the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B in f023cc3d's SHA256SUMS",
+   true,
+   "[]"
+  ],
+  [
+   "its classification blob and raw output identity are the catalog's",
+   true,
+   ""
+  ],
+  [
+   "accepted exact-final unchanged-core composed-quotient PASS (classification, as the catalog records it)",
+   true,
+   "['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core composed-quotient PASS']"
+  ],
+  [
+   "F-B's restored side (AD-1-R4 F): the composed-quotient test with the same flags, the same F-B configuration (bounds) as this control's original-explorer full_fb run",
+   false,
+   "['ledger::protocol::model_tests::gc_symmetry_fb']; mutant run ledger::protocol::model_tests::full_fb"
+  ],
+  [
+   "exact Candidate C: the source exactly C before and after",
+   true,
+   ""
+  ],
+  [
+   "execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s",
+   true,
+   ""
+  ],
+  [
+   "artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now",
+   true,
+   "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+  ]
+ ]
+}

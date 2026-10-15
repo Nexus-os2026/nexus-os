@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C26: a passed barrier clears the latch
+patch: inputs/patches/C26.patch (the frozen R2 packet's catalog/patches/C26.patch), sha256 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d (catalog 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 88f1783305f6418129671e77769fd4caf53e2a88 (expected 88f1783305f6418129671e77769fd4caf53e2a88), sha256 c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49 (expected c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

@@ -1,0 +1,19 @@
+LINK: VERIFIED
+control C15: restored-side receipt the AD-1-R5 F refinement discharge record (not a run; no outcome line; never PASS): Candidate C d5964ee5326c2733177307db6f507328023d361a; the accepted exact-final F-2 receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd; the accepted proof docs/evidence/p3-candidate11/fr-stutter-r5-01/FR-STUTTERING-REFINEMENT-PROOF-DRAFT.md (sha256 c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b); AD-1-R5 (sha256 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473) and its Owner adoption docs/evidence/p3-candidate11/ad1r5-adoption/OWNER-ADOPTION-2026-10-14.md (sha256 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4)
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+recording (AD-1-R5 D): F-R — UNCHANGED-CORE OBLIGATIONS DISCHARGED BY ACCEPTED STUTTERING-REFINEMENT PROOF
+beside it: the F-R receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/69-full-F-R at 89326b859792a442c1853c3d35d30a48301c009e stays INCOMPLETE (30,000,001 discovered, 26,539,923 expanded, at the 30,000,000-state cap); the F-2 receipt above is the run the discharge rests on; the branch accounting is FR-BRANCH-DISPOSITION.tsv of the R5 packet
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   the discharge's basis: the accepted exact-final F-2 receipt, full_f2 with the same flags on the pinned baseline executable: ['ledger::protocol::model_tests::full_f2']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   the F-2 receipt is the PASS the proof rests on: outcome PASS; 12,602,670 states, all expanded; D1 and L1 HOLD
+OK   the accepted F-R proof: sha256 and blob as the catalog and the adoption record give them: c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b
+OK   the proof is bound to the exact frozen baseline: Candidate C's commit and tree, the three blobs, and this F-2 receipt's raw output
+OK   AD-1-R5: sha256 as the catalog gives it; its section F (C15) and the recording: 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+OK   the Owner adoption of AD-1-R5: sha256 as the catalog gives it; adopted in full; the recording and the proof's sha256: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/69-full-F-R in 89326b85's SHA256SUMS: []
+OK   F-R's own receipt stays INCOMPLETE (30,000,001 discovered, 26,539,923 expanded, at the cap): never PASS: ['CLASSIFICATION: NOT PASS']

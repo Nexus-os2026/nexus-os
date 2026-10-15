@@ -1,0 +1,26 @@
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 24edfa1bc374f5b3… 4242 / 24edfa1bc374f5b3… 4242 / 24edfa1bc374f5b3… 4242 (pinned 24edfa1bc374f5b3… 4242)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob cd50b40ce632d4edcb95fff89389246b0d75c51e): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: b5d91141699a42d1796d05907fafc4812e19bf5f3a0631d25c8c4bb5fb81f497
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f2: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f2: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f2']
+FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 67.44s']; failures []
+FAIL exit 101 by a normal exit, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+FAIL exactly one panic, of that test's thread: []
+OK   no quotient or symmetry refusal; no fixture failure
+FAIL the report is printed, then repeated verbatim in the assertion message: 1 EXPLORATION headers
+OK   header 'EXPLORATION F-2' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-2
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 30,000,000 states, 2700 s (the configuration's adopted ceiling): 30000000, 2700
+FAIL raw outcome FAIL; no INCOMPLETE line: PASS; None
+FAIL the printed property is the named property E1 (no attribution exception in the catalog): None
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 30,000,000 (K.1, inclusive): 12,602,670
+FAIL the trace is printed under 'shortest trace (<n> steps):': None
+FAIL a FAIL prints only its failing property (no property lines): [('P1', 'HOLDS'), ('P2', 'HOLDS'), ('P4', 'HOLDS')]
+FAIL the failing property is one of PROPERTIES: None
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90

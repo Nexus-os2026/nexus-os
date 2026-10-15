@@ -1,0 +1,18 @@
+STATUS: READY_FOR_MUTATION_TRANCHE2_ARCHITECT_REVIEW; new candidates 10 of 10; attempted ['C23', 'C10', 'C16', 'C26', 'C3a', 'C5', 'A3', 'A6', 'C8', 'C15']; stopped []
+tools carried byte for byte, not staged (referenced in CARRIED-FORWARD.md): ['configs.py', 'report.py', 'scope-wrap.sh', 'supervise.py', 'verify_mutant.py', 'verify_tree.py', 'worktrees.py']
+OK   packet size at most 48 MiB: 1547851 bytes, 284 files
+OK   regular files only (no symlink): []
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable or any pinned mutant executable: 2 pinned
+OK   no file equal to any catalog mutant blob (no mutant source)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
+OK   only changed or added tools staged (every carried tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'classify.py', 'common.py', 'control.py', 'expectations.py', 'final_gate.py', 'finalize.py', 'pre_exec_gate.py', 'publish_checks.py', 'push.py', 'record_freeze.py', 'rehearsals.py', 'render.py', 't2_controls.py', 'tool_diff.py', 'worktree.py']
+OK   nothing staged from inputs/, original-tools/, original-publication-tools/, dev-local/ or publication/
+FAIL duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else: [('ZERO_DESCRIPTOR', 'receipts/54-C26/03-build/build.stdout', 'receipts/54-C26/03-build/descriptor.json does not record this empty stdout and its stderr')]
+     accepted: 40 (12 zero-length, 28 nonempty constants)
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 283 listed
+OK   every file this mission authored is whitespace-clean (git's default rule): {}
+     retained raw whitespace findings (byte-exact tool output, unified diffs, preserved failures): 43 in 21 files: ['development/authentication-dev1-FAILED-c28-apply-and-status-slice.txt', 'development/publish-checks-dev1-FAILED-post-crash-on-missing-key-file.txt', 'development/render.dev1-to-dev2.diff', 'development/tool_diff.dev1-to-dev2.diff', 'receipts/00-authentication.txt', 'receipts/01-supervision-selftest/1/scope-record.txt', 'receipts/01-supervision-selftest/2/scope-record.txt', 'receipts/01-supervision-selftest/3/scope-record.txt', 'receipts/01-supervision-selftest/5/scope-record.txt', 'receipts/01-supervision-selftest/6/scope-record.txt', 'receipts/01-supervision-selftest/7/scope-record.txt', 'receipts/51-C23/04-run/raw-output.txt', 'receipts/52-C10/04-run/raw-output.txt', 'receipts/53-C16/04-run/raw-output.txt', 'receipts/54-C26/04-run/raw-output.txt', 'receipts/55-C3a/04-run/raw-output.txt', 'receipts/56-C5/04-run/raw-output.txt', 'receipts/57-A3/04-run/raw-output.txt', 'receipts/58-A6/04-run/raw-output.txt', 'receipts/59-C8/04-run/raw-output.txt', 'receipts/60-C15/04-run/raw-output.txt']
+PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else

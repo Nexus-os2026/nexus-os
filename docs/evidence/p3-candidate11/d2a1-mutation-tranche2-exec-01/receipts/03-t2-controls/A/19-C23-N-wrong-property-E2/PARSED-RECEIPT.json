@@ -1,0 +1,128 @@
+{
+ "control": "C23",
+ "receipt_type": "AD-1-R4 F.1 (a)",
+ "test": "ledger::protocol::model_tests::full_f2",
+ "configuration": "F-2",
+ "named_property": "E1",
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-2",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+  "states": 14,
+  "expanded": 1,
+  "transitions": 14,
+  "fault_edges": 10,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": "E2: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (2 steps):"
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::full_f2' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {\"E2\"}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 6080
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "24edfa1bc374f5b35c592d7792b11c84f8a91b4cd65b6ae9c2fa6a732c5c2c35",
+  "pinned_size": 4242,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "24edfa1bc374f5b35c592d7792b11c84f8a91b4cd65b6ae9c2fa6a732c5c2c35",
+   "size": 4242,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "24edfa1bc374f5b35c592d7792b11c84f8a91b4cd65b6ae9c2fa6a732c5c2c35",
+   "size": 4242,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f2: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f2",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f2: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f2",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "24edfa1bc374f5b35c592d7792b11c84f8a91b4cd65b6ae9c2fa6a732c5c2c35",
+   "size": 4242,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "73b71d5a8c694a5b688bf7c8f15fc0dd9fcb54cf188dcae4c2dad2b83b8a96b9",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "FAIL of E2, not the named property E1: kills nothing (no attribution exception)",
+ "checks_hold": 27,
+ "checks_total": 29
+}

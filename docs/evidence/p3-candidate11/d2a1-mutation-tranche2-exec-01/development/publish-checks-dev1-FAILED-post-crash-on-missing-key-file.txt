@@ -1,0 +1,24 @@
+OK   remote destination ref points at the evidence commit: ebe42009ba1bd262cf31ae2f401e02cec101afa7
+FAIL remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-continue-02 unchanged: ebe42009ba1bd262cf31ae2f401e02cec101afa7
+OK   remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-resume-01 unchanged: 3695a817a6190781dc66769a72a487b442d3e6da
+OK   remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-exec-01 unchanged: 19eda8cc7f559054933fed4a93bdb0a18cc725d4
+OK   remote refs/heads/review/p3-c11-d2a1-control-definitions-r2-01 unchanged: 9f22f890d8532df395f22cd8db8db2552bfdd14c
+OK   remote refs/heads/review/p3-c11-d2a1-final-baseline-known-runs-01 unchanged: f023cc3d031a2a89e5ecbd4086e15f2e50869acd
+OK   remote refs/heads/review/p3-c11-d2a1-final-baseline-remaining-configs-01 unchanged: 89326b859792a442c1853c3d35d30a48301c009e
+OK   remote refs/heads/review/p3-c11-d2a1-fr-stutter-r5-01 unchanged: c1e46fc404a74ed76b848b709a7a246b59f3347f
+     remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+     remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+OK   GitHub commit object: sha
+OK   GitHub commit object: tree: 7d8ab59e4b3e61196d9c4cee3cb3a046fa8c4400
+OK   GitHub commit object: single parent 3695a817
+OK   GitHub compare: ahead by 1, behind by 0: (1, 0)
+OK   GitHub compare: every listed file is added under the packet path: 300 listed (the compare API lists at most 300; 471 local)
+OK   GitHub tree (recursive) read in full (not truncated): 7986 blobs
+OK   every remote tree entry equals the local evidence commit's (path, mode, blob): every changed path read back: 7986 remote; 7986 local; differing []
+     reading back 16 key files from GitHub at the evidence commit
+OK   remote SHA256SUMS: blob fa845cac5a110290451e5136984dce14f150d0de and sha256 equal local: 034672bf51ecdfe1939d61c0ec9f7052b1a28ae44592509883e6dc6ea9342835
+OK   remote INDEX.md: blob 8b177afd152dadf00fdcfbeec06de0b2fee216aa and sha256 equal local: c35d9128da0f4ee2f380d5cff40295a52c93d8386a3663acf0bdc7ebe4574cdc
+OK   remote TRANCHE-SUMMARY.md: blob 2460b260072349aba5076618b074aab125223fd0 and sha256 equal local: bc79b1ff2c802e52c2a9dfd5ff40c8ca2b227a74a75f22523ef508b6e8b9b5eb
+OK   remote CARRIED-FORWARD.md: blob 6e8c948a89a8da2dfb3735ef790c9ff4980669ca and sha256 equal local: 1d741f009c009d2cab81660f5ea40673871d0b6c92b0eaf36af38e995b97dc27
+git cat-file blob ebe42009ba1bd262cf31ae2f401e02cec101afa7:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md: fatal: path 'docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md' does not exist in 'ebe42009ba1bd262cf31ae2f401e02cec101afa7'
+

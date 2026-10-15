@@ -1,0 +1,1 @@
+STATUS: READY_FOR_MUTATION_TRANCHE2_ARCHITECT_REVIEW; new candidates 10 of 10; attempted ['C23', 'C10', 'C16', 'C26', 'C3a', 'C5', 'A3', 'A6', 'C8', 'C15']; stopped []

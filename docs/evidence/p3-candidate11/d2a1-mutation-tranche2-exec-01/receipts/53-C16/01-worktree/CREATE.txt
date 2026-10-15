@@ -1,0 +1,4 @@
+CREATE the C16 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16 at C
+result: OK
+add: git -C /home/nexus/NEXUS/nexus-os worktree add --detach /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16 d5964ee5326c2733177307db6f507328023d361a -> rc 0; HEAD is now at d5964ee5 docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record Preparing worktree (detached HEAD d5964ee5)
+lock: git -C /home/nexus/NEXUS/nexus-os worktree lock --reason P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C16 disposable mutant worktree: mission-owned; preserve until Architect review /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16 -> rc 0;  

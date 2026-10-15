@@ -1,0 +1,14 @@
+--- development/revisions/control.dev1.py	2026-10-15 00:39:31.819830834 +0100
++++ tools/control.py	2026-10-15 00:39:31.834214843 +0100
+@@ -240,8 +240,9 @@
+             "configuration (bounds) as this control's original-explorer full_fb run",
+             h["argv"] == [K.EXE, L["descriptor_test"], *FLAGS] and test == L["descriptor_test"]
+             and ctl["argv_tail"] == [ctl["test"], *FLAGS] and ctl["test"] != test and bounds == [ctl["bounds"]]
+-            and raw.splitlines()[1].endswith("EXPLORATION F-B (gating-caller symmetry quotient composed with the "
+-                                             "admission observer quotient: experimental, not the contract's explorer)"),
++            and [l for l in raw.splitlines() if "EXPLORATION " in l][:1] == [
++                f"test {test} ... EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer "
++                "quotient: experimental, not the contract's explorer)"],
+             f"{h['argv'][1:2]}; mutant run {ctl['test']}")
+     else:
+         chk("the discharge's basis: the accepted exact-final F-2 receipt, full_f2 with the same flags on the pinned "

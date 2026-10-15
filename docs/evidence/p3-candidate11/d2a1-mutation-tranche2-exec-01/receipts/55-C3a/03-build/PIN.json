@@ -1,0 +1,39 @@
+{
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+ "sha256": "c71e66debb2f3d42527668f48818c74f5ca48f03aceda67c9b8285b6f8e5a0a6",
+ "size": 8984320,
+ "source_verdict": "EXACTLY_C_PLUS_PATCH",
+ "mutant_blob": "5c74cfbd8124a78c616526ae1d461895b1a16b82",
+ "build_receipt": "receipts/55-C3a/03-build",
+ "effective_rustc_flags": {
+  "-C": [
+   "opt-level=3",
+   "lto=thin",
+   "codegen-units=16",
+   "metadata=39c9cf5f26ad991f",
+   "extra-filename=-2faa0b9718d3e6a3",
+   "strip=symbols"
+  ],
+  "--cfg": [],
+  "--check-cfg": [
+   "'cfg(docsrs,test)'",
+   "'cfg(feature, values())'"
+  ],
+  "--test": true,
+  "--edition": [
+   "2021"
+  ]
+ },
+ "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+ "fingerprints": [
+  {
+   "file": "test-lib-nexus_governed_control.json",
+   "rustc": 18276270781310494267,
+   "features": "[]",
+   "declared_features": "[]",
+   "rustflags": [],
+   "profile": 16029198466671918258,
+   "config": 8247474407144887393
+  }
+ ]
+}

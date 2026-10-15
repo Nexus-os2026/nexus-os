@@ -1,0 +1,631 @@
+P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 — INPUT AUTHENTICATION (read-only)
+executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); mission effort: High
+
+[1] frozen baseline Candidate C (mission 3)
+    OK        type: commit
+    OK        tree: 51bac5fd335999cc995c0ab9f582a30244973ef0
+    OK        single parent: 71264aa81a40b86189783facc8437e0427887c16
+    OK        crates/nexus-governed-control/src/ledger/protocol.rs blob at C: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        crates/nexus-governed-control/src/ledger/protocol.rs content hashes to its blob (in-process): a2df2841b99cad5d452008a6d4150e9369d07e66
+    info      crates/nexus-governed-control/src/ledger/protocol.rs sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296, 64546 bytes
+    OK        crates/nexus-governed-control/src/ledger/protocol/model_tests.rs blob at C: 28085ce232827301104b5d757af042ec933976f8
+    OK        crates/nexus-governed-control/src/ledger/protocol/model_tests.rs content hashes to its blob (in-process): 28085ce232827301104b5d757af042ec933976f8
+    info      crates/nexus-governed-control/src/ledger/protocol/model_tests.rs sha256 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972, 310612 bytes
+    OK        crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs blob at C: 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    OK        crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs content hashes to its blob (in-process): 55dc66409eaccdaa93e8f0a56f2ccb14be81e114
+    info      crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs sha256 841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159, 104202 bytes
+
+[2] the frozen R2 catalog and its evidence commit (mission 3)
+    OK        R2 evidence commit type: commit
+    OK        R2 evidence commit tree: 435f242243907eb7fd3e745669926193f11c5dcf
+    OK        R2 evidence commit single parent: f81159046bf0b62666851bc1185992318302d31f
+    OK        Candidate C is an ancestor of the R2 evidence commit: 0
+    OK        paths outside docs/evidence/ differing between C and the R2 evidence commit: []
+    OK        catalog.json git blob: 1918374263740d2f98640da00fc466737945975e
+    OK        catalog.json sha256: d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83
+    OK        catalog.json unchanged at the Tranche-1 evidence commit: 1918374263740d2f98640da00fc466737945975e
+    OK        input copy inputs/catalog.json already present and equal: d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83
+    OK        definitions record git blob: c79b75b65b85e1fad53592e92ab2d8507d6c8799
+    OK        definitions record sha256: 1da1ae92f313496dade2bfea5c508af1e17bf2e39b9bd11cca3e448c35f0cb26
+    OK        input copy inputs/ARCHITECT-CONTROL-DEFINITIONS-R2.md already present and equal: 1da1ae92f313496dade2bfea5c508af1e17bf2e39b9bd11cca3e448c35f0cb26
+    OK        R2 packet SHA256SUMS: all 71 listed files verify at 9f22f890: []
+    OK        R2 SHA256SUMS lists the catalog with its sha256: d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83
+    OK        R2 SHA256SUMS lists the definitions record with its sha256: 1da1ae92f313496dade2bfea5c508af1e17bf2e39b9bd11cca3e448c35f0cb26
+    OK        the R2 packet is byte-identical at the Tranche-1 evidence commit (every path's blob): []
+    OK        catalog version recorded in the artifact: d2a1-controls-v1-r2-candidate
+    OK        catalog counts: {'architect_defined': 21, 'blocked': 0, 'candidate_ready': 35, 'carried_forward': 14, 'comparison': 1, 'kill_required': 35}
+    OK        catalog baseline: {'blobs': {'crates/nexus-governed-control/src/ledger/protocol.rs': 'a2df2841b99cad5d452008a6d4150e9369d07e66', 'crates/nexus-governed-control/src/ledger/protocol/model_tests.rs': '28085ce232827301104b5d757af042ec933976f8', 'crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs': '55dc66409eaccdaa93e8f0a56f2ccb14be81e114'}, 'commit': 'd5964ee5326c2733177307db6f507328023d361a', 'tree': '51bac5fd335999cc995c0ab9f582a30244973ef0'}
+
+[3] the ten Tranche-2 controls: matrix, patch, baseline, mutant (mission 2, 3, 4)
+    OK        catalog: 36 entries (35 kill-required controls and A4): 36
+    OK        Tranche-2 ids present in the catalog, in the mission's order: ['C23', 'C10', 'C16', 'C26', 'C3a', 'C5', 'A3', 'A6', 'C8', 'C15']
+    OK        Tranche 2 + Tranche-1 accepted + not authorized + A4 = every catalog entry, each once: True
+  -- C23: the publication omits the X bit
+    OK        C23 kind: explore
+    OK        C23 configuration (mission 4): F-2
+    OK        C23 named property / permitted properties (mission 4): ['E1']
+    OK        C23 ceiling (mission 4, 10): 30000000
+    OK        C23 time limit: 2700
+    OK        C23 explorer: original (`explore`)
+    OK        C23 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C23 special attribution rules: True
+    OK        C23 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C23 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C23 expected changed blob count: 1
+    OK        C23 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C23 requires a mutant executable: True
+    OK        C23 patch file sha256 = catalog patch_sha256: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        C23 patch file bytes = catalog patch text: True
+    OK        C23 patch listed in R2 SHA256SUMS: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        input copy inputs/patches/C23.patch already present and equal: 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa
+    OK        C23 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C23 patched file git blob = catalog mutant blob: cd50b40ce632d4edcb95fff89389246b0d75c51e
+    OK        C23 patched file sha256 = catalog mutant sha256: b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa
+    OK        C23 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C23 the catalog's edits give the mutant blob too: cd50b40ce632d4edcb95fff89389246b0d75c51e
+    OK        C23 mutant blob absent from the repository object store: True
+    info      C23 test ledger::protocol::model_tests::full_f2; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd40
+  -- C10: `Commit::Unknown` followed by `Rollback::Undone` gives Not written
+    OK        C10 kind: explore
+    OK        C10 configuration (mission 4): F-1
+    OK        C10 named property / permitted properties (mission 4): ['E4']
+    OK        C10 ceiling (mission 4, 10): 60000000
+    OK        C10 time limit: 2700
+    OK        C10 explorer: original (`explore`)
+    OK        C10 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C10 special attribution rules: True
+    OK        C10 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C10 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C10 expected changed blob count: 1
+    OK        C10 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C10 requires a mutant executable: True
+    OK        C10 patch file sha256 = catalog patch_sha256: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        C10 patch file bytes = catalog patch text: True
+    OK        C10 patch listed in R2 SHA256SUMS: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        input copy inputs/patches/C10.patch already present and equal: 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c
+    OK        C10 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C10 patched file git blob = catalog mutant blob: 329a830718b81a065e3a03f4958e19e8fa3c8d9c
+    OK        C10 patched file sha256 = catalog mutant sha256: a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d
+    OK        C10 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C10 the catalog's edits give the mutant blob too: 329a830718b81a065e3a03f4958e19e8fa3c8d9c
+    OK        C10 mutant blob absent from the repository object store: True
+    info      C10 test ledger::protocol::model_tests::full_f1; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd40
+  -- C16: the drop of a Counted ticket lowers the count
+    OK        C16 kind: explore
+    OK        C16 configuration (mission 4): F-D
+    OK        C16 named property / permitted properties (mission 4): ['E3']
+    OK        C16 ceiling (mission 4, 10): 30000000
+    OK        C16 time limit: 2700
+    OK        C16 explorer: original (`explore`)
+    OK        C16 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C16 special attribution rules: True
+    OK        C16 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C16 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C16 expected changed blob count: 1
+    OK        C16 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C16 requires a mutant executable: True
+    OK        C16 patch file sha256 = catalog patch_sha256: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        C16 patch file bytes = catalog patch text: True
+    OK        C16 patch listed in R2 SHA256SUMS: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        input copy inputs/patches/C16.patch already present and equal: e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97
+    OK        C16 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C16 patched file git blob = catalog mutant blob: 33f0d257df3e126c589becd0b1c5760c57085be8
+    OK        C16 patched file sha256 = catalog mutant sha256: c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4
+    OK        C16 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C16 the catalog's edits give the mutant blob too: 33f0d257df3e126c589becd0b1c5760c57085be8
+    OK        C16 mutant blob absent from the repository object store: True
+    info      C16 test ledger::protocol::model_tests::full_fd; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D at 89326b859792a442c
+  -- C26: a passed barrier clears the latch
+    OK        C26 kind: explore
+    OK        C26 configuration (mission 4): F-4
+    OK        C26 named property / permitted properties (mission 4): ['E9']
+    OK        C26 ceiling (mission 4, 10): 30000000
+    OK        C26 time limit: 2700
+    OK        C26 explorer: original (`explore`)
+    OK        C26 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C26 special attribution rules: True
+    OK        C26 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C26 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C26 expected changed blob count: 1
+    OK        C26 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C26 requires a mutant executable: True
+    OK        C26 patch file sha256 = catalog patch_sha256: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        C26 patch file bytes = catalog patch text: True
+    OK        C26 patch listed in R2 SHA256SUMS: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        input copy inputs/patches/C26.patch already present and equal: 1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d
+    OK        C26 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C26 patched file git blob = catalog mutant blob: 88f1783305f6418129671e77769fd4caf53e2a88
+    OK        C26 patched file sha256 = catalog mutant sha256: c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49
+    OK        C26 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C26 the catalog's edits give the mutant blob too: 88f1783305f6418129671e77769fd4caf53e2a88
+    OK        C26 mutant blob absent from the repository object store: True
+    info      C26 test ledger::protocol::model_tests::full_f4; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4 at 89326b859792a442c
+  -- C3a: acknowledgement test 2 removed
+    OK        C3a kind: explore
+    OK        C3a configuration (mission 4): F-7
+    OK        C3a named property / permitted properties (mission 4): ['P13', 'P15']
+    OK        C3a ceiling (mission 4, 10): 30000000
+    OK        C3a time limit: 2700
+    OK        C3a explorer: original (`explore`)
+    OK        C3a receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C3a special attribution rules: True
+    OK        C3a mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C3a baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C3a expected changed blob count: 1
+    OK        C3a execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C3a requires a mutant executable: True
+    OK        C3a patch file sha256 = catalog patch_sha256: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        C3a patch file bytes = catalog patch text: True
+    OK        C3a patch listed in R2 SHA256SUMS: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        input copy inputs/patches/C3a.patch already present and equal: 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298
+    OK        C3a frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C3a patched file git blob = catalog mutant blob: 5c74cfbd8124a78c616526ae1d461895b1a16b82
+    OK        C3a patched file sha256 = catalog mutant sha256: abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6
+    OK        C3a edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C3a the catalog's edits give the mutant blob too: 5c74cfbd8124a78c616526ae1d461895b1a16b82
+    OK        C3a mutant blob absent from the repository object store: True
+    info      C3a test ledger::protocol::model_tests::full_f7; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7 at 89326b859792a442c
+  -- C5: resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check
+    OK        C5 kind: explore
+    OK        C5 configuration (mission 4): F-5
+    OK        C5 named property / permitted properties (mission 4): ['P13']
+    OK        C5 ceiling (mission 4, 10): 30000000
+    OK        C5 time limit: 2700
+    OK        C5 explorer: original (`explore`)
+    OK        C5 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C5 special attribution rules: True
+    OK        C5 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C5 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C5 expected changed blob count: 1
+    OK        C5 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C5 requires a mutant executable: True
+    OK        C5 patch file sha256 = catalog patch_sha256: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        C5 patch file bytes = catalog patch text: True
+    OK        C5 patch listed in R2 SHA256SUMS: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        input copy inputs/patches/C5.patch already present and equal: a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8
+    OK        C5 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C5 patched file git blob = catalog mutant blob: e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495
+    OK        C5 patched file sha256 = catalog mutant sha256: 31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd
+    OK        C5 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C5 the catalog's edits give the mutant blob too: e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495
+    OK        C5 mutant blob absent from the repository object store: True
+    info      C5 test ledger::protocol::model_tests::full_f5; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c
+  -- A3: the worker empties X before it raises H
+    OK        A3 kind: explore
+    OK        A3 configuration (mission 4): F-5
+    OK        A3 named property / permitted properties (mission 4): ['P12']
+    OK        A3 ceiling (mission 4, 10): 30000000
+    OK        A3 time limit: 2700
+    OK        A3 explorer: original (`explore`)
+    OK        A3 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        A3 special attribution rules: True
+    OK        A3 mutation source file: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    OK        A3 baseline blob = C's blob of the source file: 28085ce232827301104b5d757af042ec933976f8
+    OK        A3 expected changed blob count: 1
+    OK        A3 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        A3 requires a mutant executable: True
+    OK        A3 patch file sha256 = catalog patch_sha256: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        A3 patch file bytes = catalog patch text: True
+    OK        A3 patch listed in R2 SHA256SUMS: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        input copy inputs/patches/A3.patch already present and equal: ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00
+    OK        A3 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        A3 patched file git blob = catalog mutant blob: 72bab79d71687a1c056afe18ab7a938edc20f4a9
+    OK        A3 patched file sha256 = catalog mutant sha256: 5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9
+    OK        A3 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A3 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A3 the catalog's edits give the mutant blob too: 72bab79d71687a1c056afe18ab7a938edc20f4a9
+    OK        A3 mutant blob absent from the repository object store: True
+    info      A3 test ledger::protocol::model_tests::full_f5; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c
+  -- A6: "recovery required" is a flag, not a comparison of H with A
+    OK        A6 kind: explore
+    OK        A6 configuration (mission 4): F-5
+    OK        A6 named property / permitted properties (mission 4): ['P12', 'P15']
+    OK        A6 ceiling (mission 4, 10): 30000000
+    OK        A6 time limit: 2700
+    OK        A6 explorer: original (`explore`)
+    OK        A6 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        A6 special attribution rules: True
+    OK        A6 mutation source file: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+    OK        A6 baseline blob = C's blob of the source file: 28085ce232827301104b5d757af042ec933976f8
+    OK        A6 expected changed blob count: 1
+    OK        A6 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        A6 requires a mutant executable: True
+    OK        A6 patch file sha256 = catalog patch_sha256: 0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8
+    OK        A6 patch file bytes = catalog patch text: True
+    OK        A6 patch listed in R2 SHA256SUMS: 0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8
+    OK        input copy inputs/patches/A6.patch already present and equal: 0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8
+    OK        A6 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        A6 patched file git blob = catalog mutant blob: 51e54aed7cc33ebc8348a74fe6c881c057336ee7
+    OK        A6 patched file sha256 = catalog mutant sha256: 59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        A6 the catalog's edits give the mutant blob too: 51e54aed7cc33ebc8348a74fe6c881c057336ee7
+    OK        A6 mutant blob absent from the repository object store: True
+    info      A6 test ledger::protocol::model_tests::full_f5; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c
+  -- C8: members are classified and inserted one at a time
+    OK        C8 kind: explore
+    OK        C8 configuration (mission 4): F-B
+    OK        C8 named property / permitted properties (mission 4): ['E5']
+    OK        C8 ceiling (mission 4, 10): 30000000
+    OK        C8 time limit: 2700
+    OK        C8 explorer: original (`explore`)
+    OK        C8 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C8 special attribution rules: True
+    OK        C8 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C8 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C8 expected changed blob count: 1
+    OK        C8 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C8 requires a mutant executable: True
+    OK        C8 patch file sha256 = catalog patch_sha256: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        C8 patch file bytes = catalog patch text: True
+    OK        C8 patch listed in R2 SHA256SUMS: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        input copy inputs/patches/C8.patch already present and equal: a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927
+    OK        C8 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C8 patched file git blob = catalog mutant blob: fd6abbd8a80dc8a01620981c76427ca76a9e1f7d
+    OK        C8 patched file sha256 = catalog mutant sha256: 8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a
+    OK        C8 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C8 the catalog's edits give the mutant blob too: fd6abbd8a80dc8a01620981c76427ca76a9e1f7d
+    OK        C8 mutant blob absent from the repository object store: True
+    info      C8 test ledger::protocol::model_tests::full_fb; ignored at C True; restored side e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B at f023cc3d031a2a89e5ecbd40
+  -- C15: a cell operation ignores the occupancy number
+    OK        C15 kind: explore
+    OK        C15 configuration (mission 4): F-R
+    OK        C15 named property / permitted properties (mission 4): ['E8']
+    OK        C15 ceiling (mission 4, 10): 30000000
+    OK        C15 time limit: 2700
+    OK        C15 explorer: original (`explore`)
+    OK        C15 receipt type: (a) original-explorer mutant FAIL; restored (e1)
+    OK        C15 special attribution rules: True
+    OK        C15 mutation source file: crates/nexus-governed-control/src/ledger/protocol.rs
+    OK        C15 baseline blob = C's blob of the source file: a2df2841b99cad5d452008a6d4150e9369d07e66
+    OK        C15 expected changed blob count: 1
+    OK        C15 execution status in the artifact (historical): NOT_ATTEMPTED
+    OK        C15 requires a mutant executable: True
+    OK        C15 patch file sha256 = catalog patch_sha256: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        C15 patch file bytes = catalog patch text: True
+    OK        C15 patch listed in R2 SHA256SUMS: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        input copy inputs/patches/C15.patch already present and equal: a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810
+    OK        C15 frozen patch applies to C's file (git apply, temporary copy outside every repository): 
+    OK        C15 patched file git blob = catalog mutant blob: abdd7518e6d1202a3a7c756af9716dc66183fd21
+    OK        C15 patched file sha256 = catalog mutant sha256: 271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b
+    OK        C15 edit anchor occurs exactly 1 time(s) at C: 1
+    OK        C15 the catalog's edits give the mutant blob too: abdd7518e6d1202a3a7c756af9716dc66183fd21
+    OK        C15 mutant blob absent from the repository object store: True
+    info      C15 test ledger::protocol::model_tests::full_fr; ignored at C True; restored side AD-1-R5 F: the adopted F-R proof discharge record, citable only after verified restoration to Candidate C; the
+
+[4] contract, AD-1-R4/R5, Owner adoptions, the F-R proof, Stage-1 and Stage-2 evidence (mission 3, 5)
+    OK        base contract sha256 (at c2c69e3a): cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        input copy inputs/CONTRACT-02-R1.md already present and equal: cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        AD-1-R4 sha256 (at C): 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    OK        input copy inputs/AD1-R4.md already present and equal: 00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693
+    info      AD-1-R4 Owner adoption record docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md: sha256 105e087137fed4ed7bf2baaab50b06812a1847ddbe9549809b85eecbdae379c6
+    OK        R5 proof evidence commit type: commit
+    OK        R5 evidence commit: Candidate C is an ancestor: 0
+    OK        AD-1-R5 sha256 (at the R5 proof evidence commit): 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        input copy inputs/AD1-R5.md already present and equal: 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473
+    OK        F-R stuttering-refinement proof blob (at the R5 evidence commit): c631a061dd7206b9bc62822711be0eca2a21c223
+    OK        F-R stuttering-refinement proof sha256: c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b
+    OK        the proof and AD-1-R5 unchanged at the Tranche-1 evidence commit: ('c631a061dd7206b9bc62822711be0eca2a21c223', '4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473')
+    OK        input copy inputs/FR-STUTTERING-REFINEMENT-PROOF.md already present and equal: c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b
+    OK        R5 packet SHA256SUMS: all 62 listed files verify: []
+    OK        R5 SHA256SUMS lists the proof and AD-1-R5 with their sha256: ('c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b', '4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473')
+    OK        AD-1-R5 Owner adoption record sha256 (= the catalog's adoption_record_sha256): 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        AD-1-R5 Owner adoption record unchanged at the Tranche-1 evidence commit: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        the adoption record adopts AD-1-R5 in full and records the F-R recording words and the proof sha256: (True, True, True, True)
+    OK        input copy inputs/AD1-R5-OWNER-ADOPTION.md already present and equal: 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4
+    OK        catalog cites AD-1-R4, AD-1-R5 and the adoption record: ('00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693', '4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473', '9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4')
+    OK        catalog cites the base contract sha256: cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c
+    OK        Stage 1 evidence commit type: commit
+    OK        Stage 1: Candidate C is an ancestor: 0
+    OK        Stage 1 packet SHA256SUMS: all 179 listed files verify: []
+    OK        Stage 1 packet byte-identical at the Tranche-1 evidence commit: []
+    OK        Stage 2 evidence commit type: commit
+    OK        Stage 2: Candidate C is an ancestor: 0
+    OK        Stage 2 packet SHA256SUMS: all 268 listed files verify: []
+    OK        Stage 2 packet byte-identical at the Tranche-1 evidence commit: []
+  -- the unchanged-core receipts this tranche links (catalog restored_receipt; mission 5)
+    OK        C23 catalog restored receipt (mission 5: S1:41-full-F-2): ('f023cc3d031a2a89e5ecbd4086e15f2e50869acd', 'docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2')
+    OK        C23 (F-2) 41-full-F-2/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 2017840ffd97d068da4b111a26827b73f0c0489b66dca3f9f24225279ed6257e
+    OK        input copy inputs/linked/S1-41-full-F-2/CLASSIFICATION.txt already present and equal: 2017840ffd97d068da4b111a26827b73f0c0489b66dca3f9f24225279ed6257e
+    OK        C23 (F-2) 41-full-F-2/CHECKS.txt listed in its packet's SHA256SUMS: d34e930791b65764230801100bdb4fc7a12d2917084f0478dbb5ba4e15463466
+    OK        input copy inputs/linked/S1-41-full-F-2/CHECKS.txt already present and equal: d34e930791b65764230801100bdb4fc7a12d2917084f0478dbb5ba4e15463466
+    OK        C23 (F-2) 41-full-F-2/descriptor.json listed in its packet's SHA256SUMS: ed2321c2bb6b6df9b045b59b0743b2a221d24e77f8a8260945348454c589caf5
+    OK        input copy inputs/linked/S1-41-full-F-2/descriptor.json already present and equal: ed2321c2bb6b6df9b045b59b0743b2a221d24e77f8a8260945348454c589caf5
+    OK        C23 (F-2) 41-full-F-2/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: 6ad628ade7c96de672530505d97075f8c39691fc11b20b0fe417d4e269e179c4
+    OK        input copy inputs/linked/S1-41-full-F-2/PARSED-RECEIPT.json already present and equal: 6ad628ade7c96de672530505d97075f8c39691fc11b20b0fe417d4e269e179c4
+    OK        C23 (F-2) 41-full-F-2/RECEIPT.txt listed in its packet's SHA256SUMS: 223caa5839a8f13996b1b3cfdfacab024f4c69f47ad8ab53cd3bd3c89c532f7d
+    OK        input copy inputs/linked/S1-41-full-F-2/RECEIPT.txt already present and equal: 223caa5839a8f13996b1b3cfdfacab024f4c69f47ad8ab53cd3bd3c89c532f7d
+    OK        C23 (F-2) 41-full-F-2/raw-output.txt listed in its packet's SHA256SUMS: 985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5
+    OK        input copy inputs/linked/S1-41-full-F-2/raw-output.txt already present and equal: 985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5
+    OK        C23 (F-2) 41-full-F-2/time-v.txt listed in its packet's SHA256SUMS: d2d03916ba4286f682f3e30ffaa13a5bbf0216242d8c1bcf476ea7a79dadedf2
+    OK        input copy inputs/linked/S1-41-full-F-2/time-v.txt already present and equal: d2d03916ba4286f682f3e30ffaa13a5bbf0216242d8c1bcf476ea7a79dadedf2
+    OK        C23 (F-2) 41-full-F-2/scope-record.txt listed in its packet's SHA256SUMS: 18cfbabdeebd41b2cae030f893535195d859ec3c8409d14d07168e21503f41bd
+    OK        input copy inputs/linked/S1-41-full-F-2/scope-record.txt already present and equal: 18cfbabdeebd41b2cae030f893535195d859ec3c8409d14d07168e21503f41bd
+    OK        C23 (F-2) 41-full-F-2: CLASSIFICATION.txt blob = catalog: 6d181dc9132c0d9b7c4437512a4fe5a0742948b4
+    OK        C23 (F-2) 41-full-F-2: raw-output.txt blob = catalog: b32a5d64336c9409701719c710f1a3cbc441a1a8
+    OK        C23 (F-2) 41-full-F-2: raw-output.txt sha256 = catalog: 985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5
+    OK        C23 (F-2) 41-full-F-2: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C23 (F-2) 41-full-F-2: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C23 (F-2) 41-full-F-2: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C23 (F-2) 41-full-F-2: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C23 (F-2) 41-full-F-2: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C10 catalog restored receipt (mission 5: S1:45-full-F-1): ('f023cc3d031a2a89e5ecbd4086e15f2e50869acd', 'docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1')
+    OK        C10 (F-1) 45-full-F-1/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 051370cc131a174456cd20a95fda3415caa8d75c6d9a93dc266bb3ae57b58a42
+    OK        input copy inputs/linked/S1-45-full-F-1/CLASSIFICATION.txt already present and equal: 051370cc131a174456cd20a95fda3415caa8d75c6d9a93dc266bb3ae57b58a42
+    OK        C10 (F-1) 45-full-F-1/CHECKS.txt listed in its packet's SHA256SUMS: 6e96265fd24167b1b7ce0339e9502ea929b87c2d8eec1a9b1dfc9e155ff0cac4
+    OK        input copy inputs/linked/S1-45-full-F-1/CHECKS.txt already present and equal: 6e96265fd24167b1b7ce0339e9502ea929b87c2d8eec1a9b1dfc9e155ff0cac4
+    OK        C10 (F-1) 45-full-F-1/descriptor.json listed in its packet's SHA256SUMS: d2dc71ad5e82909ec3742bf51ed81ae518ef9380d8484034f90554d5a7216a5d
+    OK        input copy inputs/linked/S1-45-full-F-1/descriptor.json already present and equal: d2dc71ad5e82909ec3742bf51ed81ae518ef9380d8484034f90554d5a7216a5d
+    OK        C10 (F-1) 45-full-F-1/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: 98ab595bc051e666576d2f731ea7f91aeb3b2ceb56e79748e0b2ac76fcb74f0a
+    OK        input copy inputs/linked/S1-45-full-F-1/PARSED-RECEIPT.json already present and equal: 98ab595bc051e666576d2f731ea7f91aeb3b2ceb56e79748e0b2ac76fcb74f0a
+    OK        C10 (F-1) 45-full-F-1/RECEIPT.txt listed in its packet's SHA256SUMS: f1405b471d862dbfd7bcea59247ad105d7f3e21bfb14bce77cf074232bcded9d
+    OK        input copy inputs/linked/S1-45-full-F-1/RECEIPT.txt already present and equal: f1405b471d862dbfd7bcea59247ad105d7f3e21bfb14bce77cf074232bcded9d
+    OK        C10 (F-1) 45-full-F-1/raw-output.txt listed in its packet's SHA256SUMS: c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c
+    OK        input copy inputs/linked/S1-45-full-F-1/raw-output.txt already present and equal: c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c
+    OK        C10 (F-1) 45-full-F-1/time-v.txt listed in its packet's SHA256SUMS: 71341a8b003a876bd0288c402ae82990d7c93591bcd2ed7afc1f1099da2f1f4a
+    OK        input copy inputs/linked/S1-45-full-F-1/time-v.txt already present and equal: 71341a8b003a876bd0288c402ae82990d7c93591bcd2ed7afc1f1099da2f1f4a
+    OK        C10 (F-1) 45-full-F-1/scope-record.txt listed in its packet's SHA256SUMS: b599338d2347ecd8e4522f5cea544c4dd5cd8d93ddd13a04c9ffe832a13c4583
+    OK        input copy inputs/linked/S1-45-full-F-1/scope-record.txt already present and equal: b599338d2347ecd8e4522f5cea544c4dd5cd8d93ddd13a04c9ffe832a13c4583
+    OK        C10 (F-1) 45-full-F-1: CLASSIFICATION.txt blob = catalog: f095f20d8edc698acc573cce7a4393480b0e3f14
+    OK        C10 (F-1) 45-full-F-1: raw-output.txt blob = catalog: c36226c875ec5694b3b733b41ffab0dc3dfd8ee5
+    OK        C10 (F-1) 45-full-F-1: raw-output.txt sha256 = catalog: c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c
+    OK        C10 (F-1) 45-full-F-1: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C10 (F-1) 45-full-F-1: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C10 (F-1) 45-full-F-1: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C10 (F-1) 45-full-F-1: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C10 (F-1) 45-full-F-1: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C16 catalog restored receipt (mission 5: S2:68-full-F-D): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D')
+    OK        C16 (F-D) 68-full-F-D/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 0c2630a19620b10d9664ac9869e30583738584938f8cb740f2007d81c33e45c1
+    OK        input copy inputs/linked/S2-68-full-F-D/CLASSIFICATION.txt already present and equal: 0c2630a19620b10d9664ac9869e30583738584938f8cb740f2007d81c33e45c1
+    OK        C16 (F-D) 68-full-F-D/CHECKS.txt listed in its packet's SHA256SUMS: 14325485199230a063a07599cb2642a4cf213007e58e4de8c0b8ccb34a74eaea
+    OK        input copy inputs/linked/S2-68-full-F-D/CHECKS.txt already present and equal: 14325485199230a063a07599cb2642a4cf213007e58e4de8c0b8ccb34a74eaea
+    OK        C16 (F-D) 68-full-F-D/descriptor.json listed in its packet's SHA256SUMS: 7b969ecda1773a12a12d2fecd03a183984c4200e59bcb8120d987839eb674bff
+    OK        input copy inputs/linked/S2-68-full-F-D/descriptor.json already present and equal: 7b969ecda1773a12a12d2fecd03a183984c4200e59bcb8120d987839eb674bff
+    OK        C16 (F-D) 68-full-F-D/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: aca2976893499e3b059c2bf965e055a35bf46cb7cf265b3c2199569f93a548dd
+    OK        input copy inputs/linked/S2-68-full-F-D/PARSED-RECEIPT.json already present and equal: aca2976893499e3b059c2bf965e055a35bf46cb7cf265b3c2199569f93a548dd
+    OK        C16 (F-D) 68-full-F-D/RECEIPT.txt listed in its packet's SHA256SUMS: a6d1ca2a070f6eed7bfb36a85b567a565b8c58e9539372f45ab52564ea084063
+    OK        input copy inputs/linked/S2-68-full-F-D/RECEIPT.txt already present and equal: a6d1ca2a070f6eed7bfb36a85b567a565b8c58e9539372f45ab52564ea084063
+    OK        C16 (F-D) 68-full-F-D/raw-output.txt listed in its packet's SHA256SUMS: 2f80e958de47a72a81f6d7ffb7f5ff00c95895a21f387d66eebb0b696304c6b3
+    OK        input copy inputs/linked/S2-68-full-F-D/raw-output.txt already present and equal: 2f80e958de47a72a81f6d7ffb7f5ff00c95895a21f387d66eebb0b696304c6b3
+    OK        C16 (F-D) 68-full-F-D/time-v.txt listed in its packet's SHA256SUMS: 8698767be8c09f539191f4b154dfa34f86ea317aa93187c43770941ecf740f40
+    OK        input copy inputs/linked/S2-68-full-F-D/time-v.txt already present and equal: 8698767be8c09f539191f4b154dfa34f86ea317aa93187c43770941ecf740f40
+    OK        C16 (F-D) 68-full-F-D/scope-record.txt listed in its packet's SHA256SUMS: 1469c711ce00c762c4c02ce3328b752e028cffd244318267002a638c1e1e986b
+    OK        input copy inputs/linked/S2-68-full-F-D/scope-record.txt already present and equal: 1469c711ce00c762c4c02ce3328b752e028cffd244318267002a638c1e1e986b
+    OK        C16 (F-D) 68-full-F-D: CLASSIFICATION.txt blob = catalog: 13ef108d3b1750c9c66e03ead3539dc63d6de86c
+    OK        C16 (F-D) 68-full-F-D: raw-output.txt blob = catalog: 7dd617cd52e942ea0cbe63db501efc0b9b3fab29
+    OK        C16 (F-D) 68-full-F-D: raw-output.txt sha256 = catalog: 2f80e958de47a72a81f6d7ffb7f5ff00c95895a21f387d66eebb0b696304c6b3
+    OK        C16 (F-D) 68-full-F-D: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C16 (F-D) 68-full-F-D: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C16 (F-D) 68-full-F-D: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fd', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C16 (F-D) 68-full-F-D: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C16 (F-D) 68-full-F-D: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C26 catalog restored receipt (mission 5: S2:62-full-F-4): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4')
+    OK        C26 (F-4) 62-full-F-4/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 8fe9073d400be2e732c61bf9ef18b9cc65facf20d21f518639abddaa8bac65ed
+    OK        input copy inputs/linked/S2-62-full-F-4/CLASSIFICATION.txt already present and equal: 8fe9073d400be2e732c61bf9ef18b9cc65facf20d21f518639abddaa8bac65ed
+    OK        C26 (F-4) 62-full-F-4/CHECKS.txt listed in its packet's SHA256SUMS: 82c6f40b92a015c6999c7093c5cccd213a47cb344654a85910753b533072ff62
+    OK        input copy inputs/linked/S2-62-full-F-4/CHECKS.txt already present and equal: 82c6f40b92a015c6999c7093c5cccd213a47cb344654a85910753b533072ff62
+    OK        C26 (F-4) 62-full-F-4/descriptor.json listed in its packet's SHA256SUMS: cf52b75740c986e608531bc0af088e867a724d12253a8a50e4816785586e1019
+    OK        input copy inputs/linked/S2-62-full-F-4/descriptor.json already present and equal: cf52b75740c986e608531bc0af088e867a724d12253a8a50e4816785586e1019
+    OK        C26 (F-4) 62-full-F-4/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: ba619d53f865b8e3e39b22138704d218c87060e431a6553094145633f51ae510
+    OK        input copy inputs/linked/S2-62-full-F-4/PARSED-RECEIPT.json already present and equal: ba619d53f865b8e3e39b22138704d218c87060e431a6553094145633f51ae510
+    OK        C26 (F-4) 62-full-F-4/RECEIPT.txt listed in its packet's SHA256SUMS: ba3d3185931a43a6711197b0327013196f93f5ee271f3ab25c8e47e42a86059d
+    OK        input copy inputs/linked/S2-62-full-F-4/RECEIPT.txt already present and equal: ba3d3185931a43a6711197b0327013196f93f5ee271f3ab25c8e47e42a86059d
+    OK        C26 (F-4) 62-full-F-4/raw-output.txt listed in its packet's SHA256SUMS: 44b0023eb9106365e4bf88039f8cc914c1e542f8a8490f604dfa0274aacfb948
+    OK        input copy inputs/linked/S2-62-full-F-4/raw-output.txt already present and equal: 44b0023eb9106365e4bf88039f8cc914c1e542f8a8490f604dfa0274aacfb948
+    OK        C26 (F-4) 62-full-F-4/time-v.txt listed in its packet's SHA256SUMS: e2fda3148a5ab49d0fbbcd1c04704301d2a240629dfb2ece363f04a7bdaaaa85
+    OK        input copy inputs/linked/S2-62-full-F-4/time-v.txt already present and equal: e2fda3148a5ab49d0fbbcd1c04704301d2a240629dfb2ece363f04a7bdaaaa85
+    OK        C26 (F-4) 62-full-F-4/scope-record.txt listed in its packet's SHA256SUMS: 5029317e05b5d3c0aa810db018cfa9a5ae37666e931a1b3737c59c6163cfc0ad
+    OK        input copy inputs/linked/S2-62-full-F-4/scope-record.txt already present and equal: 5029317e05b5d3c0aa810db018cfa9a5ae37666e931a1b3737c59c6163cfc0ad
+    OK        C26 (F-4) 62-full-F-4: CLASSIFICATION.txt blob = catalog: 98506c46bc18e4a53532bf5bc9276a9233f0cf9f
+    OK        C26 (F-4) 62-full-F-4: raw-output.txt blob = catalog: b78687793c402b4d551137227da74972792580f1
+    OK        C26 (F-4) 62-full-F-4: raw-output.txt sha256 = catalog: 44b0023eb9106365e4bf88039f8cc914c1e542f8a8490f604dfa0274aacfb948
+    OK        C26 (F-4) 62-full-F-4: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C26 (F-4) 62-full-F-4: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C26 (F-4) 62-full-F-4: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f4', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C26 (F-4) 62-full-F-4: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C26 (F-4) 62-full-F-4: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C3a catalog restored receipt (mission 5: S2:67-full-F-7): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7')
+    OK        C3a (F-7) 67-full-F-7/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 671c4d356131ff822becb5e5a66c578cf6e9e27a70eb20e1940503fadfd23545
+    OK        input copy inputs/linked/S2-67-full-F-7/CLASSIFICATION.txt already present and equal: 671c4d356131ff822becb5e5a66c578cf6e9e27a70eb20e1940503fadfd23545
+    OK        C3a (F-7) 67-full-F-7/CHECKS.txt listed in its packet's SHA256SUMS: 61ed1dbe4f19dc14fef2948dd26023633cdc7ece6ae53a6d2b017fca41fe0f0f
+    OK        input copy inputs/linked/S2-67-full-F-7/CHECKS.txt already present and equal: 61ed1dbe4f19dc14fef2948dd26023633cdc7ece6ae53a6d2b017fca41fe0f0f
+    OK        C3a (F-7) 67-full-F-7/descriptor.json listed in its packet's SHA256SUMS: 826a9c294a983d34b789f20edf93da471c44ff6170eb617108f5160ed77bc381
+    OK        input copy inputs/linked/S2-67-full-F-7/descriptor.json already present and equal: 826a9c294a983d34b789f20edf93da471c44ff6170eb617108f5160ed77bc381
+    OK        C3a (F-7) 67-full-F-7/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: 56de687a3dd24571dac8550b7941d6ca3238955befad970828e27d8e8418aa5a
+    OK        input copy inputs/linked/S2-67-full-F-7/PARSED-RECEIPT.json already present and equal: 56de687a3dd24571dac8550b7941d6ca3238955befad970828e27d8e8418aa5a
+    OK        C3a (F-7) 67-full-F-7/RECEIPT.txt listed in its packet's SHA256SUMS: 4e13c5fd5d51dc279132082d895c48a1ca34762478f14547d628472eb8befb09
+    OK        input copy inputs/linked/S2-67-full-F-7/RECEIPT.txt already present and equal: 4e13c5fd5d51dc279132082d895c48a1ca34762478f14547d628472eb8befb09
+    OK        C3a (F-7) 67-full-F-7/raw-output.txt listed in its packet's SHA256SUMS: 69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a
+    OK        input copy inputs/linked/S2-67-full-F-7/raw-output.txt already present and equal: 69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a
+    OK        C3a (F-7) 67-full-F-7/time-v.txt listed in its packet's SHA256SUMS: 264954c21f842a05d24146765cebd73762f27ad401525f592e8c73cb798c96eb
+    OK        input copy inputs/linked/S2-67-full-F-7/time-v.txt already present and equal: 264954c21f842a05d24146765cebd73762f27ad401525f592e8c73cb798c96eb
+    OK        C3a (F-7) 67-full-F-7/scope-record.txt listed in its packet's SHA256SUMS: d43de68abeccaabca63e0b7f71366fa23b27e23d77db13f38ffc1b1ed8652958
+    OK        input copy inputs/linked/S2-67-full-F-7/scope-record.txt already present and equal: d43de68abeccaabca63e0b7f71366fa23b27e23d77db13f38ffc1b1ed8652958
+    OK        C3a (F-7) 67-full-F-7: CLASSIFICATION.txt blob = catalog: 65ec9c8179dc865ff3e0ff4a8830b218c90013ae
+    OK        C3a (F-7) 67-full-F-7: raw-output.txt blob = catalog: e5c88ee92c5e291bdb1dfb899d9ff89547c34fef
+    OK        C3a (F-7) 67-full-F-7: raw-output.txt sha256 = catalog: 69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a
+    OK        C3a (F-7) 67-full-F-7: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C3a (F-7) 67-full-F-7: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C3a (F-7) 67-full-F-7: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f7', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C3a (F-7) 67-full-F-7: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C3a (F-7) 67-full-F-7: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C5 catalog restored receipt (mission 5: S2:65-full-F-5): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5')
+    OK        C5 (F-5) 65-full-F-5/CLASSIFICATION.txt listed in its packet's SHA256SUMS: a4210b32048bfa0da6e8b1168dddb43d6784102728299145a04d19cf854ab615
+    OK        input copy inputs/linked/S2-65-full-F-5/CLASSIFICATION.txt already present and equal: a4210b32048bfa0da6e8b1168dddb43d6784102728299145a04d19cf854ab615
+    OK        C5 (F-5) 65-full-F-5/CHECKS.txt listed in its packet's SHA256SUMS: 59611b8f944d93863d44d91e6b2f0e979b857a337224caa89320077009c1ebde
+    OK        input copy inputs/linked/S2-65-full-F-5/CHECKS.txt already present and equal: 59611b8f944d93863d44d91e6b2f0e979b857a337224caa89320077009c1ebde
+    OK        C5 (F-5) 65-full-F-5/descriptor.json listed in its packet's SHA256SUMS: 9a4916ae8afe17c17bbb6feba012b800c7acf09275af6619f3fc874ef466c3e9
+    OK        input copy inputs/linked/S2-65-full-F-5/descriptor.json already present and equal: 9a4916ae8afe17c17bbb6feba012b800c7acf09275af6619f3fc874ef466c3e9
+    OK        C5 (F-5) 65-full-F-5/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: b6c49d836936994bd247a96658cbab5061134a60ab06b17b812402e4db9c94d9
+    OK        input copy inputs/linked/S2-65-full-F-5/PARSED-RECEIPT.json already present and equal: b6c49d836936994bd247a96658cbab5061134a60ab06b17b812402e4db9c94d9
+    OK        C5 (F-5) 65-full-F-5/RECEIPT.txt listed in its packet's SHA256SUMS: 8fdfb573c34c17485773cd0b8a9f1d2a9326e3848dfda0652b11c2cc836ee2dc
+    OK        input copy inputs/linked/S2-65-full-F-5/RECEIPT.txt already present and equal: 8fdfb573c34c17485773cd0b8a9f1d2a9326e3848dfda0652b11c2cc836ee2dc
+    OK        C5 (F-5) 65-full-F-5/raw-output.txt listed in its packet's SHA256SUMS: a6d17e7691c80b07c79d1c8115eb40acfa149f8dab3574bce1e1564cecb47d8b
+    OK        input copy inputs/linked/S2-65-full-F-5/raw-output.txt already present and equal: a6d17e7691c80b07c79d1c8115eb40acfa149f8dab3574bce1e1564cecb47d8b
+    OK        C5 (F-5) 65-full-F-5/time-v.txt listed in its packet's SHA256SUMS: 6ecd95aef93cce255c5379fa2dd2d3bc86f72b2e8b2c1b61c0636e0ed2192732
+    OK        input copy inputs/linked/S2-65-full-F-5/time-v.txt already present and equal: 6ecd95aef93cce255c5379fa2dd2d3bc86f72b2e8b2c1b61c0636e0ed2192732
+    OK        C5 (F-5) 65-full-F-5/scope-record.txt listed in its packet's SHA256SUMS: 7d2bb6258ec43070b1fcbb3db37e44243f8d7b1a3172cc053b42ed0d09e570a9
+    OK        input copy inputs/linked/S2-65-full-F-5/scope-record.txt already present and equal: 7d2bb6258ec43070b1fcbb3db37e44243f8d7b1a3172cc053b42ed0d09e570a9
+    OK        C5 (F-5) 65-full-F-5: CLASSIFICATION.txt blob = catalog: f2b3893371a9fb188600b7cf854ffe232666023f
+    OK        C5 (F-5) 65-full-F-5: raw-output.txt blob = catalog: 62aa03adccd38a34d2773aabf3027d1e5fc1114c
+    OK        C5 (F-5) 65-full-F-5: raw-output.txt sha256 = catalog: a6d17e7691c80b07c79d1c8115eb40acfa149f8dab3574bce1e1564cecb47d8b
+    OK        C5 (F-5) 65-full-F-5: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+    OK        C5 (F-5) 65-full-F-5: outer class is the original-explorer PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS
+    OK        C5 (F-5) 65-full-F-5: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f5', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C5 (F-5) 65-full-F-5: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C5 (F-5) 65-full-F-5: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        A3 catalog restored receipt (mission 5: S2:65-full-F-5): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5')
+    info      A3: 65-full-F-5 authenticated above (shared restored side)
+    OK        A6 catalog restored receipt (mission 5: S2:65-full-F-5): ('89326b859792a442c1853c3d35d30a48301c009e', 'docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5')
+    info      A6: 65-full-F-5 authenticated above (shared restored side)
+    OK        C8 catalog restored receipt (mission 5: S1:42-full-F-B): ('f023cc3d031a2a89e5ecbd4086e15f2e50869acd', 'docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B')
+    OK        C8 (F-B) 42-full-F-B/CLASSIFICATION.txt listed in its packet's SHA256SUMS: a247a3dee1dde037f309c3b77b953b7a57a8a91210c897d4f5659ba56a79f70e
+    OK        input copy inputs/linked/S1-42-full-F-B/CLASSIFICATION.txt already present and equal: a247a3dee1dde037f309c3b77b953b7a57a8a91210c897d4f5659ba56a79f70e
+    OK        C8 (F-B) 42-full-F-B/CHECKS.txt listed in its packet's SHA256SUMS: 744fc3385f1894fa9bbe00503063330d5ae1f6fb6024e25ad484cc89fb284ef7
+    OK        input copy inputs/linked/S1-42-full-F-B/CHECKS.txt already present and equal: 744fc3385f1894fa9bbe00503063330d5ae1f6fb6024e25ad484cc89fb284ef7
+    OK        C8 (F-B) 42-full-F-B/descriptor.json listed in its packet's SHA256SUMS: 33a47b11a1ba792c1fe588c991e9003ce90d80609f127dd3dee8ed17ea51b8a6
+    OK        input copy inputs/linked/S1-42-full-F-B/descriptor.json already present and equal: 33a47b11a1ba792c1fe588c991e9003ce90d80609f127dd3dee8ed17ea51b8a6
+    OK        C8 (F-B) 42-full-F-B/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: 5892311b863ec1a73dae423347daab7820cd06a1d431030f7cd11a66e62995e5
+    OK        input copy inputs/linked/S1-42-full-F-B/PARSED-RECEIPT.json already present and equal: 5892311b863ec1a73dae423347daab7820cd06a1d431030f7cd11a66e62995e5
+    OK        C8 (F-B) 42-full-F-B/RECEIPT.txt listed in its packet's SHA256SUMS: 2f7f98f9e6557923cfda340abbf4334a1704279c38dc2290705ac1ca351af4fd
+    OK        input copy inputs/linked/S1-42-full-F-B/RECEIPT.txt already present and equal: 2f7f98f9e6557923cfda340abbf4334a1704279c38dc2290705ac1ca351af4fd
+    OK        C8 (F-B) 42-full-F-B/raw-output.txt listed in its packet's SHA256SUMS: c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7
+    OK        input copy inputs/linked/S1-42-full-F-B/raw-output.txt already present and equal: c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7
+    OK        C8 (F-B) 42-full-F-B/time-v.txt listed in its packet's SHA256SUMS: 2a940a6893626f513fccd84e4d95f25a754e0812975669c4725539615a64ef40
+    OK        input copy inputs/linked/S1-42-full-F-B/time-v.txt already present and equal: 2a940a6893626f513fccd84e4d95f25a754e0812975669c4725539615a64ef40
+    OK        C8 (F-B) 42-full-F-B/scope-record.txt listed in its packet's SHA256SUMS: 70df9d628943ddc3d54c479026b5eafe76002fd500786ed2a3a43b75442e24b8
+    OK        input copy inputs/linked/S1-42-full-F-B/scope-record.txt already present and equal: 70df9d628943ddc3d54c479026b5eafe76002fd500786ed2a3a43b75442e24b8
+    OK        C8 (F-B) 42-full-F-B: CLASSIFICATION.txt blob = catalog: 6911a690973f0cd8246104bac178d390818c73b7
+    OK        C8 (F-B) 42-full-F-B: raw-output.txt blob = catalog: b5ba4be821c33ed91033204a4652080f1656f14d
+    OK        C8 (F-B) 42-full-F-B: raw-output.txt sha256 = catalog: c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7
+    OK        C8 (F-B) 42-full-F-B: classification first two lines: ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS']
+    OK        C8 (F-B) 42-full-F-B: outer class is the composed-quotient PASS: outer class (AD-1-R4 K.2): PASS — admissible unchanged-core composed-quotient PASS
+    OK        C8 (F-B) 42-full-F-B: argv: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::gc_symmetry_fb', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+    OK        C8 (F-B) 42-full-F-B: executable before/after sha256 = the pinned baseline executable: ('cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c', 'cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c')
+    OK        C8 (F-B) 42-full-F-B: source exactly C before/after (head, tree): ('EXACTLY_C', 'EXACTLY_C', 'd5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0')
+    OK        C15 restored side: the AD-1-R5 F discharge record (catalog type): AD-1-R5 F refinement discharge record (not a run, never PASS)
+    OK        C15 catalog: the record's AD-1-R5 and proof sha256: ('4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473', 'c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b')
+    OK        C15 catalog: the record's F-2 receipt: ('f023cc3d031a2a89e5ecbd4086e15f2e50869acd', 'docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2')
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/CLASSIFICATION.txt listed in its packet's SHA256SUMS: 64a314abdbdfd5f2d8534f829c09a41ca6984bc30db5bcc69e2ccdbd131e6428
+    OK        input copy inputs/linked/S2-69-full-F-R/CLASSIFICATION.txt already present and equal: 64a314abdbdfd5f2d8534f829c09a41ca6984bc30db5bcc69e2ccdbd131e6428
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/CHECKS.txt listed in its packet's SHA256SUMS: 8d028cfb7a5672a970820a2f9ff9f82b42f88d345ae2216f1788309948c79f74
+    OK        input copy inputs/linked/S2-69-full-F-R/CHECKS.txt already present and equal: 8d028cfb7a5672a970820a2f9ff9f82b42f88d345ae2216f1788309948c79f74
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/descriptor.json listed in its packet's SHA256SUMS: 82c2ec1d9c89efe2eb9e8b248abaab2d864e3d251fc5447d3493dfd1ed6732c2
+    OK        input copy inputs/linked/S2-69-full-F-R/descriptor.json already present and equal: 82c2ec1d9c89efe2eb9e8b248abaab2d864e3d251fc5447d3493dfd1ed6732c2
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/PARSED-RECEIPT.json listed in its packet's SHA256SUMS: 5a9eaa53c8bed90774bf835a2c97d8ef11836f2cc56516c6f95c8002f669189c
+    OK        input copy inputs/linked/S2-69-full-F-R/PARSED-RECEIPT.json already present and equal: 5a9eaa53c8bed90774bf835a2c97d8ef11836f2cc56516c6f95c8002f669189c
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/RECEIPT.txt listed in its packet's SHA256SUMS: d1547d538524c3947618c707f7ce577c3d336cdbd5c168255487301f04a08a1e
+    OK        input copy inputs/linked/S2-69-full-F-R/RECEIPT.txt already present and equal: d1547d538524c3947618c707f7ce577c3d336cdbd5c168255487301f04a08a1e
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/raw-output.txt listed in its packet's SHA256SUMS: 78e44c335b6ce65f8df6aea18b71e488613403ba8c0471c5cf1c33057ab58ccd
+    OK        input copy inputs/linked/S2-69-full-F-R/raw-output.txt already present and equal: 78e44c335b6ce65f8df6aea18b71e488613403ba8c0471c5cf1c33057ab58ccd
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/time-v.txt listed in its packet's SHA256SUMS: 25945edb32584864cbccf41d26a256d6fbb199f538b3f44be0b3ca0f1306a928
+    OK        input copy inputs/linked/S2-69-full-F-R/time-v.txt already present and equal: 25945edb32584864cbccf41d26a256d6fbb199f538b3f44be0b3ca0f1306a928
+    OK        C15 F-R receipt (INCOMPLETE, never PASS) 69-full-F-R/scope-record.txt listed in its packet's SHA256SUMS: 4b0c012634db8a80d1e4595e6c9841b73c20dd2547cbe394f4b0658ec7689739
+    OK        input copy inputs/linked/S2-69-full-F-R/scope-record.txt already present and equal: 4b0c012634db8a80d1e4595e6c9841b73c20dd2547cbe394f4b0658ec7689739
+    OK        C15 the F-R receipt stays INCOMPLETE (first line NOT PASS; outer class INCOMPLETE at the cap): ('CLASSIFICATION: NOT PASS', True)
+    info      linked receipts authenticated and copied: ['41-full-F-2', '42-full-F-B', '45-full-F-1', '62-full-F-4', '65-full-F-5', '67-full-F-7', '68-full-F-D']
+
+[5] pinned unchanged-baseline executable and its worktree (hashed and sized; never run here)
+    OK        executable is a regular file, not a symlink: (True, False)
+    OK        executable sha256: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+    OK        executable size: 8984464
+    OK        baseline worktree exactly C (verify_tree.py, byte comparison of every tracked file): EXACTLY_C
+    info      5364 tracked blobs, 97246341 bytes; status ['!! target/']
+
+[6] refs, destination absence and mission-owned paths (mission 17)
+    info      remote refs 198
+    OK        remote refs/heads/review/p3-c11-d2a1-control-definitions-r2-01: 9f22f890d8532df395f22cd8db8db2552bfdd14c
+    OK        remote Stage-1 review ref: f023cc3d031a2a89e5ecbd4086e15f2e50869acd
+    OK        remote Stage-2 review ref: 89326b859792a442c1853c3d35d30a48301c009e
+    OK        remote R5 review ref: c1e46fc404a74ed76b848b709a7a246b59f3347f
+    OK        remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-exec-01: 19eda8cc7f559054933fed4a93bdb0a18cc725d4
+    OK        remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-resume-01: 3695a817a6190781dc66769a72a487b442d3e6da
+    OK        remote refs/heads/review/p3-c11-d2a1-mutation-tranche1-continue-02 (the accepted Tranche-1 evidence): ebe42009ba1bd262cf31ae2f401e02cec101afa7
+    OK        destination refs/heads/review/p3-c11-d2a1-mutation-tranche2-exec-01 absent on the remote: False
+    OK        destination refs/heads/review/p3-c11-d2a1-mutation-tranche2-exec-01 absent locally: None
+    info      local branch refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-exec-01: None
+    info      remote refs/heads/main: 6e15dee613ea35823d1adbf6d8917ed59eeda583
+    info      remote refs/heads/rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+    info      Tranche-1 worktree of C22: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22 present True (not touched by this mission)
+    info      Tranche-1 worktree of C14: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14 present True (not touched by this mission)
+    info      Tranche-1 worktree of C19: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19 present True (not touched by this mission)
+    info      Tranche-1 worktree of C21: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21 present True (not touched by this mission)
+    info      Tranche-1 worktree of C27: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27 present True (not touched by this mission)
+    info      Tranche-1 worktree of C28: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28 present True (not touched by this mission)
+    info      Tranche-1 worktree of C12: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12 present True (not touched by this mission)
+    info      Tranche-1 worktree of C9: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9 present True (not touched by this mission)
+    info      Tranche-1 worktree of C11: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11 present True (not touched by this mission)
+    info      Tranche-1 worktree of C17: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17 present True (not touched by this mission)
+    info      Tranche-1 worktree of C18a: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a present True (not touched by this mission)
+    info      Tranche-1 worktree of C18b: /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b present True (not touched by this mission)
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-mutation-tranche2-exec-01-evidence: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-A3: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-A6: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C8: present False
+    info      mission-owned path /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C15: present False
+    OK        no worktree for any control outside Tranche 2 in this mission's namespace: []
+
+[7] the accepted Tranche-1 evidence (mission 1, 6, 7): commit, packets, the twelve accepted controls, tools
+    OK        Tranche-1 evidence commit type: commit
+    OK        Tranche-1 evidence commit tree: 7d8ab59e4b3e61196d9c4cee3cb3a046fa8c4400
+    OK        Tranche-1 evidence commit single parent (the RESUME-01 evidence commit): 3695a817a6190781dc66769a72a487b442d3e6da
+    OK        every path the Tranche-1 evidence commit changes is added under the CONTINUE-02 packet: True
+    OK        paths outside docs/evidence/ differing between C and the Tranche-1 evidence commit: []
+    OK        EXEC-01 packet: SHA256SUMS lists every packet file but itself: True
+    OK        EXEC-01 packet: all 962 listed files verify at ebe42009: []
+    info      EXEC-01 packet: 963 files, 7233913 bytes; SHA256SUMS sha256 be86b13e38a4526a28a5e4678c43c17758109557986af8f53cad60b96759204b
+    OK        EXEC-01 packet byte-identical at its own evidence commit 19eda8cc and at ebe42009: []
+    OK        RESUME-01 packet: SHA256SUMS lists every packet file but itself: True
+    OK        RESUME-01 packet: all 380 listed files verify at ebe42009: []
+    info      RESUME-01 packet: 381 files, 4149067 bytes; SHA256SUMS sha256 7403e94d0ed543843522f17c54f1ccdc7f6e44d69d19d20d82bed52d31ec40f9
+    OK        RESUME-01 packet byte-identical at its own evidence commit 3695a817 and at ebe42009: []
+    OK        CONTINUE-02 packet: SHA256SUMS lists every packet file but itself: True
+    OK        CONTINUE-02 packet: all 470 listed files verify at ebe42009: []
+    info      CONTINUE-02 packet: 471 files, 22150947 bytes; SHA256SUMS sha256 034672bf51ecdfe1939d61c0ec9f7052b1a28ae44592509883e6dc6ea9342835
+    OK        C22: EXEC-01 receipts/31-C22/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+    OK        C22: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6', '694b744de3b70a3a092c633b934262bd510d41aa', '0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5')
+    OK        C14: RESUME-01 receipts/32-C14/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C14: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4', '72556e3f03a53d7a14cb89515a286f42718b6ac8', '203d788cdfad48db63577de831cd4391d524503e99a0cc149b68a44774740d17')
+    OK        C19: RESUME-01 receipts/33-C19/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C19: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f', '899878323428eb34021f8dcf3cefc5ab041f98a2', 'a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113')
+    OK        C21: RESUME-01 receipts/34-C21/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C21: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8', '80662d4c7f8b0c25a0d8a038a9e8b28a0e469826', 'db9b9d6e98c2d5eff8d38e9b62b44c4badd1248c82ba5d422f47612700bccd3b')
+    OK        C27: RESUME-01 receipts/35-C27/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C27: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f', 'bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf', 'bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7')
+    OK        C28: CONTINUE-02 receipts/36-C28/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C28: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868', '446d0365e1472efc40321d259a6f1171d3fe716c', '1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8')
+    OK        C12: CONTINUE-02 receipts/37-C12/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C12: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803', 'd1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b', '4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04')
+    OK        C9: CONTINUE-02 receipts/38-C9/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C9: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b', '7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c', 'afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e')
+    OK        C11: CONTINUE-02 receipts/39-C11/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C11: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768', '6e039d9dad6415242884ceef97a54d3548658038', 'f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01')
+    OK        C17: CONTINUE-02 receipts/40-C17/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C17: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0', '4dfed9e1600a82b38f3326d26a47c4c41f513ac3', '94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf')
+    OK        C18a: CONTINUE-02 receipts/41-C18a/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C18a: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa', '92034563e479d1d622b7625e6ff4ad075a32a16a', '94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee')
+    OK        C18b: CONTINUE-02 receipts/42-C18b/RESULT.txt first line (historical executor label, unchanged): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+    OK        C18b: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt): ('830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2', 'c7f2b5ea99bb1676e3844b6c612d3393f97d50da', '25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a')
+    OK        CONTINUE-02 ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md first line: C22 C14 C19 C21 C27 — MUTATION CONTROL KILL ACCEPTED; C28 BUILD ARCHITECT-ADMISSIBLE (NARROW); C28 KILL PENDING
+    OK        CONTINUE-02 ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md first line: C28 BUILD — ARCHITECT-ADMISSIBLE (NARROW C28-SPECIFIC RULING; NO GENERAL WARNING EXCEPTION)
+    OK        CONTINUE-02 publication-recovery/publish-04/documents/ARCHITECT-RULING-DUPLICATE-POLICY-R2.md first line: DUPLICATE POLICY R2 — 21 EXACT NONEMPTY DUPLICATES AND 8 EXACT ZERO-LENGTH ARTIFACTS PERMITTED FOR PUBLICATION (NO SIZE THRESHOLD; NO WILDCARD; CANDIDATE ACCEPTANCE PENDING)
+    OK        RESUME-01 ARCHITECT-RULING-C22-ACCEPTANCE.md first line: C22 — MUTATION CONTROL KILL ACCEPTED
+    OK        CONTINUE-02 INDEX.md: the derived Tranche-1 status: Derived status: **READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW**
+    OK        original-tools/ (27) = the accepted Tranche-1 execution tools: CONTINUE-02's tools/ and the RESUME-01 tools it ran unchanged (names and sha256): {'authenticate.py': 'c9239e57b33c2f22771a0018f63d99aa2435c9da8eeb3574bfc9ba590c68d583', 'build_packet.py': 'a42cd96a9d996d2063adc916a606bf7e0cb9933ff18707afac7e2c2aacfe2e45', 'c28_admit.py': '45ef3886ab928d7d3f5b5725d709f67fcc306935db4a4e44774760e502a14561', 'c28_controls.py': '3eee43573756886bd229e29c0590437f1e06f74b482227c5dababdb79f47387c', 'classify.py': '53c3aa4f78698bfccf040a6716f5e3a4ba19f0a5148079c1f44ee5e3c169a684', 'common.py': 'e072745a44a34486cf51d183cb5c13627bdfe3a462830904c7a4a8757697f71f', 'configs.py': '011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744', 'control.py': '3d3aace88f73e983dba840f00b5e5ce769151dac5342e3e92d12b6abe97829d9', 'expectations.py': '96e4d77d525d12d0bc976f8523ec4ec5639ea34cc7e8fb7b1745ad2793ff5668', 'final_gate.py': '51cd7b527d7456a5481c3b0a45d87e537136ef2224a455c707c357a1d2cdb368', 'healthy.py': '7e29c41854883fb39809faba08c61cc9664376f1851410f8b2d1ac776b9a8d27', 'normalize.py': 'ff13a99b25fa0fe64d8f629fb9b66bd1489e51655246093e0a839a0b74546ad1', 'pre_exec_gate.py': '2637cede697b551e474310212acf909ae20483504b7e17b7636b949b6e366626', 'publish_checks.py': '2ea948fbca62f7a4ecc27af36763e93e4fa41686df526f66f3840fa9e3f035b2', 'record_freeze.py': '50c385324f3ec729f954a8fe9fa3f8b0b5dad05482cf7ec5c3510b35290c6c99', 'rehearsal.py': 'c855711435d3f5c588e340ebb1267c679ea0348a6c6438d9526215e3fa06b5a1', 'render.py': '7f0fe55f20ff2ec3353f5145ea824fd03b9550ae33965a2343ce0d0c6e7a72bf', 'render_rehearsal.py': '67b7cb72e61af3699a74715b83e2152e520996aea94e26aadd6bf6cd0abb1df3', 'report.py': '9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa', 'scope-wrap.sh': 'e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874', 'supervise.py': '662b969a901e09858a950864a83acbef8a0c13333e8d6f98996b2e824327e56d', 'tool_controls.py': '101fc62cb7cf5500eb3f9d91985777c913cbe493ad532fa8abec5ca81b38676b', 'tool_diff.py': '5a68e4c007f2dc818d8fb3e185dd840eacec43fd48c4888401e754dab1685a70', 'verifier_controls.py': '1dd23122b4b91bc9919dda4ee70c0e44ac0b7adc4aa4d52273bf1f88e6f10dda', 'verify_mutant.py': '6c1b6268d665012ca9591ed66445b6709c82697eec8a1479e2a454f70c97f6f5', 'verify_tree.py': '8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934', 'worktrees.py': 'e356d4e86f8f106043831473c7a8f9d84eedc0b9af15431892bb1f47e40ac67d'}
+    OK        CONTINUE-02 CARRIED-FORWARD.md names every RESUME-01 tool it ran unchanged, with its sha256: True
+    OK        original-publication-tools/ (16) = the PUBLISH-04 publication tools (names and sha256): {'assemble.py': 'a7f58a7f66756dd2a4a6677ac8a99f6444e3d64dbeb6cd36464222bbe7ed0d04', 'authenticate.py': 'b4907363eaa4d77b41efa1fb20ecd783cf6b2a2d6368ec9971bc179f4585ae6c', 'build_packet.py': 'c91ac27ccbf72b4d360b34020e7907f8b4b240d03e1a29201e4308509ec87bfb', 'builder_diff.py': '0928a1b2aae89721273d928d75551e994ba8e63994ce175c2691fcd98fb6a6c2', 'common.py': 'e072745a44a34486cf51d183cb5c13627bdfe3a462830904c7a4a8757697f71f', 'final_gate.py': 'e69cc1f8522ce39df258c235b119026cb00ebb65906b78de5b3df0d70673cc97', 'finalize.py': 'a9b34ed6a9036d6f16bec6a1abf8d81ef852ad7eaba0ad283cf54ac9e012f305', 'make_index.py': 'ca36f9a49219ab16bf93fc3bb3433845dba91de6a0e7c4c1030c904326dea1ab', 'make_maps.py': '2f1b3cba30843d193219939b52c8efef985263d9d7452a58c87670ae957b96f3', 'manifest.py': '76578636d52bcc3cd2f33e9697e61e3cdff14a8b3826eaeb08eae22be2e06b51', 'pub4common.py': '8233bbd4200f394e2994678bdebf06b3d66da0f27b3c5e4a7af94344a938d9cc', 'publish_checks.py': '307b2a6bbbca621f810fbdffa61615ba043bafe248b44f173367c47ebbde22af', 'push.py': '1e52a71bb8846d9a66dfd2b3a4b7c8ef1bd23e8eadcb0e69c517a2f1fdac7a27', 'record_freeze.py': '835b5ede3239acb4e34177e314fbe80127e521675ae16b2b22575b380efbc4d8', 'repair_controls.py': '785771587d7a412d4501c20e7ceac82840be51a2e62ecdd1da30feac32cb58c0', 'worktree.py': 'f8db2bf26e4c9798ad8594f96d86f88e8920c47bed9f670b7dcef328e0ebd824'}
+
+RESULT: ALL CHECKS HOLD

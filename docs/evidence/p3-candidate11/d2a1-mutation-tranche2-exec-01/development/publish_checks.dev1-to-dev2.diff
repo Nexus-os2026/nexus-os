@@ -1,0 +1,11 @@
+--- development/revisions/publish_checks.dev1.py	2026-10-15 00:57:08.878920789 +0100
++++ tools/publish_checks.py	2026-10-15 00:57:08.899584774 +0100
+@@ -293,7 +293,7 @@
+     print(f"     reading back {len(key)} key files from GitHub at the evidence commit")
+     for rel in key:
+         path = PACKET + rel
+-        local_blob = git("rev-parse", f"{e}:{path}", ok=(0, 128)).decode().strip()
++        local_blob = git("rev-parse", "-q", "--verify", f"{e}:{path}", ok=(0, 1, 128)).decode().strip()
+         local_sha = hashlib.sha256(git("cat-file", "blob", local_blob)).hexdigest() if local_blob else None
+         rb, rs = remote_blob(path, e)
+         check(f"remote {rel}: blob {rb} and sha256 equal local", rb == local_blob and local_blob and rs == local_sha, rs)

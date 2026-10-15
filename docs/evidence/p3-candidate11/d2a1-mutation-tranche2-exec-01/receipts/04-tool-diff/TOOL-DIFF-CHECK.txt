@@ -1,0 +1,45 @@
+OK   D1 original-tools/ (27) is exactly the accepted Tranche-1 execution tooling (CONTINUE-02's tools/ and the RESUME-01 tools it ran unchanged; sha256 from the packet SHA256SUMS at ebe42009): []
+OK   D1 original-publication-tools/ (16) is exactly the PUBLISH-04 publication tooling: []
+OK   D2 the changed tools are exactly the declared ones: ['authenticate.py', 'build_packet.py', 'classify.py', 'common.py', 'control.py', 'expectations.py', 'final_gate.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'render.py', 'tool_diff.py']
+OK   D2 the added tools are exactly the declared ones: ['finalize.py', 'push.py', 'rehearsals.py', 't2_controls.py', 'worktree.py']
+OK   D2 the tools not carried are exactly the declared ones; none is imported at module level by any tool here, and the one lazy import (normalize, inside Tranche 1's unchanged classify_e1) is in a function no tool calls: ['c28_admit.py', 'c28_controls.py', 'healthy.py', 'normalize.py', 'rehearsal.py', 'render_rehearsal.py', 'tool_controls.py', 'verifier_controls.py']; imports [('classify.py', 'classify_e1', 'normalize')]; callers []
+OK   D2 the unchanged tools are exactly the byte-for-byte carried ones: ['configs.py', 'report.py', 'scope-wrap.sh', 'supervise.py', 'verify_mutant.py', 'verify_tree.py', 'worktrees.py']
+OK   D3 supervise.py byte-identical (sha256 662b969a901e0985…): UNCHANGED
+OK   D3 worktrees.py byte-identical (sha256 e356d4e86f8f1060…): UNCHANGED
+OK   D3 verify_mutant.py byte-identical (sha256 6c1b6268d665012c…): UNCHANGED
+OK   D3 verify_tree.py byte-identical (sha256 8bf5724a7287b0b9…): UNCHANGED
+OK   D3 scope-wrap.sh byte-identical (sha256 e776ac8f2c6710d6…): UNCHANGED
+OK   D3 report.py byte-identical (sha256 9accbeec8bac1dda…): UNCHANGED
+OK   D3 configs.py byte-identical (sha256 011ba516ad9107b7…): UNCHANGED
+OK   D3 scope-wrap.sh keeps its executable mode
+OK   D4 classify.py: every function but classify_a is AST-identical to Tranche 1's: []
+OK   D4 classify.py: every module-level statement (constants, imports, the command-line block) unchanged
+OK   D4 classify.py: every changed line lies inside classify_a, and the change names only the catalog-required fields (permitted_properties, key_fields): 6 hunks
+OK   D4 classify_a's change is inert for every single-property control: Tranche 1's classifier writes byte-identical outputs on 21 synthetic receipts (receipts/03-t2-controls): 21
+OK   D4 control.py: functions ['git', 'apply_patch', 'restored_check', 'restore', 'finish'] AST-identical to Tranche 1's: []
+OK   D4 expectations.py: functions ['fn_span', 'attrs_above', 'verdict_assertion'] AST-identical to Tranche 1's: []
+OK   D4 authenticate.py: functions ['git', 'gtext', 'chk', 'copy_in', 'packet_sums', 'patch_result'] AST-identical to Tranche 1's: []
+OK   D4 common.py: functions ['build_env', 'git', 'blob', 'source', 'sha256_bytes', 'sha256_file', 'git_blob_id', 'inputs'] AST-identical to Tranche 1's: []
+OK   D4 control.main: Tranche 1's, statement for statement, but for the leading refusal (the twelve accepted controls; the Tranche-2 order) and the removed C28 dispatch
+OK   D4 control.py defines exactly git, gate, apply_patch, restored_check, restore, link, finish, main
+OK   D5 common.py: the 50 names the reused tools and this mission read with their accepted values keep them (identities, catalog, contract, Stage-1/2, baseline executable, build and run policy, limits): []
+OK   D5 common.py: values changed only for the declared mission identity, namespace, order and publication names: ['ACCEPTED', 'BRANCH', 'DEST', 'EV', 'EVIDENCE_WT', 'LOCAL_BRANCH', 'MISSION', 'NOT_AUTHORIZED', 'ORDER', 'PACKET', 'PACKET_LIMIT', 'RULING', 'RULING_FIRST', 'UNIT_PREFIX']
+OK   D5 common.py: the worktree namespace and scope prefix are this mission's own (mt2x), never Tranche 1's
+OK   D6 authenticate.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 build_packet.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 classify.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 common.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 control.py: launches only git/gh/ps/python; no cargo or rustc argument list; supervise.build/invoke only in control.main: [] [] ['supervise.build', 'supervise.invoke']
+OK   D6 expectations.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 final_gate.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 pre_exec_gate.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 publish_checks.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 record_freeze.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 render.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 tool_diff.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 finalize.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 push.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 rehearsals.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 t2_controls.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+OK   D6 worktree.py: launches only git/gh/ps/python; no cargo or rustc argument list; no supervise.build/invoke: [] [] []
+TOOL DIFF: ALL CHECKS HOLD

@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C5: resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check
+patch: inputs/patches/C5.patch (the frozen R2 packet's catalog/patches/C5.patch), sha256 a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8 (catalog a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '5\t36\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495 (expected e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495), sha256 31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd (expected 31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

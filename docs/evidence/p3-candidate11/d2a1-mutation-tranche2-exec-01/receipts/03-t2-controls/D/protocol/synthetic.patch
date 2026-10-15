@@ -1,0 +1,9 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841..ca62b05e 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -2081,3 +2081,4 @@ mod hook {
+         CALLBACK.with(|slot| *slot.borrow_mut() = None);
+     }
+ }
++// SYNTHETIC t2_controls.py comment line: never built, never a control

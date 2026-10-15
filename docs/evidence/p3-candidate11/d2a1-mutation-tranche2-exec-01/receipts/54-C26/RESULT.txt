@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C26: a passed barrier clears the latch
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 336c30483abf4a0b0672caefdd87e8c7fc504094b36d1129cce4fb90b0663f97 size 8984936
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E9
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-4 unchanged-core original-explorer PASS, type (e1))

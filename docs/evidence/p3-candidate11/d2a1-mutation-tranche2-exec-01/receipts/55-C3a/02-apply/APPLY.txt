@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C3a: acknowledgement test 2 removed
+patch: inputs/patches/C3a.patch (the frozen R2 packet's catalog/patches/C3a.patch), sha256 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298 (catalog 2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t3\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 5c74cfbd8124a78c616526ae1d461895b1a16b82 (expected 5c74cfbd8124a78c616526ae1d461895b1a16b82), sha256 abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6 (expected abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

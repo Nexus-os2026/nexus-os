@@ -1,0 +1,7 @@
+CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+control C5: resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: NOT OK
+restoration: RESTORE: EXACTLY_C
+STOP: the mutant build did not succeed (kills nothing; no rebuild). No later control is executed.

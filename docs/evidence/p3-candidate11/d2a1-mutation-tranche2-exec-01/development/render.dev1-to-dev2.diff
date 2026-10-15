@@ -1,0 +1,29 @@
+--- development/revisions/render.dev1.py	2026-10-15 00:53:05.102521240 +0100
++++ tools/render.py	2026-10-15 00:53:05.128885162 +0100
+@@ -143,7 +143,7 @@
+               f"- outer classification: {r['run_first']} — {r['outer']}", f"- run resources: {r['run_resources']}",
+               f"- restoration: {r['restore']}", f"- restored-side link: {r['link']}", "", "  RESULT facts:", ""]
+         s += [f"  - {x}" for x in r["facts"]] + [""]
+-    open(os.path.join(outdir, "TRANCHE-SUMMARY.md"), "w").write("\n".join(s) + "\n")
++    open(os.path.join(outdir, "TRANCHE-SUMMARY.md"), "w").write("\n".join(s).rstrip("\n") + "\n")
+     # CARRIED-FORWARD.md: every immutable file this mission authenticates, links, gates on or runs unchanged.
+     cf = [f"# Referenced, not republished — {K.MISSION}", "",
+           "Every file below is immutable evidence at the named commit. This mission authenticated it (receipts/"
+@@ -200,7 +200,7 @@
+         b, h = ref(K.T1, f"{packet}/{d}/RESULT.txt")
+         cf.append(f"| {cid} RESULT (historical label; Architect-accepted) | `{packet}/{d}/RESULT.txt` | `{K.T1}` | `{b}` | "
+                   f"`{h}` |")
+-    open(os.path.join(outdir, "CARRIED-FORWARD.md"), "w").write("\n".join(cf) + "\n")
++    open(os.path.join(outdir, "CARRIED-FORWARD.md"), "w").write("\n".join(cf).rstrip("\n") + "\n")
+     fr = jload(os.path.join(R, "05-FREEZE.json")) or {}
+     frs = K.sha256_file(os.path.join(R, "05-FREEZE.json")) if os.path.exists(os.path.join(R, "05-FREEZE.json")) else "none"
+     i = [f"# {K.MISSION} — evidence packet", "",
+@@ -258,7 +258,7 @@
+          "- The restored sides are linked, never rerun: the accepted exact-final Stage-1 and Stage-2 receipts; for C8 the "
+          "Stage-1 composed-quotient F-B PASS (restored side only, AD-1-R4 F); for C15 the AD-1-R5 F refinement discharge "
+          "record, which is not a run and never PASS (the F-R receipt stays INCOMPLETE).", ""]
+-    open(os.path.join(outdir, "INDEX.md"), "w").write("\n".join(i) + "\n")
++    open(os.path.join(outdir, "INDEX.md"), "w").write("\n".join(i).rstrip("\n") + "\n")
+     print(f"STATUS: {st}; new candidates {len(candidates)} of 10; attempted {attempted}; stopped {blocked}")
+     return 0
+ 

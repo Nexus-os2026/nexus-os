@@ -1,0 +1,21 @@
+-- C23: the publication omits the X bit
+   receipts/51-C23; ledger::protocol::model_tests::full_f2 (F-2); permitted ['E1']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2
+-- C10: `Commit::Unknown` followed by `Rollback::Undone` gives Not written
+   receipts/52-C10; ledger::protocol::model_tests::full_f1 (F-1); permitted ['E4']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C16: the drop of a Counted ticket lowers the count
+   receipts/53-C16; ledger::protocol::model_tests::full_fd (F-D); permitted ['E3']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D
+-- C26: a passed barrier clears the latch
+   receipts/54-C26; ledger::protocol::model_tests::full_f4 (F-4); permitted ['E9']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4
+-- C3a: acknowledgement test 2 removed
+   receipts/55-C3a; ledger::protocol::model_tests::full_f7 (F-7); permitted ['P13', 'P15']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7
+-- C5: resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check
+   receipts/56-C5; ledger::protocol::model_tests::full_f5 (F-5); permitted ['P13']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5
+-- A3: the worker empties X before it raises H
+   receipts/57-A3; ledger::protocol::model_tests::full_f5 (F-5); permitted ['P12']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4134:5 (the mutant model_tests.rs (the mutated file holds the explorer)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5
+-- A6: "recovery required" is a flag, not a comparison of H with A
+   receipts/58-A6; ledger::protocol::model_tests::full_f5 (F-5); permitted ['P12', 'P15']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4149:5 (the mutant model_tests.rs (the mutated file holds the explorer)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5
+-- C8: members are classified and inserted one at a time
+   receipts/59-C8; ledger::protocol::model_tests::full_fb (F-B); permitted ['E5']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B
+-- C15: a cell operation ignores the occupancy number
+   receipts/60-C15; ledger::protocol::model_tests::full_fr (F-R); permitted ['E8']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link fr-discharge docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2
+EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD

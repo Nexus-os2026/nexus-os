@@ -1,0 +1,22 @@
+--- development/revisions/authenticate.dev1.py	2026-10-15 00:32:07.090672848 +0100
++++ tools/authenticate.py	2026-10-15 00:32:07.105508154 +0100
+@@ -443,7 +443,9 @@
+         first = f[f"{d}/RESULT.txt"].decode().splitlines()[0]
+         want = "CONTROL RESULT: MUTATION_CONTROL_BLOCKED" if cid == "C22" else CANDIDATE_RESULT
+         chk(f"{cid}: {names[packet]} {d}/RESULT.txt first line (historical executor label, unchanged)", first, want)
+-        ap = json.loads(f[f"{d}/02-apply/APPLY.json"]) if f"{d}/02-apply/APPLY.json" in f else None
++        # C28's apply receipt is RESUME-01's (CONTINUE-02 admitted that build without re-applying the patch).
++        af = data["RESUME-01"] if cid == "C28" else f
++        ap = json.loads(af[f"{d}/02-apply/APPLY.json"]) if f"{d}/02-apply/APPLY.json" in af else None
+         chk(f"{cid}: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+             (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+              ap["verify_mutant"]["mutant_file"]["sha256"]) if ap else None,
+@@ -462,7 +464,7 @@
+         data["RESUME-01"]["ARCHITECT-RULING-C22-ACCEPTANCE.md"].decode().splitlines()[0],
+         "C22 — MUTATION CONTROL KILL ACCEPTED")
+     chk("CONTINUE-02 INDEX.md: the derived Tranche-1 status", [l for l in c2["INDEX.md"].decode().splitlines()
+-                                                              if l.startswith("Derived status: ")][0][:68],
++                                                              if l.startswith("Derived status: ")][0].split(". ")[0],
+         "Derived status: **READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW**")
+     # The accepted Tranche-1 execution tools (this mission's original-tools/) and publication tools.
+     c2tools = {f[len("tools/"):]: K.sha256_bytes(v) for f, v in c2.items() if f.startswith("tools/")}

@@ -1,0 +1,10 @@
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): FAIL of P12, not a permitted property (P13 or P15): kills nothing
+raw outcome (as printed): outcome FAIL; FAIL P12: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 30,000,000 ceiling; transitions 14; elapsed 0.0 s
+named property: P13 or P15; configuration F-7; test ledger::protocol::model_tests::full_f7
+candidate: none
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6080 KiB; scope gone
+checks: 28 of 30 hold
+FAILED CHECK: the assertion message carries failed: {"<p>"} for one permitted property p of ['P13', 'P15']: ['assertion `left == right` failed: failed: {"P12"}']
+FAILED CHECK: the printed property is one of the permitted properties ['P13', 'P15'] (catalog: AD-1-R4 F.1(a), either property the row names): P12: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown

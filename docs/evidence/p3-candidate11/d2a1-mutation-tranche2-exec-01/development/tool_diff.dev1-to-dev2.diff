@@ -1,0 +1,79 @@
+--- development/revisions/tool_diff.dev1.py	2026-10-15 00:51:37.496184336 +0100
++++ tools/tool_diff.py	2026-10-15 00:51:37.516884008 +0100
+@@ -134,23 +134,34 @@
+ 
+ 
+ def launches(path):
+-    """Every process launch, as the literal argv[0], 'python' (sys.executable) or UNKNOWN."""
++    """Every process launch, as the literal argv[0], 'python' (sys.executable) or UNKNOWN; an argument list held in a
++    name is resolved through that name's list assignments in the module (all of them must agree)."""
+     t = tree(path)
+     out = []
++    lists = {}
++    for n in ast.walk(t):
++        if isinstance(n, ast.Assign) and isinstance(n.value, ast.List):
++            for tg in n.targets:
++                if isinstance(tg, ast.Name):
++                    lists.setdefault(tg.id, []).append(n.value)
++
++    def head_of(a):
++        if isinstance(a, ast.Name) and a.id in lists:
++            hs = {head_of(v) for v in lists[a.id]}
++            return hs.pop() if len(hs) == 1 else "UNKNOWN"
++        if isinstance(a, ast.List) and a.elts:
++            e = a.elts[0]
++            if isinstance(e, ast.Constant) and isinstance(e.value, str):
++                return e.value
++            if ast.unparse(e) == "sys.executable":
++                return "python"
++        return "UNKNOWN"
+     for n in ast.walk(t):
+         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name):
+             mod, f = n.func.value.id, n.func.attr
+             if (mod == "subprocess" and f in ("run", "Popen", "call", "check_call", "check_output")) or (
+                     mod == "os" and (f in ("system", "popen") or f.startswith(("exec", "spawn")))):
+-                a = n.args[0] if n.args else None
+-                head = "UNKNOWN"
+-                if isinstance(a, ast.List) and a.elts:
+-                    e = a.elts[0]
+-                    if isinstance(e, ast.Constant) and isinstance(e.value, str):
+-                        head = e.value
+-                    elif ast.unparse(e) == "sys.executable":
+-                        head = "python"
+-                out.append((n.lineno, head))
++                out.append((n.lineno, head_of(n.args[0]) if n.args else "UNKNOWN"))
+     return out
+ 
+ 
+@@ -180,12 +191,26 @@
+           == sorted(CHANGED), sorted(f for f, s in status.items() if s == "CHANGED"))
+     check("D2 the added tools are exactly the declared ones", sorted(f for f, s in status.items() if s == "ADDED")
+           == sorted(ADDED), sorted(f for f, s in status.items() if s == "ADDED"))
+-    check("D2 the tools not carried are exactly the declared ones (none of them is imported or run by a carried tool)",
++    imports = []
++    for f in [x for x in new if x.endswith(".py")]:
++        t = tree(os.path.join(NEW, f))
++        for scope in [t] + [n for n in t.body if isinstance(n, ast.FunctionDef)]:
++            for n in (scope.body if scope is not t else t.body):
++                for m in ast.walk(n) if scope is not t else [n]:
++                    if isinstance(m, (ast.Import, ast.ImportFrom)):
++                        for a in m.names:
++                            if a.name.split(".")[0] + ".py" in NOT_CARRIED:
++                                imports.append((f, getattr(scope, "name", "<module>"), a.name))
++    lazy = [("classify.py", "classify_e1", "normalize")]  # Tranche 1's e1 baseline classifier, unchanged, never called
++    called = [f for f in new if f.endswith(".py") and "classify_e1" in [
++        ast.unparse(n.func).split(".")[-1] for n in ast.walk(tree(os.path.join(NEW, f))) if isinstance(n, ast.Call)]
++        and f != "classify.py"]
++    check("D2 the tools not carried are exactly the declared ones; none is imported at module level by any tool here, "
++          "and the one lazy import (normalize, inside Tranche 1's unchanged classify_e1) is in a function no tool calls",
+           sorted(f for f, s in status.items() if s == "NOT CARRIED") == sorted(NOT_CARRIED)
+-          and not [f for f in new if f.endswith(".py") and any(
+-              isinstance(n, (ast.Import, ast.ImportFrom)) and any(a.name.split(".")[0] + ".py" in NOT_CARRIED
+-                                                                  for a in n.names)
+-              for n in ast.walk(tree(os.path.join(NEW, f))))], sorted(f for f, s in status.items() if s == "NOT CARRIED"))
++          and set(imports) <= set(lazy) and not called and not [c for c, _ in calls(tree(os.path.join(NEW, "classify.py")))
++                                                                if c.endswith("classify_e1")],
++          f"{sorted(f for f, s in status.items() if s == 'NOT CARRIED')}; imports {imports}; callers {called}")
+     check("D2 the unchanged tools are exactly the byte-for-byte carried ones",
+           sorted(f for f, s in status.items() if s == "UNCHANGED") == sorted(CARRIED_BYTE_FOR_BYTE),
+           sorted(f for f, s in status.items() if s == "UNCHANGED"))

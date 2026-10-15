@@ -1,0 +1,9 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+index 28085ce2..f8b1fb6d 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol/model_tests.rs
+@@ -9197,3 +9197,4 @@ const C4_SCENARIOS: [C4Scenario; 2] = [C4_P4, C4_P8];
+ fn c4_witness_p4_and_p8_on_f8() {
+     run_c4_witness(&F8, &C4_SCENARIOS);
+ }
++// SYNTHETIC t2_controls.py comment line: never built, never a control

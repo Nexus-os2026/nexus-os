@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C23: the publication omits the X bit
+patch: inputs/patches/C23.patch (the frozen R2 packet's catalog/patches/C23.patch), sha256 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa (catalog 731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '0\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob cd50b40ce632d4edcb95fff89389246b0d75c51e (expected cd50b40ce632d4edcb95fff89389246b0d75c51e), sha256 b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa (expected b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

@@ -1,0 +1,1 @@
+STATUS: BLOCKED; new candidates 0 of 10; attempted []; stopped []

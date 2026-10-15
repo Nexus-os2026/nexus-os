@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E9
+raw outcome (as printed): outcome FAIL; FAIL E9: a latch or a handover fault was cleared; shortest trace (4 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.01s']
+measured: states 3,478 (expanded 987) of the 30,000,000 ceiling; transitions 7452; elapsed 0.0 s
+named property: E9; configuration F-4; test ledger::protocol::model_tests::full_f4
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.01 s of 2700 s; scope memory.peak 3727360 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6396 KiB; scope gone
+checks: 29 of 29 hold

@@ -1,0 +1,9 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C10: `Commit::Unknown` followed by `Rollback::Undone` gives Not written
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 5c8ef9f07b0ef37b430161c9da088bcbe7253ea17a6863ce2677d5f28645e867 size 8984744
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E4
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))

@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C16: the drop of a Counted ticket lowers the count
+patch: inputs/patches/C16.patch (the frozen R2 packet's catalog/patches/C16.patch), sha256 e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97 (catalog e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '3\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 33f0d257df3e126c589becd0b1c5760c57085be8 (expected 33f0d257df3e126c589becd0b1c5760c57085be8), sha256 c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4 (expected c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

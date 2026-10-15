@@ -1,0 +1,12 @@
+--- development/revisions/rehearsals.dev1.py	2026-10-15 00:53:05.103262967 +0100
++++ tools/rehearsals.py	2026-10-15 00:53:05.129053029 +0100
+@@ -58,6 +58,9 @@
+     for r in ("02-EXPECTATIONS.json", "01-supervision-selftest", "00-authentication.txt"):
+         src = os.path.join(K.EV, "receipts", r)
+         (shutil.copytree if os.path.isdir(src) else shutil.copyfile)(src, os.path.join(ev, "receipts", r))
++    st = os.path.join(ev, "receipts/01-supervision-selftest/SELFTEST.txt")
++    if os.path.exists(st):  # the copy names the synthetic root, as the real self-test names the real one
++        open(st, "w").write(open(st).read().replace(K.EV + "/", ev + "/"))
+     gate = "PRE-EXECUTION GATE: ALL CHECKS HOLD" if scenario != "R3" else "PRE-EXECUTION GATE: FAILED: synthetic"
+     open(os.path.join(ev, "receipts/06-PRE-EXECUTION-GATE.txt"), "w").write(gate + "\n" + SYN + "\n")
+     t2 = os.path.join(K.EV, "receipts/03-t2-controls")

@@ -1,0 +1,61 @@
+SUPERVISION SELF-TEST 2026-10-15T00:58:38+0100 (non-Nexus processes only)
+systemd: systemd 255 (255.4-1ubuntu8.17)
+kernel: 6.17.0-35-generic; timeout: timeout (GNU coreutils) 9.4
+1. the 16 GiB, zero-swap scope's limits read back from inside it (a 10 MiB allocation), full chain
+scope unit: p3c11-mt2x-selftest-1-1792022318.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-mt2x-selftest-1-1792022318 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/1/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/1/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'b = b'"'"'x'"'"' * (10 << 20); print('"'"'allocated'"'"', len(b))'
+launched: 2026-10-15T00:58:38+0100
+returned: 2026-10-15T00:58:38+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.02 s, max RSS (largest single process) 20432 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 16633856 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  RESULT OK
+
+2. memory cap enforced: a 64 MiB zero-swap scope, the process writes 256 MiB
+  supervisor rc -15; stdout ''; scope after: ['Result=oom-kill', 'ActiveState=failed']; wrapper record keys ['cgroup', 'command exit status', 'finished', 'memory.high', 'memory.max', 'memory.oom.group', 'memory.peak', 'memory.swap.max', 'processes at start', 'started']; complete record: False; command status recorded: 137
+  RESULT OK
+
+3. time limit enforced through the full chain: timeout -s KILL 3 around a 30 s sleep
+scope unit: p3c11-mt2x-selftest-3-1792022318.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-mt2x-selftest-3-1792022318 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=13 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/3/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/3/time-v.txt timeout -s KILL 3 nice -n 10 /bin/sleep 30
+launched: 2026-10-15T00:58:38+0100
+returned: 2026-10-15T00:58:41+0100
+supervisor return code 137; /usr/bin/time: exit status None, signal 9, wall 3.0 s, max RSS (largest single process) 1532 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 2940928 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': 9, 'supervisor_rc': 137, 'wrapper_recorded_status': '137'}; timed_out True
+  RESULT OK
+
+4. backstop enforced: RuntimeMaxSec=2 around a 30 s sleep
+  rc -15; elapsed 2.14 s
+  RESULT OK
+
+5. a normal exit 101 through the run chain
+scope unit: p3c11-mt2x-selftest-5-1792022323.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-mt2x-selftest-5-1792022323 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/5/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/5/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'import sys; sys.exit(101)'
+launched: 2026-10-15T00:58:43+0100
+returned: 2026-10-15T00:58:43+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.01 s, max RSS (largest single process) 10344 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 6692864 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': 101, 'signal': None, 'supervisor_rc': 101, 'wrapper_recorded_status': '101'}
+  RESULT OK
+
+6. a process ended by SIGABRT through the run chain
+scope unit: p3c11-mt2x-selftest-6-1792022323.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-mt2x-selftest-6-1792022323 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/6/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/6/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'import os; os.abort()'
+launched: 2026-10-15T00:58:43+0100
+returned: 2026-10-15T00:58:43+0100
+supervisor return code 134; /usr/bin/time: exit status None, signal 6, wall 0.1 s, max RSS (largest single process) 10316 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 7024640 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': 6, 'supervisor_rc': 134, 'wrapper_recorded_status': '134'}
+  RESULT OK
+
+7. separate stdout and stderr files (the build mode), environment exactly as given (env -i)
+scope unit: p3c11-mt2x-selftest-7-1792022323.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest
+command: systemd-run --user --scope --unit=p3c11-mt2x-selftest-7-1792022323 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/7/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-exec-01/receipts/01-supervision-selftest/7/time-v.txt timeout -s KILL 60 nice -n 10 /usr/bin/python3 -c 'import os, sys; print(sorted(os.environ)); print('"'"'to stderr'"'"', file=sys.stderr)'
+launched: 2026-10-15T00:58:43+0100
+returned: 2026-10-15T00:58:44+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.01 s, max RSS (largest single process) 10504 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 5570560 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  stdout "['CARGO_NET_OFFLINE', 'LC_CTYPE', 'PATH']"; stderr 'to stderr'; process {'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}
+  RESULT OK
+
+SELF-TEST RESULT: ALL OK

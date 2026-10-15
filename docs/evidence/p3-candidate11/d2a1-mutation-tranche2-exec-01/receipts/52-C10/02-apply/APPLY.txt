@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C10: `Commit::Unknown` followed by `Rollback::Undone` gives Not written
+patch: inputs/patches/C10.patch (the frozen R2 packet's catalog/patches/C10.patch), sha256 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c (catalog 5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '2\t2\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 329a830718b81a065e3a03f4958e19e8fa3c8d9c (expected 329a830718b81a065e3a03f4958e19e8fa3c8d9c), sha256 a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d (expected a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

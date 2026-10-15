@@ -1,0 +1,60 @@
+FINAL GATE — P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01; started 2026-10-15T01:20:24+0100
+OK   G1 authenticate.py --gate: ALL CHECKS HOLD (receipts/90-gate-authentication.txt): RESULT: ALL CHECKS HOLD
+OK   G2 the freeze holds: freeze check: 151 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   G3 attempted controls are a prefix of the Tranche-2 order: ['C23', 'C10', 'C16', 'C26', 'C3a', 'C5']
+OK   G3 only the last attempted control may be unsuccessful (a stop ends the tranche): {'C23': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C10': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C16': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C26': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C3a': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C5': 'CONTROL RESULT: MUTATION_CONTROL_BLOCKED'}
+OK   G3 a stop record exists exactly when the tranche stopped (or no control could start): stopped True; stop record True
+OK   G3 C23: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C23: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C23: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C23: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C23 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C23: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 3549e576ab943bad…
+OK   G3 C10: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C10: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C10: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C10: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C10 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C10: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 5c8ef9f07b0ef37b…
+OK   G3 C16: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C16: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C16: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C16: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C16 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C16: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 d53f4f0c7c96364c…
+OK   G3 C26: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C26: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C26: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C26: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C26 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C26: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 336c30483abf4a0b…
+OK   G3 C3a: RESULT agrees with its sub-receipts: CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C3a: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C3a: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C3a: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C3a disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C3a: pinned mutant executable preserved: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 c71e66debb2f3d42…
+OK   G3 C5: RESULT agrees with its sub-receipts: CONTROL RESULT: MUTATION_CONTROL_BLOCKED; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: NOT OK', 'run': None, 'restore': 'RESTORE: EXACTLY_C', 'link': None}
+OK   G3 C5: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G4 C5: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2553 target entries
+OK   G4 C5: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C5 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G3 A3: not attempted: no receipt directory and no worktree
+OK   G3 A6: not attempted: no receipt directory and no worktree
+OK   G3 C8: not attempted: no receipt directory and no worktree
+OK   G3 C15: not attempted: no receipt directory and no worktree
+OK   G4 no mt2x worktree for any accepted or not-authorized control: []
+OK   G4 the development worktree is exactly C: EXACTLY_C
+OK   G4 C22 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C14 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C19 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C21 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C27 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C28 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C12 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C9 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C11 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C17 (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18a (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18b (Architect-accepted; Tranche 1's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   G6 the pinned baseline executable unchanged
+OK   G5 no catalog mutant blob in the repository object store: []
+OK   G5 nothing staged in the main worktree: []
+OK   G7 no mutant source copy anywhere under the evidence root (19831 files compared): []
+OK   G8 no cargo, rustc or governed-control test process running now (by executable name): []
+finished 2026-10-15T01:20:52+0100
+FINAL GATE: ALL CHECKS HOLD

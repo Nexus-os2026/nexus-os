@@ -1,0 +1,17 @@
+AS EXPECTED R1 render.py status: expected READY_FOR_MUTATION_TRANCHE2_ARCHITECT_REVIEW; got STATUS: READY_FOR_MUTATION_TRANCHE2_ARCHITECT_REVIEW; new candidates 10 of 10; attempted ['C23', 'C10', 'C16', 'C26', 'C3a', 'C5', 'A3', 'A6', 'C8', 'C15']; stopped []
+AS EXPECTED R1 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: expected none; got []
+AS EXPECTED R1 build_packet.py: expected PACKET: STAGED — ALL CHECKS HOLD; got PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED R1 map: the ten build.stdout and the sampler records mapped, bound to their descriptors: expected 10 ZERO_LENGTH build.stdout rows; 20 control CGROUP_CONSTANT rows; got 10 build.stdout, 20 control samplers
+AS EXPECTED R2 render.py status: expected MUTATION_CONTROL_BLOCKED; got STATUS: MUTATION_CONTROL_BLOCKED; new candidates 4 of 10; attempted ['C23', 'C10', 'C16', 'C26', 'C3a']; stopped ['C3a']
+AS EXPECTED R2 summary: C3a stopped; C5, A3, A6, C8, C15 not attempted; 4 candidates: expected stopped C3a; not attempted C5 A3 A6 C8 C15; 4 of 10; got ['- New executor candidates (`KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING`): **4 of 10** (C23, C10, C16, C26). None is accepted here: acceptance belongs to the Sole Architect.', '- Stopped (first unsuccessful control; nothing later was attempted): C3a.', '- Authorized but not attempted: C5, A3, A6, C8, C15.']
+AS EXPECTED R2 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: expected none; got []
+AS EXPECTED R2 build_packet.py: expected PACKET: STAGED — ALL CHECKS HOLD; got PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED R3 render.py status: expected BLOCKED; got STATUS: BLOCKED; new candidates 0 of 10; attempted []; stopped []
+AS EXPECTED R3 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: expected none; got []
+AS EXPECTED R3 build_packet.py: expected PACKET: STAGED — ALL CHECKS HOLD; got PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED N1 build_packet.py rejects (UNAUTHORIZED_DUPLICATE): expected PACKET: FAILED, naming UNAUTHORIZED_DUPLICATE; got PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N2 build_packet.py rejects (LITERAL_MISMATCH): expected PACKET: FAILED, naming LITERAL_MISMATCH; got PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N3 build_packet.py rejects (ZERO_LENGTH_UNLISTED): expected PACKET: FAILED, naming ZERO_LENGTH_UNLISTED; got PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N4 build_packet.py rejects (ZERO_DESCRIPTOR): expected PACKET: FAILED, naming ZERO_DESCRIPTOR; got PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N5 build_packet.py rejects (every file this mission authored is whitespace-clean): expected PACKET: FAILED, naming every file this mission authored is whitespace-clean; got PACKET: FAILED: every file this mission authored is whitespace-clean (git's default rule)
+AS EXPECTED N6 build_packet.py rejects (no source copy): expected PACKET: FAILED, naming no source copy; got PACKET: FAILED: no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
