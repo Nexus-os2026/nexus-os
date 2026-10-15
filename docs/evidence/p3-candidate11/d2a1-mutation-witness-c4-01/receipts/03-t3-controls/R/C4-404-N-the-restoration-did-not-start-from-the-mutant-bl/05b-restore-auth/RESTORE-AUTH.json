@@ -1,0 +1,49 @@
+{
+ "control": "C1",
+ "checks": [
+  [
+   "the restoration started from the C4 mutant blob (and its sha256) and was applied as the reverse of the patch",
+   false,
+   "{'git_blob': 'a2df2841b99cad5d452008a6d4150e9369d07e66', 'sha256': '4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2'}"
+  ],
+  [
+   "the inverse patch was the same frozen patch: its sha256 now equals the catalog's",
+   true,
+   "24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d"
+  ],
+  [
+   "after restoration: the file's blob and sha256 are Candidate C's; every tracked blob and mode exactly C",
+   true,
+   "EXACTLY_C"
+  ],
+  [
+   "worktree ownership: the .git file points into the repository's worktree administration and back",
+   true,
+   "gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mtw-C1"
+  ],
+  [
+   "locked for review with this mission's reason",
+   true,
+   "P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 control C1 disposable mutant worktree: mission-owned; preserve until Architect review"
+  ],
+  [
+   "git worktree list: this path, HEAD C, detached, locked",
+   true,
+   "['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 control C1 disposable mutant worktree: mission-owned; preserve until Architect review']"
+  ],
+  [
+   "the pinned C4 mutant executable is unchanged (sha256 and size equal to 03-build/PIN.json)",
+   true,
+   "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c 8987200"
+  ]
+ ],
+ "executable_now": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "size": 8987200,
+  "mtime_ns": 1792058067773668570,
+  "inode": 65951969,
+  "symlink": false
+ },
+ "lock_reason": "P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 control C1 disposable mutant worktree: mission-owned; preserve until Architect review"
+}

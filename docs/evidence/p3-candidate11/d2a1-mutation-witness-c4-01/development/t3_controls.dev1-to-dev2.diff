@@ -1,0 +1,5 @@
+575c575,576
+<         ("N-another-test (C1's witness test selected)", {}, {"test": c1w}, NOT, NA, "argv"),
+---
+>         ("N-another-test (C1's witness test selected and listed)", {},
+>          {"test": c1w, "argv_tail": [c1w, "--exact", "--nocapture", "--test-threads=1"]}, NOT, NA, "argv"),

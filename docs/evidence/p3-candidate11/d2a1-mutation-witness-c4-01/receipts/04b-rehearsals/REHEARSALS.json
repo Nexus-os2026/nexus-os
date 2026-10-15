@@ -1,0 +1,453 @@
+[
+ {
+  "case": "R1 render.py status",
+  "expected": "KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "got": "STATUS: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 1 of 1; attempted ['C4']; stopped []",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R1 summary: C4 candidate; 33 accepted + 1 pending; the primary's first property as printed (P4, never relabelled); both exact positive lines; the G.6 changed-append record; (E) pending and (F) proposed, never made; no admission, informational, reauthentication or L1 line",
+  "expected": "1 of 1; the campaign lines; P4; both positive lines; G.6; one proposal",
+  "got": "candidates True; proposals 1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R1 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R1 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R1 map: the build.stdout and the three sampler records (build, primary, witness) mapped, bound to their descriptors",
+  "expected": "1 ZERO_LENGTH build.stdout row; 3 control CGROUP_CONSTANT rows (1 of them 04c-witness)",
+  "got": "1 build.stdout, 3 control samplers, 1 witness (by each row's path column; a row's previous-packet column may name earlier witness samplers)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R2 render.py status",
+  "expected": "MUTATION_CONTROL_BLOCKED",
+  "got": "STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R2 summary: C4 stopped (the primary printed E3: Architect ruling); no witness; 0 candidates",
+  "expected": "stopped C4; 0 of 1; E3; ruling; witness not run",
+  "got": [
+   "- New executor candidates (`KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING`): **0 of 1** (none). None is accepted here: acceptance belongs to the Sole Architect.",
+   "- Stopped (first unsuccessful control; nothing later was attempted): C4."
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R2 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R2 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R3 render.py status",
+  "expected": "STOPPED BEFORE EXECUTION",
+  "got": "STATUS: STOPPED BEFORE EXECUTION; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted []; stopped []",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R3 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R3 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R4 render.py status",
+  "expected": "MUTATION_CONTROL_BLOCKED",
+  "got": "STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R4 summary: C4 stopped at its mutant witness (only P4 shown); 0 candidates",
+  "expected": "stopped C4; 0 of 1",
+  "got": [
+   "- New executor candidates (`KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING`): **0 of 1** (none). None is accepted here: acceptance belongs to the Sole Architect.",
+   "- Stopped (first unsuccessful control; nothing later was attempted): C4."
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R4 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R4 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R5 render.py status",
+  "expected": "INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "got": "STATUS: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R5 summary: C4 stopped INCOMPLETE at the state cap (kills nothing; no witness run); 0 candidates",
+  "expected": "stopped C4; 0 of 1; INCOMPLETE",
+  "got": [
+   "- New executor candidates (`KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING`): **0 of 1** (none). None is accepted here: acceptance belongs to the Sole Architect.",
+   "- Stopped (first unsuccessful control; nothing later was attempted): C4."
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R5 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R5 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R6 render.py status",
+  "expected": "MUTATION_CONTROL_BLOCKED",
+  "got": "STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R6 summary: C4 stopped at its mutant witness (G.6 breached); 0 candidates",
+  "expected": "stopped C4; 0 of 1",
+  "got": [
+   "- New executor candidates (`KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING`): **0 of 1** (none). None is accepted here: acceptance belongs to the Sole Architect.",
+   "- Stopped (first unsuccessful control; nothing later was attempted): C4."
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R6 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md",
+  "expected": "none",
+  "got": [],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "R6 build_packet.py",
+  "expected": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "got": "PACKET: STAGED \u2014 ALL CHECKS HOLD",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N1 build_packet.py rejects (UNAUTHORIZED_DUPLICATE)",
+  "expected": "PACKET: FAILED, naming UNAUTHORIZED_DUPLICATE",
+  "got": "PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N2 build_packet.py rejects (LITERAL_MISMATCH)",
+  "expected": "PACKET: FAILED, naming LITERAL_MISMATCH",
+  "got": "PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N3 build_packet.py rejects (ZERO_LENGTH_UNLISTED)",
+  "expected": "PACKET: FAILED, naming ZERO_LENGTH_UNLISTED",
+  "got": "PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N4 build_packet.py rejects (ZERO_DESCRIPTOR)",
+  "expected": "PACKET: FAILED, naming ZERO_DESCRIPTOR",
+  "got": "PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N5 build_packet.py rejects (every file this mission authored is whitespace-clean)",
+  "expected": "PACKET: FAILED, naming every file this mission authored is whitespace-clean",
+  "got": "PACKET: FAILED: every file this mission authored is whitespace-clean (git's default rule)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N6 build_packet.py rejects (no source copy)",
+  "expected": "PACKET: FAILED, naming no source copy",
+  "got": "PACKET: FAILED: no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "N7 build_packet.py rejects (UNAUTHORIZED_DUPLICATE)",
+  "expected": "PACKET: FAILED, naming UNAUTHORIZED_DUPLICATE",
+  "got": "PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M1 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING"
+  ],
+  "got": [
+   "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M1 every G.5 step run by control.main itself: primary, witness, restore, restore-auth, healthy link, unchanged-core link, G.5 record; (F) proposed with the first property P4",
+  "expected": "each exactly its success label; the recording names P4",
+  "got": [
+   "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSI",
+   "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ",
+   "RESTORE: EXACTLY_C",
+   "RESTORE AUTH: OK",
+   "HEALTHY WITNESS LINK: VERIFIED",
+   "LINK: VERIFIED",
+   "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY "
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M1 render.py status over control.main's own receipts",
+  "expected": "KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "got": "STATUS: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 1 of 1; attempted ['C4']; stopped []",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M1 final-gate rehearsal (final_gate.py in the synthetic root): FAILED with exactly the G6 check of the synthetic pinned executable failing (it names no file); every other check holds",
+  "expected": "1 failing check, 'G6 C4: pinned mutant executable preserved'",
+  "got": "1 failing: ['FAIL G6 C4: pinned mutant executable preserved (03-build/PIN']; last 'FINAL GATE: FAILED: G6 C4: pinned mutant executable preserved (03-build/PIN.json'",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M2 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+  ],
+  "got": [
+   "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M2 the stopped path: C4 stopped at its primary (no witness run, no link, no G.5 record); restored and authenticated",
+  "expected": "no 04c-witness, 06a, 06b or 07-g5; RESTORE: EXACTLY_C; RESTORE AUTH: OK",
+  "got": [
+   "00-GATE.txt",
+   "01-worktree",
+   "02-apply",
+   "03-build",
+   "04-run",
+   "05-restore",
+   "05b-restore-auth",
+   "CONTROL-RESULT.json",
+   "RESULT.txt"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M2 render.py status over control.main's own receipts",
+  "expected": "MUTATION_CONTROL_BLOCKED",
+  "got": "STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M2 final-gate rehearsal (final_gate.py in the synthetic root): FAILED with exactly the G6 check of the synthetic pinned executable failing (it names no file); every other check holds",
+  "expected": "1 failing check, 'G6 C4: pinned mutant executable preserved'",
+  "got": "1 failing: ['FAIL G6 C4: pinned mutant executable preserved (03-build/PIN']; last 'FINAL GATE: FAILED: G6 C4: pinned mutant executable preserved (03-build/PIN.json'",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M3 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED"
+  ],
+  "got": [
+   "CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M3 the witness not admissible (killed from outside): restored and authenticated; nothing linked",
+  "expected": "RESTORE: EXACTLY_C; no 06a, 06b or 07-g5",
+  "got": [
+   "00-GATE.txt",
+   "01-worktree",
+   "02-apply",
+   "03-build",
+   "04-run",
+   "04c-witness",
+   "05-restore",
+   "05b-restore-auth",
+   "CONTROL-RESULT.json",
+   "RESULT.txt"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M3 render.py status over control.main's own receipts",
+  "expected": "INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "got": "STATUS: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M4 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED"
+  ],
+  "got": [
+   "CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M4 the stopped path: C4 stopped at its primary (no witness run, no link, no G.5 record); restored and authenticated",
+  "expected": "no 04c-witness, 06a, 06b or 07-g5; RESTORE: EXACTLY_C; RESTORE AUTH: OK",
+  "got": [
+   "00-GATE.txt",
+   "01-worktree",
+   "02-apply",
+   "03-build",
+   "04-run",
+   "05-restore",
+   "05b-restore-auth",
+   "CONTROL-RESULT.json",
+   "RESULT.txt"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M4 render.py status over control.main's own receipts",
+  "expected": "INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "got": "STATUS: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M5 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+  ],
+  "got": [
+   "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M5 the witness not admissible (G.6 breached): restored and authenticated; nothing linked",
+  "expected": "RESTORE: EXACTLY_C; no 06a, 06b or 07-g5",
+  "got": [
+   "00-GATE.txt",
+   "01-worktree",
+   "02-apply",
+   "03-build",
+   "04-run",
+   "04c-witness",
+   "05-restore",
+   "05b-restore-auth",
+   "CONTROL-RESULT.json",
+   "RESULT.txt"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M5 render.py status over control.main's own receipts",
+  "expected": "MUTATION_CONTROL_BLOCKED",
+  "got": "STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 0 of 1; attempted ['C4']; stopped ['C4']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M6 control.main end to end: the RESULT label; C7 (blocked), C1 and C25 (accepted) refused by name, nothing written for them",
+  "expected": [
+   "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING"
+  ],
+  "got": [
+   "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M6 every G.5 step run by control.main itself: primary, witness, restore, restore-auth, healthy link, unchanged-core link, G.5 record; (F) proposed with the first property P8",
+  "expected": "each exactly its success label; the recording names P8",
+  "got": [
+   "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSI",
+   "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ",
+   "RESTORE: EXACTLY_C",
+   "RESTORE AUTH: OK",
+   "HEALTHY WITNESS LINK: VERIFIED",
+   "LINK: VERIFIED",
+   "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY "
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "case": "M6 render.py status over control.main's own receipts",
+  "expected": "KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "got": "STATUS: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; new candidates 1 of 1; attempted ['C4']; stopped []",
+  "as_expected": true,
+  "detail": ""
+ }
+]

@@ -1,0 +1,31 @@
+CLASSIFICATION: G.5(B) MUTANT WITNESS — NOT ADMISSIBLE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (G.6 breached: scenario P8 step 11/12: branches ['append_gating: Refused NotWritten Storage'], not the frozen ['append_gating: Refused Uncertain Storage']; K.2 case 14)
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['C4 WITNESS F-8: 2 scenarios, every step enabled and consuming its choices as planned; 2 violations', "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)", 'OTHER PROPERTIES VIOLATED in scenario P4, each reported separately and not counted as P4: []', "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)", 'OTHER PROPERTIES VIOLATED in scenario P8, each reported separately and not counted as P8: []']
+positive line P4: "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)" — NOT ESTABLISHED
+positive line P8: "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)" — NOT ESTABLISHED
+executable: the pinned C4 mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef sha256 69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92 size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.5 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4423 KiB; scope gone
+G.6: scenario P4 step 1/8 Fw(0): offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P4 step 2/8 Fw(0): offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused []; branches ['append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)']; faults left 2; violations []
+G.6: scenario P4 step 3/8 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P4 step 4/8 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P4 step 5/8 Wk: offered [0, 0, 0, 0] consumed [(0, 3), (0, 3), (0, 2), (0, 2)] unused []; branches ['append_cell X: Committed (inserted)']; faults left 2; violations []
+G.6: scenario P4 step 6/8 Ack(0): offered [0] consumed [(0, 4)] unused []; branches ['snapshot: Taken']; faults left 2; violations []
+G.6: scenario P4 step 7/8 Ack(0): offered [0] consumed [(0, 2)] unused []; branches []; faults left 2; violations []
+G.6: scenario P4 step 8/8 Ack(0): offered [0, 0, 0, 1, 0, 0] consumed [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)] unused []; branches ['append_acknowledgement: NotApplied(Uncertain)']; faults left 1 [fault]; violations [('after', 'P4')]
+G.6: scenario P8 step 1/12 Fw(0): offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 2/12 Fw(0): offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused []; branches ['append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)']; faults left 2; violations []
+G.6: scenario P8 step 3/12 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 4/12 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 5/12 Wk: offered [0, 0, 0, 0] consumed [(0, 3), (0, 3), (0, 2), (0, 2)] unused []; branches ['append_cell X: Committed (inserted)']; faults left 2; violations []
+G.6: scenario P8 step 6/12 Ack(0): offered [0] consumed [(0, 4)] unused []; branches ['snapshot: Taken']; faults left 2; violations []
+G.6: scenario P8 step 7/12 Ack(0): offered [0] consumed [(0, 2)] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 8/12 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 9/12 Wk: offered [] consumed [] unused []; branches []; faults left 2; violations []
+G.6: scenario P8 step 10/12 Wk: offered [] consumed [] unused []; branches ['empty: Done']; faults left 2; violations []
+G.6: scenario P8 step 11/12 Gc(0): offered [0, 0, 0, 1, 1, 0] consumed [(0, 4), (0, 4), (0, 4), (1, 3), (1, 2), (0, 3)] unused []; branches ['append_gating: Refused NotWritten Storage']; faults left 1 [fault]; violations []
+G.6: scenario P8 step 12/12 Ack(0): offered [0, 0, 0, 0] consumed [(0, 4), (0, 4), (0, 4), (0, 3)] unused []; branches ['append_acknowledgement: Committed']; faults left 1; violations [('after', 'P8')]
+checks: 34 of 35 hold
+FAILED CHECK: G.6 from the raw output, both scenarios, every step: the frozen actor order; the offered stream; the consumed choices, each equal to the offered prefix with its option count; no consumption beyond the offered stream (no silent Oracle-default zero); the printed unused suffix; the branch labels; the remaining fault budget and its [fault] marker; at each changed append exactly the frozen storage-choice stream with no unused suffix: ["scenario P8 step 11/12: branches ['append_gating: Refused NotWritten Storage'], not the frozen ['append_gating: Refused Uncertain Storage']"]

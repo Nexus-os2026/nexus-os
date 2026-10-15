@@ -1,0 +1,13 @@
+G.5: NOT ESTABLISHED
+control C4: AD-1-R4 G.5 (kill criterion for C4 only; P4 AND P8)
+OK   (A) the primary is an admissible type-(a) FAIL of full_f8 on the original explorer within F-8's 30,000,000 ceiling, its first printed property P4 or P8, recorded as printed (never relabelled): P4
+OK   (B) the mutant witness is an admissible type-(c) receipt showing BOTH exact positive lines at their frozen loci (one alone is insufficient): CLASSIFICATION: G.5(B) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY)
+OK   (B) G.6 holds on the mutant transcript (verified from the raw output: no G.6 problem): []
+OK   (B) F.2: the witness ran on the same pinned C4 mutant executable as the primary (path, sha256 and size, before and after both runs, equal to 03-build/PIN.json): 69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92
+OK   (B) none of the witness rejections: every check of the witness receipt holds (CHECKS.txt: no FAIL line)
+OK   (E) restoration: the worktree restored exactly to C after the mutant receipts (RESTORE: EXACTLY_C)
+OK   (C) the accepted healthy type-(e3) witness linked after the restoration and verified, G.6 on it and against the mutant included
+OK   (D) the accepted F-8 unchanged-core type-(e1) receipt linked after the restoration and verified
+FAIL (E) identity (AD-1-R4 I items 1-7): Candidate C and its tree; C4, the frozen patch and its sha256; the mutant blob and sha256 as built; the pinned executable's sha256 and size; the exact invocations; the raw receipts' sha256; the restored blob and the clean worktree
+(E) the Sole Architect's independent review: PENDING (never claimed by the executor)
+(F) no recording: G.5 is not established

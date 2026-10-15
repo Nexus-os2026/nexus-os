@@ -1,0 +1,1288 @@
+#!/usr/bin/env python3
+"""P3-C11-DR01-D2A1-MUTATION-TRANCHE1-EXEC-01, mission sections 1, 3, 4, 5 and 6: authenticate every input (read-only).
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE1-RESUME-01 and -CONTINUE-02 (their previous packets and paths).
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 (sections 1, 3, 5, 7 and 17) for the ten Tranche-2 controls.
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE2-CONTINUE-02 (sections 1-3, 6, 7, 16, 20) for this mission's five controls
+(C5 A3 A6 C8 C15): sections [1]-[7] as below, with "unchanged at" now meaning at this commit's parent (the Tranche-2
+stopped evidence commit), and the new section [8]:
+
+  [1] frozen Candidate C (commit, tree, parent, the three blobs)                          (unchanged from Tranche 1)
+  [2] the frozen R2 catalog, its definitions record and packet SHA256SUMS                 (unchanged from Tranche 1)
+  [3] the ten Tranche-2 controls: the mission's control matrix (configuration, permitted properties, ceiling, mutated
+      file, restored side) against the catalog; each frozen patch (file, sha256, catalog text, SHA256SUMS), applied to
+      C's file in a temporary directory outside every repository, gives the catalog's mutant blob and sha256, and so do
+      the catalog's own edits; no mutant blob is in the object store
+  [4] the contract, AD-1-R4 and its Owner adoption record, AD-1-R5 with its Owner adoption record and the accepted
+      F-R proof; the Stage-1 and Stage-2 packets (every SHA256SUMS entry verifies); every unchanged-core receipt this
+      tranche links (byte copies under inputs/linked/, each file checked against its packet's SHA256SUMS and against
+      the catalog's restored_receipt), and the F-R receipt (INCOMPLETE, never PASS)
+  [5] the pinned unchanged-baseline executable (hashed and sized, never run) and its worktree exactly C
+  [6] refs, destination and local-branch absence, mission-owned paths absent before creation
+  [7] the complete accepted Tranche-1 evidence (ebe42009): commit, tree, parent, confinement; the EXEC-01, RESUME-01
+      and CONTINUE-02 packets (every SHA256SUMS entry verifies; EXEC-01 and RESUME-01 byte-identical to their own
+      evidence commits); each of the twelve accepted controls' receipt directory and RESULT (historical executor
+      labels, unchanged), patch and mutant identity; the Tranche-1 ruling records; the R2 duplicate-policy ruling;
+      (the Tranche-1 tool equality checks moved to [8]: this mission's base tooling is Tranche 2's)
+  [8] the Tranche-2 stopped evidence (2e06860f): commit, tree, parent, confinement; its packet (every SHA256SUMS entry
+      verifies; every Tranche-1 packet byte-identical in it); the five Architect-accepted Tranche-2 controls' receipts
+      (historical executor labels, unchanged; patch, mutant, pinned executable and link identities); C5's stopped
+      receipts (historical BUILD: NOT OK, unchanged), byte-copied under inputs/c5/ for the dedicated admission checker;
+      the stop record; this mission's original-tools/ equal to the Tranche-2 execution tooling (its packet's tools/ and
+      the tools it carried byte for byte); the preserved C5 executable hashed and sized read-only (never run here)
+
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01 (sections 1, 3, 4, 9, 11, 15) for this mission's ten controls
+(C2 C24 C3b C3c C6 C7 A1 A2 C20 A5): sections [1]-[7] as before, "unchanged at" now meaning at this commit's parent (the
+accepted Tranche-2 continuation evidence commit); [3] the catalog's special rules of these ten controls (C3b either
+property; C6/C7 with A4 on F-PT; C7's added F-3 run; C20/A5 L1 after a complete search); [4] the restored sides of
+mission section 9 (Stage-1 F-1, F-2 and the F-PT composed quotient; Stage-2 F-6); [6] this mission's paths and the
+continuation's review ref; [8] the Tranche-2 stopped evidence without C5's input copies (no C5 step here) and without the
+tooling check (moved to [9]); and the new section [9]:
+
+  [9] the accepted Tranche-2 continuation evidence (b97205b2): commit, tree, parent, confinement; its packet (every
+      SHA256SUMS entry verifies; every earlier packet byte-identical in it); its derived status; the five accepted
+      controls' receipts (C5 A3 A6 C8 C15: historical executor labels, unchanged; patch, mutant, pinned executable, run
+      classification, raw output and link identities); its two ruling records; this mission's original-tools/ equal to
+      the continuation's execution tooling (its packet's tools/ and the tools it carried byte for byte)
+
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (sections 1, 2, 7-9, 16, 17, 20) for this mission's nine
+controls (C24 C3b C3c C6 C7 A1 A2 C20 A5): sections [1]-[8] as before, "unchanged at" now meaning at this commit's parent
+(the Tranche-3 stopped evidence commit); [3] the nine controls; [6] this mission's paths (the mt3c namespace; C24's
+preserved Tranche-3 worktree present, read only) and the Tranche-3 review ref; [9] the accepted continuation without the
+tooling check (moved to [10]); and the new section [10]:
+
+  [10] the Tranche-3 stopped evidence (774f457a): commit, tree, parent, confinement; its packet (every SHA256SUMS entry
+       verifies; every earlier packet byte-identical in it); its derived status and stop record (historical, unchanged);
+       C2's receipts (Architect-accepted: historical executor label unchanged; patch, mutant, pinned executable, run
+       classification, raw output and link identities); C24's stopped receipts (historical BUILD: NOT OK, unchanged; the
+       build stderr's sha256; the apply receipt's patch and mutant identities; the restoration EXACTLY_C), byte-copied
+       under inputs/c24/ for the dedicated admission checker; its two records; this mission's original-tools/ equal to
+       the Tranche-3 execution tooling (its packet's tools/ and the tools it carried byte for byte); the preserved C24
+       executable hashed and sized read-only (never run here)
+
+Revised by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 (sections 3, 5, 9, 11) for this mission's four controls
+(A1 A2 C20 A5): sections [1]-[9] as before, "unchanged at" now meaning at this commit's parent (the Tranche-3
+continuation evidence commit); [3] the four controls, the catalog partition counting C7 as blocked; [6] this mission's
+paths (the mt3t namespace; no preserved worktree), the continuation's review ref, the 27 accepted controls' and C7's
+worktrees reported; [10] the Tranche-3 stopped evidence without C24's input copies (C24 is accepted: no C24 step here)
+and without the tooling check (moved to [11]); and the new section [11]:
+
+  [11] the Tranche-3 continuation evidence (c10681b3): commit, tree, parent, confinement; its packet (every SHA256SUMS
+       entry verifies; every earlier packet byte-identical in it); its derived status and stop record (historical,
+       unchanged); its four records; the four accepted controls' receipts (C24 C3b C3c C6: historical executor labels,
+       unchanged; patch, mutant, pinned executable, run classification, raw output, rules, restoration or
+       reauthentication and link identities); C7's blocked receipts as they stand (MUTATION_CONTROL_BLOCKED; E11 printed,
+       P6 required; rules NOT SATISFIED; restored; no link); this mission's original-tools/ equal to the continuation's
+       execution tooling (its packet's tools/ and the tools it carried byte for byte)
+
+Revised by P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 (sections 2, 3, 4, 5, 8) for this mission's two controls
+(C1 C25): sections [1]-[10] as before, "unchanged at" now meaning at this commit's parent (the Tranche-3 tail evidence
+commit); [3] the two controls with their G.3 catalog fields (the witness requirement, the witness test, the healthy
+witness), the catalog partition counting A1 A2 C20 A5 as accepted and C4 alone as reserved; [6] this mission's paths
+(the mtw namespace) and the tail's review ref; [11] the Tranche-3 continuation evidence without the tooling check (moved
+to [12]); and the new sections:
+
+  [12] the Tranche-3 tail evidence (e41c84b1): commit, tree, parent, confinement; its packet (every SHA256SUMS entry
+       verifies; every earlier packet byte-identical in it); its derived status; its two records; the four accepted
+       controls' receipts (A1 A2 C20 A5: historical executor labels, unchanged; patch, mutant, pinned executable, run
+       classification, raw output, rules, restoration and link identities); no C1, C4, C7 or C25 receipt in it; this
+       mission's original-tools/ equal to the tail's execution tooling (its packet's tools/ and the tools it carried)
+  [13] the G.3 witness inputs (mission sections 2-5): Candidate C holds exactly the required witness tests, ordinary
+       #[test]s calling run_witness, inside the 277 lines the Architect-reviewed witness source commit 42dd1bd1 added
+       (byte for byte); AD-1-R4 F.1, F.2, G.3 and G.4 at C (the clauses this mission applies, verbatim); the accepted
+       healthy type-(e3) receipts of Stage 2 (receipts/50-witness-C1 and 51-witness-C25: every file against Stage 2's
+       SHA256SUMS, the catalog's identities, PASS, the pinned unchanged-baseline executable, the exact healthy line),
+       byte-copied under inputs/linked/; the accepted F-1 unchanged-core receipt is [4]'s
+
+Revised by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (sections 3, 5, 9, 13) for this mission's one control (C4):
+sections [1]-[11] as before, "unchanged at" now meaning at this commit's parent (the C1/C25 witness evidence commit);
+[3] C4 with its G.5 catalog fields (the witness requirement, the witness test, the healthy witness, the special
+attribution rule, the removed lines), the catalog partition counting C1 and C25 as accepted and nothing as reserved;
+[4] the restored side, the Stage-2 F-8 receipt; [6] this mission's paths (the mwc4 namespace) and the C1/C25 review
+ref; [12] the Tranche-3 tail evidence without the parent and tooling checks (moved to [13]); [13] replaced (the C1/C25
+witness inputs are not needed: both are accepted) by the C1/C25 witness evidence; and the new section [14]:
+
+  [13] the C1/C25 witness evidence (74b3f485): commit, tree, parent, confinement; its packet (every SHA256SUMS entry
+       verifies; every earlier packet byte-identical in it); its derived status; its two records; the two accepted
+       controls' receipts (C1 C25: historical executor labels, unchanged; patch, mutant, pinned executable, primary and
+       witness classifications, raw outputs, restoration, healthy and restored-side links, G.3 record); no C4 or C7
+       receipt in it; this mission's original-tools/ equal to its execution tooling (its packet's tools/ and the tools
+       it carried); the required parent of this mission's evidence commit
+  [14] the G.5 witness inputs (mission sections 3-9): the C4 witness source commit A (04e42a7d: model_tests.rs only,
+       +678/-0, appended) and Candidate C's model_tests.rs holding its 678 lines byte for byte (blob equal to A's);
+       the witness test, an ordinary #[test] calling run_c4_witness(&F8, &C4_SCENARIOS), and its constants inside
+       them; A an ancestor of C with no ledger source change between; AD-1-R4 F.1, F.2, G.2 (C4), G.5, G.6 and K.2
+       cases 8, 9 and 14 at C, verbatim; the accepted healthy type-(e3) receipt of Stage 2 (receipts/52-witness-C4:
+       every file against Stage 2's SHA256SUMS, the catalog's identities, PASS, the pinned unchanged-baseline
+       executable, the three exact healthy lines), byte-copied under inputs/linked/; the accepted F-8 unchanged-core
+       receipt is [4]'s
+
+Every identity is compared with the value the mission states or the value the frozen catalog records; any mismatch
+prints MISMATCH and the exit status is 1. Writes only EV/inputs/ (read-only byte copies of authenticated inputs, re-hashed
+after writing) and a temporary patch-check directory outside every repository (removed again).
+
+    authenticate.py            prints the authentication record; exit 0 only if every check holds; this mission's
+                               paths must still be absent
+    authenticate.py --gate     the same checks again at a gate (this mission's paths reported, not required absent;
+                               input copies compared, not rewritten)
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import common as K  # noqa: E402
+
+fail = 0
+GATE = len(sys.argv) > 1 and sys.argv[1] == "--gate"
+TRANCHE = K.ORDER
+EITHER = "AD-1-R4 F.1(a): either property the row names"
+WITH_A4 = "contract 7.5: 'with A4' — run on F-PT (A4 on), original explorer (AD-1-R4 F)"
+L1_RULE = "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+G3_RULE = ("AD-1-R4 G.3 (kill criterion for C1 and C25 only): type (a) primary on full_f1 is recorded as printed; "
+           "attribution from the type (c) mutant witness; type (e3) healthy witness required")
+G5_RULE = ("AD-1-R4 G.5 and G.6 (C4 only): P4 AND P8; type (a) primary on full_f8 recorded as printed; attribution "
+           "from the type (c) mutant witness; type (e3) healthy witness; G.6 offered-versus-consumed Oracle rule")
+SPECIAL = {"C4": [G5_RULE], "C1": [G3_RULE], "C25": [G3_RULE], "C3b": [EITHER], "C6": [WITH_A4],
+           "C7": [WITH_A4, "AD-1-R4 F (line 748): C7 without A4 on F-3 is an added run, not required to kill"],
+           "C20": [L1_RULE], "A5": [L1_RULE]}
+LINKED_FILES = ["CLASSIFICATION.txt", "CHECKS.txt", "descriptor.json", "PARSED-RECEIPT.json", "RECEIPT.txt",
+                "raw-output.txt", "time-v.txt", "scope-record.txt"]
+CANDIDATE_RESULT = "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING"
+
+
+def git(*args):
+    r = subprocess.run(["git", "-C", K.REPO, *args], capture_output=True)
+    return None if r.returncode != 0 else r.stdout
+
+
+def gtext(*args):
+    out = git(*args)
+    return None if out is None else out.decode().strip()
+
+
+def chk(label, actual, expected):
+    global fail
+    if actual == expected:
+        print(f"    OK        {label}: {actual}")
+    else:
+        print(f"    MISMATCH  {label}: actual={actual} expected={expected}")
+        fail = 1
+
+
+def copy_in(name, data, expected_sha):
+    path = K.inputs(name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        chk(f"input copy inputs/{name} already present and equal", K.sha256_file(path), expected_sha)
+        return
+    with open(path, "wb") as fh:
+        fh.write(data)
+    os.chmod(path, 0o444)
+    chk(f"input copy inputs/{name} sha256", K.sha256_file(path), expected_sha)
+
+
+def packet_sums(commit, packet):
+    sums = git("show", f"{commit}:{packet}/SHA256SUMS").decode()
+    return {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in sums.splitlines() if l}
+
+
+def patch_result(patch_bytes, rel, base):
+    """Apply the documentary patch with `git apply` to a copy of C's file in a temporary directory outside every
+    repository (GIT_CEILING_DIRECTORIES stops discovery); return the resulting bytes, or the error."""
+    tmp = tempfile.mkdtemp(prefix="mt1x-auth-apply-")
+    try:
+        os.makedirs(os.path.join(tmp, "w", os.path.dirname(rel)))
+        with open(os.path.join(tmp, "w", rel), "wb") as fh:
+            fh.write(base)
+        with open(os.path.join(tmp, "p.patch"), "wb") as fh:
+            fh.write(patch_bytes)
+        env = dict(os.environ, GIT_CEILING_DIRECTORIES=tmp)
+        r = subprocess.run(["git", "apply", "--whitespace=nowarn", os.path.join(tmp, "p.patch")],
+                           cwd=os.path.join(tmp, "w"), capture_output=True, env=env)
+        if r.returncode != 0:
+            return None, r.stderr.decode()
+        files = []
+        for d, _, fs in os.walk(os.path.join(tmp, "w")):
+            files += [os.path.relpath(os.path.join(d, f), os.path.join(tmp, "w")) for f in fs]
+        if files != [rel]:
+            return None, f"files after apply: {files}"
+        return open(os.path.join(tmp, "w", rel), "rb").read(), ""
+    finally:
+        shutil.rmtree(tmp)
+
+
+def packet_files(commit, packet):
+    """Every file of a packet at a commit: {packet-relative path: bytes} (one cat-file --batch process)."""
+    files = sorted(f[len(packet) + 1:] for f in gtext("ls-tree", "-r", "--name-only", commit, packet + "/").splitlines())
+    data = {}
+    proc = subprocess.Popen(["git", "-C", K.REPO, "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    for rel in files:
+        proc.stdin.write(f"{commit}:{packet}/{rel}\n".encode())
+        proc.stdin.flush()
+        size = int(proc.stdout.readline().split()[2])
+        data[rel] = proc.stdout.read(size)
+        proc.stdout.read(1)
+    proc.stdin.close()
+    proc.wait()
+    return data
+
+
+def section1_2():
+    print("[1] frozen baseline Candidate C (mission 3)")
+    chk("type", gtext("cat-file", "-t", K.C), "commit")
+    chk("tree", gtext("rev-parse", K.C + "^{tree}"), K.C_TREE)
+    chk("single parent", gtext("log", "-1", "--format=%P", K.C), K.C_PARENT)
+    for rel, b in K.BLOBS.items():
+        chk(f"{rel} blob at C", gtext("rev-parse", f"{K.C}:{rel}"), b)
+        data = git("cat-file", "blob", b)
+        chk(f"{rel} content hashes to its blob (in-process)", K.git_blob_id(data), b)
+        print(f"    info      {rel} sha256 {K.sha256_bytes(data)}, {len(data)} bytes")
+    print()
+    print("[2] the frozen R2 catalog and its evidence commit (mission 3)")
+    chk("R2 evidence commit type", gtext("cat-file", "-t", K.R2), "commit")
+    chk("R2 evidence commit tree", gtext("rev-parse", K.R2 + "^{tree}"), K.R2_TREE)
+    chk("R2 evidence commit single parent", gtext("log", "-1", "--format=%P", K.R2), K.R2_PARENT)
+    chk("Candidate C is an ancestor of the R2 evidence commit",
+        subprocess.run(["git", "-C", K.REPO, "merge-base", "--is-ancestor", K.C, K.R2]).returncode, 0)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.R2).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the R2 evidence commit", outside, [])
+    chk("catalog.json git blob", gtext("rev-parse", f"{K.R2}:{K.CATALOG_PATH}"), K.CATALOG_BLOB)
+    cat_bytes = git("show", f"{K.R2}:{K.CATALOG_PATH}")
+    chk("catalog.json sha256", K.sha256_bytes(cat_bytes), K.CATALOG_SHA)
+    chk("catalog.json unchanged at this commit's parent (the C1/C25 witness evidence commit)",
+        gtext("rev-parse", f"{K.PARENT}:{K.CATALOG_PATH}"),
+        K.CATALOG_BLOB)
+    copy_in("catalog.json", cat_bytes, K.CATALOG_SHA)
+    chk("definitions record git blob", gtext("rev-parse", f"{K.R2}:{K.DEFS_PATH}"), K.DEFS_BLOB)
+    defs = git("show", f"{K.R2}:{K.DEFS_PATH}")
+    chk("definitions record sha256", K.sha256_bytes(defs), K.DEFS_SHA)
+    copy_in("ARCHITECT-CONTROL-DEFINITIONS-R2.md", defs, K.DEFS_SHA)
+    listed = packet_sums(K.R2, K.R2_DIR.rstrip("/"))
+    bad = [p for p, d in listed.items() if K.sha256_bytes(git("show", f"{K.R2}:{K.R2_DIR}{p}") or b"") != d]
+    chk(f"R2 packet SHA256SUMS: all {len(listed)} listed files verify at {K.R2[:8]}", bad, [])
+    chk("R2 SHA256SUMS lists the catalog with its sha256", listed.get("catalog/catalog.json"), K.CATALOG_SHA)
+    chk("R2 SHA256SUMS lists the definitions record with its sha256", listed.get("ARCHITECT-CONTROL-DEFINITIONS-R2.md"),
+        K.DEFS_SHA)
+    r2_now = [p for p in gtext("ls-tree", "-r", "--name-only", K.PARENT, K.R2_DIR).splitlines()]
+    chk("the R2 packet is byte-identical at this commit's parent (every path's blob)",
+        [p for p in r2_now if gtext("rev-parse", f"{K.PARENT}:{p}") != gtext("rev-parse", f"{K.R2}:{p}")], [])
+    cat = json.loads(cat_bytes)
+    chk("catalog version recorded in the artifact", cat["version"], K.CATALOG_VERSION)
+    chk("catalog counts", cat["counts"], {"architect_defined": 21, "blocked": 0, "candidate_ready": 35,
+                                          "carried_forward": 14, "comparison": 1, "kill_required": 35})
+    chk("catalog baseline", cat["baseline"], {"blobs": K.BLOBS, "commit": K.C, "tree": K.C_TREE})
+    return cat, listed
+
+
+def section3(cat, listed):
+    by = {e["id"]: e for e in cat["controls"]}
+    print("[3] this mission's control C4: matrix, patch, baseline, mutant, G.5 catalog fields (mission 4, 6-9)")
+    chk("catalog: 36 entries (35 kill-required controls and A4)", len(cat["controls"]), 36)
+    chk("this mission's ids present in the catalog, in the mission's order", [c for c in TRANCHE if c in by], TRANCHE)
+    chk("this mission's C4 + the 33 accepted (C1 C25 among them) + C7 (blocked) + A4 = every catalog entry, each once; "
+        "nothing reserved", sorted(TRANCHE + K.ACCEPTED + K.BLOCKED + K.NOT_AUTHORIZED + ["A4"]) == sorted(by)
+        and K.NOT_AUTHORIZED == [] and TRANCHE == ["C4"] and len(K.ACCEPTED) == 33, True)
+    chk("the full partition, each control once",
+        sorted(TRANCHE + K.ACCEPTED + K.BLOCKED + K.NOT_AUTHORIZED + ["A4"]) == sorted(by)
+        and len(set(TRANCHE + K.ACCEPTED + K.BLOCKED + K.NOT_AUTHORIZED)) == 35, True)
+    for cid in TRANCHE:
+        e = by[cid]
+        cfg, allowed, cap, src, link = K.MATRIX[cid]
+        print(f"  -- {cid}: {e['description']}")
+        chk(f"{cid} kind", e["kind"], "explore")
+        chk(f"{cid} configuration (mission 4)", e["configuration"], cfg)
+        chk(f"{cid} named property / permitted properties (mission 4)", e["named_property"], allowed)
+        chk(f"{cid} ceiling (mission 4)", e["ceiling_states"], cap)
+        chk(f"{cid} time limit", e["time_limit_seconds"], 2700)
+        chk(f"{cid} explorer", e["explorer"], "original (`explore`)")
+        chk(f"{cid} receipt type", e["receipt_type"], "(a) original-explorer mutant FAIL; restored (e1)")
+        chk(f"{cid} special attribution rules", e["special_attribution_rules"], SPECIAL.get(cid, []))
+        if cid in K.G3:
+            M, cw = K.G3[cid], e.get("witness") or {}
+            chk(f"{cid} witness required; witness test (mission {4 if cid == 'C1' else 5})",
+                (e.get("witness_required"), cw.get("test")), (True, K.TEST_PREFIX + M["witness_test"]))
+            chk(f"{cid} frozen patch sha256 and mutant blob = the mission's", (e["patch_sha256"], e["mutant_blob"]),
+                (M["patch_sha256"], M["mutant_blob"]))
+            chk(f"{cid} catalog healthy witness: type, commit, directory",
+                ((cw.get("healthy_witness") or {}).get("type"), (cw.get("healthy_witness") or {}).get("commit"),
+                 (cw.get("healthy_witness") or {}).get("directory")),
+                ("e3", K.STAGE2, f"{K.STAGE2_PACKET}/{M['healthy_dir']}"))
+        if cid in K.G5:
+            M, cw = K.G5[cid], e.get("witness") or {}
+            hw = cw.get("healthy_witness") or {}
+            chk(f"{cid} witness required; witness test (mission 7)", (e.get("witness_required"), cw.get("test")),
+                (True, K.TEST_PREFIX + M["witness_test"]))
+            chk(f"{cid} frozen patch sha256, mutant blob and sha256, lines removed/added = the mission's (section 4)",
+                (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"], e["patch_lines_removed_added"]),
+                (M["patch_sha256"], M["mutant_blob"], M["mutant_sha256"], M["removed_added"]))
+            chk(f"{cid} catalog healthy witness: type, commit, directory (mission 9)",
+                (hw.get("type"), hw.get("commit"), hw.get("directory")),
+                ("e3", K.STAGE2, f"{K.STAGE2_PACKET}/{M['healthy_dir']}"))
+            chk(f"{cid} catalog: named property text and printed-property field, read under G.5 (P4 AND P8; the primary "
+                "recorded as printed)", (e["named_property_text"], e["expected_primary_failure"]["printed_property_must_be"]),
+                ("P4, P8", "P4 and P8"))
+            chk(f"{cid} catalog: AD-1-R4 G.2's removed lines (Test 1) and the test", (e["g2_removed_lines"], e["test"],
+                                                                                    e["ignored_at_C"]),
+                ([1627, 1642], K.TEST_PREFIX + "full_f8", True))
+        if cid == "C7":
+            ac = e.get("additional_comparison") or {}
+            chk("C7 catalog additional comparison (mission 5): F-3, full_f3, the same patch, not required to kill",
+                (ac.get("configuration"), ac.get("test"), ac.get("required_to_kill")),
+                ("F-3", K.TEST_PREFIX + "full_f3", False))
+        chk(f"{cid} mutation source file", e["mutation_source_file"], src)
+        chk(f"{cid} baseline blob = C's blob of the source file", e["baseline_blob"], K.BLOBS[src])
+        chk(f"{cid} expected changed blob count", e["expected_changed_blob_count"], 1)
+        chk(f"{cid} execution status in the artifact (historical)", e["execution_status"], "NOT_ATTEMPTED")
+        chk(f"{cid} requires a mutant executable", e["requires_mutant_executable"], True)
+        pb = git("show", f"{K.R2}:{K.R2_DIR}catalog/{e['patch_file']}")
+        chk(f"{cid} patch file sha256 = catalog patch_sha256", K.sha256_bytes(pb), e["patch_sha256"])
+        chk(f"{cid} patch file bytes = catalog patch text", pb == e["patch"].encode(), True)
+        chk(f"{cid} patch listed in R2 SHA256SUMS", listed.get("catalog/" + e["patch_file"]), e["patch_sha256"])
+        copy_in(f"patches/{cid}.patch", pb, e["patch_sha256"])
+        base = git("cat-file", "blob", K.BLOBS[src])
+        res, err = patch_result(pb, src, base)
+        chk(f"{cid} frozen patch applies to C's file (git apply, temporary copy outside every repository)", err, "")
+        if res is not None:
+            chk(f"{cid} patched file git blob = catalog mutant blob", K.git_blob_id(res), e["mutant_blob"])
+            chk(f"{cid} patched file sha256 = catalog mutant sha256", K.sha256_bytes(res), e["mutant_sha256"])
+        text = base.decode()
+        for ed in e["edits"]:
+            chk(f"{cid} edit anchor occurs exactly {ed['expected_count']} time(s) at C", text.count(ed["anchor"]),
+                ed["expected_count"])
+            text = text.replace(ed["anchor"], ed["replacement"], 1)
+        chk(f"{cid} the catalog's edits give the mutant blob too", K.git_blob_id(text.encode()), e["mutant_blob"])
+        chk(f"{cid} mutant blob absent from the repository object store",
+            subprocess.run(["git", "-C", K.REPO, "cat-file", "-e", e["mutant_blob"]], capture_output=True).returncode != 0,
+            True)
+        print(f"    info      {cid} test {e['test']}; ignored at C {e['ignored_at_C']}; restored side "
+              f"{e['restoration']['restored_side'][:110]}")
+    return by
+
+
+def stage_receipt(name, commit, packet, sums, d, rr, quotient=False):
+    """One accepted unchanged-core receipt: every file listed in its packet's SHA256SUMS, copied under inputs/linked/,
+    and equal to the catalog's restored_receipt fields."""
+    tag = f"{'S1' if commit == K.STAGE1 else 'S2'}-{d}"
+    for f in LINKED_FILES:
+        data = git("show", f"{commit}:{packet}/receipts/{d}/{f}")
+        chk(f"{name} {d}/{f} listed in its packet's SHA256SUMS", sums.get(f"receipts/{d}/{f}"),
+            K.sha256_bytes(data or b""))
+        copy_in(f"linked/{tag}/{f}", data, sums.get(f"receipts/{d}/{f}"))
+    if rr is None:
+        return tag
+    chk(f"{name} {d}: CLASSIFICATION.txt blob = catalog", gtext("rev-parse", f"{commit}:{packet}/receipts/{d}/"
+                                                                             "CLASSIFICATION.txt"), rr["classification_blob"])
+    chk(f"{name} {d}: raw-output.txt blob = catalog", gtext("rev-parse", f"{commit}:{packet}/receipts/{d}/raw-output.txt"),
+        rr["raw_output_blob"])
+    chk(f"{name} {d}: raw-output.txt sha256 = catalog", K.sha256_bytes(git("show", f"{commit}:{packet}/receipts/{d}/"
+                                                                                  "raw-output.txt")),
+        rr["raw_output_sha256"])
+    cls = git("show", f"{commit}:{packet}/receipts/{d}/CLASSIFICATION.txt").decode().splitlines()
+    chk(f"{name} {d}: classification first two lines", cls[:2], ["CLASSIFICATION: PASS", rr["outer_class"]])
+    chk(f"{name} {d}: outer class is the {'composed-quotient' if quotient else 'original-explorer'} PASS", rr["outer_class"],
+        "outer class (AD-1-R4 K.2): PASS — admissible unchanged-core " + ("composed-quotient PASS" if quotient else
+                                                                          "original-explorer PASS"))
+    desc = json.loads(git("show", f"{commit}:{packet}/receipts/{d}/descriptor.json"))
+    chk(f"{name} {d}: argv", desc["argv"], [K.EXE, rr["descriptor_test"], "--exact", "--ignored", "--nocapture",
+                                            "--test-threads=1"])
+    ex = desc["executable"]
+    before = ex["before"]["sha256"] if "before" in ex else ex.get("sha256_before")
+    after = ex["after"]["sha256"] if "after" in ex else ex.get("sha256_after")
+    chk(f"{name} {d}: executable before/after sha256 = the pinned baseline executable", (before, after),
+        (K.EXE_SHA256,) * 2)
+    chk(f"{name} {d}: source exactly C before/after (head, tree)",
+        (desc["source_before"]["verdict"], desc["source_after"]["verdict"], desc["source_before"]["head"],
+         desc["source_before"]["tree"]), ("EXACTLY_C", "EXACTLY_C", K.C, K.C_TREE))
+    return tag
+
+
+def section4(by):
+    print("[4] contract, AD-1-R4/R5, Owner adoptions, the F-R proof, Stage-1 and Stage-2 evidence (mission 3, 9)")
+    contract = git("show", f"{K.CONTRACT_COMMIT}:{K.CONTRACT_PATH}")
+    chk(f"base contract sha256 (at {K.CONTRACT_COMMIT[:8]})", K.sha256_bytes(contract or b""), K.CONTRACT_SHA)
+    copy_in("CONTRACT-02-R1.md", contract, K.CONTRACT_SHA)
+    r4 = git("show", f"{K.C}:{K.AD1R4}")
+    chk("AD-1-R4 sha256 (at C)", K.sha256_bytes(r4 or b""), K.AD1R4_SHA)
+    copy_in("AD1-R4.md", r4, K.AD1R4_SHA)
+    a4 = git("show", f"{K.PARENT}:{K.AD1R4_ADOPTION}")
+    print(f"    info      AD-1-R4 Owner adoption record {K.AD1R4_ADOPTION}: sha256 {K.sha256_bytes(a4 or b'')}")
+    chk("R5 proof evidence commit type", gtext("cat-file", "-t", K.R5_COMMIT), "commit")
+    chk("R5 evidence commit: Candidate C is an ancestor",
+        subprocess.run(["git", "-C", K.REPO, "merge-base", "--is-ancestor", K.C, K.R5_COMMIT]).returncode, 0)
+    r5 = git("show", f"{K.R5_COMMIT}:{K.AD1R5}")
+    chk("AD-1-R5 sha256 (at the R5 proof evidence commit)", K.sha256_bytes(r5 or b""), K.AD1R5_SHA)
+    copy_in("AD1-R5.md", r5, K.AD1R5_SHA)
+    proof = git("show", f"{K.R5_COMMIT}:{K.FR_PROOF}")
+    chk("F-R stuttering-refinement proof blob (at the R5 evidence commit)", gtext("rev-parse", f"{K.R5_COMMIT}:{K.FR_PROOF}"),
+        K.FR_PROOF_BLOB)
+    chk("F-R stuttering-refinement proof sha256", K.sha256_bytes(proof or b""), K.FR_PROOF_SHA)
+    chk("the proof and AD-1-R5 unchanged at this commit's parent",
+        (gtext("rev-parse", f"{K.PARENT}:{K.FR_PROOF}"), K.sha256_bytes(git("show", f"{K.PARENT}:{K.AD1R5}") or b"")),
+        (K.FR_PROOF_BLOB, K.AD1R5_SHA))
+    copy_in("FR-STUTTERING-REFINEMENT-PROOF.md", proof, K.FR_PROOF_SHA)
+    r5sums = packet_sums(K.R5_COMMIT, K.R5_PACKET)
+    badr5 = [p for p, d in r5sums.items() if K.sha256_bytes(git("show", f"{K.R5_COMMIT}:{K.R5_PACKET}/{p}") or b"") != d]
+    chk(f"R5 packet SHA256SUMS: all {len(r5sums)} listed files verify", badr5, [])
+    chk("R5 SHA256SUMS lists the proof and AD-1-R5 with their sha256",
+        (r5sums.get("FR-STUTTERING-REFINEMENT-PROOF-DRAFT.md"), r5sums.get(
+            "P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md")), (K.FR_PROOF_SHA, K.AD1R5_SHA))
+    adopt = git("show", f"{K.AD1R5_ADOPTION_COMMIT}:{K.AD1R5_ADOPTION}")
+    chk("AD-1-R5 Owner adoption record sha256 (= the catalog's adoption_record_sha256)", K.sha256_bytes(adopt or b""),
+        K.AD1R5_ADOPTION_SHA)
+    chk("AD-1-R5 Owner adoption record unchanged at this commit's parent",
+        K.sha256_bytes(git("show", f"{K.PARENT}:{K.AD1R5_ADOPTION}") or b""), K.AD1R5_ADOPTION_SHA)
+    at = (adopt or b"").decode()
+    chk("the adoption record adopts AD-1-R5 in full and records the F-R recording words and the proof sha256",
+        ("On 2026-10-14 the Owner approved and adopted AD-1-R5 in full." in at, f"> {K.FR_RECORDING}" in at,
+         K.FR_PROOF_SHA in at, K.AD1R5_SHA in at), (True, True, True, True))
+    copy_in("AD1-R5-OWNER-ADOPTION.md", adopt, K.AD1R5_ADOPTION_SHA)
+    chk("catalog cites AD-1-R4, AD-1-R5 and the adoption record", (cat_src(by)["ad1r4"]["sha256"],
+                                                                  cat_src(by)["ad1r5"]["sha256"],
+                                                                  cat_src(by)["ad1r5"]["adoption_record_sha256"]),
+        (K.AD1R4_SHA, K.AD1R5_SHA, K.AD1R5_ADOPTION_SHA))
+    chk("catalog cites the base contract sha256", cat_src(by)["contract"]["sha256"], K.CONTRACT_SHA)
+    sums = {}
+    for name, commit, packet, ref in (("Stage 1", K.STAGE1, K.STAGE1_PACKET, K.STAGE1_REF),
+                                      ("Stage 2", K.STAGE2, K.STAGE2_PACKET, K.STAGE2_REF)):
+        chk(f"{name} evidence commit type", gtext("cat-file", "-t", commit), "commit")
+        chk(f"{name}: Candidate C is an ancestor",
+            subprocess.run(["git", "-C", K.REPO, "merge-base", "--is-ancestor", K.C, commit]).returncode, 0)
+        s = packet_sums(commit, packet)
+        badp = [p for p, d in s.items() if K.sha256_bytes(git("show", f"{commit}:{packet}/{p}") or b"") != d]
+        chk(f"{name} packet SHA256SUMS: all {len(s)} listed files verify", badp, [])
+        same = [p for p in gtext("ls-tree", "-r", "--name-only", K.PARENT, packet + "/").splitlines()
+                if gtext("rev-parse", f"{K.PARENT}:{p}") != gtext("rev-parse", f"{commit}:{p}")]
+        chk(f"{name} packet byte-identical at this commit's parent", same, [])
+        sums[commit] = s
+    print("  -- the unchanged-core receipts this mission links (catalog restored_receipt; mission 9)")
+    done = set()
+    for cid in TRANCHE:
+        e = by[cid]
+        rr = e["restored_receipt"]
+        cfg, _, _, _, link = K.MATRIX[cid]
+        if link == "FR-DISCHARGE":
+            f2 = rr["f2_receipt"]
+            chk(f"{cid} restored side: the AD-1-R5 F discharge record (catalog type)", rr["type"],
+                "AD-1-R5 F refinement discharge record (not a run, never PASS)")
+            chk(f"{cid} catalog: the record's AD-1-R5 and proof sha256", (rr["ad1r5_sha256"], rr["proof_sha256"]),
+                (K.AD1R5_SHA, K.FR_PROOF_SHA))
+            chk(f"{cid} catalog: the record's F-2 receipt", (f2["commit"], f2["directory"]),
+                (K.STAGE1, K.STAGE1_PACKET + "/receipts/41-full-F-2"))
+            if "41-full-F-2" not in done:
+                stage_receipt(f"{cid} F-2 (discharge basis)", K.STAGE1, K.STAGE1_PACKET, sums[K.STAGE1], "41-full-F-2",
+                              dict(f2))
+                done.add("41-full-F-2")
+            stage_receipt(f"{cid} F-R receipt (INCOMPLETE, never PASS)", K.STAGE2, K.STAGE2_PACKET, sums[K.STAGE2],
+                          "69-full-F-R", None)
+            cls = git("show", f"{K.STAGE2}:{K.STAGE2_PACKET}/receipts/69-full-F-R/CLASSIFICATION.txt").decode().splitlines()
+            chk(f"{cid} the F-R receipt stays INCOMPLETE (first line NOT PASS; outer class INCOMPLETE at the cap)",
+                (cls[0], cls[1].startswith("outer class (AD-1-R4 K.2): INCOMPLETE (the state cap of 30000000 was "
+                                           "reached")), ("CLASSIFICATION: NOT PASS", True))
+            continue
+        stage, d = link.split(":")
+        commit, packet = (K.STAGE1, K.STAGE1_PACKET) if stage == "S1" else (K.STAGE2, K.STAGE2_PACKET)
+        chk(f"{cid} catalog restored receipt (mission 9: {link})", (rr["commit"], rr["directory"]),
+            (commit, f"{packet}/receipts/{d}"))
+        if d not in done:
+            stage_receipt(f"{cid} ({cfg})", commit, packet, sums[commit], d, rr, quotient=(cid in K.A4_ON))
+            done.add(d)
+        else:
+            print(f"    info      {cid}: {d} authenticated above (shared restored side)")
+    print(f"    info      linked receipts authenticated and copied: {sorted(done)}")
+
+
+def cat_src(by):
+    return json.loads(open(K.inputs("catalog.json"), "rb").read())["sources"]
+
+
+def section5():
+    print("[5] pinned unchanged-baseline executable and its worktree (hashed and sized; never run here)")
+    chk("executable is a regular file, not a symlink", (os.path.isfile(K.EXE), os.path.islink(K.EXE)), (True, False))
+    chk("executable sha256", K.sha256_file(K.EXE), K.EXE_SHA256)
+    chk("executable size", os.path.getsize(K.EXE), K.EXE_SIZE)
+    vt = os.path.join(K.EV, "tools/verify_tree.py")
+    r = subprocess.run([sys.executable, vt, K.BASE_WT], capture_output=True, text=True)
+    d = json.loads(r.stdout)
+    chk("baseline worktree exactly C (verify_tree.py, byte comparison of every tracked file)", d["verdict"], "EXACTLY_C")
+    print(f"    info      {d['tracked_blobs_compared']} tracked blobs, {d['bytes_compared']} bytes; status {d['status_entries']}")
+
+
+def section6():
+    print("[6] refs, destination absence and mission-owned paths (mission 10, 15)")
+    refs = subprocess.run(["git", "-C", K.REPO, "ls-remote", K.REMOTE], capture_output=True, text=True).stdout
+    rm = {l.split("\t")[1]: l.split("\t")[0] for l in refs.splitlines() if "\t" in l}
+    print(f"    info      remote refs {len(rm)}")
+    chk(f"remote {K.R2_REF}", rm.get(K.R2_REF), K.R2)
+    chk("remote Stage-1 review ref", rm.get(K.STAGE1_REF), K.STAGE1)
+    chk("remote Stage-2 review ref", rm.get(K.STAGE2_REF), K.STAGE2)
+    chk("remote R5 review ref", rm.get(K.R5_REF), K.R5_COMMIT)
+    chk(f"remote {K.EXEC01_REF}", rm.get(K.EXEC01_REF), K.EXEC01)
+    chk(f"remote {K.RESUME01_REF}", rm.get(K.RESUME01_REF), K.RESUME01)
+    chk(f"remote {K.T1_REF} (the accepted Tranche-1 evidence)", rm.get(K.T1_REF), K.T1)
+    chk(f"remote {K.T2_REF} (the Tranche-2 stopped evidence)", rm.get(K.T2_REF), K.T2)
+    chk(f"remote {K.T2C_REF} (the accepted Tranche-2 continuation evidence)", rm.get(K.T2C_REF), K.T2C)
+    chk(f"remote {K.T3X_REF} (the Tranche-3 stopped evidence)", rm.get(K.T3X_REF), K.T3X)
+    chk(f"remote {K.T3C_REF} (the Tranche-3 continuation evidence)", rm.get(K.T3C_REF), K.T3C)
+    chk(f"remote {K.T3T_REF} (the Tranche-3 tail evidence)", rm.get(K.T3T_REF), K.T3T)
+    chk(f"remote {K.W1_REF} (the C1/C25 witness evidence; mission sections 2, 3)", rm.get(K.W1_REF), K.W1)
+    chk(f"destination {K.DEST} absent on the remote", K.DEST in rm, False)
+    chk(f"destination {K.DEST} absent locally", git("rev-parse", "--verify", "-q", K.DEST), None)
+    if GATE:
+        print(f"    info      local branch refs/heads/{K.LOCAL_BRANCH}: "
+              f"{gtext('rev-parse', '--verify', '-q', 'refs/heads/' + K.LOCAL_BRANCH)}")
+    else:
+        chk(f"local branch refs/heads/{K.LOCAL_BRANCH} absent", git("rev-parse", "--verify", "-q",
+                                                                   "refs/heads/" + K.LOCAL_BRANCH), None)
+    for ref in ("refs/heads/main", "refs/heads/rebuild/phase0-trust-boundary"):
+        print(f"    info      remote {ref}: {rm.get(ref)}")
+    for c in K.ACCEPTED:
+        p = K.ACCEPTED_WT[c]
+        print(f"    info      accepted control {c}'s worktree: {p} present {os.path.isdir(p)} (not touched by this "
+              "mission)")
+    for c, p in K.BLOCKED_WT.items():
+        print(f"    info      blocked control {c}'s worktree: {p} present {os.path.isdir(p)} (not touched by this mission)")
+    paths = [K.EVIDENCE_WT] + [K.control_wt(c) for c in TRANCHE]
+    for p in paths:
+        if GATE:
+            print(f"    info      mission-owned path {p}: present {os.path.lexists(p)}")
+        else:
+            chk(f"mission-owned path absent before creation: {p}", os.path.lexists(p), False)
+    chk("C4's worktree is a fresh one in this mission's namespace (mwc4); no preserved worktree",
+        [K.control_wt(c) for c in TRANCHE], [K.NEXUS + "/nexus-os-p3-c11-mwc4-" + c for c in TRANCHE])
+    chk("no worktree for any other control in this mission's namespace (mwc4)",
+        [c for c in K.NOT_AUTHORIZED + K.ACCEPTED + K.BLOCKED if os.path.lexists(K.NEXUS + "/nexus-os-p3-c11-mwc4-" + c)],
+        [])
+    chk("the namespace is this mission's own: no accepted or blocked control's worktree is in it",
+        [c for c, p in list(K.ACCEPTED_WT.items()) + list(K.BLOCKED_WT.items())
+         if p.startswith(K.NEXUS + "/nexus-os-p3-c11-mwc4-")], [])
+
+
+def section7(by):
+    print("[7] the accepted Tranche-1 evidence (mission 1, 6, 7): commit, packets, the twelve accepted controls, tools")
+    chk("Tranche-1 evidence commit type", gtext("cat-file", "-t", K.T1), "commit")
+    chk("Tranche-1 evidence commit tree", gtext("rev-parse", K.T1 + "^{tree}"), K.T1_TREE)
+    chk("Tranche-1 evidence commit single parent (the RESUME-01 evidence commit)", gtext("log", "-1", "--format=%P", K.T1),
+        K.T1_PARENT)
+    ns = gtext("diff", "--name-status", "--no-renames", K.T1_PARENT, K.T1).splitlines()
+    chk("every path the Tranche-1 evidence commit changes is added under the CONTINUE-02 packet",
+        bool(ns) and all(l.startswith("A\t" + K.CONTINUE02_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T1).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the Tranche-1 evidence commit", outside, [])
+    data = {}
+    for name, packet in K.T1_PACKETS:
+        files = packet_files(K.T1, packet)
+        sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+        chk(f"{name} packet: SHA256SUMS lists every packet file but itself", sorted(sums) ==
+            sorted(f for f in files if f != "SHA256SUMS"), True)
+        chk(f"{name} packet: all {len(sums)} listed files verify at {K.T1[:8]}",
+            [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+        print(f"    info      {name} packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; SHA256SUMS "
+              f"sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+        own = {"EXEC-01": K.EXEC01, "RESUME-01": K.RESUME01}.get(name)
+        if own:
+            diff = [p for p in files if gtext("rev-parse", f"{own}:{packet}/{p}") != gtext("rev-parse",
+                                                                                        f"{K.T1}:{packet}/{p}")]
+            chk(f"{name} packet byte-identical at its own evidence commit {own[:8]} and at {K.T1[:8]}", diff, [])
+        data[name] = files
+    names = {K.EXEC01_PACKET: "EXEC-01", K.RESUME01_PACKET: "RESUME-01", K.CONTINUE02_PACKET: "CONTINUE-02"}
+    for cid in K.ACCEPTED_T1:
+        packet, d = K.T1_RECEIPTS[cid]
+        f = data[names[packet]]
+        e = by[cid]
+        first = f[f"{d}/RESULT.txt"].decode().splitlines()[0]
+        want = "CONTROL RESULT: MUTATION_CONTROL_BLOCKED" if cid == "C22" else CANDIDATE_RESULT
+        chk(f"{cid}: {names[packet]} {d}/RESULT.txt first line (historical executor label, unchanged)", first, want)
+        # C28's apply receipt is RESUME-01's (CONTINUE-02 admitted that build without re-applying the patch).
+        af = data["RESUME-01"] if cid == "C28" else f
+        ap = json.loads(af[f"{d}/02-apply/APPLY.json"]) if f"{d}/02-apply/APPLY.json" in af else None
+        chk(f"{cid}: frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+             ap["verify_mutant"]["mutant_file"]["sha256"]) if ap else None,
+            (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+    c2 = data["CONTINUE-02"]
+    for rel, first in (("ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+                        "C22 C14 C19 C21 C27 — MUTATION CONTROL KILL ACCEPTED; C28 BUILD ARCHITECT-ADMISSIBLE (NARROW); "
+                        "C28 KILL PENDING"),
+                       ("ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md",
+                        "C28 BUILD — ARCHITECT-ADMISSIBLE (NARROW C28-SPECIFIC RULING; NO GENERAL WARNING EXCEPTION)"),
+                       ("publication-recovery/publish-04/documents/ARCHITECT-RULING-DUPLICATE-POLICY-R2.md",
+                        "DUPLICATE POLICY R2 — 21 EXACT NONEMPTY DUPLICATES AND 8 EXACT ZERO-LENGTH ARTIFACTS PERMITTED "
+                        "FOR PUBLICATION (NO SIZE THRESHOLD; NO WILDCARD; CANDIDATE ACCEPTANCE PENDING)")):
+        chk(f"CONTINUE-02 {rel} first line", c2[rel].decode().splitlines()[0], first)
+    chk("RESUME-01 ARCHITECT-RULING-C22-ACCEPTANCE.md first line",
+        data["RESUME-01"]["ARCHITECT-RULING-C22-ACCEPTANCE.md"].decode().splitlines()[0],
+        "C22 — MUTATION CONTROL KILL ACCEPTED")
+    chk("CONTINUE-02 INDEX.md: the derived Tranche-1 status", [l for l in c2["INDEX.md"].decode().splitlines()
+                                                              if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **READY_FOR_MUTATION_TRANCHE1_FINAL_ARCHITECT_REVIEW**")
+
+
+def section8(by):
+    print("[8] the Tranche-2 stopped evidence (mission 1-3, 6, 7): commit, packet, the five accepted controls, C5, tools")
+    chk("Tranche-2 evidence commit type", gtext("cat-file", "-t", K.T2), "commit")
+    chk("Tranche-2 evidence commit tree", gtext("rev-parse", K.T2 + "^{tree}"), K.T2_TREE)
+    chk("Tranche-2 evidence commit single parent (the accepted Tranche-1 evidence commit)",
+        gtext("log", "-1", "--format=%P", K.T2), K.T2_PARENT)
+    ns = gtext("diff", "--name-status", "--no-renames", K.T2_PARENT, K.T2).splitlines()
+    chk("every path the Tranche-2 evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.T2_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T2).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the Tranche-2 evidence commit", outside, [])
+    files = packet_files(K.T2, K.T2_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("Tranche-2 packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"Tranche-2 packet: all {len(sums)} listed files verify at {K.T2[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      Tranche-2 packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; SHA256SUMS "
+          f"sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T1, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T1[:8]} ({len(prev)}) byte-identical at {K.T2[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T1}:{p}") != gtext("rev-parse", f"{K.T2}:{p}")], [])
+    chk("Tranche-2 INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **MUTATION_CONTROL_BLOCKED**")
+    chk("Tranche-2 stop record first line", files["receipts/80-STOP-RECORD.md"].decode().splitlines()[0],
+        "# Stop record — P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01")
+    for cid, ids in K.T2_ACCEPTED_EVIDENCE.items():
+        d = K.T2_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 1): {K.T2_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T2}:{K.T2_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], CANDIDATE_RESULT)
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob", gtext("rev-parse", f"{K.T2}:{K.T2_PACKET}/{d}/04-run/CLASSIFICATION.txt"),
+            ids["run_classification_blob"])
+        cl = files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()
+        chk(f"{cid} run classification first line", cl[0], "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW "
+                                                            "PENDING")
+        chk(f"{cid} printed property and discovered count (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["configuration"]))(
+                json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])), (ids["property"], ids["states"],
+                                                                        ids["configuration"]))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/03-build/PIN.json"])
+        chk(f"{cid} pinned mutant executable sha256 (03-build/PIN.json)", pin["sha256"], ids["executable_sha256"])
+        ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+        chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"], ap["verify_mutant"]["mutant_file"]["sha256"]),
+            (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+        chk(f"{cid} 06-link/LINK.txt blob and first line", (gtext("rev-parse", f"{K.T2}:{K.T2_PACKET}/{d}/06-link/LINK.txt"),
+                                                             files[f"{d}/06-link/LINK.txt"].decode().splitlines()[0]),
+            (ids["link_blob"], "LINK: VERIFIED"))
+        chk(f"{cid} 05-restore/RESTORE.txt first line", files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0],
+            "RESTORE: EXACTLY_C")
+    d = K.T2_RECEIPTS["C5"]
+    e = by["C5"]
+    print(f"  -- C5 (stopped in Tranche 2; build Architect-admissible under the narrow ruling): {K.T2_PACKET}/{d}")
+    c5 = sorted(f for f in files if f.startswith(d + "/"))
+    chk("C5 receipts: exactly the stopped control's files (gate, worktree, apply, build, restore, RESULT; no run, no "
+        "link)", [f[len(d) + 1:] for f in c5], ["00-GATE.txt", "01-worktree/AUTHENTICATE.json", "01-worktree/AUTHENTICATE.txt",
+                                                "01-worktree/CREATE.json", "01-worktree/CREATE.txt", "02-apply/APPLY.json",
+                                                "02-apply/APPLY.txt", "03-build/CHECKS.txt", "03-build/CLASSIFICATION.txt",
+                                                "03-build/PARSED-RECEIPT.json", "03-build/RECEIPT.txt", "03-build/build.stderr",
+                                                "03-build/build.stdout", "03-build/cgroup-samples.txt",
+                                                "03-build/descriptor.json", "03-build/scope-record.txt",
+                                                "03-build/time-v.txt", "05-restore/RESTORE.json", "05-restore/RESTORE.txt",
+                                                "CONTROL-RESULT.json", "RESULT.txt"])
+    print("    info      C5's stopped receipts are verified above (packet SHA256SUMS); no copy is made (no C5 step in "
+          "this mission)")
+    chk("C5 RESULT.txt first line (historical executor label, unchanged)", files[f"{d}/RESULT.txt"].decode().splitlines()[0],
+        "CONTROL RESULT: MUTATION_CONTROL_BLOCKED")
+    chk("C5 03-build/CLASSIFICATION.txt first line (historical; immutable; the general classifier's)",
+        files[f"{d}/03-build/CLASSIFICATION.txt"].decode().splitlines()[0], "BUILD: NOT OK")
+    chk("C5 03-build/build.stderr sha256 (mission section 2)", K.sha256_bytes(files[f"{d}/03-build/build.stderr"]),
+        K.C5_STDERR_SHA256)
+    ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+    chk("C5 frozen patch, mutant blob and sha256 (its apply receipt) are the catalog's and the ruling's",
+        (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"], ap["verify_mutant"]["mutant_file"]["sha256"]),
+        (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+    chk("C5 the ruling's patch and mutant identities equal the catalog's",
+        (K.C5_PATCH_SHA256, K.C5_MUTANT_BLOB, K.C5_MUTANT_SHA256), (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+    chk("C5 05-restore/RESTORE.txt first line (the worktree restored in Tranche 2)",
+        files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0], "RESTORE: EXACTLY_C")
+    print("    info      the preserved C5 executable (read-only; authenticated in full by the C5 pin step, never run here)")
+    chk("C5 preserved executable: regular file, not a symlink", (os.path.isfile(K.C5_EXE), os.path.islink(K.C5_EXE)),
+        (True, False))
+    chk("C5 preserved executable sha256 (mission section 2)", K.sha256_file(K.C5_EXE) if os.path.isfile(K.C5_EXE) else None,
+        K.C5_EXE_SHA256)
+    chk("C5 preserved executable size (mission section 2)", os.path.getsize(K.C5_EXE) if os.path.isfile(K.C5_EXE) else None,
+        K.C5_EXE_SIZE)
+
+
+def section9(by):
+    print("[9] the accepted Tranche-2 continuation evidence (mission 1, 3, 11): commit, packet, the five accepted "
+          "controls, records, tools")
+    chk("continuation evidence commit type", gtext("cat-file", "-t", K.T2C), "commit")
+    chk("continuation evidence commit tree", gtext("rev-parse", K.T2C + "^{tree}"), K.T2C_TREE)
+    chk("continuation evidence commit single parent (the Tranche-2 stopped evidence commit)",
+        gtext("log", "-1", "--format=%P", K.T2C), K.T2C_PARENT)
+    ns = gtext("diff", "--name-status", "--no-renames", K.T2C_PARENT, K.T2C).splitlines()
+    chk("every path the continuation evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.T2C_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T2C).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the continuation evidence commit", outside, [])
+    files = packet_files(K.T2C, K.T2C_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("continuation packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"continuation packet: all {len(sums)} listed files verify at {K.T2C[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      continuation packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; "
+          f"SHA256SUMS sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T2, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T2[:8]} ({len(prev)}) byte-identical at {K.T2C[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T2}:{p}") != gtext("rev-parse", f"{K.T2C}:{p}")], [])
+    chk("continuation INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **READY_FOR_MUTATION_TRANCHE2_FINAL_ARCHITECT_REVIEW**")
+    chk("continuation: no stop record", "receipts/80-STOP-RECORD.md" in files, False)
+    for rel, first in ((K.RULING_T2C, "TRANCHE 2 — C23 C10 C16 C26 C3a — MUTATION CONTROL KILL ACCEPTED (17 OF 35); C5 "
+                                      "BUILD ARCHITECT-ADMISSIBLE (NARROW C5-SPECIFIC WARNING RULING); C5 KILL PENDING"),
+                       (K.C5_RULING, K.C5_RULING_FIRST)):
+        chk(f"continuation {rel} first line", files[rel].decode().splitlines()[0], first)
+    for cid, ids in K.T2C_ACCEPTED_EVIDENCE.items():
+        d = K.T2C_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 1): {K.T2C_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T2C}:{K.T2C_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], CANDIDATE_RESULT)
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob",
+            gtext("rev-parse", f"{K.T2C}:{K.T2C_PACKET}/{d}/04-run/CLASSIFICATION.txt"), ids["run_classification_blob"])
+        cl = files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()
+        chk(f"{cid} run classification first line", cl[0], "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW "
+                                                            "PENDING")
+        chk(f"{cid} printed property and discovered count (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["configuration"]))(
+                json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])), (ids["property"], ids["states"],
+                                                                        ids["configuration"]))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/{ids['pin']}"])
+        chk(f"{cid} pinned mutant executable sha256 ({ids['pin']})", pin["sha256"], ids["executable_sha256"])
+        if cid != "C5":
+            ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+            chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+                (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+                 ap["verify_mutant"]["mutant_file"]["sha256"]), (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+            chk(f"{cid} 05-restore/RESTORE.txt first line", files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0],
+                "RESTORE: EXACTLY_C")
+        else:
+            chk("C5 05-reauth/REAUTH.txt first line", files[f"{d}/05-reauth/REAUTH.txt"].decode().splitlines()[0],
+                "C5 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)")
+        chk(f"{cid} 06-link/LINK.txt blob and first line",
+            (gtext("rev-parse", f"{K.T2C}:{K.T2C_PACKET}/{d}/06-link/LINK.txt"),
+             files[f"{d}/06-link/LINK.txt"].decode().splitlines()[0]), (ids["link_blob"], "LINK: VERIFIED"))
+    print("    info      this mission's base tooling is the Tranche-3 continuation's execution tooling: checked in [11]")
+
+
+def section10(by):
+    print("[10] the Tranche-3 stopped evidence (mission 1, 2, 8, 9, 16): commit, packet, C2 (accepted), C24 (stopped), "
+          "records, tools")
+    chk("Tranche-3 evidence commit type", gtext("cat-file", "-t", K.T3X), "commit")
+    chk("Tranche-3 evidence commit tree", gtext("rev-parse", K.T3X + "^{tree}"), K.T3X_TREE)
+    chk("Tranche-3 evidence commit single parent (the accepted continuation evidence commit)",
+        gtext("log", "-1", "--format=%P", K.T3X), K.T3X_PARENT)
+    ns = gtext("diff", "--name-status", "--no-renames", K.T3X_PARENT, K.T3X).splitlines()
+    chk("every path the Tranche-3 evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.T3X_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T3X).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the Tranche-3 evidence commit", outside, [])
+    files = packet_files(K.T3X, K.T3X_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("Tranche-3 packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"Tranche-3 packet: all {len(sums)} listed files verify at {K.T3X[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      Tranche-3 packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; SHA256SUMS "
+          f"sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T2C, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T2C[:8]} ({len(prev)}) byte-identical at {K.T3X[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T2C}:{p}") != gtext("rev-parse", f"{K.T3X}:{p}")], [])
+    chk("Tranche-3 INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **MUTATION_CONTROL_BLOCKED**")
+    chk("Tranche-3 stop record first line (historical, unchanged)", files["receipts/80-STOP-RECORD.md"].decode()
+        .splitlines()[0], "# Stop record — P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01")
+    for rel, first in ((K.RULING_T3X, K.RULING_T3X_FIRST), (K.CAMPAIGN_T3X, K.CAMPAIGN_T3X_FIRST)):
+        chk(f"Tranche-3 {rel} first line", files[rel].decode().splitlines()[0], first)
+    for cid, ids in K.T3X_ACCEPTED_EVIDENCE.items():
+        d = K.T3X_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 1): {K.T3X_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T3X}:{K.T3X_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], CANDIDATE_RESULT)
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob",
+            gtext("rev-parse", f"{K.T3X}:{K.T3X_PACKET}/{d}/04-run/CLASSIFICATION.txt"), ids["run_classification_blob"])
+        chk(f"{cid} run classification first line", files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()[0],
+            "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING")
+        chk(f"{cid} printed property and discovered count (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["configuration"]))(
+                json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])), (ids["property"], ids["states"],
+                                                                        ids["configuration"]))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/{ids['pin']}"])
+        chk(f"{cid} pinned mutant executable sha256 ({ids['pin']})", pin["sha256"], ids["executable_sha256"])
+        ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+        chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"], ap["verify_mutant"]["mutant_file"]["sha256"]),
+            (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+        chk(f"{cid} 05-restore/RESTORE.txt first line", files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0],
+            "RESTORE: EXACTLY_C")
+        chk(f"{cid} 06-link/LINK.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3X}:{K.T3X_PACKET}/{d}/06-link/LINK.txt"),
+             files[f"{d}/06-link/LINK.txt"].decode().splitlines()[0]), (ids["link_blob"], "LINK: VERIFIED"))
+    d = K.T3X_RECEIPTS["C24"]
+    e = by["C24"]
+    print(f"  -- C24 (stopped in Tranche 3; build Architect-admissible under the narrow ruling): {K.T3X_PACKET}/{d}")
+    c24 = sorted(f for f in files if f.startswith(d + "/"))
+    chk("C24 receipts: exactly the stopped control's files (gate, worktree, apply, build, restore, RESULT; no run, no "
+        "link)", [f[len(d) + 1:] for f in c24], ["00-GATE.txt", "01-worktree/AUTHENTICATE.json", "01-worktree/AUTHENTICATE.txt",
+                                                 "01-worktree/CREATE.json", "01-worktree/CREATE.txt", "02-apply/APPLY.json",
+                                                 "02-apply/APPLY.txt", "03-build/CHECKS.txt", "03-build/CLASSIFICATION.txt",
+                                                 "03-build/PARSED-RECEIPT.json", "03-build/RECEIPT.txt", "03-build/build.stderr",
+                                                 "03-build/build.stdout", "03-build/cgroup-samples.txt",
+                                                 "03-build/descriptor.json", "03-build/scope-record.txt",
+                                                 "03-build/time-v.txt", "05-restore/RESTORE.json", "05-restore/RESTORE.txt",
+                                                 "CONTROL-RESULT.json", "RESULT.txt"])
+    print("    info      C24's stopped receipts are verified above (packet SHA256SUMS); no copy is made (C24 is "
+          "Architect-accepted: no C24 step in this mission)")
+    chk("C24 RESULT.txt first line (historical executor label, unchanged)", files[f"{d}/RESULT.txt"].decode().splitlines()[0],
+        "CONTROL RESULT: MUTATION_CONTROL_BLOCKED")
+    chk("C24 03-build/CLASSIFICATION.txt first line (historical; immutable; the general classifier's)",
+        files[f"{d}/03-build/CLASSIFICATION.txt"].decode().splitlines()[0], "BUILD: NOT OK")
+    chk("C24 03-build/build.stderr sha256 (the preserved stderr)", K.sha256_bytes(files[f"{d}/03-build/build.stderr"]),
+        K.C24_STDERR_SHA256)
+    ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+    chk("C24 frozen patch, mutant blob and sha256 (its apply receipt) are the catalog's and the ruling's",
+        (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"], ap["verify_mutant"]["mutant_file"]["sha256"]),
+        (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+    chk("C24 the ruling's patch and mutant identities equal the catalog's (mission section 2)",
+        (K.C24_PATCH_SHA256, K.C24_MUTANT_BLOB, K.C24_MUTANT_SHA256), (e["patch_sha256"], e["mutant_blob"],
+                                                                        e["mutant_sha256"]))
+    chk("C24 05-restore/RESTORE.txt first line (the worktree restored in Tranche 3)",
+        files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0], "RESTORE: EXACTLY_C")
+    print("    info      the preserved C24 executable (read-only; the accepted C24 kill's executable; never run here)")
+    chk("C24 preserved executable: regular file, not a symlink", (os.path.isfile(K.C24_EXE), os.path.islink(K.C24_EXE)),
+        (True, False))
+    chk("C24 preserved executable sha256 (the accepted C24 kill's pin)",
+        K.sha256_file(K.C24_EXE) if os.path.isfile(K.C24_EXE) else None, K.C24_EXE_SHA256)
+    chk("C24 preserved executable size (the accepted C24 kill's pin)",
+        os.path.getsize(K.C24_EXE) if os.path.isfile(K.C24_EXE) else None, K.C24_EXE_SIZE)
+    print("    info      this mission's base tooling is the Tranche-3 continuation's execution tooling: checked in [11]")
+
+
+def section11(by):
+    print("[11] the Tranche-3 continuation evidence (mission 2, 3, 9): commit, packet, records, C24 C3b C3c C6 (accepted), "
+          "C7 (blocked), tools")
+    chk("continuation evidence commit type", gtext("cat-file", "-t", K.T3C), "commit")
+    chk("continuation evidence commit tree (mission 3)", gtext("rev-parse", K.T3C + "^{tree}"), K.T3C_TREE)
+    chk("continuation evidence commit single parent (the Tranche-3 stopped evidence commit; mission 3)",
+        gtext("log", "-1", "--format=%P", K.T3C), K.T3C_PARENT)
+    chk("the continuation's parent is 774f457a", K.T3C_PARENT, "774f457a4fc27f6b26e132a0caf71b683b9af8cd")
+    ns = gtext("diff", "--name-status", "--no-renames", K.T3C_PARENT, K.T3C).splitlines()
+    chk("every path the continuation evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.T3C_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T3C).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the continuation evidence commit", outside, [])
+    files = packet_files(K.T3C, K.T3C_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("continuation packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"continuation packet: all {len(sums)} listed files verify at {K.T3C[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      continuation packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; "
+          f"SHA256SUMS sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T3X, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T3X[:8]} ({len(prev)}) byte-identical at {K.T3C[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T3X}:{p}") != gtext("rev-parse", f"{K.T3C}:{p}")], [])
+    chk("continuation INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **MUTATION_CONTROL_BLOCKED**")
+    chk("continuation stop record first line (historical, unchanged)", files["receipts/80-STOP-RECORD.md"].decode()
+        .splitlines()[0], "# Stop record — P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02")
+    for rel, first in ((K.RULING_T3C, K.RULING_T3C_FIRST), (K.W_RULING, K.W_RULING_FIRST),
+                       (K.AMENDMENT, K.AMENDMENT_FIRST), (K.CAMPAIGN_T3C, K.CAMPAIGN_T3C_FIRST)):
+        chk(f"continuation {rel} first line", files[rel].decode().splitlines()[0], first)
+    for cid, ids in K.T3C_ACCEPTED_EVIDENCE.items():
+        d = K.T3C_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 2): {K.T3C_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], CANDIDATE_RESULT)
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob",
+            gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/04-run/CLASSIFICATION.txt"), ids["run_classification_blob"])
+        chk(f"{cid} run classification first line", files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()[0],
+            "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING")
+        chk(f"{cid} printed property, discovered and expanded counts (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["report"]["expanded"],
+                        r["configuration"]))(json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])),
+            (ids["property"], ids["states"], ids["expanded"], ids["configuration"]))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/{ids['pin']}"])
+        chk(f"{cid} pinned mutant executable sha256 ({ids['pin']})", pin["sha256"], ids["executable_sha256"])
+        chk(f"{cid} 04a-rules/RULES.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/04a-rules/RULES.txt"),
+             files[f"{d}/04a-rules/RULES.txt"].decode().splitlines()[0]), (ids["rules_blob"], "TRANCHE-3 RULES: HOLD"))
+        if cid != "C24":
+            ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+            chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+                (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+                 ap["verify_mutant"]["mutant_file"]["sha256"]), (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+        chk(f"{cid} {ids['restore']} first line", files[f"{d}/{ids['restore']}"].decode().splitlines()[0],
+            "C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)"
+            if cid == "C24" else "RESTORE: EXACTLY_C")
+        chk(f"{cid} 06-link/LINK.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/06-link/LINK.txt"),
+             files[f"{d}/06-link/LINK.txt"].decode().splitlines()[0]), (ids["link_blob"], "LINK: VERIFIED"))
+    for cid, ids in K.T3C_BLOCKED_EVIDENCE.items():
+        d = K.T3C_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (MUTATION_CONTROL_BLOCKED by the Architect; mission 2): {K.T3C_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], "CONTROL RESULT: MUTATION_CONTROL_BLOCKED")
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob",
+            gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/04-run/CLASSIFICATION.txt"), ids["run_classification_blob"])
+        chk(f"{cid} run classification first line: not a kill candidate",
+            files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()[0], "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE")
+        chk(f"{cid} printed property E11 (observed), discovered and expanded counts, configuration (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["report"]["expanded"],
+                        r["configuration"]))(json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])),
+            (ids["property"], ids["states"], ids["expanded"], ids["configuration"]))
+        chk(f"{cid} the required property is the catalog's P6 (unmet)", (e["named_property"], ids["required_property"]),
+            (["P6"], "P6"))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/{ids['pin']}"])
+        chk(f"{cid} pinned mutant executable sha256 ({ids['pin']})", pin["sha256"], ids["executable_sha256"])
+        chk(f"{cid} 04a-rules/RULES.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3C}:{K.T3C_PACKET}/{d}/04a-rules/RULES.txt"),
+             files[f"{d}/04a-rules/RULES.txt"].decode().splitlines()[0]), (ids["rules_blob"],
+                                                                         "TRANCHE-3 RULES: NOT SATISFIED"))
+        chk(f"{cid} 05-restore/RESTORE.txt first line (restored in the continuation)",
+            files[f"{d}/05-restore/RESTORE.txt"].decode().splitlines()[0], "RESTORE: EXACTLY_C")
+        chk(f"{cid}: no link and no informational run (nothing beyond the blocked kill run)",
+            [f for f in files if f.startswith((d + "/06-link/", d + "/04b-info-F3/"))], [])
+    print("    info      this mission's base tooling is the Tranche-3 tail's execution tooling: checked in [12]")
+
+
+def section12(by):
+    print("[12] the Tranche-3 tail evidence (mission 1, 2): commit, packet, records, A1 A2 C20 A5 (accepted), tools")
+    chk("tail evidence commit type", gtext("cat-file", "-t", K.T3T), "commit")
+    chk("tail evidence commit tree", gtext("rev-parse", K.T3T + "^{tree}"), K.T3T_TREE)
+    chk("tail evidence commit single parent (the Tranche-3 continuation evidence commit)",
+        gtext("log", "-1", "--format=%P", K.T3T), K.T3T_PARENT)
+    chk("the tail evidence commit is the C1/C25 witness evidence commit's parent", K.W1_PARENT, K.T3T)
+    ns = gtext("diff", "--name-status", "--no-renames", K.T3T_PARENT, K.T3T).splitlines()
+    chk("every path the tail evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.T3T_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.T3T).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the tail evidence commit", outside, [])
+    files = packet_files(K.T3T, K.T3T_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("tail packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"tail packet: all {len(sums)} listed files verify at {K.T3T[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      tail packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; SHA256SUMS "
+          f"sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T3C, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T3C[:8]} ({len(prev)}) byte-identical at {K.T3T[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T3C}:{p}") != gtext("rev-parse", f"{K.T3T}:{p}")], [])
+    chk("tail INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING**")
+    chk("the tail did not stop (no stop record)", "receipts/80-STOP-RECORD.md" in files, False)
+    for rel, first in ((K.RULING_T3T, K.RULING_T3T_FIRST), (K.CAMPAIGN_T3T, K.CAMPAIGN_T3T_FIRST)):
+        chk(f"tail {rel} first line", files[rel].decode().splitlines()[0], first)
+    for cid, ids in K.T3T_ACCEPTED_EVIDENCE.items():
+        d = K.T3T_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 1): {K.T3T_PACKET}/{d}")
+        chk(f"{cid} RESULT.txt blob", gtext("rev-parse", f"{K.T3T}:{K.T3T_PACKET}/{d}/RESULT.txt"), ids["result_blob"])
+        chk(f"{cid} RESULT.txt first line (historical executor label, unchanged)",
+            files[f"{d}/RESULT.txt"].decode().splitlines()[0], CANDIDATE_RESULT)
+        chk(f"{cid} 04-run/CLASSIFICATION.txt blob",
+            gtext("rev-parse", f"{K.T3T}:{K.T3T_PACKET}/{d}/04-run/CLASSIFICATION.txt"), ids["run_classification_blob"])
+        chk(f"{cid} run classification first line", files[f"{d}/04-run/CLASSIFICATION.txt"].decode().splitlines()[0],
+            "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING")
+        chk(f"{cid} printed property, discovered and expanded counts (run PARSED-RECEIPT)",
+            (lambda r: ((r["report"]["fail"] or "").split(": ", 1)[0], r["report"]["states"], r["report"]["expanded"],
+                        r["configuration"]))(json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])),
+            (ids["property"], ids["states"], ids["expanded"], ids["configuration"]))
+        chk(f"{cid} 04-run/raw-output.txt sha256", K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]),
+            ids["raw_output_sha256"])
+        pin = json.loads(files[f"{d}/{ids['pin']}"])
+        chk(f"{cid} pinned mutant executable sha256 ({ids['pin']})", pin["sha256"], ids["executable_sha256"])
+        chk(f"{cid} 04a-rules/RULES.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3T}:{K.T3T_PACKET}/{d}/04a-rules/RULES.txt"),
+             files[f"{d}/04a-rules/RULES.txt"].decode().splitlines()[0]), (ids["rules_blob"], "TRANCHE-3 RULES: HOLD"))
+        ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+        chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+             ap["verify_mutant"]["mutant_file"]["sha256"]), (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+        chk(f"{cid} {ids['restore']} first line", files[f"{d}/{ids['restore']}"].decode().splitlines()[0],
+            "RESTORE: EXACTLY_C")
+        chk(f"{cid} 06-link/LINK.txt blob and first line",
+            (gtext("rev-parse", f"{K.T3T}:{K.T3T_PACKET}/{d}/06-link/LINK.txt"),
+             files[f"{d}/06-link/LINK.txt"].decode().splitlines()[0]), (ids["link_blob"], "LINK: VERIFIED"))
+    chk("the tail holds no receipt of C1, C4, C7 or C25 (none was executed there)",
+        sorted({f.split("/")[1] for f in files if f.startswith("receipts/") and f.count("/") >= 2
+                and f.split("/")[1].split("-", 1)[-1] in ("C1", "C4", "C7", "C25")}), [])
+    # WITNESS-C4-01: the base tooling check moved to [13] (this mission's base is the C1/C25 mission's tooling).
+
+
+WITNESS_COMMIT = "42dd1bd1cf21ffdea5968b256d2983f6575fab5b"
+WITNESS_PARENT = "2d83b74b3e9f0bfb6ca4763df56d57f3c044bcda"
+
+
+def section13(by):
+    print("[13] the C1/C25 witness evidence (mission 2, 3): commit, packet, records, C1 C25 (accepted), tools, parent")
+    chk("C1/C25 evidence commit type", gtext("cat-file", "-t", K.W1), "commit")
+    chk("C1/C25 evidence commit tree", gtext("rev-parse", K.W1 + "^{tree}"), K.W1_TREE)
+    chk("C1/C25 evidence commit single parent (the Tranche-3 tail evidence commit)",
+        gtext("log", "-1", "--format=%P", K.W1), K.W1_PARENT)
+    chk("the required parent of this mission's evidence commit is the C1/C25 evidence commit (mission 3, 13)",
+        (K.PARENT, K.PARENT_TREE), ("74b3f485c78d0d964b85ff958c09c69d85058ad5", K.W1_TREE))
+    ns = gtext("diff", "--name-status", "--no-renames", K.W1_PARENT, K.W1).splitlines()
+    chk("every path the C1/C25 evidence commit changes is added under its packet",
+        bool(ns) and all(l.startswith("A\t" + K.W1_PACKET + "/") for l in ns), True)
+    outside = [p for p in gtext("diff", "--name-only", K.C, K.W1).splitlines() if not p.startswith("docs/evidence/")]
+    chk("paths outside docs/evidence/ differing between C and the C1/C25 evidence commit", outside, [])
+    files = packet_files(K.W1, K.W1_PACKET)
+    sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in files["SHA256SUMS"].decode().splitlines() if l}
+    chk("C1/C25 packet: SHA256SUMS lists every packet file but itself",
+        sorted(sums) == sorted(f for f in files if f != "SHA256SUMS"), True)
+    chk(f"C1/C25 packet: all {len(sums)} listed files verify at {K.W1[:8]}",
+        [p for p, d in sums.items() if K.sha256_bytes(files[p]) != d], [])
+    print(f"    info      C1/C25 packet: {len(files)} files, {sum(len(v) for v in files.values())} bytes; SHA256SUMS "
+          f"sha256 {K.sha256_bytes(files['SHA256SUMS'])}")
+    prev = [p for p in gtext("ls-tree", "-r", "--name-only", K.T3T, "docs/evidence/p3-candidate11/").splitlines()]
+    chk(f"every file under docs/evidence/p3-candidate11/ at {K.T3T[:8]} ({len(prev)}) byte-identical at {K.W1[:8]}",
+        [p for p in prev if gtext("rev-parse", f"{K.T3T}:{p}") != gtext("rev-parse", f"{K.W1}:{p}")], [])
+    chk("C1/C25 INDEX.md: the derived status (historical, unchanged)",
+        [l for l in files["INDEX.md"].decode().splitlines() if l.startswith("Derived status: ")][0].split(". ")[0],
+        "Derived status: **KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING**")
+    chk("the C1/C25 mission did not stop (no stop record)", "receipts/80-STOP-RECORD.md" in files, False)
+    for rel, first in ((K.RULING_W1, K.RULING_W1_FIRST), (K.CAMPAIGN_W1, K.CAMPAIGN_W1_FIRST)):
+        chk(f"C1/C25 {rel} first line", files[rel].decode().splitlines()[0], first)
+    for cid, ids in K.W1_ACCEPTED_EVIDENCE.items():
+        d = K.W1_RECEIPTS[cid]
+        e = by[cid]
+        print(f"  -- {cid} (Architect-accepted; mission 2): {K.W1_PACKET}/{d}")
+
+        def blob(rel):
+            return gtext("rev-parse", f"{K.W1}:{K.W1_PACKET}/{d}/{rel}")
+
+        def first(rel):
+            return files[f"{d}/{rel}"].decode().splitlines()[0]
+        chk(f"{cid} RESULT.txt blob and first line (historical executor label, unchanged)",
+            (blob("RESULT.txt"), first("RESULT.txt")), (ids["result_blob"], CANDIDATE_RESULT))
+        chk(f"{cid} primary 04-run/CLASSIFICATION.txt blob and first line",
+            (blob("04-run/CLASSIFICATION.txt"), first("04-run/CLASSIFICATION.txt")),
+            (ids["primary_classification_blob"], "CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS "
+                                                 "PRINTED (A PART ONLY; NOT A KILL BY ITSELF)"))
+        chk(f"{cid} witness 04c-witness/CLASSIFICATION.txt blob and first line",
+            (blob("04c-witness/CLASSIFICATION.txt"), first("04c-witness/CLASSIFICATION.txt")),
+            (ids["witness_classification_blob"], "CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A "
+                                                 "PART ONLY)"))
+        chk(f"{cid} first printed property, discovered and expanded counts (primary PARSED-RECEIPT)",
+            (lambda r: (r["printed_property"], r["report"]["states"], r["report"]["expanded"], r["configuration"]))(
+                json.loads(files[f"{d}/04-run/PARSED-RECEIPT.json"])),
+            (ids["property"], ids["states"], ids["expanded"], ids["configuration"]))
+        chk(f"{cid} primary and witness raw-output sha256",
+            (K.sha256_bytes(files[f"{d}/04-run/raw-output.txt"]), K.sha256_bytes(files[f"{d}/04c-witness/raw-output.txt"])),
+            (ids["primary_raw_output_sha256"], ids["witness_raw_output_sha256"]))
+        chk(f"{cid} pinned mutant executable sha256 (03-build/PIN.json)",
+            json.loads(files[f"{d}/03-build/PIN.json"])["sha256"], ids["executable_sha256"])
+        ap = json.loads(files[f"{d}/02-apply/APPLY.json"])
+        chk(f"{cid} frozen patch, mutant blob and sha256 are the catalog's (its apply receipt)",
+            (ap["patch_sha256"], ap["verify_mutant"]["mutant_file"]["git_blob"],
+             ap["verify_mutant"]["mutant_file"]["sha256"]), (e["patch_sha256"], e["mutant_blob"], e["mutant_sha256"]))
+        chk(f"{cid} restoration, healthy-witness link, restored-side link and G.3 record: blobs and first lines",
+            (blob("05-restore/RESTORE.txt"), first("05-restore/RESTORE.txt"), blob("06a-healthy-witness/HEALTHY.txt"),
+             first("06a-healthy-witness/HEALTHY.txt"), blob("06b-link/LINK.txt"), first("06b-link/LINK.txt"),
+             blob("07-g3/G3.txt"), first("07-g3/G3.txt")),
+            (ids["restore_blob"], "RESTORE: EXACTLY_C", ids["healthy_blob"], "HEALTHY WITNESS LINK: VERIFIED",
+             ids["link_blob"], "LINK: VERIFIED", ids["g3_blob"], "G.3: ALL OBLIGATIONS HOLD"))
+        chk(f"{cid} the G.3(e) recording proposed there is the one the Architect recorded (mission 2)",
+            f"(e) recording, PROPOSED FOR ARCHITECT REVIEW (not an acceptance): '{ids['recording']}'" in files[
+                f"{d}/07-g3/G3.txt"].decode(), True)
+    chk("the C1/C25 packet holds no receipt of C4 or C7 (neither was executed there)",
+        sorted({f.split("/")[1] for f in files if f.startswith("receipts/") and f.count("/") >= 2
+                and f.split("/")[1].split("-", 1)[-1] in ("C4", "C7")}), [])
+    # This mission's base tooling (mission 5, step 6): the C1/C25 mission's execution tools (original-tools/).
+    w1tools = {f[len("tools/"):]: K.sha256_bytes(v) for f, v in files.items() if f.startswith("tools/")}
+    cf = files["CARRIED-FORWARD.md"].decode()
+    carried = {}
+    for line in cf.split("## The old versions of the changed tools")[0].splitlines():
+        cells = [c.strip().strip("`") for c in line.split("|")[1:-1]]
+        if len(cells) == 5 and cells[0] not in ("Tool", "---") and cells[2] in (K.T1, K.T2, K.T2C, K.T3X, K.T3C, K.T3T):
+            carried[cells[0]] = cells[4]
+            chk(f"C1/C25 CARRIED-FORWARD.md: carried tool {cells[0]} at {cells[1]}: blob and sha256 at "
+                f"{cells[2][:8]}", (gtext("rev-parse", f"{cells[2]}:{cells[1]}"),
+                                    K.sha256_bytes(git("show", f"{cells[2]}:{cells[1]}") or b"")), (cells[3], cells[4]))
+    base = dict(carried, **w1tools)
+    orig = {f: K.sha256_file(os.path.join(K.EV, "original-tools", f)) for f in
+            sorted(os.listdir(os.path.join(K.EV, "original-tools")))}
+    chk(f"original-tools/ ({len(orig)}) = the C1/C25 mission's execution tooling: its packet's tools/ ({len(w1tools)}) "
+        f"and the tools it carried byte for byte ({len(carried)}) (names and sha256)", orig, base)
+
+
+C4_WITNESS_COMMIT = "04e42a7d"
+C4_WITNESS_PARENT = WITNESS_COMMIT
+C4_EVIDENCE_B = "a464a36621523f539d2554a6b176d678c7f885ea"
+C4_B_PACKET = "docs/evidence/p3-candidate11/c4-witness-01"
+AD1R4_C4_CLAUSES = [
+    "### F.1 Receipt types: what each must show", "### F.2 Witness invocations: artifact identity by role",
+    "### G.5 The kill criterion, for C4 only", "### G.6 The offered-versus-consumed Oracle rule (C4's schedules only)",
+    "G.3 applies to C1 and C25 only. G.5 and G.6 apply to C4 only.",
+    "A positive marker in a healthy-witness receipt, or a healthy line in a mutant-witness receipt, is NOT ADMISSIBLE.",
+    "Both P4 AND P8 are required (S-22). The deterministic witness does not replace `full_f8`.",
+    "The actual first property is recorded unchanged, exactly as printed. It is never relabelled.",
+    "If it names neither P4 nor P8, that is reported as it is and not reinterpreted.",
+    "**Only P4, or only P8, is insufficient.** A witness receipt showing one of them does not establish (B).",
+    "(F) **Recording.** Only then is the row recorded as 'C4: P4, P8 (first failure <exact property printed>; witness)'.",
+    "Silent fallback is never accepted as a specified schedule. Oracle and the original replay helpers are not changed.",
+    "4. Every consumed choice equals the offered prefix.",
+    "| 9 | C4 witness on the mutant showing only one of P4 and P8 (the other NOT OBSERVED, or absent) | as printed | NOT "
+    "ADMISSIBLE for G.5(B): both properties are required | no |",
+    "| 14 | C4 witness step that consumes beyond its offered stream, or consumes other than the offered prefix, or leaves "
+    "an unused suffix not justified and frozen before execution | as printed | NOT ADMISSIBLE (G.6) | no |",
+    "lines 1627–1642 removed, none added; mutant `protocol.rs` blob `f3793c2ff61f8adbf43fe17d6b5237b49bc507b0`."]
+
+
+def section14(by):
+    print("[14] the G.5 witness inputs (mission 3-9): the C4 witness source at A and at C; AD-1-R4 F.1, F.2, G.2, G.5, "
+          "G.6, K.2; the accepted healthy type-(e3) receipt")
+    model = git("show", f"{K.C}:{K.MODEL}").decode()
+    a_full = gtext("rev-parse", C4_WITNESS_COMMIT)
+    chk("C4 witness source commit A: type and single parent (the C1/C25 witness source commit; AD-1-R4 G.1)",
+        (gtext("cat-file", "-t", a_full), gtext("log", "-1", "--format=%P", a_full)), ("commit", C4_WITNESS_PARENT))
+    chk("A changes model_tests.rs only, +678/-0 (AD-1-R4 G.1)", gtext("diff", "--numstat", C4_WITNESS_PARENT, a_full),
+        f"678\t0\t{K.MODEL}")
+    chk("A is an ancestor of Candidate C, and no ledger source differs between A and C",
+        (subprocess.run(["git", "-C", K.REPO, "merge-base", "--is-ancestor", a_full, K.C]).returncode,
+         gtext("diff", "--name-only", a_full, K.C, "--", K.CRATE)), (0, ""))
+    chk("model_tests.rs at A is C's blob; protocol.rs at A is C's blob",
+        (gtext("rev-parse", f"{a_full}:{K.MODEL}"), gtext("rev-parse", f"{a_full}:{K.PROTOCOL}")),
+        (K.BLOBS[K.MODEL], K.BLOBS[K.PROTOCOL]))
+    diff = git("diff", "-U0", C4_WITNESS_PARENT, a_full, "--", K.MODEL).decode().split("\n")
+    added = "\n".join(l[1:] for l in diff if l.startswith("+") and not l.startswith("+++")) + "\n"
+    chk("Candidate C's model_tests.rs holds the 678 lines A added, byte for byte, exactly once, at its end",
+        (model.count(added), model.endswith(added)), (1, True))
+    start = model[:model.find(added)].count("\n") + 1
+    print(f"    info      the reviewed C4 witness source spans model_tests.rs lines {start}-{start + 677} at C")
+    t = K.G5["C4"]["witness_test"]
+    i = model.find(f"\nfn {t}() {{\n")
+    chk(f"C4: Candidate C holds exactly one witness test {t}, an ordinary #[test] calling run_c4_witness(&F8, "
+        "&C4_SCENARIOS) (mission 5, step 3)",
+        (model.count(f"\nfn {t}() {{\n"), model[:i].endswith("\n#[test]"),
+         model[i:].split("\n}\n", 1)[0].strip().splitlines()[1:]),
+        (1, True, ["    run_c4_witness(&F8, &C4_SCENARIOS);"]))
+    chk("C4: the witness test, run_c4_witness, its step and scenario constants lie inside the reviewed source",
+        all(x in added for x in (f"fn {t}() {{", "fn run_c4_witness(", "const C4_P4: C4Scenario", "const C4_P8: "
+                                 "C4Scenario", "const C4_SCENARIOS: [C4Scenario; 2] = [C4_P4, C4_P8];", "fn c4_replay(",
+                                 "fn c4_replay_step(", "fn c4_consumption(", "fn c4_frozen(")), True)
+    chk("the documentary evidence commit B (C4-WITNESS-01) is present (historical; not final-baseline evidence)",
+        gtext("cat-file", "-t", C4_EVIDENCE_B), "commit")
+    bsums = {l.split("  ", 1)[1]: l.split("  ", 1)[0] for l in git(
+        "show", f"{C4_EVIDENCE_B}:{C4_B_PACKET}/PACKET-SHA256SUMS").decode().splitlines() if l}
+    for rel in ("receipts/12-run-mutant/raw-output.txt", "receipts/09-run-healthy/raw-output.txt"):
+        data = git("show", f"{C4_EVIDENCE_B}:{C4_B_PACKET}/{rel}") or b""
+        chk(f"the historical prototype receipt {rel} at B: sha256 = B's PACKET-SHA256SUMS; unchanged at this commit's "
+            "parent (historical; only the base of synthetic tooling controls)",
+            (K.sha256_bytes(data), gtext("rev-parse", f"{K.PARENT}:{C4_B_PACKET}/{rel}")),
+            (bsums.get(rel), gtext("rev-parse", f"{C4_EVIDENCE_B}:{C4_B_PACKET}/{rel}")))
+    r4 = git("show", f"{K.C}:{K.AD1R4}").decode()
+    flat = " ".join(r4.split())
+    chk("AD-1-R4 at C: the clauses this mission applies, verbatim (F.1, F.2, G.2's C4 definition, G.5, G.6, K.2 cases "
+        "9 and 14)", [c[:60] for c in AD1R4_C4_CLAUSES if " ".join(c.split()) not in flat], [])
+    s2sums = packet_sums(K.STAGE2, K.STAGE2_PACKET)
+    M = K.G5["C4"]
+    hw = by["C4"]["witness"]["healthy_witness"]
+    d = M["healthy_dir"]
+    tag = f"S2-{d.split('/')[-1]}"
+    names = sorted(p[len(d) + 1:] for p in s2sums if p.startswith(d + "/"))
+    print(f"  -- C4: the accepted healthy type-(e3) receipt {K.STAGE2_PACKET}/{d} ({len(names)} files)")
+    chk("C4 healthy receipt: 9 files listed in Stage 2's SHA256SUMS", len(names), 9)
+    for f in names:
+        data = git("show", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/{f}")
+        chk(f"C4 {d}/{f}: sha256 = Stage 2's SHA256SUMS; unchanged at this commit's parent",
+            (K.sha256_bytes(data or b""), gtext("rev-parse", f"{K.PARENT}:{K.STAGE2_PACKET}/{d}/{f}")),
+            (s2sums[f"{d}/{f}"], gtext("rev-parse", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/{f}")))
+        copy_in(f"linked/{tag}/{f}", data, s2sums[f"{d}/{f}"])
+    cls = git("show", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/CLASSIFICATION.txt").decode().splitlines()
+    raw = git("show", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/raw-output.txt")
+    chk("C4 healthy receipt: classification and raw-output identities = the catalog's",
+        (gtext("rev-parse", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/CLASSIFICATION.txt"),
+         gtext("rev-parse", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/raw-output.txt"), K.sha256_bytes(raw)),
+        (hw["classification_blob"], hw["raw_output_blob"], hw["raw_output_sha256"]))
+    chk("C4 healthy receipt: PASS, type (e3)", cls[:2], ["CLASSIFICATION: PASS", hw["outer_class"]])
+    desc = json.loads(git("show", f"{K.STAGE2}:{K.STAGE2_PACKET}/{d}/descriptor.json"))
+    chk("C4 healthy receipt: the witness test alone on the pinned unchanged-baseline executable, unchanged before and "
+        "after; Candidate C exactly",
+        (desc["argv"], desc["executable"]["before"]["sha256"], desc["executable"]["after"]["sha256"],
+         desc["source_before"]["verdict"], desc["source_after"]["verdict"], desc["source_before"]["head"]),
+        ([K.EXE, K.TEST_PREFIX + t, "--exact", "--nocapture", "--test-threads=1"], K.EXE_SHA256, K.EXE_SHA256,
+         "EXACTLY_C", "EXACTLY_C", K.C))
+    text = raw.decode()
+    hl = [l for l in text.splitlines() if l.startswith("C4 WITNESS F-8 P4: 8 steps, each enabled")
+          or l.startswith("C4 WITNESS F-8 P8: 12 steps, each enabled") or l == "C4 WITNESS F-8: 2 scenarios healthy; no "
+                                                                               "violation"]
+    chk("C4 healthy receipt: the three healthy lines (G.5(C)), each once and verbatim in AD-1-R4; no positive marker",
+        (len(hl), all(f"`{l}`" in flat for l in hl),
+         [m for m in ("NAMED PROPERTY", "OBSERVED", "VIOLATION", "FIXTURE") if m in text]), (3, True, []))
+    for n, (sc, offered) in {"P4": ("step  8/8 Ack(0) offered [0, 0, 0, 1, 0, 0] consumed [] unused [0, 0, 0, 1, 0, 0]",
+                                    6),
+                             "P8": ("step 12/12 Ack(0) offered [0, 0, 0, 0] consumed [] unused [0, 0, 0, 0]", 4)}.items():
+        chk(f"C4 healthy receipt: scenario {n}'s changed append offered {offered} choices, consumed none, all unused "
+            "(mission 9)", text.count(f"C4 WITNESS F-8 {n} {sc} "), 1)
+
+
+def main():
+    print(f"{K.MISSION} — INPUT AUTHENTICATION (read-only)")
+    print("executor: Claude Code, Claude Opus 5.5 (claude-opus-5-5); mission effort: High")
+    print()
+    cat, listed = section1_2()
+    print()
+    by = section3(cat, listed)
+    print()
+    section4(by)
+    print()
+    section5()
+    print()
+    section6()
+    print()
+    section7(by)
+    print()
+    section8(by)
+    print()
+    section9(by)
+    print()
+    section10(by)
+    print()
+    section11(by)
+    print()
+    section12(by)
+    print()
+    section13(by)
+    print()
+    section14(by)
+    print()
+    print("RESULT: " + ("ALL CHECKS HOLD" if not fail else "MISMATCH — STOP"))
+    return fail
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,9 @@
+CLASSIFICATION: G.5(A) PRIMARY — NOT ESTABLISHED
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (tool invariant: the admissible first properties are exactly C4's named P4 and P8 (G.5(A), mission section 6); the prediction P4 is one of them and is not a receipt): kills nothing
+raw outcome (as printed): outcome FAIL; FAIL E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 30,000,000 ceiling; transitions 14; elapsed 0.0 s
+G.5(A): first printed property E3 (recorded as printed; never relabelled); admissible first properties P4 or P8 or E3; the AD-1-R4 prediction P4 is not a receipt; neither P4 nor P8 is inferred from the other; the attribution of both comes only from G.5(B)
+kill label: none (the primary is a part of G.5 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4421 KiB; scope gone
+checks: 30 of 31 hold
+FAILED CHECK: tool invariant: the admissible first properties are exactly C4's named P4 and P8 (G.5(A), mission section 6); the prediction P4 is one of them and is not a receipt: ['P4', 'P8', 'E3'] / ['P4', 'P8'] / P4

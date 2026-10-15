@@ -1,0 +1,23 @@
+CLASSIFICATION: G.5(B) MUTANT WITNESS — NOT ADMISSIBLE
+outer class (AD-1-R4 K.2): INCOMPLETE (killed from outside or abnormal termination): establishes nothing
+raw outcome (as printed): harness []; panic message []
+positive line P4: "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)" — NOT ESTABLISHED
+positive line P8: "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)" — NOT ESTABLISHED
+executable: the pinned C4 mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef sha256 69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92 size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.5 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 1; largest process max RSS 4423 KiB; scope gone
+checks: 13 of 26 hold
+FAILED CHECK: harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' (1 failed) and the failures list names exactly that test: []; failures []
+FAILED CHECK: exit 101 by a normal exit, no signal: exit None, signal 9, supervisor rc -9
+FAILED CHECK: launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 1, wall 0.0 s of 2700 s, timed out False, scope gone
+FAILED CHECK: exactly one panic, of the witness test's thread: []
+FAILED CHECK: both exact positive lines occur exactly once in the whole output, each as a whole line; exactly two NAMED PROPERTY lines; no 'NOT OBSERVED': 
+FAILED CHECK: G.6 from the raw output, both scenarios, every step: the frozen actor order; the offered stream; the consumed choices, each equal to the offered prefix with its option count; no consumption beyond the offered stream (no silent Oracle-default zero); the printed unused suffix; the branch labels; the remaining fault budget and its [fault] marker; at each changed append exactly the frozen storage-choice stream with no unused suffix: ["scenarios printed ['P4'], not ['P4', 'P8']", 'scenario P4: steps numbered [], not 1..8 of 8 (the actor-step order)', 'scenario P8: not printed']
+FAILED CHECK: scenario P4 step 8's record prints P4 in the world after it (VIOLATION after: P4): None
+FAILED CHECK: P4's locus in the printed world after step 8: U holds the acknowledgement while X holds an explanation (F1's, as the witness's own predicate requires; compared with the healthy receipt's X after the link): None
+FAILED CHECK: scenario P4's line of other properties lists exactly the other properties printed in that scenario: None / []
+FAILED CHECK: scenario P8 step 12's record prints P8 in the world after it (VIOLATION after: P8): None
+FAILED CHECK: P8's locus in the printed world after step 12: G1's insert issued, its record written, not told Committed, not in U, no correction in C or in the ledger: None
+FAILED CHECK: scenario P8's line of other properties lists exactly the other properties printed in that scenario: None / []
+FAILED CHECK: the header's count equals the printed per-step violation lines plus the initial states' ones: 0 printed + 0 initial; header None

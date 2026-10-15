@@ -1,0 +1,195 @@
+{
+ "control": "C4",
+ "receipt_type": "AD-1-R4 F.1 (c), the G.5(B) mutant witness",
+ "test": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+ "named_properties": [
+  "P4",
+  "P8"
+ ],
+ "positive_lines": {
+  "P4": "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)",
+  "P8": "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)"
+ },
+ "observed": {
+  "P4": false,
+  "P8": false
+ },
+ "header_violations": null,
+ "other_properties": {},
+ "panic_message": [],
+ "g6_problems": [
+  "scenarios printed ['P4'], not ['P4', 'P8']",
+  "scenario P4: steps numbered [(1, 8)], not 1..8 of 8 (the actor-step order)",
+  "scenario P8: not printed"
+ ],
+ "transcript": {
+  "scenarios": {
+   "P4": {
+    "header": "C4 WITNESS F-8 P4: 8 steps from the initial world; step 8, Ack(0)'s append, is offered [0, 0, 0, 1, 0, 0]: the healthy core must consume [] and show 'append_acknowledgement: Refused(NotNow(CellsBusy))' (2 faults left); without test 1 it must consume [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)] and show 'append_acknowledgement: NotApplied(Uncertain)' (1 faults left)",
+    "named": "P4",
+    "total": 8,
+    "initial": [],
+    "steps": [
+     {
+      "n": 1,
+      "total": 8,
+      "actor": "Fw(0)",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Fw(0): arm -> Armed",
+      "marker": false,
+      "branches": [],
+      "word": "0x10004",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  1/8 Fw(0) offered [] consumed [] unused [] faults left 2: Fw(0): arm -> Armed",
+       "branches": "    branches []; word after 0x10004 (live 1, unapplied 0); phase Healthy, latch None",
+       "cells": "    U None; C None; X None",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     }
+    ],
+    "fixture": null
+   }
+  },
+  "order": [
+   "P4"
+  ],
+  "stray": [],
+  "witness_lines": 6,
+  "preamble": [
+   "SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01): not the output of any run"
+  ]
+ },
+ "harness_result": [],
+ "process": {
+  "exit_status": null,
+  "signal": 9,
+  "supervisor_rc": -9,
+  "wrapper_recorded_status": "137"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": true,
+  "wall_seconds": 2700.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4423
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "primary_executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [],
+   "argv": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "fe7e91984c2b0984e204038b66a4af1227a9e4b174e153f9ef3c00ddf1ee8ce3",
+ "not_produced_by_design": "the explorer report, counts, property lines and branch list (F.1 (c))",
+ "outer_classification": "INCOMPLETE (killed from outside or abnormal termination): establishes nothing",
+ "checks_hold": 13,
+ "checks_total": 26
+}

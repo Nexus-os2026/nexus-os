@@ -1,0 +1,23 @@
+{
+ "synthetic": "SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01): not the output of any run",
+ "applied_before_restoration": true,
+ "before": {
+  "git_blob": "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0",
+  "sha256": "4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2"
+ },
+ "check": {
+  "rc": 0
+ },
+ "reverse": {
+  "rc": 0
+ },
+ "after": {
+  "git_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+  "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+ },
+ "verify_tree": {
+  "verdict": "EXACTLY_C",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0"
+ }
+}

@@ -1,0 +1,14 @@
+353,356c353,360
+<                    f"{sum('/03-build/build.stdout' in l for l in m)} build.stdout, {len(ctl_samplers)} control samplers, "
+<                    f"{sum('/04c-witness/' in l for l in ctl_samplers)} witness",
+<                    sum("/03-build/build.stdout" in l for l in m) == 1 and len(ctl_samplers) == 3
+<                    and sum("/04c-witness/cgroup-samples.txt" in l for l in ctl_samplers) == 1)
+---
+>                    f"{sum(l.split(chr(9))[1].endswith('/03-build/build.stdout') for l in m[1:])} build.stdout, "
+>                    f"{len(ctl_samplers)} control samplers, "
+>                    f"{sum(l.split(chr(9))[1].endswith('/04c-witness/cgroup-samples.txt') for l in ctl_samplers)} witness "
+>                    "(by each row's path column; a row's previous-packet column may name earlier witness samplers)",
+>                    sum(l.split("\t")[1].endswith("/03-build/build.stdout") for l in m[1:]) == 1 and len(ctl_samplers) == 3
+>                    and sum(l.split("\t")[1] == "receipts/81-C4/04c-witness/cgroup-samples.txt" for l in ctl_samplers) == 1
+>                    and sorted(l.split("\t")[1] for l in ctl_samplers) == [
+>                        f"receipts/81-C4/{s}/cgroup-samples.txt" for s in ("03-build", "04-run", "04c-witness")])

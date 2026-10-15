@@ -1,0 +1,9 @@
+RESTORE AUTH: OK
+control C4: post-restoration authentication of /home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4 (mission section 12)
+OK   the restoration started from the C4 mutant blob (and its sha256) and was applied as the reverse of the patch: {'git_blob': 'f3793c2ff61f8adbf43fe17d6b5237b49bc507b0', 'sha256': '4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2'}
+OK   the inverse patch was the same frozen patch: its sha256 now equals the catalog's: 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
+OK   after restoration: the file's blob and sha256 are Candidate C's; every tracked blob and mode exactly C: EXACTLY_C
+OK   worktree ownership: the .git file points into the repository's worktree administration and back: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mwc4-C4
+OK   locked for review with this mission's reason: P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 control C4 disposable mutant worktree: mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 control C4 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   the pinned C4 mutant executable is unchanged (sha256 and size equal to 03-build/PIN.json): 38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8 8988320

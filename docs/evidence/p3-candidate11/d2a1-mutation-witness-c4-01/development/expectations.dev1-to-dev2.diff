@@ -1,0 +1,8 @@
+850a851,853
+>             c["receipt_type"] = ("(a) original-explorer mutant FAIL, the G.3(a) primary (recorded as printed) + (c) "
+>                                  "named-property mutant witness, G.3(b), on the same pinned mutant executable; restored "
+>                                  "(e1) + healthy witness (e3), G.3(d)")
+857,859d859
+<             c["receipt_type"] = ("(a) original-explorer mutant FAIL, the G.3(a) primary (recorded as printed) + (c) "
+<                                  "named-property mutant witness, G.3(b), on the same pinned mutant executable; restored "
+<                                  "(e1) + healthy witness (e3), G.3(d)")

@@ -1,0 +1,946 @@
+c85f1d796d103961e28f3a13f6204a6808450d2654a9ef28a03d00c346db66d5  CARRIED-FORWARD.md
+d4f0e27bf03d792e7ea8ba90fa5ff804163ad7ce272af8285c278d913d87bdca  INDEX.md
+7703136338fb1a4930ad9567ea2eb92a37cdbc52dc484cebd13c4b03aeec0c94  TRANCHE-SUMMARY.md
+7ae1bc60e22eb01b2484da4a77ac71be2c341479a289c7ead9ad93dd4a72d6e1  development/DEVELOPMENT-LOG.txt
+f71180caedf6586cdc63be08826462d5de1d4c1e863b5a221661c33731bfbcff  development/build-packet-prefreeze-dev1-FAILED-three-synthetic-t3-control-files-byte-equal-to-C1-C25-packet-files.txt
+698dfb203456494bf926a6d7c846cfd3bc8b06afb8f68bad82df73c1514ab60f  development/expectations-dev1-WRONG-C4-receipt-type-overwritten-by-the-G3-text.console.txt
+f6fa08f811a671af0bc5b4667f6da5cb046630dc545a6a9378719579b65f1022  development/expectations.dev1-to-dev2.diff
+6f2dfa94d2913f07a4ff33f33b6db1a381fc32a442f67035182a2636beb0c876  development/g5.dev1-to-dev2.diff
+8dc6f29ed087075e11fdb8ad487d1431ea186195cdba32c7de8aa10f2e89b34a  development/rehearsals-dev1-FAILED-R1-map-check-counted-04c-witness-in-the-previous-packet-column-of-each-row.txt
+d75e3d8100a1456614d6094edddb6ac863ba9da951ebbeea0e3037fcde24fb5c  development/rehearsals.dev1-to-dev2.diff
+8c35a2d04dc6b1650b943bd5d57538d94050259007728974ea571c992f59d284  development/t3-controls-dev1-FAILED-the-another-test-case-changed-the-listing-only-not-the-argv.txt
+3f6d48afeb885c1043f2f4060fb4be7dbb8d99f8cfdc3e94db72a60ac08067d4  development/t3_controls.dev1-to-dev2.diff
+18dbdd271a7d069b0ee14ea618e4a9765dd954bdde1982af8a2089ee17e21401  development/t3_controls.dev2-to-dev3.diff
+eca91af86c99e97a4c1486d10f7bf3c0606ff71cffd510e61fce4e0667ffe22a  development/tool-diff-dev1-FAILED-the-restore_auth-write-count-check-expected-one-w-open-but-both-records-use-w.txt
+c8c61d61ce7b485157d08c066852b0a21f310a89cfeb25dcd108d35e2449c143  development/tool-diff-dev2-FAILED-the-forbidden-prefix-git-matched-the-local-name-gitfile.txt
+7a8b464ccdc4c78732c686658b6e13d27f1933a36bc93f1c91b2e628b6ed6b2d  development/tool_diff.dev1-to-dev2.diff
+8d6d948da8351d25df1995328b96f427eb537567d82cc8e9203762a96cb74299  development/tool_diff.dev2-to-dev3.diff
+ee444b0f0a9b46bc234bda04f231b534cb01c70bd9b7c8093064b90fa39a4cc2  documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md
+a5a5c2106432f8475ca25434e28420c9d3e39a14f3d4fb3721c8c962372baec1  documents/CAMPAIGN-STATUS-BEFORE-WITNESS-C4.md
+33b638a86a7a1afd97bdea018e3471f30176e332c5c49b65e4e2a94843112057  documents/DUPLICATE-AND-ZERO-LENGTH-MAP.md
+0f0743e9fbaf2be8d9be22626c18173f7c45fb45a3014b8a2b293aceaecc1afc  documents/DUPLICATE-AND-ZERO-LENGTH-MAP.tsv
+ba3a6f5d167a75e701afe099781507adc368599cfeb52087dad366dd5ea59edd  publication/10-build-packet.txt
+dd74a184fded5c3fa342e3c9bdfb95f553fe40a3e22cc7c5aaa3746823d0c290  receipts/00-authentication.txt
+a7b57e7b32f34952fb2a004342aa8c969275cb70f067b74c32f7f0443480d265  receipts/01-supervision-selftest.console.txt
+ee324785284062a0b44397a2441ab93ea0d86514169b23ea1067d60efa90a007  receipts/01-supervision-selftest/1/cgroup-samples.txt
+7c474c35c13f6b8730bccc10bc57b59e6268957866779bbd76598435ed2e48f5  receipts/01-supervision-selftest/1/out.txt
+2ba21a468339b924cdd5452b106f58b8664b6035ab0d0750aa34f20dc85cdcb9  receipts/01-supervision-selftest/1/scope-record.txt
+14164e3eb784e27a065adc69d065a2e09af0019544b849fcaa1ae78d70a14cc1  receipts/01-supervision-selftest/1/time-v.txt
+1fe7374d9e520caa4694a9f7adeb4c7a74fc6e9a91ad96921257adc009463dd3  receipts/01-supervision-selftest/2/scope-record.txt
+b930078aca2d64e717ec936529c6318765f805db3cfae923e84df68128e832e0  receipts/01-supervision-selftest/3/cgroup-samples.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  receipts/01-supervision-selftest/3/out.txt
+bbded315ff1063566ba5aefef1ae8176f2bf66e8620381cb4721fda877da339c  receipts/01-supervision-selftest/3/scope-record.txt
+20e8a86bf72d08cf7756b0208b895effd34da84d9f482f4ff60e263a3ff9ce06  receipts/01-supervision-selftest/3/time-v.txt
+ee324785284062a0b44397a2441ab93ea0d86514169b23ea1067d60efa90a007  receipts/01-supervision-selftest/5/cgroup-samples.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  receipts/01-supervision-selftest/5/out.txt
+4dfd290f1067d33f7bb2b1517cdeb3f3a6f0ee3b77aff94787910d5b02406695  receipts/01-supervision-selftest/5/scope-record.txt
+c16cfc518572670d93155326299dc0fcb80592d4368c72750edfa8fc82940de7  receipts/01-supervision-selftest/5/time-v.txt
+5799d48b11c4241221102fe18b8bb4353b971a28f60fa8842bb1b3d9f5320805  receipts/01-supervision-selftest/6/cgroup-samples.txt
+de25f493e2a030af329f5f01121c9f9249da8508936bfa0a119d0a5c8f638731  receipts/01-supervision-selftest/6/out.txt
+68debe54ca3fba5dc0c4d7ed4194b24d55e8b2b0d4d23adf08e3772b199287c4  receipts/01-supervision-selftest/6/scope-record.txt
+13f747b0542dd611f57fdb4ad1305efed2064809af6a10d6dca6a19ede1af7c5  receipts/01-supervision-selftest/6/time-v.txt
+ee324785284062a0b44397a2441ab93ea0d86514169b23ea1067d60efa90a007  receipts/01-supervision-selftest/7/cgroup-samples.txt
+272537450a808cf739a0a1ff9f5301ad60f1cd8544643363f0288ec56400f31d  receipts/01-supervision-selftest/7/err.txt
+9af4cd4cc2fed6c2cc227bbb9632921591d4a4eace4afcda06b66f057e34743c  receipts/01-supervision-selftest/7/out.txt
+59afaeac62561f1f9c7cd36eb98d751f479c566e0b9e9520a73fbb8aa065fcf6  receipts/01-supervision-selftest/7/scope-record.txt
+36a53f827c29a47b88fa20108310a6a4cb1e804dc0c1eea943bcf9e9ccd1eff7  receipts/01-supervision-selftest/7/time-v.txt
+a7b57e7b32f34952fb2a004342aa8c969275cb70f067b74c32f7f0443480d265  receipts/01-supervision-selftest/SELFTEST.txt
+698dfb203456494bf926a6d7c846cfd3bc8b06afb8f68bad82df73c1514ab60f  receipts/02-EXPECTATIONS.console.txt
+6e356a1c5f6d1e9b1579a74ddcaa090c2799c68c22062e17f19fb3165059cfd6  receipts/02-EXPECTATIONS.json
+bc05d286b921da6d52648032f3f1aacdf9ac6141073afd05b86102942a08f076  receipts/03-t3-controls.console.txt
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/A/C4-101-P-first-failure-P4-recorded-as-printed/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/A/C4-101-P-first-failure-P4-recorded-as-printed/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/A/C4-101-P-first-failure-P4-recorded-as-printed/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/A/C4-101-P-first-failure-P4-recorded-as-printed/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/A/C4-101-P-first-failure-P4-recorded-as-printed/04-run/raw-output.txt
+735d4933558d20049515be969ea0144100414ca1247fdb391ec874612e635cc7  receipts/03-t3-controls/A/C4-102-P-first-failure-P8-recorded-as-printed/04-run/CHECKS.txt
+699413da83680224339d9effded4015e4e8b6cbaefbe1f9513eaed1df6661205  receipts/03-t3-controls/A/C4-102-P-first-failure-P8-recorded-as-printed/04-run/CLASSIFICATION.txt
+55ce73d9eeea28f879d7ba87859638f80c844a133fe8158290625b8c099019db  receipts/03-t3-controls/A/C4-102-P-first-failure-P8-recorded-as-printed/04-run/PARSED-RECEIPT.json
+7fbc7beb976a7821a56c89170a69bd5462ac8d2a9e8d0ac53c64acd4db6558b2  receipts/03-t3-controls/A/C4-102-P-first-failure-P8-recorded-as-printed/04-run/descriptor.json
+c0be8107b5c1645cc00f526297fea2a8e0c73568d5a781f91fa86c2fb52a4fc4  receipts/03-t3-controls/A/C4-102-P-first-failure-P8-recorded-as-printed/04-run/raw-output.txt
+c44560bcc20341b69249e749ee261135d091f0377d5a15acf0d820f8b949b315  receipts/03-t3-controls/A/C4-103-P-P4-exactly-at-the-F-8-ceiling-30000000/04-run/CHECKS.txt
+a6e59f4f8ea964c4bc645429847f5ac38b59cb15c6460f1b01c16c9797a38a46  receipts/03-t3-controls/A/C4-103-P-P4-exactly-at-the-F-8-ceiling-30000000/04-run/CLASSIFICATION.txt
+76ba0b539297a9436f00b0825a9e72654412563adc746fb5f7590d04b3c22aab  receipts/03-t3-controls/A/C4-103-P-P4-exactly-at-the-F-8-ceiling-30000000/04-run/PARSED-RECEIPT.json
+df9f0961e239c935270b8ada68814cc68922c04964f9718beb1d651ce477d668  receipts/03-t3-controls/A/C4-103-P-P4-exactly-at-the-F-8-ceiling-30000000/04-run/descriptor.json
+5b233c154c4725471688562352167fac383b7e4bad56d3ba18423125e670ff82  receipts/03-t3-controls/A/C4-103-P-P4-exactly-at-the-F-8-ceiling-30000000/04-run/raw-output.txt
+feb14895af096dbd2dfe3d10b25837ccf6be177e679ea1224f3fd0237e9b1e90  receipts/03-t3-controls/A/C4-104-N-wrong-first-property-E3/04-run/CHECKS.txt
+b56305391191ddc0e110e3bec9d434996e19c9d5c7385d16edd3544ba003e69f  receipts/03-t3-controls/A/C4-104-N-wrong-first-property-E3/04-run/CLASSIFICATION.txt
+dad705f3934d228126fdec63b07ec695d6403f705707ba5b05bb1f6791eed79b  receipts/03-t3-controls/A/C4-104-N-wrong-first-property-E3/04-run/PARSED-RECEIPT.json
+065622132142bded77efa4e9708b3bffd579ec6bce316ec2f107949aa1c1589a  receipts/03-t3-controls/A/C4-104-N-wrong-first-property-E3/04-run/descriptor.json
+0764e1bac60c5306a978a2699e526c2fbc009f7689a42a836a45f7895c596cd8  receipts/03-t3-controls/A/C4-104-N-wrong-first-property-E3/04-run/raw-output.txt
+ab926260df4792b862720272413fbb7fecf33e67a01a000b8abdc683b87f3e19  receipts/03-t3-controls/A/C4-105-N-wrong-first-property-P1/04-run/CHECKS.txt
+d219820a0da707d468db207017564839369ebe1881b83846717cb2f56003b28d  receipts/03-t3-controls/A/C4-105-N-wrong-first-property-P1/04-run/CLASSIFICATION.txt
+095e3e768a86b686ad8ee53899e9be06dd2f24b44ec08a4ab4bd76360c34d786  receipts/03-t3-controls/A/C4-105-N-wrong-first-property-P1/04-run/PARSED-RECEIPT.json
+3de6879575db74af403b65587e796cf01d7f56740415fe6fd0b0c3bb30cbb519  receipts/03-t3-controls/A/C4-105-N-wrong-first-property-P1/04-run/descriptor.json
+026e7bba41fbce77563791fe746680564b12700e3b386b7af23c116f5c01714e  receipts/03-t3-controls/A/C4-105-N-wrong-first-property-P1/04-run/raw-output.txt
+e71ee60b8aecaf94075d90e4c7360b45bfd1382d0d63e21740c52c8e48b93422  receipts/03-t3-controls/A/C4-106-N-wrong-first-property-E11/04-run/CHECKS.txt
+9d3019c62793a154796c2e2c112fd9d7b411f2aa3bbc80eee8977dcd25310048  receipts/03-t3-controls/A/C4-106-N-wrong-first-property-E11/04-run/CLASSIFICATION.txt
+dba85f8e5f631d968a910450305bfa1a9d66c0765ca94d9ff9380a1764aec1e2  receipts/03-t3-controls/A/C4-106-N-wrong-first-property-E11/04-run/PARSED-RECEIPT.json
+670218fca25f7c9ab49c2dd439330f6f4f4df89729ac8773c39e27d8f06d02d1  receipts/03-t3-controls/A/C4-106-N-wrong-first-property-E11/04-run/descriptor.json
+978b399e274091e1e94bfd576ea1beea395c28b20eac16514e3ccc3bbb30466d  receipts/03-t3-controls/A/C4-106-N-wrong-first-property-E11/04-run/raw-output.txt
+bad70989ba8d15bfcf70c0d15059901393c5899b0ad0137e9860729e597c755d  receipts/03-t3-controls/A/C4-107-N-PASS-on-the-mutant/04-run/CHECKS.txt
+a32c5972a2ef11c3caa581ee4fefdc560f59eee0226400d91cac11cff3cbec7d  receipts/03-t3-controls/A/C4-107-N-PASS-on-the-mutant/04-run/CLASSIFICATION.txt
+6ce8c845851935fcf397e3738e9262601d826ac5361d65ffd78db9cbce4e1340  receipts/03-t3-controls/A/C4-107-N-PASS-on-the-mutant/04-run/PARSED-RECEIPT.json
+ec2cd4c53d45d9477fc63a70010b946a857327bf28f635d2f7dee1d208eeb70e  receipts/03-t3-controls/A/C4-107-N-PASS-on-the-mutant/04-run/descriptor.json
+515b8cbb46c1f1174622ed2f407d4151aaa66c8cd2d7faa3bdaa958fcdc62e87  receipts/03-t3-controls/A/C4-107-N-PASS-on-the-mutant/04-run/raw-output.txt
+91a92380390ac92f15b2212a59ad4e5131f70a1f533b8535986c39aff98743d6  receipts/03-t3-controls/A/C4-108-N-incomplete-search-INCOMPLETE-at-the-state-cap/04-run/CHECKS.txt
+2c632dbdda107765396375680b0ce28bf244c7dfa27e59a29b1c9dcd3a653662  receipts/03-t3-controls/A/C4-108-N-incomplete-search-INCOMPLETE-at-the-state-cap/04-run/CLASSIFICATION.txt
+e131589dcf06b029e8dfc9bc630134c1632c051cd4c960223f158380ce0eb37c  receipts/03-t3-controls/A/C4-108-N-incomplete-search-INCOMPLETE-at-the-state-cap/04-run/PARSED-RECEIPT.json
+b3514e12d0f47b1f61f32354e640db1dd59c787109432677be44bb67894cecce  receipts/03-t3-controls/A/C4-108-N-incomplete-search-INCOMPLETE-at-the-state-cap/04-run/descriptor.json
+6be66a70af7c380a140cc222005db2250c4bc2a44d51ed2f44e0ed0a61ae0049  receipts/03-t3-controls/A/C4-108-N-incomplete-search-INCOMPLETE-at-the-state-cap/04-run/raw-output.txt
+710517789ee3cb2dbaba6b05989bc758860813ec8968e30ab449897f6f9b132d  receipts/03-t3-controls/A/C4-109-N-incomplete-search-INCOMPLETE-at-the-time-cap/04-run/CHECKS.txt
+14ea7f4493028283979db7c21ffdcd2a6d04bb8ea18d8d7beb4da18218171316  receipts/03-t3-controls/A/C4-109-N-incomplete-search-INCOMPLETE-at-the-time-cap/04-run/CLASSIFICATION.txt
+aa8080259795b5322a7c1a4f2ecd3aebbd730f9084c819363c54dadcb78af252  receipts/03-t3-controls/A/C4-109-N-incomplete-search-INCOMPLETE-at-the-time-cap/04-run/PARSED-RECEIPT.json
+7b5e60ed2f1f51cb599543d8fb10b49bc9918acc5b7b8276d4e0abe35e5f4f12  receipts/03-t3-controls/A/C4-109-N-incomplete-search-INCOMPLETE-at-the-time-cap/04-run/descriptor.json
+becbf095f23c551f8b35e2ff0086039955962e58259644fae4efb8827bcc6f6a  receipts/03-t3-controls/A/C4-109-N-incomplete-search-INCOMPLETE-at-the-time-cap/04-run/raw-output.txt
+ae3e57395ca5b1371f8656a10f5ca8d35a82609fa23bf9c7083c3130d226f162  receipts/03-t3-controls/A/C4-110-N-F-8-FAIL-beyond-30000000-cap-overshoot/04-run/CHECKS.txt
+0059a5df73ac16e3b0f26d7cc6b903c78cfaa42eaa61202e1b90a18a96b45802  receipts/03-t3-controls/A/C4-110-N-F-8-FAIL-beyond-30000000-cap-overshoot/04-run/CLASSIFICATION.txt
+fb73c772fa644637de81a797fc6aca68dec431984da7504dc9faa2b82e6570fe  receipts/03-t3-controls/A/C4-110-N-F-8-FAIL-beyond-30000000-cap-overshoot/04-run/PARSED-RECEIPT.json
+6b20bac0a1da748a653e1c8efde2cd0d0760c80543b58fa692094b97967dba14  receipts/03-t3-controls/A/C4-110-N-F-8-FAIL-beyond-30000000-cap-overshoot/04-run/descriptor.json
+a8aba28dc639c0029c46e4c780c9d4ef3e93b2c97acc625e93145a48902a2a93  receipts/03-t3-controls/A/C4-110-N-F-8-FAIL-beyond-30000000-cap-overshoot/04-run/raw-output.txt
+19aa51b71dfe8652c933887a6e0683f53926bde2b4810ec22796a131e331dff9  receipts/03-t3-controls/A/C4-111-N-wrong-original-explorer-configuration-full_f1-F-1-s-test/04-run/CHECKS.txt
+b6195ec5d3df4188af26d155ca705462c509ea19a6e7d291d9223e9c302a17f9  receipts/03-t3-controls/A/C4-111-N-wrong-original-explorer-configuration-full_f1-F-1-s-test/04-run/CLASSIFICATION.txt
+23c68ccc43e8a0fd8c36a6d4f90b7a316d0b5903be868071c87ebfa66ec033eb  receipts/03-t3-controls/A/C4-111-N-wrong-original-explorer-configuration-full_f1-F-1-s-test/04-run/PARSED-RECEIPT.json
+c48d317513544f44cd1dea80d6f04d1dc51ec22d4b45150b0159dc168d3b0f5a  receipts/03-t3-controls/A/C4-111-N-wrong-original-explorer-configuration-full_f1-F-1-s-test/04-run/descriptor.json
+25bba5ffe359732eca66c140fcf827c0c4f15e35316958d8f039d49f88d05b76  receipts/03-t3-controls/A/C4-111-N-wrong-original-explorer-configuration-full_f1-F-1-s-test/04-run/raw-output.txt
+560d3fac40733981cb6c1ca944a187ac7a4df81f1c2d11ee6c47b2632952574f  receipts/03-t3-controls/A/C4-112-N-wrong-original-explorer-configuration-F-8-s-header-with-an/04-run/CHECKS.txt
+6cb0503ca879e11b63267caa4c2f679e644ee4d463718fe1a2e1f053c6f2103a  receipts/03-t3-controls/A/C4-112-N-wrong-original-explorer-configuration-F-8-s-header-with-an/04-run/CLASSIFICATION.txt
+29fe84ff9e67dfe9284bd86e72a139183b54882c448bb07bce642516ec5d9696  receipts/03-t3-controls/A/C4-112-N-wrong-original-explorer-configuration-F-8-s-header-with-an/04-run/PARSED-RECEIPT.json
+f86d93c8254723001f087eda59d90ec58275ee8e0a189970566160af42efd206  receipts/03-t3-controls/A/C4-112-N-wrong-original-explorer-configuration-F-8-s-header-with-an/04-run/descriptor.json
+7ac445445a97b484e5984433d9c694e32beeaccea365b4979e128eb318376706  receipts/03-t3-controls/A/C4-112-N-wrong-original-explorer-configuration-F-8-s-header-with-an/04-run/raw-output.txt
+8e29937e77da98706ade6b484fd6b842b4add9383358a05f34d8b5f63cc472dc  receipts/03-t3-controls/A/C4-113-N-wrong-explorer-the-composed-quotient-header-for-F-8/04-run/CHECKS.txt
+2f6fec4f5f334901a9e9563b1c15fa76354e795775706ec92d9854115443b5ed  receipts/03-t3-controls/A/C4-113-N-wrong-explorer-the-composed-quotient-header-for-F-8/04-run/CLASSIFICATION.txt
+b6af9298f37271d5879884be4fc4720f6ac0310f76f8ab726f4d4dd977affb33  receipts/03-t3-controls/A/C4-113-N-wrong-explorer-the-composed-quotient-header-for-F-8/04-run/PARSED-RECEIPT.json
+e31793cae4fe7f62acd9c6da91989bc2fe7d3c3ee84c75f0edb8c8098bd31e47  receipts/03-t3-controls/A/C4-113-N-wrong-explorer-the-composed-quotient-header-for-F-8/04-run/descriptor.json
+9bbb79ed803101bd55ee2a877b0b3a65fb8331a9777aac70943b3c6a84bb93c6  receipts/03-t3-controls/A/C4-113-N-wrong-explorer-the-composed-quotient-header-for-F-8/04-run/raw-output.txt
+9d62b98515d7595f508efda753cd7c0297fdc60f9282d2b5b79445f673ea501a  receipts/03-t3-controls/A/C4-114-N-wrong-executable-identity-the-receipt-s-executable-is-not/04-run/CHECKS.txt
+1255da981612a86d3bc8d3b59d8c056912fc58d7e7daf9c0d95eaff8688934a0  receipts/03-t3-controls/A/C4-114-N-wrong-executable-identity-the-receipt-s-executable-is-not/04-run/CLASSIFICATION.txt
+e495f82243b2760f6908f0874f53399db01d6005ca2d978bc6b9002fffc708b0  receipts/03-t3-controls/A/C4-114-N-wrong-executable-identity-the-receipt-s-executable-is-not/04-run/PARSED-RECEIPT.json
+7fd5a68a769ed181294ec55c3794782125bf069086e84099245dfe78c2049eca  receipts/03-t3-controls/A/C4-114-N-wrong-executable-identity-the-receipt-s-executable-is-not/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/A/C4-114-N-wrong-executable-identity-the-receipt-s-executable-is-not/04-run/raw-output.txt
+68ba72ecea01eaf56b58d45a1f572193e80ac83368a9440401f49d66e0986e5f  receipts/03-t3-controls/A/C4-115-N-killed-from-outside-timeout-kill/04-run/CHECKS.txt
+de18f71664a597d1d4e09a6540e3f9c8a23eee0db12a712f26086139c666a6e4  receipts/03-t3-controls/A/C4-115-N-killed-from-outside-timeout-kill/04-run/CLASSIFICATION.txt
+f21f4a925feb00a5cea0d1aeff3b20e215ae4bb48f3d2c51716f02c0c861c55a  receipts/03-t3-controls/A/C4-115-N-killed-from-outside-timeout-kill/04-run/PARSED-RECEIPT.json
+48a698789ed004680d4827defb8bb411e5c4ebb49f79d0b14db2fd93e8d1cec1  receipts/03-t3-controls/A/C4-115-N-killed-from-outside-timeout-kill/04-run/descriptor.json
+a4846ebfbfb8e31defe7acf2769adc2166732fb3bc675f1ea1703c4bfd60d544  receipts/03-t3-controls/A/C4-115-N-killed-from-outside-timeout-kill/04-run/raw-output.txt
+1c69f765e5c86f8230896014e38c14da9f61698cdeb8cab524c9081248d0d21e  receipts/03-t3-controls/A/C4-116-N-killed-from-outside-OOM/04-run/CHECKS.txt
+fc68a01d3c4ebfffdf51d94122f5854da2ff15650bc99ff628c96077797a9ad6  receipts/03-t3-controls/A/C4-116-N-killed-from-outside-OOM/04-run/CLASSIFICATION.txt
+c0b6fdf85435928acf2602c166b7d34ed2bbdb777960645341bef99cbad9d86a  receipts/03-t3-controls/A/C4-116-N-killed-from-outside-OOM/04-run/PARSED-RECEIPT.json
+cc3498ad948deebfbbf7ff2fe154a22352842e91ea5e5e6be5171be3b4e8838a  receipts/03-t3-controls/A/C4-116-N-killed-from-outside-OOM/04-run/descriptor.json
+a4846ebfbfb8e31defe7acf2769adc2166732fb3bc675f1ea1703c4bfd60d544  receipts/03-t3-controls/A/C4-116-N-killed-from-outside-OOM/04-run/raw-output.txt
+fdeb3e2ca7f7194a0288c70bd62cbe702b8fb16068495e5c61a651207cc4b87e  receipts/03-t3-controls/A/C4-117-N-truncated-raw-output-no-report-a-normal-exit-101/04-run/CHECKS.txt
+db725d3ba0a2da4cbacb611f5a92c83f5ea90b7dfed3c9358b8458441614af35  receipts/03-t3-controls/A/C4-117-N-truncated-raw-output-no-report-a-normal-exit-101/04-run/CLASSIFICATION.txt
+dccdebc37cfe01ec6cff671315cc709efd10617bdc3cb63ee48ce01c8c837cbc  receipts/03-t3-controls/A/C4-117-N-truncated-raw-output-no-report-a-normal-exit-101/04-run/PARSED-RECEIPT.json
+f0b0d356931d9bad1a6eb219726a22844a153a16c45f537c1e23933cb6b4c287  receipts/03-t3-controls/A/C4-117-N-truncated-raw-output-no-report-a-normal-exit-101/04-run/descriptor.json
+a4846ebfbfb8e31defe7acf2769adc2166732fb3bc675f1ea1703c4bfd60d544  receipts/03-t3-controls/A/C4-117-N-truncated-raw-output-no-report-a-normal-exit-101/04-run/raw-output.txt
+beb61cd3231acec2c6627d62ba4c321a9e9224c7aff3b751e5f2475ea052ae5d  receipts/03-t3-controls/A/C4-118-N-malformed-raw-output-the-assertion-s-operands-edited/04-run/CHECKS.txt
+8d544197c9c6014e5457681b7c21cc36dd78364792c59934a8694f330a14d84b  receipts/03-t3-controls/A/C4-118-N-malformed-raw-output-the-assertion-s-operands-edited/04-run/CLASSIFICATION.txt
+74db821d30cc393242ecd3c6d8d5a8594610f82c3e04e79a9856aa825090d6a9  receipts/03-t3-controls/A/C4-118-N-malformed-raw-output-the-assertion-s-operands-edited/04-run/PARSED-RECEIPT.json
+d435e3233d5a36e091d0fdf4ea628d393625327553c1b4b077ffc500e2850d75  receipts/03-t3-controls/A/C4-118-N-malformed-raw-output-the-assertion-s-operands-edited/04-run/descriptor.json
+a6d9a03d388e58be816d8a341fe1dae3f9f588c107a36746580b8015616e033a  receipts/03-t3-controls/A/C4-118-N-malformed-raw-output-the-assertion-s-operands-edited/04-run/raw-output.txt
+b193bd0316288a2ae9c490bb91e5ec9706c775d6f4998ac9b174af5ce2642637  receipts/03-t3-controls/A/C4-119-N-the-witness-test-run-as-the-primary/04-run/CHECKS.txt
+24f1f97867448e8ea119405eeb3cdfa692f8b708637e944b019396302ec80078  receipts/03-t3-controls/A/C4-119-N-the-witness-test-run-as-the-primary/04-run/CLASSIFICATION.txt
+9a84ae760b54f9ac9f9c3575d4f9e5eb037af0fd869764b0a3f47b48d6dd78a1  receipts/03-t3-controls/A/C4-119-N-the-witness-test-run-as-the-primary/04-run/PARSED-RECEIPT.json
+d87eb4afba26bc40ed30a27d37c6568f4779a1e3cd9ae56db047282535043686  receipts/03-t3-controls/A/C4-119-N-the-witness-test-run-as-the-primary/04-run/descriptor.json
+bdd1145a3d1e21566c1333a7a5303e8448e37424201b978c23107d6c2f796780  receipts/03-t3-controls/A/C4-119-N-the-witness-test-run-as-the-primary/04-run/raw-output.txt
+523fa6802c962f1992d9d74e27986f443ff491c48b9f2a1af16a4a949dce9864  receipts/03-t3-controls/A/C4-120-N-incorrect-source-EXACTLY_C-the-unchanged-core-not-the-muta/04-run/CHECKS.txt
+70bb8e9f1578152e1c050fc2028b31d16b6b9c716a1227aae890af78d3f64be5  receipts/03-t3-controls/A/C4-120-N-incorrect-source-EXACTLY_C-the-unchanged-core-not-the-muta/04-run/CLASSIFICATION.txt
+93194f2522d0e7181bdc0324e8b59c7c26b04ffcc75fe743e6eed16aa405d0b8  receipts/03-t3-controls/A/C4-120-N-incorrect-source-EXACTLY_C-the-unchanged-core-not-the-muta/04-run/PARSED-RECEIPT.json
+c74dcd7298290e4cc1abd6dd5101e395d361faa7189ac4dc0341cb9b1e1f7030  receipts/03-t3-controls/A/C4-120-N-incorrect-source-EXACTLY_C-the-unchanged-core-not-the-muta/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/A/C4-120-N-incorrect-source-EXACTLY_C-the-unchanged-core-not-the-muta/04-run/raw-output.txt
+63a18fa4a801a3c918c18a2a65c14a39bb422b559a755dc92dade9273f7d3af5  receipts/03-t3-controls/A/C4-121-N-incorrect-source-C1-s-accepted-mutant-blob/04-run/CHECKS.txt
+6fe52c1e2ab3a51aa6ff4b8f174850c63a9be23a02041cb918fce3b47ced480b  receipts/03-t3-controls/A/C4-121-N-incorrect-source-C1-s-accepted-mutant-blob/04-run/CLASSIFICATION.txt
+93194f2522d0e7181bdc0324e8b59c7c26b04ffcc75fe743e6eed16aa405d0b8  receipts/03-t3-controls/A/C4-121-N-incorrect-source-C1-s-accepted-mutant-blob/04-run/PARSED-RECEIPT.json
+638b8ccc692cb17f18d7f847f4101f9b8176ed37fae72268031e0b83c2d581c5  receipts/03-t3-controls/A/C4-121-N-incorrect-source-C1-s-accepted-mutant-blob/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/A/C4-121-N-incorrect-source-C1-s-accepted-mutant-blob/04-run/raw-output.txt
+cc424da85b810de1d7f6edb53129e0ef7804b970b25d09d802ec813520c21064  receipts/03-t3-controls/A/C4-199-N-expectation-admitting-E3/04-run/CHECKS.txt
+4fc6df8aa03d9fe71c39fad0cb177ad514d0fb4416827990e479b6b7f624f2f9  receipts/03-t3-controls/A/C4-199-N-expectation-admitting-E3/04-run/CLASSIFICATION.txt
+53e82591f65d2f5b7f97960d29c3d80ccbecd8df8493773a29b11868978e91ee  receipts/03-t3-controls/A/C4-199-N-expectation-admitting-E3/04-run/PARSED-RECEIPT.json
+065622132142bded77efa4e9708b3bffd579ec6bce316ec2f107949aa1c1589a  receipts/03-t3-controls/A/C4-199-N-expectation-admitting-E3/04-run/descriptor.json
+0764e1bac60c5306a978a2699e526c2fbc009f7689a42a836a45f7895c596cd8  receipts/03-t3-controls/A/C4-199-N-expectation-admitting-E3/04-run/raw-output.txt
+6da28a86bcc6faf584d0b09ae532b77f2d803dd907260c99fbdf3b1d867a262c  receipts/03-t3-controls/B/C4-N-F-8-raw-output-byte-changed/05-restore/RESTORE.txt
+cc207d4aa82f53fe4936fd9ea360b443ee0c989875d099a4a1234a826e43bd17  receipts/03-t3-controls/B/C4-N-F-8-raw-output-byte-changed/06b-link/LINK.json
+a9e83c75129c01b97ed0237ed502881f3ec5ff35612f41e2169c43795c512041  receipts/03-t3-controls/B/C4-N-F-8-raw-output-byte-changed/06b-link/LINK.txt
+6da28a86bcc6faf584d0b09ae532b77f2d803dd907260c99fbdf3b1d867a262c  receipts/03-t3-controls/B/C4-N-another-test-in-the-expectation (the witness test as the r/05-restore/RESTORE.txt
+da4934bf41dff20b3a889d7709dea6f92c7dba9bad6b8c1a173081443e1743a9  receipts/03-t3-controls/B/C4-N-another-test-in-the-expectation (the witness test as the r/06b-link/LINK.json
+4f85b99de1febdbee1caecd84e3d33bddcfa0a7eb192b07d5c1f986cbda0f30c  receipts/03-t3-controls/B/C4-N-another-test-in-the-expectation (the witness test as the r/06b-link/LINK.txt
+7ad23cc90e90950772723df7be53bb2836a4f2e6468d0a5ba3ff7c42c0bab488  receipts/03-t3-controls/B/C4-N-linking-after-a-failed-restoration/05-restore/RESTORE.txt
+b5ab90a3c41a3c29ef36b1bf7eb65adf87779cf051d03f6ce0f5689cee9d1de3  receipts/03-t3-controls/B/C4-N-linking-after-a-failed-restoration/06b-link/LINK.json
+1a189ac07326260963bc94fd72127fa8883ac0b1bebfd56282ead6189111df61  receipts/03-t3-controls/B/C4-N-linking-after-a-failed-restoration/06b-link/LINK.txt
+f38c2f46fe40d8d7b8e3e159aff9dfcf8701c9140ef6db929758066258374742  receipts/03-t3-controls/B/C4-N-linking-before-restoration (no restoration receipt)/06b-link/LINK.json
+118a951c7273e86ab5def38924c4f35845a003df6b111d22f7fec4f5f9ea3cb4  receipts/03-t3-controls/B/C4-N-linking-before-restoration (no restoration receipt)/06b-link/LINK.txt
+6da28a86bcc6faf584d0b09ae532b77f2d803dd907260c99fbdf3b1d867a262c  receipts/03-t3-controls/B/C4-real-inputs/05-restore/RESTORE.txt
+02c60f2854a4fdfd117a2d6a06461e61e5bb18af525383e1061e98b79b3801dc  receipts/03-t3-controls/B/C4-real-inputs/06b-link/LINK.json
+d6d8a1e0d7f8d9d4a896f508e81e5f2ada3bcf242b8917d28040326643494e15  receipts/03-t3-controls/B/C4-real-inputs/06b-link/LINK.txt
+75d717ab85f8cfea8c22308e37cda3a5541bdd6dcc44fe77a387c2b92354ee86  receipts/03-t3-controls/CONTROLS.json
+c6f2d1ba989001d5e748d770cd7df3bf59e6748500ff8c1f8355af44c9c29967  receipts/03-t3-controls/CONTROLS.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04c-witness/CLASSIFICATION.txt
+6aaf721eecd4f474d94cd995145b64acc6d7236cff204f4818449b2acb82792d  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/05-restore/RESTORE.txt
+05ffa429334b975537d73f8e3213c79204552eb011004534db190ee22978da02  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/06a-healthy-witness/HEALTHY.json
+a35cf61f7603018669c238427b266c52536996a4878227c4ac8cd07c5bd37042  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/06a-healthy-witness/HEALTHY.txt
+df9bb97b4a830e8d00fc029b6dadece7f3700a7cf0a7f463faed4109fc3fccfa  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/06b-link/LINK.json
+1852545a2d361333672a1fe4070e563c3485b9163579f3b385d5a91c65bb1c27  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/06b-link/LINK.txt
+6a4d7b99c205be84a7ac19931dcfb5aeffd1e16655d05714cbf19f0b7159a2b3  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/07-g5/G5.json
+92a3be35ba85d2cea3ad4093560cb0a9d1fe063d865e5213b7e05f565f2be6e7  receipts/03-t3-controls/G/C4-N-a-G.6-problem-recorded/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/05-restore/RESTORE.json
+c574fc00bbf546df516fc72eb3e7ef9cb0352db76d2bb7a6a0f838f68b1cc4b9  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/06a-healthy-witness/HEALTHY.json
+3f4e6c8bd2bddfaa3ed137b72a74358f7d98e9b937a9de583769bf110082968c  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/06a-healthy-witness/HEALTHY.txt
+dde4f1ea3d066a10c2cac4c42782d73bc9d68fcfb7fe8ecac5cd8c8d3608ea1e  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/06b-link/LINK.json
+7d7ccc31990ae7d2d2ebcc97cadfe31ef50d9192e161cd6c68ea687b27502e2b  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/06b-link/LINK.txt
+c4f62c10d8a3c82a3372f63f6f37815bf24ad65c61d46654d8931cfb16946052  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/07-g5/G5.json
+4361128724f20d24e904c75cc737a76e42300ee0671ec9636196b26d69599a5c  receipts/03-t3-controls/G/C4-N-linking-before-restoration (links present, the restoration/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04c-witness/CLASSIFICATION.txt
+339031472fda48816a4704f77aabc86183218af2ad9287891d0e5f0d62fbe4e4  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/05-restore/RESTORE.txt
+31185a98b14d0fe39fbe1d189ef1401ad888323616baf7de8087b0227badbbcc  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/06a-healthy-witness/HEALTHY.json
+11a979245f20ab57dae315550537dec638fdf98aeb15b0b885f43160e204f159  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/06a-healthy-witness/HEALTHY.txt
+9cf5bf68f46578fa6aae745857afcf3393362ef4997b1c7912c5b938c76c8e8d  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/06b-link/LINK.json
+4bcac790a83f7512cecaffe4c7e6dce1e24b15ba99ccf181a2044ef7e6849d54  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/06b-link/LINK.txt
+0a74eb430e4866d59b2d659f68f233a4e0387e4a64d2f2fead8b472e3aa8b8f7  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/07-g5/G5.json
+56e6d3616e7c32d48c4b391ac50a2d8dd5583c2ba65a4e4766e60dcb3a9ea5f9  receipts/03-t3-controls/G/C4-N-only-P4-observed (P8 not)/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/05-restore/RESTORE.txt
+ca5b2518564c794e6c5016468ed3d32a39e962fa33c9002126d1713ede484cc7  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/06a-healthy-witness/HEALTHY.json
+aa1be9e65625e5a19d767d592c90c78406608cb1f26747b8866f52d3eb30a5b7  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/06a-healthy-witness/HEALTHY.txt
+d7debfc851a141f13b066e81cda023aa5b6464501c525c8ed84ed79f47a509e9  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/06b-link/LINK.json
+e8c2a4202c8e1fef9bc986e0eae3dfc04e195483c4759d18d60c77b419a8781f  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/06b-link/LINK.txt
+e170fa1348185221769532248c95bacf11d532ffbd9a2f0a6b03d5030ad9878a  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/07-g5/G5.json
+afbc8380bc0463390cf44b7ef71a8b5a9a9c75978ffe0aeba9ed345f7b0e03f1  receipts/03-t3-controls/G/C4-N-the-healthy-link-failed/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04-run/CLASSIFICATION.txt
+2fcded7f127d3de76a22b4dcc74cda528c0f6dabbe4eef3d658c0af04afbb1eb  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/05-restore/RESTORE.txt
+6e0f8775813b6ca18eed59fb5617dd95c6e59438af86f2e3a19c7d1326add9ae  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/06a-healthy-witness/HEALTHY.json
+c5be08134008836ed4d0cb86bc9383851e926dd108f91c3ec38667d5f4c98903  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/06a-healthy-witness/HEALTHY.txt
+ada2b95b9865d2ebbce7c0a1f9160a0a00356c089478f31b562771f0addfe9e3  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/06b-link/LINK.json
+7f23d1d04faa8eaffa2fc07dc6f76dce6ed87de22be182b515cdfcf65ba45ab8  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/06b-link/LINK.txt
+448f5868422b7b5dd0ea4a346436947d6c49821827020abd47ffdad2e5e3402d  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/07-g5/G5.json
+ea46d02a7b786ed65836926577dd37435b27b352f2a66e64a450ccd2bdb0cee5  receipts/03-t3-controls/G/C4-N-the-primary-printed-E3/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/04c-witness/raw-output.txt
+3d62fa22a120542d7daa229306be25df16dbe51cf5adcc7ccfda210e1e5c5968  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/05-restore/RESTORE.txt
+5aa37a133ed4e1638cb26e292885a0d5f623a94dd5070680f0e159325ef922bd  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/06a-healthy-witness/HEALTHY.json
+f005d30f591f9503a6ece8cb7596bd1dbc767f6af226e059f1f798eb4cb0164b  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/06a-healthy-witness/HEALTHY.txt
+52e9abc71de3ddccca2388a47cd05795cf67a40fb4a56e3fe2339bb3c5225a56  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/06b-link/LINK.json
+6587a579984752ed2a8c9b6c48c73bfeb415c6b593d3f6a310c9c8b38f30e57b  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/06b-link/LINK.txt
+192c001c321d6fa9119f4dc10cebe3ea6d50fa5a17810daf630c8fe225331077  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/07-g5/G5.json
+0ae694867fb6973cc935eee8867fa2d9682ceefd5fc5da1045096462083234fa  receipts/03-t3-controls/G/C4-N-the-restoration-did-not-start-from-the-mutant-blob/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/05-restore/RESTORE.txt
+4f09405035d6bed4d83d83c56a45d1a3f69d0398d9b9d48732aa70974fd1138a  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/06a-healthy-witness/HEALTHY.json
+47c8798115e821fea65ec6a7e0a0acaadb9156ae78faabc841724b27fae1bdd9  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/06a-healthy-witness/HEALTHY.txt
+fd73237be653b76d4a40e2be30df51a69cfd2706aeb1f8462bba5decd579fcf8  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/06b-link/LINK.json
+75f5831fc24500d5a34b6031f7ec473ac58a16da4810d27f976f7277732b0eb1  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/06b-link/LINK.txt
+549020f3aae7540344562cedbe5a9863cbb9e081d538071d7e1a3c4ed5bef8c6  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/07-g5/G5.json
+13b1025feeec06b1dcad9adec3507dd60d276d1c82a8fe0f6d39c6190dcbea13  receipts/03-t3-controls/G/C4-N-the-unchanged-core-link-failed/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04c-witness/CLASSIFICATION.txt
+cfa8dc0f3d7d3271f75ef7ed24c6afcab90b406c9e3128c83ff7ecc65793266b  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /05-restore/RESTORE.txt
+08758055e872f10c329fbc9a76191ec61c941f8d41dda18054a56c94d3bb145d  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /06a-healthy-witness/HEALTHY.json
+d63de83748904ed9fd7046ca62c34e774d490ae60fbd29904d70cf7e44c396c6  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /06a-healthy-witness/HEALTHY.txt
+6bebceeee2f716ffc3c3ce19d84bf71f195bf75fea709c5a5b3ef6e8e69f3d95  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /06b-link/LINK.json
+6730f609458aa5ef7aba993cc9e91e3029743e89481e4d8732cd2bc6918a2f95  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /06b-link/LINK.txt
+d21058a22b3e4414275ee94751e63ed459505765399f23e726b7e1d39b34bca8  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /07-g5/G5.json
+d0875882b105a3b89901b3f3e194d56822a0bad003621df33e7ecb1e365c8e92  receipts/03-t3-controls/G/C4-N-the-witness-on-another-executable (the witness descriptor /07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-all-obligations-first-P4/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-all-obligations-first-P4/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-all-obligations-first-P4/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-all-obligations-first-P4/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-all-obligations-first-P4/05-restore/RESTORE.txt
+119403e0f8981107fec4d3a3b647edd4f1e467313864634d4c86a4e6f9e3be8c  receipts/03-t3-controls/G/C4-all-obligations-first-P4/06a-healthy-witness/HEALTHY.json
+f856e76e88534ceffa2e9bd3da9cbdb6da77d0b0dc29edae4cb57ffc793c9fd2  receipts/03-t3-controls/G/C4-all-obligations-first-P4/06a-healthy-witness/HEALTHY.txt
+bd2f2f65761eae59326a3f8aa9399a6ec2729a3c462afd4ee3c479413be266c5  receipts/03-t3-controls/G/C4-all-obligations-first-P4/06b-link/LINK.json
+27fb0c0b189e5f2193cdada37438596880a2d5af679e1927b0cb9d704e75b926  receipts/03-t3-controls/G/C4-all-obligations-first-P4/06b-link/LINK.txt
+281bf7dbf2310f4b0ad242a519792b70cb2a50de22a2da48f4352d2319b752f5  receipts/03-t3-controls/G/C4-all-obligations-first-P4/07-g5/G5.json
+cdbd646673f07239ee105c977664de4356e3ee023309aa94005084d850ab35ac  receipts/03-t3-controls/G/C4-all-obligations-first-P4/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/G/C4-all-obligations-first-P8/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/G/C4-all-obligations-first-P8/03-build/PIN.json
+735d4933558d20049515be969ea0144100414ca1247fdb391ec874612e635cc7  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04-run/CHECKS.txt
+699413da83680224339d9effded4015e4e8b6cbaefbe1f9513eaed1df6661205  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04-run/CLASSIFICATION.txt
+55ce73d9eeea28f879d7ba87859638f80c844a133fe8158290625b8c099019db  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04-run/PARSED-RECEIPT.json
+7fbc7beb976a7821a56c89170a69bd5462ac8d2a9e8d0ac53c64acd4db6558b2  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04-run/descriptor.json
+c0be8107b5c1645cc00f526297fea2a8e0c73568d5a781f91fa86c2fb52a4fc4  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/G/C4-all-obligations-first-P8/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/G/C4-all-obligations-first-P8/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/G/C4-all-obligations-first-P8/05-restore/RESTORE.txt
+7d8bef5fabb49edd3f4a0f602bc2f5be3c9ec1e5f7d2245d326971c0ac4bbc8f  receipts/03-t3-controls/G/C4-all-obligations-first-P8/06a-healthy-witness/HEALTHY.json
+d1b97b8d6ccacf1f93df7d0c12b5b030d1a264b5037dde9bda80b919a61476e6  receipts/03-t3-controls/G/C4-all-obligations-first-P8/06a-healthy-witness/HEALTHY.txt
+ef7e04d6e93aba63c8f3b262582a47c277b358e709de6bcf21863e90835a621c  receipts/03-t3-controls/G/C4-all-obligations-first-P8/06b-link/LINK.json
+68a5780ad655cb27f8cc4b5f63ec26331aac2ac9333f112b80f0c1e7c693dac1  receipts/03-t3-controls/G/C4-all-obligations-first-P8/06b-link/LINK.txt
+4263e8865ad0cc50f0e0a4331066ce25a607b8cb49c9ba909be8c73f5ede4237  receipts/03-t3-controls/G/C4-all-obligations-first-P8/07-g5/G5.json
+d89af83253b7eed290d2afbb3396ddae9cddc44a7631bf8efa19e6ebe57a70c2  receipts/03-t3-controls/G/C4-all-obligations-first-P8/07-g5/G5.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/05-restore/RESTORE.txt
+8fcf658d7c96018cf62d8d8cec1077ba93e3a25c4dc98e5fc6f8e5ca5161e85a  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/06a-healthy-witness/HEALTHY.json
+16e39845a34852e4db37892850cc5aea4d9716bf32ced9b3b10adbb6f2ba7fdd  receipts/03-t3-controls/H/C4-N-changed-healthy-witness-source (raw output byte changed)/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/02-apply/APPLY.json
+658649e453efa060523c9516be5bcdb12b2fc73fdd036a6b8caecb7976db7a3e  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/05-restore/RESTORE.txt
+6a1c51bbaf85a2b842942428c8317481f74ea0e16b6d1427697f0a18617ca38a  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/06a-healthy-witness/HEALTHY.json
+b35126accf6c6ce314469ecb8938484328e56ef16101a867a116ea6cce1db433  receipts/03-t3-controls/H/C4-N-executable-role (the mutant executable is the unchanged-ba/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /05-restore/RESTORE.txt
+03bbcdcddc5cac4b4e661668b822dd83dc6bed45e17e2e1056bc4dba0511af53  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /06a-healthy-witness/HEALTHY.json
+7a809170dd1e7618b51d6b6b7e94146d87a00050bb8d6bafda75c533aa823889  receipts/03-t3-controls/H/C4-N-healthy-append-consuming-its-offered-choices (G.6 healthy /06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/05-restore/RESTORE.json
+a06420c6b656cbe936cd278037d33022440da0cdb91ba187abbf28bd94859c33  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/05-restore/RESTORE.txt
+d96ca4aa01177a939a536e758541b99632ae9f26e326af60337bc2b857c913cd  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/06a-healthy-witness/HEALTHY.json
+fa7a8093af9b5ddb71483ebbaf6aaec9acaafb8f28b1634590adf633214235a2  receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/04c-witness/raw-output.txt
+42f3258425e78c21424ce6bad1b4996f7729d68019d68a6eb97f4b734647f30b  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/06a-healthy-witness/HEALTHY.json
+4516690bbe4f569b915b3a38cbc1ecdc4e8f2695e29909f00553824fbea7544f  receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04c-witness/CLASSIFICATION.txt
+386cf9459a8e97de9918f08a50d6ccc9b6008bdad6310999d01fed6e66cfac5a  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/05-restore/RESTORE.txt
+37cba9136b5fbbeacd2c37cd5460eeed6a4e4f469a3614569cc364e698a37afa  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/06a-healthy-witness/HEALTHY.json
+3a95c738f1d0451f43fa70207d69b2f8d34e111a232699a9133440df128a3e2d  receipts/03-t3-controls/H/C4-N-mutant-X-not-the-healthy-core's-at-P4-step-8/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04c-witness/CLASSIFICATION.txt
+86372af5bde4a8eb658c2dac91d5e63f12159a86127c43e44babf0c8202d0d54  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/05-restore/RESTORE.txt
+d0b626e5d77fec2a3540b80e54aca654e89d66a828e77e4d467a37ef2f8d468f  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/06a-healthy-witness/HEALTHY.json
+407513d1530c9411f020a96279e5a01e748db99c112fe6afecaf8488d7e99b35  receipts/03-t3-controls/H/C4-N-mutant-transcript-differs-before-the-changed-append (P8 st/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/05-restore/RESTORE.txt
+2f3c27b828f328f344f7941021a01e544b836fc9ceb578e8d8c736f2e77eb414  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/06a-healthy-witness/HEALTHY.json
+1fb4b73101b35dab8ed8c51d4f6028ef2876b8784aa98db5e660ee8448c287ce  receipts/03-t3-controls/H/C4-N-positive-violation-marker-in-the-healthy-receipt/06a-healthy-witness/HEALTHY.txt
+3b929f48deb8a9d71177871e37c09b73bfac2c220c86af28659f181082bc1f68  receipts/03-t3-controls/H/C4-real-inputs/02-apply/APPLY.json
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/H/C4-real-inputs/03-build/PIN.json
+4404dc4ba1dba15cf62a6bc305c80f9b31bd49594c42d82a7f1d7b8ae9787a6f  receipts/03-t3-controls/H/C4-real-inputs/04-run/CHECKS.txt
+a3066484cab80e1b22f83e53dff56b36601dfcea1e0b9037d4b24537971b31a6  receipts/03-t3-controls/H/C4-real-inputs/04-run/CLASSIFICATION.txt
+adb8559853f3212137e2e660c2621a815699ac4a8200955abf7c27a9d4dd4384  receipts/03-t3-controls/H/C4-real-inputs/04-run/PARSED-RECEIPT.json
+cb95001de45c32b7860c9704ff80b28ffec1eef7b18630788d3ceafb3aa04957  receipts/03-t3-controls/H/C4-real-inputs/04-run/descriptor.json
+c8e09ffe122e184f18141702605005f700c6bc28ed5edc0f660d1d07b9b5f1e0  receipts/03-t3-controls/H/C4-real-inputs/04-run/raw-output.txt
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/H/C4-real-inputs/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/H/C4-real-inputs/04c-witness/CLASSIFICATION.txt
+d14171f21ac4373ae91ec58e722882095402e709b92c300af6e1a74a9e8e5830  receipts/03-t3-controls/H/C4-real-inputs/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/H/C4-real-inputs/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/H/C4-real-inputs/04c-witness/raw-output.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/H/C4-real-inputs/05-restore/RESTORE.json
+43c9624a03037c8a696cbb949b9d6be4c4477f5bcb22cedf6d60dac7b7411871  receipts/03-t3-controls/H/C4-real-inputs/05-restore/RESTORE.txt
+8250029cfa72284d9f58826fbe9a99ad9610b601d188e82000457900efafaec8  receipts/03-t3-controls/H/C4-real-inputs/06a-healthy-witness/HEALTHY.json
+85a0287f3760d00cfc4ded69f20b34742418eb6c4e3ffb1d974bcb1ab6f44f45  receipts/03-t3-controls/H/C4-real-inputs/06a-healthy-witness/HEALTHY.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/R/C4-401-P-ownership-lock-and-executable-hold-the-lock-reas/05-restore/RESTORE.json
+01cb5434b48ba5d4a78ce12ad68379d977c420e71972711921a56c76fb146e6b  receipts/03-t3-controls/R/C4-401-P-ownership-lock-and-executable-hold-the-lock-reas/05b-restore-auth/RESTORE-AUTH.json
+b838e602675a1339545e06ced59a085641108eb5febeebf096dab712a4ad8fdb  receipts/03-t3-controls/R/C4-401-P-ownership-lock-and-executable-hold-the-lock-reas/05b-restore-auth/RESTORE-AUTH.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/R/C4-402-N-this-mission-s-lock-reason-absent-the-worktree-i/05-restore/RESTORE.json
+bb35692f09bd7c1a8061d96e5a84eb6c82c6905eee2d1309ebcd6a16bf64d485  receipts/03-t3-controls/R/C4-402-N-this-mission-s-lock-reason-absent-the-worktree-i/05b-restore-auth/RESTORE-AUTH.json
+d6bd980be086af9312cd6574b87ac457ee8eb521835807ecc1774cadb932f082  receipts/03-t3-controls/R/C4-402-N-this-mission-s-lock-reason-absent-the-worktree-i/05b-restore-auth/RESTORE-AUTH.txt
+54e50508e86ddbe2de50268f61c53f92406f40a09c8cbb4e944114c1e8feb9e9  receipts/03-t3-controls/R/C4-403-N-the-pinned-executable-changed-sha256-differs-fro/05-restore/RESTORE.json
+53593626ea81816016697d745580e0d7ec68a86ca16ffc13e37d20332177ba46  receipts/03-t3-controls/R/C4-403-N-the-pinned-executable-changed-sha256-differs-fro/05b-restore-auth/RESTORE-AUTH.json
+f45c814f420971ade50736ed74a9d3a8819d2ca29bb5276b4b57a9c9c68dc89a  receipts/03-t3-controls/R/C4-403-N-the-pinned-executable-changed-sha256-differs-fro/05b-restore-auth/RESTORE-AUTH.txt
+3d62fa22a120542d7daa229306be25df16dbe51cf5adcc7ccfda210e1e5c5968  receipts/03-t3-controls/R/C4-404-N-the-restoration-did-not-start-from-the-mutant-bl/05-restore/RESTORE.json
+e1e2e0843c65a5f0f6a58acd82c8559bda77ecf3e0b479a38db561b861750206  receipts/03-t3-controls/R/C4-404-N-the-restoration-did-not-start-from-the-mutant-bl/05b-restore-auth/RESTORE-AUTH.json
+5027c8d4cf051ba127f98915cf54972b470bdc1bc8bc7ba0107e5d947adc835f  receipts/03-t3-controls/R/C4-404-N-the-restoration-did-not-start-from-the-mutant-bl/05b-restore-auth/RESTORE-AUTH.txt
+26c5bac59e342d71ec7d39b6fd507c95ccf7524f17e0af0c732d990790c1b4dc  receipts/03-t3-controls/SUMMARY.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04-run/descriptor.json
+8a20fa9e1cd31f00d29a8c657192840617e8c9196b7e9491dc8311e2edfbaec5  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04c-witness/CHECKS.txt
+8dcfdfe623749c10fd8c1151dcf12a0309830eea8dc65129ee87e23612218ac8  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04c-witness/CLASSIFICATION.txt
+817141285ea980a3149bad7ce31ff48e87f9dc5c11849389a0827d744eb47da8  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-201-P-P4-and-P8-at-their-frozen-loci-G.6-holds-in-both-scenarios/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04-run/descriptor.json
+293e1dd761fbd6b436eda3f49746fee0c57ef42681521b75cd44ce5e2f1713d3  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04c-witness/CHECKS.txt
+caded073db102ed20343b2b72f72fb39f646942a1022dd8df00ebcdbbbc4efa8  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04c-witness/CLASSIFICATION.txt
+659b13dc81f751b29de0f6ed1143d451df8607b6102825368439c41760c321ec  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04c-witness/PARSED-RECEIPT.json
+b831386679709b899cc3c8e1dcd6d82a79b5018b489ebc770d36e201b5a27e07  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04c-witness/descriptor.json
+dd7a3d9e0469fb133a1fd09140335e6d1b53093abade4d8daf2e8bd9c15dbd78  receipts/03-t3-controls/W/C4-202-P-a-further-property-reported-separately-P13-at-P4-step-8-ne/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04-run/descriptor.json
+3b633ef7a8197a6b7747e1e5f43f0fbc21d5500c7b4d2ef3c2685b7506f80a29  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04c-witness/CHECKS.txt
+1dd9541ab9fe9520401dad326ff7de20511c62688a7f7929028c7f4de6154037  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04c-witness/CLASSIFICATION.txt
+48ac614ca2ab9ed5d540ec05f8a512410c0b37afacd00fec836619804624b287  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04c-witness/PARSED-RECEIPT.json
+37ba4235aaebeb22aefd0a0c700160337699c4ae4d042d7b96658b30e7b810d5  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04c-witness/descriptor.json
+604da20f4848a1e237061d22fd2da81f91f166b55fdd36830ec4776a2a69b08f  receipts/03-t3-controls/W/C4-203-N-P4-missing-only-P8-shown/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04-run/descriptor.json
+7f6c0ff74262199582cea9c3f06652793fea93a595628cbe938be2c4a865ee61  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04c-witness/CHECKS.txt
+78f9d6b7847855748d9a5c6858a914b1d06adc7218e7b36b351f61eead8ad19a  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04c-witness/CLASSIFICATION.txt
+83e721ef3621cae5e659d1c9737523e44465489b09fb177b74a468220f66b30d  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04c-witness/PARSED-RECEIPT.json
+777872699574b206d14f08cf98e9bf3a98511fcf05dbb532f5f16530ef24033f  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04c-witness/descriptor.json
+b638e1dacdaeb5f06acced80be646e93f2678f7936aad5972d9447c8120cb201  receipts/03-t3-controls/W/C4-204-N-P8-missing-only-P4-shown/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04-run/descriptor.json
+91f6c98e63d03565d114d039990d2cfacbd8ddfd5b3026c6c74f49defeebd4ae  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04c-witness/CHECKS.txt
+f220db04f8a46927a8ce1639e7fdbd08aefb3047a67729520d93bdc727eb226a  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04c-witness/CLASSIFICATION.txt
+efc7b6d8a0dddfc56e0481d4974fe5f8e19e566a8d5820006aa4ada7436b7010  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04c-witness/PARSED-RECEIPT.json
+81b0084a8f1b0dab975f1e918d97ccf70fa53f830ea13f4c3f87cd4734781dd3  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04c-witness/descriptor.json
+df52938b75064eb64db922ac39cc4361ae5eb6a320e640f012d9351f21851f49  receipts/03-t3-controls/W/C4-205-N-P4-NOT-OBSERVED/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04-run/descriptor.json
+aae10cbe0f5c3b0efdfde018585bcc34b4a8c7d7d2d88b16b47f42e2ec1367f8  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04c-witness/CHECKS.txt
+3ec20e3d7cf3a3f91abfaf9c97cb685632350609c3e8af09b51976edf2300512  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04c-witness/CLASSIFICATION.txt
+cec60b376894cadd6b88b70e3d15ecc15f2fdd0fa595ae6d46c8634db340f394  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04c-witness/PARSED-RECEIPT.json
+34240d353b84b895e55694a20ee3e8ffa4faf49f40e023cd57681764eb1bb703  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04c-witness/descriptor.json
+b27a685c776a5ba7814f2fd19641a21cf60c23c267628f17b9adc726ca283d45  receipts/03-t3-controls/W/C4-206-N-P8-NOT-OBSERVED/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04-run/descriptor.json
+3911f6dd48e38271bad207ec3e5f546d79abf942a9e0a3e43d62c405a1aed4ea  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04c-witness/CHECKS.txt
+079e0fb0621213adebe524533370012dba1cd2b2096dbbc42c580f96adee60fb  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04c-witness/CLASSIFICATION.txt
+9d27a00ad2a67e057c50a2b6993ef0e2ed205cfd517bc7a594484366a0e2e0fa  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04c-witness/PARSED-RECEIPT.json
+9d94a9069079d7ae512147db69a3dc8dd641873753499850f7fb8173efe75b8a  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04c-witness/descriptor.json
+7656dba3c32233b3ee57a66943d20bbed0e2ba3ccf17f6631843a8d0bd4301bc  receipts/03-t3-controls/W/C4-207-N-P4-at-another-step-after-step-7-of-scenario-P4/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04-run/descriptor.json
+f295ab3f4d09d0ca38fcfe14d0079829270d25425f9386f3fa363c8e018c8f4d  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04c-witness/CHECKS.txt
+02dbd3bd9ff3f2d438512197febc38ac21f47fdc53e1bddddec4a1dfaa7b64cd  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04c-witness/CLASSIFICATION.txt
+799a069fcb3c34d188bb40f89f6a26a9f3acec947d25faafad813578dd52490a  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04c-witness/PARSED-RECEIPT.json
+53bb7c9f18c67bac60b75abdf296907593698ddd8e7aea7128f1cc20c8284379  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04c-witness/descriptor.json
+9fd04bb49271dd5a6226d0a6ffa85948f02a164387ea58533f0cd3264b482d05  receipts/03-t3-controls/W/C4-208-N-P4-in-another-scenario-after-step-8-of-scenario-P8/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04-run/descriptor.json
+48f3dc8d6659b313a74155c0cfd37345047b6a50710be730068ebd5677f299a7  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04c-witness/CHECKS.txt
+7d85e942aa38bd458001fd407ed6ba4d8249ed0b96125ac92e90ba3508b6ba3c  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04c-witness/CLASSIFICATION.txt
+cf4c485451ed56adae25b4018edd3fcc815f27a0ef2b3eb19f257e29c3b33d38  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04c-witness/PARSED-RECEIPT.json
+7fc80f48b4b01c31b4784037f96d4e8c2f8771e4222dd056a8dd97747600ed89  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04c-witness/descriptor.json
+6cbb20c5b741b42d673d7b6a533e19c0b8f806ed4316ff0c06664360b5aa57e2  receipts/03-t3-controls/W/C4-209-N-P8-at-another-step-after-step-11-of-scenario-P8/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04-run/descriptor.json
+af843c34ae07aef007aa994ddb35f92b98c09d7bcc603d28ca700e74f32f2193  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04c-witness/CHECKS.txt
+a163ab92adcf63af7cce1147ed0bd934be56b24de495767564f68779b9d401e3  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04c-witness/CLASSIFICATION.txt
+ca560f6345d601532ab6ea90260d72787a1cd023cf89b42139da3deb8c09900a  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04c-witness/PARSED-RECEIPT.json
+5eaae46858dfb4addb00d9a68d6d394ac2104715fa7bb629af017c83264828dd  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04c-witness/descriptor.json
+f2378ce6b879c9962de70464316235e9bdde75354d09e3f81ec300e14ee67203  receipts/03-t3-controls/W/C4-210-N-P4-wrong-locus-world-U-does-not-hold-the-acknowledgement-a/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04-run/descriptor.json
+6a91e68a0a0cfa82e3f267c064e8387bb374bc69b1074493729d8cad19ccc779  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04c-witness/CHECKS.txt
+dfa2cd30e8585f4171b91770adaedcd04e4ea67ed1d388469a82a3534649466f  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04c-witness/CLASSIFICATION.txt
+8cda070805dfa7458464c04a06caa1839776291c3955ccd60cd59dd7232cf072  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04c-witness/PARSED-RECEIPT.json
+b7a09ada1cbf5e40b7c856004be9a3c7208f53407606e614ee3a9fa1b284bb32  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04c-witness/descriptor.json
+5253af0d37e8d02fcbaa601559f8ac66ea374fd484cddb7193ebc16861aef3b7  receipts/03-t3-controls/W/C4-211-N-P8-wrong-locus-world-G1-s-attempt-still-in-U-at-P8-step-12/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04-run/descriptor.json
+bbc6a210354aba0843760dd797415a027aa2bff30398f9dd1b5c9029c4a09752  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04c-witness/CHECKS.txt
+b8685e7b456bc81d11b7b07c1047053111c7031bdb0c999cb3a4a33f5dd9bb40  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04c-witness/CLASSIFICATION.txt
+f94655d6360b1141ae39b8920d9070dc384a54756ec66fd070fc6a609c5a1a80  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04c-witness/PARSED-RECEIPT.json
+c4b6c9fe3902c50ad9c5fc12f050dd293d8649a3a5eea0c13d08862860399979  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04c-witness/descriptor.json
+32039b1dff04375e73acb67773b5b63ca9c0c3edf983e09494a3665093327206  receipts/03-t3-controls/W/C4-212-N-P4-counted-in-its-own-line-of-other-properties/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04-run/descriptor.json
+0a27babaa70be8d10690a3918aa6b04a3175fcf6d42ba824b4949e2b7e2e43e4  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04c-witness/CHECKS.txt
+2c2c777eaa7b57c2ba6e2ce1377b9f391068f82da9b862105163fdae0393d511  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04c-witness/CLASSIFICATION.txt
+674db5fb7d8ab7ee92e62780111513cc9dcca9d945814425b0a3bf37d55d893c  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04c-witness/PARSED-RECEIPT.json
+8d4945b7a2abc84c9d93cac500b0baef2f145eb84cd030a86a0306ca98d31795  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04c-witness/descriptor.json
+9e00b07aeee953e4af7a7af2e30958f5b256003267537051c3c42fd8d19eb1e1  receipts/03-t3-controls/W/C4-213-N-fixture-failure-the-changed-append-ends-as-neither-planned/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04-run/descriptor.json
+e8e1a7d029d356d9cfe43b66f6ae266cf1307fc5f5f3fed1d1e7f9da19af25e0  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04c-witness/CHECKS.txt
+748e21c70e4c675fe26c6b4801412645a7999820d40fc05d1a2859eea49e61a3  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04c-witness/CLASSIFICATION.txt
+d5c2bcf16fc41fcd9285816ca9f6e3d982e12b1c1702ad75dffb8b60d1a6c95c  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04c-witness/PARSED-RECEIPT.json
+3e603b68fc93c7ccb9d304a7e44d7b1d325ff8fdd4eb7369732dc28c0fed3298  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04c-witness/descriptor.json
+2972cbc83c90bf2044977fa65e0ffe38cd3945d653a25fce2b506e13ca2b9dce  receipts/03-t3-controls/W/C4-214-N-unrelated-panic-an-unwrap-on-None-in-protocol.rs/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04-run/descriptor.json
+203de4a08500d021c231ad948e5a2c2eba2c2e00b3f0ffa6408a72f02452c541  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04c-witness/CHECKS.txt
+fae1d5f5e5d382d8fb19de413b3b0e219d0948789103704997dee0768ddb8545  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04c-witness/CLASSIFICATION.txt
+371e45cea91739a93604a1a456742ac29ddf302ad4a37f90128d374d9c296e1f  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04c-witness/PARSED-RECEIPT.json
+b2d93dfd3414a73438aa4d8168d88fcb990efd7371cc0bd7c58aee02c0c138b2  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04c-witness/descriptor.json
+e7b8624f8492a404edcc55b279f691c4b62f249a77641e97069b79d4098de345  receipts/03-t3-controls/W/C4-215-N-the-healthy-transcript-as-the-mutant-witness-exit-0/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04-run/descriptor.json
+c238176c3d5c18d2cc874dfa984229b25be7d74c7b9d71bfe3aa2063a5524413  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04c-witness/CHECKS.txt
+2f305e2615640b41808da0d2e4c531dfbf69b42554f5ab81954ae52d601436e1  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04c-witness/CLASSIFICATION.txt
+97839c7d93de45440c0e17c1bffe401b1dde281d710b4d33ac7f5e97ce988053  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04c-witness/PARSED-RECEIPT.json
+491cb7a29346055ee29fa190c8e19a87b908a5d68c72d1ccdcb6aca07b92e09f  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04c-witness/descriptor.json
+ea80ee90de20a3e9aeee57c29b32df285f6040d7325fd9635983afca9788cc66  receipts/03-t3-controls/W/C4-216-N-G.6-bad-offered-choice-sequence-P4-step-8-offered-0-0-0-0/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04-run/descriptor.json
+d2669f7c48879c05ecbe1077094582f8b505b6402e26226eb2c2fe85845a5d61  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04c-witness/CHECKS.txt
+ef19ed135eb94caf6adcad73a8abf795653b5576e7c5ddc4424eeecb0cd2ac9d  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04c-witness/CLASSIFICATION.txt
+ad854c8421794363fee7414dcd02f2f23656d007a755ff6cca04b10be513d51b  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04c-witness/PARSED-RECEIPT.json
+daf74de997876b3268e40acc0373ef4c3b5796bfd810b00acd58fd4c563d5915  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04c-witness/descriptor.json
+02e1f857b5d9093a05065f4975860b284cfdcd702e9c2230636b909c4b9e4808  receipts/03-t3-controls/W/C4-217-N-G.6-consumed-choice-not-the-offered-prefix-P8-step-12-cons/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04-run/descriptor.json
+d6d71147b321864e59d4cd83620beffbe9fa44f8294d3a42c6ded5d961e52498  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04c-witness/CHECKS.txt
+f7210a5afeb46a11ef130a7d88c39bb78883eede90cedbdfcf66b48ff1c59f91  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04c-witness/CLASSIFICATION.txt
+ce663b954b3557499f654e2e8784850471ae2f0491fa284f831e4d34791861ab  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04c-witness/PARSED-RECEIPT.json
+16c5d0e2eee09ee72e11fb695f4a3289c02b864ee14177cda1a2f1704b58b9b9  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04c-witness/descriptor.json
+278fb4aba9dd601ba551f3dfdc7893b6ac6300a21276a5981e271eccc6939707  receipts/03-t3-controls/W/C4-218-N-G.6-wrong-option-count-P4-step-6-consumed-0-5-where-the-fr/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04-run/descriptor.json
+53dd2bb5927add5608b0a56dd60a5d62dc73f1551cb43604e05359bbba7b3c8d  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04c-witness/CHECKS.txt
+1fe5113e3f7f3f5d1829f71d0e18175c289e0ad7dc598f9a319f0260cf4e4d93  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04c-witness/CLASSIFICATION.txt
+1dc9768c66f065b13efa68dff807cc29d6a94f319459618b6eac4721babd0df7  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04c-witness/PARSED-RECEIPT.json
+5c8834039a534ce1ebd9fa97443ec15e6d88d2e5439395329222e4d1786b9623  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04c-witness/descriptor.json
+18d4e06ddd718cfee90ed4e213c292621b9055b2443ee3eb6808e86c6c87a7b9  receipts/03-t3-controls/W/C4-219-N-G.6-unexpected-unused-suffix-P8-step-12-consumes-3-of-4-pa/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04-run/descriptor.json
+4a571836f42028978f30e1e63acb341ce647b503b51bd3475134134ac416b4e8  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04c-witness/CHECKS.txt
+2ef49c356a3163d1943f3f3b3bd333cfadaae12e750c0823af1017dff9612428  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04c-witness/CLASSIFICATION.txt
+5d6bd9e2bb5f84141b673112770a8fcafca7d8c1f6100bb80d11c003e8e12a42  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04c-witness/PARSED-RECEIPT.json
+f35be9dfb20675724cda174c00e983c4ac75d61acf1d66ee674207f77e5fbe7f  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04c-witness/descriptor.json
+e624161e4f1281824d87d57a7458f3d5fb97e00ac5dfd9f138aa7849b3781403  receipts/03-t3-controls/W/C4-220-N-G.6-implicit-Oracle-default-consumption-P4-step-8-consumes/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04-run/descriptor.json
+9277893075d837db779681672fcf4b072849d0eb887afc99853215c4865aaca7  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04c-witness/CHECKS.txt
+b973128850758cd652ed8f8d052fad284f6b9a32a9e3bb2ff2f307faa28466fc  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04c-witness/CLASSIFICATION.txt
+1d3b8a831d21560b17931dbdae0d31f319df8ba765a024a1495f8385625dec02  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04c-witness/PARSED-RECEIPT.json
+238eae473c48fc3969c530df927d73aef41d237699bb806989c211d89259b336  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04c-witness/descriptor.json
+db715e8ee5c7d5aabb7a3f2d5beb81e74f68ade880c66d438e0f819ac3c39e30  receipts/03-t3-controls/W/C4-221-N-G.6-wrong-branch-P8-step-11-s-gating-branch-changed/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04-run/descriptor.json
+61e45758a86811f41a51e80d066fe4a34ae6867b15ae60552190ee7eaf5e35f2  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04c-witness/CHECKS.txt
+e99fcf4949e86a29eda547bca59e4893a7a7d10d2f782b23431bdaed16a198a5  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04c-witness/CLASSIFICATION.txt
+68c501eb81528481b81ea01d8139a02b3cbbb716240c411fbd67f6017573bdfd  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04c-witness/PARSED-RECEIPT.json
+34ae45d01ceff4e5fbbcd6835295d6bdcf9bc04d932f09ea0d5a92ff7c705053  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04c-witness/descriptor.json
+438b373db4b2ad0a82da5f556fbcd848e20fdadec86e99b3853892e5cd598598  receipts/03-t3-controls/W/C4-222-N-G.6-wrong-fault-budget-P4-step-5-leaves-1-fault-not-2/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04-run/descriptor.json
+5d95ad92a2a9c3fcb0ed7fc706e1b8e8f4e5e52d2e4a1a506c8a1b3239e6ade4  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04c-witness/CHECKS.txt
+3b5d44f2c7f216d1ab0d948eb0281dc5d8ef1cc1960d5d935fb1d2614cc2a1b4  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04c-witness/CLASSIFICATION.txt
+114605f29fa851fbd9f0a27d4d45ddd5ce533c911745d0c14e83560325322e60  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04c-witness/PARSED-RECEIPT.json
+9115fa4571068b3810a9dcfbebd2c5bf4159178b78a9009835b632eefeb85b33  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04c-witness/descriptor.json
+0c3ff29dc72b16ee2e138abc463e3a1966f1104a8799fafe135a387f3363a93a  receipts/03-t3-controls/W/C4-223-N-G.6-fault-marker-without-a-fault-P8-step-12-marked-fault-t/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04-run/descriptor.json
+fed6dfa33d4717f77c4035fba4a7a95cd5a4fd2093849d599e1bce22f856d282  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04c-witness/CHECKS.txt
+dd80f919721fcae3bb7ed0446b2b0c9ee1c750468282459ef2940c7754b10c04  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04c-witness/CLASSIFICATION.txt
+2d80f528a9bb369dd62c03d0be54aaccea0ac087ad29d1c2c9a17b3a93576d31  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04c-witness/PARSED-RECEIPT.json
+efebe779754ecb70e3eceb1d0985bd1baa6edd7f18fa9b65b62b5cd5f776a42c  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04c-witness/descriptor.json
+964ef3edee635a2121efbb4cc107710da5119af6f822d0e6d1a349f0afa52928  receipts/03-t3-controls/W/C4-224-N-G.6-actor-order-changed-P4-step-3-by-Se-not-Wk/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04-run/descriptor.json
+b5ee6e9fc06d7a4fa2ac4505bfe6252a9bcd6bdb9bec58619671d0fe6688c1a9  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04c-witness/CHECKS.txt
+64b80f2050194aa46a3a5c400b66ef44360277dba59c15a51da82e1ff1e9851f  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04c-witness/CLASSIFICATION.txt
+30bb765dd9a7cea8a1f42eb7f496731679bd4bfd180bac0d7f34baeee8a0be5f  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04c-witness/PARSED-RECEIPT.json
+73d45af7d32a640896f0d67bc2c5fbe6269723ddb49a9246ed153545c3a17b93  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04c-witness/descriptor.json
+cd792ccf99f5d8495c566f53b791fa185a1b7916af0c430e4d41f94d6c81704b  receipts/03-t3-controls/W/C4-225-N-G.6-a-stray-line-inside-the-witness/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04-run/descriptor.json
+0191186ecf81b3a654a295e0545ab4eb829d2505f53632dbfb3000a0c0cee7d0  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04c-witness/CHECKS.txt
+c7f13b50a5e94229b7adae570a17af937582c960f6d1d3e809f3b23c24ca27b5  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04c-witness/CLASSIFICATION.txt
+85c66272974320b3174655992ea8bb680ec14a04b07b75cf5b643859789b3a47  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04c-witness/PARSED-RECEIPT.json
+738b66c5367234deba5172317032e588025a1516b3047693525ca67daef8abf1  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-226-N-wrong-selection-no---exact/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04-run/descriptor.json
+2449023f59c1957021b933ba470737afb66e52997fb7a99be5640655fb22ffb0  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04c-witness/CHECKS.txt
+c7ac3de5a6622ae1d7756eb70b17fa35556a9d82a6e0d73b9c3e68654604cc98  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04c-witness/CLASSIFICATION.txt
+85c66272974320b3174655992ea8bb680ec14a04b07b75cf5b643859789b3a47  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04c-witness/PARSED-RECEIPT.json
+129212199d3bff733ad08079eca3c01b26de54cce81de76e47ec1d620cdc314c  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-227-N-wrong-selection---ignored-passed/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04-run/descriptor.json
+03fd3f75004b0450674462918cd0bdcad69f0a968b321efbc75381e7cb3c514f  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04c-witness/CHECKS.txt
+f3dd3e45657b69d1a0745326bf4923ba6630700e39cc84110b2ff420ba3970d0  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04c-witness/CLASSIFICATION.txt
+6228dbef7fd78904fe47c1f8e66f4557c67061b0b841b74aae6300566d4c53f3  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04c-witness/PARSED-RECEIPT.json
+4145b1803a6f03b2962e71d1f6cc400330d10ede7835b191df17d8874b2387aa  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-228-N-wrong-selection-the-listing-shows-two-tests/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04-run/descriptor.json
+f8c92455eb714d0613c4dce8c5798f048c73abc8529d9f9c4448785941eabd23  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04c-witness/CHECKS.txt
+ada830733c0bdac1a7f026215f572ba08e3210416e1c5fcbe685d6696789aec3  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04c-witness/CLASSIFICATION.txt
+29e676831528df24702ecd42a751f5d6a9520b61a15b962afd2c12b04129482a  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04c-witness/PARSED-RECEIPT.json
+7aff61057f4c218fd667ea81d88ca01cdc225789068a29e57637e7c9ec51dfac  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-229-N-another-test-C1-s-witness-test-selected-and-listed/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04-run/descriptor.json
+b90ff974db41a40282e9febf186f395fde03eaf8102619f34cc9e7ac886a036b  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04c-witness/CHECKS.txt
+fa82767bea6b6463dd6abf50be9dc2262224ca168e6f8e4e5dde276fd29e180c  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04c-witness/CLASSIFICATION.txt
+2974b4e93c4562db9e834957b3f606df0763ca6e1b6423d5b3c0344654dbf779  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04c-witness/PARSED-RECEIPT.json
+9def327d7768aeeb9d55ef30aba6d43753ec0fa546d864d144580e88a462ebd8  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-230-N-executable-role-the-mutant-witness-on-the-unchanged-baseli/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04-run/descriptor.json
+cdf27d094c810ffc11cb1c4836a46c8fef6d84707fb61f08393498a71f66c4d7  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04c-witness/CHECKS.txt
+71af451fd973a02db3380b1021b09f90dc7db3a39c5e4f299acb7cb14967a42f  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04c-witness/CLASSIFICATION.txt
+9ab935a28b8b09450e04afccf957b4c8879c381505d52e893daff931beea7b62  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04c-witness/PARSED-RECEIPT.json
+b04e5ab974381e3dcc53938f227eb5ce722c215ba1b8b4318d215101b0ee2a49  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-231-N-different-mutant-executable-between-primary-and-witness/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04-run/descriptor.json
+9aadf6b416b67cffb2a42bee6c16a3d8f6776a57ef0f774ad194e475233aaefb  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04c-witness/CHECKS.txt
+51cdd483e7174542c902fdb27a9daa1c27a94d0914c12761f8410d84cc493187  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04c-witness/CLASSIFICATION.txt
+cfb64f3ff744e6259408bd95abc7f1fbefa6ee5dad122a3ab53a2693a33ba445  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04c-witness/PARSED-RECEIPT.json
+ff7d89faa01e983eb7c4833401247a31114b926fd90c06ba069943b53af8d0fa  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-232-N-incorrect-source-EXACTLY_C-the-unchanged-core/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/03-build/PIN.json
+459ba69686014064717004a662dce91286a2bfdb419354810d76208bf8549f1c  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04-run/descriptor.json
+2e1b92fcc12abc7e2182f23cef8b04444413494fd879c1c416cedf00d78c2e44  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04c-witness/CHECKS.txt
+e56c298710e44eef7f7c08c3a9fc49063a79fa74812d5b81cfb344b446ecdcfe  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04c-witness/CLASSIFICATION.txt
+7cb34b7a573a9eeb76978a672d37eeb29e1d1babca0b5e2234e08d0736023ed5  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04c-witness/PARSED-RECEIPT.json
+fdf1d19521150c4828063106fa80a0c56152daf58e6c788704c0a96655f85451  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04c-witness/descriptor.json
+f0379924564f003f9193630219cf79388223cd71f6548992396a69c8ee9fd095  receipts/03-t3-controls/W/C4-233-N-primary-not-established-no-witness-after-an-unestablished/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04-run/descriptor.json
+9e29b6bc35eb0d8a30c6fa1939b077efbd2df0ccff4c429309a96f05c1a384a9  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04c-witness/CHECKS.txt
+e8b70542eb094f051146820a17f4f9ae04a8467ca710af2752e96da5322a31bd  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04c-witness/CLASSIFICATION.txt
+031a9550ec6fd6580345d6aef56de345c1508d833fed3725cc27371362ecede6  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04c-witness/PARSED-RECEIPT.json
+55531ad364b2f1d6b2635661d90eedd1e1b75773b4e551245a53a2cf955b6e79  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04c-witness/descriptor.json
+fe7e91984c2b0984e204038b66a4af1227a9e4b174e153f9ef3c00ddf1ee8ce3  receipts/03-t3-controls/W/C4-234-N-killed-from-outside-timeout/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04-run/descriptor.json
+e8f42bdfc2640a713c7977e5d73279f7052586e4891928b840c9aea892165dac  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04c-witness/CHECKS.txt
+b0ed9439c6d1a586b36a521a9a72a0c93f972bc47ca7b829b2511d4716d17c3c  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04c-witness/CLASSIFICATION.txt
+9a4600fd3b5fb3d3cf650f3159ce6b1d3e50561d88dfedb623b423d78006065f  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04c-witness/PARSED-RECEIPT.json
+afbcbb9a7c407010d85372421465283f5bfbcbd26c316ea9759047b4641b83a6  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04c-witness/descriptor.json
+b919f7e7bc95bb0c5b33b98184e5b6614037e455e1453874a1f996e2b10f0109  receipts/03-t3-controls/W/C4-235-N-killed-from-outside-OOM/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04-run/descriptor.json
+36f286c7cba5ff44fddf403f9ca5cb2f7ac597829bbc0f83d45d0f98e81d7a98  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04c-witness/CHECKS.txt
+ce860793d6d3a4d8e61c9ba5152363e0ff3e975e094fb82fba52604e665b321d  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04c-witness/CLASSIFICATION.txt
+33e669b2d911cf54d48259970f4c1ac223928a0067fcef8d7a79c24f180d8746  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04c-witness/PARSED-RECEIPT.json
+72b2638caab1a7f3aea59d45f2c770c6538a34d4dbb7d1baed995094efbe2fa7  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04c-witness/descriptor.json
+717e4093cd67434818c9510ad310771081fbb2b704ee73934447a94f2f6bf4a2  receipts/03-t3-controls/W/C4-236-N-truncated-raw-output-cut-inside-scenario-P8-exit-101/04c-witness/raw-output.txt
+530285055cda191fb4d47527cc46c35a54d5d42df104cd4f9d4f0326a307f5b3  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/03-build/PIN.json
+b86211484f2b13bd1685a4b5d94f81afb88607c0589482bd5a948b828ebfb7ac  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04-run/CLASSIFICATION.txt
+fb5fd2a2d2b0dc97e7ecc7f1d36ec5c14c565556dd0311d239b3c9a2493a826b  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04-run/descriptor.json
+00ac9fd9eef57313197c9f1727339458c77e2daaeb498779579f5939e213f0c0  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04c-witness/CHECKS.txt
+c01eb21d9dcd3ee13f15dc37032839bb6d739604671c35277d45573c35b56285  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04c-witness/CLASSIFICATION.txt
+50913dc52656b8dd183a0d9713c77cf28d91cad89ea3bd9424ad1666d9e5f3b7  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04c-witness/PARSED-RECEIPT.json
+985062f8aebf6508ffb58c756abbb3be42caf029b3bca98f1420a6c7b1a31d09  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04c-witness/descriptor.json
+2f0fc9b3bc6cd136d2289da85ed9c3899abe2d0d084f58894ddb572b1be4939b  receipts/03-t3-controls/W/C4-237-N-malformed-header-the-violation-count-disagrees/04c-witness/raw-output.txt
+3927d452c8d9dab72a93cc47a6888489ec48784b4d05011af31f99a96d5c0156  receipts/03-t3-controls/X/a-healthy-transcript-whose-P4-append-consumes-one-choice.json
+516134ac66a79e78a33ed41c95183df292f590f757d0a7aac61da62bd11c09a2  receipts/03-t3-controls/X/the-historical-mutant-transcript-as-healthy.json
+17963bbf1a6df09c4512230f8007e6a449596996ea6060bcc4b1ee7e5e165908  receipts/03-t3-controls/X/the-historical-mutant-transcript-as-mutant.json
+9ef125ab0f13a39c0b5c61471af3d9aa907b6ab544cf281d4fbb7f4992a948e8  receipts/03-t3-controls/X/the-real-healthy-transcript-Stage-2-as-healthy.json
+7e4c8d123e5d69a123a8f60cb493f49c0bcbb53ce355c5af7df7302f275d13a8  receipts/03-t3-controls/X/the-real-healthy-transcript-as-mutant.json
+e19af2f5ceadc5a2cef43d0e730d78f8a3aa3e40ba78a8774882ba8c56d319d8  receipts/04-tool-diff.console.txt
+53c8e86f4e7362d86c0e38f3b6ee7ae55e5cb342ea165b2c9e3247bce0fd8732  receipts/04-tool-diff/AUTHORIZATION.md
+e19af2f5ceadc5a2cef43d0e730d78f8a3aa3e40ba78a8774882ba8c56d319d8  receipts/04-tool-diff/TOOL-DIFF-CHECK.txt
+87ca0cc868f0b34e3d8bad15e295138c71d942c708776fb6f2cd442889ea15e0  receipts/04-tool-diff/TOOL-DIFF.diff
+ebbfe4c9b7ba86f67adc23ea6bf44858407814d0e5b6e277405ada15df1be917  receipts/04b-rehearsals.console.txt
+c53f857c73a09e6ed389e873773c761e4baef2ff6208d26dda406487550f964b  receipts/04b-rehearsals/M1-control-main.console.txt
+af4f3cc35cf5317eda35b56e4e03ed3955278e5a63a5599795b8875c07526fe2  receipts/04b-rehearsals/M1-final-gate.console.txt
+71da5cd321bd6a12568ff8fa26441e93c8f988a9a26855b2de215cbe9e2bf4fa  receipts/04b-rehearsals/M1-render.console.txt
+7a9b3f83ac2eb7b674adfc2f2904895e44685c3ea1cbc8fbc595503797c2a403  receipts/04b-rehearsals/M2-control-main.console.txt
+18c7b405741c84dc8a9d2d988da2db3ab26f0f5750055b2e2fed1cecf3501bc1  receipts/04b-rehearsals/M2-final-gate.console.txt
+92179609827baba127dc2ec523e7790530c8cc76d950b2c989fc06515a39663d  receipts/04b-rehearsals/M2-render.console.txt
+87f16aa9febb64af4d7710674940b41f470eb6b6209809cbc680f6771141230e  receipts/04b-rehearsals/M3-control-main.console.txt
+4d041f5c57be5725d16c6e7385e2a398755b20d9f489b85034ec1eded46d745d  receipts/04b-rehearsals/M3-render.console.txt
+fd9a77b55277816a7fbdc2002eee15019591d82bba5c6e86736788b9b0874994  receipts/04b-rehearsals/M4-control-main.console.txt
+4d041f5c57be5725d16c6e7385e2a398755b20d9f489b85034ec1eded46d745d  receipts/04b-rehearsals/M4-render.console.txt
+40a8409e7fa3b4860fcbed4d96e1c66c891adac10986fbce42f61797ad269d99  receipts/04b-rehearsals/M5-control-main.console.txt
+92179609827baba127dc2ec523e7790530c8cc76d950b2c989fc06515a39663d  receipts/04b-rehearsals/M5-render.console.txt
+ec8ca9e5a1d5743d35af1bd348772b8210db02313477f623de1c56e26bf257a4  receipts/04b-rehearsals/M6-control-main.console.txt
+71da5cd321bd6a12568ff8fa26441e93c8f988a9a26855b2de215cbe9e2bf4fa  receipts/04b-rehearsals/M6-render.console.txt
+bf293a9cdd5539d1601c7ce2aee663d7df1d7460b28e104a6e7421ee4983f855  receipts/04b-rehearsals/N1-packet.console.txt
+b3c7b60e91533af4e53d882bd55be7df106828bb3d6e720e02b1dbf0dd36eba0  receipts/04b-rehearsals/N2-packet.console.txt
+b9b40a930887aa0e3e61470fb05c2eca3af0b0ef34b454872307ff654fe60649  receipts/04b-rehearsals/N3-packet.console.txt
+c560a7c581deff57fb21c9826327b951bf6bd014dc8db8551d2bddacc2b6e8fa  receipts/04b-rehearsals/N4-packet.console.txt
+1f41f3f9ad9f423dc25ebc5f6723dc21086ad74b8474d7727448edb70145a040  receipts/04b-rehearsals/N5-packet.console.txt
+89d08edf2c561f373e6264619c1cc0e2e01e3d26fb71fc3578f6a0d20d06facd  receipts/04b-rehearsals/N6-packet.console.txt
+f5d581192e77172f99494d1ed897c96adb907ee798f9580733fac82866eb0ac3  receipts/04b-rehearsals/N7-packet.console.txt
+115a2b79752836645af8eb58ed71d6bbb2c37e6dbacac8133dbad6f965400399  receipts/04b-rehearsals/R1-packet.console.txt
+71da5cd321bd6a12568ff8fa26441e93c8f988a9a26855b2de215cbe9e2bf4fa  receipts/04b-rehearsals/R1-render.console.txt
+4696c17e525d6d33d90ee8fe259c7608464a68529ea708a97ef928748e991f02  receipts/04b-rehearsals/R2-packet.console.txt
+92179609827baba127dc2ec523e7790530c8cc76d950b2c989fc06515a39663d  receipts/04b-rehearsals/R2-render.console.txt
+808100e1cd79b0bd21fe18b99c646ee5298ca309fa3fcdfa396b39c4b6adfd71  receipts/04b-rehearsals/R3-packet.console.txt
+f1451bfed5ab99cc43465ce8316a39ce562d94f4e49ad8800b48da8e7a77c102  receipts/04b-rehearsals/R3-render.console.txt
+d0b5b349c84dd5dd4fbcb4830d7dcd6978af331f413476f344f769df700b7c2a  receipts/04b-rehearsals/R4-packet.console.txt
+92179609827baba127dc2ec523e7790530c8cc76d950b2c989fc06515a39663d  receipts/04b-rehearsals/R4-render.console.txt
+f4e497cae5c6bd37b462be6026f806ee347465e551d61f8ade45cc8287794983  receipts/04b-rehearsals/R5-packet.console.txt
+4d041f5c57be5725d16c6e7385e2a398755b20d9f489b85034ec1eded46d745d  receipts/04b-rehearsals/R5-render.console.txt
+992d80819b0e79cbcbd26fb00065dad326fe35b6db0b7582f1f6985c0c311feb  receipts/04b-rehearsals/R6-packet.console.txt
+92179609827baba127dc2ec523e7790530c8cc76d950b2c989fc06515a39663d  receipts/04b-rehearsals/R6-render.console.txt
+59ba99507b81909d5eca65c5c30f6a0623e57fc35e0060b12d9bdc6b8af57e28  receipts/04b-rehearsals/REHEARSALS.json
+12a9b9836b512aef8311246d485b5fd44b4130f2cd8dfd2817106391394c107c  receipts/04b-rehearsals/REHEARSALS.txt
+f76344227a39bf643a9a5b863ad2a9cf1aa2eb207a4dc5a2c364d4b413ad828f  receipts/04b-rehearsals/SUMMARY.txt
+30e3479bb5266d84cb15381c1e4d3572d58622d1881482f08dd039bedebb5aac  receipts/05-FREEZE-RECORD.txt
+6a8109d78b9a9606439bf6f71cdb9b5e44ecf1f0643e65f60c49d5a47179814e  receipts/05-FREEZE.json
+95507ff454d47030958b532cd8dd9aec0b9c218a2cd95b2fc687cebf544b4912  receipts/05-freeze.console.txt
+1e73ef2045a8a3880c2d20cf42b59bc3c2eef0408b73c01c86435bb73a7a570b  receipts/06-PRE-EXECUTION-GATE.txt
+15fae843ae7b56948ca62fe2ac39bc64301c76e47fb98854b98da135d6985de1  receipts/06-gate-authentication.txt
+1e73ef2045a8a3880c2d20cf42b59bc3c2eef0408b73c01c86435bb73a7a570b  receipts/06-pre-execution-gate.console.txt
+2863731054fc62c9c340d6a424f4c1ff0382ec37aecd679b8297b2e229f99348  receipts/81-C4.console.txt
+9396f86bff9e9f8b89b6bbc989054ab37722b36435eae4cf415f1a59baef9cb7  receipts/81-C4/00-GATE.txt
+0e6d804703940ac2d0da19fd2357011baf2a922d433cd72947957701be413a0f  receipts/81-C4/01-worktree/AUTHENTICATE.json
+690e64919463cf36ec6bd1f7287b85f7e725c040ff0b08a93355ac00b586f2e1  receipts/81-C4/01-worktree/AUTHENTICATE.txt
+6b68b3aed8579d41b265e53d4c949ad32e6715dd14cbc37742246527cd8a50e6  receipts/81-C4/01-worktree/CREATE.json
+17d6ae269171b4bd2d5dab7cd653106b6798e69c0d68dffc12850182f65f674d  receipts/81-C4/01-worktree/CREATE.txt
+825d1003c2bf8e135dd1161884f2ed70b2142d8da72b717480db0c32ed8a6071  receipts/81-C4/02-apply/APPLY.json
+1748844a150d9422df2a38c70efa45664e5770390ccc5a9ff721e091a6f82c37  receipts/81-C4/02-apply/APPLY.txt
+c21d093a851e3743e4151072fdeb2972345400b07f4662d81d52d60e920d9045  receipts/81-C4/03-build/CHECKS.txt
+4c1600a40ae912138a9ffe6f0f2b5365634dfa3a4108363d751e0fb16113c599  receipts/81-C4/03-build/CLASSIFICATION.txt
+de343d19c60d2f4457a7185251d19be6807f6ff095e050867c19bcda37422e8a  receipts/81-C4/03-build/PARSED-RECEIPT.json
+1e107c4a725a44306991f6d025043ae727380b3744ca1f43993a306466fa8f16  receipts/81-C4/03-build/PIN.json
+8faa7e2de66f86e779b673556d1ee67ed5c3e2c8f17707c86bb44460a74dfba2  receipts/81-C4/03-build/RECEIPT.txt
+258ed58bdb2fd09c3a5eef81bc50ace0c7c811ab70a1f6e31059747fcee27786  receipts/81-C4/03-build/build.stderr
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  receipts/81-C4/03-build/build.stdout
+c940e8672acb06a3978440d0a6e3f5a9681ef4e1533e4e0368d86e35cef91141  receipts/81-C4/03-build/cgroup-samples.txt
+187e8b069f467868b65c0e20be7e09f86e41448235013f393099e5fa72521550  receipts/81-C4/03-build/descriptor.json
+25c46fa718144e6f0243af81cd468f3cc1cc8a9c123a0c783014ee6686aa8c84  receipts/81-C4/03-build/scope-record.txt
+55770fd60ce0c1df6553dc405267c63761dad5d8ad9f2b7b7d93e6d5ea81ba20  receipts/81-C4/03-build/time-v.txt
+c865b3f80a1787b9818e24b570a1f3e475b169f3e9cd37827d932a5e7e627c93  receipts/81-C4/04-run/CHECKS.txt
+0a49bd455a63a275351b5e7e281b86d54c5def1723eb4453710638252a113a73  receipts/81-C4/04-run/CLASSIFICATION.txt
+79fff68df20ac041c7a7335c4d252ca950704d00ca352d156735a712ba494478  receipts/81-C4/04-run/PARSED-RECEIPT.json
+2f71a1fb442cfbeb627c9ded1ba57a3565a8cb695e636a1dd6c089f777d4a3e3  receipts/81-C4/04-run/RECEIPT.txt
+929ea5dab0cc27629bb8dc241b890005dcf33fd08eb5a281ef2e83f81bc5bf83  receipts/81-C4/04-run/cgroup-samples.txt
+27b80cebd6518cbc5ee1799a878260a8eabc7be1314ee8115cae5b6cd7010200  receipts/81-C4/04-run/descriptor.json
+edda61a1246945ec76b2b15526f939eaa8b4559229125d6d2729200e0fcd4477  receipts/81-C4/04-run/raw-output.txt
+ab3ea3db56e57d61d4b8a0808ebedad82f0c74b1fe0cd0735138c92712b6a177  receipts/81-C4/04-run/scope-record.txt
+1c9b2edeb5431c7a0d028925310f462fabb33613d43dcf33bb15b0fd3e864f0d  receipts/81-C4/04-run/time-v.txt
+c312b4a24b0e20a44eb445761f356c9d52372b9b23a4dccf814a7ac69d09bc71  receipts/81-C4/04c-witness/CHECKS.txt
+02c6772ca44e8ef032686410b0ab3dffbe1a98eded45e637a32117b6316b0029  receipts/81-C4/04c-witness/CLASSIFICATION.txt
+9dc11edbfce3b63001a82b2f03180805027dbf78376b4f888b245631b497d7da  receipts/81-C4/04c-witness/PARSED-RECEIPT.json
+507e519a63575f721872316c1a5693bd58e766afb520f38ecc0a28c12cff163a  receipts/81-C4/04c-witness/RECEIPT.txt
+ee324785284062a0b44397a2441ab93ea0d86514169b23ea1067d60efa90a007  receipts/81-C4/04c-witness/cgroup-samples.txt
+962564a46fe2780f8067947a066305390a6b220d581dc40baf0e0b3b1e617f50  receipts/81-C4/04c-witness/descriptor.json
+e0f7379905c08662e7a6a8e16f1604c119a8adf2a2c325a0f4d140ea253f2d44  receipts/81-C4/04c-witness/raw-output.txt
+cd1b819f81ab5f16f0617e34dc68ade8710f2ae1cb1fa17467bb313a2786882a  receipts/81-C4/04c-witness/scope-record.txt
+74a83965deeaf1bfe8268dbc508e88642602a38946e4c40a39f26874e836f384  receipts/81-C4/04c-witness/time-v.txt
+ad564a90e49e5f1f38c420a09719bb05f9c487c529eaab14b069b0652208f35e  receipts/81-C4/05-restore/RESTORE.json
+c82dbde01907d9c3d465d3750db9cae748dc857a2657e24fcb1a29bc758368c7  receipts/81-C4/05-restore/RESTORE.txt
+0fc204c0ec9b65e138b7d6fa1830395ba9b66eea59871fa1f28bd3d3beaabbb9  receipts/81-C4/05b-restore-auth/RESTORE-AUTH.json
+6d4a61974b06679cb3fc6a6ea9c8a783c80aa3779d21722ffa859d190e9f1040  receipts/81-C4/05b-restore-auth/RESTORE-AUTH.txt
+3cfb22e6b56249a5ac82eded5058a1d8db5bccea583f6fa7ca8b59b60ede6ecb  receipts/81-C4/06a-healthy-witness/HEALTHY.json
+cd70b33ad1fc3899efb81d01e1a882bfa6901be2489e7bac4dd88434660f1f39  receipts/81-C4/06a-healthy-witness/HEALTHY.txt
+e046aa9eedd94e9f4ebdb9c21c45bf1ba8714f3514e5164fb83c0cc12ae6f517  receipts/81-C4/06b-link/LINK.json
+0109ea0fec4fa172325d0f22a9e86cd201b57013cf28913d26b7532a679c94bb  receipts/81-C4/06b-link/LINK.txt
+493a123055a2cc8818039f301a5ca479b69e9ff55e34add7792c997bbc3e0a73  receipts/81-C4/07-g5/G5.json
+b24134fe3bceb5476aa79b51019a7640866909e3a6b048515b7fa08da8e123c5  receipts/81-C4/07-g5/G5.txt
+0b3fdae608d3ddb51f8aba3e9e64a9e9df944a1838121b1499a8ef829db1df68  receipts/81-C4/CONTROL-RESULT.json
+ec57281f54e157b6dcf8e3c17bd4cfe5e97d07208ba26d678ebda048ad67dc12  receipts/81-C4/RESULT.txt
+fa69641c2bb1ded0385af303a7dccad102862bea78b333dbff886786e385632f  receipts/90-final-gate.console.txt
+fa69641c2bb1ded0385af303a7dccad102862bea78b333dbff886786e385632f  receipts/90-final-gate.txt
+ffe632dc372a84f0ede5601f6b31c59676dc16dfdd2049bf7e98581551ea1382  receipts/90-gate-authentication.txt
+de0089414dea4b8ad8a585c7c0509d03763ee2eb4b984a1c28f91a2a6dd227c2  tools/authenticate.py
+0486577c7dc8f01ef792078ab20b4e6d71baabe2274649647c9b72eee6caeba9  tools/build_packet.py
+db780312d7e09fcce97e68f4808ae53be96e6e0364af9b0969d2c42502565641  tools/common.py
+2858ebdbefc0cfcb194dac08622a5033f833e29a24933f8643b028d782691f4c  tools/control.py
+8c92469295a826d986d0df732d2339c03a055bf4daee34ca35a07aa6f72e9f57  tools/expectations.py
+4afdbe1278c9dfe44f343b0606ec58c63cf0d8dcd7288c133df97bbaf8eff8ad  tools/final_gate.py
+1d0d3d1590d92474b8810b8b2cca534cf380f4e22312a80c66753c8db005c7aa  tools/finalize.py
+8cc91c3265f2c679bdd55d6de4e8d8a310b5389fcfb10c7bc07ffe9cce39f865  tools/g5.py
+ebf4772768697aeb8dc5165e7de3930cbc5dfc99cab126034cb8c49bb1282818  tools/pre_exec_gate.py
+db12b7bf0dde182c2d4ea55ca2d49c8bf8b8653fc35c28754675f8b0530a3b28  tools/publish_checks.py
+ee54aa61576343256d1072fd602695cdedd7e3be606aad18c82919cfe9842ead  tools/record_freeze.py
+25a59aa123994357b0d288d5680c4148e5614500e093cc967d643bb81e769857  tools/rehearsals.py
+a6d8e7465aa7d94d770b149762c084ec137ba03544d055771d6434688c4757e9  tools/render.py
+e571aedb1611315a67961be2cebedde6cfc8dc2dd8dcbda5f378e0f2113653a8  tools/t3_controls.py
+5ef4c3070380c7923aa929881a454988d239fed5df4747b2309458860e2ae247  tools/tool_diff.py
+27a6e7a43cfda6dd1cacd055a0d149f55c45232e03be4fd9009b7ff4705a3922  tools/worktree.py

@@ -1,0 +1,7 @@
+372,373c372,374
+<           not [c for c in ra_calls if c.startswith(("subprocess", "os.system", "os.remove", "shutil", "git",
+<                                                     "supervise.build", "supervise.invoke", "worktrees.create"))]
+---
+>           not [c for c in ra_calls if c in ("git", "control.git") or c.startswith((
+>               "subprocess.", "os.system", "os.remove", "os.unlink", "os.rename", "shutil.", "supervise.build",
+>               "supervise.invoke", "worktrees.create", "K.git"))]

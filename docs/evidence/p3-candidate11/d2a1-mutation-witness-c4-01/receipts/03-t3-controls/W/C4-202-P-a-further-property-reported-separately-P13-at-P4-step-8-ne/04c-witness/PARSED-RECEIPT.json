@@ -1,0 +1,1179 @@
+{
+ "control": "C4",
+ "receipt_type": "AD-1-R4 F.1 (c), the G.5(B) mutant witness",
+ "test": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+ "named_properties": [
+  "P4",
+  "P8"
+ ],
+ "positive_lines": {
+  "P4": "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)",
+  "P8": "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)"
+ },
+ "observed": {
+  "P4": true,
+  "P8": true
+ },
+ "header_violations": 3,
+ "other_properties": {
+  "P4": [
+   "P13"
+  ],
+  "P8": []
+ },
+ "panic_message": [
+  "C4 WITNESS F-8: 2 scenarios, every step enabled and consuming its choices as planned; 3 violations",
+  "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)",
+  "OTHER PROPERTIES VIOLATED in scenario P4, each reported separately and not counted as P4: [\"P13\"]",
+  "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)",
+  "OTHER PROPERTIES VIOLATED in scenario P8, each reported separately and not counted as P8: []",
+  "every violation:",
+  "  P4 step 8 after: P4: U is occupied together with C or X",
+  "  P4 step 8 after: P13: a synthetic detail",
+  "  P8 step 12 after: P8: G1's attempt is written, uncorrected and not in U"
+ ],
+ "g6_problems": [],
+ "transcript": {
+  "scenarios": {
+   "P4": {
+    "header": "C4 WITNESS F-8 P4: 8 steps from the initial world; step 8, Ack(0)'s append, is offered [0, 0, 0, 1, 0, 0]: the healthy core must consume [] and show 'append_acknowledgement: Refused(NotNow(CellsBusy))' (2 faults left); without test 1 it must consume [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)] and show 'append_acknowledgement: NotApplied(Uncertain)' (1 faults left)",
+    "named": "P4",
+    "total": 8,
+    "initial": [],
+    "steps": [
+     {
+      "n": 1,
+      "total": 8,
+      "actor": "Fw(0)",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Fw(0): arm -> Armed",
+      "marker": false,
+      "branches": [],
+      "word": "0x10004",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  1/8 Fw(0) offered [] consumed [] unused [] faults left 2: Fw(0): arm -> Armed",
+       "branches": "    branches []; word after 0x10004 (live 1, unapplied 0); phase Healthy, latch None",
+       "cells": "    U None; C None; X None",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 2,
+      "total": 8,
+      "actor": "Fw(0)",
+      "offered": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        3
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Fw(0): append_facts[\"F1\"] -> NotApplied NotWritten Conflict(new or retained cause DuplicateRole) [Open:Ok Facts:Ok Rollback:Ok]",
+      "marker": false,
+      "branches": [
+       "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  2/8 Fw(0) offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused [] faults left 2: Fw(0): append_facts[\"F1\"] -> NotApplied NotWritten Conflict(new or retained cause DuplicateRole) [Open:Ok Facts:Ok Rollback:Ok]",
+       "branches": "    branches [\"append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 3,
+      "total": 8,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: reads the agenda (frontier 0), chooses AppendX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 })",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  3/8 Wk offered [] consumed [] unused [] faults left 2: Wk: reads the agenda (frontier 0), chooses AppendX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 })",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 4,
+      "total": 8,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  4/8 Wk offered [] consumed [] unused [] faults left 2: Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 5,
+      "total": 8,
+      "actor": "Wk",
+      "offered": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        2
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: append_cell X: Committed (inserted) [Open:Ok Present:Ok Insert:Ok Commit:Ok]",
+      "marker": false,
+      "branches": [
+       "append_cell X: Committed (inserted)"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  5/8 Wk offered [0, 0, 0, 0] consumed [(0, 3), (0, 3), (0, 2), (0, 2)] unused [] faults left 2: Wk: append_cell X: Committed (inserted) [Open:Ok Present:Ok Insert:Ok Commit:Ok]",
+       "branches": "    branches [\"append_cell X: Committed (inserted)\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 6,
+      "total": 8,
+      "actor": "Ack(0)",
+      "offered": [
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        4
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Ack(0): snapshot -> Taken [Survey:Ok]",
+      "marker": false,
+      "branches": [
+       "snapshot: Taken"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  6/8 Ack(0) offered [0] consumed [(0, 4)] unused [] faults left 2: Ack(0): snapshot -> Taken [Survey:Ok]",
+       "branches": "    branches [\"snapshot: Taken\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 7,
+      "total": 8,
+      "actor": "Ack(0)",
+      "offered": [
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        2
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Ack(0): the Owner confirms",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  7/8 Ack(0) offered [0] consumed [(0, 2)] unused [] faults left 2: Ack(0): the Owner confirms",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 8,
+      "total": 8,
+      "actor": "Ack(0)",
+      "offered": [
+       0,
+       0,
+       0,
+       1,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ]
+      ],
+      "unused": [],
+      "faults": 1,
+      "note": "Ack(0): append_acknowledgement -> NotApplied(Uncertain) [Open:Ok Recheck:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]",
+      "marker": true,
+      "branches": [
+       "append_acknowledgement: NotApplied(Uncertain)"
+      ],
+      "word": "0x100000100a5",
+      "phase": "NeedBarrier",
+      "latch": "None",
+      "cells": {
+       "U": "Some(Acknowledgement { set: SetFacts { frontier: 0, head: 4, top: 4, count: 1, digest: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, nonce: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [
+       [
+        "after",
+        "P4",
+        "U is occupied together with C or X"
+       ],
+       [
+        "after",
+        "P13",
+        "a synthetic detail"
+       ]
+      ],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P4 step  8/8 Ack(0) offered [0, 0, 0, 1, 0, 0] consumed [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)] unused [] faults left 1: Ack(0): append_acknowledgement -> NotApplied(Uncertain) [Open:Ok Recheck:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]",
+       "branches": "    branches [\"append_acknowledgement: NotApplied(Uncertain)\"]; word after 0x100000100a5 (live 1, unapplied 1); phase NeedBarrier, latch None",
+       "cells": "    U Some(Acknowledgement { set: SetFacts { frontier: 0, head: 4, top: 4, count: 1, digest: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, nonce: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }); C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     }
+    ],
+    "fixture": null
+   },
+   "P8": {
+    "header": "C4 WITNESS F-8 P8: 12 steps from the initial world; step 12, Ack(0)'s append, is offered [0, 0, 0, 0]: the healthy core must consume [] and show 'append_acknowledgement: Refused(NotNow(NotHealthy))' (1 faults left); without test 1 it must consume [(0, 4), (0, 4), (0, 4), (0, 3)] and show 'append_acknowledgement: Committed' (1 faults left)",
+    "named": "P8",
+    "total": 12,
+    "initial": [],
+    "steps": [
+     {
+      "n": 1,
+      "total": 12,
+      "actor": "Fw(0)",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Fw(0): arm -> Armed",
+      "marker": false,
+      "branches": [],
+      "word": "0x10004",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  1/12 Fw(0) offered [] consumed [] unused [] faults left 2: Fw(0): arm -> Armed",
+       "branches": "    branches []; word after 0x10004 (live 1, unapplied 0); phase Healthy, latch None",
+       "cells": "    U None; C None; X None",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 2,
+      "total": 12,
+      "actor": "Fw(0)",
+      "offered": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        3
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Fw(0): append_facts[\"F1\"] -> NotApplied NotWritten Conflict(new or retained cause DuplicateRole) [Open:Ok Facts:Ok Rollback:Ok]",
+      "marker": false,
+      "branches": [
+       "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  2/12 Fw(0) offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused [] faults left 2: Fw(0): append_facts[\"F1\"] -> NotApplied NotWritten Conflict(new or retained cause DuplicateRole) [Open:Ok Facts:Ok Rollback:Ok]",
+       "branches": "    branches [\"append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 3,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: reads the agenda (frontier 0), chooses AppendX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 })",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  3/12 Wk offered [] consumed [] unused [] faults left 2: Wk: reads the agenda (frontier 0), chooses AppendX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 })",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 4,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  4/12 Wk offered [] consumed [] unused [] faults left 2: Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1)]"
+      }
+     },
+     {
+      "n": 5,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        2
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: append_cell X: Committed (inserted) [Open:Ok Present:Ok Insert:Ok Commit:Ok]",
+      "marker": false,
+      "branches": [
+       "append_cell X: Committed (inserted)"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  5/12 Wk offered [0, 0, 0, 0] consumed [(0, 3), (0, 3), (0, 2), (0, 2)] unused [] faults left 2: Wk: append_cell X: Committed (inserted) [Open:Ok Present:Ok Insert:Ok Commit:Ok]",
+       "branches": "    branches [\"append_cell X: Committed (inserted)\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 6,
+      "total": 12,
+      "actor": "Ack(0)",
+      "offered": [
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        4
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Ack(0): snapshot -> Taken [Survey:Ok]",
+      "marker": false,
+      "branches": [
+       "snapshot: Taken"
+      ],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  6/12 Ack(0) offered [0] consumed [(0, 4)] unused [] faults left 2: Ack(0): snapshot -> Taken [Survey:Ok]",
+       "branches": "    branches [\"snapshot: Taken\"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 7,
+      "total": 12,
+      "actor": "Ack(0)",
+      "offered": [
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        2
+       ]
+      ],
+      "unused": [],
+      "faults": 2,
+      "note": "Ack(0): the Owner confirms",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  7/12 Ack(0) offered [0] consumed [(0, 2)] unused [] faults left 2: Ack(0): the Owner confirms",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 8,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: reads the agenda (frontier 0), chooses EmptyX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 }, 4)",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  8/12 Wk offered [] consumed [] unused [] faults left 2: Wk: reads the agenda (frontier 0), chooses EmptyX(CellToken { ledger: Shared { word: 1099511693444, tickets: 8 }, cell: X, occupancy: 1 }, 4)",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 9,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+      "marker": false,
+      "branches": [],
+      "word": "0x10000010084",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step  9/12 Wk offered [] consumed [] unused [] faults left 2: Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied",
+       "branches": "    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(4)))",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 10,
+      "total": 12,
+      "actor": "Wk",
+      "offered": [],
+      "consumed": [],
+      "unused": [],
+      "faults": 2,
+      "note": "Wk: empty: Done []",
+      "marker": false,
+      "branches": [
+       "empty: Done"
+      ],
+      "word": "0x10000010004",
+      "phase": "Healthy",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": false,
+       "written": false,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step 10/12 Wk offered [] consumed [] unused [] faults left 2: Wk: empty: Done []",
+       "branches": "    branches [\"empty: Done\"]; word after 0x10000010004 (live 1, unapplied 1); phase Healthy, latch None",
+       "cells": "    U None; C None; X None",
+       "g1": "    G1: insert issued false, written false, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0)]"
+      }
+     },
+     {
+      "n": 11,
+      "total": 12,
+      "actor": "Gc(0)",
+      "offered": [
+       0,
+       0,
+       0,
+       1,
+       1,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        0,
+        3
+       ]
+      ],
+      "unused": [],
+      "faults": 1,
+      "note": "Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]",
+      "marker": true,
+      "branches": [
+       "append_gating: Refused Uncertain Storage"
+      ],
+      "word": "0x10000010025",
+      "phase": "NeedBarrier",
+      "latch": "None",
+      "cells": {
+       "U": "Some(Gating { record: GatingRecord(Member { key: RecordKey { id: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, part: None }), exit: ReturnedUncertain })",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": true,
+       "written": true,
+       "told": false,
+       "in_u": true,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0), Gating(0)]",
+      "violations": [],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step 11/12 Gc(0) offered [0, 0, 0, 1, 1, 0] consumed [(0, 4), (0, 4), (0, 4), (1, 3), (1, 2), (0, 3)] unused [] faults left 1: Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]",
+       "branches": "    branches [\"append_gating: Refused Uncertain Storage\"]; word after 0x10000010025 (live 1, unapplied 1); phase NeedBarrier, latch None",
+       "cells": "    U Some(Gating { record: GatingRecord(Member { key: RecordKey { id: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, part: None }), exit: ReturnedUncertain }); C None; X None",
+       "g1": "    G1: insert issued true, written true, told Committed false, in U true, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0), Gating(0)]"
+      }
+     },
+     {
+      "n": 12,
+      "total": 12,
+      "actor": "Ack(0)",
+      "offered": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "consumed": [
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        3
+       ]
+      ],
+      "unused": [],
+      "faults": 1,
+      "note": "Ack(0): append_acknowledgement -> Committed [Open:Ok Recheck:Ok Insert:Ok Commit:Ok]",
+      "marker": false,
+      "branches": [
+       "append_acknowledgement: Committed"
+      ],
+      "word": "0x10000010005",
+      "phase": "NeedBarrier",
+      "latch": "None",
+      "cells": {
+       "U": "None",
+       "C": "None",
+       "X": "None"
+      },
+      "g1": {
+       "issued": true,
+       "written": true,
+       "told": false,
+       "in_u": false,
+       "in_c": false,
+       "corrected": false
+      },
+      "ledger": "[Prepared(0), Holder(0), Prepared(1), Explanation(0), Gating(0), Acknowledgement { set: SetFacts { frontier: 0, head: 4, top: 4, count: 1, digest: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, nonce: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]",
+      "violations": [
+       [
+        "after",
+        "P8",
+        "G1's attempt is written, uncorrected and not in U"
+       ]
+      ],
+      "shape": [],
+      "raw": {
+       "step": "C4 WITNESS F-8 P8 step 12/12 Ack(0) offered [0, 0, 0, 0] consumed [(0, 4), (0, 4), (0, 4), (0, 3)] unused [] faults left 1: Ack(0): append_acknowledgement -> Committed [Open:Ok Recheck:Ok Insert:Ok Commit:Ok]",
+       "branches": "    branches [\"append_acknowledgement: Committed\"]; word after 0x10000010005 (live 1, unapplied 1); phase NeedBarrier, latch None",
+       "cells": "    U None; C None; X None",
+       "g1": "    G1: insert issued true, written true, told Committed false, in U false, correction in C false, correction in the ledger false",
+       "ledger": "    ledger after [Prepared(0), Holder(0), Prepared(1), Explanation(0), Gating(0), Acknowledgement { set: SetFacts { frontier: 0, head: 4, top: 4, count: 1, digest: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, nonce: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]"
+      }
+     }
+    ],
+    "fixture": null
+   }
+  },
+  "order": [
+   "P4",
+   "P8"
+  ],
+  "stray": [],
+  "witness_lines": 105,
+  "preamble": [
+   "SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01): not the output of any run"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4423
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "primary_executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [],
+   "argv": [
+    "ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "dd7a3d9e0469fb133a1fd09140335e6d1b53093abade4d8daf2e8bd9c15dbd78",
+ "not_produced_by_design": "the explorer report, counts, property lines and branch list (F.1 (c))",
+ "outer_classification": "FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(B)): both 'NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)' and 'NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)'; C4 WITNESS F-8: 2 scenarios, every step enabled and consuming its choices as planned; 3 violations; G.6 verified from the raw output in both scenarios",
+ "checks_hold": 35,
+ "checks_total": 35
+}

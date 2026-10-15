@@ -1,0 +1,14 @@
+112c112
+<     out = {"scenarios": {}, "order": [], "stray": [], "witness_lines": 0}
+---
+>     out = {"scenarios": {}, "order": [], "stray": [], "witness_lines": 0, "preamble": []}
+127a128,130
+>         if not out["order"] and not (h and h.group(1) == config_name):
+>             out["preamble"].append(line[:120])  # before the witness's first line: the harness's own lines
+>             continue
+602c605
+<     if bad or names != want_names:
+---
+>     if names != want_names:
+603a607
+>     # A byte-changed copy has already failed above; every later check still runs on it, so that each defect is reported.

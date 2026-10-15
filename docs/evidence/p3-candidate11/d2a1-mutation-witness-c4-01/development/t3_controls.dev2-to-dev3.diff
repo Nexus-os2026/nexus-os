@@ -1,0 +1,14 @@
+737,738c737,738
+<             if mod == "BASE-EXE":
+<                 json.dump({"path": K.EXE, "sha256": K.EXE_SHA256, "size": K.EXE_SIZE},
+---
+>             if mod == "BASE-EXE":  # the MARK keeps every synthetic file this mission's own (no previous packet's bytes)
+>                 json.dump({"path": K.EXE, "sha256": K.EXE_SHA256, "size": K.EXE_SIZE, "synthetic": MARK.strip()},
+886c886
+<             g5.HEALTHY_FAIL + "\n"), "(C)"),
+---
+>             g5.HEALTHY_FAIL + "\n" + MARK), "(C)"),
+888c888
+<             "LINK: FAILED\n"), "(D)"),
+---
+>             "LINK: FAILED\n" + MARK), "(D)"),

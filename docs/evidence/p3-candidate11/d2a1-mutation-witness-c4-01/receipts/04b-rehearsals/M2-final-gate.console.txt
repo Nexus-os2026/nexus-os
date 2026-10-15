@@ -1,0 +1,87 @@
+FINAL GATE — P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01; started 2026-10-15T12:56:41+0100
+OK   G1 authenticate.py --gate: ALL CHECKS HOLD (receipts/90-gate-authentication.txt): RESULT: ALL CHECKS HOLD
+OK   G2 the freeze holds: freeze check: 80 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   G3 attempted controls are a prefix of this mission's order: ['C4']
+OK   G3 only the last attempted control may be unsuccessful (a stop ends the mission): {'C4': 'CONTROL RESULT: MUTATION_CONTROL_BLOCKED'}
+OK   G3 a stop record exists exactly when the mission stopped (or no control could start): stopped True; stop record True
+OK   G3 C4: RESULT agrees with its sub-receipts (candidate only with every G.5 step; INCOMPLETE exactly when the primary or the witness is classified INCOMPLETE; STOPPED BEFORE EXECUTION exactly when the gate refused): CONTROL RESULT: MUTATION_CONTROL_BLOCKED; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: G.5(A) PRIMARY — NOT ESTABLISHED', 'witness': None, 'restore': 'RESTORE: EXACTLY_C', 'restore_auth': 'RESTORE AUTH: OK', 'healthy': None, 'link': None, 'g5': None}
+OK   G3 C4: no tranche-3 rules, build-admission, pin-only, reauthentication or informational record (none exists in this mission)
+OK   G3 C4: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G3 C4: after a pinned build, the post-restoration authentication exists and holds (mutant blob before restoration, the same inverse patch, ownership, lock, the executable unchanged): RESTORE AUTH: OK
+FAIL G6 C4: pinned mutant executable preserved (03-build/PIN.json): /synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef 69bb8bc702e38394…
+OK   G3 C7 (MUTATION_CONTROL_BLOCKED): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C22 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C14 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C19 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C21 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C27 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C28 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C12 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C9 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C11 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C17 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C18a (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C18b (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C23 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C10 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C16 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C26 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C3a (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C5 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 A3 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 A6 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C8 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C15 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C2 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C24 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C3b (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C3c (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C6 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 A1 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 A2 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C20 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 A5 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C1 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G3 C25 (Architect-accepted): no expectation, no receipt directory and no mwc4 worktree; never executed here
+OK   G4 no mwc4 worktree for any accepted or blocked control: []
+OK   G4 C22 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C14 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C19 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C21 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C27 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C28 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C12 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C9 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C11 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C17 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C23 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C10 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C16 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C26 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C5 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A3 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A3, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A6, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C8 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C15 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C15, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C2 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C24 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3b, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3c (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3c, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C6, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A1 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A2 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C20 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A5 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C1 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C25 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C7 (MUTATION_CONTROL_BLOCKED; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7, read-only): exactly C, not touched: EXACTLY_C
+OK   G6 the pinned baseline executable unchanged
+OK   G5 no catalog mutant blob in the repository object store: []
+OK   G5 nothing staged in the main worktree: []
+OK   G7 no mutant source copy anywhere under the evidence root (141 files compared): []
+OK   G8 no cargo, rustc or governed-control test process running now (by executable name): []
+finished 2026-10-15T12:59:05+0100
+FINAL GATE: FAILED: G6 C4: pinned mutant executable preserved (03-build/PIN.json)

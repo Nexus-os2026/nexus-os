@@ -1,0 +1,14 @@
+369,370c369,371
+<     check("D4 control.restore_auth (added) only reads: no process launch, no git, no write but its own RESTORE-AUTH "
+<           "record (open(..., 'w') of RESTORE-AUTH.txt and json.dump of RESTORE-AUTH.json), no supervise.build/invoke",
+---
+>     check("D4 control.restore_auth (added) only reads: no process launch of its own (worktrees.worktree_entry's "
+>           "read-only `git worktree list` aside), no git write, no write but its own two RESTORE-AUTH records "
+>           "(RESTORE-AUTH.txt and RESTORE-AUTH.json, each opened with 'w' once), no supervise.build/invoke",
+373,374c374,376
+<           and ast.unparse(ra).count("'w')") == 1 and "RESTORE-AUTH.txt" in ast.unparse(ra)
+<           and "RESTORE-AUTH.json" in ast.unparse(ra), ra_calls)
+---
+>           and ast.unparse(ra).count("'w')") == 2
+>           and ast.unparse(ra).count("os.path.join(outdir, 'RESTORE-AUTH.txt'), 'w')") == 1
+>           and ast.unparse(ra).count("os.path.join(outdir, 'RESTORE-AUTH.json'), 'w')") == 1, ra_calls)

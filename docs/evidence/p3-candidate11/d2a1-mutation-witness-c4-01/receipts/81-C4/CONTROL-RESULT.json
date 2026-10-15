@@ -1,0 +1,18 @@
+{
+ "control": "C4",
+ "status": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+ "facts": [
+  "apply: APPLY: EXACTLY_C_PLUS_PATCH",
+  "build: BUILD: PINNED",
+  "pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8 size 8988320",
+  "primary (type (a), G.5(A)): CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF); outer class (AD-1-R4 K.2): FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failure P4 recorded as printed (AD-1-R4 G.5(A) primary of C4); the primary does not establish P4 and P8: both are attributed only by the type-(c) witness (G.5(B))",
+  "mutant witness (type (c), G.5(B), G.6): CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY); outer class (AD-1-R4 K.2): FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(B)): both 'NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)' and 'NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)'; C4 WITNESS F-8: 2 scenarios, every step enabled and consuming its choices as planned; 2 violations; G.6 verified from the raw output in both scenarios",
+  "restoration: RESTORE: EXACTLY_C",
+  "post-restoration authentication: RESTORE AUTH: OK",
+  "linked healthy witness (type (e3), G.5(C), G.6): HEALTHY WITNESS LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/52-witness-C4 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)",
+  "linked restored-side receipt (type (e1), G.5(D)): LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/64-full-F-8 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-8 unchanged-core original-explorer PASS, type (e1))",
+  "G.5: G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY AND RESTORATION HOLD; (E) ARCHITECT REVIEW PENDING",
+  "G.5(F) recording, proposed for Architect review (not an acceptance): 'C4: P4, P8 (first failure P4; witness)'",
+  "G.5(E): the Sole Architect's independent review is PENDING (never claimed by the executor)"
+ ]
+}

@@ -1,0 +1,68 @@
+PRE-EXECUTION GATE: ALL CHECKS HOLD
+started: 2026-10-15T12:59:25+0100; mission P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01
+OK   E1 authenticate.py --gate: ALL CHECKS HOLD (receipts/06-gate-authentication.txt): 546 checks OK
+OK   E2 the freeze holds: freeze check: 80 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   E2 the freeze covers every tool, the C1/C25 mission's base tool set, every input (catalog, the C4 patch, the linked F-8 receipt and the C4 healthy witness receipt, addenda, adoption records, proof), the expectations and the two records (80 paths): []
+OK   E2 the freeze record states this mission's order, the accepted, the blocked and the not-authorized controls
+OK   E3 receipts/00-authentication.txt: RESULT: ALL CHECKS HOLD: RESULT: ALL CHECKS HOLD
+OK   E3 receipts/01-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK: SELF-TEST RESULT: ALL OK
+OK   E3 receipts/02-EXPECTATIONS.console.txt: EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD: EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD
+OK   E3 receipts/03-t3-controls/SUMMARY.txt: T3 CONTROLS: ALL AS EXPECTED: T3 CONTROLS: ALL AS EXPECTED
+OK   E3 receipts/04-tool-diff/TOOL-DIFF-CHECK.txt: TOOL DIFF: ALL CHECKS HOLD: TOOL DIFF: ALL CHECKS HOLD
+OK   E3 receipts/04b-rehearsals/SUMMARY.txt: REHEARSALS: ALL AS EXPECTED: REHEARSALS: ALL AS EXPECTED
+OK   E4 only authorized tool differences (tool_diff.py --check against the frozen tools): TOOL DIFF: ALL CHECKS HOLD
+OK   E5 no receipt directory and no worktree for any of this mission's controls: []
+OK   E5 C4's worktree is a fresh one in this mission's namespace (mwc4)
+OK   E5 no worktree of this mission's namespace (mwc4) for any accepted or blocked control: []
+OK   E6 no conflicting mission process (governed-control test executable, cargo/rustc in a mission worktree, p3c11-* scope, control.py): [] [] [] []
+OK   E7 C22 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C14 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C19 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C21 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C27 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C28 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C12 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C9 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C11 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C17 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C18a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C18b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C23 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C10 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C16 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C26 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C3a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C5 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 A3 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A3, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 A6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A6, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C8 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C15 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C15, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C2 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C24 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C3b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3b, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C3c (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3c, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C6, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 A1 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 A2 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C20 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 A5 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C1 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C25 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C7 (MUTATION_CONTROL_BLOCKED; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7, read-only): exactly C, not touched: EXACTLY_C
+OK   E8 order C4 alone; 33 accepted (C1 C25 among them); C7 blocked; nothing reserved; receipt directory 81
+OK   E8 C7 cannot be executed: no expectation exists for it; control.main refuses it by name before reading anything; control.gate refuses it; no receipt directory or mwc4 worktree for it: REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded 
+OK   E8 C1 cannot be executed: no expectation exists for it; control.main refuses it by name before reading anything; control.gate refuses it; no receipt directory or mwc4 worktree for it: REFUSED: C1 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 
+OK   E8 C25 cannot be executed: no expectation exists for it; control.main refuses it by name before reading anything; control.gate refuses it; no receipt directory or mwc4 worktree for it: REFUSED: C25 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14
+OK   E8 build command, environment template, run environment, build limit, memory and swap are the frozen expectations'
+OK   E8 C4: the original explorer, its catalog test with --exact --ignored --nocapture --test-threads=1, 2700 s, F-8's ceiling of 30,000,000; its named properties P4 and P8, either admissible as the primary's first
+OK   E8 C4: F-8, full_f8, 30,000,000 states, protocol.rs mutated (the frozen patch and mutant identity), the Stage-2 F-8 restored side; no L1 rule
+OK   E8 G.5(A): the primary's admissible first properties are P4 and P8 (P4 the prediction, not a receipt), recorded as printed and never relabelled
+OK   E8 G.5(B): the witness test alone, --exact --nocapture --test-threads=1 (no --ignored), 2700 s; both exact positive lines; the verdict panic is run_c4_witness's own (not its fixture panic); two scenarios of 8 and 12 steps from initial(F8), the F-8 fault budget 2
+OK   E8 G.6: each changed append's offered stream, the mutant's exact consumption with option counts and no unused suffix, and the healthy end consuming nothing with the whole stream unused (mission section 8)
+OK   E8 G.5(C): the healthy witness is the accepted Stage-2 type-(e3) receipt on the pinned unchanged-baseline executable, its input copy frozen (9 files)
+OK   E8 no A4, quotient, informational run or preserved build for any control; every type-(e1) restored side the original-explorer PASS
+OK   E8 build rules: every control zero warnings and zero errors under the unchanged general classifier (no warning exception): {'C4': 'one fresh build: zero warnings and zero errors under the unchanged general classifier (no warning exception)'}
+OK   E9 every identity the freeze records is unchanged now: []
+OK   E10 the two records state the C1/C25 acceptance, C7's block, C4's authorization and the 33-of-35 status (first lines), frozen
+OK   E11 resources now: MemAvailable at least 18 GiB; at least 8 GiB free disk for one fresh worktree and its target: MemAvailable 53730256 KiB; disk free 14 GiB
+finished: 2026-10-15T13:01:50+0100

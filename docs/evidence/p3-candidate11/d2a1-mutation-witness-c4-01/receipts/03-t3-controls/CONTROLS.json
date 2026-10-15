@@ -1,0 +1,972 @@
+[
+ {
+  "control": "C4",
+  "case": "A P-first-failure-P4-recorded-as-printed",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failur\u2026; continues to the witness",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failure P4 recorded as printed (AD-1-R4 G.5(A); continues to the witness",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-P4-relabelled-or-taken-as-both: the G.5(A) primary is never a kill label, records P4 as printed and says that it does not establish P4 and P8",
+  "expected": "first line not CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; the printed property P4; 'does not establish P4 and P8'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, R\u2026; ry of C4); the primary does not establish P4 and P8: both are attributed only by the type-(c) witness (G.5(B))",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "A P-first-failure-P8-recorded-as-printed",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failur\u2026; continues to the witness",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failure P8 recorded as printed (AD-1-R4 G.5(A); continues to the witness",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-P8-relabelled-or-taken-as-both: the G.5(A) primary is never a kill label, records P8 as printed and says that it does not establish P4 and P8",
+  "expected": "first line not CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; the printed property P8; 'does not establish P4 and P8'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, R\u2026; ry of C4); the primary does not establish P4 and P8: both are attributed only by the type-(c) witness (G.5(B))",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "A P-P4-exactly-at-the-F-8-ceiling-30000000",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failur\u2026; continues to the witness",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF) / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failure P4 recorded as printed (AD-1-R4 G.5(A); continues to the witness",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-first-property-E3",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of E3 as the first printed property, neither P4 nor P8\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'G.5(A): the first printed property'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of E3 as the first printed property, neither P4 nor P8: reported as printed, not reinterpreted; STOP FOR ; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL G.5(A): the first printed property, recorded as printed and never relabelled, is P4 o']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-first-property-P1",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of P1 as the first printed property, neither P4 nor P8\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'G.5(A): the first printed property'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of P1 as the first printed property, neither P4 nor P8: reported as printed, not reinterpreted; STOP FOR ; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL G.5(A): the first printed property, recorded as printed and never relabelled, is P4 o']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-first-property-E11",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of E11 as the first printed property\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'G.5(A): the first printed property'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / FAIL of E11 as the first printed property, neither P4 nor P8: reported as printed, not reinterpreted; STOP FOR; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL G.5(A): the first printed property, recorded as printed and never relabelled, is P4 o']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-PASS-on-the-mutant",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / PASS on the mutant (the control survives F-8): kills nothing\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'raw outcome FAIL'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / PASS on the mutant (the control survives F-8): kills nothing; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit 0, signal None, supervisor rc 0']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-incomplete-search (INCOMPLETE at the state cap)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (the state cap of 30000000 was reached. No property is esta\u2026; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; failing check 'raw outcome FAIL'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills nothing; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "as_expected": true,
+  "detail": "['FAIL the assertion message carries failed: {\"<p>\"} for the printed property p, and only it', \"FAIL the assertion's operands: left Fail, right Pass: ['  left: Incomplete', ' right: Pass\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-incomplete-search (INCOMPLETE at the time cap)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (the time cap of 2700s was reached. No property is establis\u2026; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; failing check 'raw outcome FAIL'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (the time cap of 2700s was reached. No property is established by this run.): kills nothing; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "as_expected": true,
+  "detail": "['FAIL the assertion message carries failed: {\"<p>\"} for the printed property p, and only it', \"FAIL the assertion's operands: left Fail, right Pass: ['  left: Incomplete', ' right: Pass\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-F-8-FAIL-beyond-30000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised car\u2026; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; failing check 'discovered count <= the ceiling'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "as_expected": true,
+  "detail": "['FAIL discovered count <= the ceiling 30,000,000 (K.1, inclusive): 30,000,001']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-original-explorer-configuration (full_f1, F-1's test)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'the catalog's own test'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --te; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL argv: the pinned executable, exactly the one test and flags --exact --ignored --nocap', \"FAIL selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::m\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-original-explorer-configuration (F-8's header with another configuration's bounds)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'printed bounds equal the configuration's'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (printed bounds equal the configuration's (source-derived)): kills nothing; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "[\"FAIL printed bounds equal the configuration's (source-derived): facts 2 conflicting [true,\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-explorer (the composed-quotient header for F-8)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'header 'EXPLORATION F-8' exactly'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (header 'EXPLORATION F-8' exactly (the original explorer; no quotient or symmetry line)): kills; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "[\"FAIL header 'EXPLORATION F-8' exactly (the original explorer; no quotient or symmetry line\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-wrong-executable-identity (the receipt's executable is not the pinned C4 mutant's)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'executable is the pinned one'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (executable is the pinned one (path, sha256, size) before, at selection and after; argv: the pi; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL executable is the pinned one (path, sha256, size) before, at selection and after: cde', 'FAIL argv: the pinned executable, exactly the one test and flags --exact --ignored --nocap']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-killed-from-outside (timeout kill)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (killed from outside or abnormal termination): kills nothin\u2026; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; failing check 'exit 101'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (killed from outside or abnormal termination): kills nothing; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit None, signal 9, supervisor rc -9']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-killed-from-outside (OOM)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (killed from outside or abnormal termination): kills nothin\u2026; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED; failing check 'launching command'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / INCOMPLETE (killed from outside or abnormal termination): kills nothing; CONTROL RESULT: INCOMPLETE \u2014 ARCHITECT REVIEW REQUIRED",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit None, signal 9, supervisor rc -9']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-truncated-raw-output (no report; a normal exit 101)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'the report is printed'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; fi; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", \"FAIL exactly one panic, of that test's thread: []\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-malformed-raw-output (the assertion's operands edited)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'the assertion's operands'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (the assertion's operands: left Fail, right Pass): kills nothing; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "[\"FAIL the assertion's operands: left Fail, right Pass: ['  left: Fail (edited)', ' right: P\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-the-witness-test-run-as-the-primary",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'the catalog's own test'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --te; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL argv: the pinned executable, exactly the one test and flags --exact --ignored --nocap', \"FAIL selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::m\"]"
+ },
+ {
+  "control": "C4",
+  "case": "A N-incorrect-source (EXACTLY_C: the unchanged core, not the mutant)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'source EXACTLY_C_PLUS_PATCH'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5237b49bc5; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-incorrect-source (C1's accepted mutant blob)",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (\u2026; CONTROL RESULT: MUTATION_CONTROL_BLOCKED; failing check 'source EXACTLY_C_PLUS_PATCH'",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5237b49bc5; CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "as_expected": true,
+  "detail": "['FAIL source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5']"
+ },
+ {
+  "control": "C4",
+  "case": "A N-a-tampered-expectation-admitting-E3 (a property other than P4 or P8 as admissible): refused by the tool invariant",
+  "expected": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED; the invariant check fails",
+  "got": "CLASSIFICATION: G.5(A) PRIMARY \u2014 NOT ESTABLISHED; [\"FAIL tool invariant: the admissible first properties are exactly C4's named P4 and P8 (G.5(A), mission section 6); the prediction P4 is one of them and is not a receipt: ['P4', 'P8', 'E3'] / ['P4', 'P8'] / P4\"]",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "W P-P4-and-P8-at-their-frozen-loci; G.6 holds in both scenarios",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY) / FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(\u2026",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY) / FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(B)): both 'NAMED PROPERTY P4: OBSERVED o",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "W P-a-further-property-reported-separately (P13 at P4 step 8, never counted as P4)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY) / FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(\u2026",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY) / FAIL \u2014 admissible type-(c) named-property mutant-witness receipt (G.5(B)): both 'NAMED PROPERTY P4: OBSERVED o",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-missing (only P8 shown)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown\u2026; failing check 'the exact positive line of P4'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown: one property is insufficient; G.5(B), K.2 case 9)",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P4 at its frozen locus, line 2 of the verdict: 'NAMED PROP\", 'FAIL the separate line of other properties of scenario P4, each reported separately and no']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P8-missing (only P4 shown)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P4 shown\u2026; failing check 'the exact positive line of P8'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P4 shown: one property is insufficient; G.5(B), K.2 case 9)",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P8 at its frozen locus, line 4 of the verdict: 'NAMED PROP\", 'FAIL the separate line of other properties of scenario P8, each reported separately and no']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-NOT-OBSERVED",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a named property NOT OBSERVED\u2026; failing check 'the exact positive line of P4'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a named property NOT OBSERVED at its locus: establishes nothing; G.5(B))",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P4 at its frozen locus, line 2 of the verdict: 'NAMED PROP\", 'FAIL both exact positive lines occur exactly once in the whole output, each as a whole lin']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P8-NOT-OBSERVED",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a named property NOT OBSERVED\u2026; failing check 'the exact positive line of P8'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a named property NOT OBSERVED at its locus: establishes nothing; G.5(B))",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P8 at its frozen locus, line 4 of the verdict: 'NAMED PROP\", 'FAIL both exact positive lines occur exactly once in the whole output, each as a whole lin']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-at-another-step (after step 7 of scenario P4)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown\u2026; failing check 'the exact positive line of P4'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown: one property is insufficient; G.5(B), K.2 case 9)",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P4 at its frozen locus, line 2 of the verdict: 'NAMED PROP\", 'FAIL both exact positive lines occur exactly once in the whole output, each as a whole lin']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-in-another-scenario (after step 8 of scenario P8)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown\u2026; failing check 'the exact positive line of P4'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P8 shown: one property is insufficient; G.5(B), K.2 case 9)",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P4 at its frozen locus, line 2 of the verdict: 'NAMED PROP\", 'FAIL both exact positive lines occur exactly once in the whole output, each as a whole lin']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P8-at-another-step (after step 11 of scenario P8)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P4 shown\u2026; failing check 'the exact positive line of P8'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (only P4 shown: one property is insufficient; G.5(B), K.2 case 9)",
+  "as_expected": true,
+  "detail": "[\"FAIL the exact positive line of P8 at its frozen locus, line 4 of the verdict: 'NAMED PROP\", 'FAIL both exact positive lines occur exactly once in the whole output, each as a whole lin']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-wrong-locus-world (U does not hold the acknowledgement at P4 step 8)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'P4's locus in the printed world after step 8'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (P4's locus in the printed world after step 8: U holds the acknowledgement while X holds an exp",
+  "as_expected": true,
+  "detail": "[\"FAIL P4's locus in the printed world after step 8: U holds the acknowledgement while X hol\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P8-wrong-locus-world (G1's attempt still in U at P8 step 12)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'P8's locus in the printed world after step 12'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (P8's locus in the printed world after step 12: G1's insert issued, its record written, not tol",
+  "as_expected": true,
+  "detail": "[\"FAIL P8's locus in the printed world after step 12: G1's insert issued, its record written\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-P4-counted-in-its-own-line-of-other-properties",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'the separate line of other properties of scenario P4'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (the separate line of other properties of scenario P4, each reported separately and not counted",
+  "as_expected": true,
+  "detail": "['FAIL the separate line of other properties of scenario P4, each reported separately and no', \"FAIL scenario P4's line of other properties lists exactly the other properties printed in \"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-fixture-failure (the changed append ends as neither planned end)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a WITNESS FIXTURE FAILURE\u2026; failing check 'the witness's own verdict panic'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a WITNESS FIXTURE FAILURE: establishes nothing; G.5(B))",
+  "as_expected": true,
+  "detail": "[\"FAIL the panic is the witness's own verdict panic (run_c4_witness's verdict panic!, crates\", \"FAIL the C4 WITNESS F-8 header: 'C4 WITNESS F-8: 2 scenarios, every step enabled and consu\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-unrelated-panic (an unwrap on None in protocol.rs)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'the witness's own verdict panic'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (the panic is the witness's own verdict panic (run_c4_witness's verdict panic!, crates/nexus-go",
+  "as_expected": true,
+  "detail": "[\"FAIL the panic is the witness's own verdict panic (run_c4_witness's verdict panic!, crates\", \"FAIL the C4 WITNESS F-8 header: 'C4 WITNESS F-8: 2 scenarios, every step enabled and consu\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-the-healthy-transcript-as-the-mutant-witness (exit 0)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a healthy result in a mutant-witness receipt\u2026; failing check 'no healthy line in a mutant-witness receipt'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (a healthy result in a mutant-witness receipt: establishes nothing; F.2, G.5(B))",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit 0, signal None, supervisor rc 0']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-bad-offered-choice-sequence (P4 step 8 offered [0, 0, 0, 0, 0, 0])",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P4 step 8/8: offered [0, 0, 0, 0, 0, 0], not the frozen [0, 0, 0, 1, 0,",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-consumed-choice-not-the-offered-prefix (P8 step 12 consumed (1, 4) where 0 is offered)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P8 step 12/12: consumed choices [0, 1, 0, 0] are not the offered prefix",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-wrong-option-count (P4 step 6 consumed (0, 5) where the frozen count is 4)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P4 step 6/8: consumed [(0, 5)], not the frozen [(0, 4)] (choices and op",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-unexpected-unused-suffix (P8 step 12 consumes 3 of 4: partial consumption at the changed append)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P8 step 12/12: consumed [(0, 4), (0, 4), (0, 4)], not the frozen [(0, 4",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-implicit-Oracle-default-consumption (P4 step 8 consumes a seventh choice beyond the six offered)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P4 step 8/8: consumed 7 choices, beyond the 6 offered (a silent Oracle ",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-wrong-branch (P8 step 11's gating branch changed)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P8 step 11/12: branches ['append_gating: Refused NotWritten Storage'], ",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-wrong-fault-budget (P4 step 5 leaves 1 fault, not 2)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P4 step 5/8: 1 faults left, not the frozen 2; scenario P4 step 5/8: [fa",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-fault-marker-without-a-fault (P8 step 12 marked [fault], the budget unchanged)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P8 step 12/12: [fault] marker True with the budget 1 -> 1; K.2 case 14)",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-actor-order-changed (P4 step 3 by Se, not Wk)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P4 step 3/8: actor Se, not Wk; K.2 case 14)",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-G.6-a-stray-line-inside-the-witness",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: lines outside the witness's grammar: ['    an unexpected line inside the witness",
+  "as_expected": true,
+  "detail": "['FAIL G.6 from the raw output, both scenarios, every step: the frozen actor order; the offe']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-wrong-selection (no --exact)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'argv'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads",
+  "as_expected": true,
+  "detail": "['FAIL argv: the pinned executable, exactly the one test and flags --exact --nocapture --tes', 'FAIL argv tail exactly: the witness test, --exact, --nocapture, --test-threads=1 (no --ign']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-wrong-selection (--ignored passed)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'argv'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads",
+  "as_expected": true,
+  "detail": "['FAIL argv: the pinned executable, exactly the one test and flags --exact --nocapture --tes', 'FAIL argv tail exactly: the witness test, --exact, --nocapture, --test-threads=1 (no --ign']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-wrong-selection (the listing shows two tests)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'selection listing'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (selection listing (--exact --list) shows exactly that one test): establishes nothing",
+  "as_expected": true,
+  "detail": "[\"FAIL selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::m\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-another-test (C1's witness test selected and listed)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'argv'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads",
+  "as_expected": true,
+  "detail": "['FAIL argv: the pinned executable, exactly the one test and flags --exact --nocapture --tes', \"FAIL selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::m\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-executable-role (the mutant witness on the unchanged-baseline executable)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'F.2 role'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (F.2 role: the SAME pinned C4 mutant executable as this control's type-(a) primary (03-build/PI",
+  "as_expected": true,
+  "detail": "[\"FAIL F.2 role: the SAME pinned C4 mutant executable as this control's type-(a) primary (03\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-different-mutant-executable-between-primary-and-witness",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'F.2 role'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (F.2 role: the SAME pinned C4 mutant executable as this control's type-(a) primary (03-build/PI",
+  "as_expected": true,
+  "detail": "[\"FAIL F.2 role: the SAME pinned C4 mutant executable as this control's type-(a) primary (03\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-incorrect-source (EXACTLY_C: the unchanged core)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'source EXACTLY_C_PLUS_PATCH'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5237b49bc5",
+  "as_expected": true,
+  "detail": "['FAIL source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-primary-not-established (no witness after an unestablished primary)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'the primary of the same control is classified PRIMARY_OK'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (the primary of the same control is classified PRIMARY_OK (no witness follows an unestablished ",
+  "as_expected": true,
+  "detail": "['FAIL the primary of the same control is classified PRIMARY_OK (no witness follows an unest']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-killed-from-outside (timeout)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / INCOMPLETE (killed from outside or abnormal termination): establishes \u2026; failing check 'exit 101'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / INCOMPLETE (killed from outside or abnormal termination): establishes nothing",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit None, signal 9, supervisor rc -9']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-killed-from-outside (OOM)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / INCOMPLETE (killed from outside or abnormal termination): establishes \u2026; failing check 'launching command'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / INCOMPLETE (killed from outside or abnormal termination): establishes nothing",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", 'FAIL exit 101 by a normal exit, no signal: exit None, signal 9, supervisor rc -9']"
+ },
+ {
+  "control": "C4",
+  "case": "W N-truncated-raw-output (cut inside scenario P8; exit 101)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check 'G.6 from the raw output'",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (G.6 breached: scenario P8: steps numbered [(1, 12), (2, 12), (3, 12)], not 1..12 of 12 (the ac",
+  "as_expected": true,
+  "detail": "[\"FAIL harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtere\", \"FAIL exactly one panic, of the witness test's thread: []\"]"
+ },
+ {
+  "control": "C4",
+  "case": "W N-malformed-header (the violation count disagrees)",
+  "expected": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE (\u2026; failing check ''every violation:''",
+  "got": "CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 NOT ADMISSIBLE / NOT ADMISSIBLE ('every violation:' then exactly n violation lines (the header's count), each indented; the hea",
+  "as_expected": true,
+  "detail": "[\"FAIL 'every violation:' then exactly n violation lines (the header's count), each indented\", \"FAIL the header's count equals the printed per-step violation lines plus the initial state\"]"
+ },
+ {
+  "control": "C4",
+  "case": "X G.6 on the real healthy transcript (Stage 2) as healthy",
+  "expected": "holds",
+  "got": "0 problems; 20 facts; 2 scenarios; preamble 0 lines",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "X G.6 on the real healthy transcript as mutant",
+  "expected": "problems",
+  "got": "7 problems; 20 facts; 2 scenarios; preamble 0 lines",
+  "as_expected": true,
+  "detail": "['scenario P4 step 8/8: consumed [], not the frozen [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)] (choices and option counts)', 'scenario P4 step 8/8: unused suffix [0, 0, 0, 1, 0, 0], not the frozen []']"
+ },
+ {
+  "control": "C4",
+  "case": "X G.6 on the historical mutant transcript as mutant",
+  "expected": "holds",
+  "got": "0 problems; 20 facts; 2 scenarios; preamble 0 lines",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "X G.6 on the historical mutant transcript as healthy",
+  "expected": "problems",
+  "got": "7 problems; 20 facts; 2 scenarios; preamble 0 lines",
+  "as_expected": true,
+  "detail": "['scenario P4 step 8/8: consumed [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2), (0, 3)], not the frozen [] (choices and option counts)', 'scenario P4 step 8/8: unused suffix [], not the frozen [0, 0, 0, 1, 0, 0]']"
+ },
+ {
+  "control": "C4",
+  "case": "X G.6 on a healthy transcript whose P4 append consumes one choice",
+  "expected": "problems",
+  "got": "2 problems; 20 facts; 2 scenarios; preamble 0 lines",
+  "as_expected": true,
+  "detail": "['scenario P4 step 8/8: consumed [(0, 4)], not the frozen [] (choices and option counts)', 'scenario P4 step 8/8: unused suffix [0, 0, 1, 0, 0], not the frozen [0, 0, 0, 1, 0, 0]']"
+ },
+ {
+  "control": "C4",
+  "case": "H the accepted healthy witness linked on the real authenticated inputs, after a restoration receipt; G.6 on it and against the mutant",
+  "expected": "HEALTHY WITNESS LINK: VERIFIED",
+  "got": "HEALTHY WITNESS LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/52-witness-C4 at"
+ },
+ {
+  "control": "C4",
+  "case": "H N-linking-before-restoration (no restoration receipt)",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/H/C4-N-linking-before-restoration (no restoration receipt)/05-restore/RESTORE.txt: None\"]"
+ },
+ {
+  "control": "C4",
+  "case": "H N-linking-after-a-failed-restoration",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/H/C4-N-linking-after-a-failed-restoration/05-restore/RESTORE.txt: 'RESTORE: FAILED'\"]"
+ },
+ {
+  "control": "C4",
+  "case": "H N-changed-healthy-witness-source (raw output byte changed)",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'the linked files (9) are exactly the accepted receipt's\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 3 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL the linked files (9) are exactly the accepted receipt's (docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/52-witness-C4 in 89326b85's SHA256SUMS), byte for byte: ['raw-output.txt']\"]"
+ },
+ {
+  "control": "C4",
+  "case": "H N-positive-violation-marker-in-the-healthy-receipt",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'no positive marker\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 4 failed",
+  "as_expected": true,
+  "detail": "['FAIL no positive marker, violation, fixture failure or panic in the healthy receipt (F.2): [\"    VIOLATION after: P8: G1\\'s attempt is written, uncorrected and not in U\"]']"
+ },
+ {
+  "control": "C4",
+  "case": "H N-healthy-append-consuming-its-offered-choices (G.6 healthy end)",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'G.6 on the healthy transcript\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 3 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL G.6 on the healthy transcript, both scenarios, every step: the frozen actor order, offered streams, consumption with option counts, unused suffixes, branches and fault budgets; at each changed append the healthy refusal before storage, consuming 0 of its offered choices, the whole offered stream unused: ['scenario P4 step 8/8: consumed [(0, 4)], not the frozen [] (choices and option counts)', 'scenario P4 step 8/8: unused suffix [0, 0, 1, 0, 0], not the frozen [0, 0, 0, 1, 0, 0]']\"]"
+ },
+ {
+  "control": "C4",
+  "case": "H N-executable-role (the mutant executable is the unchanged-baseline executable)",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'F.2 role: the pinned unchanged-baseline executable\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL F.2 role: the pinned unchanged-baseline executable, unchanged before and after the healthy run and hashed now equal; never this control's mutant executable: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c\"]"
+ },
+ {
+  "control": "C4",
+  "case": "H N-mutant-transcript-differs-before-the-changed-append (P8 step 11's faults)",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'G.6 items 1 and 2\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "['FAIL G.6 items 1 and 2: healthy and mutant transcripts receive the same actor sequence and the same offered stream at every step; before the changed append they agree on consumption, option counts, unused suffix, branch labels, remaining faults and [fault] markers; at P4 step 8 the mutant\\'s X is the healthy core\\'s (F1\\'s explanation): [\"scenario P8 step 11 (before the changed append): healthy ([(0, 4), (0, 4), (0, 4), (1, 3), (1, 2), (0, 3)], [], [\\'append_gating: Refused Uncertain Storage\\'], 1, True) mutant ([(0, 4), (0, 4), (0, 4), (1, 3), (1, 2), (0, 3)], [], [\\'append_gating: Refused Uncertain Storage\\'], 2, True)\"]']"
+ },
+ {
+  "control": "C4",
+  "case": "H N-mutant-X-not-the-healthy-core's-at-P4-step-8",
+  "expected": "HEALTHY WITNESS LINK: FAILED with the check 'G.6 items 1 and 2\u2026' failing",
+  "got": "HEALTHY WITNESS LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "['FAIL G.6 items 1 and 2: healthy and mutant transcripts receive the same actor sequence and the same offered stream at every step; before the changed append they agree on consumption, option counts, unused suffix, branch labels, remaining faults and [fault] markers; at P4 step 8 the mutant\\'s X is the healthy core\\'s (F1\\'s explanation): [\"scenario P4 step 8: the mutant\\'s X differs from the healthy core\\'s (F1\\'s explanation)\"]']"
+ },
+ {
+  "control": "C4",
+  "case": "B link (type (e1), G.5(D)) on the real authenticated Stage-2 F-8 receipt, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/64-full-F-8 at 8"
+ },
+ {
+  "control": "C4",
+  "case": "B N-linking-before-restoration (no restoration receipt)",
+  "expected": "LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/B/C4-N-linking-before-restoration (no restoration receipt)/05-restore/RESTORE.txt: None\"]"
+ },
+ {
+  "control": "C4",
+  "case": "B N-linking-after-a-failed-restoration",
+  "expected": "LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/B/C4-N-linking-after-a-failed-restoration/05-restore/RESTORE.txt: 'RESTORE: FAILED'\"]"
+ },
+ {
+  "control": "C4",
+  "case": "B N-F-8-raw-output-byte-changed",
+  "expected": "LINK: FAILED with the check 'its classification blob and raw output identity are the catalog's\u2026' failing",
+  "got": "LINK: FAILED; 2 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL its classification blob and raw output identity are the catalog's\"]"
+ },
+ {
+  "control": "C4",
+  "case": "B N-another-test-in-the-expectation (the witness test as the restored side's test)",
+  "expected": "LINK: FAILED with the check 'exact configuration: the same test and flags as this control's run (F-\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL exact configuration: the same test and flags as this control's run (F-8): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f8', '--exact', '--ignored', '--nocapture', '--test-threads=1']\"]"
+ },
+ {
+  "control": "C4",
+  "case": "R P-ownership-lock-and-executable-hold (the lock reason is that mission's own)",
+  "expected": "RESTORE AUTH: OK",
+  "got": "RESTORE AUTH: OK; 0 failed",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C4",
+  "case": "R N-this-mission's-lock-reason-absent (the worktree is not this mission's)",
+  "expected": "RESTORE AUTH: FAILED with 'locked for review with this mission's reason\u2026'",
+  "got": "RESTORE AUTH: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL locked for review with this mission's reason: P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 control C1 disposable mutant worktree: mission-owned; preserve until Architect review\"]"
+ },
+ {
+  "control": "C4",
+  "case": "R N-the-pinned-executable-changed (sha256 differs from 03-build/PIN.json)",
+  "expected": "RESTORE AUTH: FAILED with 'the pinned C4 mutant executable is unchanged\u2026'",
+  "got": "RESTORE AUTH: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "['FAIL the pinned C4 mutant executable is unchanged (sha256 and size equal to 03-build/PIN.json): f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c 8987200']"
+ },
+ {
+  "control": "C4",
+  "case": "R N-the-restoration-did-not-start-from-the-mutant-blob",
+  "expected": "RESTORE AUTH: FAILED with 'the restoration started from the C4 mutant blob\u2026'",
+  "got": "RESTORE AUTH: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL the restoration started from the C4 mutant blob (and its sha256) and was applied as the reverse of the patch: {'git_blob': 'a2df2841b99cad5d452008a6d4150e9369d07e66', 'sha256': '4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2'}\"]"
+ },
+ {
+  "control": "C4",
+  "case": "G every obligation holds with the primary's first property P4: (E)'s Architect review pending; (F) proposed for Architect review, never an acceptance",
+  "expected": "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY AND RESTORATION HOLD; (E) ARCHITECT REVIEW PENDING; '(F) recording, PROPOSED FOR ARCHITECT REVIEW (not an acceptance): 'C4: P4, P8 (first failure P4; witness)''",
+  "got": "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY AND RESTORATION HOLD; (E) ARCHITECT REVIEW PENDING",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G every obligation holds with the primary's first property P8: (E)'s Architect review pending; (F) proposed for Architect review, never an acceptance",
+  "expected": "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY AND RESTORATION HOLD; (E) ARCHITECT REVIEW PENDING; '(F) recording, PROPOSED FOR ARCHITECT REVIEW (not an acceptance): 'C4: P4, P8 (first failure P8; witness)''",
+  "got": "G.5: (A) (B) (C) (D) HOLD; (E) IDENTITY AND RESTORATION HOLD; (E) ARCHITECT REVIEW PENDING",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-linking-before-restoration (links present, the restoration receipt removed)",
+  "expected": "G.5: NOT ESTABLISHED; the '(E) restoration' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; ['FAIL (E) restoration: the worktree restored exactly to C after the mutant receipts (RESTORE: EXACTLY_C)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-the-witness-on-another-executable (the witness descriptor names another executable)",
+  "expected": "G.5: NOT ESTABLISHED; the '(B) F.2' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; ['FAIL (B) F.2: the witness ran on the same pinned C4 mutant executable as the primary (path, sha256 and size, before and after both runs, equal to 03-build/PIN.json): 69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-the-primary-printed-E3",
+  "expected": "G.5: NOT ESTABLISHED; the '(A)' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; [\"FAIL (A) the primary is an admissible type-(a) FAIL of full_f8 on the original explorer within F-8's 30,000,000 ceiling, its first printed property P4 or P8, recorded as printed (never relabelled): E3\"]",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-only-P4-observed (P8 not)",
+  "expected": "G.5: NOT ESTABLISHED; the '(B) the mutant witness' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; ['FAIL (B) the mutant witness is an admissible type-(c) receipt showing BOTH exact positive lines at their frozen loci (one alone is insufficient): CLASSIFICATION: G.5(B) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT: P4 AND P8 AT THEIR FROZEN LOCI; G.6 HOLDS (A PART ONLY)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-a-G.6-problem-recorded",
+  "expected": "G.5: NOT ESTABLISHED; the '(B) G.6 holds' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; [\"FAIL (B) G.6 holds on the mutant transcript (verified from the raw output: no G.6 problem): ['a synthetic G.6 problem']\"]",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-the-healthy-link-failed",
+  "expected": "G.5: NOT ESTABLISHED; the '(C)' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; ['FAIL (C) the accepted healthy type-(e3) witness linked after the restoration and verified, G.6 on it and against the mutant included']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-the-unchanged-core-link-failed",
+  "expected": "G.5: NOT ESTABLISHED; the '(D)' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; ['FAIL (D) the accepted F-8 unchanged-core type-(e1) receipt linked after the restoration and verified']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "G N-the-restoration-did-not-start-from-the-mutant-blob",
+  "expected": "G.5: NOT ESTABLISHED; the '(E) identity' obligation fails; no recording",
+  "got": "G.5: NOT ESTABLISHED; [\"FAIL (E) identity (AD-1-R4 I items 1-7): Candidate C and its tree; C4, the frozen patch and its sha256; the mutant blob and sha256 as built; the pinned executable's sha256 and size; the exact invocations; the raw receipts' sha256; the restored blob and the clean worktree\"]",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-catalog-copy-changed (C4's printed-property field)",
+  "expected": "PROBLEMS \u2014 STOP naming 'authenticated catalog copy sha256'",
+  "got": "rc 1; 3 problems",
+  "as_expected": true,
+  "detail": "['authenticated catalog copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-unauthorized-patch-change (C4's patch keeps the Healthy check)",
+  "expected": "PROBLEMS \u2014 STOP naming 'C4 authenticated patch copy sha256'",
+  "got": "rc 1; 3 problems",
+  "as_expected": true,
+  "detail": "['C4 authenticated patch copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-AD-1-R4-copy-changed (another locus for P4)",
+  "expected": "PROBLEMS \u2014 STOP naming 'authenticated AD-1-R4 copy sha256'",
+  "got": "rc 1; 1 problems",
+  "as_expected": true,
+  "detail": "['C4: authenticated AD-1-R4 copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C P-real-inputs",
+  "expected": "DERIVED, equal to receipts/02-EXPECTATIONS.json",
+  "got": "rc 0; equal True",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "D the general classifier (classify_build_success, unchanged) rerun on a copy of the historical C24 build receipt (C24 is Architect-accepted; its historical build is the warning-bearing base here)",
+  "expected": "BUILD: NOT OK; CHECKS.txt, CLASSIFICATION.txt, PARSED-RECEIPT.json byte-identical to the historical ones; no PIN.json",
+  "got": "BUILD: NOT OK; rc 1; identical {'CHECKS.txt': True, 'CLASSIFICATION.txt': True, 'PARSED-RECEIPT.json': True}; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "D a warning-bearing build presented as C4's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A3",
+  "case": "D the unchanged classifier rerun on a copy of the accepted A3 build (no diagnostic)",
+  "expected": "BUILD: PINNED; CHECKS.txt and CLASSIFICATION.txt byte-identical to the accepted ones; PIN.json equal but for its own receipt path",
+  "got": "BUILD: PINNED; rc 0; identical {'CHECKS.txt': True, 'CLASSIFICATION.txt': True, \"PIN.json (every field but build_receipt, the receipt directory's own path)\": True}",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded",
+  "got": "REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded from P3-C11-DR01-D2A1-MUTATION",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C1",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C1 is not executed",
+  "got": "REFUSED: C1 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C25",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C25 is not executed",
+  "got": "REFUSED: C25 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A1",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: A1 is not executed",
+  "got": "REFUSED: A1 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A2",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: A2 is not executed",
+  "got": "REFUSED: A2 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C20",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C20 is not executed",
+  "got": "REFUSED: C20 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A5",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: A5 is not executed",
+  "got": "REFUSED: A5 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C24 is not executed",
+  "got": "REFUSED: C24 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C6",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C6 is not executed",
+  "got": "REFUSED: C6 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C2",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C2 is not executed",
+  "got": "REFUSED: C2 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C22",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C22 is not executed",
+  "got": "REFUSED: C22 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C5",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C5 is not executed",
+  "got": "REFUSED: C5 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C9",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: C9 is not executed",
+  "got": "REFUSED: C9 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A4",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: A4 is not executed",
+  "got": "REFUSED: A4 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "X9",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED: X9 is not executed",
+  "got": "REFUSED: X9 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "\u2014",
+  "case": "F no expectation exists for C7 or any of the 33 accepted controls (nothing can select, build or run them); exactly C4 is derived",
+  "expected": "controls ['C4']",
+  "got": [
+   "C4"
+  ],
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "F control.gate refuses C7",
+  "expected": "closed: not in this mission's order",
+  "got": "C7 is not in this mission's order (the 33 accepted controls are never executed again; C7 is MUTATION_CONTROL_BLOCKED and",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C1",
+  "case": "F control.gate refuses C1",
+  "expected": "closed: not in this mission's order",
+  "got": "C1 is not in this mission's order (the 33 accepted controls are never executed again; C7 is MUTATION_CONTROL_BLOCKED and",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C25",
+  "case": "F control.gate refuses C25",
+  "expected": "closed: not in this mission's order",
+  "got": "C25 is not in this mission's order (the 33 accepted controls are never executed again; C7 is MUTATION_CONTROL_BLOCKED an",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "F control.gate before the freeze and the pre-execution gate",
+  "expected": "closed",
+  "got": "not frozen: ['documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md', 'documents/CAMPAIGN-STATUS-BEFORE-WITNESS-C4.md'",
+  "as_expected": true,
+  "detail": ""
+ }
+]

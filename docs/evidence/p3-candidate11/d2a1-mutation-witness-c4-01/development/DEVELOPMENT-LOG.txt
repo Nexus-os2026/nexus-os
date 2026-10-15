@@ -1,0 +1,160 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-15, Europe/London (+01:00), taken from file times and the execution record; "before 11:45" marks the
+reading and the static source review, whose exact times were not recorded. Official receipts are under receipts/;
+development runs are under dev-local/ (kept on the machine, not published: disposable copies of the evidence root r1 and
+later, whose tools/common.py names the copy as EV, made by dev-local/mkroot.sh; the edits were applied by counted
+exact-replacement scripts dev-local/edit_*.py through dev-local/rep.py, each aborting without writing when an anchor did
+not match exactly); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build, test or executable run; development used git objects, the
+previous packets, synthetic files and synthetic evidence roots only; every worktree, target and executable outside this
+mission was only read)
+
+ 1. before 11:45  Read the mission, AGENTS.md and CLAUDE.md. Main worktree clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Candidate C d5964ee5 (tree 51bac5fd, parent 71264aa8; protocol.rs a2df2841,
+           model_tests.rs 28085ce2, unit_tests.rs 55dc6640); catalog blob 19183742, sha256 d6c05a7c; C1/C25 evidence
+           74b3f485 (tree a1201237, parent e41c84b1) present locally; remote review ref witness-c1-c25-01 -> 74b3f485;
+           destination ref, local branch, evidence root, evidence worktree path and the mwc4 worktree path absent; the
+           C4 mutant blob f3793c2f absent from the object store. Remote main 6e15dee6, rebuild/phase0-trust-boundary
+           f727f5c3. Host: MemAvailable about 51 GiB, 16 GiB free disk (100% used); no p3c11-* scope, cargo, rustc or
+           governed-control executable running.
+ 2. before 11:45  Read AD-1-R4 F, F.1, F.2, G.1, G.2 (C4), G.5, G.6, I, J, K, K.1, K.2 at C and AD-1-R5 (F-R only; nothing
+           for C4); the frozen catalog entry of C4 (patch, mutant blob and sha256, 16 removed and 0 added, the witness and
+           healthy_witness fields, restored_receipt 64-full-F-8, special_attribution_rules G.5/G.6, named-property text
+           "P4, P8" and printed-property field "P4 and P8"); the C4 witness source in Candidate C's model_tests.rs
+           (C4Step, C4Ending, C4Scenario, C4After, c4_replay_step, c4_replay, c4_consumption, c4_frozen, run_c4_witness:
+           its fixture panic at model_tests.rs:9005:9 and its verdict panic at 9026:5; the eight C4Step constants, C4_P4,
+           C4_P8, C4_SCENARIOS; Oracle::choose's default zero at the end of its prefix); the accepted Stage-2 healthy
+           receipt 52-witness-C4 and the accepted F-8 PASS 64-full-F-8 at 89326b85; the C1/C25 mission's tooling (its
+           packet's tools/ and the ten tools it carried), development log, INDEX, CARRIED-FORWARD and local evidence root.
+ 3. before 11:45  Static source facts (nothing built): the patch changes protocol.rs only, so the witness test,
+           run_c4_witness and the explorer are C's in the mutant; the C4 witness source commit A (04e42a7d, parent the
+           C1/C25 witness source commit 42dd1bd1) added 678 lines to model_tests.rs only and A is an ancestor of C with no
+           ledger source change between (model_tests.rs and protocol.rs at A are C's blobs); the historical prototype's
+           receipts at evidence commit B (a464a366) were produced by the same source: its healthy raw output is byte-equal
+           to the accepted Stage-2 healthy receipt's (15ec6132), and its mutant transcript (12-run-mutant, 5e8c54a4) has
+           the exact G.5(B) lines and the frozen changed-step consumption. Historical only: used as the base of
+           synthetic tooling controls, never as evidence of this mission.
+ 4. 11:45  Mission evidence root created (absent before). original-tools/ (26) extracted from the git objects of
+           74b3f485 (16: its packet's tools/, each sha256 equal to its SHA256SUMS) and of the commits its
+           CARRIED-FORWARD.md names (10, blob and sha256 equal to the record); every file byte-equal to the C1/C25 local
+           root's tools/; scope-wrap.sh's executable mode set. tools/ seeded from them.
+ 5. 11:53  common.py (mission identity, mwc4 namespace, order C4 and receipt directory 81, the 33 accepted controls,
+           BLOCKED = [C7], NOT_AUTHORIZED = [], the one-control matrix, G5: the mission's statement of C4's G.5/G.6
+           bindings, the C1/C25 evidence identities read from 74b3f485's git objects, the two records, publication names,
+           parent 74b3f485). documents/ (11:53): the two records (dev-local/gen_documents.py, from mission sections 2-4
+           and 15 and git objects; read-only after writing).
+ 6. 11:56-12:00  expectations.py (g5_block and its source parsers; C4's two catalog fields read under G.5),
+           authenticate.py ([3] C4's G.5 fields, [6] the mwc4 namespace and the C1/C25 ref, [12] without its parent and
+           tooling checks, [13] the C1/C25 evidence with the base tooling check and the parent, [14] the C4 witness inputs).
+           Authentication dev run 1 (r1, 12:00): ALL CHECKS HOLD (547 OK). Expectations dev run 1 (12:00): DERIVED, but
+           on inspection C4's receipt_type was the G.3 text: the G.5 block had been inserted between the G.3 block's two
+           lines, so the old G.3 assignment followed C4's inside the G.5 branch
+           (development/expectations-dev1-WRONG-...). Fixed (expectations.dev1-to-dev2.diff): the G.3 assignment back in
+           its own branch; dev run 2 (12:01): DERIVED, receipt type the G.5 one; every frozen step, changed append,
+           header, positive line and healthy line derived from the source and found verbatim in AD-1-R4 G.5/G.6.
+ 7. 11:50-12:08  g5.py written first (about 11:50, before common.py: classify_primary, transcript, g6_check,
+           classify_witness, link_healthy, obligations) and corrected once before any run (three exact fixes: the parser
+           stops at the panic header; a muddled locus check removed; the healthy-versus-mutant comparison normalized to
+           tuples; that first draft was not kept as a file, so these three corrections are recorded here only); control.py (12:02: the G.5 flow; restore_auth added for mission section 12's post-restoration
+           authentication), record_freeze.py, pre_exec_gate.py, final_gate.py, render.py, build_packet.py, finalize.py,
+           publish_checks.py, worktree.py (12:03-12:07) retargeted; g3.py not carried.
+ 8. 12:10  Self-review of g5.py before any control ran (g5.dev1-to-dev2.diff): the transcript parser now ignores the
+           lines before the witness's first scenario header (the harness's and a synthetic file's own preamble), and
+           link_healthy keeps evaluating every check on a byte-changed healthy copy (so a positive marker in a tampered
+           healthy receipt is reported, not hidden behind the identity failure). authenticate.py [14] gained the
+           historical prototype receipts' identity checks (B's manifest).
+ 9. 12:15-12:21  t3_controls.py rewritten for the G.5/G.6 controls (sections A, W, X, H, B, R, G, C, D, F; its helpers
+           kept unchanged); rehearsals.py rewritten (R1-R6, N1-N7, M1-M6; record, pick_dir, run_tool, synthetic_freeze
+           and supervise_first unchanged); tool_diff.py's authorization map rewritten (control.gate's 1 and
+           control.main's 19 hunks extracted, reviewed and pinned literally; g5.py the one added tool; g3.py not carried).
+           Tool-diff dev check 1 (12:21) FAILED one check of its own: the new restore_auth check expected one 'w' open,
+           but both RESTORE-AUTH records are written with 'w' (development/tool-diff-dev1-FAILED-...); fixed; dev check 2
+           FAILED the same check again: its forbidden-call prefix "git" matched the local name gitfile.startswith
+           (development/tool-diff-dev2-FAILED-...); fixed to the exact names (tool_diff.dev1-to-dev2.diff,
+           dev2-to-dev3.diff); dev check 3: ALL CHECKS HOLD (69). The tool under check was right both times.
+10. 12:23  Controls dev run 1 (r1): 120 of 121 as expected; one case's construction was incomplete ("another test"
+           changed the listing only, not the argv: the classifier rejected it, at the listing check, not the intended
+           argv check; development/t3-controls-dev1-FAILED-...). Fixed in the case only (t3_controls.dev1-to-dev2.diff);
+           dev run 2: 121 of 121 as expected; every negative case reviewed for the check that fails (each fails at its
+           intended check).
+11. 12:24-12:31  Dress rehearsal r2 (fresh root; dev-local/prefreeze.sh, the exact sequence of the official pre-freeze
+           receipts): authentication (ALL CHECKS HOLD), self-test (ALL OK), expectations (DERIVED), controls (121 of 121)
+           and tool diff (ALL CHECKS HOLD) held; rehearsals FAILED one check (development/rehearsals-dev1-FAILED-...): the
+           R1 map check counted '/04c-witness/' anywhere in a map row, and each row's previous-packet column now names
+           the C1/C25 packet's witness samplers (byte-equal constants); the map itself was right (three control rows,
+           exactly one at 04c-witness). Fixed in the check only: it reads each row's path column
+           (rehearsals.dev1-to-dev2.diff). Every other scenario (R1-R6, N1-N7, M1-M6, both final-gate rehearsals) was as
+           expected already.
+12. 12:32-12:39  Dress rehearsal r3 (fresh root, the tools after entry 11): the whole pre-freeze sequence ALL CHECKS HOLD
+           (authentication 549 OK; self-test ALL OK; expectations DERIVED; controls 121 of 121; tool diff 69; rehearsals
+           51 of 51).
+13. 12:40  A dry-run packet build over r3's receipts FAILED its duplicate policy (development/build-packet-prefreeze-
+           dev1-FAILED-...): three synthetic tooling-control files were byte-equal to files the C1/C25 packet holds (the
+           same synthetic negatives there): a G-section HEALTHY.txt holding only 'HEALTHY WITNESS LINK: FAILED', a
+           G-section LINK.txt holding only 'LINK: FAILED', and the H-section PIN.json naming the baseline executable. The
+           policy was right (an unenumerated previous-packet duplicate). Fixed in the case construction only: each of the
+           three files carries this mission's MARK line (t3_controls.dev2-to-dev3.diff); the classifiers read only their
+           first lines or the named fields, so no control's outcome changes.
+14. 12:41-12:50  Dress rehearsal r4 (fresh root, the final tools; dev-local/dress.sh): the whole pre-freeze sequence ALL
+           CHECKS HOLD (authentication, self-test, expectations, controls 121 of 121, tool diff, rehearsals 51 of 51); a
+           dry-run packet build over its receipts STAGED (886 files listed; 10 enumerated duplicate/zero-length records:
+           the self-test's and the build.stdout; no unauthorized duplicate); freeze RECORDED; pre-execution gate ALL CHECKS
+           HOLD (65; E8 shows C7, C1 and C25 cannot be executed).
+15. 12:52  Publication rehearsal (dev-local/pub_rehearsal.sh: a shared clone in the session scratchpad, its github push
+           URL set to DISABLED-PUBLICATION-REHEARSAL, origin removed; over a copy of r4's synthetic R1 root, C4 a
+           candidate): preflight ALL CHECKS HOLD, worktree CREATED, packet STAGED, finalize COMMITTED (rehearsal commit
+           a36185ae, parent 74b3f485, in the clone's object store only: absent from the main repository's), pre-push ALL
+           CHECKS HOLD; the post readback exercised against the published 74b3f485 (20 FAIL lines, each a file or ref that
+           commit does not hold; no traceback) and the Actions readback (ALL CHECKS HOLD). Nothing was pushed (push.py not
+           run). The disposable clone and its worktree were deleted afterwards.
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the synthetic, historical and authenticated controls and the rehearsals)
+16. 12:53-12:59  receipts/00-authentication.txt (ALL CHECKS HOLD, 549 OK; input copies written afresh: inputs/ was absent);
+           receipts/01-supervision-selftest (ALL OK; supervise.py unchanged; non-Nexus processes);
+           receipts/02-EXPECTATIONS.json (DERIVED — ALL CROSS-CHECKS HOLD; byte-equal to r4's); receipts/03-t3-controls
+           (121 of 121 as expected; every required positive and negative control of mission section 11);
+           receipts/04-tool-diff (ALL CHECKS HOLD, 69); receipts/04b-rehearsals (51 of 51).
+17. 12:59  Pre-freeze dry-run packet build into dev-local/ over the real receipts: STAGED — ALL CHECKS HOLD (886 files
+           listed; no unauthorized duplicate of any previous-packet file; the ten byte-identical tools referenced, not
+           staged).
+18. 12:59  Tools, base tools and inputs made read-only (the records were read-only since 11:53). Freeze recorded
+           (receipts/05-FREEZE.json, 80 files, 12:59:25; sha256 6a8109d7…). Static pre-execution gate (12:59-13:01): ALL
+           CHECKS HOLD (E1-E11; 65 checks; E1 546 authentication checks; E8 shows C7, C1 and C25 cannot be executed: no
+           expectation, refused by name by control.main, refused by control.gate; E11 MemAvailable 53 GB, 14 GiB free
+           disk).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changed after the freeze; nothing retried, rebuilt or
+rerun; control.py ran once, for C4 only)
+19. 13:01-13:05  C4 (control.py C4, once): a fresh worktree (mwc4-C4, locked with this mission's reason); APPLY:
+           EXACTLY_C_PLUS_PATCH (patch 24ac7add…, protocol.rs blob f3793c2f…, sha256 4037de6e…, 0 added and 16 removed,
+           nothing else changed); one build, BUILD: PINNED (18 of 18; zero warnings, zero errors; 167.0 s wall, 2.44 GiB
+           scope peak, swap 0); executable 38be24f4…, 8,988,320 bytes, unchanged before, at selection and after both runs.
+           The primary, full_f8 on the original explorer: G.5(A) PRIMARY ADMISSIBLE (31 of 31) — raw FAIL P4 (`U is
+           occupied together with C or X`), shortest trace 8 steps, 51,078 discovered states (expanded 28,579) of
+           30,000,000, 0.19 s, exit 101 by the explorer's verdict assertion, no signal, no OOM, swap 0; P4 recorded as
+           printed (P4 the prediction; neither P4 nor P8 inferred from it). The mutant witness on the same executable
+           (c4_witness_p4_and_p8_on_f8, --exact --nocapture --test-threads=1; the listing one match, not ignored):
+           ADMISSIBLE TYPE-(c) (35 of 35) — both positive lines exactly, P4 after step 8 of scenario P4 and P8 after step
+           12 of scenario P8; header 2 scenarios, 2 violations; both lines of other properties `[]`; run_c4_witness's own
+           verdict panic at model_tests.rs:9026:5; 1 failed; exit 101; G.6 verified from the raw output at every step of
+           both scenarios (P4 step 8 offered [0, 0, 0, 1, 0, 0], consumed [(0, 4), (0, 4), (0, 4), (1, 3), (0, 2),
+           (0, 3)], unused [], 1 fault left; P8 step 12 offered [0, 0, 0, 0], consumed [(0, 4), (0, 4), (0, 4), (0, 3)],
+           unused [], 1 fault left). RESTORE: EXACTLY_C (from blob f3793c2f, by the inverse of the same frozen patch);
+           RESTORE AUTH: OK (ownership, this mission's lock, the executable unchanged); then HEALTHY WITNESS LINK:
+           VERIFIED (Stage-2 52-witness-C4, with G.6 on it and against the mutant) and LINK: VERIFIED (Stage-2
+           64-full-F-8); G.5: (A) (B) (C) (D) HOLD, (E) identity and restoration hold, (E)'s Architect review pending;
+           (F) recording proposed for Architect review: 'C4: P4, P8 (first failure P4; witness)'. CONTROL RESULT:
+           KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING.
+
+AFTER EXECUTION
+20. 13:05  No stop record: the mission did not stop (C4 a candidate).
+21. 13:05-13:08  Final gate (receipts/90-final-gate.txt): ALL CHECKS HOLD (88 checks; G1 authentication, G2 freeze, G3
+           C4's G.5 receipt chain with its restore-auth record and the absence of any C7 or accepted-control receipt, G4
+           the mwc4 worktree exactly C and locked with this mission's reason, the 33 accepted controls' and C7's worktrees
+           exactly C, G5 no mutant blob in the object store and nothing staged, G6 the pinned executable and the baseline
+           executable unchanged, G7 no mutant source copy among 24,742 files, G8 no cargo/rustc/test process).
+22. 13:08  Publication: preflight, the evidence worktree at 74b3f485, the packet build, finalize, the pre-push checks, one
+           push, the readbacks (consoles under publication/ in the evidence root; the packet build's console is committed
+           as publication/10-build-packet.txt; the later consoles cannot be inside the commit they describe).

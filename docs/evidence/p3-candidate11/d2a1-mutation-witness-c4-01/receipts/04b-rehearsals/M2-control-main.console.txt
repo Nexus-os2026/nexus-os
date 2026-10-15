@@ -1,0 +1,61 @@
+C7 REFUSAL: REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded from P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01: no rerun, rebuild, patch alteration, property substitution or comparison
+C1 REFUSAL: REFUSED: C1 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b C23 C10 C16 C26 C3a C5 A3 A6 C8 C15 C2 C24 C3b C3c C6 A1 A2 C20 A5 C1 C25 are Architect-accepted; only C4 run)
+C25 REFUSAL: REFUSED: C25 is not executed by P3-C11-DR01-D2A1-MUTATION-WITNESS-C4-01 (C22 C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b C23 C10 C16 C26 C3a C5 A3 A6 C8 C15 C2 C24 C3b C3c C6 A1 A2 C20 A5 C1 C25 are Architect-accepted; only C4 run)
+CREATE the C4 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4 at C
+result: OK
+AUTHENTICATE the C4 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4
+result: OK
+FAKE INVOKE C4 mutant-explore: ledger::protocol::model_tests::full_f8 (prior ['receipts/81-C4/03-build/CLASSIFICATION.txt']); synthetic run C4-104-N-wrong-first-property-E3
+OK   the run started (no pre-flight refusal)
+OK   tool invariant: the admissible first properties are exactly C4's named P4 and P8 (G.5(A), mission section 6); the prediction P4 is one of them and is not a receipt: ['P4', 'P8'] / ['P4', 'P8'] / P4
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 69bb8bc702e38394… 4373 / 69bb8bc702e38394… 4373 / 69bb8bc702e38394… 4373 (pinned 69bb8bc702e38394… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob f3793c2ff61f8adbf43fe17d6b5237b49bc507b0): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 0764e1bac60c5306a978a2699e526c2fbc009f7689a42a836a45f7895c596cd8
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f8', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f8: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f8: test']
+OK   the catalog's own test ledger::protocol::model_tests::full_f8 on the original explorer (full_exploration; never a quotient or symmetry test): ledger::protocol::model_tests::full_f8
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f8']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f8']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f8' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5
+OK   the assertion message carries failed: {"<p>"} for the printed property p, and only it: ['assertion `left == right` failed: failed: {"E3"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure; no witness line (F.1 (a): none is required)
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-8' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-8
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [true, false] ENV false batch false faults 2 admissions 2 gating callers 1 gating conflict false acknowledgement actors 1 attempts each 1 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Ack(0), Adm]
+OK   caps printed: 30,000,000 states, 2700 s (F-8's ceiling): 30000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+FAIL G.5(A): the first printed property, recorded as printed and never relabelled, is P4 or P8 (mission section 6); any other first property is reported as printed and stops for an Architect ruling: E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 30,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: E3
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: G.5(A) PRIMARY — NOT ESTABLISHED
+outer class (AD-1-R4 K.2): FAIL of E3 as the first printed property, neither P4 nor P8: reported as printed, not reinterpreted; STOP FOR ARCHITECT RULING (AD-1-R4 G.5(A)); kills nothing
+raw outcome (as printed): outcome FAIL; FAIL E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 30,000,000 ceiling; transitions 14; elapsed 0.0 s
+G.5(A): first printed property E3 (recorded as printed; never relabelled); admissible first properties P4 or P8; the AD-1-R4 prediction P4 is not a receipt; neither P4 nor P8 is inferred from the other; the attribution of both comes only from G.5(B)
+kill label: none (the primary is a part of G.5 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4421 KiB; scope gone
+checks: 30 of 31 hold
+FAILED CHECK: G.5(A): the first printed property, recorded as printed and never relabelled, is P4 or P8 (mission section 6); any other first property is reported as printed and stops for an Architect ruling: E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+
+CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+control C4: acknowledgement test 1 removed
+receipt type: (a) original-explorer mutant FAIL, the G.5(A) primary (recorded as printed) + (c) named-property mutant witness, G.5(B) and G.6, on the same pinned mutant executable; restored (e1), G.5(D) + healthy witness (e3), G.5(C)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mtw-C4/target/release/deps/nexus_governed_control-0123456789abcdef sha256 69bb8bc702e383948c8a784ce0abb436a8a2b27356a0f5c77499f4ca711d6c92 size 4373
+primary (type (a), G.5(A)): CLASSIFICATION: G.5(A) PRIMARY — NOT ESTABLISHED; outer class (AD-1-R4 K.2): FAIL of E3 as the first printed property, neither P4 nor P8: reported as printed, not reinterpreted; STOP FOR ARCHITECT RULING (AD-1-R4 G.5(A)); kills nothing
+restoration: RESTORE: EXACTLY_C
+post-restoration authentication: RESTORE AUTH: OK
+STOP: the primary is not an admissible type-(a) FAIL whose first printed property is P4 or P8 (any other first property stops for an Architect ruling; PASS, INCOMPLETE or a FAIL beyond the ceiling kills nothing). No later control is executed.
+== C4: rc 1; CONTROL RESULT: MUTATION_CONTROL_BLOCKED
