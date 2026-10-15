@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P6
+raw outcome (as printed): outcome FAIL; FAIL P6: F1 was refused as a conflict and is Paid; shortest trace (14 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 12.97s']
+measured: states 2,652,070 (expanded 1,807,301) of the 30,000,000 ceiling; transitions 10034456; elapsed 12.9 s
+named property: P6; configuration F-PT; test ledger::protocol::model_tests::full_fpt
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 12.96 s of 2700 s; scope memory.peak 359206912 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 353320 KiB; scope gone
+checks: 29 of 29 hold

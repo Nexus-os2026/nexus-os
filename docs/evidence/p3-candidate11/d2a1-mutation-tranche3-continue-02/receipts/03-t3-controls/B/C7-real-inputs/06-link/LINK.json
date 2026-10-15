@@ -1,0 +1,48 @@
+{
+ "control": "C7",
+ "type": "e1",
+ "reference": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-PT unchanged-core composed-quotient PASS, type (e1))",
+ "checks": [
+  [
+   "the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT in f023cc3d's SHA256SUMS",
+   true,
+   "[]"
+  ],
+  [
+   "its classification blob and raw output identity are the catalog's",
+   true,
+   ""
+  ],
+  [
+   "accepted exact-final unchanged-core composed-quotient PASS (classification, as the catalog records it)",
+   true,
+   "['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core composed-quotient PASS']"
+  ],
+  [
+   "F-PT's restored side (AD-1-R4 F): the composed-quotient test with the same flags, the same F-PT configuration (bounds) as this control's original-explorer full_fpt run",
+   true,
+   "['ledger::protocol::model_tests::gc_symmetry_fpt']; mutant run ledger::protocol::model_tests::full_fpt"
+  ],
+  [
+   "exact Candidate C: the source exactly C before and after",
+   true,
+   ""
+  ],
+  [
+   "execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s",
+   true,
+   ""
+  ],
+  [
+   "artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now",
+   true,
+   "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+  ],
+  [
+   "this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration)",
+   true,
+   "receipts/03-t3-controls/B/C7-real-inputs/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'"
+  ]
+ ],
+ "follows": "after this control's own restoration receipt receipts/03-t3-controls/B/C7-real-inputs/05-restore/RESTORE.txt (sha256 15479f775a03183a0b7c29b02af22fc1461764d6b35fbe27abc880f44dd90f86; first line 'RESTORE: EXACTLY_C')"
+}

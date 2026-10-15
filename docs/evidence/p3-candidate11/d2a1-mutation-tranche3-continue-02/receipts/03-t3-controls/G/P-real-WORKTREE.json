@@ -1,0 +1,87 @@
+{
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24",
+ "when": "t3_controls",
+ "restored_check": {
+  "verdict": "EXACTLY_C",
+  "verify_tree": {
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24",
+   "head": "d5964ee5326c2733177307db6f507328023d361a",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "detached": true,
+   "tracked_blobs_compared": 5364,
+   "bytes_compared": 97246341,
+   "gitlinks": [],
+   "index_differs_from_head": [],
+   "status_entries": [
+    "!! target/"
+   ],
+   "unexpected_status": [],
+   "content_mismatches": [],
+   "missing": [],
+   "mode_mismatches": [],
+   "verdict": "EXACTLY_C"
+  },
+  "status_policy": {
+   "ok": true,
+   "mode": "restored",
+   "allowed_modified": null,
+   "modified_seen": [],
+   "records": 2553,
+   "target_entries": 2553,
+   "status_sha256": "58f7e46bdc90902b9cb492a00e31a7bd6e3759789bc4c6f34a9ba89c6b91a204",
+   "shown": [
+    "!! target/... (2553 ignored entries, each beneath the worktree-local real target)"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target",
+    "worktree_is_own_realpath": true,
+    "exists": true,
+    "is_symlink": false,
+    "is_dir": true,
+    "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target",
+    "own_entry": true,
+    "mounts": [],
+    "ok": true
+   }
+  },
+  "line": "source (t3_controls): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+ },
+ "checks": [
+  [
+   "filesystem identity: the path is its own realpath, a directory, not a symlink, owned by this user",
+   true,
+   "{'dev': 66310, 'ino': 65171002, 'uid': 1000}"
+  ],
+  [
+   "registered: the .git file points into the repository's worktree administration, which points back",
+   true,
+   "gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt3x-C24"
+  ],
+  [
+   "locked with the Tranche-3 reason (its owner mission; this mission does not take it over)",
+   true,
+   "P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01 control C24 disposable mutant worktree: mission-owned; preserve until Architect review"
+  ],
+  [
+   "git worktree list: this path, HEAD C, detached, locked",
+   true,
+   "['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01 control C24 disposable mutant worktree: mission-owned; preserve until Architect review']"
+  ],
+  [
+   "HEAD is Candidate C and its tree, detached",
+   true,
+   "['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']"
+  ],
+  [
+   "source restored exactly to Candidate C: verify_tree.py EXACTLY_C (every tracked byte and mode) and the path-aware status policy (no tracked change; ignored entries only beneath its own real target directory)",
+   true,
+   "source (t3_controls): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+  ],
+  [
+   "protocol.rs is C's blob (computed in-process; no patch is applied to it in this mission)",
+   true,
+   "a2df2841b99cad5d452008a6d4150e9369d07e66"
+  ]
+ ]
+}

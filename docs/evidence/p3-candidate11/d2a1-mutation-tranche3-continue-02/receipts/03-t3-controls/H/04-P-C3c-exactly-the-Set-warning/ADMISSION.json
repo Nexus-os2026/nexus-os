@@ -1,0 +1,165 @@
+{
+ "control": "C3c",
+ "build_dir": "dev-local/t3-scratch/H/04-P-C3c-exactly-the-Set-warning",
+ "rule": "mission sections 3-5 as amended by AMENDMENT-01",
+ "path": "B",
+ "stderr": {
+  "groups": [
+   {
+    "header": "warning: variant `Set` is never constructed",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     636,
+     5
+    ],
+    "shown": [
+     630,
+     636
+    ],
+    "carets": [
+     [
+      636,
+      5,
+      3,
+      "Set"
+     ]
+    ],
+    "dashes": [
+     [
+      630,
+      17,
+      10,
+      "AckRefusal"
+     ]
+    ],
+    "labels": [
+     "variant in this enum"
+    ],
+    "notes": [
+     "`AckRefusal` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis",
+     "`#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default"
+    ],
+    "problems": []
+   }
+  ],
+  "summary_lines": 1,
+  "progress_lines": 639,
+  "finished_lines": 1,
+  "executable_lines": 1,
+  "unclassified": [],
+  "problems": []
+ },
+ "checks": [
+  [
+   "the control is C3b or C3c (the rule does not transfer to C24, C6, C7, A1, A2, C20, A5 or any other control)",
+   true,
+   "C3c"
+  ],
+  [
+   "the build receipt is complete and classified by the unchanged general classifier (descriptor, stdout, stderr, RECEIPT.txt, CLASSIFICATION.txt, CHECKS.txt, PARSED-RECEIPT.json)",
+   true,
+   "{'descriptor.json': True, 'build.stderr': True, 'build.stdout': True, 'RECEIPT.txt': True, 'CLASSIFICATION.txt': True, 'CHECKS.txt': True, 'PARSED-RECEIPT.json': True}"
+  ],
+  [
+   "the build started and finished (no pre-flight refusal)",
+   true,
+   ""
+  ],
+  [
+   "the build's control, role, patch and mutant identities are this control's (descriptor)",
+   true,
+   "('C3c', '1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85', '5cc9c09ac96062c5d348e86ace8cb0ac2225e83d')"
+  ],
+  [
+   "the source before and after the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, this control's mutant blob and sha256, no other mismatch (the exact frozen patch's mutant)",
+   true,
+   "EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH"
+  ],
+  [
+   "the build ran in this control's own worktree with a fresh worktree-local target (the exact command and environment are the general classifier's checks)",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2; /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target"
+  ],
+  [
+   "stdout empty (cargo writes its messages to stderr); the stderr is the one the launcher recorded",
+   true,
+   "3d33104f7f217bf64edc7036613e4c067b01de12c721a7d51e88f9ac46195de6"
+  ],
+  [
+   "B every ordinary check of the unchanged general classifier holds; the one failed check is its warning check (`no error or warning diagnostic`)",
+   true,
+   "17 of 18"
+  ],
+  [
+   "B the general classifier's own record of the diagnostics is exactly the predicted warning and cargo's one-warning summary",
+   true,
+   "[\"FAILED CHECK: no error or warning diagnostic: ['warning: variant `Set` is never constructed', 'warning: `nexus-governed-control` (lib test) generated 1 warning']\"]"
+  ],
+  [
+   "B the source the executable was built from, reproduced for the comparison: the mutant protocol.rs from the frozen patch (never written to any object store) and C's model_tests.rs",
+   true,
+   ""
+  ],
+  [
+   "I no `error` diagnostic of any kind (no line opening with `error`, `error[...]`)",
+   true,
+   "[]"
+  ],
+  [
+   "I no compiler crash text outside cargo's own Running lines (internal compiler error, panicked, query stack, SIGSEGV, signal)",
+   true,
+   ""
+  ],
+  [
+   "J exactly the permitted warning group (1), each once, in rustc's order, and no other diagnostic group",
+   true,
+   "['warning: variant `Set` is never constructed']"
+  ],
+  [
+   "J warning 1 (variant `Set` is never constructed): primary location crates/nexus-governed-control/src/ledger/protocol.rs:636:5",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 636, 5)"
+  ],
+  [
+   "J warning 1: quoted source lines [630, 636], each equal to the source the executable was built from",
+   true,
+   "[630, 636] []"
+  ],
+  [
+   "J warning 1: carets exactly under ['Set'] and dashes exactly under ['AckRefusal'] (line, column, length, marked text)",
+   true,
+   "[(636, 5, 3, 'Set')] [(630, 17, 10, 'AckRefusal')]"
+  ],
+  [
+   "J warning 1: labels and notes exactly the expected ones",
+   true,
+   "['variant in this enum'] ['`AckRefusal` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis', '`#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default']"
+  ],
+  [
+   "K every line of every group is a line of rustc's group format (header, location, gutter, quoted source, marker, '...', note); each group ends with one blank line",
+   true,
+   "[]"
+  ],
+  [
+   "K cargo's summary of exactly that warning, once: 'warning: `nexus-governed-control` (lib test) generated 1 warning' (the summary, not another diagnostic)",
+   true,
+   "1"
+  ],
+  [
+   "K every other stderr line is cargo progress (Compiling, Running), the Finished line or the Executable line: no other warning, lint, note or diagnostic",
+   true,
+   "unclassified []; Finished 1; Executable 1; progress 639"
+  ],
+  [
+   "B the executable cargo named is in this control's own target: /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3"
+  ],
+  [
+   "B the executable file now has the sha256 and size the build recorded (hashed again here); a regular file",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3"
+  ]
+ ],
+ "pin": "receipts/03-t3-controls/H/04-P-C3c-exactly-the-Set-warning/PIN.json"
+}

@@ -1,0 +1,12 @@
+C3c BUILD ADMISSION: ADMISSIBLE — CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER)
+control C3c: the build (dev-local/t3-scratch/H/03-P-C3c-clean-build) under the C3b/C3c build rule (a clean build, or exactly the one predicted warning group; the warning permitted, not required); the general classifier unchanged
+OK   the control is C3b or C3c (the rule does not transfer to C24, C6, C7, A1, A2, C20, A5 or any other control): C3c
+OK   the build receipt is complete and classified by the unchanged general classifier (descriptor, stdout, stderr, RECEIPT.txt, CLASSIFICATION.txt, CHECKS.txt, PARSED-RECEIPT.json): {'descriptor.json': True, 'build.stderr': True, 'build.stdout': True, 'RECEIPT.txt': True, 'CLASSIFICATION.txt': True, 'CHECKS.txt': True, 'PARSED-RECEIPT.json': True}
+OK   the build started and finished (no pre-flight refusal)
+OK   the build's control, role, patch and mutant identities are this control's (descriptor): ('C3c', '1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85', '5cc9c09ac96062c5d348e86ace8cb0ac2225e83d')
+OK   the source before and after the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, this control's mutant blob and sha256, no other mismatch (the exact frozen patch's mutant): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the build ran in this control's own worktree with a fresh worktree-local target (the exact command and environment are the general classifier's checks): /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2; /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target
+OK   stdout empty (cargo writes its messages to stderr); the stderr is the one the launcher recorded: b8e8b5f535582952fd07fe8d0408a26b7bd9a3a25dfc401e0ff9e76e887bf98f
+OK   A CLEAN BUILD: the unchanged general classifier's BUILD: PINNED, every one of its checks holding (exit 0, zero errors, zero warnings, every ordinary source/build/executable/resource check): 18 of 18
+OK   A no `error` or `warning` line anywhere in the stderr (read again here): []
+OK   A the general classifier's PIN.json is the one library-test executable the build recorded (path, sha256, size): ('/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', '8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed')

@@ -1,0 +1,213 @@
+{
+ "control": "C24",
+ "build_dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-continue-02/dev-local/t3-scratch/G/N03",
+ "descriptor_sha256": "e13d267a082ca9a137bd12cdf59b4573035c69c88d7068afd55d1ad660434727",
+ "stderr": {
+  "groups": [
+   {
+    "header": "warning: variant `Inconsistent` is never constructed",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     739,
+     5
+    ],
+    "shown": [
+     737,
+     738,
+     739
+    ],
+    "carets": [
+     [
+      739,
+      5,
+      9,
+      "Corrected"
+     ]
+    ],
+    "dashes": [
+     [
+      737,
+      17,
+      7,
+      "Resolve"
+     ]
+    ],
+    "labels": [
+     "variant in this enum"
+    ],
+    "notes": [
+     "`Resolve` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis",
+     "`#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default"
+    ],
+    "problems": []
+   }
+  ],
+  "summary_lines": 1,
+  "progress_lines": 639,
+  "finished_lines": 1,
+  "executable_lines": 1,
+  "unclassified": [],
+  "problems": []
+ },
+ "checks": [
+  [
+   "the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)",
+   true,
+   "C24"
+  ],
+  [
+   "SYNTHETIC CONTROL (t3_controls.py): a tampered copy, never admissible; the preserved-receipt identity check is not run",
+   false,
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-continue-02/dev-local/t3-scratch/G/N03"
+  ],
+  [
+   "A source before the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, the mutant protocol.rs blob and sha256 of section 2, no other mismatch",
+   true,
+   "EXACTLY_C_PLUS_PATCH; 3e1bfbe746851b6c63811343cde9dd3b83ad0fa9"
+  ],
+  [
+   "B source after the build: EXACTLY_C_PLUS_PATCH, the same mutant blob and sha256, no other mismatch",
+   true,
+   "EXACTLY_C_PLUS_PATCH; 3e1bfbe746851b6c63811343cde9dd3b83ad0fa9"
+  ],
+  [
+   "C the build's patch and mutant identities are section 2's and the catalog's (descriptor; and the apply receipt: the frozen patch's sha256, git apply rc 0, EXACTLY_C_PLUS_PATCH, only protocol.rs changed)",
+   true,
+   "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44"
+  ],
+  [
+   "D the exact build command in the C24 worktree: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2",
+   true,
+   "cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2"
+  ],
+  [
+   "D the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<C24 worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, feature or cfg variable; a fresh target",
+   true,
+   "{'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}"
+  ],
+  [
+   "E the exact toolchain and build inputs: rustc 1.94.0, cargo 1.94.0, toolchain 1.94.0-x86_64-unknown-linux-gnu, no other Cargo configuration; equal to each of the accepted fresh builds' records (C2; A3, A6, C8, C15); the five build inputs are Candidate C's blobs",
+   true,
+   "equal to the accepted builds: [('C2', True), ('A3', True), ('A6', True), ('C8', True), ('C15', True)]"
+  ],
+  [
+   "F normal exit 0: exit status 0, no signal, supervisor rc 0, the wrapper's recorded status 0",
+   true,
+   "{'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}"
+  ],
+  [
+   "G 16 GiB, zero swap, within 900 s: memory.max 17179869184 and memory.swap.max 0 enforced (descriptor and the scope's own record), the 900 s timeout in the timed command, wall below 900 s, not timed out, complete record",
+   true,
+   "wall 167.92000000000002 s; memory.peak 2603855872 B"
+  ],
+  [
+   "H no OOM and no signal: oom 0, oom_kill 0, swap peak 0 (descriptor and the scope's memory.events); GNU time records exit status 0 and no terminating signal",
+   true,
+   "oom 0 oom_kill 0"
+  ],
+  [
+   "the stderr is the preserved one: sha256 equals section 2's record and the build descriptor's; stdout empty and recorded",
+   false,
+   "737bb470276d201bd53c4be896e4138091a9c55c086af481ccca5a8ee5b47d28"
+  ],
+  [
+   "the source the executable was built from, reproduced for the comparison: the mutant protocol.rs from the frozen patch (blob of section 2; never written to any object store) and C's model_tests.rs",
+   true,
+   ""
+  ],
+  [
+   "I no `error` diagnostic of any kind (no line opening with `error`, `error[...]`)",
+   true,
+   "[]"
+  ],
+  [
+   "I no compiler crash text outside cargo's own Running lines (internal compiler error, panicked, query stack, SIGSEGV, signal)",
+   true,
+   ""
+  ],
+  [
+   "J exactly the permitted warning group (1), each once, in rustc's order, and no other diagnostic group",
+   false,
+   "['warning: variant `Inconsistent` is never constructed']"
+  ],
+  [
+   "J warning 1 present: warning: variant `Corrected` is never constructed",
+   false,
+   "absent"
+  ],
+  [
+   "K every line of every group is a line of rustc's group format (header, location, gutter, quoted source, marker, '...', note); each group ends with one blank line",
+   true,
+   "[]"
+  ],
+  [
+   "K cargo's summary of exactly that warning, once: 'warning: `nexus-governed-control` (lib test) generated 1 warning' (the summary, not another diagnostic)",
+   true,
+   "1"
+  ],
+  [
+   "K every other stderr line is cargo progress (Compiling, Running), the Finished line or the Executable line: no other warning, lint, note or diagnostic",
+   true,
+   "unclassified []; Finished 1; Executable 1; progress 639"
+  ],
+  [
+   "cargo's Finished line: release profile, optimized, once",
+   true,
+   "[('release', 'optimized', '2m 47s')]"
+  ],
+  [
+   "one rustc invocation compiled nexus_governed_control, as a test",
+   true,
+   "1 invocation(s)"
+  ],
+  [
+   "profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag)",
+   true,
+   "['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']"
+  ],
+  [
+   "no --cfg flag (no feature, no extra cfg); declared feature set empty",
+   true,
+   "[]"
+  ],
+  [
+   "L cargo named exactly one library-test executable (both line forms), the intended one in the C24 worktree's own target; release/deps recorded exactly it and its dep-info",
+   true,
+   "verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []"
+  ],
+  [
+   "M the recorded executable sha256 and size equal section 2's (8a81956b\u2026, 8,987,680 bytes)",
+   true,
+   "[('8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d', 8987680)]"
+  ],
+  [
+   "the test unit's fingerprint in the preserved target: no rustflags, no features (read-only)",
+   true,
+   "[('test-lib-nexus_governed_control.json', [], '[]')]"
+  ],
+  [
+   "the historical classification is unchanged: BUILD: NOT OK, 17 of 18 checks, the one failed check the general classifier's `no error or warning diagnostic` (this admission does not relabel it)",
+   true,
+   "['BUILD: NOT OK']"
+  ]
+ ],
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d",
+  "size": 8987680,
+  "executable_bit": true,
+  "test_executable_name": true
+ },
+ "dep_info": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d",
+  "sha256": "f65e04caf007fe43bcdaf61767515927e51100ee72a29ba557900833615fae97",
+  "size": 7900,
+  "executable_bit": false,
+  "test_executable_name": false
+ },
+ "build_finished": [
+  "launched: 2026-10-15T03:53:25+0100",
+  "returned: 2026-10-15T03:56:13+0100",
+  "finished: 2026-10-15T03:56:13+0100"
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "control": "C3b",
+ "build_dir": "dev-local/t3-scratch/H/10-N-C3b-a-compiler-error-plus-the-warning (exit 101)",
+ "rule": "mission sections 3-5 as amended by AMENDMENT-01",
+ "path": null,
+ "checks": [
+  [
+   "the control is C3b or C3c (the rule does not transfer to C24, C6, C7, A1, A2, C20, A5 or any other control)",
+   true,
+   "C3b"
+  ],
+  [
+   "the build receipt is complete and classified by the unchanged general classifier (descriptor, stdout, stderr, RECEIPT.txt, CLASSIFICATION.txt, CHECKS.txt, PARSED-RECEIPT.json)",
+   true,
+   "{'descriptor.json': True, 'build.stderr': True, 'build.stdout': True, 'RECEIPT.txt': True, 'CLASSIFICATION.txt': True, 'CHECKS.txt': True, 'PARSED-RECEIPT.json': True}"
+  ],
+  [
+   "the build started and finished (no pre-flight refusal)",
+   true,
+   ""
+  ],
+  [
+   "the build's control, role, patch and mutant identities are this control's (descriptor)",
+   true,
+   "('C3b', '614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4', 'e6aff1884a4b9b7f880eee8784c371648fb2c073')"
+  ],
+  [
+   "the source before and after the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, this control's mutant blob and sha256, no other mismatch (the exact frozen patch's mutant)",
+   true,
+   "EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH"
+  ],
+  [
+   "the build ran in this control's own worktree with a fresh worktree-local target (the exact command and environment are the general classifier's checks)",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2; /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target"
+  ],
+  [
+   "stdout empty (cargo writes its messages to stderr); the stderr is the one the launcher recorded",
+   true,
+   "dbc0c95264f1362f953c40945c4042b15b605c73f28a2a44c74f7fd6151bcfd7"
+  ],
+  [
+   "the build is either clean (A: BUILD: PINNED) or fails the unchanged general classifier only by its warning check (B)",
+   false,
+   "['BUILD: NOT OK']; failed checks ['normal exit 0, no signal', 'no error or warning diagnostic']"
+  ]
+ ],
+ "pin": null
+}

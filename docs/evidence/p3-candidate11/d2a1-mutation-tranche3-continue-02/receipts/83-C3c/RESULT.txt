@@ -1,0 +1,11 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C3c: acknowledgement test 5 removed
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+build admission (C3b/C3c rule, AMENDMENT-01): C3c BUILD ADMISSION: ADMISSIBLE — CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER)
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3c/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 e8cfbe4c98412d4ae78fbe3c38d9c6e93d2af16d445631971618822646c38e32 size 8983584
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P12
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-6 unchanged-core original-explorer PASS, type (e1))

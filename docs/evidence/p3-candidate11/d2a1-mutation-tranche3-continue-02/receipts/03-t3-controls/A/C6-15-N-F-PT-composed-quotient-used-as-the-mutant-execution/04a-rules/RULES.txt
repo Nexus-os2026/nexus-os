@@ -1,0 +1,13 @@
+TRANCHE-3 RULES: NOT SATISFIED
+control C6 (F-PT, ledger::protocol::model_tests::full_fpt); kill run receipts/03-t3-controls/A/C6-15-N-F-PT-composed-quotient-used-as-the-mutant-execution/04-run
+classify_a: CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE']
+OK   raw output sha256 equals the launcher's record
+FAIL the catalog's own test ledger::protocol::model_tests::full_fpt on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::gc_symmetry_fpt']
+FAIL header exactly 'EXPLORATION F-PT': no quotient or symmetry line (the original explorer): EXPLORATION F-PT (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)
+OK   the printed first property is permitted for C6: P6: P6: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   discovered count at most the ceiling 30,000,000 (F-PT): 14 of 30000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   A4 ON (F-PT as defined): the expectation requires A4 and forbids the quotient for the kill run: {'required': True, 'bounds_token': ' A4 true;', 'quotient_forbidden': True}
+OK   A4 ON in the run: the printed bounds carry ' A4 true;' and the test is full_fpt:  DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s

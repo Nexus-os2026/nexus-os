@@ -1,0 +1,2 @@
+128 controls; 128 as expected; 0 unexpected
+T3 CONTROLS: ALL AS EXPECTED

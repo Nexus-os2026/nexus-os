@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C6: classification row b ignores the refusal table, **with** A4
+patch: inputs/patches/C6.patch (the frozen R2 packet's catalog/patches/C6.patch), sha256 5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e (catalog 5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '12\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 6dde859cb243b9f4304cda61b0917b1fc555dde3 (expected 6dde859cb243b9f4304cda61b0917b1fc555dde3), sha256 649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3 (expected 649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

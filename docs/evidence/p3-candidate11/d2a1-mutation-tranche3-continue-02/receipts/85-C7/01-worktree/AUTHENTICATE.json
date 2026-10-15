@@ -1,0 +1,104 @@
+{
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7",
+ "role": "control C7 disposable mutant worktree",
+ "filesystem": {
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7",
+  "is_symlink": false,
+  "uid": 1000,
+  "gid": 1000,
+  "dev": 66310,
+  "ino": 65554353,
+  "mode": "0o40775"
+ },
+ "dotgit": "gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt3c-C7",
+ "admin": {
+  "dir": "/home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt3c-C7",
+  "gitdir": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7/.git",
+  "locked": "P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 control C7 disposable mutant worktree: mission-owned; preserve until Architect review"
+ },
+ "worktree_list_entry": [
+  "worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7",
+  "HEAD d5964ee5326c2733177307db6f507328023d361a",
+  "detached",
+  "locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 control C7 disposable mutant worktree: mission-owned; preserve until Architect review"
+ ],
+ "status": "",
+ "verify_tree": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C"
+ },
+ "baseline_file": {
+  "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "git_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+  "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+ },
+ "checks": [
+  [
+   "filesystem identity: the path is its own realpath, a directory, not a symlink",
+   true,
+   "{'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 65554353, 'mode': '0o40775'}"
+  ],
+  [
+   "owned by this user",
+   true,
+   "1000"
+  ],
+  [
+   "the worktree's .git file points into the repository's worktree administration",
+   true,
+   "gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt3c-C7"
+  ],
+  [
+   "the administrative directory points back at this worktree",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7/.git"
+  ],
+  [
+   "locked with this mission's reason (mission ownership)",
+   true,
+   "P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 control C7 disposable mutant worktree: mission-owned; preserve until Architect review"
+  ],
+  [
+   "git worktree list: this path, HEAD C, detached, locked",
+   true,
+   "['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 control C7 disposable mutant worktree: mission-owned; preserve until Architect review']"
+  ],
+  [
+   "toplevel is the path; the common git directory is the repository's",
+   true,
+   "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7; /home/nexus/NEXUS/nexus-os/.git"
+  ],
+  [
+   "HEAD is Candidate C and its tree, detached",
+   true,
+   "['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']"
+  ],
+  [
+   "clean: nothing modified, staged, untracked or ignored",
+   true,
+   ""
+  ],
+  [
+   "every tracked file byte-equal to C (verify_tree.py)",
+   true,
+   "EXACTLY_C; 5364 blobs, 97246341 bytes"
+  ],
+  [
+   "baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's",
+   true,
+   "a2df2841b99cad5d452008a6d4150e9369d07e66"
+  ]
+ ]
+}

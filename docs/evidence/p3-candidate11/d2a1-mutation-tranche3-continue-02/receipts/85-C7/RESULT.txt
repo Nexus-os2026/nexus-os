@@ -1,0 +1,10 @@
+CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+control C7: *Explained* removes every table entry, **with** A4
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 b320977a41d78ad031c74cb0f3fc9fe8c3f89051bbd599cc9b42deebb303a7e5 size 8984592
+run (type (a)): CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE; outer class (AD-1-R4 K.2): FAIL of E11, not the named property P6: kills nothing (no attribution exception)
+tranche-3 rules: TRANCHE-3 RULES: NOT SATISFIED
+restoration: RESTORE: EXACTLY_C
+STOP: the mutant run is not admissible kill evidence of the named property or test. No later control is executed.

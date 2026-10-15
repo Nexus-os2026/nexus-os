@@ -1,0 +1,10 @@
+C3b BUILD ADMISSION: REJECTED — STOP
+control C3b: the build (dev-local/t3-scratch/H/10-N-C3b-a-compiler-error-plus-the-warning (exit 101)) under the C3b/C3c build rule (a clean build, or exactly the one predicted warning group; the warning permitted, not required); the general classifier unchanged
+OK   the control is C3b or C3c (the rule does not transfer to C24, C6, C7, A1, A2, C20, A5 or any other control): C3b
+OK   the build receipt is complete and classified by the unchanged general classifier (descriptor, stdout, stderr, RECEIPT.txt, CLASSIFICATION.txt, CHECKS.txt, PARSED-RECEIPT.json): {'descriptor.json': True, 'build.stderr': True, 'build.stdout': True, 'RECEIPT.txt': True, 'CLASSIFICATION.txt': True, 'CHECKS.txt': True, 'PARSED-RECEIPT.json': True}
+OK   the build started and finished (no pre-flight refusal)
+OK   the build's control, role, patch and mutant identities are this control's (descriptor): ('C3b', '614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4', 'e6aff1884a4b9b7f880eee8784c371648fb2c073')
+OK   the source before and after the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, this control's mutant blob and sha256, no other mismatch (the exact frozen patch's mutant): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the build ran in this control's own worktree with a fresh worktree-local target (the exact command and environment are the general classifier's checks): /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2; /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target
+OK   stdout empty (cargo writes its messages to stderr); the stderr is the one the launcher recorded: dbc0c95264f1362f953c40945c4042b15b605c73f28a2a44c74f7fd6151bcfd7
+FAIL the build is either clean (A: BUILD: PINNED) or fails the unchanged general classifier only by its warning check (B): ['BUILD: NOT OK']; failed checks ['normal exit 0, no signal', 'no error or warning diagnostic']

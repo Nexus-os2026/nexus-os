@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt3c-selftest-7-1792036324.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 598832 598840 
+started: 2026-10-15T04:52:04+01:00
+finished: 2026-10-15T04:52:04+01:00
+command exit status: 0
+memory.peak: 6160384
+memory.swap.peak: 0
+memory.current: 1982464
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

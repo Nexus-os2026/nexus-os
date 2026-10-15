@@ -1,0 +1,22 @@
+--- ../development/revisions/t3_controls.dev2.py	2026-10-15 04:42:47.700033675 +0100
++++ t3_controls.py	2026-10-15 04:42:47.720758599 +0100
+@@ -76,7 +76,9 @@
+ BASE = K.CONTINUE02_PACKET + "/receipts/38-C9/04-run"
+ BASE_TEST = K.TEST_PREFIX + "full_fb2"
+ MARK = "SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02): not the output of any run\n"
+-RSS = 4373  # a distinctive synthetic resource record, so that no synthetic classification repeats an earlier packet's
++RSS = 4381  # a distinctive synthetic resource record (this mission's own), so that no synthetic classification repeats
++# an earlier packet's (TRANCHE3-EXEC-01 used 4373); section A's case directories begin with the control id for the same
++# reason (the tranche-3 rules record their own receipt path)
+ results = []
+ 
+ 
+@@ -268,7 +270,7 @@
+             kw["process"] = {"exit_status": 101, "signal": None, "supervisor_rc": 101, "wrapper_recorded_status": "101"}
+         elif kw.get("raw") == "TRUNCATED":
+             kw["raw"] = "\n".join(base_raw().replace(BASE_TEST, ctl["test"]).splitlines()[:6]) + "\n"
+-        d = os.path.join(out, "A", f"{n:02d}-{cid}-{re.sub(r'[^A-Za-z0-9_.-]+', '-', case)[:60].strip('-')}", "04-run")
++        d = os.path.join(out, "A", f"{cid}-{n:02d}-{re.sub(r'[^A-Za-z0-9_.-]+', '-', case)[:60].strip('-')}", "04-run")
+         as_patched = kw.pop("c24_as_patched", False)
+         if cid == "C24":
+             # TRANCHE3-CONTINUE-02: C24 runs from its preserved build with its worktree exactly C (main_c24).

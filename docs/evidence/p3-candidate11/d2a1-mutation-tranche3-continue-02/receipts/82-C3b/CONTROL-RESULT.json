@@ -1,0 +1,14 @@
+{
+ "control": "C3b",
+ "status": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+ "facts": [
+  "apply: APPLY: EXACTLY_C_PLUS_PATCH",
+  "build: BUILD: PINNED",
+  "build admission (C3b/C3c rule, AMENDMENT-01): C3b BUILD ADMISSION: ADMISSIBLE \u2014 CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER)",
+  "pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3b/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 8aeecde3c905a0f7069e28eec7f187db0cf2d9637e93293841bff92d8d31281b size 8983840",
+  "run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P12: P13 (permitted: P13 or P12)",
+  "tranche-3 rules: TRANCHE-3 RULES: HOLD",
+  "restoration: RESTORE: EXACTLY_C",
+  "linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-6 unchanged-core original-explorer PASS, type (e1))"
+ ]
+}

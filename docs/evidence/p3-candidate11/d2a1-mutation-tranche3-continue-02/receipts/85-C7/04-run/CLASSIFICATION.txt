@@ -1,0 +1,10 @@
+CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE
+outer class (AD-1-R4 K.2): FAIL of E11, not the named property P6: kills nothing (no attribution exception)
+raw outcome (as printed): outcome FAIL; FAIL E11: a table entry left in a step that did not see its explanation in the ledger; shortest trace (13 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 4.71s']
+measured: states 1,071,165 (expanded 686,654) of the 30,000,000 ceiling; transitions 3864850; elapsed 4.7 s
+named property: P6; configuration F-PT; test ledger::protocol::model_tests::full_fpt
+candidate: none
+resources: wall 4.7 s of 2700 s; scope memory.peak 138047488 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 136516 KiB; scope gone
+checks: 27 of 29 hold
+FAILED CHECK: the assertion message carries failed: {"P6"}: ['assertion `left == right` failed: failed: {"E11"}']
+FAILED CHECK: the printed property is the named property P6 (no attribution exception in the catalog): E11: a table entry left in a step that did not see its explanation in the ledger

@@ -1,0 +1,48 @@
+{
+ "control": "C24",
+ "type": "e1",
+ "reference": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+ "checks": [
+  [
+   "the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS",
+   false,
+   "['raw-output.txt']"
+  ],
+  [
+   "its classification blob and raw output identity are the catalog's",
+   false,
+   ""
+  ],
+  [
+   "accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it)",
+   true,
+   "['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS']"
+  ],
+  [
+   "exact configuration: the same test and flags as this control's run (F-1)",
+   true,
+   "['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']"
+  ],
+  [
+   "exact Candidate C: the source exactly C before and after",
+   true,
+   ""
+  ],
+  [
+   "execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s",
+   true,
+   ""
+  ],
+  [
+   "artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now",
+   true,
+   "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+  ],
+  [
+   "this control's own reauthentication receipt exists and records C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED) (no link before reauthentication)",
+   true,
+   "../../../receipts/03-t3-controls/B/C24-N-F-1-raw-output-byte-changed/05-reauth/REAUTH.txt: 'C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)'"
+  ]
+ ],
+ "follows": "after this control's own reauthentication receipt ../../../receipts/03-t3-controls/B/C24-N-F-1-raw-output-byte-changed/05-reauth/REAUTH.txt (sha256 e219ae1b8a0b9976a48cc6b772a438f4961af08e729e82e1f33b0794e4e24305; first line 'C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)')"
+}

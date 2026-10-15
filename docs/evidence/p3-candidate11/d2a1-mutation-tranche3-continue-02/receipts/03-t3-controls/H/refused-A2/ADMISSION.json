@@ -1,0 +1,13 @@
+{
+ "control": "A2",
+ "build_dir": "dev-local/t3-scratch/H/refused-A2-with-the-Future-warning",
+ "rule": "mission sections 3-5 as amended by AMENDMENT-01",
+ "path": null,
+ "checks": [
+  [
+   "the control is C3b or C3c (the rule does not transfer to C24, C6, C7, A1, A2, C20, A5 or any other control)",
+   false,
+   "A2"
+  ]
+ ]
+}

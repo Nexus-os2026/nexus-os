@@ -1,0 +1,7 @@
+SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02): not the output of any run
+
+running 1 test
+test ledger::protocol::model_tests::full_f1 ... EXPLORATION F-B2
+  outcome: FAIL
+  bounds: facts 2 conflicting [false, false] ENV false batch true faults 3 admissions 1 gating callers 0 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+  actors: [Fw(0), Se, Wk, Adm]

@@ -1,0 +1,43 @@
+--- ../dev-local/t3_controls.dev1.py	2026-10-15 04:35:44.553647716 +0100
++++ t3_controls.py	2026-10-15 04:35:44.572276540 +0100
+@@ -568,10 +568,12 @@
+     stderr = open(os.path.join(real, "build.stderr"), encoding="utf-8").read()
+     group = stderr[stderr.index("warning: variant `Corrected` is never constructed\n"):].split("\n\n", 1)[0] + "\n\n"
+     assert group in stderr
+-    l1818 = K.source(K.PROTOCOL).split("\n")[1817]
+-    col = l1818.index("set:") + 1
+-    extra = ("warning: unused variable: `set`\n"  # a well-formed group on a real line: only the one-group check fails
+-             f"    --> crates/nexus-governed-control/src/ledger/protocol.rs:1818:{col}\n     |\n1818 | {l1818}\n"
++    # A well-formed group on a line every mutant here leaves unchanged (protocol.rs:1643, before every hunk): only the
++    # one-group check fails.
++    l1643 = K.source(K.PROTOCOL).split("\n")[1642]
++    col = l1643.index("set =") + 1
++    extra = ("warning: unused variable: `set`\n"
++             f"    --> crates/nexus-governed-control/src/ledger/protocol.rs:1643:{col}\n     |\n1643 | {l1643}\n"
+              f"     | {' ' * (col - 1)}^^^ help: if this is intentional, prefix it with an underscore: `_set`\n\n")
+ 
+     def desc_mod(f):
+@@ -609,7 +611,8 @@
+                                                    "warning: variant `Corrected` is never constructed\n"),
+          ["I no `error` diagnostic", J1]),
+         ("N-a-two-warning-summary", stderr_mod("generated 1 warning", "generated 2 warnings"),
+-         ["K cargo's summary of exactly that warning", "K every other stderr line is cargo progress"]),
++         [J1, "K every line of every group", "K cargo's summary of exactly that warning",
++          "K every other stderr line is cargo progress"]),
+         ("N-an-unclassified-diagnostic-line", stderr_mod("    Finished `release`", "note: an extra note\n    Finished `release`"),
+          ["K every other stderr line is cargo progress"]),
+         ("N-wrong-mutant-source (C3b's mutant blob before the build)", desc_mod(
+@@ -738,10 +741,10 @@
+             assert t.count(finished) == 1
+             return t.replace(finished, "".join(groups) + summ + finished, 1)
+         return f
+-    l1818 = K.source(K.PROTOCOL).split("\n")[1817]
+-    col = l1818.index("set:") + 1
++    l1643 = K.source(K.PROTOCOL).split("\n")[1642]  # unchanged by the C3b and C3c patches (before their hunk)
++    col = l1643.index("set =") + 1
+     other = ("warning: unused variable: `set`\n"
+-             f"    --> crates/nexus-governed-control/src/ledger/protocol.rs:1818:{col}\n     |\n1818 | {l1818}\n"
++             f"    --> crates/nexus-governed-control/src/ledger/protocol.rs:1643:{col}\n     |\n1643 | {l1643}\n"
+              f"     | {' ' * (col - 1)}^^^ help: if this is intentional, prefix it with an underscore: `_set`\n\n")
+     two = "warning: `nexus-governed-control` (lib test) generated 2 warnings\n"
+     fut, st = warning_group("Future", 635), warning_group("Set", 636)

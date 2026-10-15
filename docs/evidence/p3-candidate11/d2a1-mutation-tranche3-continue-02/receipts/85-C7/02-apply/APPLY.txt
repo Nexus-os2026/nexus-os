@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C7: *Explained* removes every table entry, **with** A4
+patch: inputs/patches/C7.patch (the frozen R2 packet's catalog/patches/C7.patch), sha256 b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4 (catalog b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 0d4ab9929c0e15d910735a52b72a5f3855bef58a (expected 0d4ab9929c0e15d910735a52b72a5f3855bef58a), sha256 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa (expected 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

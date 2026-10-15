@@ -1,0 +1,1026 @@
+[
+ {
+  "control": "C24",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P8; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C3b",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P12: P13 (perm; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C3c",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C6",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P6; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C7",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P6; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "A1",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P1; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "A2",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P1; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C20",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property L1; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "A5",
+  "case": "A P-first-permitted-property",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property L1; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C3b",
+  "case": "A P-alternative-permitted-property-P12",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P12: P12\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P13 or P12: P12 (perm; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C24",
+  "case": "A P-FAIL-exactly-at-the-F-1-ceiling-60000000",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P8\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P8; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C3c",
+  "case": "A P-FAIL-exactly-at-the-30000000-ceiling",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12\u2026; rules HOLD; candidate True",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12; rules HOLD; candidate True",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "C3b",
+  "case": "A N-C3b-wrong-property-P4",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P4, not a permitted property (P13 or P12): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P4, not a permitted property (P13 or P12): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL the printed first property is permitted for C3b: P13 or P12: P4: append_facts said No']"
+ },
+ {
+  "control": "C3c",
+  "case": "A N-C3c-P13-alone",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P13, not the named property P12: kills nothing (no attribution exception)\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P13, not the named property P12: kills nothing (no attribution exception); rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL the printed first property is permitted for C3c: P12 (no other property, P13 alone in']"
+ },
+ {
+  "control": "C6",
+  "case": "A N-F-PT-composed-quotient-used-as-the-mutant-execution",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --noca; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "[\"FAIL the catalog's own test ledger::protocol::model_tests::full_fpt on the original explor\", \"FAIL header exactly 'EXPLORATION F-PT': no quotient or symmetry line (the original explore\"]"
+ },
+ {
+  "control": "C6",
+  "case": "A N-C6-with-A4-OFF (F-3 bounds)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (printed bounds equal the configuration's\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (printed bounds equal the configuration's (source-derived)): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "[\"FAIL printed bounds are the expectation's (the frozen configuration): facts 2 conflicting \", \"FAIL A4 ON in the run: the printed bounds carry ' A4 true;' and the test is full_fpt: DROP\"]"
+ },
+ {
+  "control": "C7",
+  "case": "A N-C7-kill-run-with-A4-OFF (full_f3 on F-3)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --noca; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "[\"FAIL the catalog's own test ledger::protocol::model_tests::full_fpt on the original explor\", \"FAIL header exactly 'EXPLORATION F-PT': no quotient or symmetry line (the original explore\", \"FAIL printed bounds are the expectation's (the frozen configuration): facts 2 conflicting \"]"
+ },
+ {
+  "control": "C7",
+  "case": "A N-C7-informational-F-3-receipt-counted-as-the-kill (FAIL E11)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of E11, not the named property P6: kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of E11, not the named property P6: kills nothing (no attribution exception); rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "[\"FAIL the catalog's own test ledger::protocol::model_tests::full_fpt on the original explor\", \"FAIL header exactly 'EXPLORATION F-PT': no quotient or symmetry line (the original explore\", 'FAIL the printed first property is permitted for C7: P6: E11: append_facts said Not writte']"
+ },
+ {
+  "control": "C24",
+  "case": "A N-F-1-FAIL-beyond-60000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL discovered count at most the ceiling 60,000,000 (F-1): 60000001 of 60000000']"
+ },
+ {
+  "control": "C24",
+  "case": "A N-C24-classified-as-a-patched-control-would-be (EXACTLY_C_PLUS_PATCH expected; the worktree is C)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (\u2026; rules HOLD; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob 3e1bfbe746851b6c63811343cd; rules HOLD; candidate False",
+  "as_expected": true,
+  "detail": "[]"
+ },
+ {
+  "control": "A1",
+  "case": "A N-F-1-FAIL-beyond-60000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL discovered count at most the ceiling 60,000,000 (F-1): 60000001 of 60000000']"
+ },
+ {
+  "control": "C3c",
+  "case": "A N-F-6-FAIL-beyond-30000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL discovered count at most the ceiling 30,000,000 (F-6): 30000001 of 30000000']"
+ },
+ {
+  "control": "C6",
+  "case": "A N-F-PT-FAIL-beyond-30000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL discovered count at most the ceiling 30,000,000 (F-PT): 30000001 of 30000000']"
+ },
+ {
+  "control": "C20",
+  "case": "A N-L1-before-a-complete-search (expanded < discovered)",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property L1; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL L1: complete search: every discovered state was expanded (expanded = discovered; expl']"
+ },
+ {
+  "control": "A5",
+  "case": "A N-L1-before-a-complete-search (expanded < discovered)",
+  "expected": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING / FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property L1; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL L1: complete search: every discovered state was expanded (expanded = discovered; expl']"
+ },
+ {
+  "control": "A5",
+  "case": "A N-incomplete-search (INCOMPLETE at the cap)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills n; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL the printed first property is permitted for A5: L1: None', 'FAIL discovered count at most the ceiling 30,000,000 (F-2): 30000001 of 30000000', \"FAIL L1: raw outcome FAIL of L1, with the explorer's own L1 detail: None\"]"
+ },
+ {
+  "control": "C20",
+  "case": "A N-L1-FAIL-beyond-30000000 (cap overshoot)",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE \u2014 BUDGET EXCEEDED (a FAIL printed beyond the authorised cardinality): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL discovered count at most the ceiling 30,000,000 (F-2): 30000001 of 30000000', 'FAIL L1: discovered = expanded at most 30,000,000: 30000001']"
+ },
+ {
+  "control": "C20",
+  "case": "A N-another-property-P12-instead-of-L1",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P12, not the named property L1: kills nothing (no attribution exception)\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / FAIL of P12, not the named property L1: kills nothing (no attribution exception); rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "['FAIL the printed first property is permitted for C20: L1: P12: append_facts said Not writt', \"FAIL L1: raw outcome FAIL of L1, with the explorer's own L1 detail: P12: append_facts said\", 'FAIL L1: complete search: every discovered state was expanded (expanded = discovered; expl']"
+ },
+ {
+  "control": "C24",
+  "case": "A N-killed-from-outside",
+  "expected": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (killed from outside or abnormal termination): kills nothing\u2026; rules NOT SATISFIED; candidate False",
+  "got": "CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE / INCOMPLETE (killed from outside or abnormal termination): kills nothing; rules NOT SATISFIED; candidate False",
+  "as_expected": true,
+  "detail": "[\"FAIL header exactly 'EXPLORATION F-1': no quotient or symmetry line (the original explorer\", 'FAIL the printed first property is permitted for C24: P8: None', 'FAIL discovered count at most the ceiling 60,000,000 (F-1): None of 30000000']"
+ },
+ {
+  "control": "C24",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d"
+ },
+ {
+  "control": "C3b",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 8"
+ },
+ {
+  "control": "C3c",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 8"
+ },
+ {
+  "control": "C6",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT at f023cc3"
+ },
+ {
+  "control": "C7",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT at f023cc3"
+ },
+ {
+  "control": "A1",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d"
+ },
+ {
+  "control": "A2",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d"
+ },
+ {
+  "control": "C20",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d"
+ },
+ {
+  "control": "A5",
+  "case": "B link on the real authenticated inputs, after a restoration receipt",
+  "expected": "LINK: VERIFIED",
+  "got": "LINK: VERIFIED",
+  "as_expected": true,
+  "detail": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d"
+ },
+ {
+  "control": "A1",
+  "case": "B N-linked-receipt-before-restoration (no restoration receipt)",
+  "expected": "LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/B/A1-N-linked-receipt-before-restoration (no restoration receipt)/05-restore/RESTORE.txt: None\"]"
+ },
+ {
+  "control": "C24",
+  "case": "B N-linked-receipt-before-reauthentication (no reauthentication receipt)",
+  "expected": "LINK: FAILED with the check 'this control's own reauthentication receipt exists and records C24 REA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own reauthentication receipt exists and records C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED) (no link before reauthentication): ../../../receipts/03-t3-controls/B/C24-N-linked-receipt-before-reauthentication (no reauthenticatio/05-reauth/REAUTH.txt: None\"]"
+ },
+ {
+  "control": "C24",
+  "case": "B N-a-restoration-receipt-instead-of-the-reauthentication-receipt",
+  "expected": "LINK: FAILED with the check 'this control's own reauthentication receipt exists and records C24 REA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own reauthentication receipt exists and records C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED) (no link before reauthentication): ../../../receipts/03-t3-controls/B/C24-N-a-restoration-receipt-instead-of-the-reauthentication-rece/05-reauth/REAUTH.txt: None\"]"
+ },
+ {
+  "control": "C20",
+  "case": "B N-linked-receipt-after-a-failed-restoration",
+  "expected": "LINK: FAILED with the check 'this control's own restoration receipt exists and records RESTORE: EXA\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/B/C20-N-linked-receipt-after-a-failed-restoration/05-restore/RESTORE.txt: 'RESTORE: FAILED'\"]"
+ },
+ {
+  "control": "C24",
+  "case": "B N-F-1-raw-output-byte-changed",
+  "expected": "LINK: FAILED with the check 'its classification blob and raw output identity are the catalog's\u2026' failing",
+  "got": "LINK: FAILED; 2 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL its classification blob and raw output identity are the catalog's\"]"
+ },
+ {
+  "control": "A1",
+  "case": "B N-another-test-in-the-expectation",
+  "expected": "LINK: FAILED with the check 'exact configuration: the same test and flags as this control's run (F-\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']\"]"
+ },
+ {
+  "control": "C6",
+  "case": "B N-other-bounds-in-the-expectation (A4 off)",
+  "expected": "LINK: FAILED with the check 'F-PT's restored side (AD-1-R4 F)\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL F-PT's restored side (AD-1-R4 F): the composed-quotient test with the same flags, the same F-PT configuration (bounds) as this control's original-explorer full_fpt run: ['ledger::protocol::model_tests::gc_symmetry_fpt']; mutant run ledger::protocol::model_tests::full_fpt\"]"
+ },
+ {
+  "control": "C7",
+  "case": "B N-the-F-B-configuration-in-the-expectation",
+  "expected": "LINK: FAILED with the check 'F-B's restored side (AD-1-R4 F)\u2026' failing",
+  "got": "LINK: FAILED; 1 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL F-B's restored side (AD-1-R4 F): the composed-quotient test with the same flags, the same F-B configuration (bounds) as this control's original-explorer full_fpt run: ['ledger::protocol::model_tests::gc_symmetry_fpt']; mutant run ledger::protocol::model_tests::full_fpt\"]"
+ },
+ {
+  "control": "C3b",
+  "case": "B N-F-6-classification-byte-changed",
+  "expected": "LINK: FAILED with the check 'its classification blob and raw output identity are the catalog's\u2026' failing",
+  "got": "LINK: FAILED; 3 failed",
+  "as_expected": true,
+  "detail": "[\"FAIL its classification blob and raw output identity are the catalog's\"]"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-catalog-copy-changed",
+  "expected": "PROBLEMS \u2014 STOP naming 'authenticated catalog copy sha256'",
+  "got": "rc 1; 2 problems",
+  "as_expected": true,
+  "detail": "['authenticated catalog copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C N-patch-copy-changed",
+  "expected": "PROBLEMS \u2014 STOP naming 'C20 authenticated patch copy sha256'",
+  "got": "rc 1; 2 problems",
+  "as_expected": true,
+  "detail": "['C20 authenticated patch copy sha256']"
+ },
+ {
+  "control": "\u2014",
+  "case": "C P-real-inputs",
+  "expected": "DERIVED, equal to receipts/02-EXPECTATIONS.json",
+  "got": "rc 0; equal True",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "D the general classifier (classify_build_success, unchanged) rerun on a copy of the historical C24 build receipt",
+  "expected": "BUILD: NOT OK; CHECKS.txt, CLASSIFICATION.txt, PARSED-RECEIPT.json byte-identical to the historical ones; no PIN.json",
+  "got": "BUILD: NOT OK; rc 1; identical {'CHECKS.txt': True, 'CLASSIFICATION.txt': True, 'PARSED-RECEIPT.json': True}; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C6",
+  "case": "D a warning-bearing build presented as C6's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "D a warning-bearing build presented as C7's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A1",
+  "case": "D a warning-bearing build presented as A1's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A2",
+  "case": "D a warning-bearing build presented as A2's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C20",
+  "case": "D a warning-bearing build presented as C20's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A5",
+  "case": "D a warning-bearing build presented as A5's: rejected (zero warnings required), no PIN.json",
+  "expected": "BUILD: NOT OK with exactly the check 'no error or warning diagnostic' failing",
+  "got": "BUILD: NOT OK; failing ['no error or warning diagnostic']; PIN.json False",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A3",
+  "case": "D the unchanged classifier rerun on a copy of the accepted A3 build (no diagnostic)",
+  "expected": "BUILD: PINNED; CHECKS.txt and CLASSIFICATION.txt byte-identical to the accepted ones; PIN.json equal but for its own receipt path",
+  "got": "BUILD: PINNED; rc 0; identical {'CHECKS.txt': True, 'CLASSIFICATION.txt': True, \"PIN.json (every field but build_receipt, the receipt directory's own path)\": True}",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E P-FAIL-E11 (the catalog's expectation)",
+  "expected": "admissible; INFORMATIONAL OUTCOME: FAIL E11; no kill label",
+  "got": "admissible; INFORMATIONAL OUTCOME: FAIL E11",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E P-PASS-of-a-complete-search",
+  "expected": "admissible; INFORMATIONAL OUTCOME: PASS; no kill label",
+  "got": "admissible; INFORMATIONAL OUTCOME: PASS",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E P-INCOMPLETE-at-the-explorer's-own-state-cap",
+  "expected": "admissible; INFORMATIONAL OUTCOME: INCOMPLETE (the state cap of 30000000 was reached); no kill label",
+  "got": "admissible; INFORMATIONAL OUTCOME: INCOMPLETE (the state cap of 30000000 was reached)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-FAIL-beyond-the-cap (overshoot)",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (FAIL: discovered at most 30,000,000 (a FAIL beyond the cap is a cap ",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-timeout-kill",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no ",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-OOM-kill",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no ",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-another-executable",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (executable is the pinned one (path, sha256, size) before, at selecti",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-source-not-C7's-mutant",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (source EXACTLY_C_PLUS_PATCH before and after (mutant blob 0d4ab9929c",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-composed-quotient-header",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (header exactly 'EXPLORATION F-3' (the original explorer; no quotient",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-A4-ON (F-PT bounds)",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (printed bounds are F-3's: A4 OFF)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "E N-another-test (full_fpt)",
+  "expected": "NOT ADMISSIBLE \u2014 STOP; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP; no kill label",
+  "got": "NOT ADMISSIBLE; INFORMATIONAL RUN: NOT ADMISSIBLE \u2014 STOP (argv: the pinned executable, exactly the one test and flags --exact ",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C2",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C2 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C19",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C5",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C5 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C19",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C22",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C22 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C1",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C1 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C19",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C4",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C4 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C19",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C25",
+  "case": "F control.main refuses; nothing written under receipts/",
+  "expected": "REFUSED",
+  "got": "REFUSED: C25 is not executed by P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (C22 C14 C1",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "F control.gate before C24's RESULT exists",
+  "expected": "closed: the previous control's RESULT is not a candidate",
+  "got": "receipts/81-C24/RESULT.txt is not 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING'; no freeze record",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "F control.gate before the freeze and the pre-execution gate",
+  "expected": "closed",
+  "got": "not frozen: ['documents/ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md', 'documents/ARCHITECT-RULING-C24-C3B-C3C-BUILD-ADMIS",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G admit: the real preserved receipt",
+  "expected": "C24 BUILD ADMISSION: ARCHITECT-ADMISSIBLE BUILD AUTHENTICATED (NARROW C24-SPECIFIC WARNING RULING)",
+  "got": "C24 BUILD ADMISSION: ARCHITECT-ADMISSIBLE BUILD AUTHENTICATED (NARROW C24-SPECIFIC WARNING RULING)",
+  "as_expected": true,
+  "detail": "31 of 31 checks hold"
+ },
+ {
+  "control": "C24",
+  "case": "G admit (synthetic mode): an unmodified copy: only the synthetic line fails",
+  "expected": "REJECTED; failing exactly [synthetic line]",
+  "got": "REJECTED; failing 1",
+  "as_expected": true,
+  "detail": "['SYNTHETIC CONTROL (t3_controls.py): a tampered copy, never admissible; the preserved-receipt identity check is not run']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-the-permitted-warning-absent",
+  "expected": "REJECTED; failing the synthetic line and exactly ['J exactly the permitted warning group (1), each once', 'J warning 1 present', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 4",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", \"J exactly the permitted warning group (1), each once, in rustc's order\", 'J warning 1 present: warning: variant `Corrected` is never constructed']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-an-extra-warning",
+  "expected": "REJECTED; failing the synthetic line and exactly ['J exactly the permitted warning group (1), each once', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 3",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", \"J exactly the permitted warning group (1), each once, in rustc's order\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-a-wrong-warning (variant `Inconsistent`)",
+  "expected": "REJECTED; failing the synthetic line and exactly ['J exactly the permitted warning group (1), each once', 'J warning 1 present', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 4",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", \"J exactly the permitted warning group (1), each once, in rustc's order\", 'J warning 1 present: warning: variant `Corrected` is never constructed']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-wrong-warning-location (739:5 -> 740:5)",
+  "expected": "REJECTED; failing the synthetic line and exactly ['J warning 1 (variant `Corrected` is never constructed): primary location', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 3",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", 'J warning 1 (variant `Corrected` is never constructed): primary locati']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-an-error-plus-the-warning",
+  "expected": "REJECTED; failing the synthetic line and exactly ['I no `error` diagnostic', 'J exactly the permitted warning group (1), each once', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 4",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", 'I no `error` diagnostic of any kind (no line opening with `error`, `er', \"J exactly the permitted warning group (1), each once, in rustc's order\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-a-two-warning-summary",
+  "expected": "REJECTED; failing the synthetic line and exactly ['J exactly the permitted warning group (1), each once', 'K every line of every group', \"K cargo's summary of exactly that warning\", 'K every other stderr line is cargo progress', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 6",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", \"J exactly the permitted warning group (1), each once, in rustc's order\", \"K every line of every group is a line of rustc's group format (header,\", \"K cargo's summary of exactly that warning, once: 'warning: `nexus-gove\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-an-unclassified-diagnostic-line",
+  "expected": "REJECTED; failing the synthetic line and exactly ['K every other stderr line is cargo progress', 'the stderr is the preserved one']",
+  "got": "REJECTED; failing 3",
+  "as_expected": true,
+  "detail": "[\"the stderr is the preserved one: sha256 equals section 2's record and \", 'K every other stderr line is cargo progress (Compiling, Running), the ']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-wrong-mutant-source (C3b's mutant blob before the build)",
+  "expected": "REJECTED; failing the synthetic line and exactly ['A source before the build']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "[\"A source before the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, th\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-wrong-executable-hash",
+  "expected": "REJECTED; failing the synthetic line and exactly ['M the recorded executable sha256 and size']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "[\"M the recorded executable sha256 and size equal section 2's (8a81956b\u2026\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-wrong-executable-size",
+  "expected": "REJECTED; failing the synthetic line and exactly ['M the recorded executable sha256 and size']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "[\"M the recorded executable sha256 and size equal section 2's (8a81956b\u2026\"]"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-exit-101",
+  "expected": "REJECTED; failing the synthetic line and exactly ['F normal exit 0']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "['F normal exit 0: exit status 0, no signal, supervisor rc 0, the wrappe']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-an-OOM-kill",
+  "expected": "REJECTED; failing the synthetic line and exactly ['H no OOM and no signal']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "['H no OOM and no signal: oom 0, oom_kill 0, swap peak 0 (descriptor and']"
+ },
+ {
+  "control": "C24",
+  "case": "G admit: N-a-timeout",
+  "expected": "REJECTED; failing the synthetic line and exactly ['G 16 GiB, zero swap']",
+  "got": "REJECTED; failing 2",
+  "as_expected": true,
+  "detail": "['G 16 GiB, zero swap, within 900 s: memory.max 17179869184 and memory.s']"
+ },
+ {
+  "control": "C3b",
+  "case": "G admit: the C24 warning presented for C3b (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3c",
+  "case": "G admit: the C24 warning presented for C3c (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C6",
+  "case": "G admit: the C24 warning presented for C6 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "G admit: the C24 warning presented for C7 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A1",
+  "case": "G admit: the C24 warning presented for A1 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A2",
+  "case": "G admit: the C24 warning presented for A2 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C20",
+  "case": "G admit: the C24 warning presented for C20 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A5",
+  "case": "G admit: the C24 warning presented for A5 (the ruling does not transfer)",
+  "expected": "REJECTED: the control is not C24",
+  "got": "REJECTED; failing ['the control is C24 (the warning ruling is C24-specific: it does not transfer to C3b, C3c, C6, C7, A1, A2, C20, A5 or any other control)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G admit (normal mode): a byte-changed copy of the preserved receipt",
+  "expected": "REJECTED: the preserved-receipt identity check fails",
+  "got": "REJECTED; failing ['the build evidence is the preserved Tranche-3 receipt: each of its 10 files equals docs/evidence/p3-candidate11/d2a1-mutation-tranche3-exec-01/receipts/67-C24/03-build at 774f457a (SHA256SUMS sha256 and git blob); nothing else in the directory']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G pin: the real preserved executable",
+  "expected": "C24 PRESERVED EXECUTABLE: PINNED",
+  "got": "C24 PRESERVED EXECUTABLE: PINNED",
+  "as_expected": true,
+  "detail": "10 of 10 checks hold"
+ },
+ {
+  "control": "C24",
+  "case": "G pin: N-missing-executable",
+  "expected": "C24_PRESERVED_ARTIFACT_BLOCKED with 'the preserved executable exists' failing",
+  "got": "C24_PRESERVED_ARTIFACT_BLOCKED; failing ['the preserved executable exists']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G pin: N-executable-hash-mismatch",
+  "expected": "C24_PRESERVED_ARTIFACT_BLOCKED with 'sha256 exact' failing",
+  "got": "C24_PRESERVED_ARTIFACT_BLOCKED; failing ['sha256 exact (mission section 2: 8a81956b1105d4639']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G pin: N-wrong-size",
+  "expected": "C24_PRESERVED_ARTIFACT_BLOCKED with 'size exact' failing",
+  "got": "C24_PRESERVED_ARTIFACT_BLOCKED; failing ['size exact (8,987,680 bytes)']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G pin: N-another-path (a symlink to the real executable)",
+  "expected": "C24_PRESERVED_ARTIFACT_BLOCKED with 'a regular file, not a symlink' failing",
+  "got": "C24_PRESERVED_ARTIFACT_BLOCKED; failing [\"the path is the ruling's (mission section 2) and t\", 'a regular file, not a symlink', 'every path component is real (no symlink anywhere ']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G worktree check: the preserved C24 worktree",
+  "expected": "C24 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)",
+  "got": "C24 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "G worktree check: another lock reason expected",
+  "expected": "C24 PRESERVED WORKTREE: NOT AUTHENTICATED",
+  "got": "C24 PRESERVED WORKTREE: NOT AUTHENTICATED; failing ['locked with the Tranche-3 reason (its ow']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: P-C3b-clean-build",
+  "expected": "C3b BUILD ADMISSION: ADMISSIBLE \u2014 CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER)",
+  "got": "C3b BUILD ADMISSION: ADMISSIBLE \u2014 CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER); general classifier BUILD: PINNED; pin dev-local/t3-scratch/H/01-P-C3b-clean-build/PIN.json",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: P-C3b-exactly-the-Future-warning",
+  "expected": "C3b BUILD ADMISSION: ADMISSIBLE \u2014 EXACT NARROW WARNING BUILD (ARCHITECT RULING, AMENDMENT-01)",
+  "got": "C3b BUILD ADMISSION: ADMISSIBLE \u2014 EXACT NARROW WARNING BUILD (ARCHITECT RULING, AMENDMENT-01); general classifier BUILD: NOT OK; pin receipts/03-t3-controls/H/02-P-C3b-exactly-the-Future-warning/PIN.json",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3c",
+  "case": "H c3w.admit: P-C3c-clean-build",
+  "expected": "C3c BUILD ADMISSION: ADMISSIBLE \u2014 CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER)",
+  "got": "C3c BUILD ADMISSION: ADMISSIBLE \u2014 CLEAN BUILD (BUILD: PINNED UNDER THE UNCHANGED GENERAL CLASSIFIER); general classifier BUILD: PINNED; pin dev-local/t3-scratch/H/03-P-C3c-clean-build/PIN.json",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3c",
+  "case": "H c3w.admit: P-C3c-exactly-the-Set-warning",
+  "expected": "C3c BUILD ADMISSION: ADMISSIBLE \u2014 EXACT NARROW WARNING BUILD (ARCHITECT RULING, AMENDMENT-01)",
+  "got": "C3c BUILD ADMISSION: ADMISSIBLE \u2014 EXACT NARROW WARNING BUILD (ARCHITECT RULING, AMENDMENT-01); general classifier BUILD: NOT OK; pin receipts/03-t3-controls/H/04-P-C3c-exactly-the-Set-warning/PIN.json",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-Future-warning-plus-an-extra-warning",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-the-Set-warning",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3c",
+  "case": "H c3w.admit: N-C3c-Set-warning-plus-an-extra-warning",
+  "expected": "C3c BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3c BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3c",
+  "case": "H c3w.admit: N-C3c-the-Future-warning",
+  "expected": "C3c BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3c BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-another-warning-only",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-a-compiler-error-plus-the-warning (exit 101)",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-the-Future-warning-at-another-location (636:5)",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-the-Future-warning-with-a-two-warning-summary",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C3b",
+  "case": "H c3w.admit: N-C3b-build-identity-mismatch (C3c's mutant blob in the source record)",
+  "expected": "C3b BUILD ADMISSION: REJECTED \u2014 STOP",
+  "got": "C3b BUILD ADMISSION: REJECTED \u2014 STOP; general classifier BUILD: NOT OK; pin None",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C24",
+  "case": "H the C3b/C3c rule refused for C24; the unchanged general classifier rejects its warning",
+  "expected": "C24 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "C24 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C6",
+  "case": "H the C3b/C3c rule refused for C6; the unchanged general classifier rejects its warning",
+  "expected": "C6 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "C6 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C7",
+  "case": "H the C3b/C3c rule refused for C7; the unchanged general classifier rejects its warning",
+  "expected": "C7 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "C7 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A1",
+  "case": "H the C3b/C3c rule refused for A1; the unchanged general classifier rejects its warning",
+  "expected": "A1 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "A1 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A2",
+  "case": "H the C3b/C3c rule refused for A2; the unchanged general classifier rejects its warning",
+  "expected": "A2 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "A2 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "C20",
+  "case": "H the C3b/C3c rule refused for C20; the unchanged general classifier rejects its warning",
+  "expected": "C20 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "C20 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ },
+ {
+  "control": "A5",
+  "case": "H the C3b/C3c rule refused for A5; the unchanged general classifier rejects its warning",
+  "expected": "A5 BUILD ADMISSION: REJECTED \u2014 STOP (the control is not C3b or C3c); general BUILD: NOT OK (warning check)",
+  "got": "A5 BUILD ADMISSION: REJECTED \u2014 STOP; general BUILD: NOT OK; failing ['no error or warning diagnostic']",
+  "as_expected": true,
+  "detail": ""
+ }
+]

@@ -1,0 +1,25 @@
+OK   the run started (no pre-flight refusal)
+FAIL executable is the pinned one (path, sha256, size) before, at selection and after: 049353fe0361af04… 4373 / 049353fe0361af04… 4373 / 049353fe0361af04… 4373 (pinned e580d0d546657e78… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 0d4ab9929c0e15d910735a52b72a5f3855bef58a): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 8d99242aee05947e8086d700634dd88d66aa091fd535fe6b7c70458056428e31
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt3c-C7/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f3', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f3: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f3: test']
+OK   the harness ran exactly that one test: running ['1']; ['ledger::protocol::model_tests::full_f3']
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   no signal; the process exited normally: exit 101, signal None
+OK   no fixture failure; no quotient or symmetry refusal
+OK   an exploration report is printed
+OK   header exactly 'EXPLORATION F-3' (the original explorer; no quotient or symmetry line): EXPLORATION F-3
+OK   printed bounds are F-3's: A4 OFF: facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors are F-3's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]
+OK   caps printed: 30,000,000 states, 2700 s: 30000000, 2700
+OK   counts printed
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+OK   the raw outcome is one of FAIL, PASS, INCOMPLETE: FAIL
+OK   harness FAILED with exactly that test; exit 101 by a normal exit: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; ['ledger::protocol::model_tests::full_f3']
+OK   exactly one panic, the explorer's own verdict assertion (crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): ["thread 'ledger::protocol::model_tests::full_f3' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the report is printed, then repeated verbatim in the assertion message
+OK   FAIL: the assertion's operands: left Fail, right Pass; the message names the printed property: ['assertion `left == right` failed: failed: {"E11"}', '  left: Fail', ' right: Pass']
+OK   FAIL: one of PROPERTIES; no INCOMPLETE line; the shortest trace printed: E11: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   FAIL: discovered at most 30,000,000 (a FAIL beyond the cap is a cap overshoot: not admissible): 14

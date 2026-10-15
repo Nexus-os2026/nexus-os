@@ -1,0 +1,11 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C24: resolve empties U for a present gating record without placing the correction
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+build admission: C24 BUILD ADMISSION: ARCHITECT-ADMISSIBLE BUILD AUTHENTICATED (NARROW C24-SPECIFIC WARNING RULING)
+preserved worktree before the run: C24 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)
+preserved executable: C24 PRESERVED EXECUTABLE: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d size 8987680
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P8
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+after the run: C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))

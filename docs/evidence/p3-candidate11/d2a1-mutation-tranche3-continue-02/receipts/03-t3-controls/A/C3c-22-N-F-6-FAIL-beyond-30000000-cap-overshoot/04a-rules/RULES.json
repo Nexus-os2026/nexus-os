@@ -1,0 +1,54 @@
+{
+ "control": "C3c",
+ "holds": false,
+ "checks": [
+  [
+   "the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists)",
+   true,
+   "['CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE']"
+  ],
+  [
+   "raw output sha256 equals the launcher's record",
+   true,
+   ""
+  ],
+  [
+   "the catalog's own test ledger::protocol::model_tests::full_f6 on the original explorer (never a gc_symmetry_* quotient test)",
+   true,
+   "['ledger::protocol::model_tests::full_f6']"
+  ],
+  [
+   "header exactly 'EXPLORATION F-6': no quotient or symmetry line (the original explorer)",
+   true,
+   "EXPLORATION F-6"
+  ],
+  [
+   "the printed first property is permitted for C3c: P12 (no other property, P13 alone included)",
+   true,
+   "P12: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown"
+  ],
+  [
+   "discovered count at most the ceiling 30,000,000 (F-6)",
+   false,
+   "30000001 of 30000000"
+  ],
+  [
+   "printed bounds are the expectation's (the frozen configuration)",
+   true,
+   "facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots true cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s"
+  ]
+ ],
+ "run": "receipts/03-t3-controls/A/C3c-22-N-F-6-FAIL-beyond-30000000-cap-overshoot/04-run",
+ "printed_property": "P12",
+ "report": {
+  "header": "EXPLORATION F-6",
+  "outcome": "FAIL",
+  "fail": "P12: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "states": 30000001,
+  "expanded": 1,
+  "transitions": 14,
+  "elapsed_s": 0.0,
+  "cap": 30000000
+ }
+}

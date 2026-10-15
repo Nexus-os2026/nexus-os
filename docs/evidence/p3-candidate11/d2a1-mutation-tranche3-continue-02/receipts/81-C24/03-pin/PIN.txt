@@ -1,0 +1,12 @@
+C24 PRESERVED EXECUTABLE: PINNED
+control C24: the preserved executable /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3, pinned read-only
+OK   the path is the ruling's (mission section 2) and the C24 worktree's own: /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+OK   a regular file, not a symlink: 0o100775
+OK   every path component is real (no symlink anywhere on the path; the path is its own realpath)
+OK   beneath the C24 worktree's own real target directory: a real directory (not a symlink), its own realpath, not a mount point and holding none: /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target
+OK   the executable bit is set (as the build recorded it: executable_bit true): 0o775
+OK   sha256 exact (mission section 2: 8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d): 8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d
+OK   size exact (8,987,680 bytes): 8987680
+OK   dep-info identity as the build recorded it: the .d file's sha256 and size; it has exactly one rule for the executable, whose inputs include the worktree's protocol.rs and model_tests.rs (paths relative to the C24 worktree, the build's cwd): f65e04caf007fe43bcdaf61767515927e51100ee72a29ba557900833615fae97 (recorded f65e04caf007fe43bcdaf61767515927e51100ee72a29ba557900833615fae97); rules for the executable 1
+OK   release/deps holds exactly the two nexus_governed_control artifacts the build recorded (names, sha256, sizes): [('nexus_governed_control-2faa0b9718d3e6a3', '8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d', 8987680), ('nexus_governed_control-2faa0b9718d3e6a3.d', 'f65e04caf007fe43bcdaf61767515927e51100ee72a29ba557900833615fae97', 7900)]
+OK   no target or executable modification since the build record: no entry under the target (files and directories, mtime or ctime) is newer than the build receipt's finish (1 s resolution); every entry's ctime is after the build's launch (a fresh target): 3528 entries; newest 03:56:13; build 03:53:25-03:56:13

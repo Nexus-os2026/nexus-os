@@ -1,0 +1,136 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-15, Europe/London (+01:00), taken from file times and the execution record; "before 04:18" marks the
+reading and the pre-execution question, whose exact times were not recorded. Official receipts are under receipts/;
+development runs are under dev-local/ (kept on the machine, not published: disposable copies of the evidence root, r1-r5,
+whose tools/common.py names the copy as EV, made by dev-local/mkroot.sh) and in disposable shared clones in the session
+scratchpad (outside every evidence root; push URL disabled); every failing development output and every revision with
+its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build, test or executable run; development used git objects, the
+previous packets, synthetic files and synthetic evidence roots only; every worktree, target and executable outside this
+mission was only read)
+
+ 1. before 04:18  Read the mission, AGENTS.md and CLAUDE.md. Main worktree clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Tranche-3 evidence commit 774f457a present locally (tree f74660b9, parent
+           b97205b2); remote review ref tranche3-exec-01 -> 774f457a; destination ref, local branch, evidence worktree
+           path and every mt3c path absent. Host: 16 CPUs, MemAvailable about 50 GiB, 27 GiB free disk; no p3c11-*
+           scope, cargo, rustc or governed-control executable running.
+ 2. before 04:18  Read the Tranche-3 tooling (its packet's tools/ and the nine tools it carried), its development log,
+           INDEX, stop record and C24's receipts (03-build: BUILD: NOT OK, 17 of 18, the one `Corrected` warning group;
+           executable 8a81956b…, 8,987,680 bytes, written 03:56:12, never run; worktree restored to C, locked with the
+           Tranche-3 reason), and the accepted continuation's C5 tooling (c5.py, main_c5, c2_controls.py), the template
+           of the preserved-build admission.
+ 3. before 04:18  PRE-EXECUTION FINDING (before any build or run): mission sections 3 and 4 rest on "Candidate C has
+           exactly one construction" of AckRefusal::Future (protocol.rs:1669) and AckRefusal::Set (1671). The
+           library-test build also compiles unit_tests.rs (protocol.rs:32-33, `#[cfg(test)] mod unit_tests;`), whose
+           #[test] t_ack_each_test_refuses_alone constructs AckRefusal::Future at unit_tests.rs:1861, 1867, 1903 and
+           AckRefusal::Set at 1873, 1879. Precedent: the accepted Tranche-2 control C3a removed the only protocol.rs
+           construction of AckRefusal::Stale (also constructed in unit_tests.rs) and built with no diagnostic
+           (receipts/55-C3a/03-build at 2e06860f: BUILD: PINNED). A clean C3b/C3c build was therefore the likely
+           outcome, which sections 3/4 ("Require: ... exactly that one mutation-induced warning group") did not admit.
+           Also checked: SetFacts derives PartialEq and model_tests.rs reads set.head and set.digest, so neither patch
+           can leave a field unread. The question was put to the Owner (options: fail closed and stop at C3b; admit a
+           fully clean build; pause for an Architect ruling).
+ 4. before 04:18  The Owner answered: admit a fully clean build. The Sole Architect then issued
+           P3-C11-DR01-D2A1-MUTATION-TRANCHE3-CONTINUE-02-AMENDMENT-01 (C3b/C3c: a clean build, or exactly the one
+           predicted warning group; the warning permitted, not required; any other outcome stops), which governs. Both
+           are recorded in documents/ARCHITECT-AMENDMENT-01-C3B-C3C-BUILD-RULE.md.
+ 5. 04:18  Mission evidence root created (absent before). original-tools/ (25) extracted from the git objects of 774f457a
+           (16) and of the commits its CARRIED-FORWARD.md names (9): every blob and sha256 equal to the record, and every
+           file byte-equal to the Tranche-3 local root's tools/. tools/ seeded from them.
+ 6. 04:21  common.py (mission identity, mt3c namespace with control_wt("C24") the preserved mt3x-C24 worktree as the
+           continuation did for C5, the order and receipt directories 81-89, the 23 accepted controls, the Tranche-3
+           identities and C2's accepted evidence identities, the preserved C24 identities, the C3b/C3c warning identities
+           from the frozen catalog, the four records, publication names, parent 774f457a). A first draft held placeholder
+           C3b/C3c patch sha256 values; they were replaced by the catalog's before any tool read them (they never reached
+           a receipt). documents/: the four records (dev-local/gen_documents.py, from mission sections 1-6 and 19, the
+           amendment and git objects; read-only after writing).
+ 7. 04:24  tools/c24.py (the continuation's c5.py for C24: admit, pin, worktree_check; the group parser generalized to
+           take cargo's summary and the executable's path, and to accept rustc's derived-impls note by pattern for
+           c3w.py), tools/c3w.py (AMENDMENT-01: path A a clean build under the unchanged general classifier; path B
+           exactly the predicted group; every other control refused first).
+ 8. 04:27  expectations.py (each control's build rule; C24's preserved-build block), authenticate.py (section [10]: the
+           Tranche-3 evidence, C2, C24's preserved receipts copied under inputs/c24/; the base-tooling check moved
+           there). Dev run 1: authentication ALL CHECKS HOLD (628 OK; it wrote input copies, removed again before the
+           official run); expectations DERIVED, differing from Tranche 3's only by the intended fields (order,
+           directories, namespace, build rules, C24's preserved block).
+ 9. 04:30  control.py (gate for this order and C24's preserved worktree; main_c24 from main_c5 with the tranche-3
+           rules; main's C3b/C3c admission step; link bound to C24's reauthentication), record_freeze.py,
+           pre_exec_gate.py, final_gate.py, render.py, build_packet.py, publish_checks.py, worktree.py, finalize.py
+           retargeted.
+10. 04:35  t3_controls.py: sections A-F retargeted; G (C24 admission, pin, worktree; every required C24 negative) and H
+           (the C3b/C3c rule on synthetic receipts built from the accepted C2 build over C2's real target). Dev run 1
+           (r1) FAILED two expectations (development/t3-controls-dev1-FAILED-...txt): two synthetic negative cases were
+           built wrongly (the extra warning quoted C's line 1818, which the C24 patch shifts, so a second check failed
+           too; the two-warning summary is itself parsed as a group, as the continuation's C5 control recorded). Fixed in
+           the test cases only (t3_controls.dev1-to-dev2.diff). Dev run 2: 128 of 128 as expected.
+11. 04:38  tool_diff.py rewritten for this mission's authorization map (the exact authorized hunks of control.gate, main
+           and link; main_c24 against main_c5; c24.py's parser against c5.py's). rehearsals.py retargeted (R1-R5,
+           N1-N7). tool_diff --check: ALL CHECKS HOLD.
+12. 04:41  Dress rehearsal r2: authentication, self-test, expectations, controls and tool diff held; rehearsals FAILED
+           (development/rehearsals-dev1-FAILED-...txt): the synthetic run receipts of section A repeated the Tranche-3
+           packet's bytes (its synthetic RSS marker 4373 and its case-directory names, which the tranche-3 rules
+           record). Fixed: this mission's own marker (4381) and case directories that begin with the control id
+           (t3_controls.dev2-to-dev3.diff; rehearsals.dev1-to-dev2.diff picks by the new names).
+13. 04:44  Dress rehearsal r3 (fresh root): the whole pre-freeze sequence ALL CHECKS HOLD; a dry-run packet build over
+           its receipts STAGED (no unauthorized duplicate); freeze RECORDED; pre-execution gate ALL CHECKS HOLD (51).
+           dev-local/rehearse_main.py: control.main for the nine controls with worktree, apply, build, run and restore
+           replaced by fakes (C24 through the real c24.admit, worktree_check and pin, read-only; C3b/C3c through the
+           real general classifier and c3w.admit on t3_controls' synthetic receipts: C3b the narrow path, C3c the clean
+           path): every RESULT a candidate, C7's informational step after its rules and before restoration. Final gate
+           on that state: only G6 fails (the synthetic executables do not exist), as designed.
+14. 04:48  Publication rehearsal (r4, a copy of r3, in a shared clone in the scratchpad, push URL disabled): preflight
+           and worktree held; the packet build refused the rehearsal's fake C3b/C3c build receipts (copied from C2's
+           accepted build: not the record of their control), correctly. Repeated (04:49) on r5, the synthetic R1 root
+           that rehearsals.py stages: preflight ALL CHECKS HOLD, worktree CREATED, packet STAGED, finalize COMMITTED (a
+           rehearsal commit at parent 774f457a, in the clone's object store only), pre-push ALL CHECKS HOLD; the post and
+           Actions readbacks exercised against the published commit 774f457a (no crash; the post failures are this
+           packet's files, absent there).
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the synthetic and historical controls and the rehearsals)
+15. 04:51  receipts/00-authentication.txt (ALL CHECKS HOLD, 628 OK; input copies written afresh);
+           receipts/01-supervision-selftest (ALL OK; supervise.py unchanged; non-Nexus processes);
+           receipts/02-EXPECTATIONS.json (DERIVED — ALL CROSS-CHECKS HOLD; byte-equal to rehearsal r3's);
+           receipts/03-t3-controls (128 of 128 as expected; every required negative control rejected);
+           receipts/04-tool-diff (ALL CHECKS HOLD); receipts/04b-rehearsals (27 of 27).
+16. 04:52  Pre-freeze dry-run packet build into dev-local/ over the real receipts: STAGED — ALL CHECKS HOLD (478 files,
+           4.3 MB; no unauthorized duplicate of any previous-packet file).
+17. 04:52  Tools, base tools, inputs and records made read-only. Freeze recorded (receipts/05-FREEZE.json, 117 files).
+18. 04:53  Static pre-execution gate: ALL CHECKS HOLD (E1-E11; 51 checks).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changes after the freeze; nothing retried, rebuilt or
+rerun; each control once, in order, by one sequential loop that runs control.py once per control and stops at the first
+non-zero result, besides control.py's own gate, which refuses any control whose predecessor is not a candidate)
+19. 04:54  C24 (control.py C24, once; the preserved build, not rebuilt): admission ARCHITECT-ADMISSIBLE (31 of 31);
+           preserved worktree AUTHENTICATED; executable PINNED (8a81956b…, 8,987,680 bytes; target unmodified since the
+           build); KILL_EVIDENCE_CANDIDATE — FAIL P8 at 185,114 discovered states (expanded 87,111) of 60,000,000, 0.6 s;
+           TRANCHE-3 RULES: HOLD; reauthentication HOLDS; LINK: VERIFIED (Stage-1 F-1, receipts/45-full-F-1 at f023cc3d).
+20. 04:54  C3b (control.py C3b, once): a fresh worktree; APPLY: EXACTLY_C_PLUS_PATCH; one build, BUILD: PINNED (18 of 18;
+           no diagnostic: the predicted Future warning did not appear, as the pre-execution finding expected); build
+           admission C3b ADMISSIBLE — CLEAN BUILD (AMENDMENT-01 path A); KILL_EVIDENCE_CANDIDATE — FAIL P13 (permitted
+           P13 or P12) at 67,871 discovered states (expanded 44,338) of 30,000,000, 0.3 s; RULES: HOLD; RESTORE:
+           EXACTLY_C; LINK: VERIFIED (Stage-2 F-6, receipts/66-full-F-6 at 89326b85).
+21. 04:57  C3c: one build, BUILD: PINNED (18 of 18; no diagnostic); admission C3c ADMISSIBLE — CLEAN BUILD (path A);
+           KILL_EVIDENCE_CANDIDATE — FAIL P12 at 541,827 discovered states (expanded 381,761) of 30,000,000, 2.9 s;
+           RULES: HOLD; RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-6).
+22. 05:00  C6: one build, BUILD: PINNED (zero warnings, zero errors); full_fpt, the original explorer, A4 ON;
+           KILL_EVIDENCE_CANDIDATE — FAIL P6 at 2,652,070 discovered states (expanded 1,807,301) of 30,000,000, 12.9 s;
+           RULES: HOLD; RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-1 F-PT composed-quotient PASS, restored side only).
+23. 05:03  C7: one build, BUILD: PINNED (zero warnings, zero errors); full_fpt, the original explorer, A4 ON (bounds
+           ` A4 true;`); the run printed FAIL E11 (1,071,165 discovered, expanded 686,654, of 30,000,000; 4.7 s; exit 101
+           by the explorer's verdict assertion; no signal, no OOM, swap peak 0): NOT A KILL EVIDENCE CANDIDATE (FAIL of
+           E11, not the named property P6; 27 of 29 checks hold); TRANCHE-3 RULES: NOT SATISFIED; no informational F-3
+           run (it follows only an admissible F-PT/P6 candidate); RESTORE: EXACTLY_C; no link. MUTATION_CONTROL_BLOCKED
+           at 05:06. The loop stopped; A1, A2, C20 and A5 were not attempted.
+
+AFTER THE STOP
+24. 05:07  receipts/80-STOP-RECORD.md written (executor record; no ruling, no repair).
+25. 05:08  Final gate (receipts/90-final-gate.txt): ALL CHECKS HOLD (70 checks; G1 authentication, G2 freeze, G3 the
+           receipt chains of C24 (admission, worktree, pin, run, rules, reauthentication, link), C3b, C3c (each with its
+           build admission), C6 and C7 and the stop record, G4 the mt3c worktrees exactly C and locked, C24's preserved
+           worktree exactly C and locked with the Tranche-3 reason, the 23 accepted controls' worktrees exactly C, G5 no
+           mutant blob in the object store, G6 every pinned executable, C24's preserved executable and the baseline
+           executable unchanged, G7 no mutant source copy, G8 no cargo/rustc/test process).
+26. 05:09  Publication: preflight, evidence worktree at 774f457a, packet build, finalize, pre-push checks, one push,
+           readback (consoles under publication/; the packet build console is committed as publication/10-build-packet.txt).

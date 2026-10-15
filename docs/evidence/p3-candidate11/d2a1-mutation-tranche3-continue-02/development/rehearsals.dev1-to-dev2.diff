@@ -1,0 +1,11 @@
+--- ../development/revisions/rehearsals.dev1.py	2026-10-15 04:42:47.701872942 +0100
++++ rehearsals.py	2026-10-15 04:42:47.721007157 +0100
+@@ -92,7 +92,7 @@
+ 
+     def run_and_rules(d, cid, pick):
+         src = os.path.join(t3c, "A", sorted(x for x in os.listdir(os.path.join(t3c, "A"))
+-                                            if x.split("-")[1] == cid and pick in x)[0])
++                                            if x.split("-")[0] == cid and pick in x)[0])
+         shutil.copytree(os.path.join(src, "04-run"), os.path.join(d, "04-run"))
+         shutil.copytree(os.path.join(src, "04a-rules"), os.path.join(d, "04a-rules"))
+         open(os.path.join(d, "04-run/cgroup-samples.txt"), "w").write(SAMPLER)
