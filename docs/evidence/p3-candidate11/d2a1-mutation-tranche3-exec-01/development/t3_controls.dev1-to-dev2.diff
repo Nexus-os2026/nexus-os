@@ -1,0 +1,29 @@
+--- TRANCHE3-EXEC-01/dev1/tools/t3_controls.py
++++ TRANCHE3-EXEC-01/dev2/tools/t3_controls.py
+@@ -206,7 +206,7 @@
+          "NOT ADMISSIBLE (", False),
+         ("C7", "N-C7-informational-F-3-receipt-counted-as-the-kill (FAIL E11)", {
+             "test": f3["test"], "header": "EXPLORATION F-3", "bounds": f3["bounds"], "prop": "E11"},
+-         classify.NOT_CANDIDATE, "NOT ADMISSIBLE (", False),
++         classify.NOT_CANDIDATE, "FAIL of E11, not the named property P6: kills nothing", False),
+         ("C2", "N-F-1-FAIL-beyond-60000000 (cap overshoot)", {"states": 60000001}, classify.NOT_CANDIDATE, BUDGET, False),
+         ("A1", "N-F-1-FAIL-beyond-60000000 (cap overshoot)", {"states": 60000001}, classify.NOT_CANDIDATE, BUDGET, False),
+         ("C3c", "N-F-6-FAIL-beyond-30000000 (cap overshoot)", {"states": 30000001}, classify.NOT_CANDIDATE, BUDGET, False),
+@@ -406,10 +406,15 @@
+                                          json.loads(K.blob(K.T2C, a3dir + "/descriptor.json"))["mutant_blob"],
+                                          expect_target=K.ACCEPTED_WT["A3"] + "/target")
+     same = {f: K.sha256_file(os.path.join(a, f)) == K.sha256_bytes(K.blob(K.T2C, f"{a3dir}/{f}"))
+-            for f in ("CHECKS.txt", "CLASSIFICATION.txt", "PIN.json")}
++            for f in ("CHECKS.txt", "CLASSIFICATION.txt")}
++    pin_new, pin_old = json.load(open(os.path.join(a, "PIN.json"))), json.loads(K.blob(K.T2C, f"{a3dir}/PIN.json"))
++    same["PIN.json (every field but build_receipt, the receipt directory's own path)"] = (
++        {k: v for k, v in pin_new.items() if k != "build_receipt"} == {k: v for k, v in pin_old.items()
++                                                                      if k != "build_receipt"})
+     first = supervise.first_line(os.path.join(a, "CLASSIFICATION.txt"))
+     record("A3", "D the unchanged classifier rerun on a copy of the accepted A3 build (no diagnostic)",
+-           "BUILD: PINNED; CHECKS.txt, CLASSIFICATION.txt and PIN.json byte-identical to the accepted ones",
++           "BUILD: PINNED; CHECKS.txt and CLASSIFICATION.txt byte-identical to the accepted ones; PIN.json equal but "
++           "for its own receipt path",
+            f"{first}; rc {rc}; identical {same}", first == "BUILD: PINNED" and rc == 0 and all(same.values()))
+ 
+ 

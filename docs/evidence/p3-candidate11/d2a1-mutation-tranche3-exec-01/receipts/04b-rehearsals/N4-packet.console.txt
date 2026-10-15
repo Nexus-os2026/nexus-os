@@ -1,0 +1,18 @@
+STATUS: READY_FOR_MUTATION_TRANCHE3_ARCHITECT_REVIEW; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 10 of 10; attempted ['C2', 'C24', 'C3b', 'C3c', 'C6', 'C7', 'A1', 'A2', 'C20', 'A5']; stopped []
+tools carried byte for byte, not staged (referenced in CARRIED-FORWARD.md): ['classify.py', 'configs.py', 'push.py', 'report.py', 'scope-wrap.sh', 'supervise.py', 'verify_mutant.py', 'verify_tree.py', 'worktrees.py']
+OK   packet size at most 64 MiB: 1897320 bytes, 300 files
+OK   regular files only (no symlink): []
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable, the preserved C5 executable or any pinned mutant executable: 3 pinned
+OK   no file equal to any catalog mutant blob (no mutant source)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
+OK   only changed or added tools staged (every carried tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'common.py', 'control.py', 'expectations.py', 'final_gate.py', 'finalize.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'rehearsals.py', 'render.py', 't3.py', 't3_controls.py', 'tool_diff.py', 'worktree.py']
+OK   nothing staged from inputs/, original-tools/, original-publication-tools/, dev-local/ or publication/
+FAIL duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else: [('ZERO_DESCRIPTOR', 'receipts/75-A5/03-build/build.stdout', 'receipts/75-A5/03-build/descriptor.json does not record this empty stdout and its stderr')]
+     accepted: 40 (12 zero-length, 28 nonempty constants)
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 299 listed
+OK   every file this mission authored is whitespace-clean (git's default rule): {}
+     retained raw whitespace findings (byte-exact tool output, unified diffs, preserved failures): 43 in 23 files: ['development/expectations.dev1-to-dev2.diff', 'development/render.dev1-to-dev2.diff', 'development/t3-controls-dev1-FAILED-two-expectations-too-narrow-C7-outer-and-A3-PIN-path.txt', 'development/t3_controls.dev1-to-dev2.diff', 'development/tool_diff.dev1-to-dev2.diff', 'receipts/00-authentication.txt', 'receipts/01-supervision-selftest/1/scope-record.txt', 'receipts/01-supervision-selftest/2/scope-record.txt', 'receipts/01-supervision-selftest/3/scope-record.txt', 'receipts/01-supervision-selftest/5/scope-record.txt', 'receipts/01-supervision-selftest/6/scope-record.txt', 'receipts/01-supervision-selftest/7/scope-record.txt', 'receipts/66-C2/04-run/raw-output.txt', 'receipts/67-C24/04-run/raw-output.txt', 'receipts/68-C3b/04-run/raw-output.txt', 'receipts/69-C3c/04-run/raw-output.txt', 'receipts/70-C6/04-run/raw-output.txt', 'receipts/71-C7/04-run/raw-output.txt', 'receipts/71-C7/04b-info-F3/raw-output.txt', 'receipts/72-A1/04-run/raw-output.txt', 'receipts/73-A2/04-run/raw-output.txt', 'receipts/74-C20/04-run/raw-output.txt', 'receipts/75-A5/04-run/raw-output.txt']
+PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else

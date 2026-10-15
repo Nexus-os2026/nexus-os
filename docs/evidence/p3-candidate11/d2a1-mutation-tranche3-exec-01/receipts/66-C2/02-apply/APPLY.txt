@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C2: the gating entry rule does not test C and X
+patch: inputs/patches/C2.patch (the frozen R2 packet's catalog/patches/C2.patch), sha256 f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d (catalog f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '0\t3\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d (expected 1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d), sha256 4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403 (expected 4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

@@ -1,0 +1,8 @@
+INFORMATIONAL OUTCOME: INCOMPLETE (the state cap of 30000000 was reached)
+outer class (AD-1-R4 K.2): informational (mission section 5): C7 without A4 on F-3, the original explorer; NOT the C7 kill receipt and never counted as a kill
+raw outcome (as printed): outcome INCOMPLETE; FAIL None; INCOMPLETE the state cap of 30000000 was reached. No property is established by this run.; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 600.00s']
+measured: states 30,000,004 (expanded 26,123,456) of the 30,000,000 ceiling; transitions 54214081; elapsed 67.3 s
+configuration F-3 (A4 off); test ledger::protocol::model_tests::full_f3; same pinned C7 mutant executable 049353fe0361af04979fd1f268e759871e24d699713541e35976032351d2dbef
+kill label: none (informational)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4373 KiB; scope gone
+checks: 26 of 26 hold

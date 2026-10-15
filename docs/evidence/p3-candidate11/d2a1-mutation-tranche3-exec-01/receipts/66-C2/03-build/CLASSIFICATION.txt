@@ -1,0 +1,6 @@
+BUILD: PINNED
+outer class (AD-1-R4 K.2): mutant build succeeded; one library-test executable pinned
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 47s')]
+resources: wall 167.94 s of 900 s; scope memory.peak 2618376192 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1970344 KiB; scope gone
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed size 8984096
+checks: 18 of 18 hold

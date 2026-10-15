@@ -1,0 +1,25 @@
+REHEARSALS — P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01 (synthetic evidence roots under /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-exec-01/dev-local/rehearsals-scratch; nothing is built or run)
+AS EXPECTED R1 render.py status: STATUS: READY_FOR_MUTATION_TRANCHE3_ARCHITECT_REVIEW; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 10 of 10; attempted ['C2', 'C24', 'C3b', 'C3c', 'C6', 'C7', 'A1', 'A2', 'C20', 'A5']; stopped []
+AS EXPECTED R1 summary: L1 complete-search lines for C20 and A5; C7's informational line: 2 L1; 1 informational
+AS EXPECTED R1 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: []
+AS EXPECTED R1 build_packet.py: PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED R1 map: the ten build.stdout and the sampler records mapped, bound to their descriptors (C7: its informational run's sampler too): 10 build.stdout, 21 control samplers
+AS EXPECTED R2 render.py status: STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 1 of 10; attempted ['C2', 'C24']; stopped ['C24']
+AS EXPECTED R2 summary: C24 stopped; C3b..A5 not attempted; 1 candidate: ['- New executor candidates (`KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING`): **1 of 10** (C2). None is accepted here: acceptance belongs to the Sole Architect.', '- Stopped (first unsuccessful control; nothing later was attempted): C24.', '- Authorized but not attempted: C3b, C3c, C6, C7, A1, A2, C20, A5.']
+AS EXPECTED R2 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: []
+AS EXPECTED R2 build_packet.py: PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED R3 render.py status: STATUS: BLOCKED; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 0 of 10; attempted []; stopped []
+AS EXPECTED R3 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: []
+AS EXPECTED R3 build_packet.py: PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED R4 render.py status: STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 5 of 10; attempted ['C2', 'C24', 'C3b', 'C3c', 'C6', 'C7']; stopped ['C7']
+AS EXPECTED R4 summary: C7 stopped although its informational run printed FAIL E11 (never counted as the kill); 5 candidates: ['- New executor candidates (`KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING`): **5 of 10** (C2, C24, C3b, C3c, C6). None is accepted here: acceptance belongs to the Sole Architect.', '- Stopped (first unsuccessful control; nothing later was attempted): C7.', '- C7 informational run without A4 on F-3 (not the kill receipt): INFORMATIONAL OUTCOME: FAIL E11 — raw outcome FAIL; FAIL E11: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; INCOMPLETE None; 14 discovered (expanded 1) of 30,000,000; exit 101, signal None; wall 0.0 s / 2700 s; scope peak 3.1 MiB / 16 GiB; swap peak 0 B; oom_kill 0; largest process max RSS 4373 KiB']
+AS EXPECTED R4 no prohibited wording in INDEX.md or TRANCHE-SUMMARY.md: []
+AS EXPECTED R4 build_packet.py: PACKET: STAGED — ALL CHECKS HOLD
+AS EXPECTED N1 build_packet.py rejects (UNAUTHORIZED_DUPLICATE): PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N2 build_packet.py rejects (LITERAL_MISMATCH): PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N3 build_packet.py rejects (ZERO_LENGTH_UNLISTED): PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N4 build_packet.py rejects (ZERO_DESCRIPTOR): PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+AS EXPECTED N5 build_packet.py rejects (every file this mission authored is whitespace-clean): PACKET: FAILED: every file this mission authored is whitespace-clean (git's default rule)
+AS EXPECTED N6 build_packet.py rejects (no source copy): PACKET: FAILED: no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
+AS EXPECTED N7 build_packet.py rejects (UNAUTHORIZED_DUPLICATE): PACKET: FAILED: duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact lite
+REHEARSALS: ALL AS EXPECTED

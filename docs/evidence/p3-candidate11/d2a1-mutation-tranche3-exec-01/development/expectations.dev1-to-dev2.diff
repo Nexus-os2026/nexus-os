@@ -1,0 +1,29 @@
+--- TRANCHE3-EXEC-01/dev1/tools/expectations.py
++++ TRANCHE3-EXEC-01/dev2/tools/expectations.py
+@@ -184,8 +184,13 @@
+ 
+ 
+ def fn_text(text, name):
+-    span = fn_span(text, name)
+-    return "\n".join(text.split("\n")[span[0] - 1:span[1]]) if span else None
++    """The text of the one item `[pub(super) ]fn name(` at column 0 through its closing `}` at column 0, or None."""
++    lines = text.split("\n")
++    starts = [i for i, l in enumerate(lines) if re.match(rf"^(?:pub\(super\) )?fn {re.escape(name)}\(", l)]
++    if len(starts) != 1:
++        return None
++    e = next((j for j in range(starts[0] + 1, len(lines)) if lines[j] == "}"), None)
++    return None if e is None else "\n".join(lines[starts[0]:e + 1])
+ 
+ 
+ def main(out):
+@@ -230,7 +235,9 @@
+          == {k: v for k, v in f3["config"].items() if k not in ("name", "blanket_uncertain")},
+          "F-PT is F-3 with A4 on: every other field equal")
+     # L1 (C20, A5): the explorer's complete-search rule, anchored in C's explore().
+-    explore_c = fn_text(model, "explore") if fn_span(model, "explore") else None
++    explore_c = fn_text(model, "explore")
++    need(explore_c is not None and all(configs.norm_tokens(a) in configs.norm_tokens(explore_c) for a in L1_ANCHORS),
++         "explore() found at C, and it holds every L1 anchor")
+     flat = configs.norm_tokens(model)
+     need(all(configs.norm_tokens(a) in flat for a in L1_ANCHORS), "L1 anchors in explore() at C")
+     need(derived["configs"]["F2"]["l1"] is True, "F-2 claims L1 (config.l1)")

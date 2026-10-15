@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C24: resolve empties U for a present gating record without placing the correction
+patch: inputs/patches/C24.patch (the frozen R2 packet's catalog/patches/C24.patch), sha256 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44 (catalog 39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '2\t12\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 3e1bfbe746851b6c63811343cde9dd3b83ad0fa9 (expected 3e1bfbe746851b6c63811343cde9dd3b83ad0fa9), sha256 d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268 (expected d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

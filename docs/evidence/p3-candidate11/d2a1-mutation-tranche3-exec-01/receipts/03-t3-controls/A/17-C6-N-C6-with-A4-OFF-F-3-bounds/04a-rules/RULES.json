@@ -1,0 +1,64 @@
+{
+ "control": "C6",
+ "holds": false,
+ "checks": [
+  [
+   "the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists)",
+   true,
+   "['CLASSIFICATION: NOT A KILL EVIDENCE CANDIDATE']"
+  ],
+  [
+   "raw output sha256 equals the launcher's record",
+   true,
+   ""
+  ],
+  [
+   "the catalog's own test ledger::protocol::model_tests::full_fpt on the original explorer (never a gc_symmetry_* quotient test)",
+   true,
+   "['ledger::protocol::model_tests::full_fpt']"
+  ],
+  [
+   "header exactly 'EXPLORATION F-PT': no quotient or symmetry line (the original explorer)",
+   true,
+   "EXPLORATION F-PT"
+  ],
+  [
+   "the printed first property is permitted for C6: P6",
+   true,
+   "P6: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown"
+  ],
+  [
+   "discovered count at most the ceiling 30,000,000 (F-PT)",
+   true,
+   "14 of 30000000"
+  ],
+  [
+   "printed bounds are the expectation's (the frozen configuration)",
+   false,
+   "facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s"
+  ],
+  [
+   "A4 ON (F-PT as defined): the expectation requires A4 and forbids the quotient for the kill run",
+   true,
+   "{'required': True, 'bounds_token': ' A4 true;', 'quotient_forbidden': True}"
+  ],
+  [
+   "A4 ON in the run: the printed bounds carry ' A4 true;' and the test is full_fpt",
+   false,
+   "DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s"
+  ]
+ ],
+ "run": "receipts/03-t3-controls/A/17-C6-N-C6-with-A4-OFF-F-3-bounds/04-run",
+ "printed_property": "P6",
+ "report": {
+  "header": "EXPLORATION F-PT",
+  "outcome": "FAIL",
+  "fail": "P6: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "states": 14,
+  "expanded": 1,
+  "transitions": 14,
+  "elapsed_s": 0.0,
+  "cap": 30000000
+ }
+}

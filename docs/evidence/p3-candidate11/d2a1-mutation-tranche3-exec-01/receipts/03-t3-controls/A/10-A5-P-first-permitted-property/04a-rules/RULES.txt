@@ -1,0 +1,19 @@
+TRANCHE-3 RULES: HOLD
+control A5 (F-2, ledger::protocol::model_tests::full_f2); kill run receipts/03-t3-controls/A/10-A5-P-first-permitted-property/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f2 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f2']
+OK   header exactly 'EXPLORATION F-2': no quotient or symmetry line (the original explorer): EXPLORATION F-2
+OK   the printed first property is permitted for A5: L1: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   discovered count at most the ceiling 30,000,000 (F-2): 120 of 30000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   the expectation carries the L1 complete-search rule (AD-1-R4 Q): L1 is evaluated only after a complete search (AD-1-R4 Q)
+OK   L1: raw outcome FAIL of L1, with the explorer's own L1 detail: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   L1: no INCOMPLETE line (no state or time ceiling ended the search): None
+OK   L1: complete search: every discovered state was expanded (expanded = discovered; explore() evaluates L1 only after its search loop exhausted the frontier): states 120, expanded 120
+OK   L1: discovered = expanded at most 30,000,000: 120
+OK   L1: the states on or behind a cycle are between 1 and the discovered count: 9
+OK   L1: elapsed below the 2700 s time ceiling: 0.0
+OK   L1: no property line (a FAIL prints only its failing property; L1 is not inferred from a prefix): []

@@ -1,0 +1,804 @@
+{
+ "mission": "P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01",
+ "recorded": "2026-10-15T03:49:02+0100",
+ "files": {
+  "tools/authenticate.py": "397dcfb1060ac2ce003fd53db9ca5fb3ee263a05d5763cf9dad025cd429f86c5",
+  "tools/build_packet.py": "35b5d9481a8d60a3c541c42cd548eece9fd0995b56d5cc94dd1f9f7e6128f099",
+  "tools/classify.py": "b01bb7f3805235f693b679e8b475d0e0f88ee5d0700a81d70d4821ec838c2ef4",
+  "tools/common.py": "eca1f1fb3dc5e029aa49357549687b82a89baa0eba03d2639f5573f1a7d392b0",
+  "tools/configs.py": "011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744",
+  "tools/control.py": "4a5f2f0515432deb8686ce0a7da7f23874bb42179368e6f342079afdb721c4fd",
+  "tools/expectations.py": "5e856e2711a052520848e1510557dcb0ade729e6f151f65b81ba527d5f865a0a",
+  "tools/final_gate.py": "6a88b702683e9539f952584b801a768bab8660dfaa612918fdbef55b1501cc13",
+  "tools/finalize.py": "f3b1329e55df44c8307cb571d34f6191cf4793a26c63fb94b4c4c0dd8e1646a5",
+  "tools/pre_exec_gate.py": "96adcdfa91f9e4bbbd71dace30121665a24c140c5924dc63d7fa593c98cb59aa",
+  "tools/publish_checks.py": "bd2f5839944c117a33ee42c2adf8cecb023e78fad70597f8bb068e9a5d1886e1",
+  "tools/push.py": "6fe90408e6123691d393cb3711a477ed2811b455b2c9c565d2ecdca1320797d0",
+  "tools/record_freeze.py": "cd16f02594ab397c4f6abffb3da86fb84e7214cd5423c1f3fdf9324ad0d43c9a",
+  "tools/rehearsals.py": "fcf88908e1a7118ff723fdf4fd55505626d22925b97feb72e134023371de3936",
+  "tools/render.py": "28e7f1e6ab4af30bbc72563a9fa012b312808d573c24a4964c9d7a9b39f3d4b5",
+  "tools/report.py": "9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa",
+  "tools/scope-wrap.sh": "e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874",
+  "tools/supervise.py": "662b969a901e09858a950864a83acbef8a0c13333e8d6f98996b2e824327e56d",
+  "tools/t3.py": "4918ccf46b72408cea4a5953d371c468b48db89b7fcdec52d76b1ee7d4c8f73b",
+  "tools/t3_controls.py": "f43e3d6aa03d2f315de1620994df67c371e5d6fe3e9a7ba1393cabc6cecfc246",
+  "tools/tool_diff.py": "84922f13a2e11899ca726c6cc9b0ad48debfaa5c956495355c245cf209079a9f",
+  "tools/verify_mutant.py": "6c1b6268d665012ca9591ed66445b6709c82697eec8a1479e2a454f70c97f6f5",
+  "tools/verify_tree.py": "8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934",
+  "tools/worktree.py": "77a498fbc80cafe64bc87ce3df5bbf1605c972bb885808cdb8055b1b73630b3c",
+  "tools/worktrees.py": "e356d4e86f8f106043831473c7a8f9d84eedc0b9af15431892bb1f47e40ac67d",
+  "original-tools/authenticate.py": "47f249165be9e3fa5b48fce588a830c9853eeeec5a4ff6eb997afb1f41c56c2c",
+  "original-tools/build_packet.py": "39e4e736ed853abd2ad7750f5417812ee9c3f1373a3e1599cbf9362e94c3222c",
+  "original-tools/c2_controls.py": "61c0abcde4322b1d1ce8bd77c34f81687ed053931f16fe1fb1d7aee57c612a69",
+  "original-tools/c5.py": "1f39232f6be8f28b6324a5e1df088c56c963dc6b67a265ea75614db11976cc63",
+  "original-tools/classify.py": "b01bb7f3805235f693b679e8b475d0e0f88ee5d0700a81d70d4821ec838c2ef4",
+  "original-tools/common.py": "b019405f289edaf975e25d559e2a6ca6115dc2ed3e5606d045463cf4c998aafa",
+  "original-tools/configs.py": "011ba516ad9107b7df9b43eaff6e2334c0d6ce9e4058d417fa150a0d8b548744",
+  "original-tools/control.py": "7b214664e002f6451f91f02674aaca6537f2825652f3feb06cd1da3d5679b3bb",
+  "original-tools/expectations.py": "76d81e0d187ff93856c7cb1a873675b4119d9b32ae739b47d3a7773b71c24ae6",
+  "original-tools/final_gate.py": "c5dae511e7e6d8218e24f9026d8f94cd8a754049470ff07d4f3790b6ef650e94",
+  "original-tools/finalize.py": "f86ba2decf687ccc07dfb15c354f5031ae935654ddd9ac5c0a4ab4e269ae54c2",
+  "original-tools/pre_exec_gate.py": "cd38b79fbb3751aef297005c9cf25ab21f94bb0573a3066923ba94b03b49244a",
+  "original-tools/publish_checks.py": "5a1d4d8880beba30d9c0ae577a372f2a298ba17fd59a6ad7d1edfbf1fb2efc24",
+  "original-tools/push.py": "6fe90408e6123691d393cb3711a477ed2811b455b2c9c565d2ecdca1320797d0",
+  "original-tools/record_freeze.py": "109cc9bc9d0d73ba43dbf04016147085c20a9f1ddb6937e455826ce87ce80caa",
+  "original-tools/rehearsals.py": "4ea60e9e0d4982297365b0aea5d20f79cc5e47774b2844e9e4875cf7c0b0c52b",
+  "original-tools/render.py": "ec5b6955c2326a723857e8564d3240cdff5757d838707c0ce6dcc7d1bef0b36f",
+  "original-tools/report.py": "9accbeec8bac1dda2774bf30692a6985d05758afa65766b1b3d666d0a84aa7aa",
+  "original-tools/scope-wrap.sh": "e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874",
+  "original-tools/supervise.py": "662b969a901e09858a950864a83acbef8a0c13333e8d6f98996b2e824327e56d",
+  "original-tools/tool_diff.py": "c884b95779bb13cfe73c7c48f8f425b6778b9fb542702ddd7d4cab9a8f13675a",
+  "original-tools/verify_mutant.py": "6c1b6268d665012ca9591ed66445b6709c82697eec8a1479e2a454f70c97f6f5",
+  "original-tools/verify_tree.py": "8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934",
+  "original-tools/worktree.py": "40608052c1fadc284aa2d765d1d6650c8c42907a689344ddac316da2bda61377",
+  "original-tools/worktrees.py": "e356d4e86f8f106043831473c7a8f9d84eedc0b9af15431892bb1f47e40ac67d",
+  "inputs/AD1-R4.md": "00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693",
+  "inputs/AD1-R5-OWNER-ADOPTION.md": "9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4",
+  "inputs/AD1-R5.md": "4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473",
+  "inputs/ARCHITECT-CONTROL-DEFINITIONS-R2.md": "1da1ae92f313496dade2bfea5c508af1e17bf2e39b9bd11cca3e448c35f0cb26",
+  "inputs/CONTRACT-02-R1.md": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+  "inputs/FR-STUTTERING-REFINEMENT-PROOF.md": "c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b",
+  "inputs/catalog.json": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83",
+  "inputs/linked/S1-41-full-F-2/CHECKS.txt": "d34e930791b65764230801100bdb4fc7a12d2917084f0478dbb5ba4e15463466",
+  "inputs/linked/S1-41-full-F-2/CLASSIFICATION.txt": "2017840ffd97d068da4b111a26827b73f0c0489b66dca3f9f24225279ed6257e",
+  "inputs/linked/S1-41-full-F-2/PARSED-RECEIPT.json": "6ad628ade7c96de672530505d97075f8c39691fc11b20b0fe417d4e269e179c4",
+  "inputs/linked/S1-41-full-F-2/RECEIPT.txt": "223caa5839a8f13996b1b3cfdfacab024f4c69f47ad8ab53cd3bd3c89c532f7d",
+  "inputs/linked/S1-41-full-F-2/descriptor.json": "ed2321c2bb6b6df9b045b59b0743b2a221d24e77f8a8260945348454c589caf5",
+  "inputs/linked/S1-41-full-F-2/raw-output.txt": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5",
+  "inputs/linked/S1-41-full-F-2/scope-record.txt": "18cfbabdeebd41b2cae030f893535195d859ec3c8409d14d07168e21503f41bd",
+  "inputs/linked/S1-41-full-F-2/time-v.txt": "d2d03916ba4286f682f3e30ffaa13a5bbf0216242d8c1bcf476ea7a79dadedf2",
+  "inputs/linked/S1-44-full-F-PT/CHECKS.txt": "ba44e0a91c0f544a041faf9938ae5bf54d85707944e13c7b66574eae5c77c71d",
+  "inputs/linked/S1-44-full-F-PT/CLASSIFICATION.txt": "51c135b5ed38aaf7284884b520c49630c6387a6d38cd5791cbe31496d0b981e9",
+  "inputs/linked/S1-44-full-F-PT/PARSED-RECEIPT.json": "cb9834ee5857e72d76c3aa99ac5a3de3185b72bf5560179f60736883b6eeae57",
+  "inputs/linked/S1-44-full-F-PT/RECEIPT.txt": "e32b1bc4bdfcf40e681ba6009ff3517dbd1df2af9fe2315d965a77ec6dfff66b",
+  "inputs/linked/S1-44-full-F-PT/descriptor.json": "0ae0679bc4adc76cbf7786b27af394b9082ed90dae911ba5caa05d7e3909d87a",
+  "inputs/linked/S1-44-full-F-PT/raw-output.txt": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8",
+  "inputs/linked/S1-44-full-F-PT/scope-record.txt": "6203e17f008f53ef55b0bc32f42756b4039036d11ab5f5049537dfbad5ac9c07",
+  "inputs/linked/S1-44-full-F-PT/time-v.txt": "ccac615e5d7d91bbd19e42d6983c2662ddcfb04fb1630761f7ae030b8847911f",
+  "inputs/linked/S1-45-full-F-1/CHECKS.txt": "6e96265fd24167b1b7ce0339e9502ea929b87c2d8eec1a9b1dfc9e155ff0cac4",
+  "inputs/linked/S1-45-full-F-1/CLASSIFICATION.txt": "051370cc131a174456cd20a95fda3415caa8d75c6d9a93dc266bb3ae57b58a42",
+  "inputs/linked/S1-45-full-F-1/PARSED-RECEIPT.json": "98ab595bc051e666576d2f731ea7f91aeb3b2ceb56e79748e0b2ac76fcb74f0a",
+  "inputs/linked/S1-45-full-F-1/RECEIPT.txt": "f1405b471d862dbfd7bcea59247ad105d7f3e21bfb14bce77cf074232bcded9d",
+  "inputs/linked/S1-45-full-F-1/descriptor.json": "d2dc71ad5e82909ec3742bf51ed81ae518ef9380d8484034f90554d5a7216a5d",
+  "inputs/linked/S1-45-full-F-1/raw-output.txt": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c",
+  "inputs/linked/S1-45-full-F-1/scope-record.txt": "b599338d2347ecd8e4522f5cea544c4dd5cd8d93ddd13a04c9ffe832a13c4583",
+  "inputs/linked/S1-45-full-F-1/time-v.txt": "71341a8b003a876bd0288c402ae82990d7c93591bcd2ed7afc1f1099da2f1f4a",
+  "inputs/linked/S2-66-full-F-6/CHECKS.txt": "03e4e98b3ee58ca388a4d993f9bfebca0e83ff6972a05173f05123bb668447e4",
+  "inputs/linked/S2-66-full-F-6/CLASSIFICATION.txt": "e1a98b1b258562fc13855137c909b605869904325f03e017577afa0f42355dc4",
+  "inputs/linked/S2-66-full-F-6/PARSED-RECEIPT.json": "bf957ac486a58ac97e351c958fb90ef1bd57c9b15bf26ee0e3a9bca565a4c192",
+  "inputs/linked/S2-66-full-F-6/RECEIPT.txt": "722fcdfd1f27d3c1a7caaf77e832d34a61f6bad908cb5679ada388540f831349",
+  "inputs/linked/S2-66-full-F-6/descriptor.json": "c601d1a1204006ec3e0ed26cbb56462ae7c05fa6504be9e015219d9a43981ef2",
+  "inputs/linked/S2-66-full-F-6/raw-output.txt": "3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452",
+  "inputs/linked/S2-66-full-F-6/scope-record.txt": "743096f00d12e2dda79e8f35362d037cebd74ada6793d94aacdd6efb0f2bbfed",
+  "inputs/linked/S2-66-full-F-6/time-v.txt": "2fa94eaae53e68aab32763f00aa6a9448baaf1c89c2fc3baaa0c825ee915828c",
+  "inputs/patches/A1.patch": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+  "inputs/patches/A2.patch": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+  "inputs/patches/A5.patch": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+  "inputs/patches/C2.patch": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+  "inputs/patches/C20.patch": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+  "inputs/patches/C24.patch": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+  "inputs/patches/C3b.patch": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+  "inputs/patches/C3c.patch": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+  "inputs/patches/C6.patch": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+  "inputs/patches/C7.patch": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+  "receipts/02-EXPECTATIONS.json": "e9c3e198d17ba1cb25a70291c3301b6391a365fdbd2b957bc08292eac3e8cf66",
+  "documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md": "6013b68a1097d0bb1c3702164635185e664de51be2e15dd8421c4bfd21d6b7d8",
+  "documents/CAMPAIGN-STATUS-BEFORE-TRANCHE3.md": "c2b9ca880354e80de8761057077aad141dd21e74e530a98e3ea44443e138d076"
+ },
+ "pre_freeze_receipts": {
+  "receipts/00-authentication.txt": "bd22ddb14f58ce8e33b20e17b004cd0e4d11199897f4db2c464db3452b6030bd",
+  "receipts/01-supervision-selftest/SELFTEST.txt": "29721e39f580fa4eb13ee16a0a2375106f283b68a1a5b5ab7eeb8a735b7b2eba",
+  "receipts/02-EXPECTATIONS.console.txt": "a527b0ce0cfe02d51f7fa0e8ec792e715b3424626cf05711f0a8f4cae6aa369a",
+  "receipts/03-t3-controls/SUMMARY.txt": "c56ce9f1a962504a73c34a67f43cb4b087b4e8c372cb68142de61fdad6529082",
+  "receipts/04-tool-diff/TOOL-DIFF-CHECK.txt": "1f5dc0126a3ff00d5187bf76456180d944a5edf798beb1037dd5545c36fef92c",
+  "receipts/04b-rehearsals/SUMMARY.txt": "e0a3122d2c13f815b373b41d99ac1a5037c25ef03d4ddc0644cacf1bc1c37afc"
+ },
+ "policy": {
+  "control_order": [
+   "C2",
+   "C24",
+   "C3b",
+   "C3c",
+   "C6",
+   "C7",
+   "A1",
+   "A2",
+   "C20",
+   "A5"
+  ],
+  "architect_accepted_not_executed": [
+   "C22",
+   "C14",
+   "C19",
+   "C21",
+   "C27",
+   "C28",
+   "C12",
+   "C9",
+   "C11",
+   "C17",
+   "C18a",
+   "C18b",
+   "C23",
+   "C10",
+   "C16",
+   "C26",
+   "C3a",
+   "C5",
+   "A3",
+   "A6",
+   "C8",
+   "C15"
+  ],
+  "not_authorized": [
+   "C1",
+   "C4",
+   "C25"
+  ],
+  "controls": "each once, in order; a stop on the first unsuccessful control. Each control: a fresh mission-owned worktree at C; the frozen catalog patch (exact mutant blob and sha256, only the catalog's file changed); one build with no error and no warning diagnostic (no warning exception of any kind); one original-explorer run of the catalog's test on the pinned mutant executable, classified by the unchanged classify_a, then the tranche-3 rules (t3.rules); C7 only: after an admissible F-PT/P6 candidate and before restoration, one informational run without A4 on F-3 (full_f3, same executable; t3.classify_info; never the kill receipt); restoration by git apply -R, verified byte for byte; then the restored side linked",
+  "supervision": "systemd user scope MemoryMax=16G MemorySwapMax=0, RuntimeMaxSec=limit+10 (backstop), timeout -s KILL <limit>, /usr/bin/time -v, nice -n 10; MemAvailable >= 18 GiB before each step; no conflicting test executable, build or p3c11-* scope",
+  "limits_seconds": {
+   "builds": 900,
+   "every run": 2700
+  },
+  "ceilings_states": {
+   "C2": 60000000,
+   "C24": 60000000,
+   "C3b": 30000000,
+   "C3c": 30000000,
+   "C6": 30000000,
+   "C7": 30000000,
+   "A1": 60000000,
+   "A2": 60000000,
+   "C20": 30000000,
+   "A5": 30000000
+  },
+  "permitted_properties": {
+   "C2": [
+    "P4"
+   ],
+   "C24": [
+    "P8"
+   ],
+   "C3b": [
+    "P13",
+    "P12"
+   ],
+   "C3c": [
+    "P12"
+   ],
+   "C6": [
+    "P6"
+   ],
+   "C7": [
+    "P6"
+   ],
+   "A1": [
+    "P1"
+   ],
+   "A2": [
+    "P1"
+   ],
+   "C20": [
+    "L1"
+   ],
+   "A5": [
+    "L1"
+   ]
+  },
+  "a4_on": [
+   "C6",
+   "C7"
+  ],
+  "l1_complete_search": [
+   "C20",
+   "A5"
+  ],
+  "c7_informational": {
+   "control": "C7",
+   "configuration": "F-3",
+   "test_name": "full_f3",
+   "const": "F3",
+   "ceiling_states": 30000000,
+   "limit_seconds": 2700,
+   "dir": "04b-info-F3"
+  },
+  "build_command": "cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2",
+  "build_environment": [
+   [
+    "HOME",
+    "/home/nexus"
+   ],
+   [
+    "PATH",
+    "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+   ],
+   [
+    "CARGO_TARGET_DIR",
+    "<worktree>/target"
+   ],
+   [
+    "CARGO_TERM_VERBOSE",
+    "true"
+   ],
+   [
+    "CARGO_NET_OFFLINE",
+    "true"
+   ]
+  ],
+  "run_environment": [
+   [
+    "PATH",
+    "/usr/bin:/bin"
+   ],
+   [
+    "LANG",
+    "C.UTF-8"
+   ],
+   [
+    "RUST_BACKTRACE",
+    "0"
+   ]
+  ],
+  "restoration": "git apply -R of the same frozen patch in the disposable worktree; the changed file byte-equal to C; verify_tree.py EXACTLY_C (all tracked blobs and modes); the path-aware status policy (verify_mutant.status_policy): no tracked change, ignored entries only beneath the worktree's own real target directory",
+  "restored_side": "linked only after the control's own verified restoration (link() refuses otherwise), never rerun: Stage-1 45-full-F-1 (C2 C24 A1 A2), Stage-2 66-full-F-6 (C3b C3c), Stage-1 44-full-F-PT composed-quotient PASS (C6 C7; restored side only), Stage-1 41-full-F-2 (C20 A5)",
+  "classifiers": "classify.py byte-identical to the accepted tooling's: classify_build_success (pin; zero warnings, zero errors; no exception) and classify_a for every kill run; t3.rules (adds requirements only); t3.classify_info for C7's informational run (never a kill label)",
+  "packet_tooling": "render.py, build_packet.py, publish_checks.py, worktree.py, finalize.py, push.py, final_gate.py (frozen with every other tool)",
+  "retries": "none: one build per control, one kill run per control (C7: plus its one informational run), no rebuild, no rerun, no cap increase, no alternate patch, no quotient for a mutant; the accepted controls and the unchanged-core configurations are never rerun"
+ },
+ "identities": {
+  "candidate_c": {
+   "commit": "d5964ee5326c2733177307db6f507328023d361a",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "blobs": {
+    "crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8",
+    "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114"
+   }
+  },
+  "catalog": {
+   "path": "docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/catalog/catalog.json",
+   "blob": "1918374263740d2f98640da00fc466737945975e",
+   "sha256": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83",
+   "commit": "9f22f890d8532df395f22cd8db8db2552bfdd14c"
+  },
+  "tranche1": {
+   "commit": "ebe42009ba1bd262cf31ae2f401e02cec101afa7",
+   "tree": "7d8ab59e4b3e61196d9c4cee3cb3a046fa8c4400",
+   "EXEC-01": {
+    "packet": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01",
+    "SHA256SUMS_blob": "b610ffa90a550865faa2191052e2ef8ae6bd5e62",
+    "SHA256SUMS_sha256": "be86b13e38a4526a28a5e4678c43c17758109557986af8f53cad60b96759204b"
+   },
+   "RESUME-01": {
+    "packet": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01",
+    "SHA256SUMS_blob": "0031c26eb4817ffcf7eeaa7a154b151c1e4379c7",
+    "SHA256SUMS_sha256": "7403e94d0ed543843522f17c54f1ccdc7f6e44d69d19d20d82bed52d31ec40f9"
+   },
+   "CONTINUE-02": {
+    "packet": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02",
+    "SHA256SUMS_blob": "fa845cac5a110290451e5136984dce14f150d0de",
+    "SHA256SUMS_sha256": "034672bf51ecdfe1939d61c0ec9f7052b1a28ae44592509883e6dc6ea9342835"
+   }
+  },
+  "tranche2": {
+   "commit": "2e06860f4b404d1a79a0d290116239b5545b931f",
+   "tree": "4c929aa877816cc0cb5c42e32ddbdd75b380bacd",
+   "SHA256SUMS_blob": "767d0b547ffe10e80c5b5ddf64ce4e8afce439ee"
+  },
+  "tranche2_continuation": {
+   "commit": "b97205b2b9ea058ee864b6649dc5002d28b1edeb",
+   "tree": "6db2f923278f9f6ea7bacd97bd29444d4e8d6816",
+   "SHA256SUMS_blob": "4181a3b7b2a93e686bd743e90c3893c27a4bb595"
+  },
+  "stage1": {
+   "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+   "tree": "646c4fe9fa96bfee7b4f731a38f20ebfff14239e"
+  },
+  "stage2": {
+   "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+   "tree": "329eb3a883741ce699ab4c3aada5fa6cb84a0d27"
+  },
+  "r5": {
+   "commit": "c1e46fc404a74ed76b848b709a7a246b59f3347f",
+   "tree": "ecc6914ade5378068eceaa08e88fa45a0bec35b6"
+  },
+  "fr_discharge": {
+   "proof": "c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b",
+   "ad1r5": "4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473",
+   "adoption": "9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4"
+  },
+  "controls": {
+   "C2": {
+    "dir": "receipts/66-C2",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2",
+    "patch_sha256": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+    "patch_file_sha256": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d",
+    "mutant_sha256": "4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403",
+    "test": "ledger::protocol::model_tests::full_f1",
+    "configuration": "F-1",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f1",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P4"
+    ],
+    "ceiling_states": 60000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+     "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+     "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c"
+    }
+   },
+   "C24": {
+    "dir": "receipts/67-C24",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24",
+    "patch_sha256": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+    "patch_file_sha256": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "3e1bfbe746851b6c63811343cde9dd3b83ad0fa9",
+    "mutant_sha256": "d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268",
+    "test": "ledger::protocol::model_tests::full_f1",
+    "configuration": "F-1",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f1",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P8"
+    ],
+    "ceiling_states": 60000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+     "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+     "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c"
+    }
+   },
+   "C3b": {
+    "dir": "receipts/68-C3b",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C3b",
+    "patch_sha256": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+    "patch_file_sha256": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "e6aff1884a4b9b7f880eee8784c371648fb2c073",
+    "mutant_sha256": "84dc2a424ce80ce47b71871f111c4aaa37d8b776dc4851f16513d86312247273",
+    "test": "ledger::protocol::model_tests::full_f6",
+    "configuration": "F-6",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f6",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P13",
+     "P12"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6",
+     "classification_blob": "1b8f9403216b7d72b7df35f8ed51d0189c976f4a",
+     "raw_output_sha256": "3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452"
+    }
+   },
+   "C3c": {
+    "dir": "receipts/69-C3c",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C3c",
+    "patch_sha256": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+    "patch_file_sha256": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "5cc9c09ac96062c5d348e86ace8cb0ac2225e83d",
+    "mutant_sha256": "e72f8f619fa1c9b4a8379351138b354fa83fe470b1c56450b8b22f28c61710c2",
+    "test": "ledger::protocol::model_tests::full_f6",
+    "configuration": "F-6",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f6",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P12"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "89326b859792a442c1853c3d35d30a48301c009e",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6",
+     "classification_blob": "1b8f9403216b7d72b7df35f8ed51d0189c976f4a",
+     "raw_output_sha256": "3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452"
+    }
+   },
+   "C6": {
+    "dir": "receipts/70-C6",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C6",
+    "patch_sha256": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+    "patch_file_sha256": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "6dde859cb243b9f4304cda61b0917b1fc555dde3",
+    "mutant_sha256": "649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3",
+    "test": "ledger::protocol::model_tests::full_fpt",
+    "configuration": "F-PT",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_fpt",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P6"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": {
+     "required": true,
+     "bounds_token": " A4 true;",
+     "quotient_forbidden": true
+    },
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT",
+     "classification_blob": "19329769139e98d24bedae7fb494a4586443397c",
+     "raw_output_sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8"
+    }
+   },
+   "C7": {
+    "dir": "receipts/71-C7",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C7",
+    "patch_sha256": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+    "patch_file_sha256": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+    "mutant_sha256": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa",
+    "test": "ledger::protocol::model_tests::full_fpt",
+    "configuration": "F-PT",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_fpt",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P6"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": {
+     "required": true,
+     "bounds_token": " A4 true;",
+     "quotient_forbidden": true
+    },
+    "l1_rule": false,
+    "informational": {
+     "dir": "04b-info-F3",
+     "configuration": "F-3",
+     "test": "ledger::protocol::model_tests::full_f3",
+     "ignored": true,
+     "runner": "full_exploration",
+     "explorer": "original",
+     "a4": false,
+     "argv_tail": [
+      "ledger::protocol::model_tests::full_f3",
+      "--exact",
+      "--ignored",
+      "--nocapture",
+      "--test-threads=1"
+     ],
+     "ceiling_states": 30000000,
+     "limit_seconds": 2700,
+     "bounds": "facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+     "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+     "verdict_assertion": {
+      "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+      "line": 4133,
+      "col": 5,
+      "span": [
+       4130,
+       4140
+      ]
+     },
+     "required_to_kill": false,
+     "catalog_rule": "AD-1-R4 F (line 748): C7 without A4 \u2014 C7's mutant build run by full_f3 (the original explorer, configuration F-3, A4 off), under 30,000,000; expected to fail E11; added to the receipts; not required to kill; its unchanged-core side may cite the accepted exact-final F-3 composed-quotient PASS under AD-1-R4's prerequisites",
+     "outcomes": [
+      "FAIL <property> (states at most the ceiling)",
+      "PASS (a complete original search)",
+      "INCOMPLETE at the explorer's own state or time ceiling"
+     ]
+    },
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT",
+     "classification_blob": "19329769139e98d24bedae7fb494a4586443397c",
+     "raw_output_sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8"
+    }
+   },
+   "A1": {
+    "dir": "receipts/72-A1",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-A1",
+    "patch_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+    "patch_file_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+    "mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+    "test": "ledger::protocol::model_tests::full_f1",
+    "configuration": "F-1",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f1",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P1"
+    ],
+    "ceiling_states": 60000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4142,
+     "col": 5,
+     "span": [
+      4139,
+      4149
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+     "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+     "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c"
+    }
+   },
+   "A2": {
+    "dir": "receipts/73-A2",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-A2",
+    "patch_sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+    "patch_file_sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "mutant_blob": "c0ac428f58497d8cf42458d51f86db0f2e4b84ba",
+    "mutant_sha256": "855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633",
+    "test": "ledger::protocol::model_tests::full_f1",
+    "configuration": "F-1",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f1",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "P1"
+    ],
+    "ceiling_states": 60000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4144,
+     "col": 5,
+     "span": [
+      4141,
+      4151
+     ]
+    },
+    "a4": null,
+    "l1_rule": false,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+     "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+     "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c"
+    }
+   },
+   "C20": {
+    "dir": "receipts/74-C20",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C20",
+    "patch_sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+    "patch_file_sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+    "mutant_blob": "7bb5aa2abbb52249efe76ab22dd921cb74dd337c",
+    "mutant_sha256": "0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf",
+    "test": "ledger::protocol::model_tests::full_f2",
+    "configuration": "F-2",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f2",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "L1"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4133,
+     "col": 5,
+     "span": [
+      4130,
+      4140
+     ]
+    },
+    "a4": null,
+    "l1_rule": true,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2",
+     "classification_blob": "6d181dc9132c0d9b7c4437512a4fe5a0742948b4",
+     "raw_output_sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5"
+    }
+   },
+   "A5": {
+    "dir": "receipts/75-A5",
+    "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-A5",
+    "patch_sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+    "patch_file_sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+    "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "mutant_blob": "cb08f5e8c62b3ce267f0688cc880261a28cc29a2",
+    "mutant_sha256": "8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f",
+    "test": "ledger::protocol::model_tests::full_f2",
+    "configuration": "F-2",
+    "argv_tail": [
+     "ledger::protocol::model_tests::full_f2",
+     "--exact",
+     "--ignored",
+     "--nocapture",
+     "--test-threads=1"
+    ],
+    "permitted": [
+     "L1"
+    ],
+    "ceiling_states": 30000000,
+    "limit_seconds": 2700,
+    "verdict_assertion": {
+     "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     "line": 4131,
+     "col": 5,
+     "span": [
+      4128,
+      4138
+     ]
+    },
+    "a4": null,
+    "l1_rule": true,
+    "informational": null,
+    "linked": {
+     "type": "e1",
+     "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+     "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2",
+     "classification_blob": "6d181dc9132c0d9b7c4437512a4fe5a0742948b4",
+     "raw_output_sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5"
+    }
+   }
+  },
+  "baseline_executable": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "size": 8984464
+  }
+ },
+ "statement": "After this point: no patch change, no checker or classifier change, no semantic tool repair, no automatic retry. A frozen-tool failure stops the mission and preserves its raw evidence."
+}

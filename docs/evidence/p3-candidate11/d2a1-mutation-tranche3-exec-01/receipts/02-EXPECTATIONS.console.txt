@@ -1,0 +1,21 @@
+-- C2: the gating entry rule does not test C and X
+   receipts/66-C2; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P4']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C24: resolve empties U for a present gating record without placing the correction
+   receipts/67-C24; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P8']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C3b: acknowledgement test 4 removed
+   receipts/68-C3b; ledger::protocol::model_tests::full_f6 (F-6); permitted ['P13', 'P12']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6
+-- C3c: acknowledgement test 5 removed
+   receipts/69-C3c; ledger::protocol::model_tests::full_f6 (F-6); permitted ['P12']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6
+-- C6: classification row b ignores the refusal table, **with** A4
+   receipts/70-C6; ledger::protocol::model_tests::full_fpt (F-PT); permitted ['P6']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT
+-- C7: *Explained* removes every table entry, **with** A4
+   receipts/71-C7; ledger::protocol::model_tests::full_fpt (F-PT); permitted ['P6']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT
+-- A1: the writer confirms before it records
+   receipts/72-A1; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P1']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4142:5 (the mutant model_tests.rs (the mutated file holds the explorer)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- A2: admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.
+   receipts/73-A2; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P1']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5 (the mutant model_tests.rs (the mutated file holds the explorer)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C20: an explanation found already present is not marked committed
+   receipts/74-C20; ledger::protocol::model_tests::full_f2 (F-2); permitted ['L1']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2
+-- A5: settlement claims a Conflict obligation while the store is not Healthy
+   receipts/75-A5; ledger::protocol::model_tests::full_f2 (F-2); permitted ['L1']; cap 30,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4131:5 (the mutant model_tests.rs (the mutated file holds the explorer)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2
+EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD

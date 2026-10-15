@@ -1,0 +1,125 @@
+{
+ "control": "C7",
+ "informational": true,
+ "receipt_type": "informational (mission section 5)",
+ "required_to_kill": false,
+ "test": "ledger::protocol::model_tests::full_f3",
+ "configuration": "F-3",
+ "a4": false,
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "admissible": false,
+ "outcome": "FAIL",
+ "report": {
+  "header": "EXPLORATION F-3 (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+  "states": 14,
+  "expanded": 1,
+  "transitions": 14,
+  "fault_edges": 10,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": "E11: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (2 steps):"
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4373
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mt3x-C7/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "049353fe0361af04979fd1f268e759871e24d699713541e35976032351d2dbef",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3x-C7/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "049353fe0361af04979fd1f268e759871e24d699713541e35976032351d2dbef",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3x-C7/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "049353fe0361af04979fd1f268e759871e24d699713541e35976032351d2dbef",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f3: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f3: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f3",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f3: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f3: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f3",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3x-C7/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "049353fe0361af04979fd1f268e759871e24d699713541e35976032351d2dbef",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "f8a4aed09055901932d0fdd3d3b23541284731235a40e3ea916e794e15470f01",
+ "outer_classification": "informational (mission section 5): C7 without A4 on F-3, the original explorer; NOT the C7 kill receipt and never counted as a kill; not admissible: the mission stops",
+ "checks_hold": 24,
+ "checks_total": 25
+}

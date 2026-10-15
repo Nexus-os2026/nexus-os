@@ -1,0 +1,1 @@
+STATUS: READY_FOR_MUTATION_TRANCHE3_ARCHITECT_REVIEW; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-EXEC-01; new candidates 10 of 10; attempted ['C2', 'C24', 'C3b', 'C3c', 'C6', 'C7', 'A1', 'A2', 'C20', 'A5']; stopped []

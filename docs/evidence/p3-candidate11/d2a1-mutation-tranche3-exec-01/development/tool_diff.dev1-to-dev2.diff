@@ -1,0 +1,53 @@
+--- TRANCHE3-EXEC-01/dev1/tools/tool_diff.py
++++ TRANCHE3-EXEC-01/dev2/tools/tool_diff.py
+@@ -35,6 +35,7 @@
+ import ast
+ import difflib
+ import os
++import re
+ import sys
+ 
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+@@ -252,25 +253,31 @@
+           and "CANDIDATE" not in open(os.path.join(NEW, "t3.py")).read().split("def classify_info")[1].replace(
+               "classify.CANDIDATE not in", ""), "")
+     t3t = tree(os.path.join(NEW, "t3.py"))
+-    check("D4 t3.rules returns its own verdict and writes only its own records (RULES.txt, RULES.json); it never calls "
+-          "classify_a or writes CLASSIFICATION.txt", "classify_a" not in ast.unparse(fn(t3t, "rules"))
+-          and "CLASSIFICATION.txt\"), \"w\"" not in ast.unparse(fn(t3t, "rules")))
++    rules_fn = fn(t3t, "rules")
++    writes = [ast.unparse(n.args[0]) for n in ast.walk(rules_fn) if isinstance(n, ast.Call)
++              and ast.unparse(n.func) == "open" and len(n.args) > 1 and ast.unparse(n.args[1]) == "'w'"]
++    check("D4 t3.rules returns its own verdict and writes only its own records (RULES.txt, RULES.json); it calls no "
++          "classifier and never writes CLASSIFICATION.txt",
++          not [n for n in ast.walk(rules_fn) if isinstance(n, ast.Call) and "classify_" in ast.unparse(n.func)]
++          and len(writes) == 2 and all("RULES" in w for w in writes) and "json.dump" in ast.unparse(rules_fn), writes)
+     lo, ln = fn(to, "link"), fn(tn, "link")
+     a, b = src_lines(os.path.join(OLD, "control.py"), lo), src_lines(os.path.join(NEW, "control.py"), ln)
+     ops = opcodes(a, b)
+     ins = "\n".join(l for op in ops if op[0] == "insert" for l in b[op[3]:op[4]])
+     repl = [(a[op[1]:op[2]], b[op[3]:op[4]]) for op in ops if op[0] != "insert"]
+     old_q = "\n".join(x for o, _ in repl for x in o)
+-    new_q = "\n".join(x for _, n in repl for x in n)
++    new_q = "\n".join(x for _, n in repl for x in n if x.strip() != 'cfg = ctl["configuration"]')
++
++    def norm(t):  # whitespace, string-literal boundaries and f-prefixes do not matter; every other character does
++        return re.sub(r'[\s"]', "", t.replace('f"', '"'))
++    back = new_q.replace("{cfg}", "F-B").replace("{ctl['test'].split('::')[-1]}", "full_fb")
+     nchk = lambda f: len([n for n in ast.walk(f) if isinstance(n, ast.Call) and ast.unparse(n.func) == "chk"])
+     check("D4 control.link: the continuation's, with the restoration-receipt check inserted and only the composed-quotient "
+-          "check's F-B text generalized to the control's configuration; one check more, none removed",
+-          nchk(ln) == nchk(lo) + 1 and "05-restore/RESTORE.txt" in ins and "RESTORE_OK" in ins
+-          and "F-B" in old_q and "F-B" not in new_q and "{cfg}" in new_q
+-          and all(k in new_q for k in ("composed-quotient test with the same flags", "bounds == [ctl['bounds']]",
+-                                       "gating-caller symmetry quotient composed with the admission"))
+-          and not [o for o, n in repl if not any("F-B" in x or "full_fb" in x or x.strip().startswith(("chk(", "elif L["))
+-                                                 or "EXPLORATION" in x or "quotient" in x or "bounds" in x for x in o)],
++          "check's F-B text generalized to the control's configuration (substituting F-B and full_fb back gives the "
++          "continuation's text exactly); one check more, none removed",
++          nchk(ln) == nchk(lo) + 1 and "05-restore/RESTORE.txt" in ins and "RESTORE_OK" in ins and "chk(" in ins
++          and len(repl) == 2 and "F-B" in old_q and "F-B" not in new_q and norm(back) == norm(old_q)
++          and sum(1 for _, n in repl for x in n if x.strip() == 'cfg = ctl["configuration"]') == 1,
+           f"{len(ops)} hunks; replaced {len(repl)}")
+     for f, names in SAME_FUNCS.items():
+         fa, fb = funcs(tree(os.path.join(OLD, f))), funcs(tree(os.path.join(NEW, f)))

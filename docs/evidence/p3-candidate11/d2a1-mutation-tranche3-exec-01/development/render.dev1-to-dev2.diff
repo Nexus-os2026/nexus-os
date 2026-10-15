@@ -1,0 +1,13 @@
+--- TRANCHE3-EXEC-01/dev1/tools/render.py
++++ TRANCHE3-EXEC-01/dev2/tools/render.py
+@@ -341,7 +341,9 @@
+          "- C7's run without A4 on F-3 is informational (mission section 5): it is not a kill receipt and establishes "
+          "no kill.", ""]
+     open(os.path.join(outdir, "INDEX.md"), "w").write("\n".join(i).rstrip("\n") + "\n")
+-    print(f"STATUS: {st}; new candidates {len(candidates)} of {len(K.ORDER)}; attempted {attempted}; stopped {blocked}")
++    # The mission is named on the status line: a rehearsal's console must never repeat an earlier mission's bytes.
++    print(f"STATUS: {st}; {K.MISSION}; new candidates {len(candidates)} of {len(K.ORDER)}; attempted {attempted}; "
++          f"stopped {blocked}")
+     return 0
+ 
+ 

@@ -1,0 +1,12 @@
+LINK: FAILED
+control C3b: restored-side receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-6 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt ../../../receipts/03-t3-controls/B/C3b-N-F-6-classification-byte-changed/05-restore/RESTORE.txt (sha256 33769c116a60b073eae1d6fbb2bfabfc29647c7a7acffac501be49e1169993c0; first line 'RESTORE: EXACTLY_C')
+FAIL the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 in 89326b85's SHA256SUMS: ['CLASSIFICATION.txt']
+FAIL its classification blob and raw output identity are the catalog's
+FAIL accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASs', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-6): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f6', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/B/C3b-N-F-6-classification-byte-changed/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
