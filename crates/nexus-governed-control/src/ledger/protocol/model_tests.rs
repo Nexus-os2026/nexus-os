@@ -9197,3 +9197,519 @@ const C4_SCENARIOS: [C4Scenario; 2] = [C4_P4, C4_P8];
 fn c4_witness_p4_and_p8_on_f8() {
     run_c4_witness(&F8, &C4_SCENARIOS);
 }
+
+// Deterministic witness for control C7 on F-PT (contract AD-C7-W). It replays
+// the 24 frozen steps of the unchanged model, prints every step, records every
+// violation once at its own locus, and decides nothing by search.
+mod c7_witness {
+    use super::*;
+
+    struct Step {
+        actor: Actor,
+        offered: &'static [u8],
+        consumed: &'static [(u8, u8)],
+        branches: &'static [&'static str],
+        faults: u8,
+    }
+
+    const fn quiet(actor: Actor, faults: u8) -> Step {
+        Step {
+            actor,
+            offered: &[],
+            consumed: &[],
+            branches: &[],
+            faults,
+        }
+    }
+
+    const DUPLICATE_ROLE: &str =
+        "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)";
+    const MISSING_PREPARED: &str =
+        "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)";
+
+    // Table A. Step 23 is its healthy end; CHANGED_23 is its other planned end.
+    const STEPS: [Step; 24] = [
+        quiet(Actor::Fw(1), 2),
+        Step {
+            actor: Actor::Fw(1),
+            offered: &[0, 0, 0, 0],
+            consumed: &[(0, 2), (0, 4), (0, 4), (0, 3)],
+            branches: &[DUPLICATE_ROLE],
+            faults: 2,
+        },
+        Step {
+            actor: Actor::Fw(1),
+            offered: &[0],
+            consumed: &[(0, 2)],
+            branches: &[],
+            faults: 2,
+        },
+        quiet(Actor::Fw(0), 2),
+        Step {
+            actor: Actor::Fw(0),
+            offered: &[0, 0, 0, 0],
+            consumed: &[(0, 2), (0, 4), (0, 4), (0, 3)],
+            branches: &[MISSING_PREPARED],
+            faults: 2,
+        },
+        quiet(Actor::Wk, 2),
+        quiet(Actor::Wk, 2),
+        Step {
+            actor: Actor::Wk,
+            offered: &[0, 0, 0, 0],
+            consumed: &[(0, 3), (0, 3), (0, 2), (0, 2)],
+            branches: &["append_cell X: Committed (inserted)"],
+            faults: 2,
+        },
+        quiet(Actor::Wk, 2),
+        quiet(Actor::Wk, 2),
+        Step {
+            actor: Actor::Wk,
+            offered: &[],
+            consumed: &[],
+            branches: &["empty: Done"],
+            faults: 2,
+        },
+        quiet(Actor::Se, 2),
+        Step {
+            actor: Actor::Se,
+            offered: &[0],
+            consumed: &[(0, 4)],
+            branches: &["explain: Explained"],
+            faults: 2,
+        },
+        quiet(Actor::Se, 2),
+        Step {
+            actor: Actor::Fw(0),
+            offered: &[1],
+            consumed: &[(1, 2)],
+            branches: &[],
+            faults: 1,
+        },
+        quiet(Actor::Fw(0), 1),
+        quiet(Actor::Se, 1),
+        Step {
+            actor: Actor::Se,
+            offered: &[0],
+            consumed: &[(0, 4)],
+            branches: &["lookup: Absent"],
+            faults: 1,
+        },
+        quiet(Actor::Se, 1),
+        quiet(Actor::Se, 1),
+        quiet(Actor::Se, 1),
+        quiet(Actor::Env, 1),
+        Step {
+            actor: Actor::Se,
+            offered: &[0, 0, 0, 0],
+            consumed: &[(0, 4), (0, 4), (0, 3)],
+            branches: &[MISSING_PREPARED],
+            faults: 1,
+        },
+        quiet(Actor::Se, 1),
+    ];
+
+    const CHANGED_23: Step = Step {
+        actor: Actor::Se,
+        offered: &[0, 0, 0, 0],
+        consumed: &[(0, 4), (0, 4), (0, 4), (0, 3)],
+        branches: &["append_facts: Committed (inserted)"],
+        faults: 1,
+    };
+
+    // What the verdicts read in the world after a step.
+    struct Snap {
+        word: u64,
+        phase: Phase,
+        latch: Option<LatchCause>,
+        u: Option<Occupant>,
+        c: Option<Occupant>,
+        x: Option<(Occupant, Stage)>,
+        refusals: Vec<(Option<u8>, &'static str)>,
+        classes: Table,
+        conflicted: [bool; 2],
+        rows: Vec<SimRow>,
+    }
+
+    fn snap(w: &World) -> Snap {
+        Snap {
+            word: word_of(&w.core.shared),
+            phase: w.core.phase,
+            latch: w.core.latch,
+            u: w.core.u.as_ref().map(|(_, occupant)| occupant.clone()),
+            c: w.core.c.as_ref().map(|(_, occupant)| occupant.clone()),
+            x: w.core
+                .x
+                .as_ref()
+                .map(|(_, occupant, stage)| (occupant.clone(), *stage)),
+            refusals: w
+                .core
+                .refusals
+                .iter()
+                .map(|(key, cause)| (original_of(key).filter(|&f| f < 2), cause_label(cause)))
+                .collect(),
+            classes: w.table,
+            conflicted: [
+                w.ghost.conflicted & bit(0) != 0,
+                w.ghost.conflicted & bit(1) != 0,
+            ],
+            rows: w.rows.clone(),
+        }
+    }
+
+    // One collected violation, printed once as `line` inside its locus block.
+    struct Record {
+        locus: String,
+        property: &'static str,
+        line: String,
+    }
+
+    struct Run {
+        records: Vec<Record>,
+        snaps: Vec<Snap>,
+        taken_23: Vec<(u8, u8)>,
+        changed: Option<bool>,
+        fixture: Option<String>,
+    }
+
+    impl Run {
+        fn record(&mut self, locus: String, property: &'static str, detail: &str) {
+            let line = format!("    VIOLATION {locus}: {property}: {detail}");
+            println!("{line}");
+            self.records.push(Record {
+                locus,
+                property,
+                line,
+            });
+        }
+
+        fn fail(&mut self, reason: String) {
+            println!("    WITNESS FIXTURE FAILURE (kills nothing): {reason}");
+            self.fixture = Some(reason);
+        }
+    }
+
+    // A frozen row that is not self-consistent: it consumes beyond its offered
+    // stream or off its offered prefix, or leaves an unfrozen unused suffix.
+    fn row_fault(row: &Step, unused: &[u8]) -> Option<&'static str> {
+        let used = row.consumed.len();
+        if used > row.offered.len() {
+            return Some("consumes beyond its offered stream");
+        }
+        if row
+            .consumed
+            .iter()
+            .zip(row.offered)
+            .any(|(&(choice, options), &offered)| choice != offered || choice >= options)
+        {
+            return Some("consumes a choice that is not its offered prefix or is out of range");
+        }
+        if &row.offered[used..] != unused {
+            return Some("leaves an unused suffix other than the frozen one");
+        }
+        None
+    }
+
+    fn inconsistent() -> Option<String> {
+        let steps = STEPS;
+        let changed = CHANGED_23;
+        let mut faults = FPT.faults;
+        for (index, row) in steps.iter().enumerate() {
+            let number = index + 1;
+            let unused: &[u8] = if number == 23 { &[0] } else { &[] };
+            if let Some(fault) = row_fault(row, unused) {
+                return Some(format!("row {number:02} {fault}"));
+            }
+            if row.faults > faults {
+                return Some(format!("row {number:02} raises the fault budget"));
+            }
+            faults = row.faults;
+        }
+        if let Some(fault) = row_fault(&changed, &[]) {
+            return Some(format!("the changed end of step 23 {fault}"));
+        }
+        let healthy = &steps[22];
+        if changed.actor != healthy.actor
+            || changed.offered != healthy.offered
+            || changed.faults != healthy.faults
+        {
+            return Some("the two ends of step 23 differ beyond their consumption".to_string());
+        }
+        None
+    }
+
+    fn is_row(row: &Step, taken: &[(u8, u8)], branches: &[String], faults: u8) -> bool {
+        row.consumed == taken
+            && row.faults == faults
+            && row.branches.len() == branches.len()
+            && row
+                .branches
+                .iter()
+                .zip(branches)
+                .all(|(frozen, shown)| *frozen == shown.as_str())
+    }
+
+    fn show(number: usize, branches: &[String], after: &Snap) {
+        println!(
+            "    branches {:?}; word after {:#x} (live {}, unapplied {}); phase {:?}, latch {:?}",
+            branches,
+            after.word,
+            field(after.word, LIVE_SHIFT),
+            field(after.word, UNAPPLIED_SHIFT),
+            after.phase,
+            after.latch
+        );
+        println!("    U {:?}; C {:?}; X {:?}", after.u, after.c, after.x);
+        let entries: Vec<String> = after
+            .refusals
+            .iter()
+            .map(|&(fact, label)| match fact {
+                Some(f) => format!("F{}: {label}", f + 1),
+                None => format!("?: {label}"),
+            })
+            .collect();
+        println!(
+            "    refusal table after {number:02}: {{{}}}",
+            entries.join(", ")
+        );
+        println!(
+            "    classes after {number:02}: F1 {:?}, F2 {:?}; debt {}; H {}; A {}",
+            after.classes.class[0],
+            after.classes.class[1],
+            after.classes.debt,
+            after.classes.h,
+            after.classes.a
+        );
+        println!(
+            "    conflicted after {number:02}: F1 {}, F2 {}",
+            after.conflicted[0], after.conflicted[1]
+        );
+        println!("    ledger after {number:02}: {:?}", after.rows);
+    }
+
+    // Replays the frozen steps from the initial world. Each step runs on a
+    // world decoded from the previous key. Only a fixture failure stops it.
+    fn play(config: &Config) -> Run {
+        let mut run = Run {
+            records: Vec::new(),
+            snaps: Vec::new(),
+            taken_23: Vec::new(),
+            changed: None,
+            fixture: None,
+        };
+        if let Some(reason) = inconsistent() {
+            run.fail(format!("frozen data are inconsistent: {reason}"));
+            return run;
+        }
+        let steps = STEPS;
+        let changed_23 = CHANGED_23;
+        let total = steps.len();
+        let mut key = encode(config, &initial(config));
+        for (property, detail) in violations_at(config, &key) {
+            run.record("initial".to_string(), property, &detail);
+        }
+        for (index, planned) in steps.iter().enumerate() {
+            let number = index + 1;
+            let base = decode(config, &key);
+            let mut w = decode(config, &key);
+            let mut oracle = Oracle::new(planned.offered.to_vec(), w.faults);
+            let mut obs = Obs {
+                trace: Some(String::new()),
+                ..Obs::default()
+            };
+            hook::take_counts();
+            let enabled = step(config, &mut w, planned.actor, &mut oracle, &mut obs);
+            let counts = hook::take_counts();
+            w.faults = oracle.faults;
+            let m = obs.violations.len();
+            if enabled {
+                transition_properties(&base, &w, &mut obs, counts);
+            }
+            key = encode(config, &w);
+            let after = if enabled {
+                violations_at(config, &key)
+            } else {
+                Vec::new()
+            };
+            let taken = oracle.taken.clone();
+            let unused = planned.offered.get(taken.len()..).unwrap_or(&[]);
+            let note = obs.trace.take().unwrap_or_default();
+            println!(
+                "C7 WITNESS {} step {number:02}/{total} {:?} offered {:?} consumed {:?} unused {:?} faults left {}: {}{}",
+                config.name,
+                planned.actor,
+                planned.offered,
+                taken,
+                unused,
+                oracle.faults,
+                note,
+                if oracle.fault { "   [fault]" } else { "" }
+            );
+            let snapshot = snap(&w);
+            show(number, &obs.branches, &snapshot);
+            for (property, detail) in obs.violations[..m].iter() {
+                run.record(format!("step {number:02} in-step"), *property, detail);
+            }
+            for (property, detail) in obs.violations[m..].iter() {
+                run.record(format!("step {number:02} transition"), *property, detail);
+            }
+            for (property, detail) in after {
+                run.record(format!("after {number:02}"), property, &detail);
+            }
+            let paired = match snapshot.classes.class[0] {
+                Class::Conflict => Some(false),
+                Class::Paid => Some(true),
+                _ => None,
+            };
+            run.snaps.push(snapshot);
+            let mut reason = if enabled {
+                None
+            } else {
+                Some("is not enabled".to_string())
+            };
+            if enabled {
+                if number == 23 {
+                    run.taken_23 = taken.clone();
+                    run.changed = if is_row(planned, &taken, &obs.branches, oracle.faults) {
+                        Some(false)
+                    } else if is_row(&changed_23, &taken, &obs.branches, oracle.faults) {
+                        Some(true)
+                    } else {
+                        None
+                    };
+                    if run.changed.is_none() {
+                        reason = Some(format!(
+                            "ended as neither planned end: consumed {taken:?}, branches {:?}, faults left {}",
+                            obs.branches, oracle.faults
+                        ));
+                    }
+                } else if !is_row(planned, &taken, &obs.branches, oracle.faults) {
+                    reason = Some(format!(
+                        "departs from its frozen row: consumed {taken:?}, branches {:?}, faults left {} (frozen: consumed {:?}, branches {:?}, faults left {})",
+                        obs.branches,
+                        oracle.faults,
+                        planned.consumed,
+                        planned.branches,
+                        planned.faults
+                    ));
+                }
+                if reason.is_none() && number == 24 && paired != run.changed {
+                    reason = Some(format!(
+                        "is not paired with step 23's end (step 23 changed end {:?}, F1 settled as {:?})",
+                        run.changed, paired
+                    ));
+                }
+            }
+            if let Some(reason) = reason {
+                run.fail(format!("step {number:02} {reason}"));
+                break;
+            }
+        }
+        run
+    }
+
+    // The healthy core keeps F1's refusal-table entry, F1 ends as a conflict,
+    // its fact is unwritten and X is empty.
+    fn is_kept(at13: &Snap, at24: &Snap) -> bool {
+        let only_f1 = |snap: &Snap| {
+            snap.refusals.len() == 1 && snap.refusals[0] == (Some(0u8), "MissingPrepared")
+        };
+        only_f1(at13)
+            && only_f1(at24)
+            && at24.classes.class[0] == Class::Conflict
+            && !at24.rows.contains(&SimRow::Fact(0))
+            && at24.x.is_none()
+    }
+
+    // The changed core loses the table, F1 ends as Paid after its conflict,
+    // its fact is written and its explanation is absent.
+    fn is_lost(at13: &Snap, at24: &Snap) -> bool {
+        at13.refusals.is_empty()
+            && at24.refusals.is_empty()
+            && at24.classes.class[0] == Class::Paid
+            && at24.conflicted[0]
+            && at24.rows.contains(&SimRow::Fact(0))
+            && !at24.rows.contains(&SimRow::Explanation(0))
+    }
+
+    fn judge(config: &Config) {
+        let run = play(config);
+        if let Some(reason) = &run.fixture {
+            panic!("WITNESS FIXTURE FAILURE (kills nothing): {reason}");
+        }
+        let (at13, at24) = (&run.snaps[12], &run.snaps[23]);
+        let total = STEPS.len();
+        if run.records.is_empty() {
+            let kept = is_kept(at13, at24);
+            if run.changed != Some(false) || !kept {
+                panic!(
+                    "WITNESS: no violation, but step 23 did not end healthy or the kept predicate fails (step 23 changed end {:?}, kept {kept})",
+                    run.changed
+                );
+            }
+            let offered = STEPS[22].offered;
+            let consumed = run.taken_23.len();
+            let unused = offered.get(consumed..).unwrap_or(&[]);
+            println!(
+                "C7 WITNESS {}: {total} steps, each enabled and consuming its choices as frozen; no violation; step 23 shows the healthy core's '{MISSING_PREPARED}', consuming {consumed} of its {} offered choices, unused {unused:?}; F1's refusal-table entry (MissingPrepared) kept after steps 13 and 24; step 24 records F1 as {:?}",
+                config.name,
+                offered.len(),
+                at24.classes.class[0]
+            );
+            return;
+        }
+        let found = |locus: &str, property: &str| {
+            run.records
+                .iter()
+                .any(|record| record.locus == locus && record.property == property)
+        };
+        let p6_record = found("after 24", "P6");
+        let e11_record = found("step 13 transition", "E11");
+        let changed_end = run.changed == Some(true);
+        let lost_state = is_lost(at13, at24);
+        let n = run.records.len();
+        let mut others: Vec<&str> = run
+            .records
+            .iter()
+            .map(|record| record.property)
+            .filter(|property| *property != "P6")
+            .collect();
+        others.sort_unstable();
+        others.dedup();
+        let m1 = format!(
+            "C7 WITNESS {}: {total} steps, every step enabled and consuming its choices as planned; {n} violations",
+            config.name
+        );
+        let m2 = if p6_record && changed_end && lost_state {
+            "NAMED PROPERTY P6: OBSERVED on the world after step 24 (append_facts: Committed (inserted) at step 23; F1, refused as a conflict at step 5, is Paid, with no refusal-table entry and no explanation of F1 in the ledger)".to_string()
+        } else {
+            format!(
+                "NAMED PROPERTY P6: NOT OBSERVED on the world after step 24 (P6 record at that locus {p6_record}; step 23 took the changed end {changed_end}; lost state shown {lost_state})"
+            )
+        };
+        let m3 = if e11_record {
+            "SEPARATE PROPERTY E11: OBSERVED at the transition of step 13 (explain: Explained of F2; F1's refusal-table entry left in a step that did not see F1's explanation in the ledger); never counted as P6".to_string()
+        } else {
+            format!(
+                "SEPARATE PROPERTY E11: NOT OBSERVED at the transition of step 13 (E11 record at that locus {e11_record})"
+            )
+        };
+        let m4 = format!(
+            "OTHER PROPERTIES VIOLATED, each reported separately and not counted as P6: {others:?}"
+        );
+        let summary: Vec<&str> = run
+            .records
+            .iter()
+            .map(|record| record.line.as_str())
+            .collect();
+        panic!(
+            "{m1}\n{m2}\n{m3}\n{m4}\nevery violation:\n{}",
+            summary.join("\n")
+        );
+    }
+
+    #[test]
+    fn c7_witness_p6_after_settlement_on_fpt() {
+        judge(&FPT);
+    }
+}
