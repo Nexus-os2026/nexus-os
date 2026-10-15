@@ -1,0 +1,10 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/pub_rehearsal.dev3.sh	2026-10-15 08:26:08.032419527 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/pub_rehearsal.sh	2026-10-15 08:26:08.051313021 +0100
+@@ -37,6 +37,7 @@
+ PY
+ grep -n '^EV = \|^REPO = \|^EVIDENCE_WT = ' "$PR/tools/common.py"
+ cd "$PR" || exit 1
++python3 -B -c "import sys; sys.path.insert(0, 'tools'); import rehearsals; rehearsals.synthetic_freeze('$PR')" || exit 1
+ mkdir -p publication
+ printf 'FINAL GATE — SYNTHETIC (pub_rehearsal.sh): not the record of any gate\nFINAL GATE: ALL CHECKS HOLD\n' > receipts/90-final-gate.txt
+ python3 -B tools/publish_checks.py preflight > publication/00-PREFLIGHT.txt 2>&1; echo "preflight rc=$?: $(tail -1 publication/00-PREFLIGHT.txt)"

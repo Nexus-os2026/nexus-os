@@ -1,0 +1,225 @@
+CREATE the A2 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2 at C
+result: OK
+add: git -C /home/nexus/NEXUS/nexus-os worktree add --detach /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2 d5964ee5326c2733177307db6f507328023d361a -> rc 0; HEAD is now at d5964ee5 docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record Preparing worktree (detached HEAD d5964ee5)
+lock: git -C /home/nexus/NEXUS/nexus-os worktree lock --reason P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A2 disposable mutant worktree: mission-owned; preserve until Architect review /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2 -> rc 0;  
+AUTHENTICATE the A2 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2
+result: OK
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink: {'realpath': '/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2', 'is_symlink': False, 'uid': 1000, 'gid': 1000, 'dev': 66310, 'ino': 65693898, 'mode': '0o40775'}
+OK   owned by this user: 1000
+OK   the worktree's .git file points into the repository's worktree administration: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt3t-A2
+OK   the administrative directory points back at this worktree: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/.git
+OK   locked with this mission's reason (mission ownership): P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A2 disposable mutant worktree: mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A2 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   toplevel is the path; the common git directory is the repository's: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2; /home/nexus/NEXUS/nexus-os/.git
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   clean: nothing modified, staged, untracked or ignored: 
+OK   every tracked file byte-equal to C (verify_tree.py): EXACTLY_C; 5364 blobs, 97246341 bytes
+OK   baseline file crates/nexus-governed-control/src/ledger/protocol.rs blob (in-process) is C's: a2df2841b99cad5d452008a6d4150e9369d07e66
+APPLY: EXACTLY_C_PLUS_PATCH
+control A2: admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.
+patch: inputs/patches/A2.patch (the frozen R2 packet's catalog/patches/A2.patch), sha256 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2 (catalog 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; numstat '15\t4\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba), sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633); status [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed
+SUPERVISED MUTANT BUILD — control A2 (admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.); the exact command
+started: 2026-10-15T08:37:25+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+freeze check: 82 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+prior step: receipts/82-A2/02-apply/APPLY.txt: 'APPLY: EXACTLY_C_PLUS_PATCH' (required 'APPLY: EXACTLY_C_PLUS_PATCH')
+source (before): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246754 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba / 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob 726005b29561a04536edea412bf551a9884d6639 sha256 fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298
+build input Cargo.lock: git blob 1af53a60aaf6fde5731e63fcd5b6cd11d86f669a sha256 6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob 2c558a4477d1545daaa489f0a0e502b4284ad479 sha256 7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795
+build input crates/nexus-governed-control/Cargo.toml: git blob 2543c745d661203326367962714b94c811e07980 sha256 30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f
+target directory /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-15T08:37:26+0100:
+  MemTotal 65077588 KiB; MemAvailable 53575564 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7734128 KiB (the scope has swap disabled)
+  load average ['2.21', '1.84', '1.56']; online CPUs 16
+  disk free on the worktree filesystem: 20 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    871360 brave
+    831404 chrome
+    728376 2.1.281
+    647532 brave
+    637084 python
+    607032 chrome
+    595196 claude
+    483252 chrome
+scope unit: p3c11-mt3t-82-A2-build-1792049847.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2
+command: systemd-run --user --scope --unit=p3c11-mt3t-82-A2-build-1792049847 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/82-A2/03-build/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/82-A2/03-build/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-15T08:37:27+0100
+returned: 2026-10-15T08:40:14+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 167.92000000000002 s, max RSS (largest single process) 1967848 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 2611343360 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246754 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba / 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-2faa0b9718d3e6a3', '257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d', 8984784), ('nexus_governed_control-2faa0b9718d3e6a3.d', '4b03c6341bd5fd5d42325ac687b2fc4f15f33f91d3fa5c91595f0d1eadbd26dd', 7897)]
+finished: 2026-10-15T08:40:15+0100
+OK   the build started (no pre-flight refusal)
+OK   source EXACTLY_C_PLUS_PATCH before and after the build: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   the target directory is the worktree-local fresh one: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 2611343360 B, swap.peak 0 B, oom 0, oom_kill 0, wall 167.92000000000002 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '2m 47s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-2faa0b9718d3e6a3', '257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d', 8984784)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-2faa0b9718d3e6a3.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]
+
+BUILD: PINNED
+outer class (AD-1-R4 K.2): mutant build succeeded; one library-test executable pinned
+raw outcome (as printed): exit 0, signal None; Finished [('release', 'optimized', '2m 47s')]
+resources: wall 167.92000000000002 s of 900 s; scope memory.peak 2611343360 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 1967848 KiB; scope gone
+executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d size 8984784
+checks: 18 of 18 hold
+
+SUPERVISED MUTANT RUN — control A2: ledger::protocol::model_tests::full_f1 on the pinned mutant executable (type (a))
+started: 2026-10-15T08:40:15+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+freeze check: 82 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+prior step: receipts/82-A2/03-build/CLASSIFICATION.txt: 'BUILD: PINNED' (required 'BUILD: PINNED')
+source (before): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246754 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba / 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633)
+executable before: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d", "size": 8984784, "mtime_ns": 1792050014866688086, "inode": 65705025, "symlink": false}; pinned sha256 257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d size 8984784: MATCH
+test environment (env -i; exactly these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+pre-flight 2026-10-15T08:40:16+0100:
+  MemTotal 65077588 KiB; MemAvailable 53617516 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7734132 KiB (the scope has swap disabled)
+  load average ['2.51', '2.21', '1.77']; online CPUs 16
+  disk free on the worktree filesystem: 19 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    830696 chrome
+    825224 brave
+    728536 2.1.281
+    664904 brave
+    637116 python
+    607508 chrome
+    587116 claude
+    483732 chrome
+selection: ['ledger::protocol::model_tests::full_f1', '--exact', '--list'] -> exit 0, listed ['ledger::protocol::model_tests::full_f1: test']; ['ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--list'] -> exit 0, listed ['ledger::protocol::model_tests::full_f1: test'] (ignored test expected: True); executable after the listings 257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d 8984784
+scope unit: p3c11-mt3t-04-run-1792050016.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-mt3t-04-run-1792050016 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/82-A2/04-run/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/82-A2/04-run/time-v.txt timeout -s KILL 2700 nice -n 10 /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::full_f1 --exact --ignored --nocapture --test-threads=1
+launched: 2026-10-15T08:40:16+0100
+returned: 2026-10-15T08:40:16+0100
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.0 s, max RSS (largest single process) 6324 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 4091904 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246754 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba / 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633)
+executable after: {"path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "sha256": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d", "size": 8984784, "mtime_ns": 1792050014866688086, "inode": 65705025, "symlink": false}: MATCH
+raw output: raw-output.txt sha256 d1edba58123e3301465ed89916ca80769a1d0b3ade516cd7503ed63585275e93 bytes 14181
+finished: 2026-10-15T08:40:17+0100
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 257cb481e0de2036… 8984784 / 257cb481e0de2036… 8984784 / 257cb481e0de2036… 8984784 (pinned 257cb481e0de2036… 8984784)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: d1edba58123e3301465ed89916ca80769a1d0b3ade516cd7503ed63585275e93
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.01s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 4091904 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (1242034) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5
+OK   the assertion message carries failed: {"P1"}: ['assertion `left == right` failed: failed: {"P1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property P1 (no attribution exception in the catalog): P1: a result is unrecorded, or U, C or X is occupied, at a successful admission
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 1,453
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (3 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: P1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+raw outcome (as printed): outcome FAIL; FAIL P1: a result is unrecorded, or U, C or X is occupied, at a successful admission; shortest trace (3 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.01s']
+measured: states 1,453 (expanded 277) of the 60,000,000 ceiling; transitions 2572; elapsed 0.0 s
+named property: P1; configuration F-1; test ledger::protocol::model_tests::full_f1
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 4091904 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6324 KiB; scope gone
+checks: 29 of 29 hold
+
+TRANCHE-3 RULES: HOLD
+control A2 (F-1, ledger::protocol::model_tests::full_f1); kill run receipts/82-A2/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f1']
+OK   header exactly 'EXPLORATION F-1': no quotient or symmetry line (the original explorer): EXPLORATION F-1
+OK   the printed first property is permitted for A2: P1: P1: a result is unrecorded, or U, C or X is occupied, at a successful admission
+OK   discovered count at most the ceiling 60,000,000 (F-1): 1453 of 60000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+RESTORE: EXACTLY_C
+control A2: method: reverse application of the same frozen patch (git apply -R) in the disposable worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: before restoration git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633
+crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: after restoration git blob 28085ce232827301104b5d757af042ec933976f8 sha256 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972 (C: 28085ce232827301104b5d757af042ec933976f8 / 2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972)
+source (after restoration): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+path-aware status policy (--ignored --untracked-files=all --no-renames -z): HOLDS; 2552 records, 2552 ignored entries beneath the worktree-local real target; shown ['!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; rejected []
+every changed file is byte-equal to C; the worktree is clean but for its own target directory
+LINK: VERIFIED
+control A2: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/82-A2/05-restore/RESTORE.txt (sha256 2e5fc60bbf3fd6e9d19ff2b5c0dd7cde3c3735af2f237fa915601974ae570437; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/82-A2/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control A2: admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d size 8984784
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))

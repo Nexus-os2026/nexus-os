@@ -1,0 +1,451 @@
+{
+ "mission": "P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01",
+ "catalog": {
+  "path": "docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/catalog/catalog.json",
+  "commit": "9f22f890d8532df395f22cd8db8db2552bfdd14c",
+  "blob": "1918374263740d2f98640da00fc466737945975e",
+  "sha256": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83",
+  "version": "d2a1-controls-v1-r2-candidate"
+ },
+ "candidate_c": {
+  "commit": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "blobs": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8",
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114"
+  }
+ },
+ "baseline_executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464,
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01"
+ },
+ "build": {
+  "argv": [
+   "cargo",
+   "test",
+   "-p",
+   "nexus-governed-control",
+   "--locked",
+   "--release",
+   "--lib",
+   "--no-run",
+   "-j",
+   "2"
+  ],
+  "limit_seconds": 900,
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "env_template": [
+   [
+    "HOME",
+    "/home/nexus"
+   ],
+   [
+    "PATH",
+    "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+   ],
+   [
+    "CARGO_TARGET_DIR",
+    "<worktree>/target"
+   ],
+   [
+    "CARGO_TERM_VERBOSE",
+    "true"
+   ],
+   [
+    "CARGO_NET_OFFLINE",
+    "true"
+   ]
+  ]
+ },
+ "run_env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "order": [
+  "A1",
+  "A2",
+  "C20",
+  "A5"
+ ],
+ "listed_tests_at_C": 348,
+ "accepted_not_executed": [
+  "C22",
+  "C14",
+  "C19",
+  "C21",
+  "C27",
+  "C28",
+  "C12",
+  "C9",
+  "C11",
+  "C17",
+  "C18a",
+  "C18b",
+  "C23",
+  "C10",
+  "C16",
+  "C26",
+  "C3a",
+  "C5",
+  "A3",
+  "A6",
+  "C8",
+  "C15",
+  "C2",
+  "C24",
+  "C3b",
+  "C3c",
+  "C6"
+ ],
+ "blocked_not_executed": [
+  "C7"
+ ],
+ "not_authorized": [
+  "C1",
+  "C4",
+  "C25"
+ ],
+ "controls": {
+  "A1": {
+   "id": "A1",
+   "order": 1,
+   "dir": "receipts/81-A1",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "the writer confirms before it records",
+   "patch": {
+    "input": "inputs/patches/A1.patch",
+    "catalog_file": "catalog/patches/A1.patch",
+    "sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "baseline_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "baseline_sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972",
+   "mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+   "mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+   "restoration": {
+    "method": "reverse application of patches/A1.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "28085ce232827301104b5d757af042ec933976f8",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_f1",
+   "configuration": "F-1",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_f1",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 60000000,
+   "named_property": "P1",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4142,
+    "col": 5,
+    "span": [
+     4139,
+     4149
+    ]
+   },
+   "special_attribution_rules": [],
+   "verdict_assertion_at_C": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "verdict_assertion_source": "the mutant model_tests.rs (the mutated file holds the explorer)",
+   "build_rule": {
+    "kind": "one fresh build: zero warnings and zero errors under the unchanged general classifier (no warning exception)"
+   },
+   "linked": {
+    "type": "e1",
+    "stage": "S1",
+    "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+    "input_dir": "inputs/linked/S1-45-full-F-1",
+    "configuration": "F-1",
+    "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+    "raw_output_blob": "c36226c875ec5694b3b733b41ffab0dc3dfd8ee5",
+    "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c",
+    "descriptor_test": "ledger::protocol::model_tests::full_f1",
+    "outer_class": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS",
+    "quotient": false
+   }
+  },
+  "A2": {
+   "id": "A2",
+   "order": 2,
+   "dir": "receipts/82-A2",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.",
+   "patch": {
+    "input": "inputs/patches/A2.patch",
+    "catalog_file": "catalog/patches/A2.patch",
+    "sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "baseline_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "baseline_sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972",
+   "mutant_blob": "c0ac428f58497d8cf42458d51f86db0f2e4b84ba",
+   "mutant_sha256": "855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633",
+   "restoration": {
+    "method": "reverse application of patches/A2.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "28085ce232827301104b5d757af042ec933976f8",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_f1",
+   "configuration": "F-1",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_f1",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 60000000,
+   "named_property": "P1",
+   "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4144,
+    "col": 5,
+    "span": [
+     4141,
+     4151
+    ]
+   },
+   "special_attribution_rules": [],
+   "verdict_assertion_at_C": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "verdict_assertion_source": "the mutant model_tests.rs (the mutated file holds the explorer)",
+   "build_rule": {
+    "kind": "one fresh build: zero warnings and zero errors under the unchanged general classifier (no warning exception)"
+   },
+   "linked": {
+    "type": "e1",
+    "stage": "S1",
+    "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1",
+    "input_dir": "inputs/linked/S1-45-full-F-1",
+    "configuration": "F-1",
+    "classification_blob": "f095f20d8edc698acc573cce7a4393480b0e3f14",
+    "raw_output_blob": "c36226c875ec5694b3b733b41ffab0dc3dfd8ee5",
+    "raw_output_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c",
+    "descriptor_test": "ledger::protocol::model_tests::full_f1",
+    "outer_class": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS",
+    "quotient": false
+   }
+  },
+  "C20": {
+   "id": "C20",
+   "order": 3,
+   "dir": "receipts/83-C20",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "an explanation found already present is not marked committed",
+   "patch": {
+    "input": "inputs/patches/C20.patch",
+    "catalog_file": "catalog/patches/C20.patch",
+    "sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+   "baseline_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "baseline_sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "mutant_blob": "7bb5aa2abbb52249efe76ab22dd921cb74dd337c",
+   "mutant_sha256": "0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf",
+   "restoration": {
+    "method": "reverse application of patches/C20.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_f2",
+   "configuration": "F-2",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_f2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "L1",
+   "bounds": "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "special_attribution_rules": [
+    "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+   ],
+   "verdict_assertion_source": "Candidate C's model_tests.rs (unchanged by the patch)",
+   "l1_rule": {
+    "complete_search_required": true,
+    "anchors": [
+     "if failure.is_none() && incomplete.is_none() && config.l1 {",
+     "\"{} states lie on or behind a cycle of non-fault steps; one is reached by\",",
+     "while (id as usize) < visited.len() {",
+     "if visited.len() as u64 > config.cap {",
+     "incomplete = Some(format!(\"the state cap of {} was reached\", config.cap));"
+    ],
+    "detail_form": "<k> states lie on or behind a cycle of non-fault steps; one is reached by",
+    "rule": "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+   },
+   "build_rule": {
+    "kind": "one fresh build: zero warnings and zero errors under the unchanged general classifier (no warning exception)"
+   },
+   "linked": {
+    "type": "e1",
+    "stage": "S1",
+    "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2",
+    "input_dir": "inputs/linked/S1-41-full-F-2",
+    "configuration": "F-2",
+    "classification_blob": "6d181dc9132c0d9b7c4437512a4fe5a0742948b4",
+    "raw_output_blob": "b32a5d64336c9409701719c710f1a3cbc441a1a8",
+    "raw_output_sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5",
+    "descriptor_test": "ledger::protocol::model_tests::full_f2",
+    "outer_class": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS",
+    "quotient": false
+   }
+  },
+  "A5": {
+   "id": "A5",
+   "order": 4,
+   "dir": "receipts/84-A5",
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5",
+   "kind": "explore",
+   "receipt_type": "(a) original-explorer mutant FAIL; restored (e1)",
+   "description": "settlement claims a Conflict obligation while the store is not Healthy",
+   "patch": {
+    "input": "inputs/patches/A5.patch",
+    "catalog_file": "catalog/patches/A5.patch",
+    "sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32"
+   },
+   "source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "baseline_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "baseline_sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972",
+   "mutant_blob": "cb08f5e8c62b3ce267f0688cc880261a28cc29a2",
+   "mutant_sha256": "8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f",
+   "restoration": {
+    "method": "reverse application of patches/A5.patch to the mutant bytes, in a disposable copy",
+    "restored_side": "e1: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "restored_side_receipt_type": "e1",
+    "restores_blob": "28085ce232827301104b5d757af042ec933976f8",
+    "restores_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   },
+   "test": "ledger::protocol::model_tests::full_f2",
+   "configuration": "F-2",
+   "ignored": true,
+   "runner": "full_exploration",
+   "argv_tail": [
+    "ledger::protocol::model_tests::full_f2",
+    "--exact",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+   ],
+   "limit_seconds": 2700,
+   "ceiling_states": 30000000,
+   "named_property": "L1",
+   "bounds": "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+   "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+   "verdict_assertion": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4131,
+    "col": 5,
+    "span": [
+     4128,
+     4138
+    ]
+   },
+   "special_attribution_rules": [
+    "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+   ],
+   "verdict_assertion_at_C": {
+    "file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "line": 4133,
+    "col": 5,
+    "span": [
+     4130,
+     4140
+    ]
+   },
+   "verdict_assertion_source": "the mutant model_tests.rs (the mutated file holds the explorer)",
+   "l1_rule": {
+    "complete_search_required": true,
+    "anchors": [
+     "if failure.is_none() && incomplete.is_none() && config.l1 {",
+     "\"{} states lie on or behind a cycle of non-fault steps; one is reached by\",",
+     "while (id as usize) < visited.len() {",
+     "if visited.len() as u64 > config.cap {",
+     "incomplete = Some(format!(\"the state cap of {} was reached\", config.cap));"
+    ],
+    "detail_form": "<k> states lie on or behind a cycle of non-fault steps; one is reached by",
+    "rule": "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+   },
+   "build_rule": {
+    "kind": "one fresh build: zero warnings and zero errors under the unchanged general classifier (no warning exception)"
+   },
+   "linked": {
+    "type": "e1",
+    "stage": "S1",
+    "commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+    "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2",
+    "input_dir": "inputs/linked/S1-41-full-F-2",
+    "configuration": "F-2",
+    "classification_blob": "6d181dc9132c0d9b7c4437512a4fe5a0742948b4",
+    "raw_output_blob": "b32a5d64336c9409701719c710f1a3cbc441a1a8",
+    "raw_output_sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5",
+    "descriptor_test": "ledger::protocol::model_tests::full_f2",
+    "outer_class": "outer class (AD-1-R4 K.2): PASS \u2014 admissible unchanged-core original-explorer PASS",
+    "quotient": false
+   }
+  }
+ },
+ "problems": []
+}

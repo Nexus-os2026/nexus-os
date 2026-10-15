@@ -1,0 +1,62 @@
+SUPERVISED MUTANT BUILD — control A1 (the writer confirms before it records); the exact command
+started: 2026-10-15T08:34:31+0100
+mission P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; frozen C d5964ee5326c2733177307db6f507328023d361a
+freeze check: 82 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+prior step: receipts/81-A1/02-apply/APPLY.txt: 'APPLY: EXACTLY_C_PLUS_PATCH' (required 'APPLY: EXACTLY_C_PLUS_PATCH')
+source (before): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246580 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob 26c09e7ff93633095de8d7a15ee81f5f46728336 sha256 ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632 (expected 26c09e7ff93633095de8d7a15ee81f5f46728336 / ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632)
+compiler (rustup proxy resolving rust-toolchain.toml, same environment): rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: rustc 1.94.0 (4a4ef493e 2026-03-02)
+  rustc -vV: binary: rustc
+  rustc -vV: commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db
+  rustc -vV: commit-date: 2026-03-02
+  rustc -vV: host: x86_64-unknown-linux-gnu
+  rustc -vV: release: 1.94.0
+  rustc -vV: LLVM version: 21.1.8
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: cargo 1.94.0 (85eff7c80 2026-01-15)
+  cargo -vV: release: 1.94.0
+  cargo -vV: commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643
+  cargo -vV: commit-date: 2026-01-15
+  cargo -vV: host: x86_64-unknown-linux-gnu
+  cargo -vV: libgit2: 1.9.2 (sys:0.20.3 vendored)
+  cargo -vV: libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)
+  cargo -vV: ssl: OpenSSL 3.5.4 30 Sep 2025
+  cargo -vV: os: Ubuntu 24.4.0 (noble) [64-bit]
+rustup: rustup 1.28.2 (e4f3ad6f8 2025-04-28); active toolchain: 1.94.0-x86_64-unknown-linux-gnu (overridden by '/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/rust-toolchain.toml')
+.cargo/config.toml (repository, unchanged): [build] | jobs = 8 |  | [env] | CARGO_PROFILE_TEST_DEBUG = "1" | 
+ancestor and CARGO_HOME Cargo configuration files other than the repository's: none (checked /home/nexus/NEXUS, /home/nexus, /home, / for .cargo/config and .cargo/config.toml)
+[profile.release] (workspace Cargo.toml, unchanged): opt-level = 3 | lto = "thin" | codegen-units = 16 | strip = "symbols"
+build input rust-toolchain.toml: git blob 726005b29561a04536edea412bf551a9884d6639 sha256 fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298
+build input Cargo.lock: git blob 1af53a60aaf6fde5731e63fcd5b6cd11d86f669a sha256 6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979
+build input .cargo/config.toml: git blob 05a42b50174e235b183b220afeb58922c96d17a1 sha256 379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234
+build input Cargo.toml: git blob 2c558a4477d1545daaa489f0a0e502b4284ad479 sha256 7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795
+build input crates/nexus-governed-control/Cargo.toml: git blob 2543c745d661203326367962714b94c811e07980 sha256 30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f
+target directory /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target existed before: False
+build environment (env -i; exactly these, nothing inherited): HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true
+  CARGO_TARGET_DIR: the worktree-local fresh target directory. CARGO_TERM_VERBOSE=true: output only, the equivalent of -v, so that the build's own messages record each rustc invocation's effective flags (as in the accepted Stage-1 build); it enters no fingerprint and no artifact. CARGO_NET_OFFLINE=true: no network; with --locked the lock file alone resolves dependencies. -j 2: two compiler jobs.
+  unset by env -i (so not in effect): RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, RUSTDOCFLAGS, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, RUSTUP_TOOLCHAIN, RUSTUP_HOME, CARGO_HOME, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL, CARGO_TARGET_*, CARGO_ENCODED_RUSTDOCFLAGS
+  CARGO*/RUST* variables in the launcher's own environment (names; none is passed): []
+pre-flight 2026-10-15T08:34:32+0100:
+  MemTotal 65077588 KiB; MemAvailable 53498776 KiB (needed 18874368 KiB = 18 GiB)
+  SwapTotal 16777212 KiB; SwapFree 7735356 KiB (the scope has swap disabled)
+  load average ['1.52', '1.45', '1.39']; online CPUs 16
+  disk free on the worktree filesystem: 21 GiB
+  governed-control test executables running: []; cargo/rustc in this worktree: []; active p3c11-* scopes: []
+  largest resident processes (comm only; none is stopped by this launcher):
+    858272 brave
+    825048 chrome
+    727984 2.1.281
+    658976 brave
+    637036 python
+    608808 claude
+    607456 chrome
+    482480 chrome
+scope unit: p3c11-mt3t-81-A1-build-1792049672.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1
+command: systemd-run --user --scope --unit=p3c11-mt3t-81-A1-build-1792049672 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/81-A1/03-build/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_TARGET_DIR=/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target CARGO_TERM_VERBOSE=true CARGO_NET_OFFLINE=true /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/receipts/81-A1/03-build/time-v.txt timeout -s KILL 900 nice -n 10 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+launched: 2026-10-15T08:34:32+0100
+returned: 2026-10-15T08:37:20+0100
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 167.89 s, max RSS (largest single process) 1972648 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 2621181952 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True, timed out False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+source (after): EXACTLY_C_PLUS_PATCH; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246580 bytes compared; status entries [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', '!! target/... (2552 ignored entries, each beneath the worktree-local real target)']; other mismatches []; missing []; modes []; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs: git blob 26c09e7ff93633095de8d7a15ee81f5f46728336 sha256 ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632 (expected 26c09e7ff93633095de8d7a15ee81f5f46728336 / ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632)
+nexus_governed_control* artifacts in the target's release/deps: [('nexus_governed_control-2faa0b9718d3e6a3', 'd58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12', 8984768), ('nexus_governed_control-2faa0b9718d3e6a3.d', '6bb20841c00697e5a60196f06335f57fc36663b955c4df2554e2e15f60372aab', 7897)]
+finished: 2026-10-15T08:37:21+0100

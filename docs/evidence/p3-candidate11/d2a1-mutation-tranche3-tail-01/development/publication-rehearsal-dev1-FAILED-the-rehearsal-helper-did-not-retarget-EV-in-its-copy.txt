@@ -1,0 +1,15 @@
+clone: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/43b74c6d-196e-4862-9e3f-6feca64dc6b9/scratchpad/pub5-clone; remotes:
+github	git@github.com:Nexus-os2026/nexus-os.git (fetch)
+github	DISABLED-PUBLICATION-REHEARSAL (push)
+45:EV = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/r4/dev-local/rehearsals-scratch/R1/ev"
+46:REPO = "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/43b74c6d-196e-4862-9e3f-6feca64dc6b9/scratchpad/pub5-clone"
+113:EVIDENCE_WT = "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/43b74c6d-196e-4862-9e3f-6feca64dc6b9/scratchpad/pub5-evidence-wt"
+preflight rc=0: RESULT: ALL CHECKS HOLD
+worktree rc=0: WORKTREE: CREATED
+packet rc=0: PACKET: STAGED — ALL CHECKS HOLD
+finalize rc=1: FileNotFoundError: [Errno 2] No such file or directory: '/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/r4/dev-local/rehearsals-scratch/R1/ev/receipts/90-final-gate.txt'
+pre-push rc=1: RESULT: FAILED: evidence commit has the single parent c10681b3 (the Tranche-3 continuation evidence commit); every changed path is added under the packet path (no modification, no deletion); added files are regular, non-executable blobs (no symlink, no submodule)
+rehearsal commit c10681b3c65dd377b5a13d08140427e8b34441d0 (in the clone only); parent 774f457a4fc27f6b26e132a0caf71b683b9af8cd
+post (exercised against the published c10681b3) rc=1: 19 FAIL lines
+actions rc=0: RESULT: ALL CHECKS HOLD
+main repo: no rehearsal object: PRESENT; dest ref local absent

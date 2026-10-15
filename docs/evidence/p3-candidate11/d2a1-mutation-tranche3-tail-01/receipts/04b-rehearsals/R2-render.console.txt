@@ -1,0 +1,1 @@
+STATUS: MUTATION_CONTROL_BLOCKED; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; new candidates 0 of 4; attempted ['A1']; stopped ['A1']

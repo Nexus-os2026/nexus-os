@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt3t-83-C20-build-1792050021.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 1242493 1242500 
+started: 2026-10-15T08:40:21+01:00
+finished: 2026-10-15T08:43:08+01:00
+command exit status: 0
+memory.peak: 2616266752
+memory.swap.peak: 0
+memory.current: 797298688
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

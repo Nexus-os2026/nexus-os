@@ -1,0 +1,220 @@
+{
+ "id": "03-build",
+ "type": "build",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1",
+ "cwd": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1",
+ "argv": [
+  "cargo",
+  "test",
+  "-p",
+  "nexus-governed-control",
+  "--locked",
+  "--release",
+  "--lib",
+  "--no-run",
+  "-j",
+  "2"
+ ],
+ "env": {
+  "HOME": "/home/nexus",
+  "PATH": "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+  "CARGO_TARGET_DIR": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target",
+  "CARGO_TERM_VERBOSE": "true",
+  "CARGO_NET_OFFLINE": "true"
+ },
+ "target": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target",
+ "prior": [
+  [
+   "receipts/81-A1/02-apply/APPLY.txt",
+   "APPLY: EXACTLY_C_PLUS_PATCH"
+  ]
+ ],
+ "limit_seconds": 900,
+ "control": "A1",
+ "role": "mutant build",
+ "patch_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+ "mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+ "mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+ "source_before": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246580,
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+  ],
+  "unexpected_status": [],
+  "status_policy": {
+   "ok": true,
+   "mode": "mutant",
+   "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "modified_seen": [
+    "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   ],
+   "records": 1,
+   "target_entries": 0,
+   "status_sha256": "32230043a2a70cbd9a8902b9017c6f0bb8444a1130e75fa2310db8583d6eaee0",
+   "shown": [
+    " M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target",
+    "worktree_is_own_realpath": true,
+    "exists": false,
+    "ok": true
+   }
+  },
+  "other_content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "mutant_file": {
+   "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "baseline_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "git_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+   "sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+   "bytes": 310851,
+   "differs_from_baseline": true
+  },
+  "expected_mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+  "expected_mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+  "verdict": "EXACTLY_C_PLUS_PATCH"
+ },
+ "toolchain": {
+  "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "cargo": "cargo 1.94.0 (85eff7c80 2026-01-15)",
+  "rustc_vV": "rustc 1.94.0 (4a4ef493e 2026-03-02)\nbinary: rustc\ncommit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db\ncommit-date: 2026-03-02\nhost: x86_64-unknown-linux-gnu\nrelease: 1.94.0\nLLVM version: 21.1.8",
+  "cargo_vV": "cargo 1.94.0 (85eff7c80 2026-01-15)\nrelease: 1.94.0\ncommit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643\ncommit-date: 2026-01-15\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.3 vendored)\nlibcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Ubuntu 24.4.0 (noble) [64-bit]",
+  "active_toolchain": "1.94.0-x86_64-unknown-linux-gnu",
+  "other_cargo_configs": [],
+  "build_inputs": {
+   "rust-toolchain.toml": {
+    "git_blob": "726005b29561a04536edea412bf551a9884d6639",
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   },
+   "Cargo.lock": {
+    "git_blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   ".cargo/config.toml": {
+    "git_blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   "Cargo.toml": {
+    "git_blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "git_blob": "2543c745d661203326367962714b94c811e07980",
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   }
+  }
+ },
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "2621181952",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 167.89,
+  "time_limit_seconds": 900,
+  "backstop_runtime_max_seconds": 910,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 167.936,
+  "max_rss_kib_largest_process": 1972648
+ },
+ "stdout_path": "build.stdout",
+ "stderr_path": "build.stderr",
+ "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "stderr_sha256": "6352fdb492bda79641b226c9e5822b21553466ad5876cb485d34bd6f4a0a4317",
+ "source_after": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246580,
+  "index_differs_from_head": [],
+  "status_entries": [
+   " M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "!! target/... (2552 ignored entries, each beneath the worktree-local real target)"
+  ],
+  "unexpected_status": [],
+  "status_policy": {
+   "ok": true,
+   "mode": "mutant",
+   "allowed_modified": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "modified_seen": [
+    "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs"
+   ],
+   "records": 2553,
+   "target_entries": 2552,
+   "status_sha256": "23de0497f26b95a6218182c18759b261ed2a24f1ee9daf7983b281f48cab8e59",
+   "shown": [
+    " M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+    "!! target/... (2552 ignored entries, each beneath the worktree-local real target)"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target",
+    "worktree_is_own_realpath": true,
+    "exists": true,
+    "is_symlink": false,
+    "is_dir": true,
+    "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target",
+    "own_entry": true,
+    "mounts": [],
+    "ok": true
+   }
+  },
+  "other_content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "mutant_file": {
+   "path": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "baseline_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "git_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+   "sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+   "bytes": 310851,
+   "differs_from_baseline": true
+  },
+  "expected_mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+  "expected_mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+  "verdict": "EXACTLY_C_PLUS_PATCH"
+ },
+ "deps_artifacts": [
+  {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "d58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12",
+   "size": 8984768,
+   "executable_bit": true,
+   "test_executable_name": true
+  },
+  {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d",
+   "sha256": "6bb20841c00697e5a60196f06335f57fc36663b955c4df2554e2e15f60372aab",
+   "size": 7897,
+   "executable_bit": false,
+   "test_executable_name": false
+  }
+ ]
+}

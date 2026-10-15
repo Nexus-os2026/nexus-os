@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control A5: settlement claims a Conflict obligation while the store is not Healthy
+patch: inputs/patches/A5.patch (the frozen R2 packet's catalog/patches/A5.patch), sha256 913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32 (catalog 913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; numstat '1\t3\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs git blob cb08f5e8c62b3ce267f0688cc880261a28cc29a2 (expected cb08f5e8c62b3ce267f0688cc880261a28cc29a2), sha256 8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f (expected 8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f); status [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

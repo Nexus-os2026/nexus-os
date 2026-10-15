@@ -1,0 +1,2 @@
+40 rehearsal checks; 0 unexpected
+REHEARSALS: ALL AS EXPECTED

@@ -1,0 +1,14 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/pub_rehearsal.dev2.sh	2026-10-15 08:25:30.328078801 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche3-tail-01/dev-local/pub_rehearsal.sh	2026-10-15 08:25:30.347025665 +0100
+@@ -29,6 +29,11 @@
+     assert s.count(old) == 1, old
+     s = s.replace(old, new)
+ open(p, "w").write(s)
++st = pr + "/receipts/01-supervision-selftest/SELFTEST.txt"  # the copy names its own root, as make_root's copies do
++src = m.group(0)[len('EV = "'):-1]
++t = open(st).read()
++assert src + "/" in t
++open(st, "w").write(t.replace(src + "/", pr + "/"))
+ PY
+ grep -n '^EV = \|^REPO = \|^EVIDENCE_WT = ' "$PR/tools/common.py"
+ cd "$PR" || exit 1

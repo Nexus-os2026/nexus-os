@@ -1,0 +1,71 @@
+FINAL GATE — P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; started 2026-10-15T08:48:59+0100
+OK   G1 authenticate.py --gate: ALL CHECKS HOLD (receipts/90-gate-authentication.txt): RESULT: ALL CHECKS HOLD
+OK   G2 the freeze holds: freeze check: 82 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   G3 attempted controls are a prefix of this mission's order: ['A1', 'A2', 'C20', 'A5']
+OK   G3 only the last attempted control may be unsuccessful (a stop ends the mission): {'A1': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'A2': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'C20': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'A5': 'CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING'}
+OK   G3 a stop record exists exactly when the mission stopped (or no control could start): stopped False; stop record False
+OK   G3 A1: RESULT agrees with its sub-receipts (candidate only with every step; INCOMPLETE exactly when the run is classified INCOMPLETE; STOPPED BEFORE EXECUTION exactly when the gate refused): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 A1: no build-admission, pin-only, reauthentication or informational record (none exists in this mission)
+OK   G3 A1: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G3 A1: a link exists only after a candidate run, its rules and its own restoration: {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 A1: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 A1: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A1 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 A1: pinned mutant executable preserved (03-build/PIN.json): /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 d58ccd31c2c42acb…
+OK   G3 A2: RESULT agrees with its sub-receipts (candidate only with every step; INCOMPLETE exactly when the run is classified INCOMPLETE; STOPPED BEFORE EXECUTION exactly when the gate refused): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 A2: no build-admission, pin-only, reauthentication or informational record (none exists in this mission)
+OK   G3 A2: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G3 A2: a link exists only after a candidate run, its rules and its own restoration: {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 A2: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 A2: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A2 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 A2: pinned mutant executable preserved (03-build/PIN.json): /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 257cb481e0de2036…
+OK   G3 C20: RESULT agrees with its sub-receipts (candidate only with every step; INCOMPLETE exactly when the run is classified INCOMPLETE; STOPPED BEFORE EXECUTION exactly when the gate refused): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 C20: no build-admission, pin-only, reauthentication or informational record (none exists in this mission)
+OK   G3 C20: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G3 C20: a link exists only after a candidate run, its rules and its own restoration: {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 C20: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 C20: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control C20 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 C20: pinned mutant executable preserved (03-build/PIN.json): /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 5433a13ba47468ff…
+OK   G3 A5: RESULT agrees with its sub-receipts (candidate only with every step; INCOMPLETE exactly when the run is classified INCOMPLETE; STOPPED BEFORE EXECUTION exactly when the gate refused): CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G3 A5: no build-admission, pin-only, reauthentication or informational record (none exists in this mission)
+OK   G3 A5: once the patch was applied, the restoration receipt exists and the worktree was restored: RESTORE: EXACTLY_C
+OK   G3 A5: a link exists only after a candidate run, its rules and its own restoration: {'gate': 'GATE: OPEN', 'apply': 'APPLY: EXACTLY_C_PLUS_PATCH', 'build': 'BUILD: PINNED', 'run': 'CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING', 'rules': 'TRANCHE-3 RULES: HOLD', 'restore': 'RESTORE: EXACTLY_C', 'link': 'LINK: VERIFIED'}
+OK   G4 A5: worktree exactly C now (verify_tree.py and the path-aware status policy): EXACTLY_C; 2552 target entries
+OK   G4 A5: worktree locked with this mission's reason: ['locked P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01 control A5 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   G6 A5: pinned mutant executable preserved (03-build/PIN.json): /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 22de28a2f3ff3a94…
+OK   G3 C7 (MUTATION_CONTROL_BLOCKED): no expectation, no receipt directory and no mt3t worktree; never executed
+OK   G4 no mt3t worktree for any accepted, blocked or reserved control: []
+OK   G4 C22 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C22, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C14 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C19 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C21 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C27 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C28 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C12 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C9 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C11 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C17 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C18b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C23 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C10 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C16 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C26 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3a (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C5 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A3 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A3, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 A6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A6, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C8 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C15 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C15, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C2 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C24 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3b (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3b, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C3c (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3c, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C6 (Architect-accepted; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C6, read-only): exactly C, not touched: EXACTLY_C
+OK   G4 C7 (MUTATION_CONTROL_BLOCKED; its worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7, read-only): exactly C, not touched: EXACTLY_C
+OK   G6 the pinned baseline executable unchanged
+OK   G5 no catalog mutant blob in the repository object store: []
+OK   G5 nothing staged in the main worktree: []
+OK   G7 no mutant source copy anywhere under the evidence root (18125 files compared): []
+OK   G8 no cargo, rustc or governed-control test process running now (by executable name): []
+finished 2026-10-15T08:50:37+0100
+FINAL GATE: ALL CHECKS HOLD

@@ -1,0 +1,11 @@
+--- dev-local/t3_controls.dev1.py	2026-10-15 08:01:09.170602436 +0100
++++ tools/t3_controls.py	2026-10-15 08:01:09.191111545 +0100
+@@ -486,7 +486,7 @@
+     g = copy_receipt(K.T3X, K.C24_BUILD_DIR, "C24-historical-general-classifier-rerun")
+     for f in ("CHECKS.txt", "CLASSIFICATION.txt", "PARSED-RECEIPT.json"):
+         os.remove(os.path.join(g, f))
+-    rc = classify.classify_build_success(g, "pin", "EXACTLY_C_PLUS_PATCH", C["C24"]["mutant_blob"],
++    rc = classify.classify_build_success(g, "pin", "EXACTLY_C_PLUS_PATCH", K.C24_MUTANT_BLOB,
+                                          expect_target=os.path.join(K.C24_WT, "target"))
+     same = {f: K.sha256_file(os.path.join(g, f)) == K.sha256_bytes(K.blob(K.T3X, f"{K.C24_BUILD_DIR}/{f}"))
+             for f in ("CHECKS.txt", "CLASSIFICATION.txt", "PARSED-RECEIPT.json")}

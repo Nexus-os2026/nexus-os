@@ -1,0 +1,13 @@
+--- dev-local/rehearsals.dev1.py	2026-10-15 08:11:28.331458841 +0100
++++ tools/rehearsals.py	2026-10-15 08:11:28.350064928 +0100
+@@ -319,8 +319,8 @@
+                    f"{'**4 of 4**' in summ}",
+                    summ.count("- L1 complete search (AD-1-R4 Q): yes") == 2 and "**4 of 4**" in summ
+                    and "27 accepted + 4 pending Architect review" in summ and "**27 of 35**" in summ
+-                   and "- MUTATION_CONTROL_BLOCKED (Architect ruling on" in summ and "admission" not in summ
+-                   and "informational run" not in summ and "REAUTH" not in summ)
++                   and "- MUTATION_CONTROL_BLOCKED (Architect ruling on" in summ and "- build admission" not in summ
++                   and "BUILD ADMISSION" not in summ and "informational run" not in summ and "REAUTH" not in summ)
+         bad_words = [w for w in ("D2A-1 ACCEPTED", "ALL MUTATIONS COMPLETE", "PHASE THREE ACCEPTED", "PHASE THREE COMPLETE",
+                                  "INTEGRATED", "31/35", "31 OF 35", "31 of 35") if w in summ
+                      or w in open(os.path.join(scratch, sc, "render/INDEX.md")).read()]

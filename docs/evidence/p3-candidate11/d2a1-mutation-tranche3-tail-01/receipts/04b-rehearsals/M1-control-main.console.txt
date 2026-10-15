@@ -1,0 +1,329 @@
+C7 REFUSAL: REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded from P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01: no rerun, rebuild, patch alteration, property substitution or comparison
+CREATE the A1 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1 at C
+result: OK
+AUTHENTICATE the A1 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1
+result: OK
+FAKE INVOKE A1 mutant-explore: ledger::protocol::model_tests::full_f1 (prior ['receipts/81-A1/03-build/CLASSIFICATION.txt']); synthetic run 04-run
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 11bd3c1897bf2bda… 4373 / 11bd3c1897bf2bda… 4373 / 11bd3c1897bf2bda… 4373 (pinned 11bd3c1897bf2bda… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 26c09e7ff93633095de8d7a15ee81f5f46728336): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 90419202489f4ff88bd0d893b93ae55a506b0215d0188dca93e7e15a9abdff8c
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4142:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4142:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4142:5
+OK   the assertion message carries failed: {"P1"}: ['assertion `left == right` failed: failed: {"P1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property P1 (no attribution exception in the catalog): P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: P1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+raw outcome (as printed): outcome FAIL; FAIL P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 60,000,000 ceiling; transitions 14; elapsed 0.0 s
+named property: P1; configuration F-1; test ledger::protocol::model_tests::full_f1
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4397 KiB; scope gone
+checks: 29 of 29 hold
+
+TRANCHE-3 RULES: HOLD
+control A1 (F-1, ledger::protocol::model_tests::full_f1); kill run receipts/81-A1/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f1']
+OK   header exactly 'EXPLORATION F-1': no quotient or symmetry line (the original explorer): EXPLORATION F-1
+OK   the printed first property is permitted for A1: P1: P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   discovered count at most the ceiling 60,000,000 (F-1): 14 of 60000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+LINK: VERIFIED
+control A1: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/81-A1/05-restore/RESTORE.txt (sha256 7f58646cbcf7047ee7a6e0347ff1bf55f5151b0c9df7ac2c02f162bf5eac2fb9; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/81-A1/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control A1: the writer confirms before it records
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-0123456789abcdef sha256 11bd3c1897bf2bda43e17285114f579d88eadd189d389c53e702fe20a5ec5971 size 4373
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+== A1: rc 0; CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+CREATE the A2 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2 at C
+result: OK
+AUTHENTICATE the A2 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2
+result: OK
+FAKE INVOKE A2 mutant-explore: ledger::protocol::model_tests::full_f1 (prior ['receipts/82-A2/03-build/CLASSIFICATION.txt']); synthetic run 04-run
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 642e9697c451f29b… 4373 / 642e9697c451f29b… 4373 / 642e9697c451f29b… 4373 (pinned 642e9697c451f29b… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 433c9380dd63d780b6d8c54f892e0294c64237b3ca1f958b6a20d375ee330d64
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4144:5
+OK   the assertion message carries failed: {"P1"}: ['assertion `left == right` failed: failed: {"P1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property P1 (no attribution exception in the catalog): P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: P1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+raw outcome (as printed): outcome FAIL; FAIL P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 60,000,000 ceiling; transitions 14; elapsed 0.0 s
+named property: P1; configuration F-1; test ledger::protocol::model_tests::full_f1
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4397 KiB; scope gone
+checks: 29 of 29 hold
+
+TRANCHE-3 RULES: HOLD
+control A2 (F-1, ledger::protocol::model_tests::full_f1); kill run receipts/82-A2/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f1']
+OK   header exactly 'EXPLORATION F-1': no quotient or symmetry line (the original explorer): EXPLORATION F-1
+OK   the printed first property is permitted for A2: P1: P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   discovered count at most the ceiling 60,000,000 (F-1): 14 of 60000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+LINK: VERIFIED
+control A2: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/82-A2/05-restore/RESTORE.txt (sha256 7f58646cbcf7047ee7a6e0347ff1bf55f5151b0c9df7ac2c02f162bf5eac2fb9; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/82-A2/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control A2: admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-0123456789abcdef sha256 642e9697c451f29b273f0118b016345dda233ef282a5245db6cf87405fb7f0fb size 4373
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+== A2: rc 0; CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+CREATE the C20 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20 at C
+result: OK
+AUTHENTICATE the C20 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20
+result: OK
+FAKE INVOKE C20 mutant-explore: ledger::protocol::model_tests::full_f2 (prior ['receipts/83-C20/03-build/CLASSIFICATION.txt']); synthetic run 04-run
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 8a2d0893c62e377b… 4373 / 8a2d0893c62e377b… 4373 / 8a2d0893c62e377b… 4373 (pinned 8a2d0893c62e377b… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7bb5aa2abbb52249efe76ab22dd921cb74dd337c): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: a34dbf6fb3de6e32a1644d9fb0ea6c8214c60b0a101368a124ae7b644b1940d2
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f2: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f2: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f2']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f2']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f2' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5
+OK   the assertion message carries failed: {"L1"}: ['assertion `left == right` failed: failed: {"L1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-2' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-2
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 30,000,000 states, 2700 s (the configuration's adopted ceiling): 30000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property L1 (no attribution exception in the catalog): L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 30,000,000 (K.1, inclusive): 120
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: L1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property L1
+raw outcome (as printed): outcome FAIL; FAIL L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 120 (expanded 120) of the 30,000,000 ceiling; transitions 14; elapsed 0.0 s
+named property: L1; configuration F-2; test ledger::protocol::model_tests::full_f2
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4397 KiB; scope gone
+checks: 29 of 29 hold
+
+TRANCHE-3 RULES: HOLD
+control C20 (F-2, ledger::protocol::model_tests::full_f2); kill run receipts/83-C20/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f2 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f2']
+OK   header exactly 'EXPLORATION F-2': no quotient or symmetry line (the original explorer): EXPLORATION F-2
+OK   the printed first property is permitted for C20: L1: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   discovered count at most the ceiling 30,000,000 (F-2): 120 of 30000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   the expectation carries the L1 complete-search rule (AD-1-R4 Q): L1 is evaluated only after a complete search (AD-1-R4 Q)
+OK   L1: raw outcome FAIL of L1, with the explorer's own L1 detail: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   L1: no INCOMPLETE line (no state or time ceiling ended the search): None
+OK   L1: complete search: every discovered state was expanded (expanded = discovered; explore() evaluates L1 only after its search loop exhausted the frontier): states 120, expanded 120
+OK   L1: discovered = expanded at most 30,000,000: 120
+OK   L1: the states on or behind a cycle are between 1 and the discovered count: 9
+OK   L1: elapsed below the 2700 s time ceiling: 0.0
+OK   L1: no property line (a FAIL prints only its failing property; L1 is not inferred from a prefix): []
+LINK: VERIFIED
+control C20: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/83-C20/05-restore/RESTORE.txt (sha256 7f58646cbcf7047ee7a6e0347ff1bf55f5151b0c9df7ac2c02f162bf5eac2fb9; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-2): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/83-C20/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C20: an explanation found already present is not marked committed
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef sha256 8a2d0893c62e377b517ec61c33126bfac5a036c3cecbd3852c0faac2442cb9f0 size 4373
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property L1
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))
+== C20: rc 0; CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+CREATE the A5 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5 at C
+result: OK
+AUTHENTICATE the A5 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5
+result: OK
+FAKE INVOKE A5 mutant-explore: ledger::protocol::model_tests::full_f2 (prior ['receipts/84-A5/03-build/CLASSIFICATION.txt']); synthetic run 04-run
+OK   the run started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: b69c70cd8fdc77b1… 4373 / b69c70cd8fdc77b1… 4373 / b69c70cd8fdc77b1… 4373 (pinned b69c70cd8fdc77b1… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob cb08f5e8c62b3ce267f0688cc880261a28cc29a2): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 9402d3380ccb497c5e9c58ae21f8f233eca9a45c48941ef7b2233e5f34b718ba
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mt3t-A5/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f2: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f2: test']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f2']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f2']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f2' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4131:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4131:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4131:5
+OK   the assertion message carries failed: {"L1"}: ['assertion `left == right` failed: failed: {"L1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-2' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-2
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 30,000,000 states, 2700 s (the configuration's adopted ceiling): 30000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   the printed property is the named property L1 (no attribution exception in the catalog): L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 30,000,000 (K.1, inclusive): 120
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: L1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property L1
+raw outcome (as printed): outcome FAIL; FAIL L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 120 (expanded 120) of the 30,000,000 ceiling; transitions 14; elapsed 0.0 s
+named property: L1; configuration F-2; test ledger::protocol::model_tests::full_f2
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4397 KiB; scope gone
+checks: 29 of 29 hold
+
+TRANCHE-3 RULES: HOLD
+control A5 (F-2, ledger::protocol::model_tests::full_f2); kill run receipts/84-A5/04-run
+classify_a: CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+these rules only add requirements to classify_a; a control is a candidate only when both hold
+OK   the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists): ['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING']
+OK   raw output sha256 equals the launcher's record
+OK   the catalog's own test ledger::protocol::model_tests::full_f2 on the original explorer (never a gc_symmetry_* quotient test): ['ledger::protocol::model_tests::full_f2']
+OK   header exactly 'EXPLORATION F-2': no quotient or symmetry line (the original explorer): EXPLORATION F-2
+OK   the printed first property is permitted for A5: L1: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   discovered count at most the ceiling 30,000,000 (F-2): 120 of 30000000
+OK   printed bounds are the expectation's (the frozen configuration): facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s
+OK   the expectation carries the L1 complete-search rule (AD-1-R4 Q): L1 is evaluated only after a complete search (AD-1-R4 Q)
+OK   L1: raw outcome FAIL of L1, with the explorer's own L1 detail: L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by
+OK   L1: no INCOMPLETE line (no state or time ceiling ended the search): None
+OK   L1: complete search: every discovered state was expanded (expanded = discovered; explore() evaluates L1 only after its search loop exhausted the frontier): states 120, expanded 120
+OK   L1: discovered = expanded at most 30,000,000: 120
+OK   L1: the states on or behind a cycle are between 1 and the discovered count: 9
+OK   L1: elapsed below the 2700 s time ceiling: 0.0
+OK   L1: no property line (a FAIL prints only its failing property; L1 is not inferred from a prefix): []
+LINK: VERIFIED
+control A5: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/84-A5/05-restore/RESTORE.txt (sha256 7f58646cbcf7047ee7a6e0347ff1bf55f5151b0c9df7ac2c02f162bf5eac2fb9; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-2): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/84-A5/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control A5: settlement claims a Conflict obligation while the store is not Healthy
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mt3t-A5/target/release/deps/nexus_governed_control-0123456789abcdef sha256 b69c70cd8fdc77b1ab0b0f7f16540c67a5111094cbb6d7db5ac0ad6a76fdb870 size 4373
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property L1
+tranche-3 rules: TRANCHE-3 RULES: HOLD
+restoration: RESTORE: EXACTLY_C
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))
+== A5: rc 0; CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING

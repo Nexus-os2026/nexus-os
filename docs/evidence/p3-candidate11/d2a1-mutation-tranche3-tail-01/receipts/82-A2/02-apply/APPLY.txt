@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control A2: admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.
+patch: inputs/patches/A2.patch (the frozen R2 packet's catalog/patches/A2.patch), sha256 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2 (catalog 5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; numstat '15\t4\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs git blob c0ac428f58497d8cf42458d51f86db0f2e4b84ba (expected c0ac428f58497d8cf42458d51f86db0f2e4b84ba), sha256 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633 (expected 855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633); status [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

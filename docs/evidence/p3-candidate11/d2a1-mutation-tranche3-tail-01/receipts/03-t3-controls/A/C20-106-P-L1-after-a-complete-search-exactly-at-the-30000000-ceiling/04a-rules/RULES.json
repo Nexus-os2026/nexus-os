@@ -1,0 +1,94 @@
+{
+ "control": "C20",
+ "holds": true,
+ "checks": [
+  [
+   "the kill run is classified by the unchanged classify_a (its CLASSIFICATION.txt exists)",
+   true,
+   "['CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING']"
+  ],
+  [
+   "raw output sha256 equals the launcher's record",
+   true,
+   ""
+  ],
+  [
+   "the catalog's own test ledger::protocol::model_tests::full_f2 on the original explorer (never a gc_symmetry_* quotient test)",
+   true,
+   "['ledger::protocol::model_tests::full_f2']"
+  ],
+  [
+   "header exactly 'EXPLORATION F-2': no quotient or symmetry line (the original explorer)",
+   true,
+   "EXPLORATION F-2"
+  ],
+  [
+   "the printed first property is permitted for C20: L1",
+   true,
+   "L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by"
+  ],
+  [
+   "discovered count at most the ceiling 30,000,000 (F-2)",
+   true,
+   "30000000 of 30000000"
+  ],
+  [
+   "printed bounds are the expectation's (the frozen configuration)",
+   true,
+   "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s"
+  ],
+  [
+   "the expectation carries the L1 complete-search rule (AD-1-R4 Q)",
+   true,
+   "L1 is evaluated only after a complete search (AD-1-R4 Q)"
+  ],
+  [
+   "L1: raw outcome FAIL of L1, with the explorer's own L1 detail",
+   true,
+   "L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by"
+  ],
+  [
+   "L1: no INCOMPLETE line (no state or time ceiling ended the search)",
+   true,
+   "None"
+  ],
+  [
+   "L1: complete search: every discovered state was expanded (expanded = discovered; explore() evaluates L1 only after its search loop exhausted the frontier)",
+   true,
+   "states 30000000, expanded 30000000"
+  ],
+  [
+   "L1: discovered = expanded at most 30,000,000",
+   true,
+   "30000000"
+  ],
+  [
+   "L1: the states on or behind a cycle are between 1 and the discovered count",
+   true,
+   "9"
+  ],
+  [
+   "L1: elapsed below the 2700 s time ceiling",
+   true,
+   "0.0"
+  ],
+  [
+   "L1: no property line (a FAIL prints only its failing property; L1 is not inferred from a prefix)",
+   true,
+   "[]"
+  ]
+ ],
+ "run": "receipts/03-t3-controls/A/C20-106-P-L1-after-a-complete-search-exactly-at-the-30000000-ceiling/04-run",
+ "printed_property": "L1",
+ "report": {
+  "header": "EXPLORATION F-2",
+  "outcome": "FAIL",
+  "fail": "L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by",
+  "incomplete": null,
+  "states": 30000000,
+  "expanded": 30000000,
+  "transitions": 14,
+  "elapsed_s": 0.0,
+  "cap": 30000000
+ }
+}

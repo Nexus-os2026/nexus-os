@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P1
+raw outcome (as printed): outcome FAIL; FAIL P1: a result is unrecorded, or U, C or X is occupied, at a successful admission; shortest trace (4 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.01s']
+measured: states 1,962 (expanded 430) of the 60,000,000 ceiling; transitions 3937; elapsed 0.0 s
+named property: P1; configuration F-1; test ledger::protocol::model_tests::full_f1
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.01 s of 2700 s; scope memory.peak 4472832 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6180 KiB; scope gone
+checks: 29 of 29 hold

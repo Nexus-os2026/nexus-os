@@ -1,0 +1,128 @@
+{
+ "control": "C20",
+ "receipt_type": "AD-1-R4 F.1 (a)",
+ "test": "ledger::protocol::model_tests::full_f2",
+ "configuration": "F-2",
+ "named_property": "L1",
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-2 (gating-caller symmetry quotient composed with the admission observer quotient: experimental, not the contract's explorer)",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+  "states": 120,
+  "expanded": 120,
+  "transitions": 14,
+  "fault_edges": 10,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": "L1: 9 states lie on or behind a cycle of non-fault steps; one is reached by",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (2 steps):"
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::gc_symmetry_f2' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {\"L1\"}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4397
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "8a2d0893c62e377b517ec61c33126bfac5a036c3cecbd3852c0faac2442cb9f0",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8a2d0893c62e377b517ec61c33126bfac5a036c3cecbd3852c0faac2442cb9f0",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8a2d0893c62e377b517ec61c33126bfac5a036c3cecbd3852c0faac2442cb9f0",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::gc_symmetry_f2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::gc_symmetry_f2: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::gc_symmetry_f2",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::gc_symmetry_f2: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::gc_symmetry_f2: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::gc_symmetry_f2",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8a2d0893c62e377b517ec61c33126bfac5a036c3cecbd3852c0faac2442cb9f0",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "eb8288b3e61b4b06b10314334cf86f16f8328a930f5a17e3b478bc9422b0a0cb",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "NOT ADMISSIBLE (argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1; selection listing (--exact --list) shows exactly that one test; ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored; the harness ran exactly that one test; harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in \u2026' and the failures list names exactly that test; exactly one panic, of that test's thread; header 'EXPLORATION F-2' exactly (the original explorer; no quotient or symmetry line)): kills nothing",
+ "checks_hold": 22,
+ "checks_total": 29
+}

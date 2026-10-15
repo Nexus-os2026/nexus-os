@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C20: an explanation found already present is not marked committed
+patch: inputs/patches/C20.patch (the frozen R2 packet's catalog/patches/C20.patch), sha256 5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f (catalog 5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '3\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 7bb5aa2abbb52249efe76ab22dd921cb74dd337c (expected 7bb5aa2abbb52249efe76ab22dd921cb74dd337c), sha256 0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf (expected 0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

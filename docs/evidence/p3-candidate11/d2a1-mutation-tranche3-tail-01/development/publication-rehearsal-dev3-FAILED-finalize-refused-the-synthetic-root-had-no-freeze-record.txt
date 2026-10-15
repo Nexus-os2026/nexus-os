@@ -1,0 +1,6 @@
+OK   the final gate held: ['FINAL GATE: ALL CHECKS HOLD']
+OK   the packet build held (publication/10-build-packet.txt): ['PACKET: STAGED — ALL CHECKS HOLD']
+FAIL the freeze holds: no freeze record
+OK   the staged packet still verifies against its SHA256SUMS (nothing changed since staging): 143 listed
+OK   publication/ is absent from the staged packet
+FINALIZE: REFUSED: the freeze holds

@@ -1,0 +1,4 @@
+scope cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt3t-selftest-6-1792049321.scope
+time memory.current memory.peak memory.swap.current oom_kill host.MemAvailable(KiB)
+08:28:41 6094848 6434816 0 0 53842604
+sampler: stopped at 08:28:41

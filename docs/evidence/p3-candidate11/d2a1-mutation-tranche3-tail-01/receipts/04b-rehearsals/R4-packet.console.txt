@@ -1,0 +1,18 @@
+STATUS: INCOMPLETE — ARCHITECT REVIEW REQUIRED; P3-C11-DR01-D2A1-MUTATION-TRANCHE3-TAIL-01; new candidates 2 of 4; attempted ['A1', 'A2', 'C20']; stopped ['C20']
+tools carried byte for byte, not staged (referenced in CARRIED-FORWARD.md): ['classify.py', 'configs.py', 'push.py', 'report.py', 'scope-wrap.sh', 'supervise.py', 't3.py', 'verify_mutant.py', 'verify_tree.py', 'worktrees.py']
+OK   packet size at most 64 MiB: 1152330 bytes, 126 files
+OK   regular files only (no symlink): []
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable, the preserved C5 or C24 executable or any pinned mutant executable: 4 pinned
+OK   no file equal to any catalog mutant blob (no mutant source)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
+OK   only changed or added tools staged (every carried tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'common.py', 'control.py', 'expectations.py', 'final_gate.py', 'finalize.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'rehearsals.py', 'render.py', 't3_controls.py', 'tool_diff.py', 'worktree.py']
+OK   nothing staged from inputs/, original-tools/, original-publication-tools/, dev-local/ or publication/
+OK   duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else: []
+     accepted: 18 (5 zero-length, 13 nonempty constants)
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 125 listed
+OK   every file this mission authored is whitespace-clean (git's default rule): {}
+     retained raw whitespace findings (byte-exact tool output, unified diffs, preserved failures): 15 in 11 files: ["development/t3-controls-dev1-FAILED-section-D-read-C24-from-this-mission's-expectations.txt", 'receipts/00-authentication.txt', 'receipts/01-supervision-selftest/1/scope-record.txt', 'receipts/01-supervision-selftest/2/scope-record.txt', 'receipts/01-supervision-selftest/3/scope-record.txt', 'receipts/01-supervision-selftest/5/scope-record.txt', 'receipts/01-supervision-selftest/6/scope-record.txt', 'receipts/01-supervision-selftest/7/scope-record.txt', 'receipts/81-A1/04-run/raw-output.txt', 'receipts/82-A2/04-run/raw-output.txt', 'receipts/83-C20/04-run/raw-output.txt']
+PACKET: STAGED — ALL CHECKS HOLD
