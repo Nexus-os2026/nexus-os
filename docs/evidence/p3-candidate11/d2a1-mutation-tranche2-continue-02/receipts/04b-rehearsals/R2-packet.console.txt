@@ -1,0 +1,18 @@
+STATUS: MUTATION_CONTROL_BLOCKED; new candidates 1 of 5; attempted ['C5', 'A3']; stopped ['A3']
+tools carried byte for byte, not staged (referenced in CARRIED-FORWARD.md): ['classify.py', 'configs.py', 'push.py', 'report.py', 'scope-wrap.sh', 'supervise.py', 'verify_mutant.py', 'verify_tree.py', 'worktrees.py']
+OK   packet size at most 48 MiB: 1268161 bytes, 104 files
+OK   regular files only (no symlink): []
+OK   text only (UTF-8, no NUL byte, no ELF): []
+OK   no Rust source file
+OK   no file equal to the pinned baseline executable, the preserved C5 executable or any pinned mutant executable: 3 pinned
+OK   no file equal to any catalog mutant blob (no mutant source)
+OK   no source copy: no file equal to any blob of Candidate C outside docs/evidence/ (the empty blob copies nothing)
+OK   only changed or added tools staged (every carried tool referenced, not republished): ['authenticate.py', 'build_packet.py', 'c2_controls.py', 'c5.py', 'common.py', 'control.py', 'expectations.py', 'final_gate.py', 'finalize.py', 'pre_exec_gate.py', 'publish_checks.py', 'record_freeze.py', 'rehearsals.py', 'render.py', 'tool_diff.py', 'worktree.py']
+OK   nothing staged from inputs/, original-tools/, original-publication-tools/, dev-local/ or publication/
+OK   duplicate and zero-length policy: every previous-packet duplicate and every empty file is an enumerated deterministic record with its exact literal, bound to its descriptor; nothing else: []
+     accepted: 12 (3 zero-length, 9 nonempty constants)
+OK   every staged file byte-equal to its source
+OK   SHA256SUMS lists every file but itself, and verifies: 103 listed
+OK   every file this mission authored is whitespace-clean (git's default rule): {}
+     retained raw whitespace findings (byte-exact tool output, unified diffs, preserved failures): 22 in 12 files: ['development/authentication-dev1-FAILED-section7-loop-over-all-17-accepted.txt', 'development/c2-controls-dev1-FAILED-stderr-identity-not-in-expected-failures.txt', 'development/c2_controls.py.pre-r3-to-r4.diff', 'development/control.py.pre-r3-to-r4.diff', 'receipts/00-authentication.txt', 'receipts/01-supervision-selftest/1/scope-record.txt', 'receipts/01-supervision-selftest/2/scope-record.txt', 'receipts/01-supervision-selftest/3/scope-record.txt', 'receipts/01-supervision-selftest/5/scope-record.txt', 'receipts/01-supervision-selftest/6/scope-record.txt', 'receipts/01-supervision-selftest/7/scope-record.txt', 'receipts/61-C5/04-run/raw-output.txt']
+PACKET: STAGED — ALL CHECKS HOLD

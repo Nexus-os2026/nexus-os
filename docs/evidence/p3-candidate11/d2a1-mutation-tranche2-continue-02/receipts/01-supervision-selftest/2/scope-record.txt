@@ -1,0 +1,10 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-mt2c-selftest-mem-1792026542.scope
+memory.max: 67108864
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 93865 93872 
+started: 2026-10-15T02:09:02+01:00
+finished: 2026-10-15T02:09:02+01:00
+command exit status: 137
+memory.peak: 67108864

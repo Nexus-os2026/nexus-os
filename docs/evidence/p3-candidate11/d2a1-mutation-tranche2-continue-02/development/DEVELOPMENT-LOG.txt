@@ -1,0 +1,137 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-TRANCHE2-CONTINUE-02 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-15, Europe/London (+01:00). Official receipts are under receipts/; development runs are under
+dev-local/ (kept on the machine, not published) and in a disposable clone in the session scratchpad (outside every
+evidence root); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build, test or executable run; development used git objects,
+the previous packets, synthetic files and synthetic evidence roots only; the preserved C5 worktree, target and
+executable were only read)
+
+ 1. 01:30  Read the mission, AGENTS.md and CLAUDE.md. Main worktree clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Tranche-2 stopped evidence commit 2e06860f present locally (tree 4c929aa8,
+           parent ebe42009); remote review ref tranche2-exec-01 -> 2e06860f; destination ref, local branch, evidence
+           worktree path and every mt2c path absent. Host: 16 CPUs, MemAvailable about 51 GiB, 33 GiB free disk; no
+           p3c11-* scope, cargo, rustc or governed-control executable running.
+ 2. 01:32  Read-only inspection of the preserved C5 worktree and target (sha256 and size of the executable and its
+           dep-info, newest mtime/ctime under the target, git status). Note: that one inspection `git status` ran
+           without GIT_OPTIONAL_LOCKS=0, so git took and released index.lock in the worktree's administrative
+           directory (the directory's mtime is 01:32:48); the index (01:19:24), HEAD, the lock file, every tracked
+           file and the target are unchanged. Every later read of a worktree this mission does not own uses
+           GIT_OPTIONAL_LOCKS=0 (c5.worktree_check, control.main_c5's source check, the gates).
+ 3. 01:33  Read the Tranche-2 tooling (its packet's tools/ and the seven tools it carried), its development log, stop
+           record, the C5 build receipts (descriptor, stderr: exactly the five warning groups of mission section 2),
+           the frozen catalog entries of the five controls and the linked Stage-1/Stage-2/R5 evidence.
+ 4. 01:36  Mission evidence root created (absent before). original-tools/ (24) extracted from the git objects of
+           2e06860f (17) and ebe42009 (the 7 carried RESUME-01 tools), each sha256 equal to its packet's SHA256SUMS and
+           to the Tranche-2 local root's copy.
+ 5. 01:38  common.py (mission identities; mt2c namespace and p3c11-mt2c scope prefix; the order C5 A3 A6 C8 C15; the
+           17 accepted controls; the Tranche-2 identities, the five accepted controls' evidence identities, the C5
+           build and executable identities; the records; publication names and parent 2e06860f). expectations.py:
+           Tranche 2's derivation for the five controls (receipt directories 61-65) plus C5's preserved build block;
+           its output equals Tranche 2's expectations for the same controls but for dir, order and the mt2c worktree
+           paths (C5 keeps the preserved one).
+ 6. 01:39  authenticate.py (sections 1-7 retargeted at this commit's parent; new section 8: the Tranche-2 stopped
+           evidence, the five accepted controls, C5's 21 receipts byte-copied under inputs/c5/, the base tooling, the
+           preserved C5 executable). Dev run 1 FAILED (development/authentication-dev1-FAILED-section7-loop-over-all-
+           17-accepted.txt): section 7 looped over all 17 accepted controls but holds only the 12 Tranche-1 receipt
+           locations. Fixed (authenticate.dev1-to-dev2.diff). Dev run 2: ALL CHECKS HOLD (442 OK).
+ 7. 01:47  documents/: ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md, ARCHITECT-RULING-C5-BUILD-ADMISSIBILITY.md and
+           CAMPAIGN-STATUS-BEFORE-CONTINUE-02.md written from mission sections 1, 2, 5 and 9 and git objects
+           (dev-local/gen_documents.py; read-only after writing).
+ 8. 01:50  c5.py: the dedicated C5 build-admission checker (A-M of mission section 6; the five warning groups parsed
+           line by line, every quoted source line compared with the mutant reproduced from the frozen patch and with
+           C's model_tests.rs, every caret and dash at the named item's exact column; every other stderr line
+           classified), the preserved-executable pin (section 7) and the preserved worktree check. Development run on
+           the real evidence: admission 47 of 47 hold, pin 10 of 10, worktree 7 of 7. Two corrections before any
+           receipt: the dep-info file holds a rule for itself and one for the executable, with worktree-relative
+           inputs (the check now reads the executable's rule); the executable-bit check reads the user bit, as the
+           build recorded it.
+ 9. 01:52  control.py: gate() over this order (C5's prior steps: the three records and the pre-execution gate; C5's
+           worktree must exist), main()'s C5 dispatch, main_c5() (admission, preserved worktree, pin, one
+           supervise.invoke, classify_a unchanged with source EXACTLY_C, reauthentication, link). c5.py and
+           control.py first imported each other; c5.worktree_check now takes control.restored_check as a parameter.
+10. 01:53  record_freeze.py, pre_exec_gate.py, final_gate.py, render.py, build_packet.py, publish_checks.py,
+           worktree.py and finalize.py retargeted (push.py restored byte for byte: its names come from common.py).
+11. 01:55  c2_controls.py (sections A-F). Rehearsal r1 (dev-local/rehearse.py, a disposable copy of the root) dev run
+           1 FAILED 6 controls (development/c2-controls-dev1-FAILED-stderr-identity-not-in-expected-failures.txt):
+           every tampered-stderr copy also fails the stderr identity check (section 2's sha256), which is correct but
+           was missing from those cases' expected failing sets. Fixed (c2_controls.dev1-to-dev2.diff). Dev run 2:
+           68 of 68 as expected.
+12. 01:58  tool_diff.py rewritten for this mission's authorization map. Dev run 1 FAILED
+           (development/tool-diff-dev1-FAILED-breadth-first-first-check-and-rehearsals-not-yet-revised.txt): the D4
+           check of c5.admit's first check took the first call in breadth-first order and compared it with
+           double-quoted text (ast.unparse writes single quotes); rehearsals.py was not yet revised. Fixed
+           (tool_diff.dev1-to-dev2.diff). rehearsals.py retargeted.
+13. 02:01  Rehearsal r3 FAILED (development/rehearsals-dev1-FAILED-link-and-synthetic-classification-duplicates-and-
+           R4-pin-record.txt). Two findings: (a) the duplicate policy found that control.link's records on the real
+           inputs, and the synthetic runs' CLASSIFICATION.txt, are byte-identical to Tranche-2 packet files (Tranche 2's
+           own controls linked C5, A3, A6, C8 and C15 on the same immutable inputs): the real 06-link records of this
+           mission would have repeated them; (b) render.py read a failed pin's record as a pinned one, and main_c5
+           overwrote the pin's full record. Fixed (control.py, render.py, build_packet.py, c2_controls.py
+           .pre-r3-to-r4.diff): link() now also records, by path and sha256, the control's own restoration (C5:
+           reauthentication) receipt it follows (lines inserted; every check unchanged; tool_diff D4 verifies exactly
+           that); the synthetic receipts carry a distinctive synthetic resource record; the full pin record is kept.
+14. 02:03  Rehearsal r4: authentication, self-test, expectations, controls (68 of 68), tool diff (ALL CHECKS HOLD);
+           rehearsals dev run FAILED one check (development/rehearsals-dev2-FAILED-R1-map-C5-run-sampler-not-
+           written.txt): the synthetic C5 run lacked the sampler record its expectation counted. Fixed
+           (rehearsals.dev1-to-dev2.diff). Rehearsals: 21 of 21 as expected; a packet built over r4's real pre-freeze
+           receipts: STAGED — ALL CHECKS HOLD.
+15. 02:04  Rehearsal r4: freeze recorded; pre-execution gate ALL CHECKS HOLD; control.gate (C5 open; A3, C15
+           closed) and control.main's refusals (C23, C22, M01) read-only.
+16. 02:05  dev-local/rehearse_c5.py: control.main_c5 end to end in r4 with supervise.invoke replaced by a fake that
+           never runs the executable (a synthetic receipt re-pointed at the pinned identity; the real read-only source
+           check): admission, worktree, pin, classification (candidate), reauthentication, link all as designed;
+           render.py and the final gate (ALL CHECKS HOLD) on that state.
+17. 02:06  Publication rehearsal on a disposable clone in the session scratchpad (push URL disabled; outside every
+           evidence root): preflight ALL CHECKS HOLD; worktree CREATED at 2e06860f; build_packet STAGED; finalize
+           committed a rehearsal commit at the required parent (in the clone's object store only); the pre-push checks
+           ALL CHECKS HOLD. post/actions readback exercised against the published Tranche-2 commit 2e06860f (no crash;
+           the only failures are this packet's key files, absent there, as designed).
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the synthetic and historical controls and the rehearsals)
+18. 02:09  receipts/00-authentication.txt (ALL CHECKS HOLD, 442 OK); receipts/01-supervision-selftest (ALL OK;
+           supervise.py unchanged; non-Nexus processes); receipts/02-EXPECTATIONS.json (DERIVED — ALL CROSS-CHECKS
+           HOLD; byte-equal to the rehearsal's); receipts/03-c2-controls (68 of 68 as expected; the C5 admission
+           ADMISSIBLE on the real preserved receipt; the unchanged general classifier rerun on a copy of the historical
+           build: BUILD: NOT OK with byte-identical CHECKS, CLASSIFICATION and PARSED-RECEIPT; every required negative
+           control rejected); receipts/04-tool-diff (ALL CHECKS HOLD); receipts/04b-rehearsals (21 of 21).
+19. 02:10  Pre-freeze dry-run packet build into dev-local/ over the real receipts: STAGED — ALL CHECKS HOLD (no
+           unauthorized duplicate of any previous-packet file).
+20. 02:11  Tools and inputs made read-only. Freeze recorded (receipts/05-FREEZE.json, 118 files, sha256 4b776f02…54fb6).
+21. 02:11  Static pre-execution gate: ALL CHECKS HOLD (E1-E11).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changes after the freeze; nothing retried, rebuilt or
+rerun; each control once, in order)
+22. 02:11  C5 started (control.py C5, once). No patch applied, nothing built.
+23. 02:11  C5: KILL_EVIDENCE_CANDIDATE — P13 at 418,422 states (of 30,000,000), 2.18 s, exit 101; BUILD ADMISSION:
+           ARCHITECT-ADMISSIBLE (47 of 47); PRESERVED WORKTREE: AUTHENTICATED (7 of 7); PRESERVED EXECUTABLE: PINNED
+           (10 of 10; sha256 90a60883…f9 unchanged before, at selection and after the run); REAUTHENTICATION: HOLDS (17 of
+           17); LINK: VERIFIED (Stage-2 F-5).
+24. 02:12  A3 started (control.py A3, once).
+25. 02:15  A3: KILL_EVIDENCE_CANDIDATE — P12 at 112,880 states (of 30,000,000); BUILD: PINNED (no diagnostic; 170 s);
+           RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-5).
+26. 02:15  A6 started (control.py A6, once).
+27. 02:18  A6: KILL_EVIDENCE_CANDIDATE — P12 (permitted P12 or P15) at 3,537,396 states (of 30,000,000); the report's
+           state key fields are the mutant's KEY_FIELDS and print "the test's table (classes, debt counter, H, A,
+           recovery_required)"; BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-2 F-5).
+28. 02:19  C8 started (control.py C8, once).
+29. 02:22  C8: KILL_EVIDENCE_CANDIDATE — E5 at 547 states (of 30,000,000) on the original explorer (no quotient);
+           BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (Stage-1 F-B composed-quotient PASS, the
+           restored side only).
+30. 02:22  C15 started (control.py C15, once).
+31. 02:25  C15: KILL_EVIDENCE_CANDIDATE — E8 at 83,988 states (of 30,000,000; no INCOMPLETE, no cap overshoot) on the
+           original explorer; BUILD: PINNED (no diagnostic); RESTORE: EXACTLY_C; LINK: VERIFIED (the AD-1-R5 F
+           discharge record: F-R — UNCHANGED-CORE OBLIGATIONS DISCHARGED BY ACCEPTED STUTTERING-REFINEMENT PROOF; the
+           F-R receipt stays INCOMPLETE).
+32. 02:25  Final gate: ALL CHECKS HOLD (52; receipts/90-final-gate.txt): the five controls in order, each RESULT
+           agreeing with its sub-receipts; no stop record (nothing stopped); C5's preserved worktree exactly C and
+           still locked with the Tranche-2 reason, its executable and target unchanged; the four new worktrees exactly
+           C and locked; the seventeen accepted controls' worktrees exactly C (read-only); no mutant blob in the object
+           store; no mutant source copy under the evidence root; no cargo, rustc or test running.
+
+PUBLICATION (the frozen packet and publication tools; their consoles after the packet build are kept in the local
+evidence root, publication/, because a receipt of a commit cannot be inside it)
+33. 02:27  Publication preflight, the evidence worktree at 2e06860f on the local evidence branch, and the packet build
+           into it; then finalize (stage, commit), the pre-push checks, one explicit-refspec push, the remote readback
+           and the Actions readback, as the final report records.

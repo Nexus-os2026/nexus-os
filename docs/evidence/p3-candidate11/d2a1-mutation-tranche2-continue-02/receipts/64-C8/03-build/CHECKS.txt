@@ -1,0 +1,18 @@
+OK   the build started (no pre-flight refusal)
+OK   source EXACTLY_C_PLUS_PATCH before and after the build: EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   the exact build command, the worktree as cwd: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2
+OK   the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS/feature/cfg variable: {'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}
+OK   the target directory is the worktree-local fresh one: /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8/target
+OK   stdout and stderr sha256 equal the launcher's record
+OK   normal exit 0, no signal: exit 0, signal None, supervisor rc 0
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 900 s: memory.peak 2614915072 B, swap.peak 0 B, oom 0, oom_kill 0, wall 169.8 s of 900 s, timed out False, scope gone
+OK   cargo's Finished line: release profile, optimized: [('release', 'optimized', '2m 49s')]
+OK   no error or warning diagnostic: []
+OK   no compiler crash text
+OK   exactly one library-test executable named by cargo (both line forms): verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []
+OK   the library-test executables in the fresh target's release/deps equal the one cargo named: [('nexus_governed_control-2faa0b9718d3e6a3', '60cc14b41266ec603e6a8400bac791cb7c93e03acd73a01c3ddbc72f0c3f2109', 8973616)]
+OK   no other nexus_governed_control artifact in release/deps but the executable's dep-info: ['nexus_governed_control-2faa0b9718d3e6a3.d']
+OK   one rustc invocation compiled nexus_governed_control, as a test: 1 invocation(s)
+OK   profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag): ['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']
+OK   no --cfg flag (no feature, no extra cfg); declared feature set empty: []
+OK   fingerprint of the test unit: no rustflags, no features: [('test-lib-nexus_governed_control.json', [], '[]')]

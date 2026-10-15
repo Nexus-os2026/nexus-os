@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C8: members are classified and inserted one at a time
+patch: inputs/patches/C8.patch (the frozen R2 packet's catalog/patches/C8.patch), sha256 a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927 (catalog a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '16\t25\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob fd6abbd8a80dc8a01620981c76427ca76a9e1f7d (expected fd6abbd8a80dc8a01620981c76427ca76a9e1f7d), sha256 8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a (expected 8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

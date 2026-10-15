@@ -1,0 +1,21 @@
+--- development/revisions/tool_diff.dev1.py	2026-10-15 01:58:25.731400684 +0100
++++ tools/tool_diff.py	2026-10-15 01:58:47.783668843 +0100
+@@ -224,7 +224,8 @@
+           and any(a.startswith("REAUTH_OK = ") for a in added_mod), added_mod[1:])
+     c5t = tree(os.path.join(NEW, "c5.py"))
+     admit = fn(c5t, "admit")
+-    first_ck = next(n for n in ast.walk(admit) if isinstance(n, ast.Call) and ast.unparse(n.func) == "ck")
++    first_ck = min((n for n in ast.walk(admit) if isinstance(n, ast.Call) and ast.unparse(n.func) == "ck"),
++                   key=lambda n: (n.lineno, n.col_offset))  # the first check in source order
+     callers = [f for f in new if f.endswith(".py") and f not in ("c5.py", "c2_controls.py")
+                and any(c == "c5.admit" for c, _ in calls(tree(os.path.join(NEW, f))))]
+     in_main_c5 = [c for c, _ in calls(fn(tn, "main_c5"))]
+@@ -233,7 +234,7 @@
+     check("D4 the only warning-admitting checker is c5.admit: its first check requires the control to be C5 (with the "
+           "ruling's patch and mutant), it is called only by control.main_c5 (and the pre-freeze controls), and main "
+           "calls main_c5 only for C5",
+-          "ctl.get(\"id\") == \"C5\"" in ast.unparse(first_ck) and callers == ["control.py"] and "c5.admit" in in_main_c5
++          "ctl.get('id') == 'C5'" in ast.unparse(first_ck) and callers == ["control.py"] and "c5.admit" in in_main_c5
+           and not [c for c, _ in calls(fn(tn, "main")) if c == "c5.admit"],
+           f"first check {ast.unparse(first_ck)[:80]}; callers {callers}")
+     check("D4 no other changed or added tool handles warning diagnostics (the word appears only in their text and "

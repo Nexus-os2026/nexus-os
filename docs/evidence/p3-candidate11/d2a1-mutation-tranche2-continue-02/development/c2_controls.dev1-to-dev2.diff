@@ -1,0 +1,18 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-continue-02/development/revisions/c2_controls.dev1.py	2026-10-15 01:56:25.853947409 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-continue-02/tools/c2_controls.py	2026-10-15 01:56:25.873931298 +0100
+@@ -378,6 +378,7 @@
+             t = t.replace(old, new, 1)
+             open(p, "w", encoding="utf-8").write(t)
+             desc_mod(lambda j: j.__setitem__("stderr_sha256", K.sha256_bytes(t.encode())))(d)
++        m.stderr = True  # a changed stderr also fails its identity check (section 2's sha256)
+         return m
+     J5 = "J exactly the five permitted warning groups, each once"
+     neg = [
+@@ -413,6 +414,7 @@
+         mod(d)
+         rec, ok = c5.admit(d, ctl, synthetic=True)
+         fl = failed_labels(rec)
++        want = want + (["the stderr is the preserved one"] if getattr(mod, "stderr", False) else [])
+         hit = all(any(l.startswith(w) for l in fl) for w in want)
+         only = all(l == synth_label or any(l.startswith(w) for w in want) for l in fl)
+         c5.write(os.path.join(out, "D"), f"N{n:02d}-ADMISSION", c5.ADMIT_OK, c5.ADMIT_FAIL,

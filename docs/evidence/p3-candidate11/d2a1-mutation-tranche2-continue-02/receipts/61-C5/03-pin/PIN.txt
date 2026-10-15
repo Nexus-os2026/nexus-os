@@ -1,0 +1,12 @@
+C5 PRESERVED EXECUTABLE: PINNED
+control C5: the preserved executable /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3, pinned read-only
+OK   the path is the ruling's (mission section 2) and the C5 worktree's own: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+OK   a regular file, not a symlink: 0o100775
+OK   every path component is real (no symlink anywhere on the path; the path is its own realpath)
+OK   beneath the C5 worktree's own real target directory: a real directory (not a symlink), its own realpath, not a mount point and holding none: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target
+OK   the executable bit is set (as the build recorded it: executable_bit true): 0o775
+OK   sha256 exact (mission section 2): 90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9
+OK   size exact (8,986,720 bytes): 8986720
+OK   dep-info identity as the build recorded it: the .d file's sha256 and size; it has exactly one rule for the executable, whose inputs include the worktree's protocol.rs and model_tests.rs (paths relative to the C5 worktree, the build's cwd): 4dd723838745c1fe61133f524f318ed6c444ad580678dd5bb4046a34a97dac1e (recorded 4dd723838745c1fe61133f524f318ed6c444ad580678dd5bb4046a34a97dac1e); rules for the executable 1
+OK   release/deps holds exactly the two nexus_governed_control artifacts the build recorded (names, sha256, sizes): [('nexus_governed_control-2faa0b9718d3e6a3', '90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9', 8986720), ('nexus_governed_control-2faa0b9718d3e6a3.d', '4dd723838745c1fe61133f524f318ed6c444ad580678dd5bb4046a34a97dac1e', 7897)]
+OK   no target or executable modification since the build record: no entry under the target (files and directories, mtime or ctime) is newer than the build receipt's finish (1 s resolution); every entry's ctime is after the build's launch (a fresh target): 3528 entries; newest 01:19:22; build 01:16:34-01:19:23

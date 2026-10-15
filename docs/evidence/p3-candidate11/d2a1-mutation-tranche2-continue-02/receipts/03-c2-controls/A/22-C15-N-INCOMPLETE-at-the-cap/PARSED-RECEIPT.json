@@ -1,0 +1,128 @@
+{
+ "control": "C15",
+ "receipt_type": "AD-1-R4 F.1 (a)",
+ "test": "ledger::protocol::model_tests::full_fr",
+ "configuration": "F-R",
+ "named_property": "E8",
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-R",
+  "outcome": "INCOMPLETE",
+  "bounds": "facts 2 conflicting [false, true] ENV false batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 3 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Replay]",
+  "states": 30000001,
+  "expanded": 26539923,
+  "transitions": 125538060,
+  "fault_edges": 9877119,
+  "no_step": 1920,
+  "elapsed_s": 164.7,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": null,
+  "incomplete": "the state cap of 30000000 was reached. No property is established by this run.",
+  "trace_steps": null
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::full_fr' (3288291) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 165.06s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4343
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mt2c-C15/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "8dfeb2fd0fc3ac706e42b147ba5f85ee68f1d4312bfa14d6eac4cce0944a320a",
+  "pinned_size": 4343,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-C15/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8dfeb2fd0fc3ac706e42b147ba5f85ee68f1d4312bfa14d6eac4cce0944a320a",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-C15/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8dfeb2fd0fc3ac706e42b147ba5f85ee68f1d4312bfa14d6eac4cce0944a320a",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_fr: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_fr: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_fr",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_fr: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_fr: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_fr",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-C15/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "8dfeb2fd0fc3ac706e42b147ba5f85ee68f1d4312bfa14d6eac4cce0944a320a",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "a4315259dc0d54588237fcf541657d12af6c3ab68d51d0656fc0a1af93c999d6",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "INCOMPLETE (the state cap of 30000000 was reached. No property is established by this run.): kills nothing",
+ "checks_hold": 21,
+ "checks_total": 29
+}

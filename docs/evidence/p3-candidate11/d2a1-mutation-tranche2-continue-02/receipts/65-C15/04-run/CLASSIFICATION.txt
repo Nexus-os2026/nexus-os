@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E8
+raw outcome (as printed): outcome FAIL; FAIL E8: a stale token: resolve: Refused(NotHealthy); the answer is not stale, or the core or word changed; shortest trace (8 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.28s']
+measured: states 83,988 (expanded 45,292) of the 30,000,000 ceiling; transitions 254192; elapsed 0.3 s
+named property: E8; configuration F-R; test ledger::protocol::model_tests::full_fr
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.28 s of 2700 s; scope memory.peak 12021760 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 15016 KiB; scope gone
+checks: 29 of 29 hold

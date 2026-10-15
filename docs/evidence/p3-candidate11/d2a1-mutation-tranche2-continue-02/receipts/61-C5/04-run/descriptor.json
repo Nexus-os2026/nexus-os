@@ -1,0 +1,223 @@
+{
+ "id": "04-run",
+ "type": "mutant-explore",
+ "test": "ledger::protocol::model_tests::full_f5",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5",
+ "argv": [
+  "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "ledger::protocol::model_tests::full_f5",
+  "--exact",
+  "--ignored",
+  "--nocapture",
+  "--test-threads=1"
+ ],
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "cwd": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/crates/nexus-governed-control",
+ "prior": [
+  [
+   "receipts/61-C5/01-admission/ADMISSION.txt",
+   "C5 BUILD ADMISSION: ARCHITECT-ADMISSIBLE BUILD AUTHENTICATED (NARROW C5-SPECIFIC WARNING RULING)"
+  ],
+  [
+   "receipts/61-C5/02-worktree/AUTHENTICATE-BEFORE.txt",
+   "C5 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)"
+  ],
+  [
+   "receipts/61-C5/03-pin/PIN.txt",
+   "C5 PRESERVED EXECUTABLE: PINNED"
+  ]
+ ],
+ "limit_seconds": 2700,
+ "control": "C5",
+ "configuration": "F-5",
+ "mutant_blob": "e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495",
+ "patch_sha256": "a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8",
+ "executable_origin": "the preserved Tranche-2 C5 build docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/56-C5/03-build at 2e06860f4b404d1a79a0d290116239b5545b931f, admitted under the narrow C5-specific warning ruling; not rebuilt",
+ "source_state": "EXACTLY_C (the worktree was restored in Tranche 2; the mutant identity is bound through the admitted build record and the pinned executable)",
+ "source_before": {
+  "verdict": "EXACTLY_C",
+  "verify_tree": {
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5",
+   "head": "d5964ee5326c2733177307db6f507328023d361a",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "detached": true,
+   "tracked_blobs_compared": 5364,
+   "bytes_compared": 97246341,
+   "gitlinks": [],
+   "index_differs_from_head": [],
+   "status_entries": [
+    "!! target/"
+   ],
+   "unexpected_status": [],
+   "content_mismatches": [],
+   "missing": [],
+   "mode_mismatches": [],
+   "verdict": "EXACTLY_C"
+  },
+  "status_policy": {
+   "ok": true,
+   "mode": "restored",
+   "allowed_modified": null,
+   "modified_seen": [],
+   "records": 2553,
+   "target_entries": 2553,
+   "status_sha256": "58f7e46bdc90902b9cb492a00e31a7bd6e3759789bc4c6f34a9ba89c6b91a204",
+   "shown": [
+    "!! target/... (2553 ignored entries, each beneath the worktree-local real target)"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target",
+    "worktree_is_own_realpath": true,
+    "exists": true,
+    "is_symlink": false,
+    "is_dir": true,
+    "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target",
+    "own_entry": true,
+    "mounts": [],
+    "ok": true
+   }
+  },
+  "line": "source (before): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+  "pinned_size": 8986720,
+  "before": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+   "size": 8986720,
+   "mtime_ns": 1792023562801385316,
+   "inode": 64135766,
+   "symlink": false
+  },
+  "after": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+   "size": 8986720,
+   "mtime_ns": 1792023562801385316,
+   "inode": 64135766,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_f5",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f5: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f5: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_f5",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f5: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f5: test"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+   "size": 8986720,
+   "mtime_ns": 1792023562801385316,
+   "inode": 64135766,
+   "symlink": false
+  }
+ },
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "63078400",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 2.18,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 2.224,
+  "max_rss_kib_largest_process": 64336
+ },
+ "output_path": "raw-output.txt",
+ "raw_output_sha256": "62ca176023a7f5066a474483fda926cd32e0f263c3c67835d9d5f6d1329ced19",
+ "source_after": {
+  "verdict": "EXACTLY_C",
+  "verify_tree": {
+   "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5",
+   "head": "d5964ee5326c2733177307db6f507328023d361a",
+   "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+   "detached": true,
+   "tracked_blobs_compared": 5364,
+   "bytes_compared": 97246341,
+   "gitlinks": [],
+   "index_differs_from_head": [],
+   "status_entries": [
+    "!! target/"
+   ],
+   "unexpected_status": [],
+   "content_mismatches": [],
+   "missing": [],
+   "mode_mismatches": [],
+   "verdict": "EXACTLY_C"
+  },
+  "status_policy": {
+   "ok": true,
+   "mode": "restored",
+   "allowed_modified": null,
+   "modified_seen": [],
+   "records": 2553,
+   "target_entries": 2553,
+   "status_sha256": "58f7e46bdc90902b9cb492a00e31a7bd6e3759789bc4c6f34a9ba89c6b91a204",
+   "shown": [
+    "!! target/... (2553 ignored entries, each beneath the worktree-local real target)"
+   ],
+   "rejected": [],
+   "target": {
+    "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target",
+    "worktree_is_own_realpath": true,
+    "exists": true,
+    "is_symlink": false,
+    "is_dir": true,
+    "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target",
+    "own_entry": true,
+    "mounts": [],
+    "ok": true
+   }
+  },
+  "line": "source (after): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []"
+ }
+}

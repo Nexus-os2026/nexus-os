@@ -1,0 +1,32 @@
+--- development/revisions/control.py.pre-r3.py	2026-10-15 02:01:46.852258910 +0100
++++ tools/control.py	2026-10-15 02:02:01.157940020 +0100
+@@ -313,12 +313,19 @@
+                  "26,539,923 expanded, at the 30,000,000-state cap); the F-2 receipt above is the run the discharge "
+                  "rests on; the branch accounting is FR-BRANCH-DISPOSITION.tsv of the R5 packet"]
+     ok = all(o for _, o, _ in checks)
++    # TRANCHE2-CONTINUE-02 (restored-side mappings): the link names, by path and sha256, the control's own restoration
++    # receipt (C5: its reauthentication receipt) it follows, so that each link record is bound to its own control.
++    rest = os.path.join(os.path.dirname(outdir), "05-reauth/REAUTH.txt" if ctl["id"] == "C5" else "05-restore/RESTORE.txt")
++    rest_line = (f"after this control's own {'reauthentication' if ctl['id'] == 'C5' else 'restoration'} receipt "
++                 f"{os.path.relpath(rest, K.EV)} (sha256 {K.sha256_file(rest)}; first line "
++                 f"{supervise.first_line(rest)!r})" if os.path.exists(rest) else
++                 f"no restoration receipt beside {os.path.relpath(outdir, K.EV)}: a tooling control of {K.MISSION}")
+     lines = [LINK_OK if ok else "LINK: FAILED", f"control {ctl['id']}: restored-side receipt {ref}",
+              "linked only after this control's own restoration was verified (receipt linking does not substitute for "
+-             "restoration evidence)"] + extra
++             "restoration evidence)", rest_line] + extra
+     lines += [f"{'OK  ' if o else 'FAIL'} {l}{(': ' + dd) if dd else ''}" for l, o, dd in checks]
+     text = "\n".join(lines) + "\n"
+-    record = {"control": ctl["id"], "type": L["type"], "reference": ref, "checks": checks}
++    record = {"control": ctl["id"], "type": L["type"], "reference": ref, "checks": checks, "follows": rest_line}
+     if L["type"] == "fr-discharge":
+         record["recording"] = K.FR_RECORDING
+         bad = [w for w in PROHIBITED if w in text or w in json.dumps(record, ensure_ascii=False)]
+@@ -383,7 +390,6 @@
+                      "nothing is rebuilt). No later control is executed.")
+         return finish(outdir, ctl, RESULT_ARTIFACT_BLOCKED, facts)
+     exe = {"path": prec["path"], "sha256": prec["sha256"], "size": prec["size"]}
+-    json.dump(exe, open(os.path.join(outdir, "03-pin/PIN.json"), "w"), indent=1)
+     facts.append(f"pinned mutant executable: {exe['path']} sha256 {exe['sha256']} size {exe['size']}")
+ 
+     def source_ok(rec2, when):

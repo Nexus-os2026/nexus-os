@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control A3: the worker empties X before it raises H
+patch: inputs/patches/A3.patch (the frozen R2 packet's catalog/patches/A3.patch), sha256 ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00 (catalog ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; numstat '5\t4\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs git blob 72bab79d71687a1c056afe18ab7a938edc20f4a9 (expected 72bab79d71687a1c056afe18ab7a938edc20f4a9), sha256 5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9 (expected 5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9); status [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

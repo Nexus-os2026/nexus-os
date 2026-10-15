@@ -1,0 +1,11 @@
+--- development/revisions/build_packet.py.pre-r3.py	2026-10-15 02:01:46.856410169 +0100
++++ tools/build_packet.py	2026-10-15 02:02:01.158459719 +0100
+@@ -345,7 +345,7 @@
+     for d, _, fs in os.walk(os.path.join(K.EV, "receipts")):
+         for n in fs:
+             if n == "PIN.json":
+-                pinned.add(json.load(open(os.path.join(d, n)))["sha256"])
++                pinned.add(json.load(open(os.path.join(d, n))).get("sha256"))
+     check("no file equal to the pinned baseline executable, the preserved C5 executable or any pinned mutant executable",
+           not [f for f in allf if K.sha256_file(os.path.join(dest, f)) in pinned], f"{len(pinned)} pinned")
+     cat = json.loads(open(K.inputs("catalog.json"), "rb").read())

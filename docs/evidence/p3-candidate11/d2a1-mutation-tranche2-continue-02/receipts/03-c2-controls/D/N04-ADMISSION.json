@@ -1,0 +1,456 @@
+{
+ "control": "C5",
+ "build_dir": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-continue-02/dev-local/c2-scratch/D/N04",
+ "descriptor_sha256": "c6b3d4f29b08b803a18ddd6ce12f33a44bcddbb0b2a128b9415ee3d4b5ea6133",
+ "stderr": {
+  "groups": [
+   {
+    "header": "error[E0425]: cannot find value `x` in this scope",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     1818,
+     47
+    ],
+    "shown": [],
+    "carets": [],
+    "dashes": [],
+    "labels": [],
+    "notes": [],
+    "problems": []
+   },
+   {
+    "header": "warning: unused variable: `nonce`",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     1818,
+     47
+    ],
+    "shown": [
+     1818
+    ],
+    "carets": [
+     [
+      1818,
+      47,
+      5,
+      "nonce"
+     ]
+    ],
+    "dashes": [],
+    "labels": [
+     "help: if this is intentional, prefix it with an underscore: `_nonce`"
+    ],
+    "notes": [
+     "`#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default"
+    ],
+    "problems": []
+   },
+   {
+    "header": "warning: unused variable: `io`",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     1818,
+     65
+    ],
+    "shown": [
+     1818
+    ],
+    "carets": [
+     [
+      1818,
+      65,
+      2,
+      "io"
+     ]
+    ],
+    "dashes": [],
+    "labels": [
+     "help: if this is intentional, prefix it with an underscore: `_io`"
+    ],
+    "notes": [],
+    "problems": []
+   },
+   {
+    "header": "warning: methods `acknowledgement` and `frontier` are never used",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     506,
+     8
+    ],
+    "shown": [
+     503,
+     506,
+     507
+    ],
+    "carets": [
+     [
+      506,
+      8,
+      15,
+      "acknowledgement"
+     ],
+     [
+      507,
+      8,
+      8,
+      "frontier"
+     ]
+    ],
+    "dashes": [
+     [
+      503,
+      18,
+      5,
+      "Reads"
+     ]
+    ],
+    "labels": [
+     "methods in this trait"
+    ],
+    "notes": [
+     "`#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default"
+    ],
+    "problems": []
+   },
+   {
+    "header": "warning: variant `Inconsistent` is never constructed",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol.rs",
+     743,
+     5
+    ],
+    "shown": [
+     737,
+     743
+    ],
+    "carets": [
+     [
+      743,
+      5,
+      12,
+      "Inconsistent"
+     ]
+    ],
+    "dashes": [
+     [
+      737,
+      17,
+      7,
+      "Resolve"
+     ]
+    ],
+    "labels": [
+     "variant in this enum"
+    ],
+    "notes": [
+     "`Resolve` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis"
+    ],
+    "problems": []
+   },
+   {
+    "header": "warning: variants `Acknowledgement` and `Frontier` are never constructed",
+    "loc": [
+     "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+     598,
+     5
+    ],
+    "shown": [
+     590,
+     598,
+     599
+    ],
+    "carets": [
+     [
+      598,
+      5,
+      15,
+      "Acknowledgement"
+     ],
+     [
+      599,
+      5,
+      8,
+      "Frontier"
+     ]
+    ],
+    "dashes": [
+     [
+      590,
+      6,
+      4,
+      "Verb"
+     ]
+    ],
+    "labels": [
+     "variants in this enum"
+    ],
+    "notes": [
+     "`Verb` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis"
+    ],
+    "problems": []
+   }
+  ],
+  "summary_lines": 1,
+  "progress_lines": 639,
+  "finished_lines": 1,
+  "executable_lines": 1,
+  "unclassified": [],
+  "problems": []
+ },
+ "checks": [
+  [
+   "the control is C5 (the warning ruling is C5-specific: it does not transfer to A3, A6, C8, C15 or any other control)",
+   true,
+   "C5"
+  ],
+  [
+   "SYNTHETIC CONTROL (c2_controls.py): a tampered copy, never admissible; the preserved-receipt identity check is not run",
+   false,
+   "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-tranche2-continue-02/dev-local/c2-scratch/D/N04"
+  ],
+  [
+   "A source before the build: EXACTLY_C_PLUS_PATCH, C's HEAD and tree, the mutant protocol.rs blob and sha256 of section 2, no other mismatch",
+   true,
+   "EXACTLY_C_PLUS_PATCH; e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495"
+  ],
+  [
+   "B source after the build: EXACTLY_C_PLUS_PATCH, the same mutant blob and sha256, no other mismatch",
+   true,
+   "EXACTLY_C_PLUS_PATCH; e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495"
+  ],
+  [
+   "C the build's patch and mutant identities are section 2's and the catalog's (descriptor; and the apply receipt: the frozen patch's sha256, git apply rc 0, EXACTLY_C_PLUS_PATCH, only protocol.rs changed)",
+   true,
+   "a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8"
+  ],
+  [
+   "D the exact build command in the C5 worktree: cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2",
+   true,
+   "cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2"
+  ],
+  [
+   "D the exact environment (env -i): HOME, PATH, CARGO_TARGET_DIR=<C5 worktree>/target, CARGO_TERM_VERBOSE, CARGO_NET_OFFLINE=true; no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, feature or cfg variable; a fresh target",
+   true,
+   "{'HOME': '/home/nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target', 'CARGO_TERM_VERBOSE': 'true', 'CARGO_NET_OFFLINE': 'true'}"
+  ],
+  [
+   "E the exact toolchain and build inputs: rustc 1.94.0, cargo 1.94.0, toolchain 1.94.0-x86_64-unknown-linux-gnu, no other Cargo configuration; equal to each of the five accepted Tranche-2 builds' records; the five build inputs are Candidate C's blobs",
+   true,
+   "equal to the accepted builds: [True, True, True, True, True]"
+  ],
+  [
+   "F normal exit 0: exit status 0, no signal, supervisor rc 0, the wrapper's recorded status 0",
+   true,
+   "{'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}"
+  ],
+  [
+   "G 16 GiB, zero swap, within 900 s: memory.max 17179869184 and memory.swap.max 0 enforced (descriptor and the scope's own record), the 900 s timeout in the timed command, wall below 900 s, not timed out, complete record",
+   true,
+   "wall 168.31 s; memory.peak 2615914496 B"
+  ],
+  [
+   "H no OOM and no signal: oom 0, oom_kill 0, swap peak 0 (descriptor and the scope's memory.events); GNU time records exit status 0 and no terminating signal",
+   true,
+   "oom 0 oom_kill 0"
+  ],
+  [
+   "the stderr is the preserved one: sha256 equals section 2's and the build descriptor's; stdout empty and recorded",
+   false,
+   "70ed7f723a10bca870b4c2ecf4d8d6842b010232c0e5e5ee66a3c2c97ab98d4e"
+  ],
+  [
+   "the source the executable was built from, reproduced for the comparison: the mutant protocol.rs from the frozen patch (blob of section 2; never written to any object store) and C's model_tests.rs",
+   true,
+   ""
+  ],
+  [
+   "I no `error` diagnostic of any kind (no line opening with `error`, `error[...]`)",
+   false,
+   "['error[E0425]: cannot find value `x` in this scope']"
+  ],
+  [
+   "I no compiler crash text outside cargo's own Running lines (internal compiler error, panicked, query stack, SIGSEGV, signal)",
+   true,
+   ""
+  ],
+  [
+   "J exactly the five permitted warning groups, each once, in rustc's order (mission section 2), and no other diagnostic group",
+   false,
+   "['error[E0425]: cannot find value `x` in this scope', 'warning: unused variable: `nonce`', 'warning: unused variable: `io`', 'warning: methods `acknowledgement` and `frontier` are never used', 'warning: variant `Inconsistent` is never constructed', 'warning: variants `Acknowledgement` and `Frontier` are never constructed']"
+  ],
+  [
+   "J warning 1 (unused variable: `nonce`): primary location crates/nexus-governed-control/src/ledger/protocol.rs:1818:47",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 1818, 47)"
+  ],
+  [
+   "J warning 1: quoted source lines [1818], each equal to the source the executable was built from",
+   true,
+   "[1818] []"
+  ],
+  [
+   "J warning 1: carets exactly under ['nonce'] and dashes exactly under [] (line, column, length, marked text)",
+   true,
+   "[(1818, 47, 5, 'nonce')] []"
+  ],
+  [
+   "J warning 1: labels and notes exactly the expected ones",
+   true,
+   "['help: if this is intentional, prefix it with an underscore: `_nonce`'] ['`#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default']"
+  ],
+  [
+   "J warning 2 (unused variable: `io`): primary location crates/nexus-governed-control/src/ledger/protocol.rs:1818:65",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 1818, 65)"
+  ],
+  [
+   "J warning 2: quoted source lines [1818], each equal to the source the executable was built from",
+   true,
+   "[1818] []"
+  ],
+  [
+   "J warning 2: carets exactly under ['io'] and dashes exactly under [] (line, column, length, marked text)",
+   true,
+   "[(1818, 65, 2, 'io')] []"
+  ],
+  [
+   "J warning 2: labels and notes exactly the expected ones",
+   true,
+   "['help: if this is intentional, prefix it with an underscore: `_io`'] []"
+  ],
+  [
+   "J warning 3 (methods `acknowledgement` and `frontier` are never used): primary location crates/nexus-governed-control/src/ledger/protocol.rs:506:8",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 506, 8)"
+  ],
+  [
+   "J warning 3: quoted source lines [503, 506, 507], each equal to the source the executable was built from",
+   true,
+   "[503, 506, 507] []"
+  ],
+  [
+   "J warning 3: carets exactly under ['acknowledgement', 'frontier'] and dashes exactly under ['Reads'] (line, column, length, marked text)",
+   true,
+   "[(506, 8, 15, 'acknowledgement'), (507, 8, 8, 'frontier')] [(503, 18, 5, 'Reads')]"
+  ],
+  [
+   "J warning 3: labels and notes exactly the expected ones",
+   true,
+   "['methods in this trait'] ['`#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default']"
+  ],
+  [
+   "J warning 4 (variant `Inconsistent` is never constructed): primary location crates/nexus-governed-control/src/ledger/protocol.rs:743:5",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol.rs', 743, 5)"
+  ],
+  [
+   "J warning 4: quoted source lines [737, 743], each equal to the source the executable was built from",
+   true,
+   "[737, 743] []"
+  ],
+  [
+   "J warning 4: carets exactly under ['Inconsistent'] and dashes exactly under ['Resolve'] (line, column, length, marked text)",
+   true,
+   "[(743, 5, 12, 'Inconsistent')] [(737, 17, 7, 'Resolve')]"
+  ],
+  [
+   "J warning 4: labels and notes exactly the expected ones",
+   true,
+   "['variant in this enum'] ['`Resolve` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis']"
+  ],
+  [
+   "J warning 5 (variants `Acknowledgement` and `Frontier` are never constructed): primary location crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:598:5",
+   true,
+   "('crates/nexus-governed-control/src/ledger/protocol/model_tests.rs', 598, 5)"
+  ],
+  [
+   "J warning 5: quoted source lines [590, 598, 599], each equal to the source the executable was built from",
+   true,
+   "[590, 598, 599] []"
+  ],
+  [
+   "J warning 5: carets exactly under ['Acknowledgement', 'Frontier'] and dashes exactly under ['Verb'] (line, column, length, marked text)",
+   true,
+   "[(598, 5, 15, 'Acknowledgement'), (599, 5, 8, 'Frontier')] [(590, 6, 4, 'Verb')]"
+  ],
+  [
+   "J warning 5: labels and notes exactly the expected ones",
+   true,
+   "['variants in this enum'] ['`Verb` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis']"
+  ],
+  [
+   "K every line of every group is a line of rustc's group format (header, location, gutter, quoted source, marker, '...', note); each group ends with one blank line",
+   true,
+   "[]"
+  ],
+  [
+   "K cargo's summary of exactly those five warnings, once (the summary, not a sixth diagnostic)",
+   true,
+   "1"
+  ],
+  [
+   "K every other stderr line is cargo progress (Compiling, Running), the Finished line or the Executable line: no other warning, lint, note or diagnostic",
+   true,
+   "unclassified []; Finished 1; Executable 1; progress 639"
+  ],
+  [
+   "cargo's Finished line: release profile, optimized, once",
+   true,
+   "[('release', 'optimized', '2m 48s')]"
+  ],
+  [
+   "one rustc invocation compiled nexus_governed_control, as a test",
+   true,
+   "1 invocation(s)"
+  ],
+  [
+   "profile flags: opt-level=3, lto=thin, codegen-units=16, strip=symbols (no debuginfo/debug-assertions/overflow-checks/panic flag)",
+   true,
+   "['opt-level=3', 'lto=thin', 'codegen-units=16', 'metadata=39c9cf5f26ad991f', 'extra-filename=-2faa0b9718d3e6a3', 'strip=symbols']"
+  ],
+  [
+   "no --cfg flag (no feature, no extra cfg); declared feature set empty",
+   true,
+   "[]"
+  ],
+  [
+   "L cargo named exactly one library-test executable (both line forms), the intended one in the C5 worktree's own target; release/deps recorded exactly it and its dep-info",
+   true,
+   "verbose ['/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3']; plain []"
+  ],
+  [
+   "M the recorded executable sha256 and size equal section 2's (90a60883\u2026, 8,986,720 bytes)",
+   true,
+   "[('90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9', 8986720)]"
+  ],
+  [
+   "the test unit's fingerprint in the preserved target: no rustflags, no features (read-only)",
+   true,
+   "[('test-lib-nexus_governed_control.json', [], '[]')]"
+  ],
+  [
+   "the historical classification is unchanged: BUILD: NOT OK, 17 of 18 checks, the one failed check the general classifier's `no error or warning diagnostic` (this admission does not relabel it)",
+   true,
+   "['BUILD: NOT OK']"
+  ]
+ ],
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+  "size": 8986720,
+  "executable_bit": true,
+  "test_executable_name": true
+ },
+ "dep_info": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3.d",
+  "sha256": "4dd723838745c1fe61133f524f318ed6c444ad580678dd5bb4046a34a97dac1e",
+  "size": 7897,
+  "executable_bit": false,
+  "test_executable_name": false
+ },
+ "build_finished": [
+  "launched: 2026-10-15T01:16:34+0100",
+  "returned: 2026-10-15T01:19:22+0100",
+  "finished: 2026-10-15T01:19:23+0100"
+ ]
+}

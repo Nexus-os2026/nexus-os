@@ -1,0 +1,10 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C5: resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check
+receipt type: (a) original-explorer mutant FAIL; restored (e1)
+build admission: C5 BUILD ADMISSION: ARCHITECT-ADMISSIBLE BUILD AUTHENTICATED (NARROW C5-SPECIFIC WARNING RULING)
+preserved worktree before the run: C5 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)
+preserved executable: C5 PRESERVED EXECUTABLE: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9 size 8986720
+run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P13
+after the run: C5 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)
+linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))

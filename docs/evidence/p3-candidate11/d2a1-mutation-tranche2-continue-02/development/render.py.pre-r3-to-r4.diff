@@ -1,0 +1,12 @@
+--- development/revisions/render.py.pre-r3.py	2026-10-15 02:01:46.854425060 +0100
++++ tools/render.py	2026-10-15 02:02:01.158226640 +0100
+@@ -109,7 +109,8 @@
+            "build_raw": (f"exit {errs.get('exit_status')}, signal {errs.get('signal')}; Finished {build.get('finished')}"
+                          if build else "—"),
+            "build_resources": res(build.get("supervisor")),
+-           "executable": f"`{pin['path']}` sha256 `{pin['sha256']}` size {pin['size']:,}" if pin else "not produced",
++           "executable": (f"`{pin['path']}` sha256 `{pin['sha256']}` size {pin['size']:,}" if pin and pin.get("sha256")
++                          and isinstance(pin.get("size"), int) else "not produced"),
+            "selection": " ".join(c["argv_tail"]), "config": f"{c['configuration']} (`{c['test']}`, original explorer)",
+            "restore": restore[0] if restore else "NOT PRODUCED", "link": (link[0] + " — " + link[1]) if link else "—",
+            "named": c["named_property"], "ceiling": f"{c['ceiling_states']:,}"}

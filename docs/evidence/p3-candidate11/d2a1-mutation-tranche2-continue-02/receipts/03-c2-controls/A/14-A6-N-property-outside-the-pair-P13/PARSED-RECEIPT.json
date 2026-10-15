@@ -1,0 +1,128 @@
+{
+ "control": "A6",
+ "receipt_type": "AD-1-R4 F.1 (a)",
+ "test": "ledger::protocol::model_tests::full_f5",
+ "configuration": "F-5",
+ "named_property": "P12 or P15",
+ "ceiling_states": 30000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-5",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [true, true] ENV false batch false faults 2 admissions 2 gating callers 0 gating conflict false acknowledgement actors 1 attempts each 2 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Ack(0), Adm]",
+  "states": 14,
+  "expanded": 1,
+  "transitions": 14,
+  "fault_edges": 10,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 30000000,
+  "time_cap_s": 2700,
+  "fail": "P13: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (2 steps):"
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::full_f5' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4149:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {\"P13\"}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4343
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "9fe5f07bc4219e584bd68c8a86fecdfafd48ee9d65dc05fad196f212ada6246e",
+  "pinned_size": 4343,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "9fe5f07bc4219e584bd68c8a86fecdfafd48ee9d65dc05fad196f212ada6246e",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "9fe5f07bc4219e584bd68c8a86fecdfafd48ee9d65dc05fad196f212ada6246e",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f5: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f5: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f5",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f5: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f5: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::full_f5",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "9fe5f07bc4219e584bd68c8a86fecdfafd48ee9d65dc05fad196f212ada6246e",
+   "size": 4343,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "75eef072feaf91894d0bcde3d34c1b8d4f099a71ba31bb870f1a417d86d094df",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "FAIL of P13, not a permitted property (P12 or P15): kills nothing",
+ "checks_hold": 29,
+ "checks_total": 31
+}

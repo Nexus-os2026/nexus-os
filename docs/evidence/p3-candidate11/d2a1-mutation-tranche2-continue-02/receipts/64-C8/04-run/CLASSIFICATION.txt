@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property E5
+raw outcome (as printed): outcome FAIL; FAIL E5: append_facts: an insert before every member is classified: Open:Ok Facts:Ok Insert:Ok Facts:Ok Rollback:Ok; shortest trace (3 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 547 (expanded 84) of the 30,000,000 ceiling; transitions 919; elapsed 0.0 s
+named property: E5; configuration F-B; test ledger::protocol::model_tests::full_fb
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.0 s of 2700 s; scope memory.peak 2674688 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6288 KiB; scope gone
+checks: 29 of 29 hold

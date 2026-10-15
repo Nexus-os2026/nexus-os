@@ -1,0 +1,10 @@
+--- development/revisions/rehearsals.dev1.py	2026-10-15 02:03:39.333889135 +0100
++++ tools/rehearsals.py	2026-10-15 02:03:39.352540117 +0100
+@@ -138,6 +138,7 @@
+         src = os.path.join(t2, "A", sorted(x for x in os.listdir(os.path.join(t2, "A"))
+                                            if x.split("-")[1] == "C5" and "P-as-main_c5" in x)[0])
+         shutil.copytree(src, os.path.join(d, "04-run"))
++        open(os.path.join(d, "04-run/cgroup-samples.txt"), "w").write(SAMPLER)
+         open(os.path.join(d, "04-run/RECEIPT.txt"), "w").write(f"SUPERVISED MUTANT RUN — control C5: {SYN}\n")
+         os.makedirs(os.path.join(d, "05-reauth"))
+         open(os.path.join(d, "05-reauth/REAUTH.txt"), "w").write(control.REAUTH_OK + "\n" + SYN + "\n")

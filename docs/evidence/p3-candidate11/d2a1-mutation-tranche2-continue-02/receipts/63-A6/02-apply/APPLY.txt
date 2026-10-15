@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control A6: "recovery required" is a flag, not a comparison of H with A
+patch: inputs/patches/A6.patch (the frozen R2 packet's catalog/patches/A6.patch), sha256 0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8 (catalog 0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; numstat '22\t6\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol/model_tests.rs git blob 51e54aed7cc33ebc8348a74fe6c881c057336ee7 (expected 51e54aed7cc33ebc8348a74fe6c881c057336ee7), sha256 59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4 (expected 59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4); status [' M crates/nexus-governed-control/src/ledger/protocol/model_tests.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

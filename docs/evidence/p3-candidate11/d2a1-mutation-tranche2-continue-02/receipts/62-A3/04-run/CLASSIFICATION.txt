@@ -1,0 +1,8 @@
+CLASSIFICATION: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL of the named property P12
+raw outcome (as printed): outcome FAIL; FAIL P12: the explanation of original 0 is covered by no durable acknowledgement; shortest trace (14 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.58s']
+measured: states 112,880 (expanded 80,145) of the 30,000,000 ceiling; transitions 463123; elapsed 0.6 s
+named property: P12; configuration F-5; test ledger::protocol::model_tests::full_f5
+candidate: KILL_EVIDENCE_CANDIDATE — type (a) — ARCHITECT REVIEW PENDING
+resources: wall 0.58 s of 2700 s; scope memory.peak 19451904 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 21308 KiB; scope gone
+checks: 29 of 29 hold

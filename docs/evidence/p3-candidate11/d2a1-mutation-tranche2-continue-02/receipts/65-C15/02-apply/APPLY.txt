@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C15: a cell operation ignores the occupancy number
+patch: inputs/patches/C15.patch (the frozen R2 packet's catalog/patches/C15.patch), sha256 a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810 (catalog a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t3\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob abdd7518e6d1202a3a7c756af9716dc66183fd21 (expected abdd7518e6d1202a3a7c756af9716dc66183fd21), sha256 271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b (expected 271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

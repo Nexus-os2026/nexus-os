@@ -1,0 +1,13 @@
+--- development/revisions/c2_controls.py.pre-r3.py	2026-10-15 02:01:46.857967303 +0100
++++ tools/c2_controls.py	2026-10-15 02:02:01.158724367 +0100
+@@ -120,8 +120,8 @@
+             s["mutant_file"] = None  # a restored worktree: no mutant file (control.restored_check's record)
+     if process:
+         desc["process"] = process
+-    if sup:
+-        desc["supervisor"] = dict(desc["supervisor"], **sup)
++    # A distinctive synthetic resource record, so that no synthetic classification repeats a previous packet's bytes.
++    desc["supervisor"] = dict(desc["supervisor"], max_rss_kib_largest_process=4343, **(sup or {}))
+     json.dump(desc, open(os.path.join(d, "descriptor.json"), "w"), indent=1)
+ 
+ 

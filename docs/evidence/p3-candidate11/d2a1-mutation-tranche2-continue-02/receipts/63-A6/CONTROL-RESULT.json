@@ -1,0 +1,12 @@
+{
+ "control": "A6",
+ "status": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+ "facts": [
+  "apply: APPLY: EXACTLY_C_PLUS_PATCH",
+  "build: BUILD: PINNED",
+  "pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 53d72467fe1d5cd1c318cf413ef0550c2cf05ce0d62954816cf25499b9e0b01e size 8984560",
+  "run (type (a)): CLASSIFICATION: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING; outer class (AD-1-R4 K.2): FAIL \u2014 admissible type-(a) original-explorer mutant FAIL of the named property P12 or P15: P12 (permitted: P12 or P15)",
+  "restoration: RESTORE: EXACTLY_C",
+  "linked restored-side receipt: LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))"
+ ]
+}

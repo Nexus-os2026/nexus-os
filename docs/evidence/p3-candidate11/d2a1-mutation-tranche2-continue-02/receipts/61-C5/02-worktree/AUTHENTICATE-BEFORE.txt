@@ -1,0 +1,9 @@
+C5 PRESERVED WORKTREE: AUTHENTICATED (EXACTLY C; LOCKED; NOT MODIFIED BY THIS MISSION)
+control C5: the preserved worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5, read-only, before the run (not created, patched or restored by this mission)
+OK   filesystem identity: the path is its own realpath, a directory, not a symlink, owned by this user: {'dev': 66310, 'ino': 64125204, 'uid': 1000}
+OK   registered: the .git file points into the repository's worktree administration, which points back: gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-mt2x-C5
+OK   locked with the Tranche-2 reason (its owner mission; this mission does not take it over): P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C5 disposable mutant worktree: mission-owned; preserve until Architect review
+OK   git worktree list: this path, HEAD C, detached, locked: ['worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5', 'HEAD d5964ee5326c2733177307db6f507328023d361a', 'detached', 'locked P3-C11-DR01-D2A1-MUTATION-TRANCHE2-EXEC-01 control C5 disposable mutant worktree: mission-owned; preserve until Architect review']
+OK   HEAD is Candidate C and its tree, detached: ['d5964ee5326c2733177307db6f507328023d361a', '51bac5fd335999cc995c0ab9f582a30244973ef0']
+OK   source restored exactly to Candidate C: verify_tree.py EXACTLY_C (every tracked byte and mode) and the path-aware status policy (no tracked change; ignored entries only beneath its own real target directory): source (before the run): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status entries ['!! target/']; mismatches []; missing []; modes []
+OK   protocol.rs is C's blob again (computed in-process): a2df2841b99cad5d452008a6d4150e9369d07e66

@@ -1,0 +1,11 @@
+--- development/revisions/authenticate.dev1.py	2026-10-15 01:40:31.780354773 +0100
++++ tools/authenticate.py	2026-10-15 01:39:55.419670732 +0100
+@@ -450,7 +450,7 @@
+             chk(f"{name} packet byte-identical at its own evidence commit {own[:8]} and at {K.T1[:8]}", diff, [])
+         data[name] = files
+     names = {K.EXEC01_PACKET: "EXEC-01", K.RESUME01_PACKET: "RESUME-01", K.CONTINUE02_PACKET: "CONTINUE-02"}
+-    for cid in K.ACCEPTED:
++    for cid in K.ACCEPTED_T1:
+         packet, d = K.T1_RECEIPTS[cid]
+         f = data[names[packet]]
+         e = by[cid]

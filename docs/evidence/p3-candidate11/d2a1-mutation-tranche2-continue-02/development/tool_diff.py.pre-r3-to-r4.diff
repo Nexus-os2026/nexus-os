@@ -1,0 +1,61 @@
+--- revisions/tool_diff.py.pre-r3.py	2026-10-15 02:01:46.860504764 +0100
++++ ../tools/tool_diff.py	2026-10-15 02:02:21.295920858 +0100
+@@ -15,8 +15,9 @@
+   D3  byte-identical: classify.py (the general build classifier classify_build_success and the run classifier
+       classify_a: no warning exception of any kind), supervise.py (resource and process checks, supervision),
+       worktrees.py, verify_mutant.py, verify_tree.py, scope-wrap.sh, report.py, configs.py and push.py
+-  D4  core semantics: control.py's git, apply_patch, restored_check, restore, link and finish AST-identical to Tranche
+-      2's; main is Tranche 2's statement for statement plus one dispatch (cid == 'C5' -> main_c5) after the leading
++  D4  core semantics: control.py's git, apply_patch, restored_check, restore and finish AST-identical to Tranche 2's;
++      link() is Tranche 2's with lines only inserted (no line removed or replaced, no check added): the binding of the
++      link record to the control's own restoration (C5: reauthentication) receipt by path and sha256; main is Tranche 2's statement for statement plus one dispatch (cid == 'C5' -> main_c5) after the leading
+       refusal; main_c5 is the only added function; the only tool reading warning diagnostics besides the unchanged
+       classify.py is c5.py, whose admit refuses every control but C5 and is called only by main_c5, which main calls
+       only for C5; expectations.py's helpers AST-identical; authenticate.py's helpers AST-identical
+@@ -55,7 +56,10 @@
+                    "dispatch",
+                    f"{ADM}, {PIN}: main_c5(): admission (c5.admit), the preserved worktree and executable (c5.worktree_"
+                    "check, c5.pin), one run (supervise.invoke, unchanged), classify_a (unchanged; source EXACTLY_C), the "
+-                   "reauthentication, then link() (unchanged)"],
++                   "reauthentication, then link()",
++                   f"{MAP}: link() also records, by path and sha256, the control's own restoration (C5: "
++                   "reauthentication) receipt it follows (lines inserted only; every check unchanged), so that a link "
++                   "record never repeats another mission's bytes"],
+     "expectations.py": [f"{ORD}: the five controls in this order (receipt directories 61-65); {ADM}, {PIN}: C5's "
+                         "preserved build and executable identities"],
+     "authenticate.py": [f"{FRZ}: every input of this mission, the Tranche-2 stopped evidence and C5's preserved receipts "
+@@ -81,7 +85,7 @@
+ NOT_CARRIED = {"t2_controls.py": "replaced by c2_controls.py (this mission's controls)"}
+ CARRIED_BYTE_FOR_BYTE = ["classify.py", "configs.py", "push.py", "report.py", "scope-wrap.sh", "supervise.py",
+                          "verify_mutant.py", "verify_tree.py", "worktrees.py"]
+-SAME_FUNCS = {"control.py": ["git", "apply_patch", "restored_check", "restore", "link", "finish"],
++SAME_FUNCS = {"control.py": ["git", "apply_patch", "restored_check", "restore", "finish"],
+               "expectations.py": ["fn_span", "attrs_above", "verdict_assertion", "mutant_bytes", "key_fields",
+                                   "model_constants", "config_block", "original_fb"],
+               "authenticate.py": ["git", "gtext", "chk", "copy_in", "packet_sums", "patch_result", "packet_files",
+@@ -241,6 +245,25 @@
+           "records, never in a classifier)", all(
+               not [n for n in ast.walk(tree(os.path.join(NEW, f))) if isinstance(n, ast.FunctionDef)
+                    and "warning" in n.name.lower()] for f in warning_readers), warning_readers)
++    lo, ln = fn(to, "link"), fn(tn, "link")
++    a = open(os.path.join(OLD, "control.py")).read().splitlines()[lo.lineno - 1:lo.end_lineno]
++    b = open(os.path.join(NEW, "control.py")).read().splitlines()[ln.lineno - 1:ln.end_lineno]
++    ops = [op for op in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes() if op[0] != "equal"]
++    ins = "\n".join(l for op in ops for l in b[op[3]:op[4]])
++    repl = [op for op in ops if op[0] != "insert"]
++    # The one replaced statement is the lines list, which gains rest_line at its end, and the record, which gains
++    # "follows": both are shown below with their old and new text.
++    shown = [(a[op[1]:op[2]], b[op[3]:op[4]]) for op in repl]
++    check("D4 control.link: Tranche 2's, with only the restoration-receipt binding added (inserted lines; the two "
++          "changed lines only append rest_line to the receipt lines and 'follows' to the record); no check added or "
++          "removed", all(len(o) == 1 and len(n) == 1 and (n[0] == o[0].replace('"restoration evidence)"] + extra',
++                                                                                 '"restoration evidence)", rest_line] + extra')
++                                                          or n[0] == o[0].replace('"checks": checks}',
++                                                                                  '"checks": checks, "follows": rest_line}'))
++                         for o, n in shown) and len(shown) == 2 and "rest_line" in ins and "chk(" not in ins
++          and [n for n in ast.walk(lo) if isinstance(n, ast.Call) and ast.unparse(n.func) == "chk"].__len__()
++          == [n for n in ast.walk(ln) if isinstance(n, ast.Call) and ast.unparse(n.func) == "chk"].__len__(),
++          f"{len(ops)} hunks; replaced {shown}")
+     for f, names in SAME_FUNCS.items():
+         fa, fb = funcs(tree(os.path.join(OLD, f))), funcs(tree(os.path.join(NEW, f)))
+         diff = [n for n in names if fa.get(n) is None or fa.get(n) != fb.get(n)]

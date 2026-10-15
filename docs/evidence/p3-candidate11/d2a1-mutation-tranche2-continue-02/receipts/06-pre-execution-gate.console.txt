@@ -1,0 +1,30 @@
+PRE-EXECUTION GATE: ALL CHECKS HOLD
+started: 2026-10-15T02:11:13+0100; mission P3-C11-DR01-D2A1-MUTATION-TRANCHE2-CONTINUE-02
+OK   E1 authenticate.py --gate: ALL CHECKS HOLD (receipts/06-gate-authentication.txt): 436 checks OK
+OK   E2 the freeze holds: freeze check: 118 frozen files (tools, inputs, expectations) against receipts/05-FREEZE.json: ALL EQUAL
+OK   E2 the freeze covers every tool, the Tranche-2 base tool set, every input (catalog, the five patches, linked receipts, addenda, adoption records, proof, C5's preserved receipts), the expectations and the three records (118 paths): []
+OK   E2 the freeze record states this mission's order, the accepted and the not-authorized controls
+OK   E3 receipts/00-authentication.txt: RESULT: ALL CHECKS HOLD: RESULT: ALL CHECKS HOLD
+OK   E3 receipts/01-supervision-selftest/SELFTEST.txt: SELF-TEST RESULT: ALL OK: SELF-TEST RESULT: ALL OK
+OK   E3 receipts/02-EXPECTATIONS.console.txt: EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD: EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD
+OK   E3 receipts/03-c2-controls/SUMMARY.txt: C2 CONTROLS: ALL AS EXPECTED: C2 CONTROLS: ALL AS EXPECTED
+OK   E3 receipts/04-tool-diff/TOOL-DIFF-CHECK.txt: TOOL DIFF: ALL CHECKS HOLD: TOOL DIFF: ALL CHECKS HOLD
+OK   E3 receipts/04b-rehearsals/SUMMARY.txt: REHEARSALS: ALL AS EXPECTED: REHEARSALS: ALL AS EXPECTED
+OK   E4 only authorized tool differences (tool_diff.py --check against the frozen tools): TOOL DIFF: ALL CHECKS HOLD
+OK   E5 no receipt directory for any of this mission's controls; no worktree for A3, A6, C8, C15: []
+OK   E5 no worktree of this mission's namespace (mt2c) for any accepted or not-authorized control: []
+OK   E5 C5's worktree is the preserved Tranche-2 one, present: /home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5
+OK   E6 no conflicting mission process (governed-control test executable, cargo/rustc in a mission worktree, p3c11-* scope, control.py): [] [] [] []
+OK   E7 the preserved C5 worktree, read-only: exactly C, registered, detached at C, locked with the Tranche-2 reason: []
+OK   E7 C23 (Architect-accepted; Tranche 2's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C10 (Architect-accepted; Tranche 2's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C16 (Architect-accepted; Tranche 2's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C26 (Architect-accepted; Tranche 2's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   E7 C3a (Architect-accepted; Tranche 2's worktree, read-only): exactly C, not touched: EXACTLY_C
+OK   E8 order C5 A3 A6 C8 C15; seventeen accepted; thirteen not authorized; receipt directories 61-65
+OK   E8 build command, environment template, run environment, build limit, memory and swap are the frozen expectations'
+OK   E8 every control: the original explorer, its catalog test with --exact --ignored --nocapture --test-threads=1, 2700 s, its ceiling (30,000,000) and its permitted properties
+OK   E9 every identity the freeze records is unchanged now: []
+OK   E10 the ruling, C5-ruling and campaign records state the rulings and the 17-of-35 status (first lines), frozen
+OK   E11 resources now: MemAvailable at least 18 GiB; at least 10 GiB free disk for four fresh targets: MemAvailable 53488120 KiB; disk free 32 GiB
+finished: 2026-10-15T02:11:42+0100
