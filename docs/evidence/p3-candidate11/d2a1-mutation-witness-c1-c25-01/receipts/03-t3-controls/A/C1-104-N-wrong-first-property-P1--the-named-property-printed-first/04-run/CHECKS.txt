@@ -1,0 +1,31 @@
+OK   the run started (no pre-flight refusal)
+OK   tool invariant: the predicted first failure is not the named property (G.3(a): E3 is never counted as P1, E4 never as P7): E3 / P1
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 (pinned 81af972125ea8abb… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 593e9505eef44aa58a0fd3ff8826d3ef592e44d9988e36ebf3a4c6114a21b3f8
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (full_exploration; never a gc_symmetry_* quotient test): ledger::protocol::model_tests::full_f1
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5
+OK   the assertion message carries failed: {"<p>"} for the printed property p, and only it: ['assertion `left == right` failed: failed: {"P1"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure; no witness line (F.1 (a): none is required)
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+FAIL G.3(a): the first printed property, recorded as printed, is the predicted first failure E3 (mission section 4); it is not counted as P1; another first property is reported as printed and requires an Architect ruling: P1: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: P1
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90

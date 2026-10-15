@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C1: the count becomes a flag
+patch: inputs/patches/C1.patch (the frozen R2 packet's catalog/patches/C1.patch), sha256 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252 (catalog 5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '3\t0\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66 (expected 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66), sha256 eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658 (expected eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

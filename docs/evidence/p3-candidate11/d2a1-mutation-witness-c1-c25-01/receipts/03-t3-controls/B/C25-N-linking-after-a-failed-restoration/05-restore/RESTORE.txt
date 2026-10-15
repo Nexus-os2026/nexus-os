@@ -1,0 +1,3 @@
+RESTORE: FAILED
+SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01): not the output of any run
+a synthetic restoration receipt for a tooling control of the link step

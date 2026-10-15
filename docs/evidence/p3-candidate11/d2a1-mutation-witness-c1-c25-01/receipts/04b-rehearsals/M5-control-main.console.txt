@@ -1,0 +1,263 @@
+C7 REFUSAL: REFUSED: C7 is MUTATION_CONTROL_BLOCKED by the Architect and expressly excluded from P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01: no rerun, rebuild, patch alteration, property substitution or comparison
+C4 REFUSAL: REFUSED: C4 is reserved and not authorized by P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01: never executed, built or started here
+CREATE the C1 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1 at C
+result: OK
+AUTHENTICATE the C1 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1
+result: OK
+FAKE INVOKE C1 mutant-explore: ledger::protocol::model_tests::full_f1 (prior ['receipts/81-C1/03-build/CLASSIFICATION.txt']); synthetic run C1-101-P-first-failure-E3-recorded-as-printed
+OK   the run started (no pre-flight refusal)
+OK   tool invariant: the predicted first failure is not the named property (G.3(a): E3 is never counted as P1, E4 never as P7): E3 / P1
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 (pinned 81af972125ea8abb… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 21dc812679ca5a71998f22ea804f180b5a6ad5bd7bc20e7866a8c8a3162d795c
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (full_exploration; never a gc_symmetry_* quotient test): ledger::protocol::model_tests::full_f1
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5
+OK   the assertion message carries failed: {"<p>"} for the printed property p, and only it: ['assertion `left == right` failed: failed: {"E3"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure; no witness line (F.1 (a): none is required)
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   G.3(a): the first printed property, recorded as printed, is the predicted first failure E3 (mission section 4); it is not counted as P1; another first property is reported as printed and requires an Architect ruling: E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: E3
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E3 recorded as printed (AD-1-R4 G.3(a) primary of C1); E3 is not counted as P1; P1's attribution comes only from the type-(c) witness (G.3(b))
+raw outcome (as printed): outcome FAIL; FAIL E3: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 60,000,000 ceiling; transitions 14; elapsed 0.0 s
+G.3(a): predicted first failure E3 (AD-1-R4: in 4 steps; the step count is recorded, not required); named property P1, attributed only by G.3(b); configuration F-1; test ledger::protocol::model_tests::full_f1
+kill label: none (the primary is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4403 KiB; scope gone
+checks: 31 of 31 hold
+
+FAKE INVOKE C1 mutant-witness: ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission (prior ['receipts/81-C1/04-run/CLASSIFICATION.txt']); synthetic run C1-201-P-positive-line-at-step-11-with-admission-admitted-E3-report
+OK   the witness started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 (pinned 81af972125ea8abb… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: e1d07e6a54b13962e56b9cb7419c9318bb318d1e08e8f7861e28ca7d94de7f24
+OK   F.2 role: the SAME pinned mutant executable as this control's type-(a) primary (03-build/PIN.json and the primary's descriptor before and after: path, sha256, size), never the unchanged-baseline executable: 81af972125ea8abb… 4373
+OK   the primary of the same control is classified PRIMARY_OK (no witness follows an unestablished primary): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   argv tail exactly: the witness test, --exact, --nocapture, --test-threads=1 (no --ignored: an ordinary test): ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' (1 failed) and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of the witness test's thread: ["thread 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission' (4409) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5:"]
+OK   the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5
+OK   the header: 'C1 WITNESS F-1: 11 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)): ['C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations']
+OK   the exact positive line follows the header: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' (G.3(b)): ['NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)']
+OK   the line of other properties, each reported separately and not counted as P1, names E3 and not P1 (G.3(b)): ['OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]']
+OK   'every violation:' then exactly n violation lines (the header's count), each indented: 2 lines; n 2
+OK   the named property's violation is listed at its locus ('step 11 step: P1: …'; G.4 item 9): ['  step 11 step: P1: a synthetic detail']
+OK   E3 is listed among the violations, separately (E3 is never counted as P1)
+OK   the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'
+OK   no healthy line in a mutant-witness receipt (F.2; G.3(c)): neither the healthy line nor 'no violation' nor the healthy-branch assertion
+OK   no WITNESS FIXTURE FAILURE (G.3(c)); no quotient or symmetry refusal; no explorer report (NOT PRODUCED BY DESIGN for type (c))
+OK   every scheduled step printed, numbered 1..11, with its frozen actor and choices and its fixed branches (G.4 items 5-7): []
+OK   at step 11 (the step the control changes) the branch 'admission: admitted' is shown, as run_witness's own predicate requires (G.3(b), G.4 item 9): ['admission: admitted']
+OK   step 11's record prints the violation of P1 in its own violations (VIOLATION step: P1): [('step', 'P1')]
+OK   the header's count equals the printed per-step violation lines plus the initial state's listed ones: 2 printed + 0 initial; header 2
+
+CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY)
+outer class (AD-1-R4 K.2): FAIL — admissible type-(c) named-property mutant-witness receipt (G.3(b)): 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)'; C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations; E3 reported separately, not counted as P1
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations', 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)', 'OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]']
+positive line: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' — present at its locus
+executable: the pinned mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef sha256 81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4409 KiB; scope gone
+step: step 1/11 Fw(0) choices []: branches []; word 0x10004; violations []
+step: step 2/11 Fw(0) choices [1]: branches ['expire: Armed -> Counted']; word 0x10000010004; violations []
+step: step 3/11 Fw(1) choices []: branches []; word 0x10000020004; violations []
+step: step 4/11 Fw(1) choices [1]: branches ['expire: Armed -> Counted']; word 0x20000020004; violations [('step', 'E3')]
+step: step 5/11 Fw(1) choices [0]: branches []; word 0x20000020004; violations []
+step: step 6/11 Fw(1) choices [0]: branches []; word 0x10000010004; violations []
+step: step 7/11 Se choices []: branches []; word 0x10000010004; violations []
+step: step 8/11 Se choices []: branches []; word 0x10000020004; violations []
+step: step 9/11 Se choices [0, 0, 0, 0]: branches ['append_facts: Committed (inserted)']; word 0x10000020004; violations []
+step: step 10/11 Se choices []: branches []; word 0x10000020004; violations []
+step: step 11/11 Adm choices []: branches ['admission: admitted']; word 0x10000020004; violations [('step', 'P1')]
+checks: 29 of 29 hold
+
+HEALTHY WITNESS LINK: VERIFIED
+control C1: healthy-witness receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)
+linked (never rerun) only after this control's own restoration was verified
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/81-C1/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+OK   the linked files (9) are exactly the accepted receipt's (docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 in 89326b85's SHA256SUMS), byte for byte: ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json', 'RECEIPT.txt', 'cgroup-samples.txt', 'descriptor.json', 'raw-output.txt', 'scope-record.txt', 'time-v.txt']
+OK   the receipt is the one the Stage-2 evidence commit introduced, unchanged at this commit's parent (every file's blob): e41c84b1
+OK   its classification blob and raw-output blob and sha256 are the catalog's (healthy_witness)
+OK   accepted healthy-witness type-(e3) PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS']
+OK   the same witness test alone, --exact --nocapture --test-threads=1, no --ignored, on the pinned unchanged-baseline executable (catalog descriptor fields): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   its selection listing shows exactly that one test, and it is not an ignored test: ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test']
+OK   F.2 role: the pinned unchanged-baseline executable, unchanged before and after the healthy run and hashed now equal; never this control's mutant executable: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   exact Candidate C: the source exactly C before and after the healthy run
+OK   its process and launching command: exit 0 by a normal exit; 16 GiB, zero swap, no OOM, no kill, no timeout, complete: exit 0, signal None
+OK   the exact healthy line of G.3(d), exactly once, as a whole line: 'C1 WITNESS F-1: 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused''
+OK   harness: 'ok', one test, 1 passed, 0 failed: ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+OK   no positive marker, violation, fixture failure or panic in the healthy receipt (F.2): []
+OK   the same frozen schedule: 11 step records, each with its actor, choices and fixed branches: []
+OK   no violation on the healthy core, and step 11 shows the healthy branch 'admission: refused' (G.3(d)): ['admission: refused']
+OK   the same schedule as this control's own mutant witness: every step's actor and choices equal, step by step: 11
+LINK: VERIFIED
+control C1: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/81-C1/05-restore/RESTORE.txt (sha256 7f58646cbcf7047ee7a6e0347ff1bf55f5151b0c9df7ac2c02f162bf5eac2fb9; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/81-C1/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+G.3: ALL OBLIGATIONS HOLD
+control C1: AD-1-R4 G.3 (kill criterion for C1 and C25 only)
+OK   (a) the primary is an admissible type-(a) FAIL whose first printed property is E3, recorded as printed and not counted as P1: E3
+OK   (b) the mutant witness is an admissible type-(c) receipt with the exact positive line 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)': CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY)
+OK   (b) F.2: the witness ran on the same pinned mutant executable as the primary (path, sha256 and size, before and after both runs, equal to 03-build/PIN.json): 81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc
+OK   (c) none of the witness rejections: every check of the witness receipt holds (CHECKS.txt: no FAIL line)
+OK   restoration: the worktree restored exactly to C after the mutant receipts
+OK   (d) the accepted healthy type-(e3) witness linked after the restoration and verified
+OK   the accepted F-1 unchanged-core type-(e1) receipt linked after the restoration and verified
+(e) recording, PROPOSED FOR ARCHITECT REVIEW (not an acceptance): 'C1: P1 (first failure E3; witness)'
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C1: the count becomes a flag
+receipt type: (a) original-explorer mutant FAIL, the G.3(a) primary (recorded as printed) + (c) named-property mutant witness, G.3(b), on the same pinned mutant executable; restored (e1) + healthy witness (e3), G.3(d)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef sha256 81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc size 4373
+primary (type (a), G.3(a)): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF); outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E3 recorded as printed (AD-1-R4 G.3(a) primary of C1); E3 is not counted as P1; P1's attribution comes only from the type-(c) witness (G.3(b))
+mutant witness (type (c), G.3(b)): CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY); outer class (AD-1-R4 K.2): FAIL — admissible type-(c) named-property mutant-witness receipt (G.3(b)): 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)'; C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations; E3 reported separately, not counted as P1
+restoration: RESTORE: EXACTLY_C
+linked healthy witness (type (e3), G.3(d)): HEALTHY WITNESS LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)
+linked restored-side receipt (type (e1)): LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+G.3: G.3: ALL OBLIGATIONS HOLD
+G.3(e) recording, proposed for Architect review (not an acceptance): 'C1: P1 (first failure E3; witness)'
+== C1: rc 0; CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+CREATE the C25 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25 at C
+result: OK
+AUTHENTICATE the C25 worktree /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25
+result: OK
+FAKE INVOKE C25 mutant-explore: ledger::protocol::model_tests::full_f1 (prior ['receipts/82-C25/03-build/CLASSIFICATION.txt']); synthetic run C25-102-P-first-failure-E4-recorded-as-printed
+OK   the run started (no pre-flight refusal)
+OK   tool invariant: the predicted first failure is not the named property (G.3(a): E3 is never counted as P1, E4 never as P7): E4 / P7
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: af49f2ba9d862bf4… 4373 / af49f2ba9d862bf4… 4373 / af49f2ba9d862bf4… 4373 (pinned af49f2ba9d862bf4… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 0456a0c1c1fe40f71593edc6ba5938a3b0c29900): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 97a8b6a1d9dd8def8911e352d58163777ac366bb103542a55a006a8e285179b7
+OK   argv: the pinned executable, exactly the one test and flags --exact --ignored --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::full_f1: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): ignored; --ignored passed iff ignored: ['ledger::protocol::model_tests::full_f1: test']
+OK   the catalog's own test ledger::protocol::model_tests::full_f1 on the original explorer (full_exploration; never a gc_symmetry_* quotient test): ledger::protocol::model_tests::full_f1
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::full_f1']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::full_f1']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of that test's thread: ["thread 'ledger::protocol::model_tests::full_f1' (3901053) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:"]
+OK   the panic is the explorer's own verdict assertion (full_exploration, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5): crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5
+OK   the assertion message carries failed: {"<p>"} for the printed property p, and only it: ['assertion `left == right` failed: failed: {"E4"}']
+OK   the assertion's operands: left Fail, right Pass: ['  left: Fail', ' right: Pass']
+OK   no quotient or symmetry refusal; no fixture failure; no witness line (F.1 (a): none is required)
+OK   the report is printed, then repeated verbatim in the assertion message: 2 EXPLORATION headers
+OK   header 'EXPLORATION F-1' exactly (the original explorer; no quotient or symmetry line): EXPLORATION F-1
+OK   printed bounds equal the configuration's (source-derived): facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s
+OK   printed actors equal the configuration's: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]
+OK   caps printed: 60,000,000 states, 2700 s (the configuration's adopted ceiling): 60000000, 2700
+OK   raw outcome FAIL; no INCOMPLETE line: FAIL; None
+OK   G.3(a): the first printed property, recorded as printed, is the predicted first failure E4 (mission section 5); it is not counted as P7; another first property is reported as printed and requires an Architect ruling: E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown
+OK   'states <n> (expanded <m>)' printed
+OK   discovered count <= the ceiling 60,000,000 (K.1, inclusive): 14
+OK   the trace is printed under 'shortest trace (<n> steps):':   shortest trace (2 steps):
+OK   a FAIL prints only its failing property (no property lines): []
+OK   the failing property is one of PROPERTIES: E4
+OK   the report is complete: branch list (every BRANCHES label, in order) and the key-fields line: 90 of 90
+
+CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E4 recorded as printed (AD-1-R4 G.3(a) primary of C25); E4 is not counted as P7; P7's attribution comes only from the type-(c) witness (G.3(b))
+raw outcome (as printed): outcome FAIL; FAIL E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown; shortest trace (2 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+measured: states 14 (expanded 1) of the 60,000,000 ceiling; transitions 14; elapsed 0.0 s
+G.3(a): predicted first failure E4 (AD-1-R4: in 1 steps; the step count is recorded, not required); named property P7, attributed only by G.3(b); configuration F-1; test ledger::protocol::model_tests::full_f1
+kill label: none (the primary is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4403 KiB; scope gone
+checks: 31 of 31 hold
+
+FAKE INVOKE C25 mutant-witness: ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world (prior ['receipts/82-C25/04-run/CLASSIFICATION.txt']); synthetic run C25-215-N-unrelated-panic-index-out-of-bounds-in-protocol.rs
+OK   the witness started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: af49f2ba9d862bf4… 4373 / af49f2ba9d862bf4… 4373 / af49f2ba9d862bf4… 4373 (pinned af49f2ba9d862bf4… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 0456a0c1c1fe40f71593edc6ba5938a3b0c29900): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: 2e5b6ba2e2addbb09a628dbd9053dd0f358c61999fc75425f0bf93842f294c9a
+OK   F.2 role: the SAME pinned mutant executable as this control's type-(a) primary (03-build/PIN.json and the primary's descriptor before and after: path, sha256, size), never the unchanged-baseline executable: af49f2ba9d862bf4… 4373
+OK   the primary of the same control is classified PRIMARY_OK (no witness follows an unestablished primary): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   argv tail exactly: the witness test, --exact, --nocapture, --test-threads=1 (no --ignored: an ordinary test): ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world', '--exact', '--nocapture', '--test-threads=1']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' (1 failed) and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of the witness test's thread: ["thread 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world' (4409) panicked at crates/nexus-governed-control/src/ledger/protocol.rs:1480:21:"]
+FAIL the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic: crates/nexus-governed-control/src/ledger/protocol.rs:1480:21
+FAIL the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)): ['index out of bounds: the len is 2 but the index is 7']
+FAIL the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)): []
+FAIL the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)): []
+FAIL 'every violation:' then exactly n violation lines (the header's count), each indented: 0 lines; n None
+FAIL the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9): []
+FAIL E4 is listed among the violations, separately (E4 is never counted as P7)
+FAIL the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'
+OK   no healthy line in a mutant-witness receipt (F.2; G.3(c)): neither the healthy line nor 'no violation' nor the healthy-branch assertion
+OK   no WITNESS FIXTURE FAILURE (G.3(c)); no quotient or symmetry refusal; no explorer report (NOT PRODUCED BY DESIGN for type (c))
+OK   every scheduled step printed, numbered 1..1, with its frozen actor and choices and its fixed branches (G.4 items 5-7): []
+OK   at step 1 (the step the control changes) the branch 'append_gating: Committed (inserted)' is shown, as run_witness's own predicate requires (G.3(b), G.4 item 9): ['append_gating: Committed (inserted)']
+OK   step 1's record prints the violation of P7 in its state after it (VIOLATION after: P7): [('step', 'E4'), ('after', 'P7')]
+FAIL the header's count equals the printed per-step violation lines plus the initial state's listed ones: 2 printed + 0 initial; header None
+
+CLASSIFICATION: G.3(b) MUTANT WITNESS — NOT ADMISSIBLE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic; the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)); the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)); the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)); 'every violation:' then exactly n violation lines (the header's count), each indented; the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9); E4 is listed among the violations, separately (E4 is never counted as P7); the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'; the header's count equals the printed per-step violation lines plus the initial state's listed ones): establishes nothing
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['index out of bounds: the len is 2 but the index is 7']
+positive line: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' — NOT ESTABLISHED
+executable: the pinned mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef sha256 af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1 size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4409 KiB; scope gone
+step: step 1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: branches ['append_gating: Committed (inserted)']; word 0x25; violations [('step', 'E4'), ('after', 'P7')]
+checks: 20 of 29 hold
+FAILED CHECK: the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic: crates/nexus-governed-control/src/ledger/protocol.rs:1480:21
+FAILED CHECK: the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)): ['index out of bounds: the len is 2 but the index is 7']
+FAILED CHECK: the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)): []
+FAILED CHECK: the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)): []
+FAILED CHECK: 'every violation:' then exactly n violation lines (the header's count), each indented: 0 lines; n None
+FAILED CHECK: the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9): []
+FAILED CHECK: E4 is listed among the violations, separately (E4 is never counted as P7): 
+FAILED CHECK: the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED': 
+FAILED CHECK: the header's count equals the printed per-step violation lines plus the initial state's listed ones: 2 printed + 0 initial; header None
+
+CONTROL RESULT: MUTATION_CONTROL_BLOCKED
+control C25: a gating append answers Committed on `Commit::Unknown`
+receipt type: (a) original-explorer mutant FAIL, the G.3(a) primary (recorded as printed) + (c) named-property mutant witness, G.3(b), on the same pinned mutant executable; restored (e1) + healthy witness (e3), G.3(d)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef sha256 af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1 size 4373
+primary (type (a), G.3(a)): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF); outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E4 recorded as printed (AD-1-R4 G.3(a) primary of C25); E4 is not counted as P7; P7's attribution comes only from the type-(c) witness (G.3(b))
+mutant witness (type (c), G.3(b)): CLASSIFICATION: G.3(b) MUTANT WITNESS — NOT ADMISSIBLE; outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic; the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)); the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)); the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)); 'every violation:' then exactly n violation lines (the header's count), each indented; the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9); E4 is listed among the violations, separately (E4 is never counted as P7); the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'; the header's count equals the printed per-step violation lines plus the initial state's listed ones): establishes nothing
+restoration: RESTORE: EXACTLY_C
+STOP: the mutant witness is not an admissible type-(c) receipt of the named property. No later control is executed.
+== C25: rc 1; CONTROL RESULT: MUTATION_CONTROL_BLOCKED

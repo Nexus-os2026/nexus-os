@@ -1,0 +1,12 @@
+LINK: VERIFIED
+control C25: restored-side receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+linked only after this control's own restoration was verified (receipt linking does not substitute for restoration evidence)
+after this control's own restoration receipt receipts/03-t3-controls/G/C25-all-obligations/05-restore/RESTORE.txt (sha256 e76faa4c507f3e9027f7047ff21971196a2decb02e21d031b03156e4c5ac6de0; first line 'RESTORE: EXACTLY_C')
+OK   the linked files (8) equal the accepted evidence: docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 in f023cc3d's SHA256SUMS: []
+OK   its classification blob and raw output identity are the catalog's
+OK   accepted exact-final unchanged-core original-explorer PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible unchanged-core original-explorer PASS']
+OK   exact configuration: the same test and flags as this control's run (F-1): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   exact Candidate C: the source exactly C before and after
+OK   execution policy: env -i PATH/LANG/RUST_BACKTRACE; 16 GiB; zero swap; 2700 s
+OK   artifact identity at this control's restoration: the linked receipt's executable sha256 equals the pinned baseline executable, hashed now: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/03-t3-controls/G/C25-all-obligations/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'

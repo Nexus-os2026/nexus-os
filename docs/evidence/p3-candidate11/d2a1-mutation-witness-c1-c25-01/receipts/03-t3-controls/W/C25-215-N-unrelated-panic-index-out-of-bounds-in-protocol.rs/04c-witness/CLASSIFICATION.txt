@@ -1,0 +1,19 @@
+CLASSIFICATION: G.3(b) MUTANT WITNESS — NOT ADMISSIBLE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic; the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)); the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)); the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)); 'every violation:' then exactly n violation lines (the header's count), each indented; the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9); E4 is listed among the violations, separately (E4 is never counted as P7); the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'; the header's count equals the printed per-step violation lines plus the initial state's listed ones): establishes nothing
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['index out of bounds: the len is 2 but the index is 7']
+positive line: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' — NOT ESTABLISHED
+executable: the pinned mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef sha256 af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1 size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4409 KiB; scope gone
+step: step 1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: branches ['append_gating: Committed (inserted)']; word 0x25; violations [('step', 'E4'), ('after', 'P7')]
+checks: 20 of 29 hold
+FAILED CHECK: the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic: crates/nexus-governed-control/src/ledger/protocol.rs:1480:21
+FAILED CHECK: the header: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)): ['index out of bounds: the len is 2 but the index is 7']
+FAILED CHECK: the exact positive line follows the header: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' (G.3(b)): []
+FAILED CHECK: the line of other properties, each reported separately and not counted as P7, names E4 and not P7 (G.3(b)): []
+FAILED CHECK: 'every violation:' then exactly n violation lines (the header's count), each indented: 0 lines; n None
+FAILED CHECK: the named property's violation is listed at its locus ('step 1 after: P7: …'; G.4 item 9): []
+FAILED CHECK: E4 is listed among the violations, separately (E4 is never counted as P7): 
+FAILED CHECK: the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED': 
+FAILED CHECK: the header's count equals the printed per-step violation lines plus the initial state's listed ones: 2 printed + 0 initial; header None

@@ -1,0 +1,9 @@
+tool_diff.py --check, development run 1 (dev-local/r1, 2026-10-15 about 10:20): the two non-OK lines of its output, as printed
+(the full console was not kept; the check was rerun after the mode was restored: dev-local/tool-diff-dev1.txt, ALL CHECKS HOLD)
+
+FAIL D3 scope-wrap.sh keeps its executable mode
+TOOL DIFF: FAILED
+
+Cause: tools/scope-wrap.sh was written by `git show <commit>:<path> > file` (mode 0644); its bytes equal the base tool
+(sha256 e776ac8f2c6710d6897384154e2dafd8e3483c73ef4c8fe02596a1004f263874). Repair: chmod 0755 tools/scope-wrap.sh (no
+content change).

@@ -1,0 +1,10 @@
+-- C1: the count becomes a flag
+   receipts/81-C1; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P1']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C25: a gating append answers Committed on `Commit::Unknown`
+   receipts/82-C25; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P7']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+PROBLEM: C25_WITNESS: the steps list
+PROBLEM: C25: the C25_WITNESS constant (control, F-1, named, steps, locus, the one changed step)
+PROBLEM: C25: the healthy line from the source is the mission's and AD-1-R4 G.3(d)'s: C25 WITNESS F-1: 0 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating: Refused Uncertain Storage'
+PROBLEM: C25: AD-1-R4 G.3(b) header form C25 WITNESS F-1: 0 steps, each enabled and taking its choices; 
+PROBLEM: C25: the narrow patch replaces only the Uncertain return; self.failed(), the rollback and self.keep = true are preserved (mission section 5)
+EXPECTATIONS: PROBLEMS — STOP

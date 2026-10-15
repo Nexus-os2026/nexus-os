@@ -1,0 +1,11 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/dev-local/t3_controls.dev1.py	2026-10-15 10:15:54.939566133 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/tools/t3_controls.py	2026-10-15 10:15:54.952824797 +0100
+@@ -320,7 +320,7 @@
+                    f"{f2} / {o2[:100]}", f2 == classify.NOT_CANDIDATE and o2.startswith(want2))
+             record(cid, f"A N-{kw['prop']}-counted-as-{ctl['named_property']}: the G.3(a) primary is never a kill label "
+                    "and says so", f"first line not {classify.CANDIDATE}; 'is not counted as {ctl['named_property']}'",
+-                   f"{first[:60]}…; {outer[-120:]}", first != classify.CANDIDATE and "KILL" not in first
++                   f"{first[:60]}…; {outer[-120:]}", first != classify.CANDIDATE and "KILL_EVIDENCE_CANDIDATE" not in first
+                    and f"{kw['prop']} is not counted as {ctl['named_property']}" in outer)
+             # A tampered expectation that makes the named property the prediction: the tool invariant refuses it.
+             d3 = os.path.join(out, "A", f"{cid}-{n:03d}-N-expectation-predicting-the-named-property", "04-run")

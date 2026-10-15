@@ -1,0 +1,19 @@
+HEALTHY WITNESS LINK: VERIFIED
+control C1: healthy-witness receipt docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)
+linked (never rerun) only after this control's own restoration was verified
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): receipts/03-t3-controls/G/C1-all-obligations/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+OK   the linked files (9) are exactly the accepted receipt's (docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 in 89326b85's SHA256SUMS), byte for byte: ['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json', 'RECEIPT.txt', 'cgroup-samples.txt', 'descriptor.json', 'raw-output.txt', 'scope-record.txt', 'time-v.txt']
+OK   the receipt is the one the Stage-2 evidence commit introduced, unchanged at this commit's parent (every file's blob): e41c84b1
+OK   its classification blob and raw-output blob and sha256 are the catalog's (healthy_witness)
+OK   accepted healthy-witness type-(e3) PASS (classification, as the catalog records it): ['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS — admissible healthy-witness type-(e3) PASS']
+OK   the same witness test alone, --exact --nocapture --test-threads=1, no --ignored, on the pinned unchanged-baseline executable (catalog descriptor fields): ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   its selection listing shows exactly that one test, and it is not an ignored test: ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test']
+OK   F.2 role: the pinned unchanged-baseline executable, unchanged before and after the healthy run and hashed now equal; never this control's mutant executable: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   exact Candidate C: the source exactly C before and after the healthy run
+OK   its process and launching command: exit 0 by a normal exit; 16 GiB, zero swap, no OOM, no kill, no timeout, complete: exit 0, signal None
+OK   the exact healthy line of G.3(d), exactly once, as a whole line: 'C1 WITNESS F-1: 11 steps, each enabled and taking its choices; no violation; step 11 shows the healthy core's 'admission: refused''
+OK   harness: 'ok', one test, 1 passed, 0 failed: ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']
+OK   no positive marker, violation, fixture failure or panic in the healthy receipt (F.2): []
+OK   the same frozen schedule: 11 step records, each with its actor, choices and fixed branches: []
+OK   no violation on the healthy core, and step 11 shows the healthy branch 'admission: refused' (G.3(d)): ['admission: refused']
+OK   the same schedule as this control's own mutant witness: every step's actor and choices equal, step by step: 11

@@ -1,0 +1,17 @@
+CLASSIFICATION: G.3(a) PRIMARY — NOT ESTABLISHED
+outer class (AD-1-R4 K.2): PASS on the mutant (the control survives F-1): kills nothing
+raw outcome (as printed): outcome PASS; FAIL None; no trace; harness ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 60.00s']
+measured: states 46,524,336 (expanded 46,524,336) of the 60,000,000 ceiling; transitions 209297440; elapsed 244.6 s
+G.3(a): predicted first failure E3 (AD-1-R4: in 4 steps; the step count is recorded, not required); named property P1, attributed only by G.3(b); configuration F-1; test ledger::protocol::model_tests::full_f1
+kill label: none (the primary is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4403 KiB; scope gone
+checks: 19 of 28 hold
+FAILED CHECK: harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' and the failures list names exactly that test: ['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 60.00s']; failures []
+FAILED CHECK: exit 101 by a normal exit, no signal: exit 0, signal None, supervisor rc 0
+FAILED CHECK: exactly one panic, of that test's thread: []
+FAILED CHECK: the report is printed, then repeated verbatim in the assertion message: 1 EXPLORATION headers
+FAILED CHECK: raw outcome FAIL; no INCOMPLETE line: PASS; None
+FAILED CHECK: G.3(a): the first printed property, recorded as printed, is the predicted first failure E3 (mission section 4); it is not counted as P1; another first property is reported as printed and requires an Architect ruling: None
+FAILED CHECK: the trace is printed under 'shortest trace (<n> steps):': None
+FAILED CHECK: a FAIL prints only its failing property (no property lines): [('P1', 'HOLDS'), ('P2', 'HOLDS'), ('P4', 'HOLDS')]
+FAILED CHECK: the failing property is one of PROPERTIES: None

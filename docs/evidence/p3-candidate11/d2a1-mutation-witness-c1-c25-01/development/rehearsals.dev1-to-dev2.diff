@@ -1,0 +1,19 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/dev-local/rehearsals.dev1.py	2026-10-15 10:26:59.529255839 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/tools/rehearsals.py	2026-10-15 10:26:59.547812226 +0100
+@@ -443,12 +443,14 @@
+                    and not [x for x in ("06a-healthy-witness", "06b-link", "07-g3") if os.path.exists(os.path.join(c1, x))]
+                    and "GATE C25 AFTER THE STOP: CLOSED" in o)
+         if sc == "M1":
++            import g3  # noqa: E402
++            want_g = [g3.PRIMARY_OK, g3.WITNESS_OK, g3.HEALTHY_OK, "LINK: VERIFIED", g3.G3_OK] * len(K.ORDER)
+             g = [supervise_first(os.path.join(ev, exp["controls"][c]["dir"], f)) for c in K.ORDER
+                  for f in ("04-run/CLASSIFICATION.txt", "04c-witness/CLASSIFICATION.txt", "06a-healthy-witness/HEALTHY.txt",
+                            "06b-link/LINK.txt", "07-g3/G3.txt")]
+             record("M1 every G.3 step of both controls, run by control.main itself: primary, witness, healthy link, "
+-                   "unchanged-core link, G.3 record", "each the success label", [x[:40] for x in g],
+-                   all(x is not None and ("NOT" not in x and "FAILED" not in x) for x in g))
++                   "unchanged-core link, G.3 record", "each exactly its success label", [x[:40] for x in g if x],
++                   g == want_g)
+         os.makedirs(os.path.join(scratch, sc, "render"))
+         rc, o = run_tool(ev, [os.path.join(ev, "tools/render.py"), os.path.join(scratch, sc, "render")])
+         open(os.path.join(out, f"{sc}-render.console.txt"), "w").write(o)

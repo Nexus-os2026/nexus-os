@@ -1,0 +1,87 @@
+{
+ "control": "C25",
+ "type": "e3",
+ "reference": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)",
+ "checks": [
+  [
+   "this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration)",
+   true,
+   "receipts/82-C25/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'"
+  ],
+  [
+   "the linked files (9) are exactly the accepted receipt's (docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25 in 89326b85's SHA256SUMS), byte for byte",
+   true,
+   "['CHECKS.txt', 'CLASSIFICATION.txt', 'PARSED-RECEIPT.json', 'RECEIPT.txt', 'cgroup-samples.txt', 'descriptor.json', 'raw-output.txt', 'scope-record.txt', 'time-v.txt']"
+  ],
+  [
+   "the receipt is the one the Stage-2 evidence commit introduced, unchanged at this commit's parent (every file's blob)",
+   true,
+   "e41c84b1"
+  ],
+  [
+   "its classification blob and raw-output blob and sha256 are the catalog's (healthy_witness)",
+   true,
+   ""
+  ],
+  [
+   "accepted healthy-witness type-(e3) PASS (classification, as the catalog records it)",
+   true,
+   "['CLASSIFICATION: PASS', 'outer class (AD-1-R4 K.2): PASS \u2014 admissible healthy-witness type-(e3) PASS']"
+  ],
+  [
+   "the same witness test alone, --exact --nocapture --test-threads=1, no --ignored, on the pinned unchanged-baseline executable (catalog descriptor fields)",
+   true,
+   "['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world', '--exact', '--nocapture', '--test-threads=1']"
+  ],
+  [
+   "its selection listing shows exactly that one test, and it is not an ignored test",
+   true,
+   "['ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test']"
+  ],
+  [
+   "F.2 role: the pinned unchanged-baseline executable, unchanged before and after the healthy run and hashed now equal; never this control's mutant executable",
+   true,
+   "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+  ],
+  [
+   "exact Candidate C: the source exactly C before and after the healthy run",
+   true,
+   ""
+  ],
+  [
+   "its process and launching command: exit 0 by a normal exit; 16 GiB, zero swap, no OOM, no kill, no timeout, complete",
+   true,
+   "exit 0, signal None"
+  ],
+  [
+   "the exact healthy line of G.3(d), exactly once, as a whole line: 'C25 WITNESS F-1: 1 steps, each enabled and taking its choices; no violation; step 1 shows the healthy core's 'append_gating: Refused Uncertain Storage''",
+   true,
+   ""
+  ],
+  [
+   "harness: 'ok', one test, 1 passed, 0 failed",
+   true,
+   "['test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']"
+  ],
+  [
+   "no positive marker, violation, fixture failure or panic in the healthy receipt (F.2)",
+   true,
+   "[]"
+  ],
+  [
+   "the same frozen schedule: 1 step records, each with its actor, choices and fixed branches",
+   true,
+   "[]"
+  ],
+  [
+   "no violation on the healthy core, and step 1 shows the healthy branch 'append_gating: Refused Uncertain Storage' (G.3(d))",
+   true,
+   "['append_gating: Refused Uncertain Storage']"
+  ],
+  [
+   "the same schedule as this control's own mutant witness: every step's actor and choices equal, step by step",
+   true,
+   "1"
+  ]
+ ]
+}

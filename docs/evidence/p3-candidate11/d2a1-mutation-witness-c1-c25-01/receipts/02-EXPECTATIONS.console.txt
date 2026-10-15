@@ -1,0 +1,5 @@
+-- C1: the count becomes a flag
+   receipts/81-C1; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P1']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+-- C25: a gating append answers Committed on `Commit::Unknown`
+   receipts/82-C25; ledger::protocol::model_tests::full_f1 (F-1); permitted ['P7']; cap 60,000,000; verdict assertion crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5 (Candidate C's model_tests.rs (unchanged by the patch)); link e1 docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1
+EXPECTATIONS: DERIVED — ALL CROSS-CHECKS HOLD

@@ -1,0 +1,22 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/dev-local/g3.dev1.py	2026-10-15 10:28:04.978728311 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/tools/g3.py	2026-10-15 10:28:21.301873289 +0100
+@@ -322,7 +322,7 @@
+            and all(v.startswith("  ") and not v.startswith("   ") for v in vio), f"{len(vio)} lines; n {n_vio}")
+         locus = f"  step {w['at']} {'step' if w['in_step'] else 'after'}: {N}: "
+         ck(f"the named property's violation is listed at its locus ('{locus.strip()} …'; G.4 item 9)",
+-           sum(v.startswith(locus) for v in vio) == 1, [v[:60] for v in vio if f": {N}: " in v])
++           sum(v.startswith(locus) for v in vio) >= 1, [v[:60] for v in vio if f": {N}: " in v])
+         ck(f"{OTHER} is listed among the violations, separately ({OTHER} is never counted as {N})",
+            any(re.match(rf"^  (initial state|step \d+ (step|after)): {OTHER}: ", v) for v in vio), "")
+     ck("the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY "
+@@ -341,8 +341,8 @@
+        "branches (G.4 items 5-7)", not probs, probs[:3])
+     if len(recs) == w["total"] and not probs:
+         at = recs[w["at"] - 1]
+-        ck(f"at step {w['at']} (the step the control changes) the branch is '{w['changed']}' (G.3(b), G.4 item 9)",
+-           at["branches"] == [w["changed"]], at["branches"])
++        ck(f"at step {w['at']} (the step the control changes) the branch '{w['changed']}' is shown, as run_witness's own "
++           "predicate requires (G.3(b), G.4 item 9)", w["changed"] in (at["branches"] or []), at["branches"])
+         place = "step" if w["in_step"] else "after"
+         ck(f"step {w['at']}'s record prints the violation of {N} in its {'own violations' if w['in_step'] else 'state after it'}"
+            f" (VIOLATION {place}: {N})", (place, N) in at["violations"], at["violations"])

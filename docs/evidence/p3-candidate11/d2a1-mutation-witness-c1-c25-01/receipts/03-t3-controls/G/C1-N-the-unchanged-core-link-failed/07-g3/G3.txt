@@ -1,0 +1,10 @@
+G.3: NOT ESTABLISHED
+control C1: AD-1-R4 G.3 (kill criterion for C1 and C25 only)
+OK   (a) the primary is an admissible type-(a) FAIL whose first printed property is E3, recorded as printed and not counted as P1: E3
+OK   (b) the mutant witness is an admissible type-(c) receipt with the exact positive line 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)': CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY)
+OK   (b) F.2: the witness ran on the same pinned mutant executable as the primary (path, sha256 and size, before and after both runs, equal to 03-build/PIN.json): 81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc
+OK   (c) none of the witness rejections: every check of the witness receipt holds (CHECKS.txt: no FAIL line)
+OK   restoration: the worktree restored exactly to C after the mutant receipts
+OK   (d) the accepted healthy type-(e3) witness linked after the restoration and verified
+FAIL the accepted F-1 unchanged-core type-(e1) receipt linked after the restoration and verified
+(e) no recording: G.3 is not established

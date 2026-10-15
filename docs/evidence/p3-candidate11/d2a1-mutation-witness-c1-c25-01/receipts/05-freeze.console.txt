@@ -1,0 +1,4 @@
+FREEZE: RECORDED
+recorded: 2026-10-15T10:49:17+0100
+frozen files: 89
+05-FREEZE.json sha256 8a95e86180cdb352a06ecd88d5b33f0ff27e3bdba64530dd8df6818b6bc85ac7

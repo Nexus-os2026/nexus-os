@@ -1,0 +1,131 @@
+{
+ "control": "C1",
+ "receipt_type": "AD-1-R4 F.1 (a), the G.3(a) primary",
+ "test": "ledger::protocol::model_tests::full_f1",
+ "configuration": "F-1",
+ "named_property": "P1",
+ "predicted_first_failure": "E3",
+ "printed_property": "E3",
+ "other_first_property": false,
+ "ceiling_states": 60000000,
+ "time_limit_seconds": 2700,
+ "report": {
+  "header": "EXPLORATION F-1",
+  "outcome": "FAIL",
+  "bounds": "facts 2 conflicting [false, false] ENV false batch false faults 3 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 false; ticket limit 8, refusal limit 4; settlement and the worker on; caps 60000000 states, 2700s",
+  "actors": "[Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm]",
+  "states": 5794,
+  "expanded": 1553,
+  "transitions": 12904,
+  "fault_edges": 5377,
+  "no_step": 0,
+  "elapsed_s": 0.0,
+  "cap": 60000000,
+  "time_cap_s": 2700,
+  "fail": "E3: live 2, unapplied 1; armed 0, counted 2, dropped 0",
+  "incomplete": null,
+  "trace_steps": "  shortest trace (4 steps):"
+ },
+ "panic": {
+  "header": "thread 'ledger::protocol::model_tests::full_f1' (2046116) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:4133:5:",
+  "message_first_line": [
+   "assertion `left == right` failed: failed: {\"E3\"}"
+  ]
+ },
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.02s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "4308992",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.02,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.057,
+  "max_rss_kib_largest_process": 6904
+ },
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "pinned_sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "pinned_size": 8987200,
+  "before": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+   "size": 8987200,
+   "mtime_ns": 1792058067773668570,
+   "inode": 65951969,
+   "symlink": false
+  },
+  "after": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+   "size": 8987200,
+   "mtime_ns": 1792058067773668570,
+   "inode": 65951969,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_f1",
+    "--exact",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f1: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f1: test"
+   ]
+  },
+  "ignored_listing": {
+   "argv": [
+    "ledger::protocol::model_tests::full_f1",
+    "--exact",
+    "--ignored",
+    "--list"
+   ],
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::full_f1: test\n\n1 test, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::full_f1: test"
+   ]
+  },
+  "expected_ignored": true,
+  "executable_after_listing": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+   "size": 8987200,
+   "mtime_ns": 1792058067773668570,
+   "inode": 65951969,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "f092dab461f063fea17925149b6266a102bf15c4cd8d9f7230ccc02f4c839c2a",
+ "not_required": "any witness line, locus or verdict (F.1 (a))",
+ "outer_classification": "FAIL \u2014 admissible type-(a) original-explorer mutant FAIL; first failure E3 recorded as printed (AD-1-R4 G.3(a) primary of C1); E3 is not counted as P1; P1's attribution comes only from the type-(c) witness (G.3(b))",
+ "checks_hold": 31,
+ "checks_total": 31
+}

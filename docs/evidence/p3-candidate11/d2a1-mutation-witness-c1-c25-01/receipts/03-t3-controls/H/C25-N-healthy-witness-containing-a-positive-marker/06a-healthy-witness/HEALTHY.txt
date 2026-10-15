@@ -1,0 +1,6 @@
+HEALTHY WITNESS LINK: FAILED
+control C25: healthy-witness receipt not linked
+linked (never rerun) only after this control's own restoration was verified
+OK   this control's own restoration receipt exists and records RESTORE: EXACTLY_C (no link before restoration): ../../../receipts/03-t3-controls/H/C25-N-healthy-witness-containing-a-positive-marker/05-restore/RESTORE.txt: 'RESTORE: EXACTLY_C'
+FAIL the linked files (9) are exactly the accepted receipt's (docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25 in 89326b85's SHA256SUMS), byte for byte: ['raw-output.txt']
+OK   the receipt is the one the Stage-2 evidence commit introduced, unchanged at this commit's parent (every file's blob): e41c84b1

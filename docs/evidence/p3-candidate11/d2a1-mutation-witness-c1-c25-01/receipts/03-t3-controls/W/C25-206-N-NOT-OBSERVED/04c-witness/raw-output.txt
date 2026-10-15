@@ -1,0 +1,26 @@
+SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01): not the output of any run
+
+running 1 test
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]
+    branches ["append_gating: Committed (inserted)"]; word after 0x25 (live 0, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+    VIOLATION step: E4: a synthetic detail
+    VIOLATION after: P7: a synthetic detail
+
+thread 'ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world' (4409) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5:
+C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations
+NAMED PROPERTY P7: NOT OBSERVED on the world after step 1 (append_gating: Committed (inserted))
+OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: ["E4"]
+every violation:
+  step 1 step: E4: a synthetic detail
+  step 1 after: P7: a synthetic detail
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

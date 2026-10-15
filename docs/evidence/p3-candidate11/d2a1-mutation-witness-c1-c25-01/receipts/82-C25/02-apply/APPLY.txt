@@ -1,0 +1,7 @@
+APPLY: EXACTLY_C_PLUS_PATCH
+control C25: a gating append answers Committed on `Commit::Unknown`
+patch: inputs/patches/C25.patch (the frozen R2 packet's catalog/patches/C25.patch), sha256 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732 (catalog 29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732)
+git apply --check: rc 0; git apply: rc 0 
+changed files (git diff --name-only): ['crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '1\t1\tcrates/nexus-governed-control/src/ledger/protocol.rs'
+verify_mutant.py: EXACTLY_C_PLUS_PATCH; crates/nexus-governed-control/src/ledger/protocol.rs git blob 0456a0c1c1fe40f71593edc6ba5938a3b0c29900 (expected 0456a0c1c1fe40f71593edc6ba5938a3b0c29900), sha256 27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec (expected 27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec); status [' M crates/nexus-governed-control/src/ledger/protocol.rs']; other mismatches []; staged []; 5364 tracked blobs compared
+the mutant blob is computed in-process and never written to any object store; nothing is staged or committed

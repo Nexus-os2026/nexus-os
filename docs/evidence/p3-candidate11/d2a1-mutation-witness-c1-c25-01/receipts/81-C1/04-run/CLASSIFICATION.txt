@@ -1,0 +1,8 @@
+CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E3 recorded as printed (AD-1-R4 G.3(a) primary of C1); E3 is not counted as P1; P1's attribution comes only from the type-(c) witness (G.3(b))
+raw outcome (as printed): outcome FAIL; FAIL E3: live 2, unapplied 1; armed 0, counted 2, dropped 0; shortest trace (4 steps):; harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.02s']
+measured: states 5,794 (expanded 1,553) of the 60,000,000 ceiling; transitions 12904; elapsed 0.0 s
+G.3(a): predicted first failure E3 (AD-1-R4: in 4 steps; the step count is recorded, not required); named property P1, attributed only by G.3(b); configuration F-1; test ledger::protocol::model_tests::full_f1
+kill label: none (the primary is a part of G.3 only)
+resources: wall 0.02 s of 2700 s; scope memory.peak 4308992 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 6904 KiB; scope gone
+checks: 31 of 31 hold

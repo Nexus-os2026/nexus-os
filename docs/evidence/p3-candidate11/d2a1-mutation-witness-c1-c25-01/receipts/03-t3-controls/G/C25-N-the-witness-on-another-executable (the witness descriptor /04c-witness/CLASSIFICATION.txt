@@ -1,0 +1,10 @@
+CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY)
+outer class (AD-1-R4 K.2): FAIL — admissible type-(c) named-property mutant-witness receipt (G.3(b)): 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))'; C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations; E4 reported separately, not counted as P7
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations', 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))', 'OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: ["E4"]']
+positive line: 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))' — present at its locus
+executable: the pinned mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef sha256 af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1 size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4409 KiB; scope gone
+step: step 1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: branches ['append_gating: Committed (inserted)']; word 0x25; violations [('step', 'E4'), ('after', 'P7')]
+checks: 29 of 29 hold

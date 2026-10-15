@@ -1,0 +1,153 @@
+{
+ "control": "C25",
+ "receipt_type": "AD-1-R4 F.1 (c), the G.3(b) mutant witness",
+ "test": "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world",
+ "named_property": "P7",
+ "positive_line": "NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))",
+ "header_violations": 2,
+ "other_property_required": "E4",
+ "panic_message": [
+  "C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations",
+  "NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))",
+  "OTHER PROPERTIES VIOLATED, each reported separately and not counted as P7: [\"E4\"]",
+  "every violation:",
+  "  step 1 step: E4: a synthetic detail",
+  "  step 1 after: P7: a synthetic detail"
+ ],
+ "step_records": [
+  {
+   "n": 1,
+   "total": 1,
+   "actor": "Gc(0)",
+   "choices": "[0, 0, 0, 1, 0, 0]",
+   "note": "Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]",
+   "branches": [
+    "append_gating: Committed (absent)"
+   ],
+   "word": "0x25",
+   "violations": [
+    [
+     "step",
+     "E4"
+    ],
+    [
+     "after",
+     "P7"
+    ]
+   ]
+  }
+ ],
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4409
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "primary_executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [],
+   "argv": [
+    "ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "3fc1d5c8ccb6b3667ebfe373f96ea94a0502f7f430e6c0a5809c611e10e1821d",
+ "not_produced_by_design": "the explorer report, counts, property lines and branch list (F.1 (c))",
+ "outer_classification": "NOT ADMISSIBLE (at step 1 (the step the control changes) the branch 'append_gating: Committed (inserted)' is shown, as run_witness's own predicate requires (G.3(b), G.4 item 9)): establishes nothing",
+ "checks_hold": 28,
+ "checks_total": 29
+}

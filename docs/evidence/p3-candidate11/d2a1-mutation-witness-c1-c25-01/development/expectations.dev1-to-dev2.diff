@@ -1,0 +1,29 @@
+--- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/dev-local/expectations.dev1.py	2026-10-15 10:07:15.059050751 +0100
++++ /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-mutation-witness-c1-c25-01/tools/expectations.py	2026-10-15 10:07:15.078098063 +0100
+@@ -230,7 +230,8 @@
+         return None
+     t = m.group(1)
+     field = lambda k: (re.findall(rf"^    {k}: (.*),$", t, re.M) or [None])[0]
+-    sm = re.search(r"^    steps: &\[\n(.*?)\n    \],$", t, re.M | re.S)
++    # The list is written over several lines (C1) or on one line (C25).
++    sm = re.search(r"^    steps: &\[\n(.*?)\n    \],$", t, re.M | re.S) or re.search(r"^    steps: &\[(.*)\],$", t, re.M)
+     need(sm is not None, f"{name}: the steps list")
+     flat = re.sub(r"\s+", " ", sm.group(1) if sm else "")
+     steps = []
+@@ -322,11 +323,13 @@
+         "OTHER PROPERTIES VIOLATED, each reported separately and not counted as "), f"{cid}: G.3(b) other-properties form")
+     if cid == "C25":
+         ml = mut_text.split("\n")
+-        i = [k for k, l in enumerate(ml) if l.strip() == "return GatingOutcome::Committed(seq);"]
+         bl = K.source(K.PROTOCOL).split("\n")
+         j = [k for k, l in enumerate(bl) if l.strip() == "return refused(Persistence::Uncertain, Reason::Storage);"]
+-        need(len(i) == 1 and len(j) == 1 and i == j and [l.strip() for l in ml[i[0] - 3:i[0]]] == M["preserved_lines"]
+-             and ml[:i[0]] == bl[:j[0]] and ml[i[0] + 1:] == bl[j[0] + 1:],
++        # C already holds one `return GatingOutcome::Committed(seq);` (the Durable arm's neighbour, line 1460): the
++        # mutant's changed line is found at the index of C's one Uncertain return, and every other line is C's.
++        need(len(j) == 1 and len(ml) == len(bl) and ml[j[0]].strip() == "return GatingOutcome::Committed(seq);"
++             and [l.strip() for l in ml[j[0] - 3:j[0]]] == M["preserved_lines"] and ml[:j[0]] == bl[:j[0]]
++             and ml[j[0] + 1:] == bl[j[0] + 1:],
+              "C25: the narrow patch replaces only the Uncertain return; self.failed(), the rollback and self.keep = true "
+              "are preserved (mission section 5)")
+         need(e["patch_lines_removed_added"] == [1, 1], "C25: one line removed, one added")

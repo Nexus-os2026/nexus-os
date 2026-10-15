@@ -1,0 +1,4 @@
+SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01): not the output of any run
+
+running 1 test
+test ledger::protocol::model_tests::c25_witness_p7_on_the_resulting_world ... C25 WITNESS F-1 step  1/1 Gc(0) choices [0, 0, 0, 1, 0, 0]: Gc(0): append_gating G1 -> Refused Uncertain Storage [Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok]   [fault]

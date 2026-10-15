@@ -1,0 +1,1 @@
+STATUS: STOPPED BEFORE EXECUTION; P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01; new candidates 0 of 2; attempted []; stopped []

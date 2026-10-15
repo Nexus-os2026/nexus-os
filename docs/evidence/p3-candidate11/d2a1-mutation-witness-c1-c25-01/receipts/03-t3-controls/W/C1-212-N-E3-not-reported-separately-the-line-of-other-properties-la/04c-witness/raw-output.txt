@@ -1,0 +1,56 @@
+SYNTHETIC (t3_controls.py, P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01): not the output of any run
+
+running 1 test
+test ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission ... C1 WITNESS F-1 step  1/11 Fw(0) choices []: Fw(0): arm -> Armed
+    branches []; word after 0x10004 (live 1, unapplied 0)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  2/11 Fw(0) choices [1]: Fw(0): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  3/11 Fw(1) choices []: Fw(1): arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  4/11 Fw(1) choices [1]: Fw(1): the wait expires: expire   [fault]
+    branches ["expire: Armed -> Counted"]; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+    VIOLATION step: E3: a synthetic detail
+C1 WITNESS F-1 step  5/11 Fw(1) choices [0]: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None })
+    branches []; word after 0x20000020004 (live 2, unapplied 2)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  6/11 Fw(1) choices [0]: Fw(1): confirm
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  7/11 Se choices []: Se: [T] claims F2 for Append
+    branches []; word after 0x10000010004 (live 1, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  8/11 Se choices []: Se: arm -> Armed
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1)]
+C1 WITNESS F-1 step  9/11 Se choices [0, 0, 0, 0]: Se: append_facts["F2"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok]
+    branches ["append_facts: Committed (inserted)"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 10/11 Se choices []: Se: [T] applies Fact(Committed); releases
+    branches []; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+C1 WITNESS F-1 step 11/11 Adm choices []: Adm: [T] admission: refused
+    branches ["admission: admitted"]; word after 0x10000020004 (live 2, unapplied 1)
+    ledger after [Prepared(0), Prepared(1), Fact(1)]
+    VIOLATION step: P1: a synthetic detail
+
+thread 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission' (4409) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5:
+C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations
+NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)
+OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["P15"]
+every violation:
+  step 4 step: E3: a synthetic detail
+  step 11 step: P1: a synthetic detail
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s
+

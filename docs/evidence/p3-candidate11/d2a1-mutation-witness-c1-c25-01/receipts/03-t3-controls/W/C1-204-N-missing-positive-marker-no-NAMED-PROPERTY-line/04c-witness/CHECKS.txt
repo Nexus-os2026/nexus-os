@@ -1,0 +1,29 @@
+OK   the witness started (no pre-flight refusal)
+OK   executable is the pinned one (path, sha256, size) before, at selection and after: 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 / 81af972125ea8abb… 4373 (pinned 81af972125ea8abb… 4373)
+OK   source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66): EXACTLY_C_PLUS_PATCH / EXACTLY_C_PLUS_PATCH
+OK   raw output sha256 equals the launcher's record: cf18ea88da37a1e20288eacf1a6d03f717dfb1a38111d01548dff68aa406bd7c
+OK   F.2 role: the SAME pinned mutant executable as this control's type-(a) primary (03-build/PIN.json and the primary's descriptor before and after: path, sha256, size), never the unchanged-baseline executable: 81af972125ea8abb… 4373
+OK   the primary of the same control is classified PRIMARY_OK (no witness follows an unestablished primary): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF)
+OK   argv: the pinned executable, exactly the one test and flags --exact --nocapture --test-threads=1: ['/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef', 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   selection listing (--exact --list) shows exactly that one test: ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test']
+OK   ignored status from the executable's own listing (--exact --ignored --list): not ignored; --ignored passed iff ignored: []
+OK   argv tail exactly: the witness test, --exact, --nocapture, --test-threads=1 (no --ignored: an ordinary test): ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   the harness ran exactly that one test: running ['1']; started ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission']
+OK   harness: 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in …' (1 failed) and the failures list names exactly that test: ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; failures ['ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission']
+OK   exit 101 by a normal exit, no signal: exit 101, signal None, supervisor rc 101
+OK   launching command: 16 GiB, zero swap, enforced; no OOM, no kill, no timeout; complete record; within 2700 s: memory.peak 3219456 B, swap.peak 0 B, oom 0, oom_kill 0, wall 0.0 s of 2700 s, timed out False, scope gone
+OK   exactly one panic, of the witness test's thread: ["thread 'ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission' (4409) panicked at crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5:"]
+OK   the panic is the witness's own verdict panic (run_witness's panic!, crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5), not a fixture assertion or an unrelated panic: crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:8443:5
+OK   the header: 'C1 WITNESS F-1: 11 steps, each enabled and taking its choices; <n> violations', n at least 1 (G.3(b)): ['C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations']
+FAIL the exact positive line follows the header: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' (G.3(b)): ['OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]']
+FAIL the line of other properties, each reported separately and not counted as P1, names E3 and not P1 (G.3(b)): ['every violation:']
+FAIL 'every violation:' then exactly n violation lines (the header's count), each indented: 1 lines; n 2
+OK   the named property's violation is listed at its locus ('step 11 step: P1: …'; G.4 item 9): ['  step 11 step: P1: a synthetic detail']
+FAIL E3 is listed among the violations, separately (E3 is never counted as P1)
+FAIL the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'
+OK   no healthy line in a mutant-witness receipt (F.2; G.3(c)): neither the healthy line nor 'no violation' nor the healthy-branch assertion
+OK   no WITNESS FIXTURE FAILURE (G.3(c)); no quotient or symmetry refusal; no explorer report (NOT PRODUCED BY DESIGN for type (c))
+OK   every scheduled step printed, numbered 1..11, with its frozen actor and choices and its fixed branches (G.4 items 5-7): []
+OK   at step 11 (the step the control changes) the branch 'admission: admitted' is shown, as run_witness's own predicate requires (G.3(b), G.4 item 9): ['admission: admitted']
+OK   step 11's record prints the violation of P1 in its own violations (VIOLATION step: P1): [('step', 'P1')]
+OK   the header's count equals the printed per-step violation lines plus the initial state's listed ones: 2 printed + 0 initial; header 2

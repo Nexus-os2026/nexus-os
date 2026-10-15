@@ -1,0 +1,260 @@
+{
+ "control": "C1",
+ "receipt_type": "AD-1-R4 F.1 (c), the G.3(b) mutant witness",
+ "test": "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission",
+ "named_property": "P1",
+ "positive_line": "NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)",
+ "header_violations": 2,
+ "other_property_required": "E3",
+ "panic_message": [
+  "C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations",
+  "NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)",
+  "OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: [\"E3\"]",
+  "every violation:",
+  "  step 4 step: E3: a synthetic detail",
+  "  step 11 step: P1: a synthetic detail"
+ ],
+ "step_records": [
+  {
+   "n": 1,
+   "total": 11,
+   "actor": "Fw(0)",
+   "choices": "[]",
+   "note": "Fw(0): arm -> Armed",
+   "branches": [],
+   "word": "0x10004",
+   "violations": []
+  },
+  {
+   "n": 2,
+   "total": 11,
+   "actor": "Fw(0)",
+   "choices": "[1]",
+   "note": "Fw(0): the wait expires: expire   [fault]",
+   "branches": [
+    "expire: Armed -> Counted"
+   ],
+   "word": "0x10000010004",
+   "violations": []
+  },
+  {
+   "n": 3,
+   "total": 11,
+   "actor": "Fw(1)",
+   "choices": "[]",
+   "note": "Fw(1): arm -> Armed",
+   "branches": [],
+   "word": "0x10000020004",
+   "violations": []
+  },
+  {
+   "n": 4,
+   "total": 11,
+   "actor": "Fw(1)",
+   "choices": "[1]",
+   "note": "Fw(1): the wait expires: expire   [fault]",
+   "branches": [
+    "expire: Armed -> Counted"
+   ],
+   "word": "0x20000020004",
+   "violations": [
+    [
+     "step",
+     "E3"
+    ]
+   ]
+  },
+  {
+   "n": 5,
+   "total": 11,
+   "actor": "Fw(1)",
+   "choices": "[0]",
+   "note": "Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: None })",
+   "branches": [],
+   "word": "0x20000020004",
+   "violations": []
+  },
+  {
+   "n": 6,
+   "total": 11,
+   "actor": "Fw(1)",
+   "choices": "[0]",
+   "note": "Fw(1): confirm",
+   "branches": [],
+   "word": "0x10000010004",
+   "violations": []
+  },
+  {
+   "n": 7,
+   "total": 11,
+   "actor": "Se",
+   "choices": "[]",
+   "note": "Se: [T] claims F2 for Append",
+   "branches": [],
+   "word": "0x10000010004",
+   "violations": []
+  },
+  {
+   "n": 8,
+   "total": 11,
+   "actor": "Se",
+   "choices": "[]",
+   "note": "Se: arm -> Armed",
+   "branches": [],
+   "word": "0x10000020004",
+   "violations": []
+  },
+  {
+   "n": 9,
+   "total": 11,
+   "actor": "Se",
+   "choices": "[0, 0, 0, 0]",
+   "note": "Se: append_facts[\"F2\"] -> Committed (inserted) [Open:Ok Facts:Ok Insert:Ok Commit:Ok]",
+   "branches": [
+    "append_facts: Committed (inserted)"
+   ],
+   "word": "0x10000020004",
+   "violations": []
+  },
+  {
+   "n": 10,
+   "total": 11,
+   "actor": "Se",
+   "choices": "[]",
+   "note": "Se: [T] applies Fact(Committed); releases",
+   "branches": [],
+   "word": "0x10000020004",
+   "violations": []
+  },
+  {
+   "n": 11,
+   "total": 11,
+   "actor": "Adm",
+   "choices": "[]",
+   "note": "Adm: [T] admission: refused",
+   "branches": [
+    "admission: admitted"
+   ],
+   "word": "0x10000020004",
+   "violations": [
+    [
+     "step",
+     "P1"
+    ]
+   ]
+  }
+ ],
+ "harness_result": [
+  "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s"
+ ],
+ "process": {
+  "exit_status": 101,
+  "signal": null,
+  "supervisor_rc": 101,
+  "wrapper_recorded_status": "101"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3219456",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.035,
+  "max_rss_kib_largest_process": 4409
+ },
+ "executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "pinned_sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+  "pinned_size": 4373,
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "primary_executable": {
+  "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+  "before": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  },
+  "after": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "selection": {
+  "listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [
+    "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test"
+   ],
+   "argv": [
+    "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission",
+    "--exact",
+    "--list"
+   ]
+  },
+  "ignored_listing": {
+   "exit": 0,
+   "stdout": "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission: test\n\n1 tests, 0 benchmarks\n",
+   "stderr": "",
+   "listed": [],
+   "argv": [
+    "ledger::protocol::model_tests::c1_witness_p1_at_a_successful_admission",
+    "--exact",
+    "--ignored",
+    "--list"
+   ]
+  },
+  "expected_ignored": false,
+  "executable_after_listing": {
+   "path": "/synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef",
+   "sha256": "81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc",
+   "size": 4373,
+   "mtime_ns": 0,
+   "inode": 0,
+   "symlink": false
+  }
+ },
+ "raw_output_sha256": "e1d07e6a54b13962e56b9cb7419c9318bb318d1e08e8f7861e28ca7d94de7f24",
+ "not_produced_by_design": "the explorer report, counts, property lines and branch list (F.1 (c))",
+ "outer_classification": "NOT ADMISSIBLE (source EXACTLY_C_PLUS_PATCH before and after (mutant blob 7d95dd425fcdf17b12dda2fdce461f97ba7b9a66)): establishes nothing",
+ "checks_hold": 28,
+ "checks_total": 29
+}

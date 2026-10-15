@@ -1,0 +1,153 @@
+DEVELOPMENT LOG — P3-C11-DR01-D2A1-MUTATION-WITNESS-C1-C25-01 (Claude Code, Claude Opus 5.5 `claude-opus-5-5`, effort High)
+All times 2026-10-15, Europe/London (+01:00), taken from file times and the execution record; "before 09:47" marks the
+reading and the static source review, whose exact times were not recorded. Official receipts are under receipts/;
+development runs are under dev-local/ (kept on the machine, not published: disposable copies of the evidence root r1 and
+later, whose tools/common.py names the copy as EV, made by dev-local/mkroot.sh; the edits were applied by counted
+exact-replacement scripts dev-local/edit_*.py through dev-local/rep.py, each aborting without writing when an anchor did
+not match exactly); every failing development output and every revision with its diff is copied here.
+
+BEFORE THE FREEZE (no Cargo command, no rustc, no Nexus build, test or executable run; development used git objects, the
+previous packets, synthetic files and synthetic evidence roots only; every worktree, target and executable outside this
+mission was only read)
+
+ 1. before 09:47  Read the mission, AGENTS.md and CLAUDE.md. Main worktree clean, rebuild/phase0-trust-boundary f727f5c3
+           (untouched by this mission). Candidate C d5964ee5 (tree 51bac5fd; protocol.rs a2df2841, model_tests.rs
+           28085ce2, unit_tests.rs 55dc6640); catalog blob 19183742, sha256 d6c05a7c; tail evidence e41c84b1 (tree
+           10b408a1, parent c10681b3) present locally; remote review ref tranche3-tail-01 -> e41c84b1; destination ref,
+           local branch, evidence root, evidence worktree path and every mtw path absent. Remote main 6e15dee6,
+           rebuild/phase0-trust-boundary f727f5c3. Host: MemAvailable about 51 GiB, 18 GiB free disk (99% used); no
+           p3c11-* scope, cargo, rustc or governed-control executable running.
+ 2. before 09:47  Read AD-1-R4 F, F.1, F.2, G.1-G.4, I, K.1, K.2 at C; the frozen catalog entries of C1 and C25 (patches,
+           mutant blobs, witness fields, healthy_witness, restored_receipt, special_attribution_rules); the witness source
+           in Candidate C's model_tests.rs (replay_schedule, run_witness, C1_WITNESS, C25_WITNESS and the two #[test]s;
+           run_witness's own verdict panic at model_tests.rs:8443:5; the fixture assertions at 8312, 8328, 8333, 8395 and
+           8408); the accepted Stage-2 healthy receipts 50-witness-C1 and 51-witness-C25 at 89326b85 (PASS, type (e3),
+           the pinned baseline executable cde9f9d2…, the exact healthy lines); the tail's tooling (its packet's tools/ and
+           the ten tools it carried), development log, INDEX, CARRIED-FORWARD and local evidence root.
+ 3. before 09:47  Static source facts (nothing built): both patches change protocol.rs only, so the witness tests,
+           run_witness and the explorer are C's in both mutants; Candidate C's model_tests.rs lines 8245-8521 are byte for
+           byte the 277 lines the Architect-reviewed witness source commit 42dd1bd1 added (one occurrence); C already
+           holds one `return GatingOutcome::Committed(seq);` (line 1460), so C25's changed line is identified by C's one
+           Uncertain return (line 1476), not by text alone. The catalog's printed_property_must_be (P1, P7) is read
+           under its own special_attribution_rules (AD-1-R4 G.3): the primary is recorded as printed and must be the
+           predicted E3/E4 (mission sections 4 and 5).
+ 4. 09:47  Mission evidence root created (absent before). original-tools/ (25) extracted from the git objects of e41c84b1
+           (15: its packet's tools/, each sha256 equal to its SHA256SUMS) and of the commits its CARRIED-FORWARD.md names
+           (10, blob and sha256 equal to the record); every file byte-equal to the tail's local root's tools/. tools/
+           seeded from them.
+ 5. 09:55  common.py (mission identity, mtw namespace, order C1 C25 and receipt directories 81-82, the 31 accepted
+           controls, BLOCKED = [C7], NOT_AUTHORIZED = [C4], the two-control matrix, G3: the mission's statement of each
+           control's G.3 bindings, WITNESS_LIMIT 2700, the tail's identities with its four accepted controls' evidence
+           identities read from e41c84b1's git objects, the two records, publication names, parent e41c84b1).
+           documents/ (09:56): the two records (dev-local/gen_documents.py, from mission sections 1-3 and 10 and git
+           objects; read-only after writing).
+ 6. 09:58  g3.py added: classify_primary (G.3(a): every check of classify_a, with the first printed property recorded as
+           printed and required to be the predicted E3/E4, never counted as P1/P7; another first property is an Architect
+           ruling), classify_witness (G.3(b), (c); F.2), link_healthy (G.3(d), type (e3)), obligations (G.3 (a)-(e)).
+           classify.py and t3.py stay byte-identical. A self-review before any run relaxed one check that would have
+           forbidden an initial-state violation outright (AD-1-R4 does not): the header's count must equal the printed
+           per-step violations plus the initial state's listed ones.
+ 7. 10:01  expectations.py (g3_block, witness_const), control.py (10:03; the G.3 flow in main, C4 refused by name, link()
+           unchanged), authenticate.py (10:04; [3] for C1 and C25, [6], [11] without its tooling check, new [12] the tail
+           evidence and the base tooling check, new [13] the witness inputs). Authentication dev run 1 (r1, 10:06): ALL
+           CHECKS HOLD (559 OK). Expectations dev run 1 (10:06) FAILED (development/expectations-dev1-FAILED-...): the
+           C25_WITNESS steps list is written on one line (the parser expected several), and the C25 preservation check
+           required `return GatingOutcome::Committed(seq);` to occur once in the mutant (C holds one already). Both fixed
+           (expectations.dev1-to-dev2.diff); dev run 2 (10:07): DERIVED; the parser reproduces both frozen schedules
+           from the real healthy receipts.
+ 8. 10:08  record_freeze.py, pre_exec_gate.py, final_gate.py (10:09), render.py (10:10), build_packet.py, finalize.py,
+           publish_checks.py, worktree.py (10:11) retargeted.
+ 9. 10:14  t3_controls.py rewritten for the G.3 controls (sections A, W, H, B, G, C, D, F; its helpers kept unchanged).
+           Dev run 1 (r1, 10:15) FAILED two cases (development/t3-controls-dev1-FAILED-...): the "never a kill label"
+           check required the word KILL to be absent, but the primary's label rightly says "NOT A KILL BY ITSELF". The
+           tool was right; the check was too broad. Fixed in the check only (t3_controls.dev1-to-dev2.diff). Dev run 2
+           (10:15): 104 of 104 as expected; every negative case reviewed for the check that fails (each fails at its
+           intended check).
+10. 10:17  rehearsals.py rewritten (R1-R5, N1-N7, M1-M5 for the G.3 layout; record and run_tool asserted byte-identical
+           to the base). tool_diff.py's authorization map rewritten (10:19; control.gate's 1 and control.main's 7 hunks
+           extracted, reviewed and pinned literally; g3.py the one added tool). Dev check 1 (10:20) FAILED one check:
+           tools/scope-wrap.sh had lost its executable mode when extracted from git (the content byte-identical); the
+           supervision chain needs it executable. Mode restored to 0755; ALL CHECKS HOLD (68).
+11. 10:22  Dress rehearsal r2 (fresh root; dev-local/prefreeze.sh, the exact sequence of the official pre-freeze receipts):
+           authentication, self-test, expectations, controls (104 of 104) and tool diff held; rehearsals FAILED one check
+           (development/rehearsals-dev1-FAILED-...): M1's success check treated the word NOT anywhere in a first line as a
+           failure, and the primary's label rightly says "NOT A KILL BY ITSELF"; every label was in fact the success
+           label. Fixed in the check only (it now compares the five exact success labels; rehearsals.dev1-to-dev2.diff).
+           Every other scenario (R1-R5, N1-N7, M2-M5, both final-gate rehearsals) was as expected already.
+12. 10:28  Self-review of g3.classify_witness against the source's own output (run_witness and every failure message
+           of model_tests.rs: each detail is one line, so the violation count cannot be split): two checks were
+           stricter than AD-1-R4 G.4 item 9 and run_witness's own predicate and were aligned before the freeze
+           (g3.dev1-to-dev2.diff): the named property's violation at its locus is required at least
+           once (not exactly once), and the changed step's branch list must show the required branch (run_witness's
+           `any`), not consist of it alone. No control outcome changed (r3 and r4 below).
+13. 10:31  Dress rehearsal r3 (fresh root): the whole pre-freeze sequence ALL CHECKS HOLD (rehearsals 43 of 43).
+14. 10:36  Dress rehearsal r4 (fresh root, the final tools): the whole pre-freeze sequence ALL CHECKS HOLD; a dry-run
+           packet build over its receipts STAGED (733 files, 5.5 MB; 9 enumerated duplicate/zero-length records: the two
+           build.stdout and the samplers, no unauthorized duplicate); freeze RECORDED (89 files); pre-execution gate ALL
+           CHECKS HOLD (61).
+15. 10:44  Publication rehearsal (dev-local/pub_rehearsal.sh: a shared clone in the session scratchpad, its github push
+           URL set to DISABLED-PUBLICATION-REHEARSAL, origin removed; over a copy of r4's synthetic R1 root, both controls
+           candidates): preflight ALL CHECKS HOLD, worktree CREATED, packet STAGED, finalize COMMITTED (rehearsal commit
+           102b84d1, parent e41c84b1, in the clone's object store only: absent from the main repository's), pre-push ALL
+           CHECKS HOLD; the post readback exercised against the published e41c84b1 (20 FAIL lines, each a file or ref
+           that commit does not hold; no traceback) and the Actions readback (ALL CHECKS HOLD). Nothing was pushed
+           (push.py not run). The disposable clone and its worktree were deleted afterwards.
+
+OFFICIAL PRE-FREEZE RECEIPTS (the final tools; nothing executed but authentication, the self-test's non-Nexus
+processes, the synthetic, historical and authenticated controls and the rehearsals)
+16. 10:45  receipts/00-authentication.txt (ALL CHECKS HOLD, 559 OK; input copies written afresh: inputs/ was absent);
+           receipts/01-supervision-selftest (ALL OK; supervise.py unchanged; non-Nexus processes);
+           receipts/02-EXPECTATIONS.json (DERIVED — ALL CROSS-CHECKS HOLD; byte-equal to development run 2's);
+           receipts/03-t3-controls (104 of 104 as expected; every required positive and negative control);
+           receipts/04-tool-diff (ALL CHECKS HOLD, 68); receipts/04b-rehearsals (43 of 43).
+17. 10:49  Pre-freeze dry-run packet build into dev-local/ over the real receipts: STAGED — ALL CHECKS HOLD (733 files,
+           5.5 MB; no unauthorized duplicate of any previous-packet file; the ten byte-identical tools referenced, not
+           staged).
+18. 10:49  Tools, base tools, inputs and expectations made read-only (the records were read-only since 09:56). Freeze
+           recorded (receipts/05-FREEZE.json, 89 files, 10:49:17; sha256 8a95e861…). Static pre-execution gate (10:49-
+           10:51): ALL CHECKS HOLD (E1-E11; 61 checks; E1 555 authentication checks; E8 shows C4 and C7 cannot be
+           executed: no expectation, refused by name by control.main, refused by control.gate; E11 MemAvailable 53 GB,
+           17 GiB free disk).
+
+THE FREEZE AND EXECUTION (receipts/05 onward; no frozen file changes after the freeze; nothing retried, rebuilt or
+rerun; each control once, in order, by one sequential loop that runs control.py once per control and stops at the first
+non-zero result, besides control.py's own gate, which refuses C25 unless C1's RESULT is a candidate)
+19. 10:51  C1 (control.py C1, once): a fresh worktree (mtw-C1, locked with this mission's reason); APPLY:
+           EXACTLY_C_PLUS_PATCH (patch 5ecd716a…, protocol.rs blob 7d95dd42…, +3/-0, nothing else changed); one build,
+           BUILD: PINNED (18 of 18; zero warnings, zero errors; 168.3 s wall, 2.44 GiB peak, swap 0); executable
+           f89bf7ba…, 8,987,200 bytes, unchanged before, at selection and after both runs. The primary, full_f1 on the
+           original explorer: G.3(a) PRIMARY ADMISSIBLE (31 of 31) — raw FAIL E3 (`live 2, unapplied 1; armed 0, counted
+           2, dropped 0`), shortest trace 4 steps (the AD-1-R4 prediction), 5,794 discovered states (expanded 1,553) of
+           60,000,000, exit 101 by the explorer's verdict assertion, no signal, no OOM, swap 0; E3 recorded as printed,
+           not counted as P1. The mutant witness on the same executable (c1_witness_p1_at_a_successful_admission,
+           --exact --nocapture --test-threads=1; the listing one match, not ignored): ADMISSIBLE TYPE-(c) (29 of 29) —
+           `NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)`; header 11 steps, 9 violations; `OTHER
+           PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]`; run_witness's own panic at
+           model_tests.rs:8443:5; 1 failed; exit 101. RESTORE: EXACTLY_C; then HEALTHY WITNESS LINK: VERIFIED (Stage-2
+           50-witness-C1) and LINK: VERIFIED (Stage-1 45-full-F-1); G.3: ALL OBLIGATIONS HOLD; (e) recording proposed for
+           Architect review: 'C1: P1 (first failure E3; witness)'. CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT
+           REVIEW PENDING.
+20. 10:54  C25: a fresh worktree (mtw-C25); APPLY: EXACTLY_C_PLUS_PATCH (the narrow patch 29a2c1e5…, protocol.rs blob
+           0456a0c1…, +1/-1; self.failed(), the rollback and self.keep = true preserved); one build, BUILD: PINNED (18 of
+           18; 167.1 s, 2.43 GiB peak, swap 0); executable a0d6fc9d…, 8,984,464 bytes (the baseline executable's size by
+           coincidence; a different sha256), unchanged throughout. The primary: G.3(a) PRIMARY ADMISSIBLE (31 of 31) —
+           raw FAIL E4 (`append_gating said Committed but the record is absent`), shortest trace 1 step (the
+           prediction), 4 discovered states (expanded 0) of 60,000,000; E4 recorded as printed, not counted as P7. The
+           mutant witness (c25_witness_p7_on_the_resulting_world): ADMISSIBLE TYPE-(c) (29 of 29) — `NAMED PROPERTY P7:
+           OBSERVED on the world after step 1 (append_gating: Committed (inserted))`; header 1 steps, 2 violations;
+           `... not counted as P7: ["E4"]`; the word after step 1 stays 0x25 (U kept); 1 failed; exit 101. RESTORE:
+           EXACTLY_C; HEALTHY WITNESS LINK: VERIFIED (Stage-2 51-witness-C25); LINK: VERIFIED (Stage-1 45-full-F-1); G.3:
+           ALL OBLIGATIONS HOLD; (e) recording proposed: 'C25: P7 (first failure E4; witness)'. CONTROL RESULT:
+           KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING. 10:57: the loop ended (both rc 0). C4 and C7 were not
+           executed (no expectation, no receipt directory, no mtw worktree).
+
+AFTER EXECUTION
+21. 10:57  No stop record: the mission did not stop (both controls candidates).
+22. 10:58  Final gate (receipts/90-final-gate.txt): ALL CHECKS HOLD (61 checks; G1 authentication, G2 freeze, G3 the G.3
+           receipt chains of C1 and C25 and the absence of C4 and C7, G4 the mtw worktrees exactly C and locked with this
+           mission's reason, the 31 accepted controls' and C7's worktrees exactly C, G5 no mutant blob in the object
+           store and nothing staged, G6 both pinned executables and the baseline executable unchanged, G7 no mutant
+           source copy among 23,111 files, G8 no cargo/rustc/test process).
+23. 11:01  Publication: preflight, the evidence worktree at e41c84b1, the packet build, finalize, the pre-push checks, one
+           push, the readbacks (consoles under publication/ in the evidence root; the packet build's console is committed
+           as publication/10-build-packet.txt; the later consoles cannot be inside the commit they describe).

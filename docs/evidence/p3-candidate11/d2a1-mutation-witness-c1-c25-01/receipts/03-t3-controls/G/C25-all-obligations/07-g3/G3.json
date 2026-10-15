@@ -1,0 +1,42 @@
+{
+ "control": "C25",
+ "holds": true,
+ "checks": [
+  [
+   "(a) the primary is an admissible type-(a) FAIL whose first printed property is E4, recorded as printed and not counted as P7",
+   true,
+   "E4"
+  ],
+  [
+   "(b) the mutant witness is an admissible type-(c) receipt with the exact positive line 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))'",
+   true,
+   "CLASSIFICATION: G.3(b) MUTANT WITNESS \u2014 ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY)"
+  ],
+  [
+   "(b) F.2: the witness ran on the same pinned mutant executable as the primary (path, sha256 and size, before and after both runs, equal to 03-build/PIN.json)",
+   true,
+   "af49f2ba9d862bf44d5a7d846dd03ed9e877125d402e3acfeffdb378547838a1"
+  ],
+  [
+   "(c) none of the witness rejections: every check of the witness receipt holds (CHECKS.txt: no FAIL line)",
+   true,
+   ""
+  ],
+  [
+   "restoration: the worktree restored exactly to C after the mutant receipts",
+   true,
+   ""
+  ],
+  [
+   "(d) the accepted healthy type-(e3) witness linked after the restoration and verified",
+   true,
+   ""
+  ],
+  [
+   "the accepted F-1 unchanged-core type-(e1) receipt linked after the restoration and verified",
+   true,
+   ""
+  ]
+ ],
+ "recording_proposed_for_architect_review": "C25: P7 (first failure E4; witness)"
+}

@@ -1,0 +1,13 @@
+CONTROL RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+control C25: a gating append answers Committed on `Commit::Unknown`
+receipt type: (a) original-explorer mutant FAIL, the G.3(a) primary (recorded as printed) + (c) named-property mutant witness, G.3(b), on the same pinned mutant executable; restored (e1) + healthy witness (e3), G.3(d)
+apply: APPLY: EXACTLY_C_PLUS_PATCH
+build: BUILD: PINNED
+pinned mutant executable: /home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315 size 8984464
+primary (type (a), G.3(a)): CLASSIFICATION: G.3(a) PRIMARY — ADMISSIBLE TYPE-(a) FAIL, RECORDED AS PRINTED (A PART ONLY; NOT A KILL BY ITSELF); outer class (AD-1-R4 K.2): FAIL — admissible type-(a) original-explorer mutant FAIL; first failure E4 recorded as printed (AD-1-R4 G.3(a) primary of C25); E4 is not counted as P7; P7's attribution comes only from the type-(c) witness (G.3(b))
+mutant witness (type (c), G.3(b)): CLASSIFICATION: G.3(b) MUTANT WITNESS — ADMISSIBLE TYPE-(c) RECEIPT (A PART ONLY); outer class (AD-1-R4 K.2): FAIL — admissible type-(c) named-property mutant-witness receipt (G.3(b)): 'NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))'; C25 WITNESS F-1: 1 steps, each enabled and taking its choices; 2 violations; E4 reported separately, not counted as P7
+restoration: RESTORE: EXACTLY_C
+linked healthy witness (type (e3), G.3(d)): HEALTHY WITNESS LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)
+linked restored-side receipt (type (e1)): LINK: VERIFIED; docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))
+G.3: G.3: ALL OBLIGATIONS HOLD
+G.3(e) recording, proposed for Architect review (not an acceptance): 'C25: P7 (first failure E4; witness)'

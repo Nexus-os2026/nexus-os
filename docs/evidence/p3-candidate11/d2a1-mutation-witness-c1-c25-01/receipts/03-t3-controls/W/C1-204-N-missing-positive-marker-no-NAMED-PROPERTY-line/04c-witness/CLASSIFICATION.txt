@@ -1,0 +1,25 @@
+CLASSIFICATION: G.3(b) MUTANT WITNESS — NOT ADMISSIBLE
+outer class (AD-1-R4 K.2): NOT ADMISSIBLE (the exact positive line follows the header: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' (G.3(b)); the line of other properties, each reported separately and not counted as P1, names E3 and not P1 (G.3(b)); 'every violation:' then exactly n violation lines (the header's count), each indented; E3 is listed among the violations, separately (E3 is never counted as P1); the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED'): establishes nothing
+raw outcome (as printed): harness ['test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 347 filtered out; finished in 0.00s']; panic message ['C1 WITNESS F-1: 11 steps, each enabled and taking its choices; 2 violations', 'OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]', 'every violation:']
+positive line: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' — NOT ESTABLISHED
+executable: the pinned mutant executable of the primary, /synthetic/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-0123456789abcdef sha256 81af972125ea8abb2f7c5b254ef1b3b8d9007c137284c9cf1732648c1b3c65bc size 4373
+explorer report, counts, property lines and branch list: NOT PRODUCED BY DESIGN (F.1 (c))
+kill label: none (the witness is a part of G.3 only)
+resources: wall 0.0 s of 2700 s; scope memory.peak 3219456 B (memory.max 17179869184); swap peak 0 B (swap.max 0); oom 0, oom_kill 0; largest process max RSS 4409 KiB; scope gone
+step: step 1/11 Fw(0) choices []: branches []; word 0x10004; violations []
+step: step 2/11 Fw(0) choices [1]: branches ['expire: Armed -> Counted']; word 0x10000010004; violations []
+step: step 3/11 Fw(1) choices []: branches []; word 0x10000020004; violations []
+step: step 4/11 Fw(1) choices [1]: branches ['expire: Armed -> Counted']; word 0x20000020004; violations [('step', 'E3')]
+step: step 5/11 Fw(1) choices [0]: branches []; word 0x20000020004; violations []
+step: step 6/11 Fw(1) choices [0]: branches []; word 0x10000010004; violations []
+step: step 7/11 Se choices []: branches []; word 0x10000010004; violations []
+step: step 8/11 Se choices []: branches []; word 0x10000020004; violations []
+step: step 9/11 Se choices [0, 0, 0, 0]: branches ['append_facts: Committed (inserted)']; word 0x10000020004; violations []
+step: step 10/11 Se choices []: branches []; word 0x10000020004; violations []
+step: step 11/11 Adm choices []: branches ['admission: admitted']; word 0x10000020004; violations [('step', 'P1')]
+checks: 24 of 29 hold
+FAILED CHECK: the exact positive line follows the header: 'NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)' (G.3(b)): ['OTHER PROPERTIES VIOLATED, each reported separately and not counted as P1: ["E3"]']
+FAILED CHECK: the line of other properties, each reported separately and not counted as P1, names E3 and not P1 (G.3(b)): ['every violation:']
+FAILED CHECK: 'every violation:' then exactly n violation lines (the header's count), each indented: 1 lines; n 2
+FAILED CHECK: E3 is listed among the violations, separately (E3 is never counted as P1): 
+FAILED CHECK: the exact positive line occurs exactly once in the whole output, as a whole line; exactly one NAMED PROPERTY line; no 'NOT OBSERVED': 
