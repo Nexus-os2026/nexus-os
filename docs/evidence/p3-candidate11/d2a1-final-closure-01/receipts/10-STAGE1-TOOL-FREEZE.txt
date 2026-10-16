@@ -1,0 +1,4 @@
+STAGE 1 TOOL FREEZE 2026-10-16T15:00:59Z
+8f1a0cf9a91bf29919e0a9a75fd9ca42a6732e9c7c0bd50df73af612ca0e0d45  common.py
+b820f10e1d8da0c55e8fc80cabb84c26a51c40eaa79b5e24bfa5f4868de46730  s1_mutations.py
+render (read-only renderer added after the run): 4e76ea4469a4ab5aabbf773dacfd2eb29e37382b7e10f7473799f5870e1c5c21  render_s1.py

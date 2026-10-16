@@ -1,0 +1,2 @@
+1578 of 1579 hold
+FAIL H.3(6): no self-reference: ct-1 records no commit or tree hash of C (no 'final_tree') :: 

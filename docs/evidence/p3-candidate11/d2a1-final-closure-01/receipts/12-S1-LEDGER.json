@@ -1,0 +1,2582 @@
+{
+ "A1": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+  "apply_patch_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+  "catalog_mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+  "catalog_patch_sha256": "e3a21c74babd86e1c40c58457319dc6901c7fac7a6e56d7c8f149e3389f72507",
+  "configuration": "F-1",
+  "contract_row": "| A1 | the writer confirms before it records | P1 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": [
+    "26c09e7ff93633095de8d7a15ee81f5f46728336",
+    "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632"
+   ]
+  },
+  "description": "the writer confirms before it records",
+  "exit_status": 101,
+  "first_failure": "P1",
+  "id": "A1",
+  "kind": "explore",
+  "mutant_blob": "26c09e7ff93633095de8d7a15ee81f5f46728336",
+  "mutant_exe_on_disk": "d58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "d58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12",
+  "mutant_exe_size": 8984768,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "ea3ac997cd4a66925613346707f305ef3d8b68c0871e581110a9c13e9e4dd632",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+  "named_property": "P1",
+  "primary_config": "F-1",
+  "primary_expanded": 430,
+  "primary_fail": "P1: a result is unrecorded, or U, C or X is occupied, at a successful admission",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "dfa2632f14274dbd2c0b7853cfc32db15f5b89e3",
+  "primary_raw_sha256": "2a1c9413592503f43f03c0e42a1e9b53cf3b45810e1db72cf53172f422ab2244",
+  "primary_receipt": "d2a1-mutation-tranche3-tail-01/receipts/81-A1/04-run/raw-output.txt",
+  "primary_states": 1962,
+  "receipt_dir": "d2a1-mutation-tranche3-tail-01/receipts/81-A1",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-tail-01/receipts/81-A1/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "36ebc7018c529f132ac9e5e4c4255d699bcc870b",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "46c246eaa30db42abb58fac9a9e2bf91f2edf7169e778459a7c5d9239d6e9b88",
+  "result_txt": "d2a1-mutation-tranche3-tail-01/receipts/81-A1/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "36ebc7018c529f132ac9e5e4c4255d699bcc870b",
+    "46c246eaa30db42abb58fac9a9e2bf91f2edf7169e778459a7c5d9239d6e9b88"
+   ]
+  ],
+  "run_exe_after": "d58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12",
+  "run_exe_before": "d58ccd31c2c42acbb065d3ef08a00f42a8966c04bd0f000f938f3b9b2bdf6b12"
+ },
+ "A2": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+  "apply_patch_sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "c0ac428f58497d8cf42458d51f86db0f2e4b84ba",
+  "catalog_mutant_sha256": "855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633",
+  "catalog_patch_sha256": "5f1f30486da2457e2a50f0f72f1c96bfecf67e12692d47aa20d0ae3a1d677cf2",
+  "configuration": "F-1",
+  "contract_row": "| A2 | admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two. | P1 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": [
+    "c0ac428f58497d8cf42458d51f86db0f2e4b84ba",
+    "855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633"
+   ]
+  },
+  "description": "admission is split into two steps under two separate holds of the test's lock. Step one takes a `view` and keeps only its low 16 bits: phase, session, latch, cells, handover fault. Any actor may step in between. Step two takes a second `view`, keeps only `unapplied`, reads the debt count, H and A, and decides from the kept bits of step one and the values of step two.",
+  "exit_status": 101,
+  "first_failure": "P1",
+  "id": "A2",
+  "kind": "explore",
+  "mutant_blob": "c0ac428f58497d8cf42458d51f86db0f2e4b84ba",
+  "mutant_exe_on_disk": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d",
+  "mutant_exe_size": 8984784,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "855a6ff6e419e6b3e09425047b629b42708d493507194a97516326bf2d8b2633",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+  "named_property": "P1",
+  "primary_config": "F-1",
+  "primary_expanded": 277,
+  "primary_fail": "P1: a result is unrecorded, or U, C or X is occupied, at a successful admission",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "4e66580bf63c7202cc58ea02dc1988733ad1a520",
+  "primary_raw_sha256": "d1edba58123e3301465ed89916ca80769a1d0b3ade516cd7503ed63585275e93",
+  "primary_receipt": "d2a1-mutation-tranche3-tail-01/receipts/82-A2/04-run/raw-output.txt",
+  "primary_states": 1453,
+  "receipt_dir": "d2a1-mutation-tranche3-tail-01/receipts/82-A2",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-tail-01/receipts/82-A2/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "8761e5125e3eef33bb1b616818b661564ff2e3ef",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "c8e1bab10021bcb4da2880800f44a90333d9513357d31fc6ff6739744e9bab95",
+  "result_txt": "d2a1-mutation-tranche3-tail-01/receipts/82-A2/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "8761e5125e3eef33bb1b616818b661564ff2e3ef",
+    "c8e1bab10021bcb4da2880800f44a90333d9513357d31fc6ff6739744e9bab95"
+   ]
+  ],
+  "run_exe_after": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d",
+  "run_exe_before": "257cb481e0de203654f7007d60ebe537e84b71dfd8c98b02b90288365249662d"
+ },
+ "A3": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00",
+  "apply_patch_sha256": "ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "72bab79d71687a1c056afe18ab7a938edc20f4a9",
+  "catalog_mutant_sha256": "5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9",
+  "catalog_patch_sha256": "ad0c64489e962756316b1a29b5d289a721517d1115525ee011e52db69cf2cc00",
+  "configuration": "F-5",
+  "contract_row": "| A3 | the worker empties X before it raises H | P12 | F-5 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "674ed583be5e88700426c6e05db978003d03e016"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": [
+    "72bab79d71687a1c056afe18ab7a938edc20f4a9",
+    "5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9"
+   ]
+  },
+  "description": "the worker empties X before it raises H",
+  "exit_status": 101,
+  "first_failure": "P12",
+  "id": "A3",
+  "kind": "explore",
+  "mutant_blob": "72bab79d71687a1c056afe18ab7a938edc20f4a9",
+  "mutant_exe_on_disk": "4805365da56eb6534708df651442299570561b3937838366b819267f420c4b64",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A3/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "4805365da56eb6534708df651442299570561b3937838366b819267f420c4b64",
+  "mutant_exe_size": 8984528,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "5eff1f8c581c2de4ab54470a2670057b6139c83f6bdc56326ff96f6a3d8c9ab9",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+  "named_property": "P12",
+  "primary_config": "F-5",
+  "primary_expanded": 80145,
+  "primary_fail": "P12: the explanation of original 0 is covered by no durable acknowledgement",
+  "primary_header": "EXPLORATION F-5",
+  "primary_raw_blob": "f1b75f26de3d6eaec1679ddba0e3e4bcb0e7f9c8",
+  "primary_raw_sha256": "17132fdad65419ef1f26eca196f38c13cdb5322e337636d17c58423d24e9e1b9",
+  "primary_receipt": "d2a1-mutation-tranche2-continue-02/receipts/62-A3/04-run/raw-output.txt",
+  "primary_states": 112880,
+  "receipt_dir": "d2a1-mutation-tranche2-continue-02/receipts/62-A3",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-continue-02/receipts/62-A3/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "8fe853c28225ffa6f2cba3fb85d1fdf448e8fd44",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "8f0f39305f65ca5d46738d1e40d36d1bc5c3649ab3e7ed2c7c213381297fa8f3",
+  "result_txt": "d2a1-mutation-tranche2-continue-02/receipts/62-A3/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "8fe853c28225ffa6f2cba3fb85d1fdf448e8fd44",
+    "8f0f39305f65ca5d46738d1e40d36d1bc5c3649ab3e7ed2c7c213381297fa8f3"
+   ]
+  ],
+  "run_exe_after": "4805365da56eb6534708df651442299570561b3937838366b819267f420c4b64",
+  "run_exe_before": "4805365da56eb6534708df651442299570561b3937838366b819267f420c4b64"
+ },
+ "A5": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+  "apply_patch_sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "cb08f5e8c62b3ce267f0688cc880261a28cc29a2",
+  "catalog_mutant_sha256": "8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f",
+  "catalog_patch_sha256": "913eba6d31d7cbe6d65f4543b9fb2d0def6ca7e7586b26209b3ee5063a2f4d32",
+  "configuration": "F-2",
+  "contract_row": "| A5 | settlement claims a Conflict obligation while the store is not Healthy | L1 | F-2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": [
+    "cb08f5e8c62b3ce267f0688cc880261a28cc29a2",
+    "8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f"
+   ]
+  },
+  "description": "settlement claims a Conflict obligation while the store is not Healthy",
+  "exit_status": 101,
+  "first_failure": "L1",
+  "id": "A5",
+  "kind": "explore",
+  "mutant_blob": "cb08f5e8c62b3ce267f0688cc880261a28cc29a2",
+  "mutant_exe_on_disk": "22de28a2f3ff3a94d480f5247523ca2139600988139e9c4769d79be874041a85",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-A5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "22de28a2f3ff3a94d480f5247523ca2139600988139e9c4769d79be874041a85",
+  "mutant_exe_size": 8984464,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "8d6f100133cced95076d584acc8a861c6da39eb234fc8a570775811b3e97ec5f",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+  "named_property": "L1",
+  "primary_config": "F-2",
+  "primary_expanded": 12684666,
+  "primary_fail": "L1: 2162310 states lie on or behind a cycle of non-fault steps; one is reached by",
+  "primary_header": "EXPLORATION F-2",
+  "primary_raw_blob": "6417e1d2ef78c98c9d2ecf7481b6e3fe5b44f54a",
+  "primary_raw_sha256": "ba743f7dc3c70ee50016f201a2e3cb19cc6227e41d921c14338b27f68672e3c6",
+  "primary_receipt": "d2a1-mutation-tranche3-tail-01/receipts/84-A5/04-run/raw-output.txt",
+  "primary_states": 12684666,
+  "receipt_dir": "d2a1-mutation-tranche3-tail-01/receipts/84-A5",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-tail-01/receipts/84-A5/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "04478cd57ce6191432eabfee05ff21fa7decd3b5",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "168b4387610002952331be1662272c73f208b0a50de3c509b844fd1c925cf617",
+  "result_txt": "d2a1-mutation-tranche3-tail-01/receipts/84-A5/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "04478cd57ce6191432eabfee05ff21fa7decd3b5",
+    "168b4387610002952331be1662272c73f208b0a50de3c509b844fd1c925cf617"
+   ]
+  ],
+  "run_exe_after": "22de28a2f3ff3a94d480f5247523ca2139600988139e9c4769d79be874041a85",
+  "run_exe_before": "22de28a2f3ff3a94d480f5247523ca2139600988139e9c4769d79be874041a85"
+ },
+ "A6": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8",
+  "apply_patch_sha256": "0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "51e54aed7cc33ebc8348a74fe6c881c057336ee7",
+  "catalog_mutant_sha256": "59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4",
+  "catalog_patch_sha256": "0700052eb3e9fb91f36ee6d535b02b923ff007f1061490ac7dd16dd98d0d0ee8",
+  "configuration": "F-5",
+  "contract_row": "| A6 | \"recovery required\" is a flag, not a comparison of H with A | P12 or P15 | F-5 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "674ed583be5e88700426c6e05db978003d03e016"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": [
+    "51e54aed7cc33ebc8348a74fe6c881c057336ee7",
+    "59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4"
+   ]
+  },
+  "description": "\"recovery required\" is a flag, not a comparison of H with A",
+  "exit_status": 101,
+  "first_failure": "P12",
+  "id": "A6",
+  "kind": "explore",
+  "mutant_blob": "51e54aed7cc33ebc8348a74fe6c881c057336ee7",
+  "mutant_exe_on_disk": "53d72467fe1d5cd1c318cf413ef0550c2cf05ce0d62954816cf25499b9e0b01e",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-A6/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "53d72467fe1d5cd1c318cf413ef0550c2cf05ce0d62954816cf25499b9e0b01e",
+  "mutant_exe_size": 8984560,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "59c2f87666ad3272661497e30d7a4a841dcc5aafd90569307cc4fdbd69b5a4b4",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+  "named_property": "P12 or P15",
+  "primary_config": "F-5",
+  "primary_expanded": 3240539,
+  "primary_fail": "P12: the explanation of original 1 is covered by no durable acknowledgement",
+  "primary_header": "EXPLORATION F-5",
+  "primary_raw_blob": "f9c6ab54007ba09a42ab7ecd410d2c40611a0209",
+  "primary_raw_sha256": "52ea67c27c5187cc81ae1e11b333f19b9d1081c0846375177cf7dafebc56db2d",
+  "primary_receipt": "d2a1-mutation-tranche2-continue-02/receipts/63-A6/04-run/raw-output.txt",
+  "primary_states": 3537396,
+  "receipt_dir": "d2a1-mutation-tranche2-continue-02/receipts/63-A6",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-continue-02/receipts/63-A6/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "0b676921013432ad4149ccbf48e537b128955107",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "8127246bcfca9c022724d62d0ad28f962df4d8311890f44668d687576ac6b581",
+  "result_txt": "d2a1-mutation-tranche2-continue-02/receipts/63-A6/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "0b676921013432ad4149ccbf48e537b128955107",
+    "8127246bcfca9c022724d62d0ad28f962df4d8311890f44668d687576ac6b581"
+   ]
+  ],
+  "run_exe_after": "53d72467fe1d5cd1c318cf413ef0550c2cf05ce0d62954816cf25499b9e0b01e",
+  "run_exe_before": "53d72467fe1d5cd1c318cf413ef0550c2cf05ce0d62954816cf25499b9e0b01e"
+ },
+ "C1": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R4 G.3 (C1/C25 only)",
+  "apply_catalog_patch_sha256": "5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252",
+  "apply_patch_sha256": "5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "7d95dd425fcdf17b12dda2fdce461f97ba7b9a66",
+  "catalog_mutant_sha256": "eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658",
+  "catalog_patch_sha256": "5ecd716a8f123d61034b0d274238898e13a116a9cc464c7645a9736934970252",
+  "configuration": "F-1",
+  "contract_row": "| C1 | the count becomes a flag | P1 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+    "f0d110291a17bcd2a56b4e3b687b68fb4cbb3d8e"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "7d95dd425fcdf17b12dda2fdce461f97ba7b9a66",
+    "eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658"
+   ]
+  },
+  "description": "the count becomes a flag",
+  "exit_status": 101,
+  "first_failure": "E3",
+  "g_recording_proposed": "C1: P1 (first failure E3; witness)",
+  "g_rule_holds": true,
+  "healthy_reference": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)",
+  "id": "C1",
+  "kind": "explore",
+  "mutant_blob": "7d95dd425fcdf17b12dda2fdce461f97ba7b9a66",
+  "mutant_exe_on_disk": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C1/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "mutant_exe_size": 8987200,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "eb3bf0adfcab9711be1bfc5f0d608a58ae97dcb65a7ca1ca1d66023347522658",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P1",
+  "primary_config": "F-1",
+  "primary_expanded": 1553,
+  "primary_fail": "E3: live 2, unapplied 1; armed 0, counted 2, dropped 0",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "d8a569908b624a3dea2250d4e1bd19b29cc8a6b0",
+  "primary_raw_sha256": "f092dab461f063fea17925149b6266a102bf15c4cd8d9f7230ccc02f4c839c2a",
+  "primary_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/81-C1/04-run/raw-output.txt",
+  "primary_states": 5794,
+  "receipt_dir": "d2a1-mutation-witness-c1-c25-01/receipts/81-C1",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "C1: P1 (first failure E3; witness)",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/81-C1/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "d7c4cb692a00421cac7ebf0c82f9671ad64630be",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "3e178b744526ca9b3fc626675ecbb2ac6601193fd49797e3855a578828316967",
+  "result_txt": "d2a1-mutation-witness-c1-c25-01/receipts/81-C1/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+    "d7c4cb692a00421cac7ebf0c82f9671ad64630be",
+    "3e178b744526ca9b3fc626675ecbb2ac6601193fd49797e3855a578828316967"
+   ]
+  ],
+  "run_exe_after": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "run_exe_before": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "witness_exe_before": "f89bf7ba397c73b37e43bc6aae8851fd2ff88e5928a8ecdd69e967956d21f23c",
+  "witness_lines": [
+   "NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)"
+  ],
+  "witness_raw_sha256": "e3aebea065e409289bf2518f4dea4669867017c9efafd5f841620024e8514cfd",
+  "witness_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/81-C1/04c-witness/raw-output.txt"
+ },
+ "C10": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R4 S-24 (sealed definition)",
+  "apply_catalog_patch_sha256": "5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c",
+  "apply_patch_sha256": "5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "329a830718b81a065e3a03f4958e19e8fa3c8d9c",
+  "catalog_mutant_sha256": "a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d",
+  "catalog_patch_sha256": "5e73745b2f8a6d02585519bac4990513e3ae6997dec9ad4e478fb92a2464a16c",
+  "configuration": "F-1",
+  "contract_row": "| C10 | `Commit::Unknown` followed by `Rollback::Undone` gives Not written | E4 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "54f618029d79a3eaf65c891a4b8eae5a1455f1d0"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "329a830718b81a065e3a03f4958e19e8fa3c8d9c",
+    "a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d"
+   ]
+  },
+  "description": "`Commit::Unknown` followed by `Rollback::Undone` gives Not written",
+  "exit_status": 101,
+  "first_failure": "E4",
+  "id": "C10",
+  "kind": "explore",
+  "mutant_blob": "329a830718b81a065e3a03f4958e19e8fa3c8d9c",
+  "mutant_exe_on_disk": "5c8ef9f07b0ef37b430161c9da088bcbe7253ea17a6863ce2677d5f28645e867",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C10/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "5c8ef9f07b0ef37b430161c9da088bcbe7253ea17a6863ce2677d5f28645e867",
+  "mutant_exe_size": 8984744,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "a04658fa091c2e4dcbcb116b1ec3c87828fb4cc6a358684d6b0f1c744510041d",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E4",
+  "primary_config": "F-1",
+  "primary_expanded": 1,
+  "primary_fail": "E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Insert:Ok Commit:Unknown Rollback:Ok",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "d81d108c56868917ecda34ba9215214cf90f19a4",
+  "primary_raw_sha256": "36c16109f0c1ad0fa54d7db0eb534b8f473c29c656505ea969ecf2a9cda1fd13",
+  "primary_receipt": "d2a1-mutation-tranche2-exec-01/receipts/52-C10/04-run/raw-output.txt",
+  "primary_states": 42,
+  "receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/52-C10",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/52-C10/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "c535a404e357e7dec2b306e3ffed262395abc860",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "93820cf47bec3f484a533ad31d3397573e693657ed27999d4472d302237cb0f4",
+  "result_txt": "d2a1-mutation-tranche2-exec-01/receipts/52-C10/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "c535a404e357e7dec2b306e3ffed262395abc860",
+    "93820cf47bec3f484a533ad31d3397573e693657ed27999d4472d302237cb0f4"
+   ]
+  ],
+  "run_exe_after": "5c8ef9f07b0ef37b430161c9da088bcbe7253ea17a6863ce2677d5f28645e867",
+  "run_exe_before": "5c8ef9f07b0ef37b430161c9da088bcbe7253ea17a6863ce2677d5f28645e867"
+ },
+ "C11": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768",
+  "apply_patch_sha256": "913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "6e039d9dad6415242884ceef97a54d3548658038",
+  "catalog_mutant_sha256": "f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01",
+  "catalog_patch_sha256": "913997fd20c0da21a39cb18b4d3fb6fd44cc0f1a22d42309fa25f2707111c768",
+  "configuration": "F-B2",
+  "contract_row": "| C11 | a constraint failure during the inserts gives Not written whatever the rollback said. **This is the amendment's rule, which the review rejected.** | E4 | F-B2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "6e039d9dad6415242884ceef97a54d3548658038",
+    "f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01"
+   ]
+  },
+  "description": "a constraint failure during the inserts gives Not written whatever the rollback said. **This is the amendment's rule, which the review rejected.**",
+  "exit_status": 101,
+  "first_failure": "E4",
+  "id": "C11",
+  "kind": "explore",
+  "mutant_blob": "6e039d9dad6415242884ceef97a54d3548658038",
+  "mutant_exe_on_disk": "e6759c9e4884fa0bafc450f63e32e783ef58f270d9c2dcc8aa71f60a0515ab30",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C11/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "e6759c9e4884fa0bafc450f63e32e783ef58f270d9c2dcc8aa71f60a0515ab30",
+  "mutant_exe_size": 8986736,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "f86ba9613b84c59e74cc1af6822db4a20b8dafea8f8ea46a57a74c19125aea01",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E4",
+  "primary_config": "F-B2",
+  "primary_expanded": 1,
+  "primary_fail": "E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "primary_header": "EXPLORATION F-B2",
+  "primary_raw_blob": "aa85d57c7495f4f70c9e45525707ddbc09c69bed",
+  "primary_raw_sha256": "3847524f46a9de5f627b49318adf63b21385f3701fb73f591d8c1a90d4e42aff",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/39-C11/04-run/raw-output.txt",
+  "primary_states": 14,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/39-C11",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/39-C11/05-restore/RESTORE.json",
+  "restored_side": "(None) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))",
+  "result_blob": "048a8cfa7932050d44018ef5cbf0be5c146c85f4",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "a01e5394d7007ac74551460c6a1c52b777fb47c90a30a6c8c731b409d08ed6f3",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/39-C11/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "048a8cfa7932050d44018ef5cbf0be5c146c85f4",
+    "a01e5394d7007ac74551460c6a1c52b777fb47c90a30a6c8c731b409d08ed6f3"
+   ]
+  ],
+  "run_exe_after": "e6759c9e4884fa0bafc450f63e32e783ef58f270d9c2dcc8aa71f60a0515ab30",
+  "run_exe_before": "e6759c9e4884fa0bafc450f63e32e783ef58f270d9c2dcc8aa71f60a0515ab30"
+ },
+ "C12": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803",
+  "apply_patch_sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+  "catalog_mutant_sha256": "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04",
+  "catalog_patch_sha256": "d484b4d7f5699eb22bffed0a05ac685171c7960b30ab3973ad039e3a401a7803",
+  "configuration": "X-1",
+  "contract_row": "| C12 | the publication is two exchanges: bits, then count | E2 | X-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+    "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04"
+   ]
+  },
+  "description": "the publication is two exchanges: bits, then count",
+  "exit_status": 101,
+  "first_failure": "E2",
+  "id": "C12",
+  "kind": "explore",
+  "mutant_blob": "d1e46ea63bb35c8e9b65d6fe1a2beb8b68a3e27b",
+  "mutant_exe_on_disk": "c4359cbe2eac514dc6809085ad795a4a393d340b4988daf4b5b31bdc89453a18",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C12/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "c4359cbe2eac514dc6809085ad795a4a393d340b4988daf4b5b31bdc89453a18",
+  "mutant_exe_size": 8983152,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "4d67c182a6e411ee6f7ed6269281d4c84d0bc1ef2699253e39c01cd42aae6a04",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E2",
+  "primary_config": "X-1",
+  "primary_expanded": 1,
+  "primary_fail": "E2: loads 0, exchanges 2; views 0, ticket steps 0, store operations 1",
+  "primary_header": "EXPLORATION X-1",
+  "primary_raw_blob": "13b60eb462517647c26e302f7f640ac0b4c84ad3",
+  "primary_raw_sha256": "d7d6dc6780698b402983970a6b7a8171e856d906a0524befa8eaaf7a0b44b7f9",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/37-C12/04-run/raw-output.txt",
+  "primary_states": 5,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/37-C12",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/37-C12/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/10-baseline-X-1 (type (e1), standalone, this mission)",
+  "result_blob": "9935630251c4c81adcb49fc9cd83c3a739cf59d2",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "915a93a761f97c117ba3ab4d0e19e274b6796928035375bd60253fdcc00237b7",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/37-C12/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "9935630251c4c81adcb49fc9cd83c3a739cf59d2",
+    "915a93a761f97c117ba3ab4d0e19e274b6796928035375bd60253fdcc00237b7"
+   ]
+  ],
+  "run_exe_after": "c4359cbe2eac514dc6809085ad795a4a393d340b4988daf4b5b31bdc89453a18",
+  "run_exe_before": "c4359cbe2eac514dc6809085ad795a4a393d340b4988daf4b5b31bdc89453a18"
+ },
+ "C14": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4",
+  "apply_patch_sha256": "2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "72556e3f03a53d7a14cb89515a286f42718b6ac8",
+  "catalog_mutant_sha256": "203d788cdfad48db63577de831cd4391d524503e99a0cc149b68a44774740d17",
+  "catalog_patch_sha256": "2c7f17dafd7347cc2ceb92228f48584a6c0a08292024943551e952879fa2c1e4",
+  "configuration": "named unit test (not exploration)",
+  "contract_row": "| C14 | the ticket check of step 0 is removed | T-BIND |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+    "59d7a24b19ee2294d68c0f3a375ba57380b4b377"
+   ],
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "72556e3f03a53d7a14cb89515a286f42718b6ac8",
+    "203d788cdfad48db63577de831cd4391d524503e99a0cc149b68a44774740d17"
+   ]
+  },
+  "description": "the ticket check of step 0 is removed",
+  "exit_status": 101,
+  "first_failure": "['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5']",
+  "id": "C14",
+  "kind": "unit",
+  "mutant_blob": "72556e3f03a53d7a14cb89515a286f42718b6ac8",
+  "mutant_exe_on_disk": "bfb7b864ef21ec8db377907c8fbbd4910ff15b4e58f59b9a26e332c215bbd77d",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C14/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "bfb7b864ef21ec8db377907c8fbbd4910ff15b4e58f59b9a26e332c215bbd77d",
+  "mutant_exe_size": 8988256,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "203d788cdfad48db63577de831cd4391d524503e99a0cc149b68a44774740d17",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_blob": "2d8e33fa911d23c3ff3dd5e8b0e8c3e706ac36c5",
+  "primary_raw_sha256": "b795ef1d0808f7a17c8db8fcc118c2ab5fe598d7a122d3b4d0aa549ad673970b",
+  "primary_receipt": "d2a1-mutation-tranche1-resume-01/receipts/32-C14/04-run/raw-output.txt",
+  "receipt_dir": "d2a1-mutation-tranche1-resume-01/receipts/32-C14",
+  "receipt_type": "(b) named non-explorer mutant-test FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-resume-01/receipts/32-C14/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/11-baseline-T-BIND (type (e2), standalone, this mission)",
+  "result_blob": "40c73e6335b0e221c34e0d079b049ac815c9862b",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "225b706e06d472dace8557ac165f20f58ea7eff6ee0f6646617ff10dd745cd1f",
+  "result_txt": "d2a1-mutation-tranche1-resume-01/receipts/32-C14/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "40c73e6335b0e221c34e0d079b049ac815c9862b",
+    "225b706e06d472dace8557ac165f20f58ea7eff6ee0f6646617ff10dd745cd1f"
+   ]
+  ],
+  "run_exe_after": "bfb7b864ef21ec8db377907c8fbbd4910ff15b4e58f59b9a26e332c215bbd77d",
+  "run_exe_before": "bfb7b864ef21ec8db377907c8fbbd4910ff15b4e58f59b9a26e332c215bbd77d"
+ },
+ "C15": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R5 F (restored side only)",
+  "apply_catalog_patch_sha256": "a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810",
+  "apply_patch_sha256": "a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "abdd7518e6d1202a3a7c756af9716dc66183fd21",
+  "catalog_mutant_sha256": "271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b",
+  "catalog_patch_sha256": "a9a5037d36b1a2a6fc5fddb5accea1198ea08d3823a3044bf45f1c4b6cea5810",
+  "configuration": "F-R",
+  "contract_row": "| C15 | a cell operation ignores the occupancy number | E8 | F-R |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "674ed583be5e88700426c6e05db978003d03e016"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "abdd7518e6d1202a3a7c756af9716dc66183fd21",
+    "271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b"
+   ]
+  },
+  "description": "a cell operation ignores the occupancy number",
+  "exit_status": 101,
+  "first_failure": "E8",
+  "id": "C15",
+  "kind": "explore",
+  "mutant_blob": "abdd7518e6d1202a3a7c756af9716dc66183fd21",
+  "mutant_exe_on_disk": "89809695e0b87c8be259927a622bf2f2326a0323bde357aaa2406facf1c7b9f3",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C15/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "89809695e0b87c8be259927a622bf2f2326a0323bde357aaa2406facf1c7b9f3",
+  "mutant_exe_size": 8986544,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "271b13d4422d0ec8322951cb71c2979a80b98d61975c3ab9ee0e5c69bc62141b",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E8",
+  "primary_config": "F-R",
+  "primary_expanded": 45292,
+  "primary_fail": "E8: a stale token: resolve: Refused(NotHealthy); the answer is not stale, or the core or word changed",
+  "primary_header": "EXPLORATION F-R",
+  "primary_raw_blob": "0a979d68900d339d0668517dd6352e48a284f1fd",
+  "primary_raw_sha256": "75c2c6d76f3868e75b85e1a4770ab78ebb691fab87981187bcd070bea471a5ad",
+  "primary_receipt": "d2a1-mutation-tranche2-continue-02/receipts/65-C15/04-run/raw-output.txt",
+  "primary_states": 83988,
+  "receipt_dir": "d2a1-mutation-tranche2-continue-02/receipts/65-C15",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-continue-02/receipts/65-C15/05-restore/RESTORE.json",
+  "restored_side": "(fr-discharge) the AD-1-R5 F refinement discharge record (not a run; no outcome line; never PASS): Candidate C d5964ee5326c2733177307db6f507328023d361a; the accepted exact-final F-2 receipt docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd; the accepted proof docs/evidence/p3-candidate11/fr-stutter-r5-01/FR-STUTTERING-REFINEMENT-PROOF-DRAFT.md (sha256 c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b); AD-1-R5 (sha256 4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473) and its Owner adoption docs/evidence/p3-candidate11/ad1r5-adoption/OWNER-ADOPTION-2026-10-14.md (sha256 9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4)",
+  "result_blob": "712e4ca3a4d02d9c41547c201f0c8ce8c681c54d",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "82a1bc4111654181d4bd7b77e51fca09919016fadc956c17660fa58456092d8a",
+  "result_txt": "d2a1-mutation-tranche2-continue-02/receipts/65-C15/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "712e4ca3a4d02d9c41547c201f0c8ce8c681c54d",
+    "82a1bc4111654181d4bd7b77e51fca09919016fadc956c17660fa58456092d8a"
+   ]
+  ],
+  "run_exe_after": "89809695e0b87c8be259927a622bf2f2326a0323bde357aaa2406facf1c7b9f3",
+  "run_exe_before": "89809695e0b87c8be259927a622bf2f2326a0323bde357aaa2406facf1c7b9f3"
+ },
+ "C16": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97",
+  "apply_patch_sha256": "e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "33f0d257df3e126c589becd0b1c5760c57085be8",
+  "catalog_mutant_sha256": "c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4",
+  "catalog_patch_sha256": "e48a988cfc85488141d1e9eb033f897135ad9a4509edf16a3df85b55f8ff5e97",
+  "configuration": "F-D",
+  "contract_row": "| C16 | the drop of a Counted ticket lowers the count | E3 | F-D |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "54f618029d79a3eaf65c891a4b8eae5a1455f1d0"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "33f0d257df3e126c589becd0b1c5760c57085be8",
+    "c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4"
+   ]
+  },
+  "description": "the drop of a Counted ticket lowers the count",
+  "exit_status": 101,
+  "first_failure": "E3",
+  "id": "C16",
+  "kind": "explore",
+  "mutant_blob": "33f0d257df3e126c589becd0b1c5760c57085be8",
+  "mutant_exe_on_disk": "d53f4f0c7c96364c55c654b98ec6966066e68e30d590da964eb5488a9069ce8c",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C16/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "d53f4f0c7c96364c55c654b98ec6966066e68e30d590da964eb5488a9069ce8c",
+  "mutant_exe_size": 8984872,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "c8c2b3ef54f2a2d13dc69aa0922cd67166021f9705ba32782bcfbf1e4db8c9d4",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E3",
+  "primary_config": "F-D",
+  "primary_expanded": 317,
+  "primary_fail": "E3: live 1, unapplied 0; armed 0, counted 0, dropped 1",
+  "primary_header": "EXPLORATION F-D",
+  "primary_raw_blob": "52bd20b3f971e3c1eb514602fb5e0c9dde0a919b",
+  "primary_raw_sha256": "ee469a45a015b4ad23914c2ebb23c83a281e47a0136f37a4fcd11b801e1242ba",
+  "primary_receipt": "d2a1-mutation-tranche2-exec-01/receipts/53-C16/04-run/raw-output.txt",
+  "primary_states": 1513,
+  "receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/53-C16",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/53-C16/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-D unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "743cf3867a06af943057dc9ebf3e769d6065a33a",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "5e42903607a229828640cce7db92a0be6bcf7332dde6115e9b0093d7e61e45f3",
+  "result_txt": "d2a1-mutation-tranche2-exec-01/receipts/53-C16/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "743cf3867a06af943057dc9ebf3e769d6065a33a",
+    "5e42903607a229828640cce7db92a0be6bcf7332dde6115e9b0093d7e61e45f3"
+   ]
+  ],
+  "run_exe_after": "d53f4f0c7c96364c55c654b98ec6966066e68e30d590da964eb5488a9069ce8c",
+  "run_exe_before": "d53f4f0c7c96364c55c654b98ec6966066e68e30d590da964eb5488a9069ce8c"
+ },
+ "C17": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0",
+  "apply_patch_sha256": "37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "4dfed9e1600a82b38f3326d26a47c4c41f513ac3",
+  "catalog_mutant_sha256": "94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf",
+  "catalog_patch_sha256": "37b696d014ef6e251119e6b9b489e01d701b483153330d92592ec27e34613ac0",
+  "configuration": "F-B2",
+  "contract_row": "| C17 | the guard reports Not written after an insert was issued | E4 | F-B2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "4dfed9e1600a82b38f3326d26a47c4c41f513ac3",
+    "94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf"
+   ]
+  },
+  "description": "the guard reports Not written after an insert was issued",
+  "exit_status": 101,
+  "first_failure": "E4",
+  "id": "C17",
+  "kind": "explore",
+  "mutant_blob": "4dfed9e1600a82b38f3326d26a47c4c41f513ac3",
+  "mutant_exe_on_disk": "5cd6d0042c4047590e15cfb489b2ffba7e02d220ef19cd0fa4c192b72721500c",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C17/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "5cd6d0042c4047590e15cfb489b2ffba7e02d220ef19cd0fa4c192b72721500c",
+  "mutant_exe_size": 8986120,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "94b303d898fe0dd664c2d70d2bbe7c0722e69c355631e128298295ee916606bf",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E4",
+  "primary_config": "F-B2",
+  "primary_expanded": 1,
+  "primary_fail": "E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Ok Commit:Unknown Rollback:Unwound",
+  "primary_header": "EXPLORATION F-B2",
+  "primary_raw_blob": "35209194feaf8e5ee19fcc3f91f0c761e319cf4c",
+  "primary_raw_sha256": "0e68d6c148ad282187b87674d39cf472e9adf49d0408ca24aed53db76088828a",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/40-C17/04-run/raw-output.txt",
+  "primary_states": 9,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/40-C17",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/40-C17/05-restore/RESTORE.json",
+  "restored_side": "(None) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))",
+  "result_blob": "9ac14d9641e5141644dbde15272887d87d42d78d",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "a45c9679ce0849b8b4111b6f2f98043235879eff5c7279f90e59d205cd40eebb",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/40-C17/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "9ac14d9641e5141644dbde15272887d87d42d78d",
+    "a45c9679ce0849b8b4111b6f2f98043235879eff5c7279f90e59d205cd40eebb"
+   ]
+  ],
+  "run_exe_after": "5cd6d0042c4047590e15cfb489b2ffba7e02d220ef19cd0fa4c192b72721500c",
+  "run_exe_before": "5cd6d0042c4047590e15cfb489b2ffba7e02d220ef19cd0fa4c192b72721500c"
+ },
+ "C18a": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa",
+  "apply_patch_sha256": "7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "92034563e479d1d622b7625e6ff4ad075a32a16a",
+  "catalog_mutant_sha256": "94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee",
+  "catalog_patch_sha256": "7ced1f36a56066c596913442cc3dd93abe23beb1affab728b914fa26f60065fa",
+  "configuration": "F-G",
+  "contract_row": "| C18a | a refused gating append leaves U occupied | E7 | F-G |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "92034563e479d1d622b7625e6ff4ad075a32a16a",
+    "94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee"
+   ]
+  },
+  "description": "a refused gating append leaves U occupied",
+  "exit_status": 101,
+  "first_failure": "E7",
+  "id": "C18a",
+  "kind": "explore",
+  "mutant_blob": "92034563e479d1d622b7625e6ff4ad075a32a16a",
+  "mutant_exe_on_disk": "bf7c2cd17197e075f6d3fd8b0c3568cad44c606a23b92bf20c893163a41c78fb",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "bf7c2cd17197e075f6d3fd8b0c3568cad44c606a23b92bf20c893163a41c78fb",
+  "mutant_exe_size": 8984464,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "94db8208ef639878a1e27e0ff960901d92b30034a881b183c00be20d72405bee",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E7",
+  "primary_config": "F-G",
+  "primary_expanded": 0,
+  "primary_fail": "E7: after a gating conflict with a new cause: U, X or the table is wrong",
+  "primary_header": "EXPLORATION F-G",
+  "primary_raw_blob": "88550682425c3401a78c99ac4204a380cbea1836",
+  "primary_raw_sha256": "016b4c4de2f4128523dae60931509f9cc2549800a31572ba1869a5f4a5924c10",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/41-C18a/04-run/raw-output.txt",
+  "primary_states": 19,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/41-C18a",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/41-C18a/05-restore/RESTORE.json",
+  "restored_side": "(None) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))",
+  "result_blob": "b3cb2b68b40581fd1b64c8b7c8dd7c3392f6420f",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "ba7a5459ca7ad3e9eb47e9b2d7fbf5297fcdc94cff073b7cdb946479bfa73f1b",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/41-C18a/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "b3cb2b68b40581fd1b64c8b7c8dd7c3392f6420f",
+    "ba7a5459ca7ad3e9eb47e9b2d7fbf5297fcdc94cff073b7cdb946479bfa73f1b"
+   ]
+  ],
+  "run_exe_after": "bf7c2cd17197e075f6d3fd8b0c3568cad44c606a23b92bf20c893163a41c78fb",
+  "run_exe_before": "bf7c2cd17197e075f6d3fd8b0c3568cad44c606a23b92bf20c893163a41c78fb"
+ },
+ "C18b": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2",
+  "apply_patch_sha256": "830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "c7f2b5ea99bb1676e3844b6c612d3393f97d50da",
+  "catalog_mutant_sha256": "25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a",
+  "catalog_patch_sha256": "830f21c88f5ba82798baa9126d67d7f37fdcc4aaae71a52d4ed023c009713ec2",
+  "configuration": "F-G",
+  "contract_row": "| C18b | a gating conflict makes a table entry | E7 | F-G |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "c7f2b5ea99bb1676e3844b6c612d3393f97d50da",
+    "25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a"
+   ]
+  },
+  "description": "a gating conflict makes a table entry",
+  "exit_status": 101,
+  "first_failure": "E7",
+  "id": "C18b",
+  "kind": "explore",
+  "mutant_blob": "c7f2b5ea99bb1676e3844b6c612d3393f97d50da",
+  "mutant_exe_on_disk": "9c16a35f34f38eb7062c99dfaf4267b86feb9ebac57071fca21e51af5a3d7e55",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C18b/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "9c16a35f34f38eb7062c99dfaf4267b86feb9ebac57071fca21e51af5a3d7e55",
+  "mutant_exe_size": 8983656,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "25805e5b0bfa3bc3c611a4d6a407461ab1e1d1d7d1a680d65b3d5f6575a1db1a",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E7",
+  "primary_config": "F-G",
+  "primary_expanded": 0,
+  "primary_fail": "E7: after a gating conflict with a new cause: U, X or the table is wrong",
+  "primary_header": "EXPLORATION F-G",
+  "primary_raw_blob": "8774ca67733d33fdb3f5507043863137eb5f190f",
+  "primary_raw_sha256": "cd5161aa5edf561643f0e9b544d69d87c72a767f6e7614f0fa305fd4239c85b7",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/42-C18b/04-run/raw-output.txt",
+  "primary_states": 19,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/42-C18b",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/42-C18b/05-restore/RESTORE.json",
+  "restored_side": "(None) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-G unchanged-core PASS, type (e1))",
+  "result_blob": "8bfc35a4f6f64cf6cb26cee63beb518f87bed4f2",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "e2ebe8dbb30093eaaf677db401d5c1b7f76873f3c669f1d91cef3c1982e524b2",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/42-C18b/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "8bfc35a4f6f64cf6cb26cee63beb518f87bed4f2",
+    "e2ebe8dbb30093eaaf677db401d5c1b7f76873f3c669f1d91cef3c1982e524b2"
+   ]
+  ],
+  "run_exe_after": "9c16a35f34f38eb7062c99dfaf4267b86feb9ebac57071fca21e51af5a3d7e55",
+  "run_exe_before": "9c16a35f34f38eb7062c99dfaf4267b86feb9ebac57071fca21e51af5a3d7e55"
+ },
+ "C19": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f",
+  "apply_patch_sha256": "066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "899878323428eb34021f8dcf3cefc5ab041f98a2",
+  "catalog_mutant_sha256": "a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113",
+  "catalog_patch_sha256": "066cc479a89ea2779a2b4ff29ff15b966d877f78b252fbe07493c064766da48f",
+  "configuration": "named unit test (not exploration)",
+  "contract_row": "| C19 | X can be emptied before it is marked committed | T-CELL |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+    "59d7a24b19ee2294d68c0f3a375ba57380b4b377"
+   ],
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "899878323428eb34021f8dcf3cefc5ab041f98a2",
+    "a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113"
+   ]
+  },
+  "description": "X can be emptied before it is marked committed",
+  "exit_status": 101,
+  "first_failure": "['ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1654:5']",
+  "id": "C19",
+  "kind": "unit",
+  "mutant_blob": "899878323428eb34021f8dcf3cefc5ab041f98a2",
+  "mutant_exe_on_disk": "f564e177e8edcdcef6c5304ced8371d3bee88177bd72645977e6b61c382e89c5",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C19/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "f564e177e8edcdcef6c5304ced8371d3bee88177bd72645977e6b61c382e89c5",
+  "mutant_exe_size": 8984720,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "a7bb602edbcd7894923a19c8e1e940a7e8ab59c31e9c8c8011eb2dc0a0750113",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_blob": "24cd2d314855471917192cc26523011d4154c27e",
+  "primary_raw_sha256": "bca85833e56e4abd37453b1aa851ba1a00972a8117d66e392a14398c1035a306",
+  "primary_receipt": "d2a1-mutation-tranche1-resume-01/receipts/33-C19/04-run/raw-output.txt",
+  "receipt_dir": "d2a1-mutation-tranche1-resume-01/receipts/33-C19",
+  "receipt_type": "(b) named non-explorer mutant-test FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-resume-01/receipts/33-C19/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/12-baseline-T-CELL (type (e2), standalone, this mission)",
+  "result_blob": "9c2999e128f86ab92cf1a1b3ec5427682c65c089",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "6ca7d192c0647ab6f8af2cf70dca350470a78e2aade94d0eeb12e43327f868e8",
+  "result_txt": "d2a1-mutation-tranche1-resume-01/receipts/33-C19/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "9c2999e128f86ab92cf1a1b3ec5427682c65c089",
+    "6ca7d192c0647ab6f8af2cf70dca350470a78e2aade94d0eeb12e43327f868e8"
+   ]
+  ],
+  "run_exe_after": "f564e177e8edcdcef6c5304ced8371d3bee88177bd72645977e6b61c382e89c5",
+  "run_exe_before": "f564e177e8edcdcef6c5304ced8371d3bee88177bd72645977e6b61c382e89c5"
+ },
+ "C2": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+  "apply_patch_sha256": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d",
+  "catalog_mutant_sha256": "4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403",
+  "catalog_patch_sha256": "f02c3e721aa2c96bb7d15fe081acf3dc6e4c1958de096f4215bc55a7cafc218d",
+  "configuration": "F-1",
+  "contract_row": "| C2 | the gating entry rule does not test C and X | P4 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-continue-02/documents/ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md",
+    "0a19b1886192cb62a048e7cf9a05b3fa7636950d"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d",
+    "4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403"
+   ]
+  },
+  "description": "the gating entry rule does not test C and X",
+  "exit_status": 101,
+  "first_failure": "P4",
+  "id": "C2",
+  "kind": "explore",
+  "mutant_blob": "1c10adbc93c2fe0984d0ac677727a3bdc82b8e5d",
+  "mutant_exe_on_disk": "8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C2/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed",
+  "mutant_exe_size": 8984096,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "4889d2ba4ac5c9a9c7e982d750957fa5cfd2af8c8be9cd0580ca7a859eac2403",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P4",
+  "primary_config": "F-1",
+  "primary_expanded": 185130,
+  "primary_fail": "P4: U is occupied together with C or X",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "f5a18890430f0766ebb4b22d47d31affa868abc3",
+  "primary_raw_sha256": "758a6b98779fb27bd44ef1e99783ceb1982b2532e135d0d7de50e48963a1fb31",
+  "primary_receipt": "d2a1-mutation-tranche3-exec-01/receipts/66-C2/04-run/raw-output.txt",
+  "primary_states": 361534,
+  "receipt_dir": "d2a1-mutation-tranche3-exec-01/receipts/66-C2",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-exec-01/receipts/66-C2/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "57c789536982a03c357492bd7aec619e27ac7684",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "130210abc0b6b3c408219959458ccc8381e0fd5f612a43feb5c84855cc75d0f5",
+  "result_txt": "d2a1-mutation-tranche3-exec-01/receipts/66-C2/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-continue-02/documents/ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md",
+    "57c789536982a03c357492bd7aec619e27ac7684",
+    "130210abc0b6b3c408219959458ccc8381e0fd5f612a43feb5c84855cc75d0f5"
+   ]
+  ],
+  "run_exe_after": "8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed",
+  "run_exe_before": "8460515fe149a78637bcb1d797d9cb5c2ed5b89eb2361cd74e02e96cedaed0ed"
+ },
+ "C20": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+  "apply_patch_sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "7bb5aa2abbb52249efe76ab22dd921cb74dd337c",
+  "catalog_mutant_sha256": "0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf",
+  "catalog_patch_sha256": "5ea1889e67bc552d08c75074f3717d87a4509c56d13448d61bc574fc3d93f62f",
+  "configuration": "F-2",
+  "contract_row": "| C20 | an explanation found already present is not marked committed | L1 | F-2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "7bb5aa2abbb52249efe76ab22dd921cb74dd337c",
+    "0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf"
+   ]
+  },
+  "description": "an explanation found already present is not marked committed",
+  "exit_status": 101,
+  "first_failure": "L1",
+  "id": "C20",
+  "kind": "explore",
+  "mutant_blob": "7bb5aa2abbb52249efe76ab22dd921cb74dd337c",
+  "mutant_exe_on_disk": "5433a13ba47468ff457cf665ae1383e64fdd7de26086b4a95b9ffd7c4b121a02",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3t-C20/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "5433a13ba47468ff457cf665ae1383e64fdd7de26086b4a95b9ffd7c4b121a02",
+  "mutant_exe_size": 8988112,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "0e521df8ae9dfc69114085daafaa96f8b55f2119e6a3c51afa142af8acc5caaf",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "L1",
+  "primary_config": "F-2",
+  "primary_expanded": 12590754,
+  "primary_fail": "L1: 206694 states lie on or behind a cycle of non-fault steps; one is reached by",
+  "primary_header": "EXPLORATION F-2",
+  "primary_raw_blob": "d6f17fbc653e3bdceb3cf0b5ce1eed0b4b635cec",
+  "primary_raw_sha256": "8d80f6092fca5e55f26e55d64a22637112caeda8fd3a7ef8bc5e8e3d80aa31a5",
+  "primary_receipt": "d2a1-mutation-tranche3-tail-01/receipts/83-C20/04-run/raw-output.txt",
+  "primary_states": 12590754,
+  "receipt_dir": "d2a1-mutation-tranche3-tail-01/receipts/83-C20",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-tail-01/receipts/83-C20/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "6ceebd19d13ffd6b190640f53d656c57ed20c6cd",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "01ce97598244a5f5a8bb55abf95cc9902d8e15cb806ee108bae18f61411a8ca2",
+  "result_txt": "d2a1-mutation-tranche3-tail-01/receipts/83-C20/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+    "6ceebd19d13ffd6b190640f53d656c57ed20c6cd",
+    "01ce97598244a5f5a8bb55abf95cc9902d8e15cb806ee108bae18f61411a8ca2"
+   ]
+  ],
+  "run_exe_after": "5433a13ba47468ff457cf665ae1383e64fdd7de26086b4a95b9ffd7c4b121a02",
+  "run_exe_before": "5433a13ba47468ff457cf665ae1383e64fdd7de26086b4a95b9ffd7c4b121a02"
+ },
+ "C21": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8",
+  "apply_patch_sha256": "65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "80662d4c7f8b0c25a0d8a038a9e8b28a0e469826",
+  "catalog_mutant_sha256": "db9b9d6e98c2d5eff8d38e9b62b44c4badd1248c82ba5d422f47612700bccd3b",
+  "catalog_patch_sha256": "65029c7b396057e3bfd9c38893e36f77e110311392157a68439065a6be42f7d8",
+  "configuration": "named unit test (not exploration)",
+  "contract_row": "| C21 | the well-formed test of step 1 is removed | W6 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+    "59d7a24b19ee2294d68c0f3a375ba57380b4b377"
+   ],
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "80662d4c7f8b0c25a0d8a038a9e8b28a0e469826",
+    "db9b9d6e98c2d5eff8d38e9b62b44c4badd1248c82ba5d422f47612700bccd3b"
+   ]
+  },
+  "description": "the well-formed test of step 1 is removed",
+  "exit_status": 101,
+  "first_failure": "['ledger::protocol::unit_tests::w6_one_identity_under_two_contents'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:2600:5']",
+  "id": "C21",
+  "kind": "unit",
+  "mutant_blob": "80662d4c7f8b0c25a0d8a038a9e8b28a0e469826",
+  "mutant_exe_on_disk": "b4c2d0a60231bffdcb8b466446e171aa193dea0b34a5a249255cd8d24cf1eeb8",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C21/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "b4c2d0a60231bffdcb8b466446e171aa193dea0b34a5a249255cd8d24cf1eeb8",
+  "mutant_exe_size": 8957304,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "db9b9d6e98c2d5eff8d38e9b62b44c4badd1248c82ba5d422f47612700bccd3b",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_blob": "68369651cfe0c9dbd6d93e19f7f82061f15a1ef5",
+  "primary_raw_sha256": "bc1322e08ac476e22e9384932ee34f61d52f03e141e4f58544d469856a6fbf43",
+  "primary_receipt": "d2a1-mutation-tranche1-resume-01/receipts/34-C21/04-run/raw-output.txt",
+  "receipt_dir": "d2a1-mutation-tranche1-resume-01/receipts/34-C21",
+  "receipt_type": "(b) named non-explorer mutant-test FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-resume-01/receipts/34-C21/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/13-baseline-W6 (type (e2), standalone, this mission)",
+  "result_blob": "0daa04f2044d48575dd0d0363158a42e4dbbd6b2",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "6eda983f969ccfbe9618b0fd2ab133fab1b1719d98ebc47db5a25bb4a065523f",
+  "result_txt": "d2a1-mutation-tranche1-resume-01/receipts/34-C21/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "0daa04f2044d48575dd0d0363158a42e4dbbd6b2",
+    "6eda983f969ccfbe9618b0fd2ab133fab1b1719d98ebc47db5a25bb4a065523f"
+   ]
+  ],
+  "run_exe_after": "b4c2d0a60231bffdcb8b466446e171aa193dea0b34a5a249255cd8d24cf1eeb8",
+  "run_exe_before": "b4c2d0a60231bffdcb8b466446e171aa193dea0b34a5a249255cd8d24cf1eeb8"
+ },
+ "C22": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; contract line 731 exception; AD-1-R4 F.1 (d)/(e4)",
+  "apply_catalog_patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
+  "apply_patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
+  "catalog_mutant_sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
+  "catalog_patch_sha256": "e017ced648c6d4329ab8c744441e8fc03e8207b47e9cb3387202cc29ce7e95c6",
+  "configuration": "none (build)",
+  "contract_row": "| C22 | the ticket derives `Clone` | T-OWN. **Killed by a build failure, on purpose:** the recorded diagnostic must be E0283 at the assertion's line. |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche1-resume-01/ARCHITECT-RULING-C22-ACCEPTANCE.md",
+    "b852dc55adfb3b2dbff05a48f811143e5b12fc37"
+   ],
+   [
+    "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+    "59d7a24b19ee2294d68c0f3a375ba57380b4b377"
+   ],
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "694b744de3b70a3a092c633b934262bd510d41aa",
+    "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5"
+   ]
+  },
+  "description": "the ticket derives `Clone`",
+  "exit_status": 101,
+  "first_failure": "E0283 at unit_tests.rs:1089:5",
+  "id": "C22",
+  "kind": "build",
+  "mutant_blob": "694b744de3b70a3a092c633b934262bd510d41aa",
+  "mutant_exe_sha256": "NOT PRODUCED BY DESIGN",
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "0f13a8e5512439aa6385bbe65c20ceb6a77fe6c819216ef82564f7b8880425e5",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_sha256": "5cbb36bd2d8af4c66bf12fa30eb68133689a181e87d0e15e6d65f471afb633b2",
+  "primary_receipt": "d2a1-mutation-tranche1-exec-01/receipts/31-C22/03-build/build.stderr",
+  "receipt_dir": "d2a1-mutation-tranche1-exec-01/receipts/31-C22",
+  "receipt_type": "(d) intentional mutant compile failure",
+  "recording": "",
+  "restoration": "historical tool label 'RESTORE: FAILED'; protocol.rs after = a2df2841b99cad5d452008a6d4150e9369d07e66; Architect independently verified restoration to C (C22 ruling record)",
+  "restored_side": "(e4) d2a1-mutation-tranche1-exec-01/receipts/20-healthy-build/CLASSIFICATION.txt: CLASSIFICATION: PASS",
+  "result_blob": "b9717ad766e11dacf4d342db0022ab56886ae486",
+  "result_first_line": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "result_sha256": "106c45675b7f1d0e164d10125b7258ffe71244f908573d63321371771dda0aec",
+  "result_txt": "d2a1-mutation-tranche1-exec-01/receipts/31-C22/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "b9717ad766e11dacf4d342db0022ab56886ae486",
+    "106c45675b7f1d0e164d10125b7258ffe71244f908573d63321371771dda0aec"
+   ]
+  ]
+ },
+ "C23": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa",
+  "apply_patch_sha256": "731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "cd50b40ce632d4edcb95fff89389246b0d75c51e",
+  "catalog_mutant_sha256": "b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa",
+  "catalog_patch_sha256": "731ffbedf845790c681b1fe7a2dc20d53174c8ce7378de04e5963865f0bc04aa",
+  "configuration": "F-2",
+  "contract_row": "| C23 | the publication omits the X bit | E1 | F-2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "54f618029d79a3eaf65c891a4b8eae5a1455f1d0"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "cd50b40ce632d4edcb95fff89389246b0d75c51e",
+    "b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa"
+   ]
+  },
+  "description": "the publication omits the X bit",
+  "exit_status": 101,
+  "first_failure": "E1",
+  "id": "C23",
+  "kind": "explore",
+  "mutant_blob": "cd50b40ce632d4edcb95fff89389246b0d75c51e",
+  "mutant_exe_on_disk": "3549e576ab943bad1cb9ee0a2d96d073924b5225dc0b24abc399b5d6db2b98b9",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C23/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "3549e576ab943bad1cb9ee0a2d96d073924b5225dc0b24abc399b5d6db2b98b9",
+  "mutant_exe_size": 8985352,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "b866fa5aefa95dba779ae7d567d304232251d9ae6e4145abfc850553bea49afa",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E1",
+  "primary_config": "F-2",
+  "primary_expanded": 94,
+  "primary_fail": "E1: word bits 0x4, core 0x84",
+  "primary_header": "EXPLORATION F-2",
+  "primary_raw_blob": "06ea3524567cd298ea21d59f5756fbf81d014f42",
+  "primary_raw_sha256": "eccccfb71cab27d3c9c880c64d07dd2e0db41c50f2abfcc6417638853ce209bd",
+  "primary_receipt": "d2a1-mutation-tranche2-exec-01/receipts/51-C23/04-run/raw-output.txt",
+  "primary_states": 671,
+  "receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/51-C23",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/51-C23/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-2 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "6e4bbaae5e1ce8b63157b9a3408e85b2e20c8cc4",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "a549c43ab79308755a55cc5185ddcb0e015b3ab7fab4cb8f902222fdf2792472",
+  "result_txt": "d2a1-mutation-tranche2-exec-01/receipts/51-C23/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "6e4bbaae5e1ce8b63157b9a3408e85b2e20c8cc4",
+    "a549c43ab79308755a55cc5185ddcb0e015b3ab7fab4cb8f902222fdf2792472"
+   ]
+  ],
+  "run_exe_after": "3549e576ab943bad1cb9ee0a2d96d073924b5225dc0b24abc399b5d6db2b98b9",
+  "run_exe_before": "3549e576ab943bad1cb9ee0a2d96d073924b5225dc0b24abc399b5d6db2b98b9"
+ },
+ "C24": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R4 S-25 (sealed definition)",
+  "apply_catalog_patch_sha256": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+  "apply_patch_sha256": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "build_admission_ruling": [
+   "d2a1-mutation-tranche3-continue-02/documents/ARCHITECT-RULING-C24-C3B-C3C-BUILD-ADMISSIBILITY.md",
+   "237a969e988362c77e548832a7e46d296dc766f7",
+   "C24 BUILD ARCHITECT-ADMISSIBLE (NARROW C24-SPECIFIC WARNING RULING); C3b AND C3c CONDITIONAL BUILD RULES; NO GENERAL WARNING EXCEPTION"
+  ],
+  "build_packet_result_first_line": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "build_receipt_dir": "d2a1-mutation-tranche3-exec-01/receipts/67-C24",
+  "catalog_mutant_blob": "3e1bfbe746851b6c63811343cde9dd3b83ad0fa9",
+  "catalog_mutant_sha256": "d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268",
+  "catalog_patch_sha256": "39439c3c17a3b90d31ec3bec1f3b80e753ab3d042cc59ea9848c748872580e44",
+  "configuration": "F-1",
+  "contract_row": "| C24 | resolve empties U for a present gating record without placing the correction | P8 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "2a5a4309d2ec48494aa568513cc89655baa777c2"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "3e1bfbe746851b6c63811343cde9dd3b83ad0fa9",
+    "d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268"
+   ]
+  },
+  "description": "resolve empties U for a present gating record without placing the correction",
+  "exit_status": 101,
+  "first_failure": "P8",
+  "id": "C24",
+  "kind": "explore",
+  "mutant_blob": "3e1bfbe746851b6c63811343cde9dd3b83ad0fa9",
+  "mutant_exe_on_disk": "8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3x-C24/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d",
+  "mutant_exe_size": 8987680,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "d4732d83f924d824752d62d59a28e12cc97a456669f7cbea0868d7e6e9742268",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P8",
+  "primary_config": "F-1",
+  "primary_expanded": 87111,
+  "primary_fail": "P8: G1's attempt is written, uncorrected and not in U",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "a75ac4ac58b6c2a9c7e51f87bdafb4e881a4eab4",
+  "primary_raw_sha256": "9b48791e313d3a0f33ae0d77c37edf7dd1fb18a74efd4aa11f7c15b93a2af3df",
+  "primary_receipt": "d2a1-mutation-tranche3-continue-02/receipts/81-C24/04-run/raw-output.txt",
+  "primary_states": 185114,
+  "reauth_after_run": "C24 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)",
+  "receipt_dir": "d2a1-mutation-tranche3-continue-02/receipts/81-C24",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-exec-01/receipts/67-C24/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "1886f614db4d4fcaa3cf2d6f5d1c29f81509a50b",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "b391e62cabedbc3ee73ddf5baa6161806d5e57e1fb4895882e2e8ffa0abfe678",
+  "result_txt": "d2a1-mutation-tranche3-continue-02/receipts/81-C24/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "1886f614db4d4fcaa3cf2d6f5d1c29f81509a50b",
+    "b391e62cabedbc3ee73ddf5baa6161806d5e57e1fb4895882e2e8ffa0abfe678"
+   ]
+  ],
+  "run_exe_after": "8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d",
+  "run_exe_before": "8a81956b1105d4639a804cdbdc51555b7b3416bfcec86a1be223dec2c9fa7b1d"
+ },
+ "C25": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R4 G.3 (C1/C25 only)",
+  "apply_catalog_patch_sha256": "29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732",
+  "apply_patch_sha256": "29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "0456a0c1c1fe40f71593edc6ba5938a3b0c29900",
+  "catalog_mutant_sha256": "27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec",
+  "catalog_patch_sha256": "29a2c1e571b4f7fd278d106fe3d40a8cf912119dbe44fbbbbd92855431ecd732",
+  "configuration": "F-1",
+  "contract_row": "| C25 | a gating append answers Committed on `Commit::Unknown` | P7 | F-1 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+    "f0d110291a17bcd2a56b4e3b687b68fb4cbb3d8e"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "0456a0c1c1fe40f71593edc6ba5938a3b0c29900",
+    "27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec"
+   ]
+  },
+  "description": "a gating append answers Committed on `Commit::Unknown`",
+  "exit_status": 101,
+  "first_failure": "E4",
+  "g_recording_proposed": "C25: P7 (first failure E4; witness)",
+  "g_rule_holds": true,
+  "healthy_reference": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)",
+  "id": "C25",
+  "kind": "explore",
+  "mutant_blob": "0456a0c1c1fe40f71593edc6ba5938a3b0c29900",
+  "mutant_exe_on_disk": "a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mtw-C25/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315",
+  "mutant_exe_size": 8984464,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "27c1b9f30f1e753675dc36417b23d4efcbb9c0309f89204ea21326d3601d9dec",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P7",
+  "primary_config": "F-1",
+  "primary_expanded": 0,
+  "primary_fail": "E4: append_gating said Committed but the record is absent",
+  "primary_header": "EXPLORATION F-1",
+  "primary_raw_blob": "7368406df55dd7d8b82f81c82e264defcb90ff64",
+  "primary_raw_sha256": "91dc90ab09aecf8750a4a99a6557165574e42da34c7fe0071a1cd755fb4a9f65",
+  "primary_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/82-C25/04-run/raw-output.txt",
+  "primary_states": 4,
+  "receipt_dir": "d2a1-mutation-witness-c1-c25-01/receipts/82-C25",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "C25: P7 (first failure E4; witness)",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/82-C25/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1 at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-1 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "84a78ca7b0e1bddaa82e6667bc3925be3728812d",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "390c4a574ee83e84f2afc193ea09a46db1513c56e1db6487d8356e4085f98f63",
+  "result_txt": "d2a1-mutation-witness-c1-c25-01/receipts/82-C25/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+    "84a78ca7b0e1bddaa82e6667bc3925be3728812d",
+    "390c4a574ee83e84f2afc193ea09a46db1513c56e1db6487d8356e4085f98f63"
+   ]
+  ],
+  "run_exe_after": "a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315",
+  "run_exe_before": "a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315",
+  "witness_exe_before": "a0d6fc9d870b09d8bf4a17f1867d4a7bbae64ce21961d6133526c4e84d0ec315",
+  "witness_lines": [
+   "NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))"
+  ],
+  "witness_raw_sha256": "501cd4cd8776c4a1242ecd1110544f012e662d54c8cab3e4174c474f73222219",
+  "witness_receipt": "d2a1-mutation-witness-c1-c25-01/receipts/82-C25/04c-witness/raw-output.txt"
+ },
+ "C26": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d",
+  "apply_patch_sha256": "1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "88f1783305f6418129671e77769fd4caf53e2a88",
+  "catalog_mutant_sha256": "c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49",
+  "catalog_patch_sha256": "1e26422d79a19553d925585aeb580f8a0c684bcc78d8a922ab5ab9a3756e8b4d",
+  "configuration": "F-4",
+  "contract_row": "| C26 | a passed barrier clears the latch | E9 | F-4 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "54f618029d79a3eaf65c891a4b8eae5a1455f1d0"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "88f1783305f6418129671e77769fd4caf53e2a88",
+    "c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49"
+   ]
+  },
+  "description": "a passed barrier clears the latch",
+  "exit_status": 101,
+  "first_failure": "E9",
+  "id": "C26",
+  "kind": "explore",
+  "mutant_blob": "88f1783305f6418129671e77769fd4caf53e2a88",
+  "mutant_exe_on_disk": "336c30483abf4a0b0672caefdd87e8c7fc504094b36d1129cce4fb90b0663f97",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C26/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "336c30483abf4a0b0672caefdd87e8c7fc504094b36d1129cce4fb90b0663f97",
+  "mutant_exe_size": 8984936,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "c9cccd06367aced8a183493cde03e4c9a62ece34c171fb7a95ed094173ae7b49",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E9",
+  "primary_config": "F-4",
+  "primary_expanded": 987,
+  "primary_fail": "E9: a latch or a handover fault was cleared",
+  "primary_header": "EXPLORATION F-4",
+  "primary_raw_blob": "e0a6e8c960571068ceb40624a45da82d3f814aed",
+  "primary_raw_sha256": "0313d7154ad42a4f69f3d8bb2e6b919df5b8e94ab15a45e9bc5998ba15f83faa",
+  "primary_receipt": "d2a1-mutation-tranche2-exec-01/receipts/54-C26/04-run/raw-output.txt",
+  "primary_states": 3478,
+  "receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/54-C26",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/54-C26/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-4 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "f4505012b964e1f1da47efce8c2293bb85036749",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "f720a2e84d2b0ed74ced2a12b7b8ba0900e541f671a2734023d6563f055b3b70",
+  "result_txt": "d2a1-mutation-tranche2-exec-01/receipts/54-C26/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "f4505012b964e1f1da47efce8c2293bb85036749",
+    "f720a2e84d2b0ed74ced2a12b7b8ba0900e541f671a2734023d6563f055b3b70"
+   ]
+  ],
+  "run_exe_after": "336c30483abf4a0b0672caefdd87e8c7fc504094b36d1129cce4fb90b0663f97",
+  "run_exe_before": "336c30483abf4a0b0672caefdd87e8c7fc504094b36d1129cce4fb90b0663f97"
+ },
+ "C27": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f",
+  "apply_patch_sha256": "bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf",
+  "catalog_mutant_sha256": "bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7",
+  "catalog_patch_sha256": "bb88f0446b1e56e83a13c1d969e5572a310b0b62ec1f3b2424572f433efefd3f",
+  "configuration": "named unit test (not exploration)",
+  "contract_row": "| C27 | the guard is created after the entry rule | T-PREC: an append refused at entry is not counted |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+    "59d7a24b19ee2294d68c0f3a375ba57380b4b377"
+   ],
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf",
+    "bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7"
+   ]
+  },
+  "description": "the guard is created after the entry rule",
+  "exit_status": 101,
+  "first_failure": "['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799:9']",
+  "id": "C27",
+  "kind": "unit",
+  "mutant_blob": "bbcaaaf1dcf92d194eb6d9804daaa9901a68cadf",
+  "mutant_exe_on_disk": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C27/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f",
+  "mutant_exe_size": 8986736,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "bc3fe6359decaf6210e43c4285432cd153f6550c30644ef356e35258122df5d7",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_blob": "b920dd46432434514818b9b2142624f67d9d784f",
+  "primary_raw_sha256": "79b4d2e25fc32ff3ff4081a4fdf041d9cedaabf3b91d8cee737c27f0ffad6622",
+  "primary_receipt": "d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/raw-output.txt",
+  "receipt_dir": "d2a1-mutation-tranche1-resume-01/receipts/35-C27",
+  "receipt_type": "(b) named non-explorer mutant-test FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-resume-01/receipts/35-C27/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/14-baseline-T-PREC (type (e2), standalone, this mission)",
+  "result_blob": "00145cd131aa2aeffd70e916a272c02aac55e916",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "4b8b64b5a6288733cf70c5d11fa1aae338f3fb2159450354eecfe0df000f6a3c",
+  "result_txt": "d2a1-mutation-tranche1-resume-01/receipts/35-C27/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "00145cd131aa2aeffd70e916a272c02aac55e916",
+    "4b8b64b5a6288733cf70c5d11fa1aae338f3fb2159450354eecfe0df000f6a3c"
+   ]
+  ],
+  "run_exe_after": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f",
+  "run_exe_before": "8711617881e34ca65305f29e156773484797bb002b44d4ab0601b70146ec181f"
+ },
+ "C28": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
+  "apply_patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "build_admission_ruling": [
+   "d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-C28-BUILD-ADMISSIBILITY.md",
+   "ecaa1239ea656bb8b3d48ccd23202d0ebc3478a8",
+   "C28 BUILD \u2014 ARCHITECT-ADMISSIBLE (NARROW C28-SPECIFIC RULING; NO GENERAL WARNING EXCEPTION)"
+  ],
+  "build_packet_result_first_line": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "build_receipt_dir": "d2a1-mutation-tranche1-resume-01/receipts/36-C28",
+  "catalog_mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
+  "catalog_mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
+  "catalog_patch_sha256": "519378de0e6b6a05019e6a2dc718441b2a03970ae0341d89d858f1168ee23868",
+  "configuration": "named unit test (not exploration)",
+  "contract_row": "| C28 | resolve's \"present, frontier below N\" check alone is removed | T-RES, with a verb that answers inconsistently. (In exploration the presence read and this check hide each other, so neither can be controlled alone there.) |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "446d0365e1472efc40321d259a6f1171d3fe716c",
+    "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8"
+   ]
+  },
+  "description": "resolve's \"present, frontier below N\" check alone is removed",
+  "exit_status": 101,
+  "first_failure": "['ledger::protocol::unit_tests::t_res_every_resolve_row'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1745:17']",
+  "id": "C28",
+  "kind": "unit",
+  "mutant_blob": "446d0365e1472efc40321d259a6f1171d3fe716c",
+  "mutant_exe_on_disk": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C28/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+  "mutant_exe_size": 8983776,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "1b59477e6c974f79c9c698916aa2aad350c4c27f1130c86481a15277572c77d8",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": null,
+  "primary_raw_blob": "35d61c59b4ebc98eeb59366edd2ce45c2b31e0de",
+  "primary_raw_sha256": "aa162533f7f49d1295cc09ddec911cc2f4aeb6d3437dd401deebe004904415dc",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/36-C28/04-run/raw-output.txt",
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/36-C28",
+  "receipt_type": "(b) named non-explorer mutant-test FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/36-C28/05-restore/RESTORE.json",
+  "restored_side": "(None) receipts/15-baseline-T-RES (type (e2), standalone, this mission)",
+  "result_blob": "21d0ba8e95903d7e66ad720e2176a6404c1eac63",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "d425668a12ee748e4e50a130ddd7fef337c0c6d427bde78cede700817f178d6d",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/36-C28/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "21d0ba8e95903d7e66ad720e2176a6404c1eac63",
+    "d425668a12ee748e4e50a130ddd7fef337c0c6d427bde78cede700817f178d6d"
+   ]
+  ],
+  "run_exe_after": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36",
+  "run_exe_before": "116a6584ebe58c1fea17e2067c6f2af3f3c365cb64f595648040f5c797a5de36"
+ },
+ "C3a": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298",
+  "apply_patch_sha256": "2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "5c74cfbd8124a78c616526ae1d461895b1a16b82",
+  "catalog_mutant_sha256": "abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6",
+  "catalog_patch_sha256": "2442f63d9383dc0d36dd934e2a6b8fb0b3d6936f215e00ba3d964ede73fb6298",
+  "configuration": "F-7",
+  "contract_row": "| C3a | acknowledgement test 2 removed | P13 or P15 | F-7 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "54f618029d79a3eaf65c891a4b8eae5a1455f1d0"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "5c74cfbd8124a78c616526ae1d461895b1a16b82",
+    "abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6"
+   ]
+  },
+  "description": "acknowledgement test 2 removed",
+  "exit_status": 101,
+  "first_failure": "P13",
+  "id": "C3a",
+  "kind": "explore",
+  "mutant_blob": "5c74cfbd8124a78c616526ae1d461895b1a16b82",
+  "mutant_exe_on_disk": "c71e66debb2f3d42527668f48818c74f5ca48f03aceda67c9b8285b6f8e5a0a6",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C3a/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "c71e66debb2f3d42527668f48818c74f5ca48f03aceda67c9b8285b6f8e5a0a6",
+  "mutant_exe_size": 8984320,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "abeb1664c20aa079fcbc869ed818f876c84e3af679dc6ea6f4fec72d805ad7a6",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P13 or P15",
+  "primary_config": "F-7",
+  "primary_expanded": 609616,
+  "primary_fail": "P13: A 0 qualified 6 durable 5 head 8",
+  "primary_header": "EXPLORATION F-7",
+  "primary_raw_blob": "b790270e6084f076fd619707917e52958a93da59",
+  "primary_raw_sha256": "b17f69a34ae04752b2d123493d6b8ec8d0b393fd5ca4f8b3de4d52f2d2339000",
+  "primary_receipt": "d2a1-mutation-tranche2-exec-01/receipts/55-C3a/04-run/raw-output.txt",
+  "primary_states": 746152,
+  "receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/55-C3a",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/55-C3a/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-7 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "d6a4c0645d564bb0be25bd71fed8f80b2e80155a",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "6b70930d1f8ef473697b4ae6517f0901f8ace276d8a99acca67783ad6e9e3bd2",
+  "result_txt": "d2a1-mutation-tranche2-exec-01/receipts/55-C3a/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+    "d6a4c0645d564bb0be25bd71fed8f80b2e80155a",
+    "6b70930d1f8ef473697b4ae6517f0901f8ace276d8a99acca67783ad6e9e3bd2"
+   ]
+  ],
+  "run_exe_after": "c71e66debb2f3d42527668f48818c74f5ca48f03aceda67c9b8285b6f8e5a0a6",
+  "run_exe_before": "c71e66debb2f3d42527668f48818c74f5ca48f03aceda67c9b8285b6f8e5a0a6"
+ },
+ "C3b": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+  "apply_patch_sha256": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "e6aff1884a4b9b7f880eee8784c371648fb2c073",
+  "catalog_mutant_sha256": "84dc2a424ce80ce47b71871f111c4aaa37d8b776dc4851f16513d86312247273",
+  "catalog_patch_sha256": "614e53fd75518991c5e6518bc0fe61cf546cf092b955e3eda0e71cf25d5f6dd4",
+  "configuration": "F-6",
+  "contract_row": "| C3b | acknowledgement test 4 removed | P13 or P12 | F-6 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "2a5a4309d2ec48494aa568513cc89655baa777c2"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "e6aff1884a4b9b7f880eee8784c371648fb2c073",
+    "84dc2a424ce80ce47b71871f111c4aaa37d8b776dc4851f16513d86312247273"
+   ]
+  },
+  "description": "acknowledgement test 4 removed",
+  "exit_status": 101,
+  "first_failure": "P13",
+  "id": "C3b",
+  "kind": "explore",
+  "mutant_blob": "e6aff1884a4b9b7f880eee8784c371648fb2c073",
+  "mutant_exe_on_disk": "8aeecde3c905a0f7069e28eec7f187db0cf2d9637e93293841bff92d8d31281b",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3b/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "8aeecde3c905a0f7069e28eec7f187db0cf2d9637e93293841bff92d8d31281b",
+  "mutant_exe_size": 8983840,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "84dc2a424ce80ce47b71871f111c4aaa37d8b776dc4851f16513d86312247273",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P13 or P12",
+  "primary_config": "F-6",
+  "primary_expanded": 44338,
+  "primary_fail": "P13: A 0 qualified 7 durable 7 head 6",
+  "primary_header": "EXPLORATION F-6",
+  "primary_raw_blob": "02ec25c384b6753d8c667daddd69674fadaa748e",
+  "primary_raw_sha256": "9c08f2f01dad5348b2f21a968f1c4a29aad54f32fe27d6b7ab87e2b185998b9b",
+  "primary_receipt": "d2a1-mutation-tranche3-continue-02/receipts/82-C3b/04-run/raw-output.txt",
+  "primary_states": 67871,
+  "receipt_dir": "d2a1-mutation-tranche3-continue-02/receipts/82-C3b",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-continue-02/receipts/82-C3b/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-6 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "550d4fe8a75054ffcb4dacf44b02920c9eb9cf18",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "c3b10255e8c07d1e15b67192ee2b83b45c7771869c001f66fae324f3041870ba",
+  "result_txt": "d2a1-mutation-tranche3-continue-02/receipts/82-C3b/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "550d4fe8a75054ffcb4dacf44b02920c9eb9cf18",
+    "c3b10255e8c07d1e15b67192ee2b83b45c7771869c001f66fae324f3041870ba"
+   ]
+  ],
+  "run_exe_after": "8aeecde3c905a0f7069e28eec7f187db0cf2d9637e93293841bff92d8d31281b",
+  "run_exe_before": "8aeecde3c905a0f7069e28eec7f187db0cf2d9637e93293841bff92d8d31281b"
+ },
+ "C3c": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+  "apply_patch_sha256": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "5cc9c09ac96062c5d348e86ace8cb0ac2225e83d",
+  "catalog_mutant_sha256": "e72f8f619fa1c9b4a8379351138b354fa83fe470b1c56450b8b22f28c61710c2",
+  "catalog_patch_sha256": "1e60d98d6d42c0aab581a5bde34162f9767949a495fad801b73d9c740d9e2e85",
+  "configuration": "F-6",
+  "contract_row": "| C3c | acknowledgement test 5 removed | P12 | F-6 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "2a5a4309d2ec48494aa568513cc89655baa777c2"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "5cc9c09ac96062c5d348e86ace8cb0ac2225e83d",
+    "e72f8f619fa1c9b4a8379351138b354fa83fe470b1c56450b8b22f28c61710c2"
+   ]
+  },
+  "description": "acknowledgement test 5 removed",
+  "exit_status": 101,
+  "first_failure": "P12",
+  "id": "C3c",
+  "kind": "explore",
+  "mutant_blob": "5cc9c09ac96062c5d348e86ace8cb0ac2225e83d",
+  "mutant_exe_on_disk": "e8cfbe4c98412d4ae78fbe3c38d9c6e93d2af16d445631971618822646c38e32",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C3c/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "e8cfbe4c98412d4ae78fbe3c38d9c6e93d2af16d445631971618822646c38e32",
+  "mutant_exe_size": 8983584,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "e72f8f619fa1c9b4a8379351138b354fa83fe470b1c56450b8b22f28c61710c2",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P12",
+  "primary_config": "F-6",
+  "primary_expanded": 381761,
+  "primary_fail": "P12: the explanation of original 0 is covered by no durable acknowledgement",
+  "primary_header": "EXPLORATION F-6",
+  "primary_raw_blob": "2c670bd1ef2112a61b1aea58687d3e57a17961cf",
+  "primary_raw_sha256": "e746174a0ef2371ab9630191faa3e213cbcfad6fa2fd576844fb5b77e133197c",
+  "primary_receipt": "d2a1-mutation-tranche3-continue-02/receipts/83-C3c/04-run/raw-output.txt",
+  "primary_states": 541827,
+  "receipt_dir": "d2a1-mutation-tranche3-continue-02/receipts/83-C3c",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-continue-02/receipts/83-C3c/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-6 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "3378c4f38dc8d0cea10f432904efae43a36b9286",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "244d81d11add79cf2ea234b573b5e149f19fbc4b1ea567b352f6d179bd934c59",
+  "result_txt": "d2a1-mutation-tranche3-continue-02/receipts/83-C3c/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "3378c4f38dc8d0cea10f432904efae43a36b9286",
+    "244d81d11add79cf2ea234b573b5e149f19fbc4b1ea567b352f6d179bd934c59"
+   ]
+  ],
+  "run_exe_after": "e8cfbe4c98412d4ae78fbe3c38d9c6e93d2af16d445631971618822646c38e32",
+  "run_exe_before": "e8cfbe4c98412d4ae78fbe3c38d9c6e93d2af16d445631971618822646c38e32"
+ },
+ "C4": {
+  "amendment": "AD-1-R4 G.5, G.6, S-22 (both P4 and P8 required)",
+  "apply_catalog_patch_sha256": "24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d",
+  "apply_patch_sha256": "24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0",
+  "catalog_mutant_sha256": "4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2",
+  "catalog_patch_sha256": "24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d",
+  "configuration": "F-8",
+  "contract_row": "| C4 | acknowledgement test 1 removed | P4, P8 | F-8 |",
+  "decision": "ACCEPTED \u2014 conveyed in mission P3-C11-DR01-D2A1-FINAL-CLOSURE-01 section 1 ('Previously Architect accepted'; conversational checkpoint: P4 and P8, first failure P4); no by-ID Git record",
+  "decision_provenance": "CONVERSATIONAL_ARCHITECT_RULING; indirect Git corroboration only: executor-written AD-C7-W adoption record (2026-10-15) states 'Mutation campaign: 34/35 ARCHITECT ACCEPTED' with C7 blocked",
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0",
+    "4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2"
+   ]
+  },
+  "description": "acknowledgement test 1 removed",
+  "exit_status": 101,
+  "first_failure": "P4",
+  "g5_E_architect_review_at_execution": "PENDING",
+  "g5_first_printed_property": "P4",
+  "g_recording_proposed": "C4: P4, P8 (first failure P4; witness)",
+  "g_rule_holds": true,
+  "healthy_reference": "docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/52-witness-C4 at 89326b859792a442c1853c3d35d30a48301c009e (accepted healthy-witness type-(e3) PASS on the pinned unchanged-baseline executable cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c)",
+  "id": "C4",
+  "kind": "explore",
+  "mutant_blob": "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0",
+  "mutant_exe_on_disk": "38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mwc4-C4/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8",
+  "mutant_exe_size": 8988320,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P4, P8",
+  "primary_config": "F-8",
+  "primary_expanded": 28579,
+  "primary_fail": "P4: U is occupied together with C or X",
+  "primary_header": "EXPLORATION F-8",
+  "primary_raw_blob": "40b15298e3c1df65e0a60efe9f361b0cc474080f",
+  "primary_raw_sha256": "edda61a1246945ec76b2b15526f939eaa8b4559229125d6d2729200e0fcd4477",
+  "primary_receipt": "d2a1-mutation-witness-c4-01/receipts/81-C4/04-run/raw-output.txt",
+  "primary_states": 51078,
+  "receipt_dir": "d2a1-mutation-witness-c4-01/receipts/81-C4",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "C4: P4, P8 (first failure P4; witness)",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-witness-c4-01/receipts/81-C4/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/64-full-F-8 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-8 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "2873db949e782cacecb61afec89000a43dff2695",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "ec57281f54e157b6dcf8e3c17bd4cfe5e97d07208ba26d678ebda048ad67dc12",
+  "result_txt": "d2a1-mutation-witness-c4-01/receipts/81-C4/RESULT.txt",
+  "ruling_cites": [],
+  "run_exe_after": "38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8",
+  "run_exe_before": "38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8",
+  "witness_exe_before": "38be24f405dbb56fe4f3e26baad35a6b892d6fc47b5200ddae1e388e02da6db8",
+  "witness_lines": [
+   "NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (append_acknowledgement: NotApplied(Uncertain); U holds the acknowledgement while X holds F1's explanation)",
+   "NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (append_acknowledgement: Committed; G1's written attempt, not told Committed, is neither in U nor corrected in C or in the ledger)"
+  ],
+  "witness_raw_sha256": "e0f7379905c08662e7a6a8e16f1604c119a8adf2a2c325a0f4d140ea253f2d44",
+  "witness_receipt": "d2a1-mutation-witness-c4-01/receipts/81-C4/04c-witness/raw-output.txt"
+ },
+ "C5": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8",
+  "apply_patch_sha256": "a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "build_admission_ruling": [
+   "d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-C5-BUILD-ADMISSIBILITY.md",
+   "d85b1bd6b89e4d19b2bf71c52f705232d1793bfa",
+   "C5 BUILD \u2014 ARCHITECT-ADMISSIBLE (NARROW C5-SPECIFIC WARNING RULING; NO GENERAL WARNING EXCEPTION)"
+  ],
+  "build_packet_result_first_line": "CONTROL RESULT: MUTATION_CONTROL_BLOCKED",
+  "build_receipt_dir": "d2a1-mutation-tranche2-exec-01/receipts/56-C5",
+  "catalog_mutant_blob": "e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495",
+  "catalog_mutant_sha256": "31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd",
+  "catalog_patch_sha256": "a4776885b669bd912fd8710d5a3283f4c1863ab9213e8474d26707b5a6e5f3d8",
+  "configuration": "F-5",
+  "contract_row": "| C5 | resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check | P13 | F-5 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "674ed583be5e88700426c6e05db978003d03e016"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495",
+    "31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd"
+   ]
+  },
+  "description": "resolve, for an acknowledgement in U, raises the frontier with neither the presence read nor the frontier check",
+  "exit_status": 101,
+  "first_failure": "P13",
+  "id": "C5",
+  "kind": "explore",
+  "mutant_blob": "e1a49f5ba952bc81cdac9f8f8ace9eeb2aa93495",
+  "mutant_exe_on_disk": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2x-C5/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+  "mutant_exe_size": 8986720,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "31ca02cfaeb6058879af75091e2b1bdb21addf846d59ee3e5b4f5806fe30dedd",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P13",
+  "primary_config": "F-5",
+  "primary_expanded": 312900,
+  "primary_fail": "P13: A 0 qualified 5 durable 0 head 5",
+  "primary_header": "EXPLORATION F-5",
+  "primary_raw_blob": "a6276ebbf9af43fdbcb2926f29deaf3d392526a4",
+  "primary_raw_sha256": "62ca176023a7f5066a474483fda926cd32e0f263c3c67835d9d5f6d1329ced19",
+  "primary_receipt": "d2a1-mutation-tranche2-continue-02/receipts/61-C5/04-run/raw-output.txt",
+  "primary_states": 418422,
+  "reauth_after_run": "C5 REAUTHENTICATION AFTER THE RUN: HOLDS (WORKTREE EXACTLY C; EXECUTABLE AND TARGET UNCHANGED)",
+  "receipt_dir": "d2a1-mutation-tranche2-continue-02/receipts/61-C5",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-exec-01/receipts/56-C5/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-5 unchanged-core original-explorer PASS, type (e1))",
+  "result_blob": "cc1ccc68b5cfc300a8f19204e32e9e421c8675ec",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "1d2eb2ece426c830745a3ac1091a96236a85c031b3306e90b0b34bca1a754ce7",
+  "result_txt": "d2a1-mutation-tranche2-continue-02/receipts/61-C5/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "cc1ccc68b5cfc300a8f19204e32e9e421c8675ec",
+    "1d2eb2ece426c830745a3ac1091a96236a85c031b3306e90b0b34bca1a754ce7"
+   ]
+  ],
+  "run_exe_after": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9",
+  "run_exe_before": "90a608834ad0227632ba26f095de5e16914942da86d2f05fdaab5a0d745c15f9"
+ },
+ "C6": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+  "apply_patch_sha256": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "6dde859cb243b9f4304cda61b0917b1fc555dde3",
+  "catalog_mutant_sha256": "649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3",
+  "catalog_patch_sha256": "5c647500156a5e9c9b3faa27ce59ea2c09f0c45d1a50daa7a7d1d0a33c5a7e5e",
+  "configuration": "F-PT",
+  "contract_row": "| C6 | classification row b ignores the refusal table, **with** A4 | P6 | F-PT |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "2a5a4309d2ec48494aa568513cc89655baa777c2"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "6dde859cb243b9f4304cda61b0917b1fc555dde3",
+    "649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3"
+   ]
+  },
+  "description": "classification row b ignores the refusal table, **with** A4",
+  "exit_status": 101,
+  "first_failure": "P6",
+  "id": "C6",
+  "kind": "explore",
+  "mutant_blob": "6dde859cb243b9f4304cda61b0917b1fc555dde3",
+  "mutant_exe_on_disk": "5c88a5c7b0c2c9e9ab644c97bd93a4e97c0570e85807a5be7467466bdcdd832d",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C6/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "5c88a5c7b0c2c9e9ab644c97bd93a4e97c0570e85807a5be7467466bdcdd832d",
+  "mutant_exe_size": 8985584,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "649d95ba8232cefa81d71c7793d8413e956271efebc25bc291ddb4288084c2a3",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P6",
+  "primary_config": "F-PT",
+  "primary_expanded": 1807301,
+  "primary_fail": "P6: F1 was refused as a conflict and is Paid",
+  "primary_header": "EXPLORATION F-PT",
+  "primary_raw_blob": "036385385011e85c8b036b8be4174c6f0c2ba305",
+  "primary_raw_sha256": "920e109f65a60b316c70e21dabe30942bc95db5e225b00af1470df2bcf41fd01",
+  "primary_receipt": "d2a1-mutation-tranche3-continue-02/receipts/84-C6/04-run/raw-output.txt",
+  "primary_states": 2652070,
+  "receipt_dir": "d2a1-mutation-tranche3-continue-02/receipts/84-C6",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche3-continue-02/receipts/84-C6/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-PT unchanged-core composed-quotient PASS, type (e1))",
+  "result_blob": "f82d4bc60180a18317638bd076d52df28d48b849",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "dafe4558ed42f9ff44d2dcc497cbce4db128a62cb68ebef87250635738a28eea",
+  "result_txt": "d2a1-mutation-tranche3-continue-02/receipts/84-C6/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+    "f82d4bc60180a18317638bd076d52df28d48b849",
+    "dafe4558ed42f9ff44d2dcc497cbce4db128a62cb68ebef87250635738a28eea"
+   ]
+  ],
+  "run_exe_after": "5c88a5c7b0c2c9e9ab644c97bd93a4e97c0570e85807a5be7467466bdcdd832d",
+  "run_exe_before": "5c88a5c7b0c2c9e9ab644c97bd93a4e97c0570e85807a5be7467466bdcdd832d"
+ },
+ "C7": {
+  "amendment": "AD-C7-W (Owner adopted 2026-10-15; identity approval 2026-10-16), CR-B B-W/A",
+  "catalog_mutant_blob": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+  "catalog_mutant_sha256": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa",
+  "catalog_patch_sha256": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+  "configuration": "F-PT",
+  "contract_row": "| C7 | *Explained* removes every table entry, **with** A4 | P6 | F-PT |",
+  "decision": "ACCEPTED \u2014 conveyed in mission P3-C11-DR01-D2A1-FINAL-CLOSURE-01 section 1 as ruling P3-C11-DR01-D2A1-C7-ACCEPTANCE-01 (conversational; no Git ruling record exists)",
+  "decision_provenance": "CONVERSATIONAL_ARCHITECT_RULING (mission text only); no by-ID Git record",
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+    "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+   ]
+  },
+  "description": "*Explained* removes every table entry, **with** A4",
+  "final_classification": [
+   "STAGE 12 RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING"
+  ],
+  "first_failure": "E11",
+  "healthy_exe_sha256": "e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843",
+  "healthy_raw_sha256": "9df95b75de9a673d1af2658a8767227ec5afd98f829660580e2fd0cf7c5e64d6",
+  "healthy_receipt": "d2a1-c7-compliant-exec-02/receipts/40-run-C-healthy-witness/raw-output.txt",
+  "healthy_verdict": "PASS_ADMISSIBLE",
+  "historical": "d2a1-mutation-tranche3-continue-02/receipts/85-C7/RESULT.txt (MUTATION_CONTROL_BLOCKED, E11 on E-C-based mutant; preserved, not the accepted route)",
+  "id": "C7",
+  "informational_f3_raw_sha256": "5a4a041a77c2d4d895f63fb65b117464bff3cbf8295522d8196171a9a9751c9a",
+  "kind": "explore",
+  "link": [
+   "(D) LINK USABLE \u2014 C-BASE PASS on E-C; NOT W-SRC PASS"
+  ],
+  "mutant_blob": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+  "mutant_exe_sha256": "156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38",
+  "mutant_sha256": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "P6",
+  "on_disk_healthy": "e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843",
+  "on_disk_mutant": "156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38",
+  "primary_outcome": "FAIL E11",
+  "primary_raw_blob": "df463b47747d19cc0e8b6df925ee7eef063e8822",
+  "primary_raw_sha256": "83407d516c71ce173995f4565729b386c29d41f22a2070b873e7e1ae134c9137",
+  "primary_receipt": "d2a1-c7-compliant-exec-02/receipts/41-run-A-full_fpt/raw-output.txt",
+  "primary_states": 1071165,
+  "primary_verdict": "FAIL_E11_ADMISSIBLE",
+  "receipt_type": "(a) primary + (c) mutant witness + (e3) healthy witness (AD-C7-W G.7/G.9)",
+  "recording": "C7: P6 (first failure E11; witness)",
+  "restoration": "EXACTLY_W",
+  "restored_side": "(CR-B link) (D) LINK USABLE \u2014 C-BASE PASS on E-C; NOT W-SRC PASS",
+  "route": "AD-C7-W witness route (exec-02)",
+  "witness_lines": [
+   "VIOLATION step 13 transition: E11: a table entry left in a step that did not see its explanation in the ledger",
+   "VIOLATION after 24: P6: F1 was refused as a conflict and is Paid"
+  ],
+  "witness_raw_sha256": "4c30badd26eb39629f8cf4bc5b914227291eef20be508847d4a34d61a32b6a16",
+  "witness_receipt": "d2a1-c7-compliant-exec-02/receipts/42-run-B-mutant-witness/raw-output.txt",
+  "witness_verdict": "ADMISSIBLE_TWO_CANONICAL"
+ },
+ "C8": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2",
+  "apply_catalog_patch_sha256": "a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927",
+  "apply_patch_sha256": "a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "fd6abbd8a80dc8a01620981c76427ca76a9e1f7d",
+  "catalog_mutant_sha256": "8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a",
+  "catalog_patch_sha256": "a7cdd1925bf34283880384b78dd1c918fc61e64afef10094ab6d947bdeb97927",
+  "configuration": "F-B",
+  "contract_row": "| C8 | members are classified and inserted one at a time | E5 | F-B |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "674ed583be5e88700426c6e05db978003d03e016"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "fd6abbd8a80dc8a01620981c76427ca76a9e1f7d",
+    "8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a"
+   ]
+  },
+  "description": "members are classified and inserted one at a time",
+  "exit_status": 101,
+  "first_failure": "E5",
+  "id": "C8",
+  "kind": "explore",
+  "mutant_blob": "fd6abbd8a80dc8a01620981c76427ca76a9e1f7d",
+  "mutant_exe_on_disk": "60cc14b41266ec603e6a8400bac791cb7c93e03acd73a01c3ddbc72f0c3f2109",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt2c-C8/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "60cc14b41266ec603e6a8400bac791cb7c93e03acd73a01c3ddbc72f0c3f2109",
+  "mutant_exe_size": 8973616,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "8baa7d6daa9e2adf3ea0b382a04d81e0d340cf40f1a09ecccd24a87bb849c30a",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E5",
+  "primary_config": "F-B",
+  "primary_expanded": 84,
+  "primary_fail": "E5: append_facts: an insert before every member is classified: Open:Ok Facts:Ok Insert:Ok Facts:Ok Rollback:Ok",
+  "primary_header": "EXPLORATION F-B",
+  "primary_raw_blob": "284abe9f0f6b66dcb6b1892a1e06ac6ffdc0ada8",
+  "primary_raw_sha256": "b42d0eb5775ba8fb6c1279dcf390468c7fffcbc47e7f4e888fc2cd23e3dd90cc",
+  "primary_receipt": "d2a1-mutation-tranche2-continue-02/receipts/64-C8/04-run/raw-output.txt",
+  "primary_states": 547,
+  "receipt_dir": "d2a1-mutation-tranche2-continue-02/receipts/64-C8",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche2-continue-02/receipts/64-C8/05-restore/RESTORE.json",
+  "restored_side": "(e1) docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B at f023cc3d031a2a89e5ecbd4086e15f2e50869acd (accepted exact-final F-B unchanged-core composed-quotient PASS, type (e1))",
+  "result_blob": "f0bc22fbedbe4c86afa59dbff793ed7dd713e99d",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "d2c572022bf8836c7d0dc029630ea167b62626b5c0519d0f492e54608964924b",
+  "result_txt": "d2a1-mutation-tranche2-continue-02/receipts/64-C8/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+    "f0bc22fbedbe4c86afa59dbff793ed7dd713e99d",
+    "d2c572022bf8836c7d0dc029630ea167b62626b5c0519d0f492e54608964924b"
+   ]
+  ],
+  "run_exe_after": "60cc14b41266ec603e6a8400bac791cb7c93e03acd73a01c3ddbc72f0c3f2109",
+  "run_exe_before": "60cc14b41266ec603e6a8400bac791cb7c93e03acd73a01c3ddbc72f0c3f2109"
+ },
+ "C9": {
+  "amendment": "AD-1-R4 F, F.1, I, K.2; AD-1-R4 S-23 (C9-b)",
+  "apply_catalog_patch_sha256": "cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b",
+  "apply_patch_sha256": "cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b",
+  "apply_verdict": "EXACTLY_C_PLUS_PATCH",
+  "catalog_mutant_blob": "7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c",
+  "catalog_mutant_sha256": "afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e",
+  "catalog_patch_sha256": "cda8e8d473a1a4650e98c875f1b9d81b184abfb02c2e55e30a97fd6f4ec2b76b",
+  "configuration": "F-B2",
+  "contract_row": "| C9 | `Rollback::Unknown` is treated as `Undone` | E4 | F-B2 |",
+  "decision": "MUTATION CONTROL KILL ACCEPTED",
+  "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority",
+  "decision_records": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "c82adabae323eaada06fc24ed5b6faeaedb41485"
+   ]
+  ],
+  "derived_mutant": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": [
+    "7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c",
+    "afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e"
+   ]
+  },
+  "description": "`Rollback::Unknown` is treated as `Undone`",
+  "exit_status": 101,
+  "first_failure": "E4",
+  "id": "C9",
+  "kind": "explore",
+  "mutant_blob": "7ba4a8247ba483dea8799ae3b9a107e1c2b4ef5c",
+  "mutant_exe_on_disk": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+  "mutant_exe_path": "/home/nexus/NEXUS/nexus-os-p3-c11-mt1x-C9/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "mutant_exe_sha256": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+  "mutant_exe_size": 8984400,
+  "mutant_head": "d5964ee5326c2733177307db6f507328023d361a",
+  "mutant_sha256": "afe5a170535241f2106ede6058b5e7f0ed98e01a875674e9fa70ee0032e7bd4e",
+  "mutant_tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "mutation_source_file": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "named_property": "E4",
+  "primary_config": "F-B2",
+  "primary_expanded": 1,
+  "primary_fail": "E4: append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown",
+  "primary_header": "EXPLORATION F-B2",
+  "primary_raw_blob": "45be0a25ea7d6bf339f664a71ed6f32dc62e6d08",
+  "primary_raw_sha256": "518e0e47108811b5e8069c693aa1963f7da3ee87aad824a1bbe7479fa9c798d2",
+  "primary_receipt": "d2a1-mutation-tranche1-continue-02/receipts/38-C9/04-run/raw-output.txt",
+  "primary_states": 14,
+  "receipt_dir": "d2a1-mutation-tranche1-continue-02/receipts/38-C9",
+  "receipt_type": "(a) original-explorer mutant FAIL",
+  "recording": "",
+  "restoration": "EXACTLY_C",
+  "restoration_receipt": "d2a1-mutation-tranche1-continue-02/receipts/38-C9/05-restore/RESTORE.json",
+  "restored_side": "(None) docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2 at 89326b859792a442c1853c3d35d30a48301c009e (accepted exact-final F-B2 unchanged-core PASS, type (e1))",
+  "result_blob": "2eecc90b8176d6c6dd86ba7f6ba6be80e0d9f8f4",
+  "result_first_line": "CONTROL RESULT: KILL_EVIDENCE_CANDIDATE \u2014 ARCHITECT REVIEW PENDING",
+  "result_sha256": "d8964dc693266739a697e9e49f3dac6a260176e640d2cda3b9fe53161ab73b40",
+  "result_txt": "d2a1-mutation-tranche1-continue-02/receipts/38-C9/RESULT.txt",
+  "ruling_cites": [
+   [
+    "d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+    "2eecc90b8176d6c6dd86ba7f6ba6be80e0d9f8f4",
+    "d8964dc693266739a697e9e49f3dac6a260176e640d2cda3b9fe53161ab73b40"
+   ]
+  ],
+  "run_exe_after": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778",
+  "run_exe_before": "60821ef6a9c6b77ee8a21b3677bee83491a525271263257823de43d895d4f778"
+ },
+ "_rulings": [
+  {
+   "accepted_stated": [
+    "C22"
+   ],
+   "blob": "b852dc55adfb3b2dbff05a48f811143e5b12fc37",
+   "count_stated": null,
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/ARCHITECT-RULING-C22-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "8bfb7fdac4141bc00f0ae4a1f994c1f38dd157b9e452abc40f52a3ebdb290af3",
+   "title": "C22 \u2014 MUTATION CONTROL KILL ACCEPTED",
+   "title_accepted": [
+    "C22"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C14",
+    "C19",
+    "C21",
+    "C22",
+    "C27"
+   ],
+   "blob": "59d7a24b19ee2294d68c0f3a375ba57380b4b377",
+   "count_stated": null,
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "cf9bf865e01c8f8b359916eae75f29147132ff67465f93b1c08473c0a8b0d776",
+   "title": "C22 C14 C19 C21 C27 \u2014 MUTATION CONTROL KILL ACCEPTED; C28 BUILD ARCHITECT-ADMISSIBLE (NARROW); C28 KILL PENDING",
+   "title_accepted": [
+    "C14",
+    "C19",
+    "C21",
+    "C22",
+    "C27"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C11",
+    "C12",
+    "C14",
+    "C17",
+    "C18a",
+    "C18b",
+    "C19",
+    "C21",
+    "C22",
+    "C27",
+    "C28",
+    "C9"
+   ],
+   "blob": "c82adabae323eaada06fc24ed5b6faeaedb41485",
+   "count_stated": "12",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "e8859092ad0de7a4a357486172a4c2704946e70fb8510a43c383f9384a9cf04b",
+   "title": "TRANCHE 1 \u2014 C22 C14 C19 C21 C27 C28 C12 C9 C11 C17 C18a C18b \u2014 MUTATION CONTROL KILL ACCEPTED (12 OF 35); A4 SATISFIED \u2014 ARCHITECT ACCEPTED",
+   "title_accepted": [
+    "C11",
+    "C12",
+    "C14",
+    "C17",
+    "C18a",
+    "C18b",
+    "C19",
+    "C21",
+    "C22",
+    "C27",
+    "C28",
+    "C9"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C10",
+    "C16",
+    "C23",
+    "C26",
+    "C3a"
+   ],
+   "blob": "54f618029d79a3eaf65c891a4b8eae5a1455f1d0",
+   "count_stated": "17",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "17cf49462a6ea81f4255b97952042772ed42e59fa80db2f139aeedd51b331a59",
+   "title": "TRANCHE 2 \u2014 C23 C10 C16 C26 C3a \u2014 MUTATION CONTROL KILL ACCEPTED (17 OF 35); C5 BUILD ARCHITECT-ADMISSIBLE (NARROW C5-SPECIFIC WARNING RULING); C5 KILL PENDING",
+   "title_accepted": [
+    "C10",
+    "C16",
+    "C23",
+    "C26",
+    "C3a"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "A3",
+    "A6",
+    "C15",
+    "C5",
+    "C8"
+   ],
+   "blob": "674ed583be5e88700426c6e05db978003d03e016",
+   "count_stated": "22",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "6013b68a1097d0bb1c3702164635185e664de51be2e15dd8421c4bfd21d6b7d8",
+   "title": "TRANCHE 2 CONTINUATION \u2014 C5 A3 A6 C8 C15 \u2014 MUTATION CONTROL KILL ACCEPTED (22 OF 35); TRANCHE 3 AUTHORIZED: C2 C24 C3b C3c C6 C7 A1 A2 C20 A5",
+   "title_accepted": [
+    "A3",
+    "A6",
+    "C15",
+    "C5",
+    "C8"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C2"
+   ],
+   "blob": "0a19b1886192cb62a048e7cf9a05b3fa7636950d",
+   "count_stated": "23",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/documents/ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "13daed6b69247f81ce4d8f4638f45960a19fc282984d148e383a18b9dd38c5dc",
+   "title": "TRANCHE 3 \u2014 C2 \u2014 MUTATION CONTROL KILL ACCEPTED (23 OF 35); TRANCHE 3 CONTINUATION AUTHORIZED: C24 C3b C3c C6 C7 A1 A2 C20 A5",
+   "title_accepted": [
+    "C2"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C24",
+    "C3b",
+    "C3c",
+    "C6"
+   ],
+   "blob": "2a5a4309d2ec48494aa568513cc89655baa777c2",
+   "count_stated": "27",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "8a037382911967919845da590e52ade34162b638d32aeb88b4ecd9f6c138a88b",
+   "title": "TRANCHE 3 CONTINUATION \u2014 C24 C3b C3c C6 \u2014 MUTATION CONTROL KILL ACCEPTED (27 OF 35); C7 MUTATION_CONTROL_BLOCKED; TRANCHE 3 TAIL AUTHORIZED: A1 A2 C20 A5",
+   "title_accepted": [
+    "C24",
+    "C3b",
+    "C3c",
+    "C6"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "A1",
+    "A2",
+    "A5",
+    "C20"
+   ],
+   "blob": "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493",
+   "count_stated": "31",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+   "recordings": [],
+   "sha256": "5364fbe49daecf89eb7a4784d43381eab9d187c9f8a2ed979cbf5b937942e0b1",
+   "title": "TRANCHE 3 TAIL \u2014 A1 A2 C20 A5 \u2014 MUTATION CONTROL KILL ACCEPTED (31 OF 35); C7 MUTATION_CONTROL_BLOCKED; C4 RESERVED; WITNESS-BOUND C1 C25 AUTHORIZED (C1 THEN C25)",
+   "title_accepted": [
+    "A1",
+    "A2",
+    "A5",
+    "C20"
+   ]
+  },
+  {
+   "accepted_stated": [
+    "C1",
+    "C25"
+   ],
+   "blob": "f0d110291a17bcd2a56b4e3b687b68fb4cbb3d8e",
+   "count_stated": "33",
+   "path": "docs/evidence/p3-candidate11/d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+   "recordings": [
+    "C1: P1 (first failure E3; witness)",
+    "C25: P7 (first failure E4; witness)"
+   ],
+   "sha256": "ee444b0f0a9b46bc234bda04f231b534cb01c70bd9b7c8093064b90fa39a4cc2",
+   "title": "C1 C25 \u2014 WITNESS-BOUND MUTATION CONTROL KILL ACCEPTED (33 OF 35); C7 MUTATION_CONTROL_BLOCKED; WITNESS-BOUND C4 AUTHORIZED (G.5, G.6)",
+   "title_accepted": [
+    "C1",
+    "C25"
+   ]
+  }
+ ],
+ "_superseded_receipts": {
+  "C24": [
+   [
+    "d2a1-mutation-tranche3-exec-01/receipts/67-C24/RESULT.txt",
+    "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+   ]
+  ],
+  "C28": [
+   [
+    "d2a1-mutation-tranche1-resume-01/receipts/36-C28/RESULT.txt",
+    "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+   ]
+  ],
+  "C5": [
+   [
+    "d2a1-mutation-tranche2-exec-01/receipts/56-C5/RESULT.txt",
+    "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+   ]
+  ],
+  "C7": [
+   [
+    "d2a1-mutation-tranche3-continue-02/receipts/85-C7/RESULT.txt",
+    "CONTROL RESULT: MUTATION_CONTROL_BLOCKED"
+   ]
+  ]
+ }
+}

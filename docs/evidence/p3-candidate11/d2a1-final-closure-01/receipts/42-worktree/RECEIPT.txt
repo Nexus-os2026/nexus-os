@@ -1,0 +1,24 @@
+MISSION-OWNED DETACHED CANDIDATE C WORKTREE 2026-10-16T16:11:00+0100
+$ git -C /home/nexus/NEXUS/nexus-os worktree add --detach /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01 d5964ee5326c2733177307db6f507328023d361a
+  rc 0
+  stdout 'HEAD is now at d5964ee5 docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record'
+  stderr 'Preparing worktree (detached HEAD d5964ee5)'
+source check (after checkout): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status []; mismatches []; missing []; modes []
+workflow step 'Verify the tested commit and a clean checkout': tested d5964ee5326c2733177307db6f507328023d361a; status output 0 bytes ''
+$ rustc --version -> rustc 1.94.0 (4a4ef493e 2026-03-02)
+$ cargo --version -> rc 0 cargo 1.94.0 (85eff7c80 2026-01-15) 
+$ cargo clippy --version -> rc 0 clippy 0.1.94 (4a4ef493e3 2026-03-02) 
+$ cargo fmt --version -> rc 0 rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02) 
+first PATH match under the build environment:
+  cargo-clippy /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo-clippy
+  clippy-driver /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/clippy-driver
+  rustc /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc
+  cargo /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo
+  rustfmt /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustfmt
+$ pkg-config --exists webkit2gtk-4.1 -> rc 0; --modversion 2.52.6
+$ pkg-config --exists javascriptcoregtk-4.1 -> rc 0; --modversion 2.52.6
+$ pkg-config --exists libsoup-3.0 -> rc 0; --modversion 3.4.4
+$ pkg-config --exists gtk+-3.0 -> rc 0; --modversion 3.24.41
+$ pkg-config --exists glib-2.0 -> rc 0; --modversion 2.80.0
+source check (after the verification commands): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status []; mismatches []; missing []; modes []
+finished: 2026-10-16T16:11:02+0100

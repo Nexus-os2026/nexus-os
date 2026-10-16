@@ -1,0 +1,374 @@
+OK   X-1: one exploration report (repeats byte-identical) :: 1
+OK   X-1: header names the configuration :: X-1
+OK   X-1: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION X-1
+OK   X-1: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   X-1: ticket limit 8 and refusal limit 4
+OK   X-1: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   X-1: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   X-1: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x1_two_facts_two_writers_one_admission', '--exact', '--nocapture', '--test-threads=1']
+OK   X-1: 16 GiB, zero swap, no OOM kill, not timed out
+OK   X-1: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   X-1: E10 not applicable; L1 HOLDS
+OK   X-1: D1 HOLDS
+OK   X-1: complete: every discovered key expanded; discovered <= cap :: (59104, 59104, 250000)
+OK   X-1: harness exit 0 by a normal exit
+OK   X-1: classification PASS :: CLASSIFICATION: PASS
+OK   X-2: one exploration report (repeats byte-identical) :: 1
+OK   X-2: header names the configuration :: X-2
+OK   X-2: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION X-2
+OK   X-2: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   X-2: ticket limit 8 and refusal limit 4
+OK   X-2: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   X-2: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   X-2: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x2_one_fact_two_gating_callers', '--exact', '--nocapture', '--test-threads=1']
+OK   X-2: 16 GiB, zero swap, no OOM kill, not timed out
+OK   X-2: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   X-2: E10 not applicable; L1 HOLDS
+OK   X-2: D1 HOLDS
+OK   X-2: complete: every discovered key expanded; discovered <= cap :: (10020, 10020, 250000)
+OK   X-2: harness exit 0 by a normal exit
+OK   X-2: classification PASS :: CLASSIFICATION: PASS
+OK   X-3: one exploration report (repeats byte-identical) :: 1
+OK   X-3: header names the configuration :: X-3
+OK   X-3: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION X-3
+OK   X-3: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   X-3: ticket limit 8 and refusal limit 4
+OK   X-3: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   X-3: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   X-3: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x3_one_conflicting_fact_with_env', '--exact', '--nocapture', '--test-threads=1']
+OK   X-3: 16 GiB, zero swap, no OOM kill, not timed out
+OK   X-3: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   X-3: E10 not applicable; L1 HOLDS
+OK   X-3: D1 HOLDS
+OK   X-3: complete: every discovered key expanded; discovered <= cap :: (25617, 25617, 250000)
+OK   X-3: harness exit 0 by a normal exit
+OK   X-3: classification PASS :: CLASSIFICATION: PASS
+OK   X-4: one exploration report (repeats byte-identical) :: 1
+OK   X-4: header names the configuration :: X-4
+OK   X-4: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION X-4
+OK   X-4: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   X-4: ticket limit 8 and refusal limit 4
+OK   X-4: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   X-4: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   X-4: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x4_one_conflicting_fact_one_acknowledgement', '--exact', '--nocapture', '--test-threads=1']
+OK   X-4: 16 GiB, zero swap, no OOM kill, not timed out
+OK   X-4: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   X-4: E10 not applicable; L1 HOLDS
+OK   X-4: D1 HOLDS
+OK   X-4: complete: every discovered key expanded; discovered <= cap :: (3106, 3106, 250000)
+OK   X-4: harness exit 0 by a normal exit
+OK   X-4: classification PASS :: CLASSIFICATION: PASS
+OK   X-5: one exploration report (repeats byte-identical) :: 1
+OK   X-5: header names the configuration :: X-5
+OK   X-5: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION X-5
+OK   X-5: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   X-5: ticket limit 8 and refusal limit 4
+OK   X-5: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   X-5: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   X-5: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::x5_one_clean_batch_of_two', '--exact', '--nocapture', '--test-threads=1']
+OK   X-5: 16 GiB, zero swap, no OOM kill, not timed out
+OK   X-5: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   X-5: E10 not applicable; L1 HOLDS
+OK   X-5: D1 HOLDS
+OK   X-5: complete: every discovered key expanded; discovered <= cap :: (3311, 3311, 250000)
+OK   X-5: harness exit 0 by a normal exit
+OK   X-5: classification PASS :: CLASSIFICATION: PASS
+OK   F-1: the Git receipt is unchanged at the evidence head
+OK   F-1: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/45-full-F-1/raw-output.txt
+OK   F-1: one exploration report (repeats byte-identical) :: 1
+OK   F-1: header names the configuration :: F-1
+OK   F-1: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-1
+OK   F-1: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-1: ticket limit 8 and refusal limit 4
+OK   F-1: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-1: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-1: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f1', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-1: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-1: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-1: E10 not applicable; L1 HOLDS
+OK   F-1: D1 HOLDS
+OK   F-1: complete: every discovered key expanded; discovered <= cap :: (46524336, 46524336, 60000000)
+OK   F-1: harness exit 0 by a normal exit
+OK   F-1: classification PASS :: CLASSIFICATION: PASS
+OK   F-2: the Git receipt is unchanged at the evidence head
+OK   F-2: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/41-full-F-2/raw-output.txt
+OK   F-2: one exploration report (repeats byte-identical) :: 1
+OK   F-2: header names the configuration :: F-2
+OK   F-2: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-2
+OK   F-2: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-2: ticket limit 8 and refusal limit 4
+OK   F-2: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-2: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-2: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-2: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-2: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-2: E10 not applicable; L1 HOLDS
+OK   F-2: D1 HOLDS
+OK   F-2: complete: every discovered key expanded; discovered <= cap :: (12602670, 12602670, 30000000)
+OK   F-2: harness exit 0 by a normal exit
+OK   F-2: classification PASS :: CLASSIFICATION: PASS
+OK   F-3: the Git receipt is unchanged at the evidence head
+OK   F-3: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/43-full-F-3/raw-output.txt
+OK   F-3: one exploration report (repeats byte-identical) :: 1
+OK   F-3: header names the configuration :: F-3
+OK   F-3: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-3 (gating-caller symmetry quotient composed with the admission observer quotient: expe
+OK   F-3: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-3: ticket limit 8 and refusal limit 4
+OK   F-3: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-3: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-3: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::gc_symmetry_f3', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-3: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-3: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-3: E10 not applicable; L1 HOLDS
+OK   F-3: D1 HOLDS
+OK   F-3: complete: every discovered key expanded; discovered <= cap :: (20431851, 20431851, 30000000)
+OK   F-3: harness exit 0 by a normal exit
+OK   F-3: classification PASS :: CLASSIFICATION: PASS
+OK   F-4: the Git receipt is unchanged at the evidence head
+OK   F-4: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/62-full-F-4/raw-output.txt
+OK   F-4: one exploration report (repeats byte-identical) :: 1
+OK   F-4: header names the configuration :: F-4
+OK   F-4: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-4
+OK   F-4: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-4: ticket limit 8 and refusal limit 4
+OK   F-4: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-4: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-4: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f4', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-4: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-4: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-4: E10 not applicable; L1 HOLDS
+OK   F-4: D1 HOLDS
+OK   F-4: complete: every discovered key expanded; discovered <= cap :: (12892806, 12892806, 30000000)
+OK   F-4: harness exit 0 by a normal exit
+OK   F-4: classification PASS :: CLASSIFICATION: PASS
+OK   F-5: the Git receipt is unchanged at the evidence head
+OK   F-5: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/65-full-F-5/raw-output.txt
+OK   F-5: one exploration report (repeats byte-identical) :: 1
+OK   F-5: header names the configuration :: F-5
+OK   F-5: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-5
+OK   F-5: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-5: ticket limit 8 and refusal limit 4
+OK   F-5: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-5: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-5: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f5', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-5: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-5: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-5: E10 not applicable; L1 HOLDS
+OK   F-5: D1 HOLDS
+OK   F-5: complete: every discovered key expanded; discovered <= cap :: (5553180, 5553180, 30000000)
+OK   F-5: harness exit 0 by a normal exit
+OK   F-5: classification PASS :: CLASSIFICATION: PASS
+OK   F-6: the Git receipt is unchanged at the evidence head
+OK   F-6: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/66-full-F-6/raw-output.txt
+OK   F-6: one exploration report (repeats byte-identical) :: 1
+OK   F-6: header names the configuration :: F-6
+OK   F-6: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-6
+OK   F-6: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-6: ticket limit 8 and refusal limit 4
+OK   F-6: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-6: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-6: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f6', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-6: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-6: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-6: E10 not applicable; L1 HOLDS
+OK   F-6: D1 HOLDS
+OK   F-6: complete: every discovered key expanded; discovered <= cap :: (9315384, 9315384, 30000000)
+OK   F-6: harness exit 0 by a normal exit
+OK   F-6: classification PASS :: CLASSIFICATION: PASS
+OK   F-7: the Git receipt is unchanged at the evidence head
+OK   F-7: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/67-full-F-7/raw-output.txt
+OK   F-7: one exploration report (repeats byte-identical) :: 1
+OK   F-7: header names the configuration :: F-7
+OK   F-7: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-7
+OK   F-7: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-7: ticket limit 8 and refusal limit 4
+OK   F-7: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-7: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-7: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f7', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-7: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-7: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-7: E10 not applicable; L1 HOLDS
+OK   F-7: D1 HOLDS
+OK   F-7: complete: every discovered key expanded; discovered <= cap :: (2420576, 2420576, 30000000)
+OK   F-7: harness exit 0 by a normal exit
+OK   F-7: classification PASS :: CLASSIFICATION: PASS
+OK   F-8: the Git receipt is unchanged at the evidence head
+OK   F-8: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/64-full-F-8/raw-output.txt
+OK   F-8: one exploration report (repeats byte-identical) :: 1
+OK   F-8: header names the configuration :: F-8
+OK   F-8: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-8
+OK   F-8: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-8: ticket limit 8 and refusal limit 4
+OK   F-8: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-8: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-8: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_f8', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-8: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-8: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-8: E10 not applicable; L1 HOLDS
+OK   F-8: D1 HOLDS
+OK   F-8: complete: every discovered key expanded; discovered <= cap :: (12775224, 12775224, 30000000)
+OK   F-8: harness exit 0 by a normal exit
+OK   F-8: classification PASS :: CLASSIFICATION: PASS
+OK   F-PT: the Git receipt is unchanged at the evidence head
+OK   F-PT: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/44-full-F-PT/raw-output.txt
+OK   F-PT: one exploration report (repeats byte-identical) :: 1
+OK   F-PT: header names the configuration :: F-PT
+OK   F-PT: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-PT (gating-caller symmetry quotient composed with the admission observer quotient: exp
+OK   F-PT: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-PT: ticket limit 8 and refusal limit 4
+OK   F-PT: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-PT: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-PT: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::gc_symmetry_fpt', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-PT: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-PT: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-PT: E10 not applicable; L1 HOLDS
+OK   F-PT: D1 HOLDS
+OK   F-PT: complete: every discovered key expanded; discovered <= cap :: (29751473, 29751473, 30000000)
+OK   F-PT: harness exit 0 by a normal exit
+OK   F-PT: classification PASS :: CLASSIFICATION: PASS
+OK   F-B: the Git receipt is unchanged at the evidence head
+OK   F-B: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-known-runs-01/receipts/42-full-F-B/raw-output.txt
+OK   F-B: one exploration report (repeats byte-identical) :: 1
+OK   F-B: header names the configuration :: F-B
+OK   F-B: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-B (gating-caller symmetry quotient composed with the admission observer quotient: expe
+OK   F-B: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-B: ticket limit 8 and refusal limit 4
+OK   F-B: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-B: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-B: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::gc_symmetry_fb', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-B: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-B: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-B: E10 not applicable; L1 HOLDS
+OK   F-B: D1 HOLDS
+OK   F-B: complete: every discovered key expanded; discovered <= cap :: (3775373, 3775373, 30000000)
+OK   F-B: harness exit 0 by a normal exit
+OK   F-B: classification PASS :: CLASSIFICATION: PASS
+OK   F-B2: the Git receipt is unchanged at the evidence head
+OK   F-B2: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/61-full-F-B2/raw-output.txt
+OK   F-B2: one exploration report (repeats byte-identical) :: 1
+OK   F-B2: header names the configuration :: F-B2
+OK   F-B2: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-B2
+OK   F-B2: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-B2: ticket limit 8 and refusal limit 4
+OK   F-B2: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-B2: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-B2: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fb2', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-B2: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-B2: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-B2: E10 not applicable; L1 HOLDS
+OK   F-B2: D1 HOLDS
+OK   F-B2: complete: every discovered key expanded; discovered <= cap :: (21536, 21536, 30000000)
+OK   F-B2: harness exit 0 by a normal exit
+OK   F-B2: classification PASS :: CLASSIFICATION: PASS
+OK   F-G: the Git receipt is unchanged at the evidence head
+OK   F-G: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/60-full-F-G/raw-output.txt
+OK   F-G: one exploration report (repeats byte-identical) :: 1
+OK   F-G: header names the configuration :: F-G
+OK   F-G: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-G
+OK   F-G: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-G: ticket limit 8 and refusal limit 4
+OK   F-G: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-G: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-G: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fg', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-G: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-G: outcome PASS; 24 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 24, {})
+OK   F-G: E10 not applicable; L1 HOLDS
+OK   F-G: D1 HOLDS
+OK   F-G: complete: every discovered key expanded; discovered <= cap :: (185106, 185106, 30000000)
+OK   F-G: harness exit 0 by a normal exit
+OK   F-G: classification PASS :: CLASSIFICATION: PASS
+OK   F-W: the Git receipt is unchanged at the evidence head
+OK   F-W: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/63-full-F-W/raw-output.txt
+OK   F-W: one exploration report (repeats byte-identical) :: 1
+OK   F-W: header names the configuration :: F-W
+OK   F-W: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-W
+OK   F-W: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-W: ticket limit 8 and refusal limit 4
+OK   F-W: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-W: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-W: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fw', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-W: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-W: outcome PASS; 25 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 25, {})
+OK   F-W: E10 HOLDS; L1 HOLDS
+OK   F-W: D1 HOLDS
+OK   F-W: complete: every discovered key expanded; discovered <= cap :: (12602670, 12602670, 30000000)
+OK   F-W: harness exit 0 by a normal exit
+OK   F-W: classification PASS :: CLASSIFICATION: PASS
+OK   F-D: the Git receipt is unchanged at the evidence head
+OK   F-D: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/68-full-F-D/raw-output.txt
+OK   F-D: one exploration report (repeats byte-identical) :: 1
+OK   F-D: header names the configuration :: F-D
+OK   F-D: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-D
+OK   F-D: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-D: ticket limit 8 and refusal limit 4
+OK   F-D: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-D: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-D: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fd', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-D: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-D: outcome PASS; 23 lines HOLD; no FAIL/INCOMPLETE :: ('PASS', 23, {})
+OK   F-D: E10 not applicable; L1 not claimed
+OK   F-D: D1 HOLDS
+OK   F-D: complete: every discovered key expanded; discovered <= cap :: (7140378, 7140378, 30000000)
+OK   F-D: harness exit 0 by a normal exit
+OK   F-D: classification PASS :: CLASSIFICATION: PASS
+OK   F-R: the Git receipt is unchanged at the evidence head
+OK   F-R: Git copy byte-equal to the local original receipt :: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-baseline-remaining-configs-01/receipts/69-full-F-R/raw-output.txt
+OK   F-R: one exploration report (repeats byte-identical) :: 2
+OK   F-R: header names the configuration :: F-R
+OK   F-R: explorer kind as required (quotient only for F-3/F-PT/F-B) :: EXPLORATION F-R
+OK   F-R: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {}
+OK   F-R: ticket limit 8 and refusal limit 4
+OK   F-R: source exactly Candidate C before the run :: ('d5964ee5326c2733177307db6f507328023d361a', 'EXACTLY_C')
+OK   F-R: pinned baseline executable E-C, equal before and after :: cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c
+OK   F-R: argv selects exactly the configuration's test with --exact :: ['/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3', 'ledger::protocol::model_tests::full_fr', '--exact', '--ignored', '--nocapture', '--test-threads=1']
+OK   F-R: 16 GiB, zero swap, no OOM kill, not timed out
+OK   F-R: raw outcome INCOMPLETE at the 30,000,000-state cap: 30,000,001 discovered, 26,539,923 expanded
+OK   F-R: every property line NOT ESTABLISHED (incomplete); no HOLDS
+OK   F-R: classification NOT PASS / INCOMPLETE
+OK   F-R: harness exit 101 (assertion), no signal
+OK   Stage B: nexus-governed-control lib test binary result line found :: ('313', '0', '35', '161.16')
+OK   X-1: VALIDATION-02 Stage B (unoptimised cargo test --workspace): harness line '... ok' exactly once (output captured: no report printed) :: ['ok']
+OK   X-1: Stage-1 suite (pinned E-C, f023cc3d 30-suite): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (1, 'PASS')
+OK   X-2: VALIDATION-02 Stage B (unoptimised cargo test --workspace): harness line '... ok' exactly once (output captured: no report printed) :: ['ok']
+OK   X-2: Stage-1 suite (pinned E-C, f023cc3d 30-suite): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (1, 'PASS')
+OK   X-3: VALIDATION-02 Stage B (unoptimised cargo test --workspace): harness line '... ok' exactly once (output captured: no report printed) :: ['ok']
+OK   X-3: Stage-1 suite (pinned E-C, f023cc3d 30-suite): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (1, 'PASS')
+OK   X-4: VALIDATION-02 Stage B (unoptimised cargo test --workspace): harness line '... ok' exactly once (output captured: no report printed) :: ['ok']
+OK   X-4: Stage-1 suite (pinned E-C, f023cc3d 30-suite): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (1, 'PASS')
+OK   X-5: VALIDATION-02 Stage B (unoptimised cargo test --workspace): harness line '... ok' exactly once (output captured: no report printed) :: ['ok']
+OK   X-5: Stage-1 suite (pinned E-C, f023cc3d 30-suite): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (1, 'PASS')
+OK   Stage B raw output sha256 (VALIDATION-02 receipts/30-stage-B-workspace-test/raw-output.txt) :: ce11ea91537fc899292d3496e84a88de393dea01d7ebc65878a428d0d7639533
+OK   Stage-1 suite raw sha256 d6f58742...a3b3
+OK   vocabulary: 193 rows, unique ids and unique labels :: 193
+OK   FR-BRANCH-DISPOSITION.tsv: 193 rows on the same labels :: 193
+OK   X-1: every taken label is a vocabulary row :: []
+OK   X-2: every taken label is a vocabulary row :: []
+OK   X-3: every taken label is a vocabulary row :: []
+OK   X-4: every taken label is a vocabulary row :: []
+OK   X-5: every taken label is a vocabulary row :: []
+OK   F-1: every taken label is a vocabulary row :: []
+OK   F-2: every taken label is a vocabulary row :: []
+OK   F-3: every taken label is a vocabulary row :: []
+OK   F-4: every taken label is a vocabulary row :: []
+OK   F-5: every taken label is a vocabulary row :: []
+OK   F-6: every taken label is a vocabulary row :: []
+OK   F-7: every taken label is a vocabulary row :: []
+OK   F-8: every taken label is a vocabulary row :: []
+OK   F-PT: every taken label is a vocabulary row :: []
+OK   F-B: every taken label is a vocabulary row :: []
+OK   F-B2: every taken label is a vocabulary row :: []
+OK   F-G: every taken label is a vocabulary row :: []
+OK   F-W: every taken label is a vocabulary row :: []
+OK   F-D: every taken label is a vocabulary row :: []
+OK   F-R: every taken label is a vocabulary row :: []
+OK   branch accounting: rows sum to 193 :: {'MEASURED_COMPLETE': 85, 'MEASURED_IN_INCOMPLETE_PREFIX': 3, 'UNOBSERVED': 105}
+OK   branch accounting: proof never upgrades an unobserved row (every proof-TAKEN row is measured somewhere)
+OK   branch accounting: every F-R-prefix-only row is proof-TAKEN
+OK   branch accounting: F-2 measured set equals the proof's F-2 column
+OK   branch accounting: F-R prefix set equals the disposition's prefix column
+OK   model_tests.rs at C: 34 #[ignore] tests :: 34
+OK   unit_tests.rs at C: no #[ignore] :: []
+OK   Stage B: 79 '... ignored' entries (78 in libtest result sums + the custom-harness webview_boundary_live) :: 79
+OK   Stage B: the 34 model_tests ignored tests are exactly the source's 34 :: 34
+
+RESULT: 372 of 372 checks hold; 0 fail

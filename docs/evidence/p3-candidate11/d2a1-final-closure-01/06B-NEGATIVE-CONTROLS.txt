@@ -1,0 +1,10 @@
+REJECTED  1 altered source identity: targeted check failed = True; failed checks 2 of 49: ['source: every recorded source file blob and sha256 equal Git at C', 'source: the three ledger blobs are the governing ones']
+REJECTED  2 missing accepted mutation receipt (C10 row removed): targeted check failed = True; failed checks 1 of 49: ["mutations: exactly the catalog's 35 control ids, each once"]
+REJECTED  3 F-R relabelled PASS: targeted check failed = True; failed checks 1 of 49: ['configurations: 19 PASS and F-R INCOMPLETE']
+REJECTED  4 unobserved branch relabelled covered: targeted check failed = True; failed checks 2 of 49: ['branches: 193 rows, 85 / 3 / 105', 'branches: no unobserved row marked covered; classification follows the measured columns only']
+REJECTED  5 pending 183 decision relabelled accepted: targeted check failed = True; failed checks 1 of 49: ["183: 183 rows; every current status 'pending'; no acceptance recorded"]
+REJECTED  6 wrong source commit in H.6: targeted check failed = True; failed checks 1 of 49: ['H.6: attestation binds Candidate C exactly']
+REJECTED  7 missing required Fast Local receipt (all-features Clippy): targeted check failed = True; failed checks 2 of 49: ['Fast Local: the all-features Clippy receipt is present, PASS, and equal to its bound hash', "Fast Local: that receipt ran exactly the workflow's Clippy command"]
+REJECTED  8 invented Architect decision record (a C7 ruling file that does not exist): targeted check failed = True; failed checks 1 of 49: ['provenance: every ARCHITECT-RULING record named exists in Git']
+
+RESULT: 8 of 8 negative controls rejected

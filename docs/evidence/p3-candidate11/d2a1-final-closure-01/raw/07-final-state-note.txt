@@ -1,0 +1,4 @@
+Note on raw/07-final-state-raw.txt (2026-10-16T15:48Z): its line 'refs naming this mission: 4' used the over-broad pattern 'final-closure'. The four matches are pre-existing Phase Zero refs:
+  refs/heads/repair/p0-linux-final-closure-r1, refs/heads/repair/p0-linux-final-closure-r2,
+  refs/remotes/github/repair/p0-linux-final-closure-r1, refs/remotes/github/repair/p0-linux-final-closure-r2.
+The mission-specific pattern 'd2a1-final-closure' matches 0 refs. This mission created no ref.

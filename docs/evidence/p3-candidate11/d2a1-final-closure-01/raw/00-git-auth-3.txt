@@ -1,0 +1,39 @@
+== pinned baseline executable E-C (hashed, not executed) 2026-10-16T15:27:41Z
+cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c  /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+size 8984464 inode 62417761 mtime 1791979773
+== evidence commits and the local refs that point at them (remote-tracking refs are local copies; GitHub was not contacted)
+066a322a9182fc978e3f5dc8454157caacec6241 da31dfa7c9a0c4f358bfde4f15815f6c8d46f806 parent d5964ee5326c2733177307db6f507328023d361a | refs/heads/evidence/p3-c11-d2a1-current-tree-183-01 refs/remotes/github/review/p3-c11-d2a1-current-tree-183-01 
+0622a4d042b1dfd3160f06fc5d333e131e2a60c8 a512aa45a2daf385081b55e16353f6263b95665d parent 066a322a9182fc978e3f5dc8454157caacec6241 | refs/heads/evidence/p3-c11-d2a1-final-source-proof-readiness-01 refs/remotes/github/review/p3-c11-d2a1-final-source-proof-readiness-01 
+f023cc3d031a2a89e5ecbd4086e15f2e50869acd 646c4fe9fa96bfee7b4f731a38f20ebfff14239e parent 0622a4d042b1dfd3160f06fc5d333e131e2a60c8 | refs/heads/evidence/p3-c11-d2a1-final-baseline-known-runs-01 refs/remotes/github/review/p3-c11-d2a1-final-baseline-known-runs-01 
+89326b859792a442c1853c3d35d30a48301c009e 329eb3a883741ce699ab4c3aada5fa6cb84a0d27 parent f023cc3d031a2a89e5ecbd4086e15f2e50869acd | refs/heads/evidence/p3-c11-d2a1-final-baseline-remaining-configs-01 refs/remotes/github/review/p3-c11-d2a1-final-baseline-remaining-configs-01 
+c1e46fc404a74ed76b848b709a7a246b59f3347f ecc6914ade5378068eceaa08e88fa45a0bec35b6 parent 89326b859792a442c1853c3d35d30a48301c009e | refs/heads/evidence/p3-c11-d2a1-fr-stutter-r5-01 refs/remotes/github/review/p3-c11-d2a1-fr-stutter-r5-01 
+59df21036f7c0183fa17d76b6e0886f8f5784685 12d5dd2405c59ce9a83c225c0e42b6585d8da107 parent c1e46fc404a74ed76b848b709a7a246b59f3347f | refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-01 
+f81159046bf0b62666851bc1185992318302d31f 234ca0990434485f59ebda0ceff3086d4e66d797 parent 59df21036f7c0183fa17d76b6e0886f8f5784685 | refs/heads/evidence/p3-c11-d2a1-control-definitions-r1-01 refs/remotes/github/review/p3-c11-d2a1-control-definitions-r1-01 
+9f22f890d8532df395f22cd8db8db2552bfdd14c 435f242243907eb7fd3e745669926193f11c5dcf parent f81159046bf0b62666851bc1185992318302d31f | refs/heads/evidence/p3-c11-d2a1-control-definitions-r2-01 refs/remotes/github/review/p3-c11-d2a1-control-definitions-r2-01 
+19eda8cc7f559054933fed4a93bdb0a18cc725d4 1b313ec5c23b5bf76db90b5fa89758d9cd880a75 parent 9f22f890d8532df395f22cd8db8db2552bfdd14c | refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-exec-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-exec-01 
+3695a817a6190781dc66769a72a487b442d3e6da a5fce69d5f60b0b86f3982aa655d5a33f4ef9ea4 parent 19eda8cc7f559054933fed4a93bdb0a18cc725d4 | refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-continue-02 refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-resume-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-resume-01 
+ebe42009ba1bd262cf31ae2f401e02cec101afa7 7d8ab59e4b3e61196d9c4cee3cb3a046fa8c4400 parent 3695a817a6190781dc66769a72a487b442d3e6da | refs/heads/publication/p3-c11-d2a1-mutation-tranche1-publish-04 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-continue-02 
+2e06860f4b404d1a79a0d290116239b5545b931f 4c929aa877816cc0cb5c42e32ddbdd75b380bacd parent ebe42009ba1bd262cf31ae2f401e02cec101afa7 | refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-exec-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-exec-01 
+b97205b2b9ea058ee864b6649dc5002d28b1edeb 6db2f923278f9f6ea7bacd97bd29444d4e8d6816 parent 2e06860f4b404d1a79a0d290116239b5545b931f | refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-continue-02 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-continue-02 
+774f457a4fc27f6b26e132a0caf71b683b9af8cd f74660b98288c53e285bcb4d3b98fb9f55962b57 parent b97205b2b9ea058ee864b6649dc5002d28b1edeb | refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-exec-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-exec-01 
+c10681b3c65dd377b5a13d08140427e8b34441d0 7071c0ce01c9ed9a01f28ff7792d648516466a48 parent 774f457a4fc27f6b26e132a0caf71b683b9af8cd | refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-continue-02 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-continue-02 
+e41c84b1c41dded6cc9816f11f6603f5d80587a9 10b408a1432edeed5720024bd6b8807852ecb464 parent c10681b3c65dd377b5a13d08140427e8b34441d0 | refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-tail-01 refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-tail-01 
+74b3f485c78d0d964b85ff958c09c69d85058ad5 a1201237e741336bae0f4bcd3c1dcd2b892a2935 parent e41c84b1c41dded6cc9816f11f6603f5d80587a9 | refs/heads/evidence/p3-c11-d2a1-mutation-witness-c1-c25-01 refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c1-c25-01 
+452b3cb5c3d72fd1c7efaa75ed3838845d06a5cd 56fe188d0ae752fc5c5476e2cb0b2de7925c67d0 parent 74b3f485c78d0d964b85ff958c09c69d85058ad5 | refs/heads/evidence/p3-c11-d2a1-mutation-witness-c4-01 refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c4-01 
+e0f73cddd8e0581319630e4382853ee86da5e12b 1a163fa7d60e5fc8d378e28867b3b09f27d01057 parent 452b3cb5c3d72fd1c7efaa75ed3838845d06a5cd | refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-draft03-01 
+16e74908e922160993a726e71e45374f1e5ff8a1 dbfdceca15feb58e0be6d4e143a1fa9a4f33e66f parent e0f73cddd8e0581319630e4382853ee86da5e12b | refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 
+4c29b2f0035ecaa86bca8d49238331485a1140e6 d44a9c5a1368658b7527c1e5ab4f8778950c0771 parent 16e74908e922160993a726e71e45374f1e5ff8a1 | refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 
+643e54baa1f551cba48e9f96df2ac44dac9201a4 4389dc51752b684811d046befe37689e85ddf14e parent 4c29b2f0035ecaa86bca8d49238331485a1140e6 | refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-evidence-exec-01 
+2148c5a524b6979dde2eb63b6d1442e39dcfb960 55b5118646fe3a311fc0364868ef05f9760a1012 parent 643e54baa1f551cba48e9f96df2ac44dac9201a4 | refs/remotes/github/review/p3-c11-d2a1-c7-owner-identity-approval-01 
+cca0d773d9a405be566e576886321acf6a28f29b 68256471d53479a99538462cbd4cb1f53f4c2003 parent 2148c5a524b6979dde2eb63b6d1442e39dcfb960 | refs/remotes/github/review/p3-c11-d2a1-c7-compliant-exec-02 
+== every commit C..cca0d773 changes only docs/evidence/
+0
+24
+0
+== main and authoritative branch (local refs)
+4b36f60694148b60029733bc7b3d26e5a215d460
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+6e15dee613ea35823d1adbf6d8917ed59eeda583
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+== stash list
+stash@{0}: On repair/p0-ci-resource-limiter: p0-ci-r5-before-base-correction

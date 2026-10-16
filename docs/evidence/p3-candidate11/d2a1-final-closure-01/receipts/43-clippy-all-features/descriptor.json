@@ -1,0 +1,51 @@
+{
+ "stage": "clippy-all-features",
+ "argv": [
+  "cargo",
+  "clippy",
+  "--workspace",
+  "--all-targets",
+  "--all-features",
+  "--locked",
+  "--",
+  "-D",
+  "warnings"
+ ],
+ "env": {
+  "HOME": "/home/nexus",
+  "USER": "nexus",
+  "LOGNAME": "nexus",
+  "PATH": "/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin:/home/nexus/.cargo/bin:/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "CARGO_TARGET_DIR": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target",
+  "CARGO_BUILD_JOBS": "2",
+  "CARGO_INCREMENTAL": "0",
+  "CARGO_NET_OFFLINE": "true",
+  "CARGO_TERM_COLOR": "never"
+ },
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01",
+ "target": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target",
+ "limit_seconds": 2700,
+ "memory_max": "16G",
+ "swap_max": "0",
+ "disk_stop_trigger_bytes": 18253611008,
+ "disk_floor_bytes": 17179869184,
+ "source_before": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C",
+  "tracked_exact": true,
+  "classified_verdict": "EXACTLY_C"
+ }
+}

@@ -1,0 +1,121 @@
+{
+ "stage": "clippy-all-features",
+ "argv": [
+  "cargo",
+  "clippy",
+  "--workspace",
+  "--all-targets",
+  "--all-features",
+  "--locked",
+  "--",
+  "-D",
+  "warnings"
+ ],
+ "env": {
+  "HOME": "/home/nexus",
+  "USER": "nexus",
+  "LOGNAME": "nexus",
+  "PATH": "/home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin:/home/nexus/.cargo/bin:/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "CARGO_TARGET_DIR": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target",
+  "CARGO_BUILD_JOBS": "2",
+  "CARGO_INCREMENTAL": "0",
+  "CARGO_NET_OFFLINE": "true",
+  "CARGO_TERM_COLOR": "never"
+ },
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01",
+ "target": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target",
+ "limit_seconds": 2700,
+ "memory_max": "16G",
+ "swap_max": "0",
+ "disk_stop_trigger_bytes": 18253611008,
+ "disk_floor_bytes": 17179869184,
+ "source_before": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [],
+  "unexpected_status": [],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "EXACTLY_C",
+  "tracked_exact": true,
+  "classified_verdict": "EXACTLY_C"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "6374899712",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "max_events": 0,
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 372.12,
+  "time_limit_seconds": 2700,
+  "backstop_runtime_max_seconds": 2710,
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 372.159,
+  "max_rss_kib_largest_process": 2063940,
+  "disk": {
+   "start_avail_bytes": 26543030272,
+   "end_avail_bytes": 24145653760,
+   "min_avail_bytes": 24145653760,
+   "start_target_bytes": 0,
+   "end_target_bytes": 2390077440,
+   "max_target_bytes": 2390077440,
+   "consumed_bytes": 2397376512,
+   "triggered": null,
+   "samples": 186,
+   "events": [],
+   "stop_trigger_bytes": 18253611008,
+   "floor_bytes": 17179869184
+  }
+ },
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "warnings": [],
+ "errors": [],
+ "finished": [
+  "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6m 11s"
+ ],
+ "source_after": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01",
+  "head": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "detached": true,
+  "tracked_blobs_compared": 5364,
+  "bytes_compared": 97246341,
+  "gitlinks": [],
+  "index_differs_from_head": [],
+  "status_entries": [
+   "!! app/src-tauri/permissions/",
+   "!! target/"
+  ],
+  "unexpected_status": [
+   "!! app/src-tauri/permissions/"
+  ],
+  "content_mismatches": [],
+  "missing": [],
+  "mode_mismatches": [],
+  "verdict": "NOT_C",
+  "tracked_exact": true,
+  "classified_verdict": "SOURCE_EXACT_C_WITH_DECLARED_GENERATED"
+ }
+}

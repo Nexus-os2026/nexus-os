@@ -1,0 +1,15 @@
+raw sha256 ce11ea91537fc899292d3496e84a88de393dea01d7ebc65878a428d0d7639533
+libtest result lines: 305 statuses: ['ok']
+sum passed/failed/ignored: 8764 0 78
+Running units: 237 Doc-tests units: 70
+'... FAILED' lines: 0 ; 'error:' lines: 0
+custom harness lines: ['test result: ok. 39 live sandbox cases passed']
+argv ['cargo', 'test', '--workspace', '--locked']
+env {'HOME': '/home/nexus', 'USER': 'nexus', 'LOGNAME': 'nexus', 'PATH': '/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'CARGO_TARGET_DIR': '/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-exact-source-validation-02/target', 'CARGO_BUILD_JOBS': '2', 'CARGO_INCREMENTAL': '0', 'CARGO_NET_OFFLINE': 'true', 'CARGO_TERM_COLOR': 'never'}
+process {'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}
+supervisor {'memory_max': '17179869184', 'swap_max': '0', 'memory_peak_bytes': '17179885568', 'swap_peak_bytes': '0', 'oom': 0, 'oom_kill': 0, 'max_events': 4595, 'completed': True, 'timed_out': False, 'wall_seconds': 1019.12, 'time_limit_seconds': 2700}
+source_before SOURCE_EXACT_C_WITH_DECLARED_GENERATED d5964ee5326c2733177307db6f507328023d361a 51bac5fd335999cc995c0ab9f582a30244973ef0
+source_after SOURCE_EXACT_C_WITH_DECLARED_GENERATED
+CLASSIFICATION: PASS
+checks: 32 of 32 hold
+

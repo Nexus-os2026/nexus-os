@@ -1,0 +1,18 @@
+OK   pre: supervision self-test PASS: 
+OK   pre: worktree stage PASS: 
+OK   pre: no earlier clippy invocation started (one invocation only; earlier NOT_STARTED refusals preserved): earlier ['43-clippy-all-features']; started []
+OK   pre: GitHub runner inactive, MainPID=0: {'MainPID': '0', 'ActiveState': 'inactive', 'UnitFileState': 'disabled'}
+OK   pre: no cargo/rustc/clippy/rustdoc/runner/governed-control process; no active mission scope: [] []
+OK   pre: MemAvailable >= 18 GiB: 52152456 KiB
+OK   pre: projected consumption (+15%) leaves availability above the 17 GiB stop trigger: avail 24.720 GiB
+OK   pre: worktree byte-exact Candidate C (EXACTLY_C): 
+OK   pre: mission target absent (fresh build): /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target
+OK   process exited 0 by a normal exit (no signal): {'exit_status': 0, 'signal': None, 'supervisor_rc': 0, 'wrapper_recorded_status': '0'}
+OK   no warning diagnostic (`-D warnings` would make any warning an error): []
+OK   no error diagnostic: []
+OK   exactly one `Finished` line: ['    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6m 11s']
+OK   no network access attempted (no 'Downloading'/'Updating' crates.io index lines): 
+OK   scope limits read back: 16 GiB, zero swap: 
+OK   no OOM kill, swap peak 0, completed, not timed out: 
+OK   disk availability never at or below the 17 GiB trigger: 24145653760
+OK   after: tracked bytes exactly Candidate C (declared generated ignored output allowed): ['!! app/src-tauri/permissions/']

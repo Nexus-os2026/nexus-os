@@ -1,0 +1,5 @@
+STAGE 6B CHECKER FREEZE 2026-10-16T15:52:14Z — frozen before the single final run
+8f0490214c32c3e58fb6a8d346909c272a336850b190c222be8b8bb9d6adfa00  final_check.py
+8f1a0cf9a91bf29919e0a9a75fd9ca42a6732e9c7c0bd50df73af612ca0e0d45  common.py
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  verify_tree.py
+development runs (preserved): development/final-check-dev-run-1.txt (48/49, label-field whitespace defect, fixed), development/final-check-dev-run-2.txt (49/49), development/negatives-dev-run-1.txt (8/8 rejected)

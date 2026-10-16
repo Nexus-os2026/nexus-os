@@ -1,0 +1,7 @@
+STAGE 4 TOOL REVISION R2 2026-10-16T15:11:39Z
+reason: receipts/43-clippy-all-features is NOT_STARTED: the one-invocation gate counted the shell-redirect console file '43-clippy-all-features.console.txt' as an earlier receipt. No cargo process ran (no raw-output.txt; no scope launched).
+change: gate only (development/s4_launch.r1-to-r2.diff): only directories count; an earlier directory is admissible only if NOT_STARTED with no raw output.
+038bc2ae004aea64d522ba5c326d90310e92c090a6a15e8f0ca66f840ad53108  s4_launch.py
+926d01db4e5988d74335aba92d33b6618f536e46a2b017b5625435a70e815ff3  scope-wrap.sh
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  verify_tree.py
+s4_matrix.py (read-only matrix generator; worktree check count corrected 31->24 before release): 5dbaed4c76b752ce764490cb65dcc51180642ebd40de635fe832d7c1d43a2cee  s4_matrix.py

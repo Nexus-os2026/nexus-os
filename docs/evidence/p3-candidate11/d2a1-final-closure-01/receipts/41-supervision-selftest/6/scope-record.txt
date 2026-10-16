@@ -1,0 +1,7 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-fc01-selftest-6-1792163419.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 61913 61920 
+started: 2026-10-16T16:10:19+01:00

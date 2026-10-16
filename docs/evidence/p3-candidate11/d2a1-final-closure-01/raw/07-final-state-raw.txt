@@ -1,0 +1,19 @@
+== final state 2026-10-16T15:47:58Z
+primary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47 refs/heads/rebuild/phase0-trust-boundary status-lines=0
+main 4b36f60694148b60029733bc7b3d26e5a215d460
+rebuild/phase0-trust-boundary f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+github/main 6e15dee613ea35823d1adbf6d8917ed59eeda583
+github/rebuild/phase0-trust-boundary f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+github/review/p3-c11-d2a1-c7-compliant-exec-02 cca0d773d9a405be566e576886321acf6a28f29b
+refs naming this mission: 4
+worktrees: 216; locked: 40
+/home/nexus/NEXUS/nexus-os-p0-linux-final-closure-r2                            cae7bb52 [repair/p0-linux-final-closure-r2]
+/home/nexus/NEXUS/nexus-os-p0-linux-final-r1                                    b8402283 [repair/p0-linux-final-closure-r1]
+/home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01                         d5964ee5 (detached HEAD)
+mission worktree HEAD d5964ee5326c2733177307db6f507328023d361a detached=yes; status: !! app/src-tauri/permissions/ !! target/ 
+2390077440	target
+/dev/nvme0n1p1 1966746755072 1902498443264 24246124544  99% /
+active mission scopes: 0
+0
+MainPID=0
+ActiveState=inactive

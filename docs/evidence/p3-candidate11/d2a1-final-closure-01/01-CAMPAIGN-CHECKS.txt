@@ -1,0 +1,649 @@
+OK   K1 catalog blob at evidence head
+OK   K1 catalog sha256
+OK   catalog: exactly 35 kill-required controls (A4 excluded)
+OK   catalog: A4 present and not kill-required
+OK   ruling b852dc55: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling 59d7a24b: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling c82adaba: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling 54f61802: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling 674ed583: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling 0a19b188: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling 2a5a4309: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling bd99bd84: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling f0d11029: title list contains the quoted ruling's list; any extra id was accepted by an earlier record
+OK   ruling records: the union of controls stated accepted is exactly 33
+OK   ruling records: C4 never stated accepted by ID
+OK   ruling records: C7 never stated accepted by ID
+OK   ruling records: A4 never in a kill acceptance list
+OK   ruling records: 33 + {C4, C7} = the catalog's 35
+OK   C1: catalog patch applies to Candidate C (scratch copy)
+OK   C1: re-derived mutant blob/sha256 equal the catalog's
+OK   C1: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C1: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md)
+OK   C1: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C1: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C1: recorded mutant blob/sha256 = independently re-derived
+OK   C1: pinned mutant executable built from the recorded mutant blob
+OK   C1: pinned mutant executable is not the baseline E-C
+OK   C1: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C1: run used the pinned mutant executable, equal before and after
+OK   C1: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C1: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   C1: discovered count within the configuration's ceiling (60000000)
+OK   C1: primary first failure printed as E3 (recorded as printed, never as the named property)
+OK   C1: restoration EXACTLY_C (blob equality to C, clean)
+OK   C1: restored-side link verified, every check holds
+OK   C1: mutant witness on the same pinned mutant executable
+OK   C1: healthy witness link verified, every check holds
+OK   C1: G.3 criterion record holds
+OK   C1: witness shows P1 OBSERVED
+OK   C1: stated accepted by at least one by-ID ruling record
+OK   C2: catalog patch applies to Candidate C (scratch copy)
+OK   C2: re-derived mutant blob/sha256 equal the catalog's
+OK   C2: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C2: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md)
+OK   C2: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C2: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C2: recorded mutant blob/sha256 = independently re-derived
+OK   C2: pinned mutant executable built from the recorded mutant blob
+OK   C2: pinned mutant executable is not the baseline E-C
+OK   C2: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C2: run used the pinned mutant executable, equal before and after
+OK   C2: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C2: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   C2: discovered count within the configuration's ceiling (60000000)
+OK   C2: printed first failure is a named property ['P4']
+OK   C2: restoration EXACTLY_C (blob equality to C, clean)
+OK   C2: restored-side link verified, every check holds
+OK   C2: stated accepted by at least one by-ID ruling record
+OK   C3a: catalog patch applies to Candidate C (scratch copy)
+OK   C3a: re-derived mutant blob/sha256 equal the catalog's
+OK   C3a: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C3a: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md)
+OK   C3a: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C3a: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C3a: recorded mutant blob/sha256 = independently re-derived
+OK   C3a: pinned mutant executable built from the recorded mutant blob
+OK   C3a: pinned mutant executable is not the baseline E-C
+OK   C3a: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C3a: run used the pinned mutant executable, equal before and after
+OK   C3a: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C3a: primary is the original explorer (no quotient/symmetry line) on F-7
+OK   C3a: discovered count within the configuration's ceiling (30000000)
+OK   C3a: printed first failure is a named property ['P13', 'P15']
+OK   C3a: restoration EXACTLY_C (blob equality to C, clean)
+OK   C3a: restored-side link verified, every check holds
+OK   C3a: stated accepted by at least one by-ID ruling record
+OK   C3b: catalog patch applies to Candidate C (scratch copy)
+OK   C3b: re-derived mutant blob/sha256 equal the catalog's
+OK   C3b: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C3b: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md)
+OK   C3b: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C3b: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C3b: recorded mutant blob/sha256 = independently re-derived
+OK   C3b: pinned mutant executable built from the recorded mutant blob
+OK   C3b: pinned mutant executable is not the baseline E-C
+OK   C3b: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C3b: run used the pinned mutant executable, equal before and after
+OK   C3b: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C3b: primary is the original explorer (no quotient/symmetry line) on F-6
+OK   C3b: discovered count within the configuration's ceiling (30000000)
+OK   C3b: printed first failure is a named property ['P13', 'P12']
+OK   C3b: restoration EXACTLY_C (blob equality to C, clean)
+OK   C3b: restored-side link verified, every check holds
+OK   C3b: stated accepted by at least one by-ID ruling record
+OK   C3c: catalog patch applies to Candidate C (scratch copy)
+OK   C3c: re-derived mutant blob/sha256 equal the catalog's
+OK   C3c: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C3c: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md)
+OK   C3c: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C3c: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C3c: recorded mutant blob/sha256 = independently re-derived
+OK   C3c: pinned mutant executable built from the recorded mutant blob
+OK   C3c: pinned mutant executable is not the baseline E-C
+OK   C3c: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C3c: run used the pinned mutant executable, equal before and after
+OK   C3c: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C3c: primary is the original explorer (no quotient/symmetry line) on F-6
+OK   C3c: discovered count within the configuration's ceiling (30000000)
+OK   C3c: printed first failure is a named property ['P12']
+OK   C3c: restoration EXACTLY_C (blob equality to C, clean)
+OK   C3c: restored-side link verified, every check holds
+OK   C3c: stated accepted by at least one by-ID ruling record
+OK   C4: catalog patch applies to Candidate C (scratch copy)
+OK   C4: re-derived mutant blob/sha256 equal the catalog's
+OK   C4: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C4: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C4: recorded mutant blob/sha256 = independently re-derived
+OK   C4: pinned mutant executable built from the recorded mutant blob
+OK   C4: pinned mutant executable is not the baseline E-C
+OK   C4: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C4: run used the pinned mutant executable, equal before and after
+OK   C4: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C4: primary is the original explorer (no quotient/symmetry line) on F-8
+OK   C4: discovered count within the configuration's ceiling (30000000)
+OK   C4: primary first failure printed as P4 (recorded as printed, never as the named property)
+OK   C4: restoration EXACTLY_C (blob equality to C, clean)
+OK   C4: restored-side link verified, every check holds
+OK   C4: mutant witness on the same pinned mutant executable
+OK   C4: healthy witness link verified, every check holds
+OK   C4: G.5 (A)-(D) and (E) identity criterion record holds
+OK   C4: witness shows both P4 and P8 OBSERVED
+OK   C5: catalog patch applies to Candidate C (scratch copy)
+OK   C5: re-derived mutant blob/sha256 equal the catalog's
+OK   C5: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C5: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md)
+OK   C5: preserved-build admission ruling record present
+OK   C5: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C5: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C5: recorded mutant blob/sha256 = independently re-derived
+OK   C5: pinned mutant executable built from the recorded mutant blob
+OK   C5: pinned mutant executable is not the baseline E-C
+OK   C5: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C5: run used the pinned mutant executable, equal before and after
+OK   C5: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C5: primary is the original explorer (no quotient/symmetry line) on F-5
+OK   C5: discovered count within the configuration's ceiling (30000000)
+OK   C5: printed first failure is a named property ['P13']
+OK   C5: re-authentication after the run holds
+OK   C5: restoration EXACTLY_C (blob equality to C, clean)
+OK   C5: restored-side link verified, every check holds
+OK   C5: stated accepted by at least one by-ID ruling record
+OK   C6: catalog patch applies to Candidate C (scratch copy)
+OK   C6: re-derived mutant blob/sha256 equal the catalog's
+OK   C6: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C6: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md)
+OK   C6: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C6: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C6: recorded mutant blob/sha256 = independently re-derived
+OK   C6: pinned mutant executable built from the recorded mutant blob
+OK   C6: pinned mutant executable is not the baseline E-C
+OK   C6: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C6: run used the pinned mutant executable, equal before and after
+OK   C6: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C6: primary is the original explorer (no quotient/symmetry line) on F-PT
+OK   C6: discovered count within the configuration's ceiling (30000000)
+OK   C6: printed first failure is a named property ['P6']
+OK   C6: restoration EXACTLY_C (blob equality to C, clean)
+OK   C6: restored-side link verified, every check holds
+OK   C6: stated accepted by at least one by-ID ruling record
+OK   C7: catalog patch applies to Candidate C (scratch copy)
+OK   C7: re-derived mutant blob/sha256 equal the catalog's
+OK   C7: the mutant witness prints exactly two distinct canonical VIOLATION records, E11 first, P6 second
+OK   C7: run A is the original explorer on F-PT, A4 on, FAIL E11, admissible
+OK   C7: run A printed no P6 failure (no original F-PT P6 is claimed)
+OK   C7: mutant witness: E11 at step-13 transition, then P6 after step 24; ADMISSIBLE_TWO_CANONICAL
+OK   C7: healthy witness PASS_ADMISSIBLE
+OK   C7: Stage 12 KILL_EVIDENCE_CANDIDATE (executor maximum; not acceptance)
+OK   C7: restoration EXACTLY_W recorded (receipts/50-restoration/restoration.txt)
+OK   C7: link = Candidate C base PASS on E-C, not a W-SRC PASS (CR-B)
+OK   C7: mutant E-W7 executable on disk hashes to its pin (hashed, not run)
+OK   C7: healthy E-W executable on disk hashes to its pin (hashed, not run)
+OK   C8: catalog patch applies to Candidate C (scratch copy)
+OK   C8: re-derived mutant blob/sha256 equal the catalog's
+OK   C8: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C8: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md)
+OK   C8: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C8: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C8: recorded mutant blob/sha256 = independently re-derived
+OK   C8: pinned mutant executable built from the recorded mutant blob
+OK   C8: pinned mutant executable is not the baseline E-C
+OK   C8: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C8: run used the pinned mutant executable, equal before and after
+OK   C8: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C8: primary is the original explorer (no quotient/symmetry line) on F-B
+OK   C8: discovered count within the configuration's ceiling (30000000)
+OK   C8: printed first failure is a named property ['E5']
+OK   C8: restoration EXACTLY_C (blob equality to C, clean)
+OK   C8: restored-side link verified, every check holds
+OK   C8: stated accepted by at least one by-ID ruling record
+OK   C9: catalog patch applies to Candidate C (scratch copy)
+OK   C9: re-derived mutant blob/sha256 equal the catalog's
+OK   C9: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C9: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C9: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C9: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C9: recorded mutant blob/sha256 = independently re-derived
+OK   C9: pinned mutant executable built from the recorded mutant blob
+OK   C9: pinned mutant executable is not the baseline E-C
+OK   C9: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C9: run used the pinned mutant executable, equal before and after
+OK   C9: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C9: primary is the original explorer (no quotient/symmetry line) on F-B2
+OK   C9: discovered count within the configuration's ceiling (30000000)
+OK   C9: printed first failure is a named property ['E4']
+OK   C9: restoration EXACTLY_C (blob equality to C, clean)
+OK   C9: restored-side link verified, every check holds
+OK   C9: stated accepted by at least one by-ID ruling record
+OK   C10: catalog patch applies to Candidate C (scratch copy)
+OK   C10: re-derived mutant blob/sha256 equal the catalog's
+OK   C10: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C10: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md)
+OK   C10: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C10: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C10: recorded mutant blob/sha256 = independently re-derived
+OK   C10: pinned mutant executable built from the recorded mutant blob
+OK   C10: pinned mutant executable is not the baseline E-C
+OK   C10: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C10: run used the pinned mutant executable, equal before and after
+OK   C10: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C10: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   C10: discovered count within the configuration's ceiling (60000000)
+OK   C10: printed first failure is a named property ['E4']
+OK   C10: restoration EXACTLY_C (blob equality to C, clean)
+OK   C10: restored-side link verified, every check holds
+OK   C10: stated accepted by at least one by-ID ruling record
+OK   C11: catalog patch applies to Candidate C (scratch copy)
+OK   C11: re-derived mutant blob/sha256 equal the catalog's
+OK   C11: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C11: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C11: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C11: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C11: recorded mutant blob/sha256 = independently re-derived
+OK   C11: pinned mutant executable built from the recorded mutant blob
+OK   C11: pinned mutant executable is not the baseline E-C
+OK   C11: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C11: run used the pinned mutant executable, equal before and after
+OK   C11: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C11: primary is the original explorer (no quotient/symmetry line) on F-B2
+OK   C11: discovered count within the configuration's ceiling (30000000)
+OK   C11: printed first failure is a named property ['E4']
+OK   C11: restoration EXACTLY_C (blob equality to C, clean)
+OK   C11: restored-side link verified, every check holds
+OK   C11: stated accepted by at least one by-ID ruling record
+OK   C12: catalog patch applies to Candidate C (scratch copy)
+OK   C12: re-derived mutant blob/sha256 equal the catalog's
+OK   C12: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C12: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C12: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C12: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C12: recorded mutant blob/sha256 = independently re-derived
+OK   C12: pinned mutant executable built from the recorded mutant blob
+OK   C12: pinned mutant executable is not the baseline E-C
+OK   C12: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C12: run used the pinned mutant executable, equal before and after
+OK   C12: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C12: primary is the original explorer (no quotient/symmetry line) on X-1
+OK   C12: discovered count within the configuration's ceiling (250000)
+OK   C12: printed first failure is a named property ['E2']
+OK   C12: restoration EXACTLY_C (blob equality to C, clean)
+OK   C12: restored-side link verified, every check holds
+OK   C12: stated accepted by at least one by-ID ruling record
+OK   C15: catalog patch applies to Candidate C (scratch copy)
+OK   C15: re-derived mutant blob/sha256 equal the catalog's
+OK   C15: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C15: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md)
+OK   C15: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C15: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C15: recorded mutant blob/sha256 = independently re-derived
+OK   C15: pinned mutant executable built from the recorded mutant blob
+OK   C15: pinned mutant executable is not the baseline E-C
+OK   C15: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C15: run used the pinned mutant executable, equal before and after
+OK   C15: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C15: primary is the original explorer (no quotient/symmetry line) on F-R
+OK   C15: discovered count within the configuration's ceiling (30000000)
+OK   C15: printed first failure is a named property ['E8']
+OK   C15: restoration EXACTLY_C (blob equality to C, clean)
+OK   C15: restored-side link verified, every check holds
+OK   C15: restored side cites the AD-1-R5 F refinement discharge record (not a run, never PASS), bound to C, F-2 and the proof
+OK   C15: stated accepted by at least one by-ID ruling record
+OK   C16: catalog patch applies to Candidate C (scratch copy)
+OK   C16: re-derived mutant blob/sha256 equal the catalog's
+OK   C16: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C16: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md)
+OK   C16: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C16: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C16: recorded mutant blob/sha256 = independently re-derived
+OK   C16: pinned mutant executable built from the recorded mutant blob
+OK   C16: pinned mutant executable is not the baseline E-C
+OK   C16: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C16: run used the pinned mutant executable, equal before and after
+OK   C16: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C16: primary is the original explorer (no quotient/symmetry line) on F-D
+OK   C16: discovered count within the configuration's ceiling (30000000)
+OK   C16: printed first failure is a named property ['E3']
+OK   C16: restoration EXACTLY_C (blob equality to C, clean)
+OK   C16: restored-side link verified, every check holds
+OK   C16: stated accepted by at least one by-ID ruling record
+OK   C17: catalog patch applies to Candidate C (scratch copy)
+OK   C17: re-derived mutant blob/sha256 equal the catalog's
+OK   C17: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C17: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C17: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C17: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C17: recorded mutant blob/sha256 = independently re-derived
+OK   C17: pinned mutant executable built from the recorded mutant blob
+OK   C17: pinned mutant executable is not the baseline E-C
+OK   C17: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C17: run used the pinned mutant executable, equal before and after
+OK   C17: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C17: primary is the original explorer (no quotient/symmetry line) on F-B2
+OK   C17: discovered count within the configuration's ceiling (30000000)
+OK   C17: printed first failure is a named property ['E4']
+OK   C17: restoration EXACTLY_C (blob equality to C, clean)
+OK   C17: restored-side link verified, every check holds
+OK   C17: stated accepted by at least one by-ID ruling record
+OK   C18a: catalog patch applies to Candidate C (scratch copy)
+OK   C18a: re-derived mutant blob/sha256 equal the catalog's
+OK   C18a: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C18a: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C18a: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C18a: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C18a: recorded mutant blob/sha256 = independently re-derived
+OK   C18a: pinned mutant executable built from the recorded mutant blob
+OK   C18a: pinned mutant executable is not the baseline E-C
+OK   C18a: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C18a: run used the pinned mutant executable, equal before and after
+OK   C18a: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C18a: primary is the original explorer (no quotient/symmetry line) on F-G
+OK   C18a: discovered count within the configuration's ceiling (30000000)
+OK   C18a: printed first failure is a named property ['E7']
+OK   C18a: restoration EXACTLY_C (blob equality to C, clean)
+OK   C18a: restored-side link verified, every check holds
+OK   C18a: stated accepted by at least one by-ID ruling record
+OK   C18b: catalog patch applies to Candidate C (scratch copy)
+OK   C18b: re-derived mutant blob/sha256 equal the catalog's
+OK   C18b: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C18b: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C18b: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C18b: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C18b: recorded mutant blob/sha256 = independently re-derived
+OK   C18b: pinned mutant executable built from the recorded mutant blob
+OK   C18b: pinned mutant executable is not the baseline E-C
+OK   C18b: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C18b: run used the pinned mutant executable, equal before and after
+OK   C18b: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C18b: primary is the original explorer (no quotient/symmetry line) on F-G
+OK   C18b: discovered count within the configuration's ceiling (30000000)
+OK   C18b: printed first failure is a named property ['E7']
+OK   C18b: restoration EXACTLY_C (blob equality to C, clean)
+OK   C18b: restored-side link verified, every check holds
+OK   C18b: stated accepted by at least one by-ID ruling record
+OK   C20: catalog patch applies to Candidate C (scratch copy)
+OK   C20: re-derived mutant blob/sha256 equal the catalog's
+OK   C20: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C20: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md)
+OK   C20: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C20: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C20: recorded mutant blob/sha256 = independently re-derived
+OK   C20: pinned mutant executable built from the recorded mutant blob
+OK   C20: pinned mutant executable is not the baseline E-C
+OK   C20: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C20: run used the pinned mutant executable, equal before and after
+OK   C20: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C20: primary is the original explorer (no quotient/symmetry line) on F-2
+OK   C20: discovered count within the configuration's ceiling (30000000)
+OK   C20: printed first failure is a named property ['L1']
+OK   C20: restoration EXACTLY_C (blob equality to C, clean)
+OK   C20: restored-side link verified, every check holds
+OK   C20: stated accepted by at least one by-ID ruling record
+OK   C23: catalog patch applies to Candidate C (scratch copy)
+OK   C23: re-derived mutant blob/sha256 equal the catalog's
+OK   C23: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C23: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md)
+OK   C23: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C23: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C23: recorded mutant blob/sha256 = independently re-derived
+OK   C23: pinned mutant executable built from the recorded mutant blob
+OK   C23: pinned mutant executable is not the baseline E-C
+OK   C23: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C23: run used the pinned mutant executable, equal before and after
+OK   C23: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C23: primary is the original explorer (no quotient/symmetry line) on F-2
+OK   C23: discovered count within the configuration's ceiling (30000000)
+OK   C23: printed first failure is a named property ['E1']
+OK   C23: restoration EXACTLY_C (blob equality to C, clean)
+OK   C23: restored-side link verified, every check holds
+OK   C23: stated accepted by at least one by-ID ruling record
+OK   C24: catalog patch applies to Candidate C (scratch copy)
+OK   C24: re-derived mutant blob/sha256 equal the catalog's
+OK   C24: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C24: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md)
+OK   C24: preserved-build admission ruling record present
+OK   C24: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C24: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C24: recorded mutant blob/sha256 = independently re-derived
+OK   C24: pinned mutant executable built from the recorded mutant blob
+OK   C24: pinned mutant executable is not the baseline E-C
+OK   C24: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C24: run used the pinned mutant executable, equal before and after
+OK   C24: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C24: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   C24: discovered count within the configuration's ceiling (60000000)
+OK   C24: printed first failure is a named property ['P8']
+OK   C24: re-authentication after the run holds
+OK   C24: restoration EXACTLY_C (blob equality to C, clean)
+OK   C24: restored-side link verified, every check holds
+OK   C24: stated accepted by at least one by-ID ruling record
+OK   C25: catalog patch applies to Candidate C (scratch copy)
+OK   C25: re-derived mutant blob/sha256 equal the catalog's
+OK   C25: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C25: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md)
+OK   C25: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C25: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C25: recorded mutant blob/sha256 = independently re-derived
+OK   C25: pinned mutant executable built from the recorded mutant blob
+OK   C25: pinned mutant executable is not the baseline E-C
+OK   C25: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C25: run used the pinned mutant executable, equal before and after
+OK   C25: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C25: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   C25: discovered count within the configuration's ceiling (60000000)
+OK   C25: primary first failure printed as E4 (recorded as printed, never as the named property)
+OK   C25: restoration EXACTLY_C (blob equality to C, clean)
+OK   C25: restored-side link verified, every check holds
+OK   C25: mutant witness on the same pinned mutant executable
+OK   C25: healthy witness link verified, every check holds
+OK   C25: G.3 criterion record holds
+OK   C25: witness shows P7 OBSERVED
+OK   C25: stated accepted by at least one by-ID ruling record
+OK   C26: catalog patch applies to Candidate C (scratch copy)
+OK   C26: re-derived mutant blob/sha256 equal the catalog's
+OK   C26: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C26: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md)
+OK   C26: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C26: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C26: recorded mutant blob/sha256 = independently re-derived
+OK   C26: pinned mutant executable built from the recorded mutant blob
+OK   C26: pinned mutant executable is not the baseline E-C
+OK   C26: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C26: run used the pinned mutant executable, equal before and after
+OK   C26: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C26: primary is the original explorer (no quotient/symmetry line) on F-4
+OK   C26: discovered count within the configuration's ceiling (30000000)
+OK   C26: printed first failure is a named property ['E9']
+OK   C26: restoration EXACTLY_C (blob equality to C, clean)
+OK   C26: restored-side link verified, every check holds
+OK   C26: stated accepted by at least one by-ID ruling record
+OK   C14: catalog patch applies to Candidate C (scratch copy)
+OK   C14: re-derived mutant blob/sha256 equal the catalog's
+OK   C14: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C14: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C14: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C14: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C14: recorded mutant blob/sha256 = independently re-derived
+OK   C14: pinned mutant executable built from the recorded mutant blob
+OK   C14: pinned mutant executable is not the baseline E-C
+OK   C14: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C14: run used the pinned mutant executable, equal before and after
+OK   C14: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C14: exactly the catalog's named unit test failed (ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger), panicking at a unit_tests.rs check
+OK   C14: harness '1 failed'
+OK   C14: restoration EXACTLY_C (blob equality to C, clean)
+OK   C14: restored-side link verified, every check holds
+OK   C14: stated accepted by at least one by-ID ruling record
+OK   C19: catalog patch applies to Candidate C (scratch copy)
+OK   C19: re-derived mutant blob/sha256 equal the catalog's
+OK   C19: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C19: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C19: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C19: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C19: recorded mutant blob/sha256 = independently re-derived
+OK   C19: pinned mutant executable built from the recorded mutant blob
+OK   C19: pinned mutant executable is not the baseline E-C
+OK   C19: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C19: run used the pinned mutant executable, equal before and after
+OK   C19: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C19: exactly the catalog's named unit test failed (ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends), panicking at a unit_tests.rs check
+OK   C19: harness '1 failed'
+OK   C19: restoration EXACTLY_C (blob equality to C, clean)
+OK   C19: restored-side link verified, every check holds
+OK   C19: stated accepted by at least one by-ID ruling record
+OK   C21: catalog patch applies to Candidate C (scratch copy)
+OK   C21: re-derived mutant blob/sha256 equal the catalog's
+OK   C21: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C21: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C21: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C21: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C21: recorded mutant blob/sha256 = independently re-derived
+OK   C21: pinned mutant executable built from the recorded mutant blob
+OK   C21: pinned mutant executable is not the baseline E-C
+OK   C21: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C21: run used the pinned mutant executable, equal before and after
+OK   C21: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C21: exactly the catalog's named unit test failed (ledger::protocol::unit_tests::w6_one_identity_under_two_contents), panicking at a unit_tests.rs check
+OK   C21: harness '1 failed'
+OK   C21: restoration EXACTLY_C (blob equality to C, clean)
+OK   C21: restored-side link verified, every check holds
+OK   C21: stated accepted by at least one by-ID ruling record
+OK   C22: catalog patch applies to Candidate C (scratch copy)
+OK   C22: re-derived mutant blob/sha256 equal the catalog's
+OK   C22: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C22: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C22: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C22: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C22: recorded mutant blob/sha256 = independently re-derived
+OK   C22: exactly one coded error, E0283, at unit_tests.rs:1089:5; exit 101 by a normal exit
+OK   C22: restored protocol.rs blob = Candidate C's
+OK   C22: linked healthy type-(e4) build classification PASS
+OK   C22: stated accepted by at least one by-ID ruling record
+OK   C27: catalog patch applies to Candidate C (scratch copy)
+OK   C27: re-derived mutant blob/sha256 equal the catalog's
+OK   C27: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C27: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C27: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C27: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C27: recorded mutant blob/sha256 = independently re-derived
+OK   C27: pinned mutant executable built from the recorded mutant blob
+OK   C27: pinned mutant executable is not the baseline E-C
+OK   C27: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C27: run used the pinned mutant executable, equal before and after
+OK   C27: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C27: exactly the catalog's named unit test failed (ledger::protocol::unit_tests::t_prec_persistence_of_every_ending), panicking at a unit_tests.rs check
+OK   C27: harness '1 failed'
+OK   C27: restoration EXACTLY_C (blob equality to C, clean)
+OK   C27: restored-side link verified, every check holds
+OK   C27: stated accepted by at least one by-ID ruling record
+OK   C28: catalog patch applies to Candidate C (scratch copy)
+OK   C28: re-derived mutant blob/sha256 equal the catalog's
+OK   C28: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   C28: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md)
+OK   C28: preserved-build admission ruling record present
+OK   C28: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   C28: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   C28: recorded mutant blob/sha256 = independently re-derived
+OK   C28: pinned mutant executable built from the recorded mutant blob
+OK   C28: pinned mutant executable is not the baseline E-C
+OK   C28: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   C28: run used the pinned mutant executable, equal before and after
+OK   C28: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   C28: exactly the catalog's named unit test failed (ledger::protocol::unit_tests::t_res_every_resolve_row), panicking at a unit_tests.rs check
+OK   C28: harness '1 failed'
+OK   C28: restoration EXACTLY_C (blob equality to C, clean)
+OK   C28: restored-side link verified, every check holds
+OK   C28: stated accepted by at least one by-ID ruling record
+OK   A1: catalog patch applies to Candidate C (scratch copy)
+OK   A1: re-derived mutant blob/sha256 equal the catalog's
+OK   A1: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   A1: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md)
+OK   A1: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   A1: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   A1: recorded mutant blob/sha256 = independently re-derived
+OK   A1: pinned mutant executable built from the recorded mutant blob
+OK   A1: pinned mutant executable is not the baseline E-C
+OK   A1: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   A1: run used the pinned mutant executable, equal before and after
+OK   A1: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   A1: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   A1: discovered count within the configuration's ceiling (60000000)
+OK   A1: printed first failure is a named property ['P1']
+OK   A1: restoration EXACTLY_C (blob equality to C, clean)
+OK   A1: restored-side link verified, every check holds
+OK   A1: stated accepted by at least one by-ID ruling record
+OK   A2: catalog patch applies to Candidate C (scratch copy)
+OK   A2: re-derived mutant blob/sha256 equal the catalog's
+OK   A2: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   A2: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md)
+OK   A2: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   A2: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   A2: recorded mutant blob/sha256 = independently re-derived
+OK   A2: pinned mutant executable built from the recorded mutant blob
+OK   A2: pinned mutant executable is not the baseline E-C
+OK   A2: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   A2: run used the pinned mutant executable, equal before and after
+OK   A2: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   A2: primary is the original explorer (no quotient/symmetry line) on F-1
+OK   A2: discovered count within the configuration's ceiling (60000000)
+OK   A2: printed first failure is a named property ['P1']
+OK   A2: restoration EXACTLY_C (blob equality to C, clean)
+OK   A2: restored-side link verified, every check holds
+OK   A2: stated accepted by at least one by-ID ruling record
+OK   A3: catalog patch applies to Candidate C (scratch copy)
+OK   A3: re-derived mutant blob/sha256 equal the catalog's
+OK   A3: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   A3: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md)
+OK   A3: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   A3: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   A3: recorded mutant blob/sha256 = independently re-derived
+OK   A3: pinned mutant executable built from the recorded mutant blob
+OK   A3: pinned mutant executable is not the baseline E-C
+OK   A3: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   A3: run used the pinned mutant executable, equal before and after
+OK   A3: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   A3: primary is the original explorer (no quotient/symmetry line) on F-5
+OK   A3: discovered count within the configuration's ceiling (30000000)
+OK   A3: printed first failure is a named property ['P12']
+OK   A3: restoration EXACTLY_C (blob equality to C, clean)
+OK   A3: restored-side link verified, every check holds
+OK   A3: stated accepted by at least one by-ID ruling record
+OK   A5: catalog patch applies to Candidate C (scratch copy)
+OK   A5: re-derived mutant blob/sha256 equal the catalog's
+OK   A5: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   A5: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md)
+OK   A5: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   A5: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   A5: recorded mutant blob/sha256 = independently re-derived
+OK   A5: pinned mutant executable built from the recorded mutant blob
+OK   A5: pinned mutant executable is not the baseline E-C
+OK   A5: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   A5: run used the pinned mutant executable, equal before and after
+OK   A5: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   A5: primary is the original explorer (no quotient/symmetry line) on F-2
+OK   A5: discovered count within the configuration's ceiling (30000000)
+OK   A5: printed first failure is a named property ['L1']
+OK   A5: restoration EXACTLY_C (blob equality to C, clean)
+OK   A5: restored-side link verified, every check holds
+OK   A5: stated accepted by at least one by-ID ruling record
+OK   A6: catalog patch applies to Candidate C (scratch copy)
+OK   A6: re-derived mutant blob/sha256 equal the catalog's
+OK   A6: at least one ruling record cites its RESULT.txt with blob and sha256
+OK   A6: cited RESULT.txt blob/sha256 equal the Git object (ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md)
+OK   A6: applied patch sha256 = catalog patch sha256 = frozen patch blob
+OK   A6: mutant built from C (head/tree) plus the patch: EXACTLY_C_PLUS_PATCH
+OK   A6: recorded mutant blob/sha256 = independently re-derived
+OK   A6: pinned mutant executable built from the recorded mutant blob
+OK   A6: pinned mutant executable is not the baseline E-C
+OK   A6: pinned mutant executable still on disk with its pinned sha256 (hashed, not run)
+OK   A6: run used the pinned mutant executable, equal before and after
+OK   A6: primary run exited 101 by a normal exit (no signal), supervisor completed, no OOM/timeout
+OK   A6: primary is the original explorer (no quotient/symmetry line) on F-5
+OK   A6: discovered count within the configuration's ceiling (30000000)
+OK   A6: printed first failure is a named property ['P12', 'P15']
+OK   A6: restoration EXACTLY_C (blob equality to C, clean)
+OK   A6: restored-side link verified, every check holds
+OK   A6: stated accepted by at least one by-ID ruling record
+OK   C1/C25 record: recordings 'C1: P1 (first failure E3; witness)' and 'C25: P7 (first failure E4; witness)'
+OK   ledger: exactly 35 distinct control ids
+
+RESULT: 647 of 647 checks hold; 0 fail

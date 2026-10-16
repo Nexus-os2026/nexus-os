@@ -1,0 +1,6 @@
+STAGE 4 — ONE SUPERVISED `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` 2026-10-16T16:11:09+0100
+source check (before): EXACTLY_C; HEAD d5964ee5326c2733177307db6f507328023d361a; tree 51bac5fd335999cc995c0ab9f582a30244973ef0; detached True; 5364 tracked blobs, 97246341 bytes compared; status []; mismatches []; missing []; modes []
+pre-stage gate 2026-10-16T16:11:10+0100: load ['1.19', '0.83', '0.81']; MemAvailable 52098012 KiB; SwapFree 8258620 KiB; disk {'avail_bytes': 26543521792, 'used_bytes': 1900201046016}
+finished: 2026-10-16T16:11:10+0100
+CLASSIFICATION: NOT_STARTED
+launcher exit=1

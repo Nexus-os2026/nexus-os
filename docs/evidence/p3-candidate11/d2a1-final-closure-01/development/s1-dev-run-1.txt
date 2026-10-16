@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/s1_mutations.py", line 254, in <module>
+    ap = jshow(HEAD_EV, f"{rdir}/02-apply/APPLY.json")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/common.py", line 78, in jshow
+    return json.loads(show(rev, path))
+                      ^^^^^^^^^^^^^^^
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/common.py", line 50, in show
+    return git("show", f"{rev}:{path}", binary=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/common.py", line 45, in git
+    raise RuntimeError(f"git {' '.join(args)} failed rc={r.returncode}: {r.stderr.decode(errors='replace')}")
+RuntimeError: git show cca0d773d9a405be566e576886321acf6a28f29b:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/61-C5/02-apply/APPLY.json failed rc=128: fatal: path 'docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/61-C5/02-apply/APPLY.json' does not exist in 'cca0d773d9a405be566e576886321acf6a28f29b'
+

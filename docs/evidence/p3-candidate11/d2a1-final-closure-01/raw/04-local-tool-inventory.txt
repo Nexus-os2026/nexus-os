@@ -1,0 +1,36 @@
+== 2026-10-16T15:06:27Z local tool inventory (read-only version queries)
+rg: ripgrep 14.1.0  [workflow pin: ripgrep 14.1.1, installed into the runner tool cache via cargo install (network)]
+grep: ugrep 7.8.4 x86_64-pc-linux-gnu +sse2; -P:pcre2jit; -z:zlib,bzip2,zstd,brotli,7z,tar/pax/cpio/zip
+node: v20.20.2 at /usr/bin/node  [workflow pins: Node 24.21.0 (Builder assembly, actions/setup-node); Node "22" (frontend job)]
+npm: 10.8.2
+python3: Python 3.12.3
+python3.11: ABSENT
+python3.12: Python 3.12.3
+  [workflow pin: Python 3.11 via actions/setup-python]
+cargo-audit: cargo-audit-audit 0.22.1 [workflow pin: cargo-audit-audit 0.22.1 in the runner tool cache; advisory DB fetched fresh (network)]
+cargo-deny: cargo-deny 0.19.6 [workflow pin: cargo-deny 0.19.6]
+xvfb-run: /usr/bin/xvfb-run
+pkg-config: 1.8.1
+webkit2gtk-4.1 2.52.6
+javascriptcoregtk-4.1 2.52.6
+libsoup-3.0 3.4.4
+gtk+-3.0 3.24.41
+glib-2.0 2.80.0
+cargo: present
+rustc: present
+rustdoc: present
+cargo-clippy: present
+clippy-driver: present
+cargo-fmt: present
+rustfmt: present
+rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo 1.94.0 (85eff7c80 2026-01-15)
+clippy 0.1.94 (4a4ef493e3 2026-03-02)
+rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+no node/python version managers found
+content-v2
+index-v5
+2.0G	/home/nexus/.npm/_cacache
+http-v2
+selfcheck
+wheels

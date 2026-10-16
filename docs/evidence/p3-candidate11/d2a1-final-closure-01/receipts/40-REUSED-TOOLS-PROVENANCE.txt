@@ -1,0 +1,8 @@
+REUSED UNCHANGED FROM VALIDATION-02 (manifest 36f10bf9...b822) 2026-10-16T15:07:39Z
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-exact-source-validation-02/tools/verify_tree.py
+926d01db4e5988d74335aba92d33b6618f536e46a2b017b5625435a70e815ff3  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-exact-source-validation-02/tools/scope-wrap.sh
+copies:
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/verify_tree.py
+926d01db4e5988d74335aba92d33b6618f536e46a2b017b5625435a70e815ff3  /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01/tools/scope-wrap.sh
+926d01db4e5988d74335aba92d33b6618f536e46a2b017b5625435a70e815ff3  tools/scope-wrap.sh
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  tools/verify_tree.py

@@ -1,0 +1,8 @@
+363 of 370 hold; branch counts {'MEASURED_COMPLETE': 85, 'MEASURED_IN_INCOMPLETE_PREFIX': 3, 'UNOBSERVED': 105}; proof-TAKEN rows 57; Stage B ignored 77
+FAIL X-4: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {'attempts': (1, 0)}
+FAIL F-8: printed bounds equal the contract's reviewed bounds (8.2/8.3; executor encoding) :: {'attempts': (1, 0)}
+FAIL X-1: VALIDATION-02 Stage B (cargo test --workspace, unoptimised): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (0, None)
+FAIL X-2: VALIDATION-02 Stage B (cargo test --workspace, unoptimised): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (0, None)
+FAIL X-3: VALIDATION-02 Stage B (cargo test --workspace, unoptimised): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (0, None)
+FAIL X-4: VALIDATION-02 Stage B (cargo test --workspace, unoptimised): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (0, None)
+FAIL X-5: VALIDATION-02 Stage B (cargo test --workspace, unoptimised): exactly one block on its own harness line, PASS, same counts and branches as Stage C :: (0, None)

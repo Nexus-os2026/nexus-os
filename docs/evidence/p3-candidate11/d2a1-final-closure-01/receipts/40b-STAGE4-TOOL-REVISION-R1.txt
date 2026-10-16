@@ -1,0 +1,6 @@
+STAGE 4 TOOL REVISION R1 2026-10-16T15:10:48Z
+reason: self-test 6 predicate expected a /usr/bin/time signal record, which cannot exist when the scope (including time and scope-wrap.sh) is SIGTERMed; the guard itself triggered and stopped the scope in ~1 s (receipts/41-supervision-selftest, preserved FAILED).
+change: predicate only (development/s4_launch.v1-to-r1.diff); enforcement code unchanged; stage gate now requires the R1 self-test.
+115b107aeab91067926e73aaf801c7b99f4a4df6074952d025b518b1db9602a2  s4_launch.py
+926d01db4e5988d74335aba92d33b6618f536e46a2b017b5625435a70e815ff3  scope-wrap.sh
+8bf5724a7287b0b913f14e2d5929b15b73bedb2de9cce7a7bd64008c9451b934  verify_tree.py

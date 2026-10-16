@@ -1,0 +1,57 @@
+== contract at C
+fatal: path 'docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md' does not exist in 'd5964ee5326c2733177307db6f507328023d361a'
+d5964ee5326c2733177307db6f507328023d361a:docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md
+fatal: path 'docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md' does not exist in 'd5964ee5326c2733177307db6f507328023d361a'
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  -
+fatal: path 'docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md' does not exist in 'd5964ee5326c2733177307db6f507328023d361a'
+      0       0
+== manifests at C
+docs/evidence/p3-candidate11/current-tree-183/manifest.json
+5d31cb45123403626f06c521dd2d53103676250e
+20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279  -
+docs/evidence/p3-candidate10/original-183/manifest.json
+65fa69dcc0742e04658a3360c42e051e38ebbf5b
+2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14  -
+== search for AD blobs in all objects at C
+35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1 docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md
+== grep AD names at C
+docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/INDEX.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/PACKET-SHA256SUMS
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/AD1-R3-to-AD1-R4.diff
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/01-check-ad1r4.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/02-contradiction-scan.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/03-check-matrix.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/04-classification-cases.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/05-negative-controls.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/06-obligation-scan-r3.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/07-obligation-scan-disposition.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/08-review-coverage.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/checks/09-defs-anchor-check.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/matrix/CONSOLIDATION-MATRIX.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/matrix/CONSOLIDATION-MATRIX.tsv
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/matrix/README.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/00-STAGE1-AUTHENTICATION.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/02-development-log.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/03-freeze.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/04-final-gate.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/github-refs-before.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/receipts/revisions/FAILURE-EXTRACTS.txt
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/review/R3-TO-R4-SEMANTIC-REVIEW.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/ad1r4-template.md
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/build-packet.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/check-ad1r4.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/check-matrix.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/check-review.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/classify-cases-r4.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/contradiction-scan.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/defs-anchor-check.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/fill-ad1r4.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/final-gate.sh
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/negative-controls-r4.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/obligation-scan.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/render-matrix.py
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/revisions/check-ad1r4.v1-to-check-ad1r4.v2.diff
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/revisions/check-ad1r4.v2-to-check-ad1r4.v3.diff
+docs/evidence/p3-candidate11/ad1r4-consolidation-01/tools/revisions/check-ad1r4.v3-to-check-ad1r4.v4.diff

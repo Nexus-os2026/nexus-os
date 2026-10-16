@@ -1,0 +1,28 @@
+OK   pre: supervision self-test PASS: 
+OK   pre: worktree path absent: /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01
+OK   git worktree add rc 0: Preparing worktree (detached HEAD d5964ee5)
+OK   byte-exact Candidate C after checkout (EXACTLY_C): 
+OK   workflow: tested commit equals the commit under test (C): d5964ee5326c2733177307db6f507328023d361a
+OK   workflow: `git status --porcelain=v1 --untracked-files=all --ignored` is empty: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustdoc is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo-clippy is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/clippy-driver is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo-fmt is executable: 
+OK   workflow: /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustfmt is executable: 
+OK   workflow: rustc --version matches ^rustc 1\.94\.0 : rustc 1.94.0 (4a4ef493e 2026-03-02)
+OK   workflow: cargo --version rc 0: cargo 1.94.0 (85eff7c80 2026-01-15)
+OK   workflow: cargo clippy --version rc 0: clippy 0.1.94 (4a4ef493e3 2026-03-02)
+OK   workflow: cargo fmt --version rc 0: rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+OK   build PATH resolves cargo-clippy, clippy-driver, rustc, cargo and rustfmt to the 1.94.0 toolchain directory: cargo-clippy /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo-clippy
+clippy-driver /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/clippy-driver
+rustc /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustc
+cargo /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/cargo
+rustfmt /home/nexus/.rustup/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin/rustfmt
+OK   workflow: pkg-config --exists webkit2gtk-4.1: 2.52.6
+OK   workflow: pkg-config --exists javascriptcoregtk-4.1: 2.52.6
+OK   workflow: pkg-config --exists libsoup-3.0: 3.4.4
+OK   workflow: pkg-config --exists gtk+-3.0: 3.24.41
+OK   workflow: pkg-config --exists glib-2.0: 2.80.0
+OK   byte-exact Candidate C after the verification commands: 

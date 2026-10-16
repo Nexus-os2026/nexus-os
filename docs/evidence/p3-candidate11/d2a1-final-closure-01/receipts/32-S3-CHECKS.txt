@@ -1,0 +1,1603 @@
+OK   H.2: ct-1 path at C, git blob 5d31cb45
+OK   H.2: ct-1 sha256 20bcc6fe...
+OK   H.2: ct-1 version 'ct-1'
+OK   H.1: historical manifest at C: blob 65fa69dc, sha256 2c4adc84..., version 1-r1, 183 controls
+OK   H.1: historical manifest unchanged at the evidence head
+OK   ct-1 unchanged at the evidence head
+OK   H.3(1): derived_from names the original's path, sha256 and version
+OK   H.3(6): no self-reference: ct-1 has no 'final_tree' key and contains neither C's commit nor C's tree hash
+OK   historical base 9d5fdf95 is an ancestor of C
+OK   H.3(2): 183 controls in each, same ids in the same order
+OK   M01: H.3(2) definition fields equal the original's
+OK   M01: H.3(3) historical review fields copied unchanged and marked historical
+OK   M01: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M01: source_sha256 lists exactly the files the control edits
+OK   M01 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M01 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M01 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M01 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M01 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M01 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M02: H.3(2) definition fields equal the original's
+OK   M02: H.3(3) historical review fields copied unchanged and marked historical
+OK   M02: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M02: source_sha256 lists exactly the files the control edits
+OK   M02 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M02 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M02 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M02 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M03: H.3(2) definition fields equal the original's
+OK   M03: H.3(3) historical review fields copied unchanged and marked historical
+OK   M03: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M03: source_sha256 lists exactly the files the control edits
+OK   M03 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M03 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M03 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M03 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M04: H.3(2) definition fields equal the original's
+OK   M04: H.3(3) historical review fields copied unchanged and marked historical
+OK   M04: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M04: source_sha256 lists exactly the files the control edits
+OK   M04 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M04 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M04 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M04 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M05: H.3(2) definition fields equal the original's
+OK   M05: H.3(3) historical review fields copied unchanged and marked historical
+OK   M05: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M05: source_sha256 lists exactly the files the control edits
+OK   M05 crates/nexus-governed-control/src/authority/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M05 crates/nexus-governed-control/src/authority/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M05 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M05 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M06: H.3(2) definition fields equal the original's
+OK   M06: H.3(3) historical review fields copied unchanged and marked historical
+OK   M06: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M06: source_sha256 lists exactly the files the control edits
+OK   M06 crates/nexus-governed-control/src/authority/evidence.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M06 crates/nexus-governed-control/src/authority/evidence.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M06 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M06 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M07: H.3(2) definition fields equal the original's
+OK   M07: H.3(3) historical review fields copied unchanged and marked historical
+OK   M07: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M07: source_sha256 lists exactly the files the control edits
+OK   M07 crates/nexus-governed-control/src/tool/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M07 crates/nexus-governed-control/src/tool/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M07 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M07 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M08: H.3(2) definition fields equal the original's
+OK   M08: H.3(3) historical review fields copied unchanged and marked historical
+OK   M08: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M08: source_sha256 lists exactly the files the control edits
+OK   M08 crates/nexus-governed-control/src/tool/catalog.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M08 crates/nexus-governed-control/src/tool/catalog.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M08 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M08 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M09: H.3(2) definition fields equal the original's
+OK   M09: H.3(3) historical review fields copied unchanged and marked historical
+OK   M09: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M09: source_sha256 lists exactly the files the control edits
+OK   M09 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M09 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M09 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M09 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M10: H.3(2) definition fields equal the original's
+OK   M10: H.3(3) historical review fields copied unchanged and marked historical
+OK   M10: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M10: source_sha256 lists exactly the files the control edits
+OK   M10 crates/nexus-governed-control/src/egress/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M10 crates/nexus-governed-control/src/egress/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M10 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M10 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M11: H.3(2) definition fields equal the original's
+OK   M11: H.3(3) historical review fields copied unchanged and marked historical
+OK   M11: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M11: source_sha256 lists exactly the files the control edits
+OK   M11 crates/nexus-governed-control/src/egress/destination.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M11 crates/nexus-governed-control/src/egress/destination.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M11 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M11 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M12: H.3(2) definition fields equal the original's
+OK   M12: H.3(3) historical review fields copied unchanged and marked historical
+OK   M12: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M12: source_sha256 lists exactly the files the control edits
+OK   M12 crates/nexus-governed-control/src/egress/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M12 crates/nexus-governed-control/src/egress/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M12 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M12 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M12 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M12 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M13: H.3(2) definition fields equal the original's
+OK   M13: H.3(3) historical review fields copied unchanged and marked historical
+OK   M13: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M13: source_sha256 lists exactly the files the control edits
+OK   M13 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M13 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M13 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M13 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M14: H.3(2) definition fields equal the original's
+OK   M14: H.3(3) historical review fields copied unchanged and marked historical
+OK   M14: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M14: source_sha256 lists exactly the files the control edits
+OK   M14 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M14 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M14 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M14 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M15: H.3(2) definition fields equal the original's
+OK   M15: H.3(3) historical review fields copied unchanged and marked historical
+OK   M15: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M15: source_sha256 lists exactly the files the control edits
+OK   M15 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M15 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M15 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M15 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M15 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M15 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M16: H.3(2) definition fields equal the original's
+OK   M16: H.3(3) historical review fields copied unchanged and marked historical
+OK   M16: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M16: source_sha256 lists exactly the files the control edits
+OK   M16 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M16 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M16 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M16 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M17: H.3(2) definition fields equal the original's
+OK   M17: H.3(3) historical review fields copied unchanged and marked historical
+OK   M17: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M17: source_sha256 lists exactly the files the control edits
+OK   M17 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M17 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M17 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M17 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M17 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M17 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M18: H.3(2) definition fields equal the original's
+OK   M18: H.3(3) historical review fields copied unchanged and marked historical
+OK   M18: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M18: source_sha256 lists exactly the files the control edits
+OK   M18 crates/nexus-governed-control/src/broker.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M18 crates/nexus-governed-control/src/broker.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M18 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M18 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M19: H.3(2) definition fields equal the original's
+OK   M19: H.3(3) historical review fields copied unchanged and marked historical
+OK   M19: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M19: source_sha256 lists exactly the files the control edits
+OK   M19 crates/nexus-governed-control/src/broker.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M19 crates/nexus-governed-control/src/broker.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M19 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M19 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M20: H.3(2) definition fields equal the original's
+OK   M20: H.3(3) historical review fields copied unchanged and marked historical
+OK   M20: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M20: source_sha256 lists exactly the files the control edits
+OK   M20 crates/nexus-governed-control/src/connector/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M20 crates/nexus-governed-control/src/connector/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M20 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M20 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M21: H.3(2) definition fields equal the original's
+OK   M21: H.3(3) historical review fields copied unchanged and marked historical
+OK   M21: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M21: source_sha256 lists exactly the files the control edits
+OK   M21 crates/nexus-governed-control/src/connector/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M21 crates/nexus-governed-control/src/connector/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M21 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M21 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M22: H.3(2) definition fields equal the original's
+OK   M22: H.3(3) historical review fields copied unchanged and marked historical
+OK   M22: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M22: source_sha256 lists exactly the files the control edits
+OK   M22 crates/nexus-governed-control/src/ingress.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M22 crates/nexus-governed-control/src/ingress.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M22 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M22 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M23: H.3(2) definition fields equal the original's
+OK   M23: H.3(3) historical review fields copied unchanged and marked historical
+OK   M23: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M23: source_sha256 lists exactly the files the control edits
+OK   M23 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M23 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M23 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M23 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M24: H.3(2) definition fields equal the original's
+OK   M24: H.3(3) historical review fields copied unchanged and marked historical
+OK   M24: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M24: source_sha256 lists exactly the files the control edits
+OK   M24 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M24 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M24 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M24 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M25: H.3(2) definition fields equal the original's
+OK   M25: H.3(3) historical review fields copied unchanged and marked historical
+OK   M25: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M25: source_sha256 lists exactly the files the control edits
+OK   M25 kernel/src/config.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M25 kernel/src/config.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M25 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M25 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M26: H.3(2) definition fields equal the original's
+OK   M26: H.3(3) historical review fields copied unchanged and marked historical
+OK   M26: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M26: source_sha256 lists exactly the files the control edits
+OK   M26 app/src-tauri/src/nx_bridge/commands.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M26 app/src-tauri/src/nx_bridge/commands.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M26 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M26 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M27: H.3(2) definition fields equal the original's
+OK   M27: H.3(3) historical review fields copied unchanged and marked historical
+OK   M27: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M27: source_sha256 lists exactly the files the control edits
+OK   M27 app/src-tauri/src/commands/apps.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M27 app/src-tauri/src/commands/apps.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M27 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M27 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M28: H.3(2) definition fields equal the original's
+OK   M28: H.3(3) historical review fields copied unchanged and marked historical
+OK   M28: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M28: source_sha256 lists exactly the files the control edits
+OK   M28 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M28 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M28 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M28 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M29: H.3(2) definition fields equal the original's
+OK   M29: H.3(3) historical review fields copied unchanged and marked historical
+OK   M29: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M29: source_sha256 lists exactly the files the control edits
+OK   M29 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M29 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M29 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M29 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M30: H.3(2) definition fields equal the original's
+OK   M30: H.3(3) historical review fields copied unchanged and marked historical
+OK   M30: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M30: source_sha256 lists exactly the files the control edits
+OK   M30 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M30 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M30 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M30 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M31: H.3(2) definition fields equal the original's
+OK   M31: H.3(3) historical review fields copied unchanged and marked historical
+OK   M31: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M31: source_sha256 lists exactly the files the control edits
+OK   M31 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M31 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M31 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M31 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M32: H.3(2) definition fields equal the original's
+OK   M32: H.3(3) historical review fields copied unchanged and marked historical
+OK   M32: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M32: source_sha256 lists exactly the files the control edits
+OK   M32 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M32 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M32 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M32 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M33: H.3(2) definition fields equal the original's
+OK   M33: H.3(3) historical review fields copied unchanged and marked historical
+OK   M33: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M33: source_sha256 lists exactly the files the control edits
+OK   M33 kernel/src/config.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M33 kernel/src/config.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M33 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M33 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M34: H.3(2) definition fields equal the original's
+OK   M34: H.3(3) historical review fields copied unchanged and marked historical
+OK   M34: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M34: source_sha256 lists exactly the files the control edits
+OK   M34 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M34 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M34 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M34 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M35: H.3(2) definition fields equal the original's
+OK   M35: H.3(3) historical review fields copied unchanged and marked historical
+OK   M35: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M35: source_sha256 lists exactly the files the control edits
+OK   M35 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M35 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M35 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M35 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M36: H.3(2) definition fields equal the original's
+OK   M36: H.3(3) historical review fields copied unchanged and marked historical
+OK   M36: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M36: source_sha256 lists exactly the files the control edits
+OK   M36 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M36 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M36 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M36 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M37: H.3(2) definition fields equal the original's
+OK   M37: H.3(3) historical review fields copied unchanged and marked historical
+OK   M37: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M37: source_sha256 lists exactly the files the control edits
+OK   M37 crates/nexus-governed-control/src/authority/evidence.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M37 crates/nexus-governed-control/src/authority/evidence.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M37 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M37 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M38: H.3(2) definition fields equal the original's
+OK   M38: H.3(3) historical review fields copied unchanged and marked historical
+OK   M38: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M38: source_sha256 lists exactly the files the control edits
+OK   M38 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M38 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M38 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M38 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M39: H.3(2) definition fields equal the original's
+OK   M39: H.3(3) historical review fields copied unchanged and marked historical
+OK   M39: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M39: source_sha256 lists exactly the files the control edits
+OK   M39 crates/nexus-governed-control/src/broker.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M39 crates/nexus-governed-control/src/broker.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M39 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M39 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M40: H.3(2) definition fields equal the original's
+OK   M40: H.3(3) historical review fields copied unchanged and marked historical
+OK   M40: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M40: source_sha256 lists exactly the files the control edits
+OK   M40 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M40 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M40 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M40 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M41: H.3(2) definition fields equal the original's
+OK   M41: H.3(3) historical review fields copied unchanged and marked historical
+OK   M41: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M41: source_sha256 lists exactly the files the control edits
+OK   M41 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M41 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M41 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M41 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M42: H.3(2) definition fields equal the original's
+OK   M42: H.3(3) historical review fields copied unchanged and marked historical
+OK   M42: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M42: source_sha256 lists exactly the files the control edits
+OK   M42 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M42 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M42 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M42 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M43: H.3(2) definition fields equal the original's
+OK   M43: H.3(3) historical review fields copied unchanged and marked historical
+OK   M43: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M43: source_sha256 lists exactly the files the control edits
+OK   M43 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M43 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M43 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M43 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M44: H.3(2) definition fields equal the original's
+OK   M44: H.3(3) historical review fields copied unchanged and marked historical
+OK   M44: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M44: source_sha256 lists exactly the files the control edits
+OK   M44 crates/nexus-governed-control/src/egress/destination.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M44 crates/nexus-governed-control/src/egress/destination.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M44 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M44 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M45: H.3(2) definition fields equal the original's
+OK   M45: H.3(3) historical review fields copied unchanged and marked historical
+OK   M45: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M45: source_sha256 lists exactly the files the control edits
+OK   M45 crates/nexus-governed-control/src/authority/run.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M45 crates/nexus-governed-control/src/authority/run.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M45 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M45 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M46: H.3(2) definition fields equal the original's
+OK   M46: H.3(3) historical review fields copied unchanged and marked historical
+OK   M46: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M46: source_sha256 lists exactly the files the control edits
+OK   M46 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M46 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M46 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M46 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M47: H.3(2) definition fields equal the original's
+OK   M47: H.3(3) historical review fields copied unchanged and marked historical
+OK   M47: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M47: source_sha256 lists exactly the files the control edits
+OK   M47 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M47 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M47 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M47 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M48: H.3(2) definition fields equal the original's
+OK   M48: H.3(3) historical review fields copied unchanged and marked historical
+OK   M48: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M48: source_sha256 lists exactly the files the control edits
+OK   M48 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M48 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M48 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M48 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M49: H.3(2) definition fields equal the original's
+OK   M49: H.3(3) historical review fields copied unchanged and marked historical
+OK   M49: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M49: source_sha256 lists exactly the files the control edits
+OK   M49 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M49 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M49 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M49 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M50: H.3(2) definition fields equal the original's
+OK   M50: H.3(3) historical review fields copied unchanged and marked historical
+OK   M50: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M50: source_sha256 lists exactly the files the control edits
+OK   M50 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M50 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M50 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M50 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M51: H.3(2) definition fields equal the original's
+OK   M51: H.3(3) historical review fields copied unchanged and marked historical
+OK   M51: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M51: source_sha256 lists exactly the files the control edits
+OK   M51 crates/nexus-governed-control/src/browser/cdp.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M51 crates/nexus-governed-control/src/browser/cdp.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M51 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M51 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M52: H.3(2) definition fields equal the original's
+OK   M52: H.3(3) historical review fields copied unchanged and marked historical
+OK   M52: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M52: source_sha256 lists exactly the files the control edits
+OK   M52 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M52 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M52 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M52 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M53: H.3(2) definition fields equal the original's
+OK   M53: H.3(3) historical review fields copied unchanged and marked historical
+OK   M53: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M53: source_sha256 lists exactly the files the control edits
+OK   M53 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M53 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M53 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M53 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M54: H.3(2) definition fields equal the original's
+OK   M54: H.3(3) historical review fields copied unchanged and marked historical
+OK   M54: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M54: source_sha256 lists exactly the files the control edits
+OK   M54 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M54 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M54 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M54 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M55: H.3(2) definition fields equal the original's
+OK   M55: H.3(3) historical review fields copied unchanged and marked historical
+OK   M55: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M55: source_sha256 lists exactly the files the control edits
+OK   M55 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M55 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M55 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M55 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M56: H.3(2) definition fields equal the original's
+OK   M56: H.3(3) historical review fields copied unchanged and marked historical
+OK   M56: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M56: source_sha256 lists exactly the files the control edits
+OK   M56 crates/nexus-governed-control/src/executable.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M56 crates/nexus-governed-control/src/executable.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M56 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M56 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M57: H.3(2) definition fields equal the original's
+OK   M57: H.3(3) historical review fields copied unchanged and marked historical
+OK   M57: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M57: source_sha256 lists exactly the files the control edits
+OK   M57 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M57 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M57 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M57 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M58: H.3(2) definition fields equal the original's
+OK   M58: H.3(3) historical review fields copied unchanged and marked historical
+OK   M58: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M58: source_sha256 lists exactly the files the control edits
+OK   M58 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M58 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M58 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M58 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M59: H.3(2) definition fields equal the original's
+OK   M59: H.3(3) historical review fields copied unchanged and marked historical
+OK   M59: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M59: source_sha256 lists exactly the files the control edits
+OK   M59 crates/nexus-governed-control/src/egress/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M59 crates/nexus-governed-control/src/egress/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M59 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M59 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M60: H.3(2) definition fields equal the original's
+OK   M60: H.3(3) historical review fields copied unchanged and marked historical
+OK   M60: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M60: source_sha256 lists exactly the files the control edits
+OK   M60 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M60 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M60 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M60 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M61: H.3(2) definition fields equal the original's
+OK   M61: H.3(3) historical review fields copied unchanged and marked historical
+OK   M61: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M61: source_sha256 lists exactly the files the control edits
+OK   M61 crates/nexus-governed-control/src/authority/policy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M61 crates/nexus-governed-control/src/authority/policy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M61 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M61 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M62: H.3(2) definition fields equal the original's
+OK   M62: H.3(3) historical review fields copied unchanged and marked historical
+OK   M62: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M62: source_sha256 lists exactly the files the control edits
+OK   M62 crates/nexus-governed-control/src/control.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M62 crates/nexus-governed-control/src/control.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M62 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M62 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M63: H.3(2) definition fields equal the original's
+OK   M63: H.3(3) historical review fields copied unchanged and marked historical
+OK   M63: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M63: source_sha256 lists exactly the files the control edits
+OK   M63 crates/nexus-governed-control/src/control.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M63 crates/nexus-governed-control/src/control.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M63 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M63 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M64: H.3(2) definition fields equal the original's
+OK   M64: H.3(3) historical review fields copied unchanged and marked historical
+OK   M64: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M64: source_sha256 lists exactly the files the control edits
+OK   M64 crates/nexus-governed-control/src/control.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M64 crates/nexus-governed-control/src/control.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M64 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M64 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M65: H.3(2) definition fields equal the original's
+OK   M65: H.3(3) historical review fields copied unchanged and marked historical
+OK   M65: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M65: source_sha256 lists exactly the files the control edits
+OK   M65 crates/nexus-governed-control/src/authority/evidence.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M65 crates/nexus-governed-control/src/authority/evidence.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M65 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M65 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M66: H.3(2) definition fields equal the original's
+OK   M66: H.3(3) historical review fields copied unchanged and marked historical
+OK   M66: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M66: source_sha256 lists exactly the files the control edits
+OK   M66 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M66 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M66 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M66 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M67: H.3(2) definition fields equal the original's
+OK   M67: H.3(3) historical review fields copied unchanged and marked historical
+OK   M67: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M67: source_sha256 lists exactly the files the control edits
+OK   M67 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M67 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M67 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M67 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M68: H.3(2) definition fields equal the original's
+OK   M68: H.3(3) historical review fields copied unchanged and marked historical
+OK   M68: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M68: source_sha256 lists exactly the files the control edits
+OK   M68 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M68 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M68 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M68 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M69: H.3(2) definition fields equal the original's
+OK   M69: H.3(3) historical review fields copied unchanged and marked historical
+OK   M69: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M69: source_sha256 lists exactly the files the control edits
+OK   M69 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M69 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M69 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M69 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M70: H.3(2) definition fields equal the original's
+OK   M70: H.3(3) historical review fields copied unchanged and marked historical
+OK   M70: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M70: source_sha256 lists exactly the files the control edits
+OK   M70 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M70 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M70 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M70 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M70 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M70 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M71: H.3(2) definition fields equal the original's
+OK   M71: H.3(3) historical review fields copied unchanged and marked historical
+OK   M71: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M71: source_sha256 lists exactly the files the control edits
+OK   M71 crates/nexus-governed-control/src/tool/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M71 crates/nexus-governed-control/src/tool/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M71 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M71 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M72: H.3(2) definition fields equal the original's
+OK   M72: H.3(3) historical review fields copied unchanged and marked historical
+OK   M72: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M72: source_sha256 lists exactly the files the control edits
+OK   M72 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M72 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M72 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M72 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M73: H.3(2) definition fields equal the original's
+OK   M73: H.3(3) historical review fields copied unchanged and marked historical
+OK   M73: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M73: source_sha256 lists exactly the files the control edits
+OK   M73 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M73 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M73 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M73 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M74: H.3(2) definition fields equal the original's
+OK   M74: H.3(3) historical review fields copied unchanged and marked historical
+OK   M74: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M74: source_sha256 lists exactly the files the control edits
+OK   M74 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M74 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M74 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M74 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M75: H.3(2) definition fields equal the original's
+OK   M75: H.3(3) historical review fields copied unchanged and marked historical
+OK   M75: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M75: source_sha256 lists exactly the files the control edits
+OK   M75 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M75 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M75 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M75 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M76: H.3(2) definition fields equal the original's
+OK   M76: H.3(3) historical review fields copied unchanged and marked historical
+OK   M76: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M76: source_sha256 lists exactly the files the control edits
+OK   M76 app/src-tauri/src/commands/agents.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M76 app/src-tauri/src/commands/agents.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M76 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M76 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M77: H.3(2) definition fields equal the original's
+OK   M77: H.3(3) historical review fields copied unchanged and marked historical
+OK   M77: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M77: source_sha256 lists exactly the files the control edits
+OK   M77 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M77 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M77 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M77 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M78: H.3(2) definition fields equal the original's
+OK   M78: H.3(3) historical review fields copied unchanged and marked historical
+OK   M78: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M78: source_sha256 lists exactly the files the control edits
+OK   M78 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M78 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M78 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M78 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M79: H.3(2) definition fields equal the original's
+OK   M79: H.3(3) historical review fields copied unchanged and marked historical
+OK   M79: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M79: source_sha256 lists exactly the files the control edits
+OK   M79 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M79 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M79 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M79 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M80: H.3(2) definition fields equal the original's
+OK   M80: H.3(3) historical review fields copied unchanged and marked historical
+OK   M80: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M80: source_sha256 lists exactly the files the control edits
+OK   M80 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M80 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M80 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M80 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M81: H.3(2) definition fields equal the original's
+OK   M81: H.3(3) historical review fields copied unchanged and marked historical
+OK   M81: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M81: source_sha256 lists exactly the files the control edits
+OK   M81 kernel/src/config.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M81 kernel/src/config.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M81 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M81 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M82: H.3(2) definition fields equal the original's
+OK   M82: H.3(3) historical review fields copied unchanged and marked historical
+OK   M82: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M82: source_sha256 lists exactly the files the control edits
+OK   M82 kernel/src/config.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M82 kernel/src/config.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M82 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M82 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M83: H.3(2) definition fields equal the original's
+OK   M83: H.3(3) historical review fields copied unchanged and marked historical
+OK   M83: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M83: source_sha256 lists exactly the files the control edits
+OK   M83 kernel/src/autopilot/stress_test.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M83 kernel/src/autopilot/stress_test.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M83 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M83 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M84: H.3(2) definition fields equal the original's
+OK   M84: H.3(3) historical review fields copied unchanged and marked historical
+OK   M84: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M84: source_sha256 lists exactly the files the control edits
+OK   M84 crates/nexus-governed-control/src/authority/approval.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M84 crates/nexus-governed-control/src/authority/approval.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M84 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M84 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M85: H.3(2) definition fields equal the original's
+OK   M85: H.3(3) historical review fields copied unchanged and marked historical
+OK   M85: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M85: source_sha256 lists exactly the files the control edits
+OK   M85 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M85 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M85 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M85 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M86: H.3(2) definition fields equal the original's
+OK   M86: H.3(3) historical review fields copied unchanged and marked historical
+OK   M86: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M86: source_sha256 lists exactly the files the control edits
+OK   M86 cli/Cargo.toml: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M86 cli/Cargo.toml: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M86 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M86 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M87: H.3(2) definition fields equal the original's
+OK   M87: H.3(3) historical review fields copied unchanged and marked historical
+OK   M87: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M87: source_sha256 lists exactly the files the control edits
+OK   M87 crates/nexus-governed-control/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M87 crates/nexus-governed-control/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M87 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M87 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M88: H.3(2) definition fields equal the original's
+OK   M88: H.3(3) historical review fields copied unchanged and marked historical
+OK   M88: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M88: source_sha256 lists exactly the files the control edits
+OK   M88 cli/Cargo.toml: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M88 cli/Cargo.toml: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M88 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M88 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M89: H.3(2) definition fields equal the original's
+OK   M89: H.3(3) historical review fields copied unchanged and marked historical
+OK   M89: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M89: source_sha256 lists exactly the files the control edits
+OK   M89 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M89 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M89 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M89 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M90: H.3(2) definition fields equal the original's
+OK   M90: H.3(3) historical review fields copied unchanged and marked historical
+OK   M90: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M90: source_sha256 lists exactly the files the control edits
+OK   M90 cli/Cargo.toml: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M90 cli/Cargo.toml: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M90 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M90 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M91: H.3(2) definition fields equal the original's
+OK   M91: H.3(3) historical review fields copied unchanged and marked historical
+OK   M91: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M91: source_sha256 lists exactly the files the control edits
+OK   M91 app/src-tauri/src/commands/enterprise.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M91 app/src-tauri/src/commands/enterprise.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M91 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M91 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M92: H.3(2) definition fields equal the original's
+OK   M92: H.3(3) historical review fields copied unchanged and marked historical
+OK   M92: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M92: source_sha256 lists exactly the files the control edits
+OK   M92 app/src-tauri/src/commands/enterprise.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M92 app/src-tauri/src/commands/enterprise.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M92 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M92 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M93: H.3(2) definition fields equal the original's
+OK   M93: H.3(3) historical review fields copied unchanged and marked historical
+OK   M93: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M93: source_sha256 lists exactly the files the control edits
+OK   M93 app/src-tauri/src/commands/enterprise.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M93 app/src-tauri/src/commands/enterprise.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M93 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M93 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M94: H.3(2) definition fields equal the original's
+OK   M94: H.3(3) historical review fields copied unchanged and marked historical
+OK   M94: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M94: source_sha256 lists exactly the files the control edits
+OK   M94 app/src-tauri/src/commands/agents.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M94 app/src-tauri/src/commands/agents.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M94 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M94 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M95: H.3(2) definition fields equal the original's
+OK   M95: H.3(3) historical review fields copied unchanged and marked historical
+OK   M95: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M95: source_sha256 lists exactly the files the control edits
+OK   M95 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M95 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M95 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M95 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M95 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M95 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M96: H.3(2) definition fields equal the original's
+OK   M96: H.3(3) historical review fields copied unchanged and marked historical
+OK   M96: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M96: source_sha256 lists exactly the files the control edits
+OK   M96 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M96 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M96 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M96 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M97: H.3(2) definition fields equal the original's
+OK   M97: H.3(3) historical review fields copied unchanged and marked historical
+OK   M97: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M97: source_sha256 lists exactly the files the control edits
+OK   M97 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M97 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M97 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M97 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M98: H.3(2) definition fields equal the original's
+OK   M98: H.3(3) historical review fields copied unchanged and marked historical
+OK   M98: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M98: source_sha256 lists exactly the files the control edits
+OK   M98 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M98 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M98 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M98 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M99: H.3(2) definition fields equal the original's
+OK   M99: H.3(3) historical review fields copied unchanged and marked historical
+OK   M99: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M99: source_sha256 lists exactly the files the control edits
+OK   M99 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M99 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M99 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M99 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M100: H.3(2) definition fields equal the original's
+OK   M100: H.3(3) historical review fields copied unchanged and marked historical
+OK   M100: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M100: source_sha256 lists exactly the files the control edits
+OK   M100 crates/nexus-governed-control/src/authority/evidence.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M100 crates/nexus-governed-control/src/authority/evidence.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M100 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M100 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M101: H.3(2) definition fields equal the original's
+OK   M101: H.3(3) historical review fields copied unchanged and marked historical
+OK   M101: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M101: source_sha256 lists exactly the files the control edits
+OK   M101 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M101 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M101 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M101 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M102: H.3(2) definition fields equal the original's
+OK   M102: H.3(3) historical review fields copied unchanged and marked historical
+OK   M102: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M102: source_sha256 lists exactly the files the control edits
+OK   M102 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M102 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M102 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M102 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M103: H.3(2) definition fields equal the original's
+OK   M103: H.3(3) historical review fields copied unchanged and marked historical
+OK   M103: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M103: source_sha256 lists exactly the files the control edits
+OK   M103 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M103 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M103 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M103 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M104: H.3(2) definition fields equal the original's
+OK   M104: H.3(3) historical review fields copied unchanged and marked historical
+OK   M104: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M104: source_sha256 lists exactly the files the control edits
+OK   M104 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M104 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M104 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M104 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M105: H.3(2) definition fields equal the original's
+OK   M105: H.3(3) historical review fields copied unchanged and marked historical
+OK   M105: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M105: source_sha256 lists exactly the files the control edits
+OK   M105 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M105 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M105 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M105 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M106: H.3(2) definition fields equal the original's
+OK   M106: H.3(3) historical review fields copied unchanged and marked historical
+OK   M106: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M106: source_sha256 lists exactly the files the control edits
+OK   M106 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M106 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M106 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M106 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M107: H.3(2) definition fields equal the original's
+OK   M107: H.3(3) historical review fields copied unchanged and marked historical
+OK   M107: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M107: source_sha256 lists exactly the files the control edits
+OK   M107 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M107 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M107 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M107 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M108: H.3(2) definition fields equal the original's
+OK   M108: H.3(3) historical review fields copied unchanged and marked historical
+OK   M108: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M108: source_sha256 lists exactly the files the control edits
+OK   M108 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M108 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M108 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M108 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M109: H.3(2) definition fields equal the original's
+OK   M109: H.3(3) historical review fields copied unchanged and marked historical
+OK   M109: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M109: source_sha256 lists exactly the files the control edits
+OK   M109 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M109 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M109 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M109 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M110: H.3(2) definition fields equal the original's
+OK   M110: H.3(3) historical review fields copied unchanged and marked historical
+OK   M110: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M110: source_sha256 lists exactly the files the control edits
+OK   M110 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M110 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M110 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M110 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M111: H.3(2) definition fields equal the original's
+OK   M111: H.3(3) historical review fields copied unchanged and marked historical
+OK   M111: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M111: source_sha256 lists exactly the files the control edits
+OK   M111 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M111 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M111 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M111 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M112: H.3(2) definition fields equal the original's
+OK   M112: H.3(3) historical review fields copied unchanged and marked historical
+OK   M112: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M112: source_sha256 lists exactly the files the control edits
+OK   M112 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M112 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M112 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M112 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M113: H.3(2) definition fields equal the original's
+OK   M113: H.3(3) historical review fields copied unchanged and marked historical
+OK   M113: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M113: source_sha256 lists exactly the files the control edits
+OK   M113 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M113 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M113 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M113 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M114: H.3(2) definition fields equal the original's
+OK   M114: H.3(3) historical review fields copied unchanged and marked historical
+OK   M114: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M114: source_sha256 lists exactly the files the control edits
+OK   M114 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M114 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M114 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M114 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M115: H.3(2) definition fields equal the original's
+OK   M115: H.3(3) historical review fields copied unchanged and marked historical
+OK   M115: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M115: source_sha256 lists exactly the files the control edits
+OK   M115 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M115 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M115 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M115 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M116: H.3(2) definition fields equal the original's
+OK   M116: H.3(3) historical review fields copied unchanged and marked historical
+OK   M116: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M116: source_sha256 lists exactly the files the control edits
+OK   M116 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M116 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M116 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M116 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M117: H.3(2) definition fields equal the original's
+OK   M117: H.3(3) historical review fields copied unchanged and marked historical
+OK   M117: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M117: source_sha256 lists exactly the files the control edits
+OK   M117 crates/nexus-governed-control/src/display/tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M117 crates/nexus-governed-control/src/display/tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M117 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M117 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M118: H.3(2) definition fields equal the original's
+OK   M118: H.3(3) historical review fields copied unchanged and marked historical
+OK   M118: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M118: source_sha256 lists exactly the files the control edits
+OK   M118 crates/nexus-governed-control/src/browser/tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M118 crates/nexus-governed-control/src/browser/tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M118 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M118 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M119: H.3(2) definition fields equal the original's
+OK   M119: H.3(3) historical review fields copied unchanged and marked historical
+OK   M119: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M119: source_sha256 lists exactly the files the control edits
+OK   M119 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M119 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M119 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M119 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M120: H.3(2) definition fields equal the original's
+OK   M120: H.3(3) historical review fields copied unchanged and marked historical
+OK   M120: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M120: source_sha256 lists exactly the files the control edits
+OK   M120 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M120 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M120 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M120 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M121: H.3(2) definition fields equal the original's
+OK   M121: H.3(3) historical review fields copied unchanged and marked historical
+OK   M121: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M121: source_sha256 lists exactly the files the control edits
+OK   M121 crates/nexus-governed-control/src/authority/policy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M121 crates/nexus-governed-control/src/authority/policy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M121 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M121 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M122: H.3(2) definition fields equal the original's
+OK   M122: H.3(3) historical review fields copied unchanged and marked historical
+OK   M122: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M122: source_sha256 lists exactly the files the control edits
+OK   M122 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M122 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M122 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M122 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M123: H.3(2) definition fields equal the original's
+OK   M123: H.3(3) historical review fields copied unchanged and marked historical
+OK   M123: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M123: source_sha256 lists exactly the files the control edits
+OK   M123 app/src/pages/GovernedControl.tsx: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M123 app/src/pages/GovernedControl.tsx: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M123 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M123 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M124: H.3(2) definition fields equal the original's
+OK   M124: H.3(3) historical review fields copied unchanged and marked historical
+OK   M124: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M124: source_sha256 lists exactly the files the control edits
+OK   M124 app/src/pages/GovernedControl.tsx: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M124 app/src/pages/GovernedControl.tsx: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M124 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M124 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M125: H.3(2) definition fields equal the original's
+OK   M125: H.3(3) historical review fields copied unchanged and marked historical
+OK   M125: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M125: source_sha256 lists exactly the files the control edits
+OK   M125 app/src-tauri/src/commands/agents.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M125 app/src-tauri/src/commands/agents.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M125 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M125 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M126: H.3(2) definition fields equal the original's
+OK   M126: H.3(3) historical review fields copied unchanged and marked historical
+OK   M126: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M126: source_sha256 lists exactly the files the control edits
+OK   M126 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M126 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M126 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M126 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M127: H.3(2) definition fields equal the original's
+OK   M127: H.3(3) historical review fields copied unchanged and marked historical
+OK   M127: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M127: source_sha256 lists exactly the files the control edits
+OK   M127 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M127 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M127 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M127 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M128: H.3(2) definition fields equal the original's
+OK   M128: H.3(3) historical review fields copied unchanged and marked historical
+OK   M128: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M128: source_sha256 lists exactly the files the control edits
+OK   M128 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M128 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M128 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M128 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M129: H.3(2) definition fields equal the original's
+OK   M129: H.3(3) historical review fields copied unchanged and marked historical
+OK   M129: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M129: source_sha256 lists exactly the files the control edits
+OK   M129 crates/nexus-governed-control/src/authority/run.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M129 crates/nexus-governed-control/src/authority/run.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M129 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M129 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M130: H.3(2) definition fields equal the original's
+OK   M130: H.3(3) historical review fields copied unchanged and marked historical
+OK   M130: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M130: source_sha256 lists exactly the files the control edits
+OK   M130 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M130 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M130 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M130 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M131: H.3(2) definition fields equal the original's
+OK   M131: H.3(3) historical review fields copied unchanged and marked historical
+OK   M131: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M131: source_sha256 lists exactly the files the control edits
+OK   M131 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M131 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M131 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M131 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M132: H.3(2) definition fields equal the original's
+OK   M132: H.3(3) historical review fields copied unchanged and marked historical
+OK   M132: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M132: source_sha256 lists exactly the files the control edits
+OK   M132 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M132 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M132 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M132 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M133: H.3(2) definition fields equal the original's
+OK   M133: H.3(3) historical review fields copied unchanged and marked historical
+OK   M133: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M133: source_sha256 lists exactly the files the control edits
+OK   M133 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M133 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M133 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M133 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M134: H.3(2) definition fields equal the original's
+OK   M134: H.3(3) historical review fields copied unchanged and marked historical
+OK   M134: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M134: source_sha256 lists exactly the files the control edits
+OK   M134 crates/nexus-governed-control/src/authority/evidence.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M134 crates/nexus-governed-control/src/authority/evidence.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M134 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M134 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M135: H.3(2) definition fields equal the original's
+OK   M135: H.3(3) historical review fields copied unchanged and marked historical
+OK   M135: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M135: source_sha256 lists exactly the files the control edits
+OK   M135 crates/nexus-governed-control/src/control.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M135 crates/nexus-governed-control/src/control.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M135 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M135 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M136: H.3(2) definition fields equal the original's
+OK   M136: H.3(3) historical review fields copied unchanged and marked historical
+OK   M136: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M136: source_sha256 lists exactly the files the control edits
+OK   M136 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M136 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M136 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M136 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M137: H.3(2) definition fields equal the original's
+OK   M137: H.3(3) historical review fields copied unchanged and marked historical
+OK   M137: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M137: source_sha256 lists exactly the files the control edits
+OK   M137 crates/nexus-governed-control/src/authority/commitment.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M137 crates/nexus-governed-control/src/authority/commitment.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M137 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M137 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M138: H.3(2) definition fields equal the original's
+OK   M138: H.3(3) historical review fields copied unchanged and marked historical
+OK   M138: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M138: source_sha256 lists exactly the files the control edits
+OK   M138 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M138 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M138 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M138 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M139: H.3(2) definition fields equal the original's
+OK   M139: H.3(3) historical review fields copied unchanged and marked historical
+OK   M139: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M139: source_sha256 lists exactly the files the control edits
+OK   M139 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M139 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M139 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M139 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M140: H.3(2) definition fields equal the original's
+OK   M140: H.3(3) historical review fields copied unchanged and marked historical
+OK   M140: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M140: source_sha256 lists exactly the files the control edits
+OK   M140 crates/nexus-governed-control/src/runtime_root.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M140 crates/nexus-governed-control/src/runtime_root.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M140 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M140 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M141: H.3(2) definition fields equal the original's
+OK   M141: H.3(3) historical review fields copied unchanged and marked historical
+OK   M141: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M141: source_sha256 lists exactly the files the control edits
+OK   M141 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M141 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M141 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M141 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M142: H.3(2) definition fields equal the original's
+OK   M142: H.3(3) historical review fields copied unchanged and marked historical
+OK   M142: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M142: source_sha256 lists exactly the files the control edits
+OK   M142 app/src-tauri/src/commands/flash.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M142 app/src-tauri/src/commands/flash.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M142 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M142 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M143: H.3(2) definition fields equal the original's
+OK   M143: H.3(3) historical review fields copied unchanged and marked historical
+OK   M143: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M143: source_sha256 lists exactly the files the control edits
+OK   M143 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M143 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M143 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M143 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M144: H.3(2) definition fields equal the original's
+OK   M144: H.3(3) historical review fields copied unchanged and marked historical
+OK   M144: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M144: source_sha256 lists exactly the files the control edits
+OK   M144 app/src-tauri/src/commands/enterprise.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M144 app/src-tauri/src/commands/enterprise.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M144 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M144 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M145: H.3(2) definition fields equal the original's
+OK   M145: H.3(3) historical review fields copied unchanged and marked historical
+OK   M145: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M145: source_sha256 lists exactly the files the control edits
+OK   M145 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M145 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M145 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M145 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M146: H.3(2) definition fields equal the original's
+OK   M146: H.3(3) historical review fields copied unchanged and marked historical
+OK   M146: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M146: source_sha256 lists exactly the files the control edits
+OK   M146 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M146 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M146 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M146 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M147: H.3(2) definition fields equal the original's
+OK   M147: H.3(3) historical review fields copied unchanged and marked historical
+OK   M147: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M147: source_sha256 lists exactly the files the control edits
+OK   M147 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M147 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M147 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M147 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M148: H.3(2) definition fields equal the original's
+OK   M148: H.3(3) historical review fields copied unchanged and marked historical
+OK   M148: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M148: source_sha256 lists exactly the files the control edits
+OK   M148 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M148 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M148 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M148 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M149: H.3(2) definition fields equal the original's
+OK   M149: H.3(3) historical review fields copied unchanged and marked historical
+OK   M149: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M149: source_sha256 lists exactly the files the control edits
+OK   M149 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M149 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M149 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M149 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M150: H.3(2) definition fields equal the original's
+OK   M150: H.3(3) historical review fields copied unchanged and marked historical
+OK   M150: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M150: source_sha256 lists exactly the files the control edits
+OK   M150 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M150 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M150 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M150 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M151: H.3(2) definition fields equal the original's
+OK   M151: H.3(3) historical review fields copied unchanged and marked historical
+OK   M151: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M151: source_sha256 lists exactly the files the control edits
+OK   M151 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M151 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M151 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M151 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M152: H.3(2) definition fields equal the original's
+OK   M152: H.3(3) historical review fields copied unchanged and marked historical
+OK   M152: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M152: source_sha256 lists exactly the files the control edits
+OK   M152 app/src-tauri/src/commands/flash.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M152 app/src-tauri/src/commands/flash.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M152 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M152 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M153: H.3(2) definition fields equal the original's
+OK   M153: H.3(3) historical review fields copied unchanged and marked historical
+OK   M153: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M153: source_sha256 lists exactly the files the control edits
+OK   M153 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M153 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M153 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M153 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M154: H.3(2) definition fields equal the original's
+OK   M154: H.3(3) historical review fields copied unchanged and marked historical
+OK   M154: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M154: source_sha256 lists exactly the files the control edits
+OK   M154 app/src-tauri/src/commands/agents.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M154 app/src-tauri/src/commands/agents.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M154 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M154 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M155: H.3(2) definition fields equal the original's
+OK   M155: H.3(3) historical review fields copied unchanged and marked historical
+OK   M155: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M155: source_sha256 lists exactly the files the control edits
+OK   M155 app/src-tauri/src/commands/agents.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M155 app/src-tauri/src/commands/agents.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M155 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M155 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M156: H.3(2) definition fields equal the original's
+OK   M156: H.3(3) historical review fields copied unchanged and marked historical
+OK   M156: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M156: source_sha256 lists exactly the files the control edits
+OK   M156 crates/nexus-governed-control/src/browser/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M156 crates/nexus-governed-control/src/browser/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M156 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M156 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M157: H.3(2) definition fields equal the original's
+OK   M157: H.3(3) historical review fields copied unchanged and marked historical
+OK   M157: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M157: source_sha256 lists exactly the files the control edits
+OK   M157 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M157 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M157 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M157 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M158: H.3(2) definition fields equal the original's
+OK   M158: H.3(3) historical review fields copied unchanged and marked historical
+OK   M158: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M158: source_sha256 lists exactly the files the control edits
+OK   M158 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M158 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M158 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M158 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M159: H.3(2) definition fields equal the original's
+OK   M159: H.3(3) historical review fields copied unchanged and marked historical
+OK   M159: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M159: source_sha256 lists exactly the files the control edits
+OK   M159 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M159 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M159 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M159 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M160: H.3(2) definition fields equal the original's
+OK   M160: H.3(3) historical review fields copied unchanged and marked historical
+OK   M160: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M160: source_sha256 lists exactly the files the control edits
+OK   M160 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M160 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M160 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M160 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M160 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M160 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M161: H.3(2) definition fields equal the original's
+OK   M161: H.3(3) historical review fields copied unchanged and marked historical
+OK   M161: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M161: source_sha256 lists exactly the files the control edits
+OK   M161 app/src-tauri/src/governed_real_world.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M161 app/src-tauri/src/governed_real_world.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M161 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M161 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M162: H.3(2) definition fields equal the original's
+OK   M162: H.3(3) historical review fields copied unchanged and marked historical
+OK   M162: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M162: source_sha256 lists exactly the files the control edits
+OK   M162 crates/nexus-governed-control/src/runtime_root.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M162 crates/nexus-governed-control/src/runtime_root.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M162 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M162 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M163: H.3(2) definition fields equal the original's
+OK   M163: H.3(3) historical review fields copied unchanged and marked historical
+OK   M163: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M163: source_sha256 lists exactly the files the control edits
+OK   M163 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M163 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M163 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M163 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M164: H.3(2) definition fields equal the original's
+OK   M164: H.3(3) historical review fields copied unchanged and marked historical
+OK   M164: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M164: source_sha256 lists exactly the files the control edits
+OK   M164 crates/nexus-governed-control/src/egress/transport.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M164 crates/nexus-governed-control/src/egress/transport.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M164 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M164 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M165: H.3(2) definition fields equal the original's
+OK   M165: H.3(3) historical review fields copied unchanged and marked historical
+OK   M165: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M165: source_sha256 lists exactly the files the control edits
+OK   M165 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M165 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M165 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M165 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M166: H.3(2) definition fields equal the original's
+OK   M166: H.3(3) historical review fields copied unchanged and marked historical
+OK   M166: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M166: source_sha256 lists exactly the files the control edits
+OK   M166 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M166 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M166 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M166 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M166 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M166 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M166 edit 2: H.5 anchor occurs exactly count=1 times at application
+OK   M166 edit 2: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M167: H.3(2) definition fields equal the original's
+OK   M167: H.3(3) historical review fields copied unchanged and marked historical
+OK   M167: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M167: source_sha256 lists exactly the files the control edits
+OK   M167 crates/nexus-governed-control/src/display/server.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M167 crates/nexus-governed-control/src/display/server.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M167 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M167 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M168: H.3(2) definition fields equal the original's
+OK   M168: H.3(3) historical review fields copied unchanged and marked historical
+OK   M168: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M168: source_sha256 lists exactly the files the control edits
+OK   M168 crates/nexus-governed-control/src/display/mod.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M168 crates/nexus-governed-control/src/display/mod.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M168 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M168 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M169: H.3(2) definition fields equal the original's
+OK   M169: H.3(3) historical review fields copied unchanged and marked historical
+OK   M169: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M169: source_sha256 lists exactly the files the control edits
+OK   M169 crates/nexus-governed-control/src/governed.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M169 crates/nexus-governed-control/src/governed.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M169 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M169 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M170: H.3(2) definition fields equal the original's
+OK   M170: H.3(3) historical review fields copied unchanged and marked historical
+OK   M170: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M170: source_sha256 lists exactly the files the control edits
+OK   M170 crates/nexus-governed-control/src/runtime_root.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M170 crates/nexus-governed-control/src/runtime_root.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M170 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M170 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M171: H.3(2) definition fields equal the original's
+OK   M171: H.3(3) historical review fields copied unchanged and marked historical
+OK   M171: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M171: source_sha256 lists exactly the files the control edits
+OK   M171 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M171 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M171 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M171 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M172: H.3(2) definition fields equal the original's
+OK   M172: H.3(3) historical review fields copied unchanged and marked historical
+OK   M172: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M172: source_sha256 lists exactly the files the control edits
+OK   M172 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M172 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M172 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M172 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M173: H.3(2) definition fields equal the original's
+OK   M173: H.3(3) historical review fields copied unchanged and marked historical
+OK   M173: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M173: source_sha256 lists exactly the files the control edits
+OK   M173 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M173 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M173 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M173 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M174: H.3(2) definition fields equal the original's
+OK   M174: H.3(3) historical review fields copied unchanged and marked historical
+OK   M174: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M174: source_sha256 lists exactly the files the control edits
+OK   M174 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M174 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M174 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M174 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M175: H.3(2) definition fields equal the original's
+OK   M175: H.3(3) historical review fields copied unchanged and marked historical
+OK   M175: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M175: source_sha256 lists exactly the files the control edits
+OK   M175 app/src-tauri/src/commands/cognitive.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M175 app/src-tauri/src/commands/cognitive.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M175 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M175 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M176: H.3(2) definition fields equal the original's
+OK   M176: H.3(3) historical review fields copied unchanged and marked historical
+OK   M176: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M176: source_sha256 lists exactly the files the control edits
+OK   M176 app/src-tauri/src/commands/flash.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M176 app/src-tauri/src/commands/flash.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M176 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M176 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M177: H.3(2) definition fields equal the original's
+OK   M177: H.3(3) historical review fields copied unchanged and marked historical
+OK   M177: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M177: source_sha256 lists exactly the files the control edits
+OK   M177 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M177 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M177 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M177 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M178: H.3(2) definition fields equal the original's
+OK   M178: H.3(3) historical review fields copied unchanged and marked historical
+OK   M178: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M178: source_sha256 lists exactly the files the control edits
+OK   M178 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M178 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M178 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M178 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M179: H.3(2) definition fields equal the original's
+OK   M179: H.3(3) historical review fields copied unchanged and marked historical
+OK   M179: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M179: source_sha256 lists exactly the files the control edits
+OK   M179 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M179 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M179 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M179 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M180: H.3(2) definition fields equal the original's
+OK   M180: H.3(3) historical review fields copied unchanged and marked historical
+OK   M180: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M180: source_sha256 lists exactly the files the control edits
+OK   M180 app/src-tauri/src/phase3_tests.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M180 app/src-tauri/src/phase3_tests.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M180 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M180 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M181: H.3(2) definition fields equal the original's
+OK   M181: H.3(3) historical review fields copied unchanged and marked historical
+OK   M181: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M181: source_sha256 lists exactly the files the control edits
+OK   M181 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M181 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M181 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M181 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M182: H.3(2) definition fields equal the original's
+OK   M182: H.3(3) historical review fields copied unchanged and marked historical
+OK   M182: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M182: source_sha256 lists exactly the files the control edits
+OK   M182 crates/nexus-governed-control/src/browser/proxy.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M182 crates/nexus-governed-control/src/browser/proxy.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M182 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M182 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   M183: H.3(2) definition fields equal the original's
+OK   M183: H.3(3) historical review fields copied unchanged and marked historical
+OK   M183: H.3(4) current review status is 'pending' (no string confers acceptance)
+OK   M183: source_sha256 lists exactly the files the control edits
+OK   M183 app/src-tauri/src/lib.rs: H.3(5)/H.5 recorded source_sha256 equals the file at C
+OK   M183 app/src-tauri/src/lib.rs: ct-1 current_tree record (sha, blob, equality flag) equals the recomputation
+OK   M183 edit 1: H.5 anchor occurs exactly count=1 times at application
+OK   M183 edit 1: ct-1 anchor record equals the recomputation (unedited count, count at application, lines)
+OK   counts: 183 controls, 184 control-file pairs, 39 source files, 191 anchors
+OK   counts: 162 pairs equal their historical hash, 22 differ
+OK   the 22 changed pairs are exactly AD-1-R4 H.4's two sets (15 D2A-1, 7 earlier)
+OK   ct-1 summary's differing_pairs equals the recomputation
+OK   ct-1 summary counts equal the recomputation
+OK   H.5: the original manifest's sha256 at C is still 2c4adc84...
+OK   M05: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M05: first-stale commit found on C's first-parent line
+OK   M05: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M05: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M18: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M18: first-stale commit found on C's first-parent line
+OK   M18: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M18: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M19: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M19: first-stale commit found on C's first-parent line
+OK   M19: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M19: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M32: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M32: first-stale commit found on C's first-parent line
+OK   M32: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M32: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M32: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M39: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M39: first-stale commit found on C's first-parent line
+OK   M39: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M39: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M45: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M45: first-stale commit found on C's first-parent line
+OK   M45: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M45: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M78: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M78: first-stale commit found on C's first-parent line
+OK   M78: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M78: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M78: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M79: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M79: first-stale commit found on C's first-parent line
+OK   M79: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M79: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M79: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M80: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M80: first-stale commit found on C's first-parent line
+OK   M80: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M80: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M80: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M84: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M84: first-stale commit found on C's first-parent line
+OK   M84: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M84: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M87: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M87: first-stale commit found on C's first-parent line
+OK   M87: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M87: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M87: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M89: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M89: first-stale commit found on C's first-parent line
+OK   M89: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M89: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M89: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M112: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M112: first-stale commit found on C's first-parent line
+OK   M112: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M112: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M112: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M113: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M113: first-stale commit found on C's first-parent line
+OK   M113: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M113: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M113: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M129: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M129: first-stale commit found on C's first-parent line
+OK   M129: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M129: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M141: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M141: first-stale commit found on C's first-parent line
+OK   M141: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M141: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M141: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M143: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M143: first-stale commit found on C's first-parent line
+OK   M143: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M143: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M143: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M153: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M153: first-stale commit found on C's first-parent line
+OK   M153: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M153: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M153: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M177: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M177: first-stale commit found on C's first-parent line
+OK   M177: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M177: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M177: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M178: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M178: first-stale commit found on C's first-parent line
+OK   M178: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M178: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M178: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M179: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M179: first-stale commit found on C's first-parent line
+OK   M179: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M179: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M179: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+OK   M180: the historical base holds the recorded hash, so 'stale' is measured from it
+OK   M180: first-stale commit found on C's first-parent line
+OK   M180: anchors, replacements, command and expected tests unchanged (definition equal)
+OK   M180: every expected-failure test body is byte-identical between 9d5fdf95 and C (one definition each)
+OK   M180: D2A-1 set: first stale at the D2A-1 source commit 22ebf9a5
+
+RESULT: 1601 of 1601 checks hold; 0 fail

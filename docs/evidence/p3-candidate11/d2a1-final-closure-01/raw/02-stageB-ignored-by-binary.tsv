@@ -1,0 +1,80 @@
+binary	test	reason
+ide_features-e2bd9ed56f48f37a	test_project_init_rust	requires Ollama with a deployed model
+designer_agent-d80ccefd9f63989c	test_design_generation	requires Ollama with a deployed model
+designer_agent-d80ccefd9f63989c	test_screenshot_analysis	requires Ollama with a deployed model
+nexus_capability_measurement-1569eff64701d67a	evaluation::nim_client::tests::test_real_nim_adapter_single_agent	
+nexus_capability_measurement-1569eff64701d67a	evaluation::openrouter_client::tests::test_real_openrouter_query	Requires OPENROUTER_API_KEY
+nexus_capability_measurement-1569eff64701d67a	evaluation::validation_run::tests::execute_run1_pre_bugfix_baseline	
+nexus_capability_measurement-1569eff64701d67a	evaluation::validation_run::tests::execute_run2_and_three_way_comparison	
+nexus_computer_use-02140f01b6a39f40	capture::screenshot::tests::test_backend_detection_real	
+nexus_computer_use-02140f01b6a39f40	capture::screenshot::tests::test_real_capture	
+nexus_computer_use-02140f01b6a39f40	capture::screenshot::tests::test_real_capture_with_region	
+nexus_computer_use-02140f01b6a39f40	governance::app_registry::tests::test_real_focused_app	
+nexus_computer_use-02140f01b6a39f40	governance::app_registry::tests::test_real_list_windows	
+nexus_computer_use-02140f01b6a39f40	governance::app_registry::tests::test_real_wm_class_detection	
+nexus_computer_use-02140f01b6a39f40	input::keyboard::tests::test_real_type_text	
+nexus_computer_use-02140f01b6a39f40	input::mouse::tests::test_real_get_position	
+nexus_computer_use-02140f01b6a39f40	input::mouse::tests::test_real_mouse_move	
+nexus_desktop_backend-6e974b81909e90e3	builder_workspace::process_lifecycle::tests::c4b_fixture_crash	
+nexus_desktop_backend-6e974b81909e90e3	builder_workspace::process_lifecycle::tests::c4b_fixture_delayed_exit	
+nexus_desktop_backend-6e974b81909e90e3	builder_workspace::process_lifecycle::tests::c4b_fixture_descendant	
+nexus_desktop_backend-6e974b81909e90e3	builder_workspace::process_lifecycle::tests::c4b_fixture_hold	
+nexus_desktop_backend-6e974b81909e90e3	builder_workspace::process_lifecycle::tests::c4b_fixture_root_exit	
+webview_boundary_live-d39bf6e05c108272	webview_boundary_live	(pass `-- --ignored` to run)
+nexus_governed_control-a7b441620dedae4f	authority::tests::stop_measurement::rs01_t10_the_registry_stop_seen_from_outside_its_lock	RS-01 T10: a diagnostic measurement, run only by its own command after T10a
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f1	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f2	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f3	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f4	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f5	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f6	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f7	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_f8	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fb	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fb2	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fd	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fg	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fpt	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fr	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::full_fw	full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::gc_symmetry_f3	experimental gating-caller symmetry quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::gc_symmetry_fb	experimental gating-caller symmetry quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::gc_symmetry_fpt	experimental gating-caller symmetry quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::gc_symmetry_prefix_f3	experimental gating-caller symmetry quotient: a bounded F-3 prefix, run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f1	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f2	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f3	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f4	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f5	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f6	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f7	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_f8	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fb	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fb2	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fd	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fg	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fpt	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fr	experimental admission observer quotient: run only when an Architect mission names it
+nexus_governed_control-a7b441620dedae4f	ledger::protocol::model_tests::quotient_full_fw	experimental admission observer quotient: run only when an Architect mission names it
+nexus_kernel-76743e5c6daefea0	secrets::backend_keyring::ak_commit4_tests::live_round_trip	
+nexus_kernel-76743e5c6daefea0	supervisor::tests::test_supervisor_config_from_env_with_invalid_value_uses_default	
+nexus_kernel-76743e5c6daefea0	supervisor::tests::test_supervisor_config_from_env_with_valid_values	
+resource_limiter_integration_tests-b947c10b3959a579	helper_attempt_spawn	
+resource_limiter_integration_tests-b947c10b3959a579	helper_cpu	
+resource_limiter_integration_tests-b947c10b3959a579	helper_direct	
+resource_limiter_integration_tests-b947c10b3959a579	helper_exit	
+resource_limiter_integration_tests-b947c10b3959a579	helper_linux_limits	
+resource_limiter_integration_tests-b947c10b3959a579	helper_root_exit	
+resource_limiter_integration_tests-b947c10b3959a579	helper_tree	
+sealed_spawn_tests-72dd1e4ccd0643ac	sealed_exit	
+sealed_spawn_tests-72dd1e4ccd0643ac	sealed_hold	
+sealed_spawn_tests-72dd1e4ccd0643ac	sealed_middle	
+sealed_spawn_tests-72dd1e4ccd0643ac	sealed_report	
+sealed_spawn_tests-72dd1e4ccd0643ac	sealed_tree	
+nexus_persistence-64df584b06e4d698	tests::perf_swarm_audit_1000_row_insert_then_query	
+phase1_teams-b72db6a88727a2e8	drive_builder_teams_end_to_end	Phase 1.5 — requires specialists wired in Phase 1.2-1.4
+vision_judge-bedbcec031649ae8	integration_real_codex_call	requires real Codex CLI + ChatGPT Plus credentials; run manually
+xvfb_smoke-a717fa6f773d6b59	xvfb_session_input_calls_run_without_panic	structural; requires Xvfb. Run with -- --ignored
+xvfb_smoke-a717fa6f773d6b59	xvfb_session_spawns_and_capture_runs_without_panic	structural; requires Xvfb. Run with -- --ignored
+doc-tests nexus_integration	tests/integration/src/swarm_harness/prelude.rs - swarm_harness::prelude (line 4)	
+doc-tests nexus_migrate	crates/nexus-migrate/src/tauri_commands.rs - tauri_commands::_command_signatures (line 98)	

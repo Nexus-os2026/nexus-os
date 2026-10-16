@@ -1,0 +1,16 @@
+435c435,439
+<     good = sup["disk"]["triggered"] == "stop" and proc["signal"] in (15, 9) and (sup["wall_seconds"] or 99) < 30
+---
+>     # SIGTERM to the scope ends scope-wrap.sh and /usr/bin/time too, so no time -v record exists; the evidence is the
+>     # monitor's trigger, the signal accepted for this scope, the launcher's early return and the scope being gone
+>     good = (sup["disk"]["triggered"] == "stop" and proc["supervisor_rc"] in (-15, -9, 143, 137)
+>             and sup["launcher_elapsed_seconds"] < 30 and sup["scope_show"].get("ActiveState") == "inactive"
+>             and any("--signal=SIGTERM" in e and "rc 0" in e for e in sup["disk"]["events"]))
+448c452
+<     add("pre: supervision self-test PASS", stage_ok("41-supervision-selftest"))
+---
+>     add("pre: supervision self-test PASS", stage_ok("41b-supervision-selftest-r1"))
+501c505
+<     add("pre: supervision self-test PASS", stage_ok("41-supervision-selftest"))
+---
+>     add("pre: supervision self-test PASS", stage_ok("41b-supervision-selftest-r1"))

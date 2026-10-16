@@ -1,0 +1,52 @@
+FINAL CONSISTENCY CHECK of /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-final-closure-01
+OK   required outputs: all present and non-empty
+OK   source: commit/tree/parent of Candidate C equal Git
+OK   source: every recorded source file blob and sha256 equal Git at C
+OK   source: the three ledger blobs are the governing ones
+OK   contract: sha256 of the authenticated copy
+OK   contract: AD-1-R4, AD-1-R5, AD-C7-W identities equal Git
+OK   manifests: ct-1 and the historical 183 manifest identities equal Git
+OK   prior root p3-c11-dr01-d2a1-exact-source-validation-02: manifest sha256 as stated and every entry verifies
+OK   prior root p3-c11-dr01-d2a1-closure-evidence-audit-01: manifest sha256 as stated and every entry verifies
+OK   prior root p3-c11-dr01-d2a1-closure-packet-01: manifest sha256 as stated and every entry verifies
+OK   packet custody receipt: 19 of 19 Git evidence packets verify
+OK   mutations: exactly the catalog's 35 control ids, each once
+OK   mutations: every decision ACCEPTED with a stated provenance
+OK   mutations: exactly C4 and C7 are conversational rulings; the other 33 cite Git records
+OK   mutations: no executor RESULT record relabelled (bytes equal Git)
+OK   mutations: every accepted failing receipt present in Git with the recorded sha256
+OK   mutations: every cited ruling record exists in Git with its blob
+OK   mutations: recordings exactly C1, C25, C4, C7
+OK   mutations: C7's original F-PT first failure is E11, never P6
+OK   configurations: all 20 accounted for
+OK   configurations: 19 PASS and F-R INCOMPLETE
+OK   configurations: F-R's discharge named exactly as AD-1-R5 D
+OK   configurations: quotient runs only for F-3, F-PT, F-B
+OK   configurations: every full-run raw sha256 equals the H.6-bound hash
+OK   branches: 193 rows, 85 / 3 / 105
+OK   branches: no unobserved row marked covered; classification follows the measured columns only
+OK   183: alignment identities equal Git (ct-1 blob/sha256, C)
+OK   183: counts 183/184/39/191, 162 equal, 22 changed
+OK   183: 183 rows; every current status 'pending'; no acceptance recorded
+OK   183: the attestation keeps every current review status pending
+OK   Fast Local: verdict recorded as FAST_LOCAL_NOT_FULLY_DISCHARGED
+OK   Fast Local: the all-features Clippy receipt is present, PASS, and equal to its bound hash
+OK   Fast Local: that receipt ran exactly the workflow's Clippy command
+OK   Fast Local: the matrix lists all 31 workflow steps; 21 not discharged
+OK   H.6: attestation binds Candidate C exactly
+OK   H.6: detached — outside every worktree, and its blob is in no Git object store
+OK   H.6: status is CANDIDATE — PENDING_DECISIONS
+OK   H.6: every Git-bound input path exists
+OK   provenance: C4 and C7 stated as having no Git record
+OK   provenance: no claimed signature
+OK   provenance: every ARCHITECT-RULING record named exists in Git
+OK   no source change: primary checkout clean at its starting HEAD
+OK   no publication: protected and evidence refs unchanged
+OK   no publication: no ref names this mission
+OK   no source change: the mission worktree's tracked bytes are exactly C
+OK   no prohibited F-R wording anywhere in the packet's documents
+OK   no Section 11 label: the label text appears only as the docket's quotation; FINAL-STATE says WITHHELD
+OK   no acceptance, integration or Phase Three completion claim (every such phrase is negated)
+OK   FINAL-STATE: one allowed classification and the six status fields
+
+RESULT: 49 of 49 checks hold; 0 fail

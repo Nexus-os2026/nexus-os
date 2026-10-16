@@ -1,0 +1,175 @@
+{
+ "mission": "P3-C11-DR01-D2A1-FINAL-CLOSURE-01",
+ "recorded_utc": "2026-10-16T14:45:45Z",
+ "note": "Every value was read from a Git object or a file and re-hashed by this mission. A hash authenticates bytes, not the truth of their content.",
+ "primary_repository": {
+  "path": "/home/nexus/NEXUS/nexus-os",
+  "head": "f727f5c39fab8d5c729a55eb28ad576d3d56ce47",
+  "tree": "8106ec232a494a3e9b857c7986f85eee3a7888b9",
+  "branch": "rebuild/phase0-trust-boundary",
+  "status": "clean (porcelain v2 empty; upstream +0 -0)",
+  "local_main": "4b36f60694148b60029733bc7b3d26e5a215d460",
+  "remote_tracking_main": "6e15dee613ea35823d1adbf6d8917ed59eeda583",
+  "remote_tracking_authoritative": "f727f5c39fab8d5c729a55eb28ad576d3d56ce47"
+ },
+ "candidate_C": {
+  "commit": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "parent": "71264aa81a40b86189783facc8437e0427887c16",
+  "subject": "docs(evidence): add the current-tree 183-control manifest ct-1 and the AD-1-R4 adoption record",
+  "tracked_entries": 5364,
+  "tracked_bytes": 97246341,
+  "files": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": {
+    "blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+    "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": {
+    "blob": "28085ce232827301104b5d757af042ec933976f8",
+    "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"
+   },
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": {
+    "blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+    "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159"
+   },
+   "Cargo.lock": {
+    "blob": "1af53a60aaf6fde5731e63fcd5b6cd11d86f669a",
+    "sha256": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979"
+   },
+   "Cargo.toml": {
+    "blob": "2c558a4477d1545daaa489f0a0e502b4284ad479",
+    "sha256": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795"
+   },
+   "rust-toolchain.toml": {
+    "blob": "726005b29561a04536edea412bf551a9884d6639",
+    "sha256": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298"
+   },
+   ".cargo/config.toml": {
+    "blob": "05a42b50174e235b183b220afeb58922c96d17a1",
+    "sha256": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234"
+   },
+   ".github/workflows/ci-fast-local.yml": {
+    "blob": "fa4f732535701d9b3d67a92593eea0d303df2a83",
+    "sha256": "583311baaedd2b02320539e48a1949305e1a7a38e1dbec065e4f3174d36753a3"
+   },
+   "crates/nexus-governed-control/Cargo.toml": {
+    "blob": "2543c745d661203326367962714b94c811e07980",
+    "sha256": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f"
+   },
+   "crates/nexus-governed-control/src/lib.rs": {
+    "blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+    "sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d"
+   },
+   "crates/nexus-governed-control/src/ledger.rs": {
+    "blob": "d872b90816fdd18cca8e5d1a0005bb49434aaf2a",
+    "sha256": "d37983f6b040f67fd012f1bc4d040523a254d5d0557a39edfa40dd9dffe99215"
+   }
+  }
+ },
+ "pinned_executable_E_C": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464,
+  "build": "final-baseline-known-runs-01 receipts/10-build: cargo test -p nexus-governed-control --locked --release --lib --no-run; rustc 1.94.0 (4a4ef493e 2026-03-02); opt-level=3, lto=thin, codegen-units=16, strip=symbols",
+  "rehashed_now": "equal (raw/00-git-auth-3.txt); not executed"
+ },
+ "toolchain": {
+  "rustc": "1.94.0 (4a4ef493e 2026-03-02)",
+  "cargo": "1.94.0 (85eff7c80 2026-01-15)",
+  "clippy": "0.1.94 (4a4ef493e3 2026-03-02)",
+  "rustfmt": "1.8.0-stable (4a4ef493e3 2026-03-02)"
+ },
+ "contract": {
+  "id": "P3-C11-D2A1-CONTRACT-02-R1",
+  "sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+  "bytes": 107331,
+  "lines": 1462,
+  "authenticated_copy": "docs/evidence/p3-candidate11/ad1r2-review-packet-01/evidence/p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/P3-C11-D2A1-CONTRACT-02-R1.md at 8693e3a7 (blob a5ef321a); also the local copy in p3-c11-dr01-d2a1-ad1r1-mut-readiness-01/contract/ (equal sha256); NOT in Candidate C's tree"
+ },
+ "AD-1-R4": {
+  "blob": "35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1",
+  "sha256": "00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693",
+  "path": "docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md (in C)",
+  "adoption_record": {
+   "path": "docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "blob": "54c956bc1324dd3a8fd97439faa815f0865b404d",
+   "sha256": "105e087137fed4ed7bf2baaab50b06812a1847ddbe9549809b85eecbdae379c6"
+  }
+ },
+ "AD-1-R5": {
+  "blob": "ae3cabdb45627f9b3179a098c50d27e50c55101f",
+  "sha256": "4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473",
+  "evidence_commit": "c1e46fc404a74ed76b848b709a7a246b59f3347f",
+  "adoption_record": {
+   "path": "docs/evidence/p3-candidate11/ad1r5-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "blob": "1492e185cb475bd32d95079a39b49078c0e23ddc",
+   "sha256": "9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4"
+  },
+  "fr_proof": {
+   "path": "docs/evidence/p3-candidate11/fr-stutter-r5-01/FR-STUTTERING-REFINEMENT-PROOF-DRAFT.md",
+   "blob": "c631a061dd7206b9bc62822711be0eca2a21c223",
+   "sha256": "c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b"
+  }
+ },
+ "AD-C7-W": {
+  "K2_blob": "cb3a208e1d79a7e94e2ae0001e208a2b6436bc46",
+  "K2_sha256": "989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b",
+  "freeze_commit": "16e74908e922160993a726e71e45374f1e5ff8a1",
+  "K1_catalog": {
+   "blob": "1918374263740d2f98640da00fc466737945975e",
+   "sha256": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83"
+  },
+  "K3_sha256": "c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7",
+  "adoption_2026_10_15": {
+   "commit": "4c29b2f0035ecaa86bca8d49238331485a1140e6",
+   "blob": "f9ce488c5db8fba8e3f0277334446b11d423c4de",
+   "sha256": "800f767d4df66f6a8c1c30306395042ff62a22bc3a354349d813ffc100066a54"
+  },
+  "identity_approval_2026_10_16": {
+   "commit": "2148c5a524b6979dde2eb63b6d1442e39dcfb960",
+   "blob": "cfcbf9982add53dee8f0b4d9c6b634474b4e072b",
+   "sha256": "4b74b90a73b7f93d804859afb8bf3d18d0d457603984995f5c1d3ae8a39392e2"
+  }
+ },
+ "C7_final_evidence": {
+  "commit": "cca0d773d9a405be566e576886321acf6a28f29b",
+  "tree": "68256471d53479a99538462cbd4cb1f53f4c2003",
+  "parent": "2148c5a524b6979dde2eb63b6d1442e39dcfb960",
+  "ref_on_github_as_recorded": "refs/heads/review/p3-c11-d2a1-c7-compliant-exec-02",
+  "local_remote_tracking_ref": "refs/remotes/github/review/p3-c11-d2a1-c7-compliant-exec-02 -> cca0d773d9a405be566e576886321acf6a28f29b",
+  "manifest": {
+   "entries": 357,
+   "sha256": "9181dbabb7ad65525915a88a335b378202a94c36aa65fe6b7e5a9b601de86622"
+  }
+ },
+ "current_tree_manifest_ct1": {
+  "path": "docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+  "blob": "5d31cb45123403626f06c521dd2d53103676250e",
+  "sha256": "20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279",
+  "version": "ct-1"
+ },
+ "historical_183_manifest": {
+  "path": "docs/evidence/p3-candidate10/original-183/manifest.json",
+  "blob": "65fa69dcc0742e04658a3360c42e051e38ebbf5b",
+  "sha256": "2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14",
+  "version": "1-r1"
+ },
+ "prior_local_roots": {
+  "VALIDATION-02": {
+   "manifest_sha256": "36f10bf966cdd0709dca61885004d02873e47e214e13af57b4b7901bb0fcb822",
+   "entries": 177,
+   "verified": "177/177, no unlisted file"
+  },
+  "CLOSURE-EVIDENCE-AUDIT-01": {
+   "manifest_sha256": "aa38221f0e4d53ab99e5c49aad104fae952637f8b3984d6250c27732f4c01732",
+   "entries": 13,
+   "verified": "13/13"
+  },
+  "CLOSURE-PACKET-01": {
+   "manifest_sha256": "372d1bc16e5a6f4a04a1e9f8b9dd5b15c7ebea45ca2000ee9ef7f83aa55a7f3f",
+   "entries": 48,
+   "verified": "48/48"
+  }
+ },
+ "evidence_chain": "24 commits C..cca0d773, single-parent, no merge, no path outside docs/evidence/ (raw/00-git-auth-3.txt)"
+}

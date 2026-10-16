@@ -1,0 +1,2 @@
+resolved packages (default features, all targets incl. dev-deps): 1026
+nexus-desktop-backend dependency closure (normal+dev+build): 983 packages; workspace members in it: 58 of 72

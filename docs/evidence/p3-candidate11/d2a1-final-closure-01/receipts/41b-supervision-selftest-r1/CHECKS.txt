@@ -1,0 +1,6 @@
+OK   1 limits and environment: 17179869184 0
+OK   2 memory cap enforced: rc -15; ['Result=oom-kill']
+OK   3 time limit: {'exit_status': None, 'signal': 9, 'supervisor_rc': 137, 'wrapper_recorded_status': '137'}
+OK   4 RuntimeMaxSec backstop: rc -15 2.16s
+OK   5 exit 101: {'exit_status': 101, 'signal': None, 'supervisor_rc': 101, 'wrapper_recorded_status': '101'}
+OK   6 disk controlled stop: stop {'exit_status': None, 'signal': None, 'supervisor_rc': -15, 'wrapper_recorded_status': None}

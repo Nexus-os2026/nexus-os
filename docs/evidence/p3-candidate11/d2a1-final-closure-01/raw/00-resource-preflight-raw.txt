@@ -1,0 +1,48 @@
+== time
+2026-10-16T14:50:08Z
+ 15:50:08 up 24 days, 22:29,  1 user,  load average: 0.86, 0.88, 0.93
+== disk (NEXUS fs and audits fs)
+Filesystem         1B-blocks          Used   Available Use% Mounted on
+/dev/nvme0n1p1 1966746755072 1900075339776 26669228032  99% /
+/dev/nvme0n1p1 1966746755072 1900075339776 26669228032  99% /
+/dev/nvme0n1p1 1966746755072 1900075339776 26669228032  99% /
+/dev/nvme0n1p1 ext4   rw,relatime
+== memory
+               total        used        free      shared  buff/cache   available
+Mem:     66639450112 13057830912  6755295232    97427456 47662346240 53581619200
+Swap:    17179865088  8723214336  8456650752
+MemTotal:       65077588 kB
+MemAvailable:   52324184 kB
+SwapTotal:      16777212 kB
+SwapFree:        8258448 kB
+NAME      TYPE SIZE USED PRIO
+/swap.img file  16G 8.1G   -2
+== cgroup v2 / systemd-run user scope capability
+cgroup2fs
+cpuset cpu io memory hugetlb pids rdma misc dmem
+systemd 255 (255.4-1ubuntu8.18)
+cpu memory pids
+cpu memory pids
+== nproc
+16
+== conflicting processes (cargo/rustc/clippy/test exe/runner)
+3843548    2999 1707226  6888 /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/node/node --permission --allow-addons --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/home --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/tmp --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/entry/serve-exp.mjs {"projectRoot":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react","cacheDir":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache","token":"tok123"}
+3843944    2999 1707171  6804 /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/node/node --permission --allow-addons --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/home --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/tmp --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/entry/serve-exp.mjs {"projectRoot":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react","cacheDir":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache","token":"tok123"}
+3846431    2999 1706837  6836 /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/node/node --permission --allow-addons --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react --allow-fs-read=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/home --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/tmp --allow-fs-write=/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache /tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/tc/entry/nexus-builder.mjs {"projectRoot":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/react","cacheDir":"/tmp/claude-1000/-home-nexus-claude-remote-test/e25e6e09-183a-546c-b929-ffe14aa49ef6/scratchpad/c4c3/gov/runtime/vite-cache","probeToken":"0123456789abcdef0123456789abcdef"}
+== runner service
+  nvidia-hibernate.service                                                                                                      loaded    inactive dead      NVIDIA system hibernate actions
+  nvidia-resume.service                                                                                                         loaded    inactive dead      NVIDIA system resume actions
+  nvidia-suspend.service                                                                                                        loaded    inactive dead      NVIDIA system suspend actions
+== top memory consumers
+    PID   RSS ELAPSED COMMAND
+ 697486 896700 842398 chrome
+1435194 830276 796268 brave
+2158219 739476 1906393 2.1.281
+2861935 720012 214597 chrome
+ 698327 675532 842306 chrome
+1112683 662272 2078932 brave
+2087503 599580 1910760 python
+ 263104 576512 1098184 claude
+ 698338 479764 842306 chrome
+2080835 403448 1911795 claude-desktop
+   9199 353420 2154213 chrome

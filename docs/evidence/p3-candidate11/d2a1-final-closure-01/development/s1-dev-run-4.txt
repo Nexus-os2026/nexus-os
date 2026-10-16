@@ -1,0 +1,2 @@
+646 of 647 hold
+FAIL ruling 59d7a24b: title acceptance list equals the quoted ruling's list :: title ['C14', 'C19', 'C21', 'C22', 'C27'] quoted ['C14', 'C19', 'C21', 'C27']

@@ -1,0 +1,6633 @@
+{
+ "controls": [
+  {
+   "id": "M01",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      995
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      483
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M02",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      911
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M03",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      687
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M04",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      961
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M05",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      335
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/mod.rs": false
+   }
+  },
+  {
+   "id": "M06",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/evidence.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      139
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/evidence.rs": true
+   }
+  },
+  {
+   "id": "M07",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/tool/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/tool/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      258
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/tool/mod.rs": true
+   }
+  },
+  {
+   "id": "M08",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/tool/catalog.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/tool/catalog.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      23
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/tool/catalog.rs": true
+   }
+  },
+  {
+   "id": "M09",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      261
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M10",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      437
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/mod.rs": true
+   }
+  },
+  {
+   "id": "M11",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/destination.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/destination.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      251
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/destination.rs": true
+   }
+  },
+  {
+   "id": "M12",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      77
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/egress/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      76
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/mod.rs": true
+   }
+  },
+  {
+   "id": "M13",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      57
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M14",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      568
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M15",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1308
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1379
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M16",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      634
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M17",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1129
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1134
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M18",
+   "category": "broker",
+   "files": [
+    "crates/nexus-governed-control/src/broker.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/broker.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      403
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/broker.rs": false
+   }
+  },
+  {
+   "id": "M19",
+   "category": "broker",
+   "files": [
+    "crates/nexus-governed-control/src/broker.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/broker.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      425
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/broker.rs": false
+   }
+  },
+  {
+   "id": "M20",
+   "category": "connector",
+   "files": [
+    "crates/nexus-governed-control/src/connector/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/connector/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      550
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/connector/mod.rs": true
+   }
+  },
+  {
+   "id": "M21",
+   "category": "connector",
+   "files": [
+    "crates/nexus-governed-control/src/connector/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/connector/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      408
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/connector/mod.rs": true
+   }
+  },
+  {
+   "id": "M22",
+   "category": "unified command",
+   "files": [
+    "crates/nexus-governed-control/src/ingress.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/ingress.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      162
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/ingress.rs": true
+   }
+  },
+  {
+   "id": "M23",
+   "category": "executor",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1608
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M24",
+   "category": "native approval",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      680
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M25",
+   "category": "bypass guard",
+   "files": [
+    "kernel/src/config.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "kernel/src/config.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1903
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "kernel/src/config.rs": true
+   }
+  },
+  {
+   "id": "M26",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/nx_bridge/commands.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/nx_bridge/commands.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      160
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/nx_bridge/commands.rs": true
+   }
+  },
+  {
+   "id": "M27",
+   "category": "egress",
+   "files": [
+    "app/src-tauri/src/commands/apps.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/apps.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      852
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/apps.rs": true
+   }
+  },
+  {
+   "id": "M28",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      5016
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M29",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      192
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M30",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      140
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M31",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      848
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M32",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4665
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M33",
+   "category": "bypass guard",
+   "files": [
+    "kernel/src/config.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "kernel/src/config.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1903
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "kernel/src/config.rs": true
+   }
+  },
+  {
+   "id": "M34",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      663
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M35",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1326
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M36",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1412
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M37",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/evidence.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      200
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/evidence.rs": true
+   }
+  },
+  {
+   "id": "M38",
+   "category": "broker",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      122
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M39",
+   "category": "broker",
+   "files": [
+    "crates/nexus-governed-control/src/broker.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/broker.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      120
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/broker.rs": false
+   }
+  },
+  {
+   "id": "M40",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      562
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M41",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      7999
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M42",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      877
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M43",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      437
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M44",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/destination.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/destination.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      416
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/destination.rs": true
+   }
+  },
+  {
+   "id": "M45",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/run.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/run.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      376
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/run.rs": false
+   }
+  },
+  {
+   "id": "M46",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      488
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M47",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6425
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M48",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      414
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M49",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      614
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M50",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      614
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M51",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/cdp.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/cdp.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      122
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/cdp.rs": true
+   }
+  },
+  {
+   "id": "M52",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      567
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M53",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      568
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M54",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      38
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M55",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      124
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M56",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/executable.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/executable.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      172
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/executable.rs": true
+   }
+  },
+  {
+   "id": "M57",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      722
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M58",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      847
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M59",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      289
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/mod.rs": true
+   }
+  },
+  {
+   "id": "M60",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      685
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M61",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/policy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/policy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      190
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/policy.rs": true
+   }
+  },
+  {
+   "id": "M62",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/control.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/control.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      226
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/control.rs": true
+   }
+  },
+  {
+   "id": "M63",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/control.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/control.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      184
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/control.rs": true
+   }
+  },
+  {
+   "id": "M64",
+   "category": "broker",
+   "files": [
+    "crates/nexus-governed-control/src/control.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/control.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      214
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/control.rs": true
+   }
+  },
+  {
+   "id": "M65",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/evidence.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      161
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/evidence.rs": true
+   }
+  },
+  {
+   "id": "M66",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1381
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M67",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      438
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M68",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1252
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M69",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      943
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M70",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      418
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      428
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M71",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/tool/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/tool/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      371
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/tool/mod.rs": true
+   }
+  },
+  {
+   "id": "M72",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      494
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M73",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      525
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M74",
+   "category": "native approval",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      620
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M75",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      257
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M76",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/commands/agents.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/agents.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      518
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/agents.rs": true
+   }
+  },
+  {
+   "id": "M77",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      222
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M78",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      5025
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M79",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      5123
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M80",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4697
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M81",
+   "category": "bypass guard",
+   "files": [
+    "kernel/src/config.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "kernel/src/config.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1903
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "kernel/src/config.rs": true
+   }
+  },
+  {
+   "id": "M82",
+   "category": "bypass guard",
+   "files": [
+    "kernel/src/config.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "kernel/src/config.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1903
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "kernel/src/config.rs": true
+   }
+  },
+  {
+   "id": "M83",
+   "category": "bypass guard",
+   "files": [
+    "kernel/src/autopilot/stress_test.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "kernel/src/autopilot/stress_test.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      583
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "kernel/src/autopilot/stress_test.rs": true
+   }
+  },
+  {
+   "id": "M84",
+   "category": "native approval",
+   "files": [
+    "crates/nexus-governed-control/src/authority/approval.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/approval.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      194
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/approval.rs": false
+   }
+  },
+  {
+   "id": "M85",
+   "category": "bypass guard",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      968
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M86",
+   "category": "bypass guard",
+   "files": [
+    "cli/Cargo.toml"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "cli/Cargo.toml",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      13
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "cli/Cargo.toml": true
+   }
+  },
+  {
+   "id": "M87",
+   "category": "native approval",
+   "files": [
+    "crates/nexus-governed-control/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      50
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/lib.rs": false
+   }
+  },
+  {
+   "id": "M88",
+   "category": "bypass guard",
+   "files": [
+    "cli/Cargo.toml"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "cli/Cargo.toml",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "cli/Cargo.toml": true
+   }
+  },
+  {
+   "id": "M89",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      2874
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M90",
+   "category": "bypass guard",
+   "files": [
+    "cli/Cargo.toml"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "cli/Cargo.toml",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "cli/Cargo.toml": true
+   }
+  },
+  {
+   "id": "M91",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/enterprise.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/enterprise.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      408
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/enterprise.rs": true
+   }
+  },
+  {
+   "id": "M92",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/enterprise.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/enterprise.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      450
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/enterprise.rs": true
+   }
+  },
+  {
+   "id": "M93",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/enterprise.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/enterprise.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      353
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/enterprise.rs": true
+   }
+  },
+  {
+   "id": "M94",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/agents.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/agents.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      508
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/agents.rs": true
+   }
+  },
+  {
+   "id": "M95",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6425
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6435
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M96",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      2147
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M97",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      275
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M98",
+   "category": "evidence",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      336
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M99",
+   "category": "evidence",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      445
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M100",
+   "category": "native approval",
+   "files": [
+    "crates/nexus-governed-control/src/authority/evidence.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      163
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/evidence.rs": true
+   }
+  },
+  {
+   "id": "M101",
+   "category": "native approval",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      710
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M102",
+   "category": "native approval",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      814
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M103",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1373
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M104",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1262
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M105",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      244
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M106",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      115
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M107",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      402
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M108",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      923
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M109",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1053
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M110",
+   "category": "commitment",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1310
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M111",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1045
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M112",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4591
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M113",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4653
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M114",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      318
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M115",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      346
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M116",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      293
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M117",
+   "category": "ci",
+   "files": [
+    "crates/nexus-governed-control/src/display/tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      26
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/tests.rs": true
+   }
+  },
+  {
+   "id": "M118",
+   "category": "ci",
+   "files": [
+    "crates/nexus-governed-control/src/browser/tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      40
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/tests.rs": true
+   }
+  },
+  {
+   "id": "M119",
+   "category": "display",
+   "files": [
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      144
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M120",
+   "category": "display",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1216
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M121",
+   "category": "display",
+   "files": [
+    "crates/nexus-governed-control/src/authority/policy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/policy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      157
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/policy.rs": true
+   }
+  },
+  {
+   "id": "M122",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      976
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M123",
+   "category": "owner stop",
+   "files": [
+    "app/src/pages/GovernedControl.tsx"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src/pages/GovernedControl.tsx",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      238
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src/pages/GovernedControl.tsx": true
+   }
+  },
+  {
+   "id": "M124",
+   "category": "native approval",
+   "files": [
+    "app/src/pages/GovernedControl.tsx"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src/pages/GovernedControl.tsx",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      131
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src/pages/GovernedControl.tsx": true
+   }
+  },
+  {
+   "id": "M125",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/agents.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/agents.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      579
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/agents.rs": true
+   }
+  },
+  {
+   "id": "M126",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      7693
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M127",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6525
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M128",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1201
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M129",
+   "category": "unified command",
+   "files": [
+    "crates/nexus-governed-control/src/authority/run.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/run.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      229
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/run.rs": false
+   }
+  },
+  {
+   "id": "M130",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      478
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M131",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      487
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M132",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      106
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M133",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      867
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M134",
+   "category": "native approval",
+   "files": [
+    "crates/nexus-governed-control/src/authority/evidence.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      165
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/evidence.rs": true
+   }
+  },
+  {
+   "id": "M135",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/control.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/control.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      342
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/control.rs": true
+   }
+  },
+  {
+   "id": "M136",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1295
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M137",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/authority/commitment.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1318
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/authority/commitment.rs": true
+   }
+  },
+  {
+   "id": "M138",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      420
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M139",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1023
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M140",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/runtime_root.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/runtime_root.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      41
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/runtime_root.rs": true
+   }
+  },
+  {
+   "id": "M141",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      5048
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M142",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/commands/flash.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/flash.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      253
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/flash.rs": true
+   }
+  },
+  {
+   "id": "M143",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4562
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M144",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/commands/enterprise.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/enterprise.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      5
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/enterprise.rs": true
+   }
+  },
+  {
+   "id": "M145",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      926
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M146",
+   "category": "native approval",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "TEST COMMAND RE-ANCHOR",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      814
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M147",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6803
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M148",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1200
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M149",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1250
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M150",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6531
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M151",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6429
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M152",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/commands/flash.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/flash.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      253
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/flash.rs": true
+   }
+  },
+  {
+   "id": "M153",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      4596
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M154",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/agents.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/agents.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      597
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/agents.rs": true
+   }
+  },
+  {
+   "id": "M155",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/agents.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/agents.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      557
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/agents.rs": true
+   }
+  },
+  {
+   "id": "M156",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      576
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/mod.rs": true
+   }
+  },
+  {
+   "id": "M157",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1282
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M158",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1267
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M159",
+   "category": "screen/input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      390
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M160",
+   "category": "unified command",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "CORRECTED HISTORICAL DEFINITION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      403
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      432
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M161",
+   "category": "unified command",
+   "files": [
+    "app/src-tauri/src/governed_real_world.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/governed_real_world.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      265
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/governed_real_world.rs": true
+   }
+  },
+  {
+   "id": "M162",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/runtime_root.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/runtime_root.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      80
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/runtime_root.rs": true
+   }
+  },
+  {
+   "id": "M163",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      111
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M164",
+   "category": "egress",
+   "files": [
+    "crates/nexus-governed-control/src/egress/transport.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/egress/transport.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      440
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/egress/transport.rs": true
+   }
+  },
+  {
+   "id": "M165",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1289
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M166",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs",
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "SEMANTIC REVIEW NEEDED",
+   "historical_lineage": "VERSION-SUPERSEDED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1267
+     ]
+    },
+    {
+     "edit": 2,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      410
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true,
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M167",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/server.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/server.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      438
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/server.rs": true
+   }
+  },
+  {
+   "id": "M168",
+   "category": "input",
+   "files": [
+    "crates/nexus-governed-control/src/display/mod.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/display/mod.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1289
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/display/mod.rs": true
+   }
+  },
+  {
+   "id": "M169",
+   "category": "unified command",
+   "files": [
+    "crates/nexus-governed-control/src/governed.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/governed.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      399
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/governed.rs": true
+   }
+  },
+  {
+   "id": "M170",
+   "category": "tool",
+   "files": [
+    "crates/nexus-governed-control/src/runtime_root.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/runtime_root.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      108
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/runtime_root.rs": true
+   }
+  },
+  {
+   "id": "M171",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      2345
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M172",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1781
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M173",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "RE-ANCHOR NEEDED",
+   "historical_lineage": "APPROVED SEMANTIC ADAPTATION",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      2397
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M174",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1237
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M175",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/commands/cognitive.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/cognitive.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      1254
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/cognitive.rs": true
+   }
+  },
+  {
+   "id": "M176",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/commands/flash.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/commands/flash.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      253
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/commands/flash.rs": true
+   }
+  },
+  {
+   "id": "M177",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8908
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M178",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8910
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M179",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8991
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M180",
+   "category": "bypass guard",
+   "files": [
+    "app/src-tauri/src/phase3_tests.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/phase3_tests.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      8919
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/phase3_tests.rs": false
+   }
+  },
+  {
+   "id": "M181",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6531
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  },
+  {
+   "id": "M182",
+   "category": "browser",
+   "files": [
+    "crates/nexus-governed-control/src/browser/proxy.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      176
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "crates/nexus-governed-control/src/browser/proxy.rs": true
+   }
+  },
+  {
+   "id": "M183",
+   "category": "owner stop",
+   "files": [
+    "app/src-tauri/src/lib.rs"
+   ],
+   "definition_equal": true,
+   "current_review_status": "pending",
+   "historical_review_status": "PASS",
+   "historical_lineage": "UNCHANGED",
+   "anchors": [
+    {
+     "edit": 1,
+     "file": "app/src-tauri/src/lib.rs",
+     "count": 1,
+     "unedited": 1,
+     "at_application": 1,
+     "lines_at_C": [
+      6449
+     ]
+    }
+   ],
+   "pairs_equal_historical": {
+    "app/src-tauri/src/lib.rs": true
+   }
+  }
+ ],
+ "pairs": [
+  {
+   "control": "M01",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M02",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M03",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M04",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M05",
+   "file": "crates/nexus-governed-control/src/authority/mod.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M06",
+   "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M07",
+   "file": "crates/nexus-governed-control/src/tool/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M08",
+   "file": "crates/nexus-governed-control/src/tool/catalog.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M09",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M10",
+   "file": "crates/nexus-governed-control/src/egress/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M11",
+   "file": "crates/nexus-governed-control/src/egress/destination.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M12",
+   "file": "crates/nexus-governed-control/src/egress/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M13",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M14",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M15",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M16",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M17",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M18",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M19",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M20",
+   "file": "crates/nexus-governed-control/src/connector/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M21",
+   "file": "crates/nexus-governed-control/src/connector/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M22",
+   "file": "crates/nexus-governed-control/src/ingress.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M23",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M24",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M25",
+   "file": "kernel/src/config.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M26",
+   "file": "app/src-tauri/src/nx_bridge/commands.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M27",
+   "file": "app/src-tauri/src/commands/apps.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M28",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M29",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M30",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M31",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M32",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M33",
+   "file": "kernel/src/config.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M34",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M35",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M36",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M37",
+   "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M38",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M39",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M40",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M41",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M42",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M43",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M44",
+   "file": "crates/nexus-governed-control/src/egress/destination.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M45",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M46",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M47",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M48",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M49",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M50",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M51",
+   "file": "crates/nexus-governed-control/src/browser/cdp.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M52",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M53",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M54",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M55",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M56",
+   "file": "crates/nexus-governed-control/src/executable.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M57",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M58",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M59",
+   "file": "crates/nexus-governed-control/src/egress/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M60",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M61",
+   "file": "crates/nexus-governed-control/src/authority/policy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M62",
+   "file": "crates/nexus-governed-control/src/control.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M63",
+   "file": "crates/nexus-governed-control/src/control.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M64",
+   "file": "crates/nexus-governed-control/src/control.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M65",
+   "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M66",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M67",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M68",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M69",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M70",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M71",
+   "file": "crates/nexus-governed-control/src/tool/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M72",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M73",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M74",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M75",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M76",
+   "file": "app/src-tauri/src/commands/agents.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M77",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M78",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M79",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M80",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M81",
+   "file": "kernel/src/config.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M82",
+   "file": "kernel/src/config.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M83",
+   "file": "kernel/src/autopilot/stress_test.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M84",
+   "file": "crates/nexus-governed-control/src/authority/approval.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M85",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M86",
+   "file": "cli/Cargo.toml",
+   "equals_historical": true
+  },
+  {
+   "control": "M87",
+   "file": "crates/nexus-governed-control/src/lib.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M88",
+   "file": "cli/Cargo.toml",
+   "equals_historical": true
+  },
+  {
+   "control": "M89",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M90",
+   "file": "cli/Cargo.toml",
+   "equals_historical": true
+  },
+  {
+   "control": "M91",
+   "file": "app/src-tauri/src/commands/enterprise.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M92",
+   "file": "app/src-tauri/src/commands/enterprise.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M93",
+   "file": "app/src-tauri/src/commands/enterprise.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M94",
+   "file": "app/src-tauri/src/commands/agents.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M95",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M96",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M97",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M98",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M99",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M100",
+   "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M101",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M102",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M103",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M104",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M105",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M106",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M107",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M108",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M109",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M110",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M111",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M112",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M113",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M114",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M115",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M116",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M117",
+   "file": "crates/nexus-governed-control/src/display/tests.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M118",
+   "file": "crates/nexus-governed-control/src/browser/tests.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M119",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M120",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M121",
+   "file": "crates/nexus-governed-control/src/authority/policy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M122",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M123",
+   "file": "app/src/pages/GovernedControl.tsx",
+   "equals_historical": true
+  },
+  {
+   "control": "M124",
+   "file": "app/src/pages/GovernedControl.tsx",
+   "equals_historical": true
+  },
+  {
+   "control": "M125",
+   "file": "app/src-tauri/src/commands/agents.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M126",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M127",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M128",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M129",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M130",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M131",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M132",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M133",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M134",
+   "file": "crates/nexus-governed-control/src/authority/evidence.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M135",
+   "file": "crates/nexus-governed-control/src/control.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M136",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M137",
+   "file": "crates/nexus-governed-control/src/authority/commitment.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M138",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M139",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M140",
+   "file": "crates/nexus-governed-control/src/runtime_root.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M141",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M142",
+   "file": "app/src-tauri/src/commands/flash.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M143",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M144",
+   "file": "app/src-tauri/src/commands/enterprise.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M145",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M146",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M147",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M148",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M149",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M150",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M151",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M152",
+   "file": "app/src-tauri/src/commands/flash.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M153",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M154",
+   "file": "app/src-tauri/src/commands/agents.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M155",
+   "file": "app/src-tauri/src/commands/agents.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M156",
+   "file": "crates/nexus-governed-control/src/browser/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M157",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M158",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M159",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M160",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M161",
+   "file": "app/src-tauri/src/governed_real_world.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M162",
+   "file": "crates/nexus-governed-control/src/runtime_root.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M163",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M164",
+   "file": "crates/nexus-governed-control/src/egress/transport.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M165",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M166",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M166",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M167",
+   "file": "crates/nexus-governed-control/src/display/server.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M168",
+   "file": "crates/nexus-governed-control/src/display/mod.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M169",
+   "file": "crates/nexus-governed-control/src/governed.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M170",
+   "file": "crates/nexus-governed-control/src/runtime_root.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M171",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M172",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M173",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M174",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M175",
+   "file": "app/src-tauri/src/commands/cognitive.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M176",
+   "file": "app/src-tauri/src/commands/flash.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M177",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M178",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M179",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M180",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "equals_historical": false
+  },
+  {
+   "control": "M181",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M182",
+   "file": "crates/nexus-governed-control/src/browser/proxy.rs",
+   "equals_historical": true
+  },
+  {
+   "control": "M183",
+   "file": "app/src-tauri/src/lib.rs",
+   "equals_historical": true
+  }
+ ],
+ "changed_22": [
+  {
+   "control": "M05",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/authority/mod.rs",
+   "historical_recorded_sha256": "f4eca418d66a239148087efba96b88c41547699c60a8929bafcbc89f88e7ae32",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "ae99b2f59794470c4899396861c4942ba5db2e2e338fb3aeab8712be6c217013",
+   "current_blob": "c1dfe9f5af9f50b84c5400df0306d4c6f577fb48",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "first_stale_subject": "fix(authority): a resume lifts only the stop the Owner confirmed (RS-01)",
+   "diff_base_to_C": "+50 -10",
+   "anchor_lines_base": [
+    [
+     312
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     335
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "authority::tests::an_emergency_stop_cancels_every_run_and_refuses_new_ones",
+     "base_hits": [
+      "crates/nexus-governed-control/src/authority/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/authority/tests.rs"
+     ],
+     "body_byte_identical": true
+    },
+    {
+     "test": "governed::tests::the_emergency_stop_ends_everything_until_the_owner_resumes",
+     "base_hits": [
+      "crates/nexus-governed-control/src/governed/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/governed/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M18",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+   "current_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "first_stale_subject": "fix(trust): the broker re-checks run and lease liveness before it reads the vault (XA-R1-02)",
+   "diff_base_to_C": "+66 -5",
+   "anchor_lines_base": [
+    [
+     350
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     403
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "broker::tests::a_commitment_cannot_release_a_lease_it_does_not_list",
+     "base_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M19",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+   "current_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "first_stale_subject": "fix(trust): the broker re-checks run and lease liveness before it reads the vault (XA-R1-02)",
+   "diff_base_to_C": "+66 -5",
+   "anchor_lines_base": [
+    [
+     372
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     425
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "broker::tests::a_lease_releases_its_secret_once_to_its_commitment_only",
+     "base_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M32",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4665
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4665
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M39",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "historical_recorded_sha256": "471d8a79ec8a030b68c3af7c0a0156c52ffca468ea2be056512d5eeb0941ce9e",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "353bbbc8a9d983fb6888b71d7c178db6bcc3a9d87ad30a072e97b7509c6e14e4",
+   "current_blob": "eaa469d94fbfb7f31f5ba51d06d7bdc85cee16a2",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "first_stale_subject": "fix(trust): the broker re-checks run and lease liveness before it reads the vault (XA-R1-02)",
+   "diff_base_to_C": "+66 -5",
+   "anchor_lines_base": [
+    [
+     108
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     120
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "broker::tests::a_credential_from_the_environment_is_refused",
+     "base_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/broker/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M45",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "historical_recorded_sha256": "33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6",
+   "current_blob": "83e2c42e306872fe35d2674dc3e1bc4ce52b05f1",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "first_stale_subject": "fix(authority): a resume lifts only the stop the Owner confirmed (RS-01)",
+   "diff_base_to_C": "+216 -12",
+   "anchor_lines_base": [
+    [
+     190
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     376
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "authority::tests::finishing_a_run_ends_what_it_left_and_releases_what_it_owns",
+     "base_hits": [
+      "crates/nexus-governed-control/src/authority/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/authority/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M78",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     5025
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     5025
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M79",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     5123
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     5123
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M80",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4697
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4697
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    },
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M84",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/authority/approval.rs",
+   "historical_recorded_sha256": "f34be06d927e59884f219e3b31bc57916ad3da6bc3bc65120d8e8c9fd2252c6c",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "34f849b502782f0c6a046c9fd2d5ceb50bf497a54e52e591339630670db49202",
+   "current_blob": "19e3ace99a7f24c9d182354c2cfcdc388729af4d",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "first_stale_subject": "fix(authority): a resume lifts only the stop the Owner confirmed (RS-01)",
+   "diff_base_to_C": "+5 -2",
+   "anchor_lines_base": [
+    [
+     191
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     194
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M87",
+   "set": "D2A-1 (15)",
+   "file": "crates/nexus-governed-control/src/lib.rs",
+   "historical_recorded_sha256": "53c37d97f90ede471aff8cf6da93f9323c6915120626e94554788f45cd5b7f46",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "addad1993f57ad370da7e38719f3e58d26b5a4eb1fbe06b24df51525b135727d",
+   "current_blob": "b806ed577f8d3472b7187d161246e08d2f1ccd3d",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+1 -0",
+   "anchor_lines_base": [
+    [
+     50
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     50
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_15_the_compile_fail_doctests_are_pinned_with_their_errors",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M89",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     2874
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     2874
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_16_test_only_features_are_enabled_only_by_tests",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M112",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4591
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4591
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_04_the_mechanisms_are_confined_to_their_modules",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    },
+    {
+     "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    },
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M113",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4653
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4653
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M129",
+   "set": "earlier Candidate 11 (7)",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "historical_recorded_sha256": "33d3c06b65405799d304c91c32ccb0121c0a012a476cfa34bb447b40faae5725",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "394d725b5386fdcd29ba4306de0810a92d73be3c011caeb2a7c905981d7d5ae6",
+   "current_blob": "83e2c42e306872fe35d2674dc3e1bc4ce52b05f1",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "first_stale_subject": "fix(authority): a resume lifts only the stop the Owner confirmed (RS-01)",
+   "diff_base_to_C": "+216 -12",
+   "anchor_lines_base": [
+    [
+     151
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     229
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "governed::tests::quitting_cancels_every_run_and_opens_no_more",
+     "base_hits": [
+      "crates/nexus-governed-control/src/governed/tests.rs"
+     ],
+     "c_hits": [
+      "crates/nexus-governed-control/src/governed/tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M141",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     5048
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     5048
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M143",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4562
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4562
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    },
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M153",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     4596
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     4596
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g6_12_the_inventory_fails_closed",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M177",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     8908
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     8908
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M178",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     8910
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     8910
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M179",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     8991
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     8991
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  },
+  {
+   "control": "M180",
+   "set": "D2A-1 (15)",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "historical_recorded_sha256": "2d131e17bef88dcb68a7b31f2b8bf06c7e2b9c3e2543e6af8a02a120c327fdae",
+   "base_9d5fdf95_sha256_equals_record": true,
+   "current_sha256": "b7e0b7493fa0ce839782a1297d945184ac0d59dc6fdb002a16261199d66ab0b8",
+   "current_blob": "5d79c7c38b04a7ea480e144850cfb1a1e38d1e83",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "first_stale_subject": "feat(ledger): add the dormant protocol core and its guard (D2A-1)",
+   "diff_base_to_C": "+239 -0",
+   "anchor_lines_base": [
+    [
+     8919
+    ]
+   ],
+   "anchor_lines_C": [
+    [
+     8919
+    ]
+   ],
+   "definition_unchanged": true,
+   "expected_test_bodies": [
+    {
+     "test": "phase3_tests::p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock",
+     "base_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "c_hits": [
+      "app/src-tauri/src/phase3_tests.rs"
+     ],
+     "body_byte_identical": true
+    }
+   ],
+   "ct1_current_review_status": "pending"
+  }
+ ],
+ "counts": {
+  "controls": 183,
+  "pairs": 184,
+  "files": 39,
+  "anchors": 191,
+  "pairs_equal": 162,
+  "pairs_changed": 22
+ },
+ "identities": {
+  "ct1": {
+   "path": "docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "blob": "5d31cb45123403626f06c521dd2d53103676250e",
+   "sha256": "20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279",
+   "version": "ct-1"
+  },
+  "historical": {
+   "path": "docs/evidence/p3-candidate10/original-183/manifest.json",
+   "blob": "65fa69dcc0742e04658a3360c42e051e38ebbf5b",
+   "sha256": "2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14"
+  },
+  "commit": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0"
+ }
+}

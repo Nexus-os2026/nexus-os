@@ -1,0 +1,1904 @@
+{
+ "document": "AD-1-R4 H.6 DETACHED ATTESTATION — CANDIDATE",
+ "status": "CANDIDATE — PENDING_DECISIONS. Not accepted. Not an approval, signature or publication.",
+ "authority": "A string is never authority. A SHA256 authenticates bytes, not the truth of statements inside them. Only the Sole Architect may accept this attestation; the Owner keeps every Owner decision.",
+ "detachment": "Lives only in the local mission evidence root, outside the repository; not written into Candidate C or into any commit whose identity it attests; no commit or push was made.",
+ "generated_utc": "2026-10-16T15:40:29Z",
+ "mission": "P3-C11-DR01-D2A1-FINAL-CLOSURE-01",
+ "A_source": {
+  "commit": "d5964ee5326c2733177307db6f507328023d361a",
+  "tree": "51bac5fd335999cc995c0ab9f582a30244973ef0",
+  "parent": "71264aa81a40b86189783facc8437e0427887c16",
+  "blobs": {
+   "crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8",
+   "crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114"
+  },
+  "pinned_executable_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c"
+ },
+ "B_current_tree_manifest": {
+  "path": "docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+  "git_blob": "5d31cb45123403626f06c521dd2d53103676250e",
+  "sha256": "20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279",
+  "version": "ct-1"
+ },
+ "C_alignment": {
+  "status": "ALIGNED (mechanical; H.1-H.5)",
+  "counts": {
+   "controls": 183,
+   "pairs": 184,
+   "files": 39,
+   "anchors": 191,
+   "pairs_equal": 162,
+   "pairs_changed": 22
+  },
+  "current_review_status_all": "pending"
+ },
+ "D_reconciliation_22": [
+  {
+   "control": "M05",
+   "file": "crates/nexus-governed-control/src/authority/mod.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M18",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "definition_unchanged": true,
+   "class": "MATERIALLY_CHANGED_OBSERVABLE_MECHANISM — REQUIRES_EXPLICIT_ARCHITECT_REVIEW"
+  },
+  {
+   "control": "M19",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M32",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M39",
+   "file": "crates/nexus-governed-control/src/broker.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "862a11cef284c5e3c34234dfd2677a5462c86d5d",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M45",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M78",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M79",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M80",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M84",
+   "file": "crates/nexus-governed-control/src/authority/approval.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M87",
+   "file": "crates/nexus-governed-control/src/lib.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M89",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M112",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M113",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M129",
+   "file": "crates/nexus-governed-control/src/authority/run.rs",
+   "set": "earlier Candidate 11 (7)",
+   "first_stale_commit": "6be32bf43cebce623681f2d1e82965ba784a7f04",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M141",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M143",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M153",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M177",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M178",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M179",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  },
+  {
+   "control": "M180",
+   "file": "app/src-tauri/src/phase3_tests.rs",
+   "set": "D2A-1 (15)",
+   "first_stale_commit": "22ebf9a5c5b16bb6f5169daf3731a3417c5289d3",
+   "definition_unchanged": true,
+   "class": "ESTABLISHED_UNDER_EXISTING_ARCHITECT_DECISION + MECHANICALLY_ALIGNED"
+  }
+ ],
+ "E_mutations_35": {
+  "count": 35,
+  "by_id_git_records": 33,
+  "conversational": [
+   "C4",
+   "C7"
+  ],
+  "controls": {
+   "A1": {
+    "recording": null,
+    "first_failure_as_printed": "P1",
+    "failing_raw_sha256": "2a1c9413592503f43f03c0e42a1e9b53cf3b45810e1db72cf53172f422ab2244",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "A2": {
+    "recording": null,
+    "first_failure_as_printed": "P1",
+    "failing_raw_sha256": "d1edba58123e3301465ed89916ca80769a1d0b3ade516cd7503ed63585275e93",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "A3": {
+    "recording": null,
+    "first_failure_as_printed": "P12",
+    "failing_raw_sha256": "17132fdad65419ef1f26eca196f38c13cdb5322e337636d17c58423d24e9e1b9",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "A5": {
+    "recording": null,
+    "first_failure_as_printed": "L1",
+    "failing_raw_sha256": "ba743f7dc3c70ee50016f201a2e3cb19cc6227e41d921c14338b27f68672e3c6",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "A6": {
+    "recording": null,
+    "first_failure_as_printed": "P12",
+    "failing_raw_sha256": "52ea67c27c5187cc81ae1e11b333f19b9d1081c0846375177cf7dafebc56db2d",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C1": {
+    "recording": "C1: P1 (first failure E3; witness)",
+    "first_failure_as_printed": "E3",
+    "failing_raw_sha256": "f092dab461f063fea17925149b6266a102bf15c4cd8d9f7230ccc02f4c839c2a",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C10": {
+    "recording": null,
+    "first_failure_as_printed": "E4",
+    "failing_raw_sha256": "36c16109f0c1ad0fa54d7db0eb534b8f473c29c656505ea969ecf2a9cda1fd13",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C11": {
+    "recording": null,
+    "first_failure_as_printed": "E4",
+    "failing_raw_sha256": "3847524f46a9de5f627b49318adf63b21385f3701fb73f591d8c1a90d4e42aff",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C12": {
+    "recording": null,
+    "first_failure_as_printed": "E2",
+    "failing_raw_sha256": "d7d6dc6780698b402983970a6b7a8171e856d906a0524befa8eaaf7a0b44b7f9",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C14": {
+    "recording": null,
+    "first_failure_as_printed": "['ledger::protocol::unit_tests::t_bind_every_bound_value_belongs_to_one_ledger'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1119:5']",
+    "failing_raw_sha256": "b795ef1d0808f7a17c8db8fcc118c2ab5fe598d7a122d3b4d0aa549ad673970b",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C15": {
+    "recording": null,
+    "first_failure_as_printed": "E8",
+    "failing_raw_sha256": "75c2c6d76f3868e75b85e1a4770ab78ebb691fab87981187bcd070bea471a5ad",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C16": {
+    "recording": null,
+    "first_failure_as_printed": "E3",
+    "failing_raw_sha256": "ee469a45a015b4ad23914c2ebb23c83a281e47a0136f37a4fcd11b801e1242ba",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C17": {
+    "recording": null,
+    "first_failure_as_printed": "E4",
+    "failing_raw_sha256": "0e68d6c148ad282187b87674d39cf472e9adf49d0408ca24aed53db76088828a",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C18a": {
+    "recording": null,
+    "first_failure_as_printed": "E7",
+    "failing_raw_sha256": "016b4c4de2f4128523dae60931509f9cc2549800a31572ba1869a5f4a5924c10",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C18b": {
+    "recording": null,
+    "first_failure_as_printed": "E7",
+    "failing_raw_sha256": "cd5161aa5edf561643f0e9b544d69d87c72a767f6e7614f0fa305fd4239c85b7",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C19": {
+    "recording": null,
+    "first_failure_as_printed": "['ledger::protocol::unit_tests::t_cell_worker_operations_and_cell_appends'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1654:5']",
+    "failing_raw_sha256": "bca85833e56e4abd37453b1aa851ba1a00972a8117d66e392a14398c1035a306",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C2": {
+    "recording": null,
+    "first_failure_as_printed": "P4",
+    "failing_raw_sha256": "758a6b98779fb27bd44ef1e99783ceb1982b2532e135d0d7de50e48963a1fb31",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C20": {
+    "recording": null,
+    "first_failure_as_printed": "L1",
+    "failing_raw_sha256": "8d80f6092fca5e55f26e55d64a22637112caeda8fd3a7ef8bc5e8e3d80aa31a5",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C21": {
+    "recording": null,
+    "first_failure_as_printed": "['ledger::protocol::unit_tests::w6_one_identity_under_two_contents'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:2600:5']",
+    "failing_raw_sha256": "bc1322e08ac476e22e9384932ee34f61d52f03e141e4f58544d469856a6fbf43",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C22": {
+    "recording": null,
+    "first_failure_as_printed": "E0283 at unit_tests.rs:1089:5",
+    "failing_raw_sha256": "5cbb36bd2d8af4c66bf12fa30eb68133689a181e87d0e15e6d65f471afb633b2",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C23": {
+    "recording": null,
+    "first_failure_as_printed": "E1",
+    "failing_raw_sha256": "eccccfb71cab27d3c9c880c64d07dd2e0db41c50f2abfcc6417638853ce209bd",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C24": {
+    "recording": null,
+    "first_failure_as_printed": "P8",
+    "failing_raw_sha256": "9b48791e313d3a0f33ae0d77c37edf7dd1fb18a74efd4aa11f7c15b93a2af3df",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C25": {
+    "recording": "C25: P7 (first failure E4; witness)",
+    "first_failure_as_printed": "E4",
+    "failing_raw_sha256": "91dc90ab09aecf8750a4a99a6557165574e42da34c7fe0071a1cd755fb4a9f65",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C26": {
+    "recording": null,
+    "first_failure_as_printed": "E9",
+    "failing_raw_sha256": "0313d7154ad42a4f69f3d8bb2e6b919df5b8e94ab15a45e9bc5998ba15f83faa",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C27": {
+    "recording": null,
+    "first_failure_as_printed": "['ledger::protocol::unit_tests::t_prec_persistence_of_every_ending'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:799:9']",
+    "failing_raw_sha256": "79b4d2e25fc32ff3ff4081a4fdf041d9cedaabf3b91d8cee737c27f0ffad6622",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C28": {
+    "recording": null,
+    "first_failure_as_printed": "['ledger::protocol::unit_tests::t_res_every_resolve_row'] at ['crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs:1745:17']",
+    "failing_raw_sha256": "aa162533f7f49d1295cc09ddec911cc2f4aeb6d3437dd401deebe004904415dc",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C3a": {
+    "recording": null,
+    "first_failure_as_printed": "P13",
+    "failing_raw_sha256": "b17f69a34ae04752b2d123493d6b8ec8d0b393fd5ca4f8b3de4d52f2d2339000",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C3b": {
+    "recording": null,
+    "first_failure_as_printed": "P13",
+    "failing_raw_sha256": "9c08f2f01dad5348b2f21a968f1c4a29aad54f32fe27d6b7ab87e2b185998b9b",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C3c": {
+    "recording": null,
+    "first_failure_as_printed": "P12",
+    "failing_raw_sha256": "e746174a0ef2371ab9630191faa3e213cbcfad6fa2fd576844fb5b77e133197c",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C4": {
+    "recording": "C4: P4, P8 (first failure P4; witness)",
+    "first_failure_as_printed": "P4",
+    "failing_raw_sha256": "edda61a1246945ec76b2b15526f939eaa8b4559229125d6d2729200e0fcd4477",
+    "decision": "ACCEPTED",
+    "decision_provenance": "CONVERSATIONAL_ARCHITECT_RULING; indirect Git corroboration only: executor-written AD-C7-W adoption record (2026-10-15) states 'Mutation campaign: 34/35 ARCHITECT ACCEPTED' with C7 blocked"
+   },
+   "C5": {
+    "recording": null,
+    "first_failure_as_printed": "P13",
+    "failing_raw_sha256": "62ca176023a7f5066a474483fda926cd32e0f263c3c67835d9d5f6d1329ced19",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C6": {
+    "recording": null,
+    "first_failure_as_printed": "P6",
+    "failing_raw_sha256": "920e109f65a60b316c70e21dabe30942bc95db5e225b00af1470df2bcf41fd01",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C7": {
+    "recording": "C7: P6 (first failure E11; witness)",
+    "first_failure_as_printed": "E11",
+    "failing_raw_sha256": "83407d516c71ce173995f4565729b386c29d41f22a2070b873e7e1ae134c9137",
+    "decision": "ACCEPTED",
+    "decision_provenance": "CONVERSATIONAL_ARCHITECT_RULING (mission text only); no by-ID Git record"
+   },
+   "C8": {
+    "recording": null,
+    "first_failure_as_printed": "E5",
+    "failing_raw_sha256": "b42d0eb5775ba8fb6c1279dcf390468c7fffcbc47e7f4e888fc2cd23e3dd90cc",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   },
+   "C9": {
+    "recording": null,
+    "first_failure_as_printed": "E4",
+    "failing_raw_sha256": "518e0e47108811b5e8069c693aa1963f7da3ee87aad824a1bbe7479fa9c798d2",
+    "decision": "ACCEPTED",
+    "decision_provenance": "EXECUTOR-WRITTEN GIT RECORD of the Architect ruling as conveyed in the named mission's section 1; unsigned; a string is not authority"
+   }
+  }
+ },
+ "F_configurations_20": {
+  "X-1": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "db1707f08db7a15cf6a1ea2803bd9914c39f614c050b86a3c98ba83452a279e0",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "8.2 default exploration (also run unoptimised inside cargo test --workspace)"
+  },
+  "X-2": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "edb43eb5be78972ebe5007a12140651be5265568bc3c0f6ad4530a4c48c474a7",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "8.2 default exploration (also run unoptimised inside cargo test --workspace)"
+  },
+  "X-3": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "03ebeb6be03dfea651c36f4b7b9664a73b6f10478a09c545461e6f8500844494",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "8.2 default exploration (also run unoptimised inside cargo test --workspace)"
+  },
+  "X-4": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "d276336a9c3b60c65c0a37d58f714168eec85c757e0c41eb5ca650d46d1abca2",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "8.2 default exploration (also run unoptimised inside cargo test --workspace)"
+  },
+  "X-5": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "622f0cf9d88394d003e95cbe3c3cd7e246e73ff2f7e19b950547ec40c2ceec09",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "8.2 default exploration (also run unoptimised inside cargo test --workspace)"
+  },
+  "F-1": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-2": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-3": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562",
+   "admissibility": "PASS — admissible unchanged-core composed-quotient PASS (AD-1-R4 B-E, N)",
+   "discharge": "REPLACED_BY gc_symmetry_f3 (AD-1-R4 E.1/E.3 row 3)"
+  },
+  "F-4": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "44b0023eb9106365e4bf88039f8cc914c1e542f8a8490f604dfa0274aacfb948",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-5": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "a6d17e7691c80b07c79d1c8115eb40acfa149f8dab3574bce1e1564cecb47d8b",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-6": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-7": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-8": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "2e0f15299b7ed66a30cd12cf8ab6414139480a52687c83796b9d5718d4d3e3ee",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-PT": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8",
+   "admissibility": "PASS — admissible unchanged-core composed-quotient PASS (AD-1-R4 B-E, N)",
+   "discharge": "REPLACED_BY gc_symmetry_fpt (AD-1-R4 E.1/E.3 row 9); also A4's (f) comparison"
+  },
+  "F-B": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7",
+   "admissibility": "PASS — admissible unchanged-core composed-quotient PASS (AD-1-R4 B-E, N)",
+   "discharge": "REPLACED_BY gc_symmetry_fb (AD-1-R4 E.1/E.3 row 10)"
+  },
+  "F-B2": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-G": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-W": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "d309de48cde0febf20ab897d3e01fad05339e27d2fbb7a42abe674670900ba71",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-D": {
+   "raw_outcome": "PASS",
+   "raw_sha256": "2f80e958de47a72a81f6d7ffb7f5ff00c95895a21f387d66eebb0b696304c6b3",
+   "admissibility": "PASS — admissible unchanged-core original-explorer PASS",
+   "discharge": "REQUIRED_FINAL_RUN, original explorer (AD-1-R4 E.3)"
+  },
+  "F-R": {
+   "raw_outcome": "INCOMPLETE",
+   "raw_sha256": "78e44c335b6ce65f8df6aea18b71e488613403ba8c0471c5cf1c33057ab58ccd",
+   "admissibility": "INCOMPLETE — STATE CEILING REACHED (AD-1-R4 K.1); establishes no property",
+   "discharge": "F-R — UNCHANGED-CORE OBLIGATIONS DISCHARGED BY ACCEPTED STUTTERING-REFINEMENT PROOF (AD-1-R5 B, C, D; Owner adoption 2026-10-14); NOT an explorer PASS"
+  }
+ },
+ "F_R_recording": "F-R — UNCHANGED-CORE OBLIGATIONS DISCHARGED BY ACCEPTED STUTTERING-REFINEMENT PROOF",
+ "G_branch_accounting": {
+  "rows": 193,
+  "counts": {
+   "MEASURED_COMPLETE": 85,
+   "MEASURED_IN_INCOMPLETE_PREFIX": 3,
+   "UNOBSERVED": 105
+  },
+  "proof_taken_rows": 57,
+  "rule": "no derived row is recorded as measured; no unobserved row is recorded as covered"
+ },
+ "H_fast_local": {
+  "verdict": "FAST_LOCAL_NOT_FULLY_DISCHARGED",
+  "evidenced": [
+   "checkout verification",
+   "toolchain and system libraries",
+   "cargo fmt --all -- --check",
+   "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+   "cargo test --workspace --locked (ripgrep 14.1.0, not 14.1.1)"
+  ],
+  "not_discharged_steps": 21
+ },
+ "I_current_tree_review_decisions": [
+  {
+   "decision": "All 22 stale M-control mappings: SAME PROPERTY",
+   "source": "relayed FINAL-EVIDENCE-STAGE1; FREEZE-RECORD.txt blob 4321cb34",
+   "nature": "ARCHITECT DECISION (relayed)"
+  },
+  {
+   "decision": "M18: SAME INTENDED AUTHORITY PROPERTY. CHANGED OBSERVABLE FAILURE MECHANISM.",
+   "source": "mission text (CLOSURE-PACKET-01; FINAL-CLOSURE-01 section 8)",
+   "nature": "ARCHITECT SOURCE-LEVEL DISPOSITION (conveyed); not an acceptance"
+  },
+  {
+   "decision": "current-tree acceptance of any of the 183",
+   "source": "none",
+   "nature": "PENDING"
+  }
+ ],
+ "J_assumptions_and_limitations": [
+  "A-1 and A-2 undischarged",
+  "AQ6 binding model-scope limitation for F-3/F-PT/F-B",
+  "quotient original counts DERIVED only",
+  "F-R safety/D1/L1 DERIVED through the proof",
+  "105 branch rows unobserved",
+  "D2A-1 core dormant, production-unactivated",
+  "decision records executor-written and unsigned"
+ ],
+ "K_outstanding_decisions": "see 05-H6-UNRESOLVED.md",
+ "section11_label": "WITHHELD",
+ "inputs": [
+  {
+   "label": "A source protocol.rs",
+   "where": "git d5964ee5326c:crates/nexus-governed-control/src/ledger/protocol.rs",
+   "git_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
+   "sha256": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296",
+   "bytes": 64546,
+   "nature": "SOURCE",
+   "binds": "A"
+  },
+  {
+   "label": "A source model_tests.rs",
+   "where": "git d5964ee5326c:crates/nexus-governed-control/src/ledger/protocol/model_tests.rs",
+   "git_blob": "28085ce232827301104b5d757af042ec933976f8",
+   "sha256": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972",
+   "bytes": 310612,
+   "nature": "SOURCE",
+   "binds": "A"
+  },
+  {
+   "label": "A source unit_tests.rs",
+   "where": "git d5964ee5326c:crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs",
+   "git_blob": "55dc66409eaccdaa93e8f0a56f2ccb14be81e114",
+   "sha256": "841220b1095f339568e2764c41be0792a83c7fb097df6cdea8b50e46dc261159",
+   "bytes": 104202,
+   "nature": "SOURCE",
+   "binds": "A"
+  },
+  {
+   "label": "B ct-1 manifest",
+   "where": "git d5964ee5326c:docs/evidence/p3-candidate11/current-tree-183/manifest.json",
+   "git_blob": "5d31cb45123403626f06c521dd2d53103676250e",
+   "sha256": "20bcc6fe221238f81246348cbbe94636a3c9b6d8acf89901d230e091f1a44279",
+   "bytes": 687381,
+   "nature": "SOURCE (candidate manifest; no string in it confers acceptance)",
+   "binds": "B"
+  },
+  {
+   "label": "B historical 183 manifest",
+   "where": "git d5964ee5326c:docs/evidence/p3-candidate10/original-183/manifest.json",
+   "git_blob": "65fa69dcc0742e04658a3360c42e051e38ebbf5b",
+   "sha256": "2c4adc84121c1efbbfe84aa4422444407c4d1eb4b556fbf3a0ab8e22d4782e14",
+   "bytes": 413749,
+   "nature": "SOURCE (historical, preserved)",
+   "binds": "B"
+  },
+  {
+   "label": "contract P3-C11-D2A1-CONTRACT-02-R1 (authenticated copy)",
+   "where": "mission:raw/CONTRACT-02-R1.md",
+   "git_blob": null,
+   "sha256": "cac6535115fb333e68e6c3c045e444342c950ab7a735b7b7deea21cb2cb53b3c",
+   "bytes": 107331,
+   "nature": "CONTRACT",
+   "binds": "governing"
+  },
+  {
+   "label": "AD-1-R4",
+   "where": "git d5964ee5326c:docs/evidence/p3-candidate11/ad1r4-consolidation-01/ad1r4/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R4-DRAFT.md",
+   "git_blob": "35d5074c2daa2ce9602fee3cd23dc0ccd6aef5b1",
+   "sha256": "00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693",
+   "bytes": 143220,
+   "nature": "CONTRACT AMENDMENT (Owner adopted)",
+   "binds": "governing"
+  },
+  {
+   "label": "AD-1-R4 Owner adoption record",
+   "where": "git d5964ee5326c:docs/evidence/p3-candidate11/ad1r4-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "git_blob": "54c956bc1324dd3a8fd97439faa815f0865b404d",
+   "sha256": "105e087137fed4ed7bf2baaab50b06812a1847ddbe9549809b85eecbdae379c6",
+   "bytes": 2677,
+   "nature": "OWNER DECISION RECORD (executor-written, unsigned)",
+   "binds": "governing"
+  },
+  {
+   "label": "AD-1-R5",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md",
+   "git_blob": "ae3cabdb45627f9b3179a098c50d27e50c55101f",
+   "sha256": "4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473",
+   "bytes": 16067,
+   "nature": "CONTRACT AMENDMENT (Owner adopted)",
+   "binds": "governing"
+  },
+  {
+   "label": "AD-1-R5 Owner adoption record",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/ad1r5-adoption/OWNER-ADOPTION-2026-10-14.md",
+   "git_blob": "1492e185cb475bd32d95079a39b49078c0e23ddc",
+   "sha256": "9990d2565a5ec96e0db03be832e96f64f774e662f6131cb69240c9a435757aa4",
+   "bytes": 3641,
+   "nature": "OWNER DECISION RECORD (executor-written, unsigned)",
+   "binds": "governing; F"
+  },
+  {
+   "label": "AD-C7-W (K2)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md",
+   "git_blob": "cb3a208e1d79a7e94e2ae0001e208a2b6436bc46",
+   "sha256": "989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b",
+   "bytes": 116248,
+   "nature": "CONTRACT AMENDMENT (Owner adopted, C7 only)",
+   "binds": "governing; E"
+  },
+  {
+   "label": "AD-C7-W Owner adoption 2026-10-15",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-adc7w-owner-adoption-01/OWNER-ADOPTION-2026-10-15.md",
+   "git_blob": "f9ce488c5db8fba8e3f0277334446b11d423c4de",
+   "sha256": "800f767d4df66f6a8c1c30306395042ff62a22bc3a354349d813ffc100066a54",
+   "bytes": 3838,
+   "nature": "OWNER DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "AD-C7-W Owner identity approval 2026-10-16",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/c7-owner-identity-reauthorization-2026-10-16/OWNER-DECISION-2026-10-16.md",
+   "git_blob": "cfcbf9982add53dee8f0b4d9c6b634474b4e072b",
+   "sha256": "4b74b90a73b7f93d804859afb8bf3d18d0d457603984995f5c1d3ae8a39392e2",
+   "bytes": 5489,
+   "nature": "OWNER DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "K1 control catalog",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-control-definitions-r2-01/catalog/catalog.json",
+   "git_blob": "1918374263740d2f98640da00fc466737945975e",
+   "sha256": "d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83",
+   "bytes": 288312,
+   "nature": "ACCEPTED EVIDENCE (frozen catalog)",
+   "binds": "E"
+  },
+  {
+   "label": "C/D all-183 alignment and 22 reconciliation (recomputed)",
+   "where": "mission:03-CURRENT-TREE-ALIGNMENT.json",
+   "git_blob": null,
+   "sha256": "5a744f7c4265977c98816eaf67f3d2cb552883a974f640afe45203f136c57a4f",
+   "bytes": 155046,
+   "nature": "EXECUTOR ANALYSIS (mechanical)",
+   "binds": "C, D"
+  },
+  {
+   "label": "C alignment checks",
+   "where": "mission:receipts/32-S3-CHECKS.txt",
+   "git_blob": null,
+   "sha256": "e477072c4d16e3deca0582f2f6dbd682760e65dc861b5efbe7112da55874ecea",
+   "bytes": 140994,
+   "nature": "EXECUTOR ANALYSIS (mechanical)",
+   "binds": "C"
+  },
+  {
+   "label": "D reconciliation record",
+   "where": "mission:03-RECONCILIATION-22.md",
+   "git_blob": null,
+   "sha256": "487ad62f555e15c85a372bd627228aa64094188b71ff89beff60f0049ada3d53",
+   "bytes": 13263,
+   "nature": "EXECUTOR ANALYSIS",
+   "binds": "D"
+  },
+  {
+   "label": "D/I relayed SAME PROPERTY ruling (FINAL-EVIDENCE-STAGE1 freeze record)",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/FREEZE-RECORD.txt",
+   "git_blob": "4321cb34ade69ec76fdba0b65fe36ecca05c1b5a",
+   "sha256": "a9b86f89b033cf8873404e2780f42febc48715a6e6dca0ec5dfd42630e6d7fe3",
+   "bytes": 3114,
+   "nature": "ARCHITECT DECISION RECORD (relayed; executor-written)",
+   "binds": "D, I"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-C22-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/ARCHITECT-RULING-C22-ACCEPTANCE.md",
+   "git_blob": "b852dc55adfb3b2dbff05a48f811143e5b12fc37",
+   "sha256": "8bfb7fdac4141bc00f0ae4a1f994c1f38dd157b9e452abc40f52a3ebdb290af3",
+   "bytes": 6336,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/ARCHITECT-RULING-TRANCHE1-PARTIAL-ACCEPTANCE.md",
+   "git_blob": "59d7a24b19ee2294d68c0f3a375ba57380b4b377",
+   "sha256": "cf9bf865e01c8f8b359916eae75f29147132ff67465f93b1c08473c0a8b0d776",
+   "bytes": 12549,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/documents/ARCHITECT-RULING-TRANCHE1-FINAL-ACCEPTANCE.md",
+   "git_blob": "c82adabae323eaada06fc24ed5b6faeaedb41485",
+   "sha256": "e8859092ad0de7a4a357486172a4c2704946e70fb8510a43c383f9384a9cf04b",
+   "bytes": 8058,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/documents/ARCHITECT-RULING-TRANCHE2-PARTIAL-ACCEPTANCE.md",
+   "git_blob": "54f618029d79a3eaf65c891a4b8eae5a1455f1d0",
+   "sha256": "17cf49462a6ea81f4255b97952042772ed42e59fa80db2f139aeedd51b331a59",
+   "bytes": 9230,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-exec-01/documents/ARCHITECT-RULING-TRANCHE2-CONTINUATION-ACCEPTANCE.md",
+   "git_blob": "674ed583be5e88700426c6e05db978003d03e016",
+   "sha256": "6013b68a1097d0bb1c3702164635185e664de51be2e15dd8421c4bfd21d6b7d8",
+   "bytes": 8554,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/documents/ARCHITECT-RULING-TRANCHE3-C2-ACCEPTANCE.md",
+   "git_blob": "0a19b1886192cb62a048e7cf9a05b3fa7636950d",
+   "sha256": "13daed6b69247f81ce4d8f4638f45960a19fc282984d148e383a18b9dd38c5dc",
+   "bytes": 5372,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/documents/ARCHITECT-RULING-TRANCHE3-CONTINUATION-ACCEPTANCE.md",
+   "git_blob": "2a5a4309d2ec48494aa568513cc89655baa777c2",
+   "sha256": "8a037382911967919845da590e52ade34162b638d32aeb88b4ecd9f6c138a88b",
+   "bytes": 10554,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/documents/ARCHITECT-RULING-TRANCHE3-TAIL-ACCEPTANCE.md",
+   "git_blob": "bd99bd84e7f81815ced66bc6d23e9f4dbc88d493",
+   "sha256": "5364fbe49daecf89eb7a4784d43381eab9d187c9f8a2ed979cbf5b937942e0b1",
+   "bytes": 10276,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E ruling record ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c4-01/documents/ARCHITECT-RULING-C1-C25-WITNESS-ACCEPTANCE.md",
+   "git_blob": "f0d110291a17bcd2a56b4e3b687b68fb4cbb3d8e",
+   "sha256": "ee444b0f0a9b46bc234bda04f231b534cb01c70bd9b7c8093064b90fa39a4cc2",
+   "bytes": 8756,
+   "nature": "ARCHITECT DECISION RECORD (executor-written, unsigned)",
+   "binds": "E"
+  },
+  {
+   "label": "E A1 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/81-A1/RESULT.txt",
+   "git_blob": "36ebc7018c529f132ac9e5e4c4255d699bcc870b",
+   "sha256": "46c246eaa30db42abb58fac9a9e2bf91f2edf7169e778459a7c5d9239d6e9b88",
+   "bytes": 964,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E A1 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/81-A1/04-run/raw-output.txt",
+   "git_blob": "dfa2632f14274dbd2c0b7853cfc32db15f5b89e3",
+   "sha256": "2a1c9413592503f43f03c0e42a1e9b53cf3b45810e1db72cf53172f422ab2244",
+   "bytes": 13381,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E A2 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/82-A2/RESULT.txt",
+   "git_blob": "8761e5125e3eef33bb1b616818b661564ff2e3ef",
+   "sha256": "c8e1bab10021bcb4da2880800f44a90333d9513357d31fc6ff6739744e9bab95",
+   "bytes": 1296,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E A2 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/82-A2/04-run/raw-output.txt",
+   "git_blob": "4e66580bf63c7202cc58ea02dc1988733ad1a520",
+   "sha256": "d1edba58123e3301465ed89916ca80769a1d0b3ade516cd7503ed63585275e93",
+   "bytes": 14181,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E A3 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/62-A3/RESULT.txt",
+   "git_blob": "8fe853c28225ffa6f2cba3fb85d1fdf448e8fd44",
+   "sha256": "8f0f39305f65ca5d46738d1e40d36d1bc5c3649ab3e7ed2c7c213381297fa8f3",
+   "bytes": 935,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E A3 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/62-A3/04-run/raw-output.txt",
+   "git_blob": "f1b75f26de3d6eaec1679ddba0e3e4bcb0e7f9c8",
+   "sha256": "17132fdad65419ef1f26eca196f38c13cdb5322e337636d17c58423d24e9e1b9",
+   "bytes": 15423,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E A5 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/84-A5/RESULT.txt",
+   "git_blob": "04478cd57ce6191432eabfee05ff21fa7decd3b5",
+   "sha256": "168b4387610002952331be1662272c73f208b0a50de3c509b844fd1c925cf617",
+   "bytes": 997,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E A5 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/84-A5/04-run/raw-output.txt",
+   "git_blob": "6417e1d2ef78c98c9d2ecf7481b6e3fe5b44f54a",
+   "sha256": "ba743f7dc3c70ee50016f201a2e3cb19cc6227e41d921c14338b27f68672e3c6",
+   "bytes": 16264,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E A6 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/63-A6/RESULT.txt",
+   "git_blob": "0b676921013432ad4149ccbf48e537b128955107",
+   "sha256": "8127246bcfca9c022724d62d0ad28f962df4d8311890f44668d687576ac6b581",
+   "bytes": 991,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E A6 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/63-A6/04-run/raw-output.txt",
+   "git_blob": "f9c6ab54007ba09a42ab7ecd410d2c40611a0209",
+   "sha256": "52ea67c27c5187cc81ae1e11b333f19b9d1081c0846375177cf7dafebc56db2d",
+   "bytes": 18548,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C1 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/81-C1/RESULT.txt",
+   "git_blob": "d7c4cb692a00421cac7ebf0c82f9671ad64630be",
+   "sha256": "3e178b744526ca9b3fc626675ecbb2ac6601193fd49797e3855a578828316967",
+   "bytes": 2174,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C1 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/81-C1/04-run/raw-output.txt",
+   "git_blob": "d8a569908b624a3dea2250d4e1bd19b29cc8a6b0",
+   "sha256": "f092dab461f063fea17925149b6266a102bf15c4cd8d9f7230ccc02f4c839c2a",
+   "bytes": 13603,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C1 mutant witness receipt",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/81-C1/04c-witness/raw-output.txt",
+   "git_blob": "07d91180f30b872449519a8480cd7131b09f2f6e",
+   "sha256": "e3aebea065e409289bf2518f4dea4669867017c9efafd5f841620024e8514cfd",
+   "bytes": 4361,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C10 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/52-C10/RESULT.txt",
+   "git_blob": "c535a404e357e7dec2b306e3ffed262395abc860",
+   "sha256": "93820cf47bec3f484a533ad31d3397573e693657ed27999d4472d302237cb0f4",
+   "bytes": 956,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C10 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/52-C10/04-run/raw-output.txt",
+   "git_blob": "d81d108c56868917ecda34ba9215214cf90f19a4",
+   "sha256": "36c16109f0c1ad0fa54d7db0eb534b8f473c29c656505ea969ecf2a9cda1fd13",
+   "bytes": 13497,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C11 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/39-C11/RESULT.txt",
+   "git_blob": "048a8cfa7932050d44018ef5cbf0be5c146c85f4",
+   "sha256": "a01e5394d7007ac74551460c6a1c52b777fb47c90a30a6c8c731b409d08ed6f3",
+   "bytes": 1027,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C11 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/39-C11/04-run/raw-output.txt",
+   "git_blob": "aa85d57c7495f4f70c9e45525707ddbc09c69bed",
+   "sha256": "3847524f46a9de5f627b49318adf63b21385f3701fb73f591d8c1a90d4e42aff",
+   "bytes": 13568,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C12 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/37-C12/RESULT.txt",
+   "git_blob": "9935630251c4c81adcb49fc9cd83c3a739cf59d2",
+   "sha256": "915a93a761f97c117ba3ab4d0e19e274b6796928035375bd60253fdcc00237b7",
+   "bytes": 804,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C12 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/37-C12/04-run/raw-output.txt",
+   "git_blob": "13b60eb462517647c26e302f7f640ac0b4c84ad3",
+   "sha256": "d7d6dc6780698b402983970a6b7a8171e856d906a0524befa8eaaf7a0b44b7f9",
+   "bytes": 13446,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C14 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/32-C14/RESULT.txt",
+   "git_blob": "40c73e6335b0e221c34e0d079b049ac815c9862b",
+   "sha256": "225b706e06d472dace8557ac165f20f58ea7eff6ee0f6646617ff10dd745cd1f",
+   "bytes": 862,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C14 failing receipt ((b) named non-explorer mutant-test FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/32-C14/04-run/raw-output.txt",
+   "git_blob": "2d8e33fa911d23c3ff3dd5e8b0e8c3e706ac36c5",
+   "sha256": "b795ef1d0808f7a17c8db8fcc118c2ab5fe598d7a122d3b4d0aa549ad673970b",
+   "bytes": 654,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C15 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/65-C15/RESULT.txt",
+   "git_blob": "712e4ca3a4d02d9c41547c201f0c8ce8c681c54d",
+   "sha256": "82a1bc4111654181d4bd7b77e51fca09919016fadc956c17660fa58456092d8a",
+   "bytes": 1467,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C15 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/65-C15/04-run/raw-output.txt",
+   "git_blob": "0a979d68900d339d0668517dd6352e48a284f1fd",
+   "sha256": "75c2c6d76f3868e75b85e1a4770ab78ebb691fab87981187bcd070bea471a5ad",
+   "bytes": 14860,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C16 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/53-C16/RESULT.txt",
+   "git_blob": "743cf3867a06af943057dc9ebf3e769d6065a33a",
+   "sha256": "5e42903607a229828640cce7db92a0be6bcf7332dde6115e9b0093d7e61e45f3",
+   "bytes": 942,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C16 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/53-C16/04-run/raw-output.txt",
+   "git_blob": "52bd20b3f971e3c1eb514602fb5e0c9dde0a919b",
+   "sha256": "ee469a45a015b4ad23914c2ebb23c83a281e47a0136f37a4fcd11b801e1242ba",
+   "bytes": 13471,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C17 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/40-C17/RESULT.txt",
+   "git_blob": "9ac14d9641e5141644dbde15272887d87d42d78d",
+   "sha256": "a45c9679ce0849b8b4111b6f2f98043235879eff5c7279f90e59d205cd40eebb",
+   "bytes": 937,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C17 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/40-C17/04-run/raw-output.txt",
+   "git_blob": "35209194feaf8e5ee19fcc3f91f0c761e319cf4c",
+   "sha256": "0e68d6c148ad282187b87674d39cf472e9adf49d0408ca24aed53db76088828a",
+   "bytes": 13588,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C18a RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/41-C18a/RESULT.txt",
+   "git_blob": "b3cb2b68b40581fd1b64c8b7c8dd7c3392f6420f",
+   "sha256": "ba7a5459ca7ad3e9eb47e9b2d7fbf5297fcdc94cff073b7cdb946479bfa73f1b",
+   "bytes": 922,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C18a failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/41-C18a/04-run/raw-output.txt",
+   "git_blob": "88550682425c3401a78c99ac4204a380cbea1836",
+   "sha256": "016b4c4de2f4128523dae60931509f9cc2549800a31572ba1869a5f4a5924c10",
+   "bytes": 15227,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C18b RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/42-C18b/RESULT.txt",
+   "git_blob": "8bfc35a4f6f64cf6cb26cee63beb518f87bed4f2",
+   "sha256": "e2ebe8dbb30093eaaf677db401d5c1b7f76873f3c669f1d91cef3c1982e524b2",
+   "bytes": 918,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C18b failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/42-C18b/04-run/raw-output.txt",
+   "git_blob": "8774ca67733d33fdb3f5507043863137eb5f190f",
+   "sha256": "cd5161aa5edf561643f0e9b544d69d87c72a767f6e7614f0fa305fd4239c85b7",
+   "bytes": 14601,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C19 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/33-C19/RESULT.txt",
+   "git_blob": "9c2999e128f86ab92cf1a1b3ec5427682c65c089",
+   "sha256": "6ca7d192c0647ab6f8af2cf70dca350470a78e2aade94d0eeb12e43327f868e8",
+   "bytes": 871,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C19 failing receipt ((b) named non-explorer mutant-test FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/33-C19/04-run/raw-output.txt",
+   "git_blob": "24cd2d314855471917192cc26523011d4154c27e",
+   "sha256": "bca85833e56e4abd37453b1aa851ba1a00972a8117d66e392a14398c1035a306",
+   "bytes": 625,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C2 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-exec-01/receipts/66-C2/RESULT.txt",
+   "git_blob": "57c789536982a03c357492bd7aec619e27ac7684",
+   "sha256": "130210abc0b6b3c408219959458ccc8381e0fd5f612a43feb5c84855cc75d0f5",
+   "bytes": 970,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C2 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-exec-01/receipts/66-C2/04-run/raw-output.txt",
+   "git_blob": "f5a18890430f0766ebb4b22d47d31affa868abc3",
+   "sha256": "758a6b98779fb27bd44ef1e99783ceb1982b2532e135d0d7de50e48963a1fb31",
+   "bytes": 15690,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C20 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/83-C20/RESULT.txt",
+   "git_blob": "6ceebd19d13ffd6b190640f53d656c57ed20c6cd",
+   "sha256": "01ce97598244a5f5a8bb55abf95cc9902d8e15cb806ee108bae18f61411a8ca2",
+   "bytes": 989,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C20 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-tail-01/receipts/83-C20/04-run/raw-output.txt",
+   "git_blob": "d6f17fbc653e3bdceb3cf0b5ce1eed0b4b635cec",
+   "sha256": "8d80f6092fca5e55f26e55d64a22637112caeda8fd3a7ef8bc5e8e3d80aa31a5",
+   "bytes": 16650,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C21 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/34-C21/RESULT.txt",
+   "git_blob": "0daa04f2044d48575dd0d0363158a42e4dbbd6b2",
+   "sha256": "6eda983f969ccfbe9618b0fd2ab133fab1b1719d98ebc47db5a25bb4a065523f",
+   "bytes": 858,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C21 failing receipt ((b) named non-explorer mutant-test FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/34-C21/04-run/raw-output.txt",
+   "git_blob": "68369651cfe0c9dbd6d93e19f7f82061f15a1ef5",
+   "sha256": "bc1322e08ac476e22e9384932ee34f61d52f03e141e4f58544d469856a6fbf43",
+   "bytes": 705,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C22 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/31-C22/RESULT.txt",
+   "git_blob": "b9717ad766e11dacf4d342db0022ab56886ae486",
+   "sha256": "106c45675b7f1d0e164d10125b7258ffe71244f908573d63321371771dda0aec",
+   "bytes": 579,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C22 failing receipt ((d) intentional mutant compile failure)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/31-C22/03-build/build.stderr",
+   "git_blob": "2064a39176fbb386ad5e4624aa873bd059c4e8e5",
+   "sha256": "5cbb36bd2d8af4c66bf12fa30eb68133689a181e87d0e15e6d65f471afb633b2",
+   "bytes": 420062,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C23 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/51-C23/RESULT.txt",
+   "git_blob": "6e4bbaae5e1ce8b63157b9a3408e85b2e20c8cc4",
+   "sha256": "a549c43ab79308755a55cc5185ddcb0e015b3ab7fab4cb8f902222fdf2792472",
+   "bytes": 921,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C23 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/51-C23/04-run/raw-output.txt",
+   "git_blob": "06ea3524567cd298ea21d59f5756fbf81d014f42",
+   "sha256": "eccccfb71cab27d3c9c880c64d07dd2e0db41c50f2abfcc6417638853ce209bd",
+   "bytes": 14943,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C24 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/81-C24/RESULT.txt",
+   "git_blob": "1886f614db4d4fcaa3cf2d6f5d1c29f81509a50b",
+   "sha256": "b391e62cabedbc3ee73ddf5baa6161806d5e57e1fb4895882e2e8ffa0abfe678",
+   "bytes": 1322,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C24 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/81-C24/04-run/raw-output.txt",
+   "git_blob": "a75ac4ac58b6c2a9c7e51f87bdafb4e881a4eab4",
+   "sha256": "9b48791e313d3a0f33ae0d77c37edf7dd1fb18a74efd4aa11f7c15b93a2af3df",
+   "bytes": 14256,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C25 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/82-C25/RESULT.txt",
+   "git_blob": "84a78ca7b0e1bddaa82e6667bc3925be3728812d",
+   "sha256": "390c4a574ee83e84f2afc193ea09a46db1513c56e1db6487d8356e4085f98f63",
+   "bytes": 2240,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C25 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/82-C25/04-run/raw-output.txt",
+   "git_blob": "7368406df55dd7d8b82f81c82e264defcb90ff64",
+   "sha256": "91dc90ab09aecf8750a4a99a6557165574e42da34c7fe0071a1cd755fb4a9f65",
+   "bytes": 13911,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C25 mutant witness receipt",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c1-c25-01/receipts/82-C25/04c-witness/raw-output.txt",
+   "git_blob": "e122d740faf09ade100364738bd80ab3ad5cded2",
+   "sha256": "501cd4cd8776c4a1242ecd1110544f012e662d54c8cab3e4174c474f73222219",
+   "bytes": 1395,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C26 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/54-C26/RESULT.txt",
+   "git_blob": "f4505012b964e1f1da47efce8c2293bb85036749",
+   "sha256": "f720a2e84d2b0ed74ced2a12b7b8ba0900e541f671a2734023d6563f055b3b70",
+   "bytes": 930,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C26 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/54-C26/04-run/raw-output.txt",
+   "git_blob": "e0a6e8c960571068ceb40624a45da82d3f814aed",
+   "sha256": "0313d7154ad42a4f69f3d8bb2e6b919df5b8e94ab15a45e9bc5998ba15f83faa",
+   "bytes": 13673,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C27 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/35-C27/RESULT.txt",
+   "git_blob": "00145cd131aa2aeffd70e916a272c02aac55e916",
+   "sha256": "4b8b64b5a6288733cf70c5d11fa1aae338f3fb2159450354eecfe0df000f6a3c",
+   "bytes": 865,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C27 failing receipt ((b) named non-explorer mutant-test FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-resume-01/receipts/35-C27/04-run/raw-output.txt",
+   "git_blob": "b920dd46432434514818b9b2142624f67d9d784f",
+   "sha256": "79b4d2e25fc32ff3ff4081a4fdf041d9cedaabf3b91d8cee737c27f0ffad6622",
+   "bytes": 694,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C28 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/36-C28/RESULT.txt",
+   "git_blob": "21d0ba8e95903d7e66ad720e2176a6404c1eac63",
+   "sha256": "d425668a12ee748e4e50a130ddd7fef337c0c6d427bde78cede700817f178d6d",
+   "bytes": 1116,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C28 failing receipt ((b) named non-explorer mutant-test FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/36-C28/04-run/raw-output.txt",
+   "git_blob": "35d61c59b4ebc98eeb59366edd2ce45c2b31e0de",
+   "sha256": "aa162533f7f49d1295cc09ddec911cc2f4aeb6d3437dd401deebe004904415dc",
+   "bytes": 564,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3a RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/55-C3a/RESULT.txt",
+   "git_blob": "d6a4c0645d564bb0be25bd71fed8f80b2e80155a",
+   "sha256": "6b70930d1f8ef473697b4ae6517f0901f8ace276d8a99acca67783ad6e9e3bd2",
+   "bytes": 964,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3a failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-exec-01/receipts/55-C3a/04-run/raw-output.txt",
+   "git_blob": "b790270e6084f076fd619707917e52958a93da59",
+   "sha256": "b17f69a34ae04752b2d123493d6b8ec8d0b393fd5ca4f8b3de4d52f2d2339000",
+   "bytes": 18044,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3b RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/82-C3b/RESULT.txt",
+   "git_blob": "550d4fe8a75054ffcb4dacf44b02920c9eb9cf18",
+   "sha256": "c3b10255e8c07d1e15b67192ee2b83b45c7771869c001f66fae324f3041870ba",
+   "bytes": 1152,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3b failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/82-C3b/04-run/raw-output.txt",
+   "git_blob": "02ec25c384b6753d8c667daddd69674fadaa748e",
+   "sha256": "9c08f2f01dad5348b2f21a968f1c4a29aad54f32fe27d6b7ab87e2b185998b9b",
+   "bytes": 15681,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3c RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/83-C3c/RESULT.txt",
+   "git_blob": "3378c4f38dc8d0cea10f432904efae43a36b9286",
+   "sha256": "244d81d11add79cf2ea234b573b5e149f19fbc4b1ea567b352f6d179bd934c59",
+   "bytes": 1116,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C3c failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/83-C3c/04-run/raw-output.txt",
+   "git_blob": "2c670bd1ef2112a61b1aea58687d3e57a17961cf",
+   "sha256": "e746174a0ef2371ab9630191faa3e213cbcfad6fa2fd576844fb5b77e133197c",
+   "bytes": 16439,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C4 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c4-01/receipts/81-C4/RESULT.txt",
+   "git_blob": "2873db949e782cacecb61afec89000a43dff2695",
+   "sha256": "ec57281f54e157b6dcf8e3c17bd4cfe5e97d07208ba26d678ebda048ad67dc12",
+   "bytes": 2847,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C4 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c4-01/receipts/81-C4/04-run/raw-output.txt",
+   "git_blob": "40b15298e3c1df65e0a60efe9f361b0cc474080f",
+   "sha256": "edda61a1246945ec76b2b15526f939eaa8b4559229125d6d2729200e0fcd4477",
+   "bytes": 16773,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C4 mutant witness receipt",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-witness-c4-01/receipts/81-C4/04c-witness/raw-output.txt",
+   "git_blob": "2a9daa6f04b45fc677d382948b44046326c540cb",
+   "sha256": "e0f7379905c08662e7a6a8e16f1604c119a8adf2a2c325a0f4d140ea253f2d44",
+   "bytes": 25309,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C5 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/61-C5/RESULT.txt",
+   "git_blob": "cc1ccc68b5cfc300a8f19204e32e9e421c8675ec",
+   "sha256": "1d2eb2ece426c830745a3ac1091a96236a85c031b3306e90b0b34bca1a754ce7",
+   "bytes": 1319,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C5 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/61-C5/04-run/raw-output.txt",
+   "git_blob": "a6276ebbf9af43fdbcb2926f29deaf3d392526a4",
+   "sha256": "62ca176023a7f5066a474483fda926cd32e0f263c3c67835d9d5f6d1329ced19",
+   "bytes": 16155,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C6 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/84-C6/RESULT.txt",
+   "git_blob": "f82d4bc60180a18317638bd076d52df28d48b849",
+   "sha256": "dafe4558ed42f9ff44d2dcc497cbce4db128a62cb68ebef87250635738a28eea",
+   "bytes": 988,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C6 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/84-C6/04-run/raw-output.txt",
+   "git_blob": "036385385011e85c8b036b8be4174c6f0c2ba305",
+   "sha256": "920e109f65a60b316c70e21dabe30942bc95db5e225b00af1470df2bcf41fd01",
+   "bytes": 16900,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C7 failing receipt ((a) primary + (c) mutant witness + (e3) healthy witness (AD-C7-W G.7/G.9))",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-compliant-exec-02/receipts/41-run-A-full_fpt/raw-output.txt",
+   "git_blob": "df463b47747d19cc0e8b6df925ee7eef063e8822",
+   "sha256": "83407d516c71ce173995f4565729b386c29d41f22a2070b873e7e1ae134c9137",
+   "bytes": 15851,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C7 mutant witness receipt",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-compliant-exec-02/receipts/42-run-B-mutant-witness/raw-output.txt",
+   "git_blob": "aa3a0be51834afe1d719dd85191c37ce5ecc4173",
+   "sha256": "4c30badd26eb39629f8cf4bc5b914227291eef20be508847d4a34d61a32b6a16",
+   "bytes": 20521,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C7 healthy witness receipt",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-compliant-exec-02/receipts/40-run-C-healthy-witness/raw-output.txt",
+   "git_blob": "ac792aaef0e4b7803a707224eb5069e21366264b",
+   "sha256": "9df95b75de9a673d1af2658a8767227ec5afd98f829660580e2fd0cf7c5e64d6",
+   "bytes": 19885,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C7 packet manifest",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-c7-compliant-exec-02/MANIFEST.sha256",
+   "git_blob": "30551c8d2f6a12c45d69f96fd89b8acf83f5f666",
+   "sha256": "9181dbabb7ad65525915a88a335b378202a94c36aa65fe6b7e5a9b601de86622",
+   "bytes": 39474,
+   "nature": "ACCEPTED EVIDENCE (seal)",
+   "binds": "E"
+  },
+  {
+   "label": "E C8 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/64-C8/RESULT.txt",
+   "git_blob": "f0bc22fbedbe4c86afa59dbff793ed7dd713e99d",
+   "sha256": "d2c572022bf8836c7d0dc029630ea167b62626b5c0519d0f492e54608964924b",
+   "bytes": 937,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C8 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche2-continue-02/receipts/64-C8/04-run/raw-output.txt",
+   "git_blob": "284abe9f0f6b66dcb6b1892a1e06ac6ffdc0ada8",
+   "sha256": "b42d0eb5775ba8fb6c1279dcf390468c7fffcbc47e7f4e888fc2cd23e3dd90cc",
+   "bytes": 15230,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C9 RESULT.txt (historical executor label)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/38-C9/RESULT.txt",
+   "git_blob": "2eecc90b8176d6c6dd86ba7f6ba6be80e0d9f8f4",
+   "sha256": "d8964dc693266739a697e9e49f3dac6a260176e640d2cda3b9fe53161ab73b40",
+   "bytes": 921,
+   "nature": "RAW EXECUTOR RECORD (label is not acceptance)",
+   "binds": "E"
+  },
+  {
+   "label": "E C9 failing receipt ((a) original-explorer mutant FAIL)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-continue-02/receipts/38-C9/04-run/raw-output.txt",
+   "git_blob": "45be0a25ea7d6bf339f664a71ed6f32dc62e6d08",
+   "sha256": "518e0e47108811b5e8069c693aa1963f7da3ee87aad824a1bbe7479fa9c798d2",
+   "bytes": 13568,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C1 healthy witness receipt (e3)",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/50-witness-C1/raw-output.txt",
+   "git_blob": "e713792188d562563eb64d211183d1ba3cd5d103",
+   "sha256": "26bc516ee7a4e7700ee1d9d1eeb072a5e413501fe0fc0c84af5dfcc0c28420e7",
+   "bytes": 2557,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C25 healthy witness receipt (e3)",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/51-witness-C25/raw-output.txt",
+   "git_blob": "5881aa86f3ecad92857f109734997906ae13c803",
+   "sha256": "1ad1bc3ef1a12e564ce17c7c8369d986971c2065457f9a9a8d45092b6275a6b0",
+   "bytes": 667,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C4 healthy witness receipt (e3)",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/52-witness-C4/raw-output.txt",
+   "git_blob": "baa14a4753ff2a825d13aca081ab58aadd0544e6",
+   "sha256": "15ec6132bf25eacac418f0b661bffe53985fe20506f95725b8c40ec23cbc9918",
+   "bytes": 24303,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "E"
+  },
+  {
+   "label": "E C22 healthy build (e4) classification",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/d2a1-mutation-tranche1-exec-01/receipts/20-healthy-build/CLASSIFICATION.txt",
+   "git_blob": "604a6911710080ce5f5a01f4379017adb54e6704",
+   "sha256": "f3ae4e225cdbfec34c31cd8704d86f5236223d6295e392d692af54d0002335f4",
+   "bytes": 635,
+   "nature": "RAW EXECUTOR RECORD (accepted as C22's restored side)",
+   "binds": "E"
+  },
+  {
+   "label": "E 35-control decision ledger",
+   "where": "mission:01-MUTATION-DECISIONS.tsv",
+   "git_blob": null,
+   "sha256": "f546d59acb3114b4f764118e8180a7804b4671dc6cda773424b740a36a125ef2",
+   "bytes": 38551,
+   "nature": "EXECUTOR ANALYSIS (consolidation)",
+   "binds": "E"
+  },
+  {
+   "label": "E campaign checks",
+   "where": "mission:01-CAMPAIGN-CHECKS.txt",
+   "git_blob": null,
+   "sha256": "a801ae602a6e9176a3da1e65794bd5bcd2d36bb953d1ffd3efc36a32dd332ade",
+   "bytes": 47223,
+   "nature": "EXECUTOR ANALYSIS (mechanical)",
+   "binds": "E"
+  },
+  {
+   "label": "F X-1 receipt (Stage C, optimised e1)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/41-stage-C-X-1/raw-output.txt",
+   "git_blob": null,
+   "sha256": "db1707f08db7a15cf6a1ea2803bd9914c39f614c050b86a3c98ba83452a279e0",
+   "bytes": 6581,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F"
+  },
+  {
+   "label": "F X-2 receipt (Stage C, optimised e1)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/42-stage-C-X-2/raw-output.txt",
+   "git_blob": null,
+   "sha256": "edb43eb5be78972ebe5007a12140651be5265568bc3c0f6ad4530a4c48c474a7",
+   "bytes": 6578,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F"
+  },
+  {
+   "label": "F X-3 receipt (Stage C, optimised e1)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/43-stage-C-X-3/raw-output.txt",
+   "git_blob": null,
+   "sha256": "03ebeb6be03dfea651c36f4b7b9664a73b6f10478a09c545461e6f8500844494",
+   "bytes": 6650,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F"
+  },
+  {
+   "label": "F X-4 receipt (Stage C, optimised e1)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/44-stage-C-X-4/raw-output.txt",
+   "git_blob": null,
+   "sha256": "d276336a9c3b60c65c0a37d58f714168eec85c757e0c41eb5ca650d46d1abca2",
+   "bytes": 6654,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F"
+  },
+  {
+   "label": "F X-5 receipt (Stage C, optimised e1)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/45-stage-C-X-5/raw-output.txt",
+   "git_blob": null,
+   "sha256": "622f0cf9d88394d003e95cbe3c3cd7e246e73ff2f7e19b950547ec40c2ceec09",
+   "bytes": 6552,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F"
+  },
+  {
+   "label": "F X-1..X-5 Stage-1 suite",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/30-suite/raw-output.txt",
+   "git_blob": "6e2ec7f47982f21fdcaf13540757213705c2d2e6",
+   "sha256": "d6f58742ea483dbb95452b186dcf72f729538e672ae60741d978b0eddc6ca3b3",
+   "bytes": 561714,
+   "nature": "RAW MEASUREMENT",
+   "binds": "F; H"
+  },
+  {
+   "label": "F F-2 receipt",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/41-full-F-2/raw-output.txt",
+   "git_blob": "b32a5d64336c9409701719c710f1a3cbc441a1a8",
+   "sha256": "985a3976713bc77bdf358744ec770e6220310f2ce2ed72b3e9ae10b3fb314ab5",
+   "bytes": 6809,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-B receipt",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/42-full-F-B/raw-output.txt",
+   "git_blob": "b5ba4be821c33ed91033204a4652080f1656f14d",
+   "sha256": "c8b612e9ee7e2b8478bf7d4a8bb1dc37d737da7a06828136156752772c8ccaa7",
+   "bytes": 7564,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-3 receipt",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/43-full-F-3/raw-output.txt",
+   "git_blob": "872ef461d465070aabc4418dbe36fd47b86f9d91",
+   "sha256": "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562",
+   "bytes": 7580,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-PT receipt",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT/raw-output.txt",
+   "git_blob": "a92cb8dabd8109f7f237821ce3fba588eee9434e",
+   "sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8",
+   "bytes": 7584,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-1 receipt",
+   "where": "git f023cc3d031a:docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/45-full-F-1/raw-output.txt",
+   "git_blob": "c36226c875ec5694b3b733b41ffab0dc3dfd8ee5",
+   "sha256": "c1455a1ba3e55ae1ddd83feb97e13585882727613608eca01a669439e8f62c6c",
+   "bytes": 6809,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-G receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/60-full-F-G/raw-output.txt",
+   "git_blob": "0b77294ef4eec4da1d911a5cf73f7124e42ebe57",
+   "sha256": "fabcbf13cfccec2744d03d38042dec7e72e3f3699f941a9a2ce17869d55705d1",
+   "bytes": 6786,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-B2 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/61-full-F-B2/raw-output.txt",
+   "git_blob": "fa48050d7ea0ace7e9382bb25282e5b80f18ae63",
+   "sha256": "516adc39418a5cc0db8432e1ce7c1051029d05cb30dc133ac9b1147439633aa3",
+   "bytes": 6544,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-4 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/62-full-F-4/raw-output.txt",
+   "git_blob": "b78687793c402b4d551137227da74972792580f1",
+   "sha256": "44b0023eb9106365e4bf88039f8cc914c1e542f8a8490f604dfa0274aacfb948",
+   "bytes": 6808,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-W receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/63-full-F-W/raw-output.txt",
+   "git_blob": "9bd8fe72705d1197892af33d8930b5b6619c9807",
+   "sha256": "d309de48cde0febf20ab897d3e01fad05339e27d2fbb7a42abe674670900ba71",
+   "bytes": 6765,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-8 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/64-full-F-8/raw-output.txt",
+   "git_blob": "907330db1e82b2a48cf0b0387a3e92c11d8f9d75",
+   "sha256": "2e0f15299b7ed66a30cd12cf8ab6414139480a52687c83796b9d5718d4d3e3ee",
+   "bytes": 6810,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-5 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/65-full-F-5/raw-output.txt",
+   "git_blob": "62aa03adccd38a34d2773aabf3027d1e5fc1114c",
+   "sha256": "a6d17e7691c80b07c79d1c8115eb40acfa149f8dab3574bce1e1564cecb47d8b",
+   "bytes": 6650,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-6 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/66-full-F-6/raw-output.txt",
+   "git_blob": "44bfdbf966c52a4cdcc53761048816dd85e9b9da",
+   "sha256": "3660a0b2b88146f787aed4cf7d6fefe16ebfa658bfa172c33d90e9df3df28452",
+   "bytes": 6650,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-7 receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/67-full-F-7/raw-output.txt",
+   "git_blob": "e5c88ee92c5e291bdb1dfb899d9ff89547c34fef",
+   "sha256": "69e152df74318f497bfd1b8f2b6525de73c00317651f42934f4b22b69a3b417a",
+   "bytes": 6657,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-D receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/68-full-F-D/raw-output.txt",
+   "git_blob": "7dd617cd52e942ea0cbe63db501efc0b9b3fab29",
+   "sha256": "2f80e958de47a72a81f6d7ffb7f5ff00c95895a21f387d66eebb0b696304c6b3",
+   "bytes": 6687,
+   "nature": "RAW MEASUREMENT (accepted evidence)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-R receipt",
+   "where": "git 89326b859792:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/receipts/69-full-F-R/raw-output.txt",
+   "git_blob": "f65f5c1ba5b15053266ee60f6b24de6c70643e6b",
+   "sha256": "78e44c335b6ce65f8df6aea18b71e488613403ba8c0471c5cf1c33057ab58ccd",
+   "bytes": 14961,
+   "nature": "RAW MEASUREMENT — INCOMPLETE (establishes no property)",
+   "binds": "F"
+  },
+  {
+   "label": "F F-R stuttering-refinement proof",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/fr-stutter-r5-01/FR-STUTTERING-REFINEMENT-PROOF-DRAFT.md",
+   "git_blob": "c631a061dd7206b9bc62822711be0eca2a21c223",
+   "sha256": "c97332a33e68f3fecae12dc0ed863b24fbc1f8bffdbf67430765fd3b5281606b",
+   "bytes": 57318,
+   "nature": "DERIVED PROOF OBLIGATION (accepted, as conveyed)",
+   "binds": "F; G"
+  },
+  {
+   "label": "F/G F-R branch disposition",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/fr-stutter-r5-01/FR-BRANCH-DISPOSITION.tsv",
+   "git_blob": "18ffb9a9c184dfe766fa905cac01cbdce128269a",
+   "sha256": "23c3dad1dce7bdc935706de85449ca2f8b8be96731dbdf924283e3a45561f072",
+   "bytes": 53514,
+   "nature": "DERIVED PROOF OBLIGATION (accepted, as conveyed)",
+   "binds": "G"
+  },
+  {
+   "label": "F replay occurrence matrix",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/fr-stutter-r5-01/REPLAY-OCCURRENCE-MATRIX.tsv",
+   "git_blob": "1f676ef6b21bb442cd63f0bb3566565b6cd4a2cb",
+   "sha256": "a341dbf0d7a992c08c95363656f764f0a8b2df9c1fd7491bae6e119fe205e08f",
+   "bytes": 94764,
+   "nature": "EXECUTOR ANALYSIS (AD-1-R5 C(4))",
+   "binds": "F"
+  },
+  {
+   "label": "F configuration record",
+   "where": "mission:02-CONFIGURATIONS.tsv",
+   "git_blob": null,
+   "sha256": "13eb6f32a201839afb734e3e3bcbc07311222ab866ca9122ecc479f10d93517b",
+   "bytes": 27532,
+   "nature": "EXECUTOR ANALYSIS (consolidation of raw measurements)",
+   "binds": "F"
+  },
+  {
+   "label": "G branch vocabulary (193 rows)",
+   "where": "git cca0d773d9a4:docs/evidence/p3-candidate11/final-baseline-remaining-configs-01/vocabulary/VOCABULARY.tsv",
+   "git_blob": "0bc814239185f4c51abbbf8adc4d63f22e8a4a17",
+   "sha256": "a9fc64110c00dfbf37f5db67b5ab5c38719a098b11c0a0af29c1115914c653fe",
+   "bytes": 45821,
+   "nature": "ACCEPTED EVIDENCE (vocabulary)",
+   "binds": "G"
+  },
+  {
+   "label": "G consolidated branch accounting",
+   "where": "mission:02-BRANCH-VOCABULARY.tsv",
+   "git_blob": null,
+   "sha256": "205b4c8994b485a7b0742d4d4fbfc2be7469aa36fe6f5539451d81d22cdd32e7",
+   "bytes": 82981,
+   "nature": "EXECUTOR ANALYSIS (consolidation)",
+   "binds": "G"
+  },
+  {
+   "label": "H fmt receipt (reused)",
+   "where": "audits:p3-c11-dr01-d2a1-closure-packet-01/receipts/50-fmt-gate-and-run.json",
+   "git_blob": null,
+   "sha256": "a79c7e5c9db3316d79a3588701f5be21a23c9c436b3546a379c3f3cc84a2dce3",
+   "bytes": 6484,
+   "nature": "RAW MEASUREMENT",
+   "binds": "H"
+  },
+  {
+   "label": "H all-features clippy raw output (this mission)",
+   "where": "mission:receipts/43b-clippy-all-features-r2/raw-output.txt",
+   "git_blob": null,
+   "sha256": "00495e2bcd527821aae5a6a9fea78a9d61d8e6b799a700cab51c37ce4c43b241",
+   "bytes": 34530,
+   "nature": "RAW MEASUREMENT",
+   "binds": "H"
+  },
+  {
+   "label": "H all-features clippy descriptor",
+   "where": "mission:receipts/43b-clippy-all-features-r2/descriptor.json",
+   "git_blob": null,
+   "sha256": "cfd41babecc4e0b095f39154bd542e37feab2fbb16b9f323bda00c492c8c1ce6",
+   "bytes": 3245,
+   "nature": "RAW MEASUREMENT",
+   "binds": "H"
+  },
+  {
+   "label": "H workspace tests raw output (reused)",
+   "where": "audits:p3-c11-dr01-d2a1-exact-source-validation-02/receipts/30-stage-B-workspace-test/raw-output.txt",
+   "git_blob": null,
+   "sha256": "ce11ea91537fc899292d3496e84a88de393dea01d7ebc65878a428d0d7639533",
+   "bytes": 698431,
+   "nature": "RAW MEASUREMENT",
+   "binds": "H"
+  },
+  {
+   "label": "H Fast Local matrix",
+   "where": "mission:04-FAST-LOCAL-MATRIX.tsv",
+   "git_blob": null,
+   "sha256": "b984636fe08a671331bc1e7134154c1c4f582ac0eb4bbd584d52a1c221211ca4",
+   "bytes": 13139,
+   "nature": "EXECUTOR ANALYSIS",
+   "binds": "H"
+  }
+ ]
+}

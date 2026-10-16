@@ -1,0 +1,29 @@
+STAGE 0 RESOURCE PREFLIGHT — P3-C11-DR01-D2A1-FINAL-CLOSURE-01
+taken 2026-10-16T14:50:08Z, read-only (full raw output: raw/00-resource-preflight-raw.txt)
+
+DISK (root filesystem /dev/nvme0n1p1, ext4; one filesystem holds NEXUS, nexus-audits and /tmp)
+  available to the user: 26,669,228,032 B (24.84 GiB); 16 GiB floor = 17,179,869,184 B; headroom 9,489,358,848 B (8.84 GiB)
+  => no fresh whole-workspace or desktop-backend test build can fit above the floor (VALIDATION-02's test target: 31,998,849,024 B)
+
+MEMORY
+  MemTotal 65,077,588 KiB; MemAvailable 52,324,184 KiB (>= 18 GiB required before each expensive command)
+  host swap: 16 GiB file, 8.1 GiB in use before this mission (not this mission's); every mission scope ran with MemorySwapMax=0
+
+ENFORCEMENT CAPABILITY
+  cgroup2fs; controllers cpuset cpu io memory hugetlb pids rdma misc dmem; user manager delegates cpu memory pids
+  systemd 255 (255.4-1ubuntu8.18): transient user scopes with MemoryMax/MemorySwapMax/RuntimeMaxSec
+  self-test: receipts/41-supervision-selftest (v1, FAILED predicate, preserved) and receipts/41b-supervision-selftest-r1 (PASS 6/6)
+
+CPU
+  16 logical CPUs; load average 0.86 0.88 0.93; Cargo build concurrency limited to 2 (CARGO_BUILD_JOBS=2)
+
+PROCESSES
+  no cargo, rustc, clippy-driver, cargo-clippy, rustdoc, Runner.Worker/Listener or nexus_governed_control test executable running
+  GitHub runner actions.runner.Nexus-os2026-nexus-os.nexus-local-asus.service: inactive, disabled, MainPID 0
+  unrelated, left untouched: PID 2978429 (tail -f on an old C4 console), PID 2306315 (a bash wait loop from Oct 13),
+  and Node processes of another Claude session (claude-remote-test scratchpad). Nothing was signalled.
+
+WORKTREES
+  215 registered at the start, including the primary checkout (216 after this mission added its own); 40 locked; none recreated, changed, unlocked or removed
+
+HARD STOP CONDITIONS CHECKED: none met (identities match; resources sufficient for the one Clippy check only)

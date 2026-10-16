@@ -1,0 +1,22 @@
+area	item	status	evidence	decision_owner	pending_decision
+source	Candidate C exact (commit, tree, blobs, 5,364 tracked files)	EXACT_CANDIDATE_C	00-PROVENANCE.md; 00-SOURCE-IDENTITIES.json	-	-
+contract	CONTRACT-02-R1, AD-1-R4, AD-1-R5, AD-C7-W identities and adoptions	AUTHENTICATED	00-CONTRACT-CHAIN.md	-	-
+mutations	35 D2A-1 controls	35_ARCHITECT_ACCEPTED (33 Git records; C4, C7 conversational)	01-*; MUTATION-35-ACCEPTANCE.md	Architect	A-6 by-ID records for C4/C7 (optional)
+mutations	A4	SATISFIED — ARCHITECT ACCEPTED	01-ACCEPTANCE-PROVENANCE.md	-	-
+configurations	X-1..X-5	MEASURED PASS	02-CONFIGURATIONS.tsv	Architect	A-7 X evidence form
+configurations	F-1, F-2, F-4..F-8, F-B2, F-G, F-W, F-D	PASS (original explorer)	02-CONFIGURATIONS.tsv	-	-
+configurations	F-3, F-PT, F-B	PASS (composed quotient; original graph not explored)	02-CONFIGURATIONS.tsv	-	-
+configurations	F-R	raw INCOMPLETE; F-R — UNCHANGED-CORE OBLIGATIONS DISCHARGED BY ACCEPTED STUTTERING-REFINEMENT PROOF	02-SECTION84-CLOSURE.md	Architect	A-8 record of AD-1-R5 C(7)
+8.4	consolidated receipt record; 34 ignored tests	EVIDENCED (consolidated)	02-*	Architect	A-7 accept the record
+branches	193 rows	85 MEASURED_COMPLETE / 3 PREFIX-ONLY / 105 UNOBSERVED (disclosed)	02-BRANCH-VOCABULARY.tsv	-	-
+current-tree 183	H.1-H.5 alignment	ALIGNED	03-CURRENT-TREE-ALIGNMENT.json	Architect	A-2 ct-1 review
+current-tree 183	current review statuses	183 PENDING	03-M183-DECISION-PROVENANCE.tsv	Architect	A-2
+current-tree 183	22 changed pairs	21 under relayed SAME PROPERTY ruling; M18 requires explicit review	03-RECONCILIATION-22.md	Architect	A-3, A-4
+current-tree 183	campaign at the final tree	NO RECEIPT AT C; scope unruled	03-REMAINING-183-DECISIONS.md	Architect; Owner	A-5; O-3
+fast local	fmt, all-features clippy, workspace tests, checkout/toolchain checks	EVIDENCED (tests with ripgrep 14.1.0)	04-RUST-VALIDATION.md	Architect	A-9 deviation
+fast local	21 remaining workflow steps	NOT_DISCHARGED	04-FAST-LOCAL-VERDICT.md	Owner; Architect	O-1; A-11
+H.6	detached attestation	CANDIDATE — PENDING_DECISIONS	05-*	Architect	A-12
+section 11	interim label	WITHHELD (line 926)	06-SECTION11-DECISION-DOCKET.md	Owner (if wanted)	O-2
+review	independent review of the evidence (S-20)	PENDING	this packet	Architect	A-1
+assumptions	A-1, A-2	UNDISCHARGED BY DESIGN	02-ASSURANCE-LIMITATIONS.md	-	full D2a contract
+publication	packet and attestation	NOT PUBLISHED (local only)	FINAL-STATE.txt	Owner	O-4

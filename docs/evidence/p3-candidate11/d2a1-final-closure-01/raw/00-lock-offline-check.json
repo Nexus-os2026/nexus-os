@@ -1,0 +1,13 @@
+{
+ "lock_version": 4,
+ "packages": 1099,
+ "path_packages": 72,
+ "registry_packages": 1027,
+ "git_packages": 0,
+ "registry_missing_from_cache": [],
+ "registry_checksum_mismatch": [],
+ "git_sources": [],
+ "caches": [
+  "/home/nexus/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/"
+ ]
+}

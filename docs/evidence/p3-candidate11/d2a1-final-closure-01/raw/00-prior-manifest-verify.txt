@@ -1,0 +1,24 @@
+=== p3-c11-dr01-d2a1-exact-source-validation-02
+64a8f5cd146f5965f109286b3fc24ae4a922c76ead54cbffcf40e3e237c6b20a  INDEX.md
+1d66c293c2ac635a9aa06e69071744d404551ef77a466c2ce3c92706b0cc0aca  development/common.v1-to-r1.diff
+VERIFY_OK entries=177
+exit=0
+files_on_disk_excl_manifest_pycache=177
+on-disk not in manifest:
+in manifest not on disk:
+=== p3-c11-dr01-d2a1-closure-evidence-audit-01
+37e5c9e3b829dcf84021b694edf3a5abad63c55c2cf15bd426a0ab8b128169dd  CLOSURE-CROSSWALK.md
+f0d568ab94b71f06fa468cf11d5094570feeef7fb8a2627b76af18ceee4e37d2  CONTROL-22-RECONCILIATION.tsv
+VERIFY_OK entries=13
+exit=0
+files_on_disk_excl_manifest_pycache=13
+on-disk not in manifest:
+in manifest not on disk:
+=== p3-c11-dr01-d2a1-closure-packet-01
+e24c20f0224a302fe9a7f7f82bfa27234b1b9798f19f1ec84cb3ddbf02fff7a4  C4-C7-DECISION-EVIDENCE.md
+313a25cb4cb696110685516d623e11bd752e36b1e9e42c738fd87d3b5d851256  DEVIATIONS-AND-LABEL.md
+VERIFY_OK entries=48
+exit=0
+files_on_disk_excl_manifest_pycache=48
+on-disk not in manifest:
+in manifest not on disk:

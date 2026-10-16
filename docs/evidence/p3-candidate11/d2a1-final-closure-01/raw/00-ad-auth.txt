@@ -1,0 +1,88 @@
+== AD-1-R4 blob
+blob
+00ced6d535c78f34f9e92233b742126a7b19192bf3ac8348056be2665192b693  -
+143220
+== AD-1-R5 blob
+blob
+4e1ed8c92dbb2f3706eb524fa8b4fae766f027e7027f54049331ab312bb91473  -
+16067
+== AD-C7-W blob
+blob
+989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b  -
+116248
+== which refs carry R5/C7W blobs (path)
+refs/heads/evidence/p3-c11-d2a1-control-definitions-r1-01 f81159046bf0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-control-definitions-r1-01 f81159046bf0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-control-definitions-r2-01 9f22f890d853 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-control-definitions-r2-01 9f22f890d853 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-fr-stutter-r5-01 c1e46fc404a7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-fr-stutter-r5-01 c1e46fc404a7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-01 59df21036f7c ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-01 59df21036f7c ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-continue-02 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-continue-02 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-exec-01 19eda8cc7f55 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-exec-01 19eda8cc7f55 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-resume-01 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche1-resume-01 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-continue-02 b97205b2b9ea ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-continue-02 b97205b2b9ea ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-exec-01 2e06860f4b40 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche2-exec-01 2e06860f4b40 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-continue-02 c10681b3c65d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-continue-02 c10681b3c65d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-exec-01 774f457a4fc2 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-exec-01 774f457a4fc2 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-tail-01 e41c84b1c41d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-tranche3-tail-01 e41c84b1c41d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-witness-c1-c25-01 74b3f485c78d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-witness-c1-c25-01 74b3f485c78d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/evidence/p3-c11-d2a1-mutation-witness-c4-01 452b3cb5c3d7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/evidence/p3-c11-d2a1-mutation-witness-c4-01 452b3cb5c3d7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/heads/publication/p3-c11-d2a1-mutation-tranche1-publish-04 ebe42009ba1b ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/heads/publication/p3-c11-d2a1-mutation-tranche1-publish-04 ebe42009ba1b ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-draft03-01 e0f73cddd8e0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-draft03-01 e0f73cddd8e0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-evidence-exec-01 643e54baa1f5 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-evidence-exec-01 643e54baa1f5 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-evidence-exec-01 643e54baa1f5 cb3a208e1d79a7e94e2ae0001e208a2b6436bc46 docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 16e74908e922 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 16e74908e922 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 16e74908e922 cb3a208e1d79a7e94e2ae0001e208a2b6436bc46 docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 4c29b2f0035e ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 4c29b2f0035e ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 4c29b2f0035e cb3a208e1d79a7e94e2ae0001e208a2b6436bc46 docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md
+refs/remotes/github/review/p3-c11-d2a1-c7-compliant-exec-02 cca0d773d9a4 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-compliant-exec-02 cca0d773d9a4 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-compliant-exec-02 cca0d773d9a4 cb3a208e1d79a7e94e2ae0001e208a2b6436bc46 docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md
+refs/remotes/github/review/p3-c11-d2a1-c7-owner-identity-approval-01 2148c5a524b6 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-c7-owner-identity-approval-01 2148c5a524b6 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-c7-owner-identity-approval-01 2148c5a524b6 cb3a208e1d79a7e94e2ae0001e208a2b6436bc46 docs/evidence/p3-candidate11/d2a1-c7-adc7w-final-freeze-01/AD-C7-W-FROZEN-REVIEW.md
+refs/remotes/github/review/p3-c11-d2a1-control-definitions-r1-01 f81159046bf0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-control-definitions-r1-01 f81159046bf0 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-control-definitions-r2-01 9f22f890d853 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-control-definitions-r2-01 9f22f890d853 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-fr-stutter-r5-01 c1e46fc404a7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-fr-stutter-r5-01 c1e46fc404a7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-01 59df21036f7c ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-01 59df21036f7c ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-continue-02 ebe42009ba1b ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-continue-02 ebe42009ba1b ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-exec-01 19eda8cc7f55 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-exec-01 19eda8cc7f55 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-resume-01 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche1-resume-01 3695a817a619 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-continue-02 b97205b2b9ea ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-continue-02 b97205b2b9ea ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-exec-01 2e06860f4b40 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche2-exec-01 2e06860f4b40 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-continue-02 c10681b3c65d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-continue-02 c10681b3c65d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-exec-01 774f457a4fc2 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-exec-01 774f457a4fc2 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-tail-01 e41c84b1c41d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-tranche3-tail-01 e41c84b1c41d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c1-c25-01 74b3f485c78d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c1-c25-01 74b3f485c78d ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c4-01 452b3cb5c3d7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.md
+refs/remotes/github/review/p3-c11-d2a1-mutation-witness-c4-01 452b3cb5c3d7 ae3cabdb45627f9b3179a098c50d27e50c55101f docs/evidence/p3-candidate11/fr-stutter-r5-01/tools/docs-src/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R5-DRAFT.src.md

@@ -1,0 +1,16 @@
+== Stage 3 checker development (s3_h5.py)
+run 1: 1578/1579 — FAIL H.3(6): predicate searched the substring 'final_tree'; ct-1's only hit is its own prose
+       ("AD-1-R1's final_tree is not used"). Fix: search for a 'final_tree' KEY and for C's commit/tree hashes.
+run 2: 1579/1579, but a separate inspection printed body_byte_identical False for M89 (p3_g6_16...) and M112
+       (p3_g6_04...). Root cause: the naive brace counter counted braces inside string literals and ran past the
+       function end. Confirmed by an independent awk extraction (identical bodies). Fix: rustfmt indentation rule.
+run 3: 1579/1579; all 22 changed pairs' expected-test bodies byte-identical between 9d5fdf95 and C.
+== Stage 1 development: runs 1-5 in s1-dev-run-*.txt (field-name, indentation and split-layout checker fixes;
+   no evidence value changed). Stage 2 development: runs 1-4 in s2-dev-run-*.txt (contract-encoding default for
+   'attempts', Stage B capture behaviour, ignore-line reason suffix and doc-test names).
+render_s1.py r1: C4 witness-table wording and unit-test named-property cell corrected before release; first rendering discarded (own draft output).
+s4_matrix.py: evidence label for receipts/42-worktree corrected from (31/31) to the receipt's actual (24/24); matrix regenerated.
+Stage 2 derivation note: stageB_ignored binary attribution in receipts/22-S2-DERIVATION.json is unreliable for unit-test binaries (regex missed 'Running unittests src/lib.rs (...)'); names, reasons and counts are correct; per-binary attribution recomputed read-only in raw/02-stageB-ignored-by-binary.tsv.
+packet_verify.py dev run 1: 5 packets FAILED only because Git paths containing spaces were split on whitespace; fixed with ls-tree -z.
+final_check.py dev run 1: 48/49 — the label check required 'SECTION11_LABEL: WITHHELD' with one space; FINAL-STATE aligns fields with several. Fixed with a whitespace-tolerant line regex.
+MANIFEST build 1 (discarded before release): listed its own temporary file MANIFEST.sha256.tmp because the shell redirect created it before find enumerated; rebuilt by writing to the session scratchpad first.

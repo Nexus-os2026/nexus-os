@@ -1,0 +1,9 @@
+OK   pre: supervision self-test PASS: 
+OK   pre: worktree stage PASS: 
+FAIL pre: no earlier clippy receipt directory exists (one invocation only): 
+OK   pre: GitHub runner inactive, MainPID=0: {'MainPID': '0', 'ActiveState': 'inactive', 'UnitFileState': 'disabled'}
+OK   pre: no cargo/rustc/clippy/rustdoc/runner/governed-control process; no active mission scope: [] []
+OK   pre: MemAvailable >= 18 GiB: 52098012 KiB
+OK   pre: projected consumption (+15%) leaves availability above the 17 GiB stop trigger: avail 24.721 GiB
+OK   pre: worktree byte-exact Candidate C (EXACTLY_C): 
+OK   pre: mission target absent (fresh build): /home/nexus/NEXUS/nexus-os-p3-c11-d2a1-final-closure-01/target

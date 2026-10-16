@@ -1,0 +1,4 @@
+disk monitor: root filesystem; stop trigger 18253611008 B (17.000 GiB), floor 17179869184 B (16.000 GiB); target None start 0 B; start avail 26658512896 B
+time avail_bytes used_delta_bytes target_bytes
+16:10:14 26658512896 0 0
+disk monitor: stopped 2026-10-16T16:10:14+0100; end avail 26658496512 B; end target 0 B; samples 1; min avail 26658496512 B; triggered None

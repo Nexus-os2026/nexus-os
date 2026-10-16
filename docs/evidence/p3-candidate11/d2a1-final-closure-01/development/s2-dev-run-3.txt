@@ -1,0 +1,2 @@
+371 of 372 hold; branch counts {'MEASURED_COMPLETE': 85, 'MEASURED_IN_INCOMPLETE_PREFIX': 3, 'UNOBSERVED': 105}; proof-TAKEN rows 57; Stage B ignored 77
+FAIL Stage B: 79 '... ignored' entries (78 in libtest result sums + the custom-harness webview_boundary_live) :: 77

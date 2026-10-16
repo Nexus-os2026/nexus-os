@@ -1,0 +1,10 @@
+507,508c507,512
+<     add("pre: no earlier clippy receipt directory exists (one invocation only)",
+<         not any(n.startswith("43-") and n != os.path.basename(outdir) for n in os.listdir(REC)))
+---
+>     earlier = [n for n in os.listdir(REC) if n.startswith("43") and os.path.isdir(os.path.join(REC, n))
+>                and n != os.path.basename(outdir)]
+>     started = [n for n in earlier if os.path.exists(os.path.join(REC, n, "raw-output.txt")) or
+>                not open(os.path.join(REC, n, "CLASSIFICATION.txt")).readline().startswith("CLASSIFICATION: NOT_STARTED")]
+>     add("pre: no earlier clippy invocation started (one invocation only; earlier NOT_STARTED refusals preserved)",
+>         not started, f"earlier {earlier}; started {started}")
