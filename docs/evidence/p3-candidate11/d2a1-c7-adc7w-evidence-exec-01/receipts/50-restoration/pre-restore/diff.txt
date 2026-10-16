@@ -1,0 +1,13 @@
+diff --git a/crates/nexus-governed-control/src/ledger/protocol.rs b/crates/nexus-governed-control/src/ledger/protocol.rs
+index a2df2841..0d4ab992 100644
+--- a/crates/nexus-governed-control/src/ledger/protocol.rs
++++ b/crates/nexus-governed-control/src/ledger/protocol.rs
+@@ -1557,7 +1557,7 @@ impl<'a> Publish<'a> {
+         }
+         match io.explained(key) {
+             Read::Got(Some(seq)) => {
+-                self.core.refusals.remove(key);
++                self.core.refusals.clear();
+                 return Explain::Explained(seq);
+             }
+             Read::Got(None) => {}

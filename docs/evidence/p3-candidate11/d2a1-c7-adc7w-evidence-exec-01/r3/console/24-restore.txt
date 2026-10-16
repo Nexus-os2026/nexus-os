@@ -1,0 +1,53 @@
+stage 24-restore gate at 2026-10-16T01:08:24+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 12215336960 bytes; required >= 8589934592
+inodes free: 115922679; required >= 1000000
+MemAvailable: 53324076 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+preserve exit=0
+RESTORATION (frozen inverse patch) 2026-10-16T01:08:25+0100
+[PASS] R-1: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant
+[PASS] R-2: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] R-3: creation record names this worktree
+[PASS] R-4: tracked paths differing from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+[PASS] R-5: 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+[PASS] R-6: status: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+[PASS] R-7: patch sha256 b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+[PASS] R-8: git apply -R --check rc=0 
+7.3A authentication R-1..R-8: OK
+git apply -R --check rc=0 
+git apply -R (one attempt, 60 s ceiling) rc=0 
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: ['!! target/']
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W after restoration: OK
+RESTORATION COMPLETE: EXACTLY_W
+restore exit=0
+E-W7 /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 after restoration: aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 (pinned aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223): MATCH
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: ['!! target/']
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W: OK
+healthy verify exit=0

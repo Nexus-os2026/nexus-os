@@ -1,0 +1,196 @@
+{
+ "id": "L8-exact-ignored-full_f3",
+ "type": "invocation",
+ "label": "list-E-W-L8-exact-ignored-full_f3",
+ "mission": "P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy",
+ "cwd": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/crates/nexus-governed-control",
+ "argv": [
+  "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "--exact",
+  "--ignored",
+  "--list",
+  "ledger::protocol::model_tests::full_f3"
+ ],
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "limit_seconds": 2700,
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256_before": "042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825",
+  "sha256_after": "042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825",
+  "size": 8995112
+ },
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3112960",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "swap_events": {
+   "swap.events.high": 0,
+   "swap.events.max": 0,
+   "swap.events.fail": 0
+  },
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.032,
+  "max_rss_kib_largest_process": 3656
+ },
+ "output_path": "raw-output.txt",
+ "raw_output_sha256": "478c5980f49561676d1c561fc7bfd5a3348d7a6836518209028b582ea455cd98",
+ "source_verification_before": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE; differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: []"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: ['!! target/']"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ],
+ "source_verification_after": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE; differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: []"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: ['!! target/']"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ],
+ "finished_at": "2026-10-16T01:05:28+0100"
+}

@@ -1,0 +1,8 @@
+stage 20-run-C gate at 2026-10-16T01:06:00+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 12250263552 bytes; required >= 8589934592
+inodes free: 115922725; required >= 1000000
+MemAvailable: 52518832 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS

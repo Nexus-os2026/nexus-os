@@ -1,0 +1,307 @@
+stage 19-bwc-check gate at 2026-10-16T01:05:49+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 12250476544 bytes; required >= 8589934592
+inodes free: 115922732; required >= 1000000
+MemAvailable: 53316704 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+# B-W/C: NI-6 (build-time clause), NI-7, NI-8 and the 6A four-way agreement
+# mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+# started 2026-10-16T01:05:49+0100
+[PASS] EC-1: E-C baseline listings read from git objects at f023cc3d have the frozen sha256 values -- fe5126990e77 4b13105f6ff6
+[PASS] EC-2: E-C listings are well formed with 348 all / 35 ignored tests
+
+## E-W
+[PASS] PROC-1: E-W build: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W build: scope record complete; not timed out
+[PASS] PROC-3: E-W build: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W build: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W build: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W build: memory.peak below the limit
+[PASS] PROC-7: E-W build: wall time below the ceiling 900 s
+[PASS] NI-6a: E-W build: build command is exactly the 7.1 command
+[PASS] NI-6b: E-W build: environment is exactly HOME, PATH, CARGO_NET_OFFLINE=true and the worktree-local CARGO_TARGET_DIR; nothing else
+[PASS] NI-6c: E-W build: no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, CARGO_PROFILE_*, CARGO_BUILD_*, RUSTC_WRAPPER or target override in the build environment
+[PASS] BLD-1: E-W build: built in the recorded worktree with -j 2
+[PASS] NI-6d: E-W build: rustc -vV equals E-C's build record (7 lines)
+[PASS] NI-6e: E-W build: cargo -vV equals E-C's build record (9 lines)
+[PASS] NI-7a: E-W build: zero warnings and zero errors (recorded and recounted from build.stderr)
+[PASS] NI-7b: E-W build: build.stderr matches its recorded sha256
+[PASS] NI-7c: E-W build: exactly one `Finished` line, release profile
+[PASS] NI-7d: E-W build: the package under test was compiled
+[PASS] BLD-2: E-W build: exactly one pinned test executable, named by cargo and found by the deps scan
+[PASS] BLD-3: E-W build: the executable lies under the worktree-local target/release/deps
+[PASS] BLD-4: E-W build: source verification (W) passed before and after the build
+[PASS] PIN-2: E-W pin equals the build receipt's executable (path, sha256, size) and its descriptor/receipt hashes still match
+[PASS] PIN-3: E-W: the compile fingerprint shows rustflags == [] (recorded: [('nexus-governed-control-2faa0b9718d3e6a3', 16029198466671918258)])
+[PASS] NI-8.0: E-W: the executable still has the pinned sha256 after all listings
+[PASS] PROC-1: E-W L1-list-all: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L1-list-all: scope record complete; not timed out
+[PASS] PROC-3: E-W L1-list-all: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L1-list-all: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L1-list-all: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L1-list-all: memory.peak below the limit
+[PASS] PROC-7: E-W L1-list-all: wall time below the ceiling 2700 s
+[PASS] LST-1.L1-list-all: E-W: L1-list-all: argv is exactly [pinned executable] + ['--list']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L1-list-all: E-W: L1-list-all: executable sha256 before and after equal the pin
+[PASS] LST-3.L1-list-all: E-W: L1-list-all: raw output matches its recorded sha256
+[PASS] LST-4.L1-list-all: E-W: L1-list-all: source verification passed before and after
+[PASS] LST-5.L1-list-all: E-W: L1-list-all: strictly formed libtest listing
+[PASS] PROC-1: E-W L2-list-ignored: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L2-list-ignored: scope record complete; not timed out
+[PASS] PROC-3: E-W L2-list-ignored: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L2-list-ignored: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L2-list-ignored: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L2-list-ignored: memory.peak below the limit
+[PASS] PROC-7: E-W L2-list-ignored: wall time below the ceiling 2700 s
+[PASS] LST-1.L2-list-ignored: E-W: L2-list-ignored: argv is exactly [pinned executable] + ['--list', '--ignored']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L2-list-ignored: E-W: L2-list-ignored: executable sha256 before and after equal the pin
+[PASS] LST-3.L2-list-ignored: E-W: L2-list-ignored: raw output matches its recorded sha256
+[PASS] LST-4.L2-list-ignored: E-W: L2-list-ignored: source verification passed before and after
+[PASS] LST-5.L2-list-ignored: E-W: L2-list-ignored: strictly formed libtest listing
+[PASS] PROC-1: E-W L3-exact-witness: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L3-exact-witness: scope record complete; not timed out
+[PASS] PROC-3: E-W L3-exact-witness: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L3-exact-witness: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L3-exact-witness: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L3-exact-witness: memory.peak below the limit
+[PASS] PROC-7: E-W L3-exact-witness: wall time below the ceiling 2700 s
+[PASS] LST-1.L3-exact-witness: E-W: L3-exact-witness: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L3-exact-witness: E-W: L3-exact-witness: executable sha256 before and after equal the pin
+[PASS] LST-3.L3-exact-witness: E-W: L3-exact-witness: raw output matches its recorded sha256
+[PASS] LST-4.L3-exact-witness: E-W: L3-exact-witness: source verification passed before and after
+[PASS] LST-5.L3-exact-witness: E-W: L3-exact-witness: strictly formed libtest listing
+[PASS] PROC-1: E-W L4-exact-full_fpt: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L4-exact-full_fpt: scope record complete; not timed out
+[PASS] PROC-3: E-W L4-exact-full_fpt: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L4-exact-full_fpt: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L4-exact-full_fpt: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L4-exact-full_fpt: memory.peak below the limit
+[PASS] PROC-7: E-W L4-exact-full_fpt: wall time below the ceiling 2700 s
+[PASS] LST-1.L4-exact-full_fpt: E-W: L4-exact-full_fpt: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::full_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L4-exact-full_fpt: E-W: L4-exact-full_fpt: executable sha256 before and after equal the pin
+[PASS] LST-3.L4-exact-full_fpt: E-W: L4-exact-full_fpt: raw output matches its recorded sha256
+[PASS] LST-4.L4-exact-full_fpt: E-W: L4-exact-full_fpt: source verification passed before and after
+[PASS] LST-5.L4-exact-full_fpt: E-W: L4-exact-full_fpt: strictly formed libtest listing
+[PASS] PROC-1: E-W L5-exact-full_f3: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L5-exact-full_f3: scope record complete; not timed out
+[PASS] PROC-3: E-W L5-exact-full_f3: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L5-exact-full_f3: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L5-exact-full_f3: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L5-exact-full_f3: memory.peak below the limit
+[PASS] PROC-7: E-W L5-exact-full_f3: wall time below the ceiling 2700 s
+[PASS] LST-1.L5-exact-full_f3: E-W: L5-exact-full_f3: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::full_f3']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L5-exact-full_f3: E-W: L5-exact-full_f3: executable sha256 before and after equal the pin
+[PASS] LST-3.L5-exact-full_f3: E-W: L5-exact-full_f3: raw output matches its recorded sha256
+[PASS] LST-4.L5-exact-full_f3: E-W: L5-exact-full_f3: source verification passed before and after
+[PASS] LST-5.L5-exact-full_f3: E-W: L5-exact-full_f3: strictly formed libtest listing
+[PASS] PROC-1: E-W L6-exact-ignored-witness: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L6-exact-ignored-witness: scope record complete; not timed out
+[PASS] PROC-3: E-W L6-exact-ignored-witness: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L6-exact-ignored-witness: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L6-exact-ignored-witness: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L6-exact-ignored-witness: memory.peak below the limit
+[PASS] PROC-7: E-W L6-exact-ignored-witness: wall time below the ceiling 2700 s
+[PASS] LST-1.L6-exact-ignored-witness: E-W: L6-exact-ignored-witness: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L6-exact-ignored-witness: E-W: L6-exact-ignored-witness: executable sha256 before and after equal the pin
+[PASS] LST-3.L6-exact-ignored-witness: E-W: L6-exact-ignored-witness: raw output matches its recorded sha256
+[PASS] LST-4.L6-exact-ignored-witness: E-W: L6-exact-ignored-witness: source verification passed before and after
+[PASS] LST-5.L6-exact-ignored-witness: E-W: L6-exact-ignored-witness: strictly formed libtest listing
+[PASS] PROC-1: E-W L7-exact-ignored-full_fpt: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L7-exact-ignored-full_fpt: scope record complete; not timed out
+[PASS] PROC-3: E-W L7-exact-ignored-full_fpt: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L7-exact-ignored-full_fpt: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L7-exact-ignored-full_fpt: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L7-exact-ignored-full_fpt: memory.peak below the limit
+[PASS] PROC-7: E-W L7-exact-ignored-full_fpt: wall time below the ceiling 2700 s
+[PASS] LST-1.L7-exact-ignored-full_fpt: E-W: L7-exact-ignored-full_fpt: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::full_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L7-exact-ignored-full_fpt: E-W: L7-exact-ignored-full_fpt: executable sha256 before and after equal the pin
+[PASS] LST-3.L7-exact-ignored-full_fpt: E-W: L7-exact-ignored-full_fpt: raw output matches its recorded sha256
+[PASS] LST-4.L7-exact-ignored-full_fpt: E-W: L7-exact-ignored-full_fpt: source verification passed before and after
+[PASS] LST-5.L7-exact-ignored-full_fpt: E-W: L7-exact-ignored-full_fpt: strictly formed libtest listing
+[PASS] PROC-1: E-W L8-exact-ignored-full_f3: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W L8-exact-ignored-full_f3: scope record complete; not timed out
+[PASS] PROC-3: E-W L8-exact-ignored-full_f3: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W L8-exact-ignored-full_f3: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W L8-exact-ignored-full_f3: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W L8-exact-ignored-full_f3: memory.peak below the limit
+[PASS] PROC-7: E-W L8-exact-ignored-full_f3: wall time below the ceiling 2700 s
+[PASS] LST-1.L8-exact-ignored-full_f3: E-W: L8-exact-ignored-full_f3: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::full_f3']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L8-exact-ignored-full_f3: E-W: L8-exact-ignored-full_f3: executable sha256 before and after equal the pin
+[PASS] LST-3.L8-exact-ignored-full_f3: E-W: L8-exact-ignored-full_f3: raw output matches its recorded sha256
+[PASS] LST-4.L8-exact-ignored-full_f3: E-W: L8-exact-ignored-full_f3: source verification passed before and after
+[PASS] LST-5.L8-exact-ignored-full_f3: E-W: L8-exact-ignored-full_f3: strictly formed libtest listing
+[PASS] NI-8.1: E-W: all-tests listing has 349 tests with trailer '349 tests, 0 benchmarks'
+[PASS] NI-8.2: E-W: the all-listing equals E-C's 348 lines plus exactly the one new witness line (set comparison)
+[PASS] NI-8.3: E-W: the all-listing is byte-identical to E-C's raw listing with the witness line inserted in sorted position and the trailer replaced
+[PASS] NI-8.4: E-W: ignored listing is byte-identical to E-C's `21-list-ignored` raw output (sha256 4b13105f…ae1e) and has 35 tests
+[PASS] NI-8.5: E-W: the ignored tests are a subset of all tests; the witness is ordinary (not ignored); full_fpt and full_f3 are ignored
+[PASS] NI-8.6.L3-exact-witness: E-W: `--exact --list c7_witness_p6_after_settlement_on_fpt` resolves to exactly one test
+[PASS] NI-8.6.L4-exact-full_fpt: E-W: `--exact --list full_fpt` resolves to exactly one test
+[PASS] NI-8.6.L5-exact-full_f3: E-W: `--exact --list full_f3` resolves to exactly one test
+[PASS] NI-8.7.L6: E-W: `--exact --ignored --list <witness>` selects nothing (the witness is not ignored)
+[PASS] NI-8.7.L7-exact-ignored-full_fpt: E-W: `--exact --ignored --list full_fpt` resolves to exactly one test
+[PASS] NI-8.7.L8-exact-ignored-full_f3: E-W: `--exact --ignored --list full_f3` resolves to exactly one test
+
+## E-W7
+[PASS] PROC-1: E-W7 build: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 build: scope record complete; not timed out
+[PASS] PROC-3: E-W7 build: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 build: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 build: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 build: memory.peak below the limit
+[PASS] PROC-7: E-W7 build: wall time below the ceiling 900 s
+[PASS] NI-6a: E-W7 build: build command is exactly the 7.1 command
+[PASS] NI-6b: E-W7 build: environment is exactly HOME, PATH, CARGO_NET_OFFLINE=true and the worktree-local CARGO_TARGET_DIR; nothing else
+[PASS] NI-6c: E-W7 build: no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, CARGO_PROFILE_*, CARGO_BUILD_*, RUSTC_WRAPPER or target override in the build environment
+[PASS] BLD-1: E-W7 build: built in the recorded worktree with -j 2
+[PASS] NI-6d: E-W7 build: rustc -vV equals E-C's build record (7 lines)
+[PASS] NI-6e: E-W7 build: cargo -vV equals E-C's build record (9 lines)
+[PASS] NI-7a: E-W7 build: zero warnings and zero errors (recorded and recounted from build.stderr)
+[PASS] NI-7b: E-W7 build: build.stderr matches its recorded sha256
+[PASS] NI-7c: E-W7 build: exactly one `Finished` line, release profile
+[PASS] NI-7d: E-W7 build: the package under test was compiled
+[PASS] BLD-2: E-W7 build: exactly one pinned test executable, named by cargo and found by the deps scan
+[PASS] BLD-3: E-W7 build: the executable lies under the worktree-local target/release/deps
+[PASS] BLD-4: E-W7 build: source verification (W7) passed before and after the build
+[PASS] PIN-2: E-W7 pin equals the build receipt's executable (path, sha256, size) and its descriptor/receipt hashes still match
+[PASS] PIN-3: E-W7: the compile fingerprint shows rustflags == [] (recorded: [('nexus-governed-control-2faa0b9718d3e6a3', 16029198466671918258)])
+[PASS] NI-8.0: E-W7: the executable still has the pinned sha256 after all listings
+[PASS] PROC-1: E-W7 L1-list-all: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L1-list-all: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L1-list-all: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L1-list-all: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L1-list-all: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L1-list-all: memory.peak below the limit
+[PASS] PROC-7: E-W7 L1-list-all: wall time below the ceiling 2700 s
+[PASS] LST-1.L1-list-all: E-W7: L1-list-all: argv is exactly [pinned executable] + ['--list']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L1-list-all: E-W7: L1-list-all: executable sha256 before and after equal the pin
+[PASS] LST-3.L1-list-all: E-W7: L1-list-all: raw output matches its recorded sha256
+[PASS] LST-4.L1-list-all: E-W7: L1-list-all: source verification passed before and after
+[PASS] LST-5.L1-list-all: E-W7: L1-list-all: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L2-list-ignored: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L2-list-ignored: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L2-list-ignored: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L2-list-ignored: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L2-list-ignored: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L2-list-ignored: memory.peak below the limit
+[PASS] PROC-7: E-W7 L2-list-ignored: wall time below the ceiling 2700 s
+[PASS] LST-1.L2-list-ignored: E-W7: L2-list-ignored: argv is exactly [pinned executable] + ['--list', '--ignored']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L2-list-ignored: E-W7: L2-list-ignored: executable sha256 before and after equal the pin
+[PASS] LST-3.L2-list-ignored: E-W7: L2-list-ignored: raw output matches its recorded sha256
+[PASS] LST-4.L2-list-ignored: E-W7: L2-list-ignored: source verification passed before and after
+[PASS] LST-5.L2-list-ignored: E-W7: L2-list-ignored: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L3-exact-witness: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L3-exact-witness: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L3-exact-witness: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L3-exact-witness: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L3-exact-witness: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L3-exact-witness: memory.peak below the limit
+[PASS] PROC-7: E-W7 L3-exact-witness: wall time below the ceiling 2700 s
+[PASS] LST-1.L3-exact-witness: E-W7: L3-exact-witness: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L3-exact-witness: E-W7: L3-exact-witness: executable sha256 before and after equal the pin
+[PASS] LST-3.L3-exact-witness: E-W7: L3-exact-witness: raw output matches its recorded sha256
+[PASS] LST-4.L3-exact-witness: E-W7: L3-exact-witness: source verification passed before and after
+[PASS] LST-5.L3-exact-witness: E-W7: L3-exact-witness: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L4-exact-full_fpt: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L4-exact-full_fpt: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L4-exact-full_fpt: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L4-exact-full_fpt: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L4-exact-full_fpt: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L4-exact-full_fpt: memory.peak below the limit
+[PASS] PROC-7: E-W7 L4-exact-full_fpt: wall time below the ceiling 2700 s
+[PASS] LST-1.L4-exact-full_fpt: E-W7: L4-exact-full_fpt: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::full_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L4-exact-full_fpt: E-W7: L4-exact-full_fpt: executable sha256 before and after equal the pin
+[PASS] LST-3.L4-exact-full_fpt: E-W7: L4-exact-full_fpt: raw output matches its recorded sha256
+[PASS] LST-4.L4-exact-full_fpt: E-W7: L4-exact-full_fpt: source verification passed before and after
+[PASS] LST-5.L4-exact-full_fpt: E-W7: L4-exact-full_fpt: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L5-exact-full_f3: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L5-exact-full_f3: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L5-exact-full_f3: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L5-exact-full_f3: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L5-exact-full_f3: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L5-exact-full_f3: memory.peak below the limit
+[PASS] PROC-7: E-W7 L5-exact-full_f3: wall time below the ceiling 2700 s
+[PASS] LST-1.L5-exact-full_f3: E-W7: L5-exact-full_f3: argv is exactly [pinned executable] + ['--exact', '--list', 'ledger::protocol::model_tests::full_f3']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L5-exact-full_f3: E-W7: L5-exact-full_f3: executable sha256 before and after equal the pin
+[PASS] LST-3.L5-exact-full_f3: E-W7: L5-exact-full_f3: raw output matches its recorded sha256
+[PASS] LST-4.L5-exact-full_f3: E-W7: L5-exact-full_f3: source verification passed before and after
+[PASS] LST-5.L5-exact-full_f3: E-W7: L5-exact-full_f3: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L6-exact-ignored-witness: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L6-exact-ignored-witness: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L6-exact-ignored-witness: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L6-exact-ignored-witness: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L6-exact-ignored-witness: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L6-exact-ignored-witness: memory.peak below the limit
+[PASS] PROC-7: E-W7 L6-exact-ignored-witness: wall time below the ceiling 2700 s
+[PASS] LST-1.L6-exact-ignored-witness: E-W7: L6-exact-ignored-witness: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L6-exact-ignored-witness: E-W7: L6-exact-ignored-witness: executable sha256 before and after equal the pin
+[PASS] LST-3.L6-exact-ignored-witness: E-W7: L6-exact-ignored-witness: raw output matches its recorded sha256
+[PASS] LST-4.L6-exact-ignored-witness: E-W7: L6-exact-ignored-witness: source verification passed before and after
+[PASS] LST-5.L6-exact-ignored-witness: E-W7: L6-exact-ignored-witness: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L7-exact-ignored-full_fpt: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L7-exact-ignored-full_fpt: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L7-exact-ignored-full_fpt: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L7-exact-ignored-full_fpt: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L7-exact-ignored-full_fpt: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L7-exact-ignored-full_fpt: memory.peak below the limit
+[PASS] PROC-7: E-W7 L7-exact-ignored-full_fpt: wall time below the ceiling 2700 s
+[PASS] LST-1.L7-exact-ignored-full_fpt: E-W7: L7-exact-ignored-full_fpt: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::full_fpt']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L7-exact-ignored-full_fpt: E-W7: L7-exact-ignored-full_fpt: executable sha256 before and after equal the pin
+[PASS] LST-3.L7-exact-ignored-full_fpt: E-W7: L7-exact-ignored-full_fpt: raw output matches its recorded sha256
+[PASS] LST-4.L7-exact-ignored-full_fpt: E-W7: L7-exact-ignored-full_fpt: source verification passed before and after
+[PASS] LST-5.L7-exact-ignored-full_fpt: E-W7: L7-exact-ignored-full_fpt: strictly formed libtest listing
+[PASS] PROC-1: E-W7 L8-exact-ignored-full_f3: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 L8-exact-ignored-full_f3: scope record complete; not timed out
+[PASS] PROC-3: E-W7 L8-exact-ignored-full_f3: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 L8-exact-ignored-full_f3: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 L8-exact-ignored-full_f3: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 L8-exact-ignored-full_f3: memory.peak below the limit
+[PASS] PROC-7: E-W7 L8-exact-ignored-full_f3: wall time below the ceiling 2700 s
+[PASS] LST-1.L8-exact-ignored-full_f3: E-W7: L8-exact-ignored-full_f3: argv is exactly [pinned executable] + ['--exact', '--ignored', '--list', 'ledger::protocol::model_tests::full_f3']; env is exactly the 7.2 run environment; cwd is the crate directory
+[PASS] LST-2.L8-exact-ignored-full_f3: E-W7: L8-exact-ignored-full_f3: executable sha256 before and after equal the pin
+[PASS] LST-3.L8-exact-ignored-full_f3: E-W7: L8-exact-ignored-full_f3: raw output matches its recorded sha256
+[PASS] LST-4.L8-exact-ignored-full_f3: E-W7: L8-exact-ignored-full_f3: source verification passed before and after
+[PASS] LST-5.L8-exact-ignored-full_f3: E-W7: L8-exact-ignored-full_f3: strictly formed libtest listing
+[PASS] NI-8.1: E-W7: all-tests listing has 349 tests with trailer '349 tests, 0 benchmarks'
+[PASS] NI-8.2: E-W7: the all-listing equals E-C's 348 lines plus exactly the one new witness line (set comparison)
+[PASS] NI-8.3: E-W7: the all-listing is byte-identical to E-C's raw listing with the witness line inserted in sorted position and the trailer replaced
+[PASS] NI-8.4: E-W7: ignored listing is byte-identical to E-C's `21-list-ignored` raw output (sha256 4b13105f…ae1e) and has 35 tests
+[PASS] NI-8.5: E-W7: the ignored tests are a subset of all tests; the witness is ordinary (not ignored); full_fpt and full_f3 are ignored
+[PASS] NI-8.6.L3-exact-witness: E-W7: `--exact --list c7_witness_p6_after_settlement_on_fpt` resolves to exactly one test
+[PASS] NI-8.6.L4-exact-full_fpt: E-W7: `--exact --list full_fpt` resolves to exactly one test
+[PASS] NI-8.6.L5-exact-full_f3: E-W7: `--exact --list full_f3` resolves to exactly one test
+[PASS] NI-8.7.L6: E-W7: `--exact --ignored --list <witness>` selects nothing (the witness is not ignored)
+[PASS] NI-8.7.L7-exact-ignored-full_fpt: E-W7: `--exact --ignored --list full_fpt` resolves to exactly one test
+[PASS] NI-8.7.L8-exact-ignored-full_f3: E-W7: `--exact --ignored --list full_f3` resolves to exactly one test
+
+## cross checks
+[PASS] 0A-1: E-W and E-W7 are different executables (different sha256 and path; proves difference only) -- 042b11e69964 vs aa0c0577ebbd
+[PASS] 0A-2: E-W is not E-C (cde9f9d2…) -- 042b11e69964
+[PASS] 0A-3: E-W7 is not the historical C7 executable (b320977a…) -- aa0c0577ebbd
+[PASS] 0A-4: E-W7 is not E-C
+[PASS] AGREE-1.L1-list-all: E-W's and E-W7's `L1-list-all` raw outputs are byte-identical
+[PASS] AGREE-1.L2-list-ignored: E-W's and E-W7's `L2-list-ignored` raw outputs are byte-identical
+[PASS] AGREE-1.L3-exact-witness: E-W's and E-W7's `L3-exact-witness` raw outputs are byte-identical
+[PASS] AGREE-1.L4-exact-full_fpt: E-W's and E-W7's `L4-exact-full_fpt` raw outputs are byte-identical
+[PASS] AGREE-1.L5-exact-full_f3: E-W's and E-W7's `L5-exact-full_f3` raw outputs are byte-identical
+[PASS] AGREE-1.L6-exact-ignored-witness: E-W's and E-W7's `L6-exact-ignored-witness` raw outputs are byte-identical
+[PASS] AGREE-1.L7-exact-ignored-full_fpt: E-W's and E-W7's `L7-exact-ignored-full_fpt` raw outputs are byte-identical
+[PASS] AGREE-1.L8-exact-ignored-full_f3: E-W's and E-W7's `L8-exact-ignored-full_f3` raw outputs are byte-identical
+[PASS] AGREE-2: four-way agreement (total, ignored): W-TREE source (349, 35); E-W listings (349, 35); E-W7 listings (349, 35); expectation (349, 35)
+[PASS] AGREE-3: each single-test invocation will print `348 filtered out` (the listing's own all-count minus 1) on both executables
+
+B-W/C: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8; four-way agreement holds). SUBJECT TO INDEPENDENT ARCHITECT AUDIT. Not a final acceptance of C7.
+
+## O-6 record (AD-C7-W 6.3)
+W-SRC identity: W-COMMIT 6c424c3aec579401543ae010e3f8729e17c4ed98; W-TREE 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4; W-BLOB c18a6235a9eb32314931c51dd7bb574df77fbe28 (sha256 6762d91f3e4de61902efb8f32eccf38fcf4166f5c036ba7a2832f05944b0be25, 329569 bytes); W-PATCH sha256 c8509c025542c81fdc44e296a0da256e04ba533a971dfbe1b379ee6f9f76b0a9; sole parent C-BASE d5964ee5326c2733177307db6f507328023d361a.
+W7-SRC = W-SRC plus the frozen C7 patch (sha256 b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4), never committed or staged; protocol.rs blob 0d4ab9929c0e15d910735a52b72a5f3855bef58a sha256 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa.
+B-W/B was conveyed by: the Architect (Primary / Sole Decision Architect) statement in the text of mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01 ('The Primary Architect has independently accepted B-W/B for this exact W-COMMIT only'). This executor did not review the source for B-W/B; it authenticated only the frozen identities.
+E-W: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825 size 8995112; build receipt receipts/10-build-E-W (descriptor sha256 6215f88b10c9e9d2cd6f8d719d5aa71775fb0e588383994fc80cec073d7819ae, RECEIPT.txt sha256 a99c44960f1da7a56b62269c04b8fab1a87a2348e2d8659d53f7db9dbfbfe063): warnings 0 errors 0; listings under receipts/20-list-E-W (eight invocations).
+E-W7: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 size 8995176; build receipt receipts/11-build-E-W7 (descriptor sha256 038538b61b38dc86d213a2f66588fa089c622c7a33a3b8c6078a6a3f0008c095, RECEIPT.txt sha256 2b4e7bc0dbd3ca27e948bf53b31a6eb15e5b2850867c7ad75b6d877d5b3b46fb): warnings 0 errors 0; listings under receipts/21-list-E-W7 (eight invocations).
+Listing inventories: all-tests listing sha256 4aec607794b5879dfe9353bf2338ea7180cdd5a0aa174c123e63d7e85ca649a2; ignored listing sha256 4b13105f6ff6ebba618100e093d1fde445da6b5ed396006272b2761ea5a1ae1e (E-C's `21-list-ignored` raw sha256 4b13105f6ff6ebba618100e093d1fde445da6b5ed396006272b2761ea5a1ae1e).
+Four-way agreement: {"source_counts": [349, 35], "E-W": [349, 35], "E-W7": [349, 35], "expected": [349, 35]}.
+Asserts nothing beyond NI-6 (build-time clause), NI-7, NI-8 and CR-B's conclusion for this one identity. It does not establish that W-SRC equals C-BASE, that any test passes, or anything about the witness. No cargo command was run after either executable was pinned.
+Limitation: the CARGO_TERM_VERBOSE=true variable of E-C's build environment (output only) is omitted from this mission's build environment, as 7.1 lists only CARGO_NET_OFFLINE and the target directory.
+exit=0

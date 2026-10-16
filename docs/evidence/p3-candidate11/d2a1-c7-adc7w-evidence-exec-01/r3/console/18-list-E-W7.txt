@@ -1,0 +1,65 @@
+stage 18-list-E-W7 gate at 2026-10-16T01:05:34+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 12250886144 bytes; required >= 8589934592
+inodes free: 115922791; required >= 1000000
+MemAvailable: 53408628 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L1-list-all/raw-output.txt sha256 4aec607794b5879dfe9353bf2338ea7180cdd5a0aa174c123e63d7e85ca649a2 bytes 25659
+finished: 2026-10-16T01:05:35+0100
+listing L1-list-all ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L2-list-ignored/raw-output.txt sha256 4b13105f6ff6ebba618100e093d1fde445da6b5ed396006272b2761ea5a1ae1e bytes 1825
+finished: 2026-10-16T01:05:36+0100
+listing L2-list-ignored ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L3-exact-witness/raw-output.txt sha256 07d89fc7db930b0854bd7be984bd0b88d07fd93826d7f613d5e40d89a46de0ab bytes 109
+finished: 2026-10-16T01:05:37+0100
+listing L3-exact-witness ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L4-exact-full_fpt/raw-output.txt sha256 395e568dadf92b23decd1b83943ce80e0495ddacd574c122dc5bbc5c0d92888b bytes 68
+finished: 2026-10-16T01:05:38+0100
+listing L4-exact-full_fpt ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L5-exact-full_f3/raw-output.txt sha256 478c5980f49561676d1c561fc7bfd5a3348d7a6836518209028b582ea455cd98 bytes 67
+finished: 2026-10-16T01:05:39+0100
+listing L5-exact-full_f3 ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L6-exact-ignored-witness/raw-output.txt sha256 414c144fa67f1df75f7b14a69af5641637772e81c4c3fa0a171e3228adbb922e bytes 22
+finished: 2026-10-16T01:05:40+0100
+listing L6-exact-ignored-witness ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L7-exact-ignored-full_fpt/raw-output.txt sha256 395e568dadf92b23decd1b83943ce80e0495ddacd574c122dc5bbc5c0d92888b bytes 68
+finished: 2026-10-16T01:05:41+0100
+listing L7-exact-ignored-full_fpt ok
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/21-list-E-W7/L8-exact-ignored-full_f3/raw-output.txt sha256 478c5980f49561676d1c561fc7bfd5a3348d7a6836518209028b582ea455cd98 bytes 67
+finished: 2026-10-16T01:05:42+0100
+listing L8-exact-ignored-full_f3 ok
+exit=0

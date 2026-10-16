@@ -1,0 +1,49 @@
+stage 21-run-A gate at 2026-10-16T01:06:39+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 12249899008 bytes; required >= 8589934592
+inodes free: 115922715; required >= 1000000
+MemAvailable: 53202960 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/41-run-A-full_fpt/raw-output.txt sha256 8366f35b2d1d8736e2f0065c1465b5dff594b00a6939110674d683ccb8494629 bytes 15853
+finished: 2026-10-16T01:06:46+0100
+invoke exit=0
+# C7 classification (A) ORIGINAL F-PT EXPLORER on E-W7 — 41-run-A-full_fpt
+# mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+# started 2026-10-16T01:06:46+0100
+[PASS] ID-1: executable path equals the pinned E-W7 path (CL-10) -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 vs pinned /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-2: executable sha256 before and after equal the pinned E-W7 sha256 (C7-16) -- before=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 after=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 pinned=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 size=8995176/8995176
+[PASS] ID-3: not the other build, not E-C, not the historical C7 executable (C7-4, C7-14) -- other=/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-4: argv is the exact frozen invocation -- ["/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "ledger::protocol::model_tests::full_fpt", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+[PASS] ID-5: environment is exactly env -i PATH LANG RUST_BACKTRACE; ceiling 2700 s -- {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "RUST_BACKTRACE": "0"}
+[PASS] ID-6: worktree and working directory are the mutant worktree's crate -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant | /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/crates/nexus-governed-control
+[PASS] ID-7: descriptor's raw-output sha256 equals the file
+[PASS] ID-8: source identity verified before and after (CL-11: EXACTLY_W7) -- failed: []
+[PASS] CL1-1: process exited normally with status 0 or 101, no signal, supervisor and wrapper agree -- {"exit_status": 101, "signal": null, "supervisor_rc": 101, "wrapper_recorded_status": "101"}
+[PASS] CL1-2: scope record complete; no supervisor timeout (7.3) -- completed=True timed_out=False scope=gone
+[PASS] CL1-3: oom 0 and oom_kill 0 -- oom=0 oom_kill=0
+[PASS] CL1-4: zero swap: memory.swap.peak 0, no swap events -- peak=0 events={'swap.events.high': 0, 'swap.events.max': 0, 'swap.events.fail': 0}
+[PASS] CL1-5: cgroup limits memory.max 17179869184, memory.swap.max 0 -- max=17179869184 swap.max=0
+[PASS] CL1-6: memory.peak below the 16 GiB limit -- peak=137269248
+[PASS] CL1-7: wall time below the 2700 s ceiling -- wall=4.65 limit=2700
+[PASS] RAW-1: raw output is strict UTF-8 with LF only, no CR, no NUL, ends with a newline -- 15853 bytes
+[PASS] RAW-2: raw output has content
+[INFO] RAW-3: 253 lines, 8 blank (blank lines are not structural)
+[INFO] EX-1: instance 1: name=F-PT outcome=FAIL states=1071165 elapsed=4.6 fail=('E11', 'a table entry left in a step that did not see its explanation in the ledger')
+[PASS] STR: the raw output has the frozen explorer layout (FAIL: two byte-equal instances)
+[PASS] EX-2: configuration is F-PT with A4 true and caps 30000000 states, 2700s -- name='F-PT' a4='true' caps_ok=True
+[PASS] EX-3: no quotient or symmetry run
+[PASS] EX-4: states within the 30,000,000 ceiling and elapsed within 2700 s -- states=1071165 elapsed=4.6
+[PASS] C7-1a: (A): outcome FAIL with property E11, exit 101, `1 failed`, `348 filtered out`, failed set {"E11"}
+[PASS] C7-1b: (A): the FAIL is not accompanied by an incomplete reason (a cap hit is not a clean kill) -- None
+[PASS] C7-21: (A): the executable is E-W7, never the historical `85-C7` build
+
+KIND A   VERDICT FAIL_E11_ADMISSIBLE   E11
+FAILED CHECKS: none
+(A) ORIGINAL F-PT: FAIL E11 — ADMISSIBLE (C7-1)
+classify exit=0

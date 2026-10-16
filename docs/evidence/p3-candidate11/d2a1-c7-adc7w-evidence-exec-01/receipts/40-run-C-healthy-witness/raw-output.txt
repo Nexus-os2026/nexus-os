@@ -1,0 +1,175 @@
+
+running 1 test
+test ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt ... C7 WITNESS F-PT step 01/24 Fw(1) offered [] consumed [] unused [] faults left 2: Fw(1): arm -> Armed
+    branches []; word after 0x10004 (live 1, unapplied 0); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 01: {}
+    classes after 01: F1 Unattempted, F2 Unattempted; debt 0; H 0; A 0
+    conflicted after 01: F1 false, F2 false
+    ledger after 01: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 02/24 Fw(1) offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused [] faults left 2: Fw(1): append_facts["F2"] -> NotApplied NotWritten Conflict(new or retained cause DuplicateRole) [Open:Ok Facts:Ok Rollback:Ok]
+    branches ["append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)"]; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 02: {F2: DuplicateRole}
+    classes after 02: F1 Unattempted, F2 Unattempted; debt 0; H 0; A 0
+    conflicted after 02: F1 false, F2 true
+    ledger after 02: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 03/24 Fw(1) offered [0] consumed [(0, 2)] unused [] faults left 2: Fw(1): [T] records Counted(Counted { persistence: NotWritten, conflict_member: Some(0) })
+    branches []; word after 0x10000010084 (live 1, unapplied 1); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 03: {F2: DuplicateRole}
+    classes after 03: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 03: F1 false, F2 true
+    ledger after 03: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 04/24 Fw(0) offered [] consumed [] unused [] faults left 2: Fw(0): arm -> Armed
+    branches []; word after 0x10000020084 (live 2, unapplied 1); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 04: {F2: DuplicateRole}
+    classes after 04: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 04: F1 false, F2 true
+    ledger after 04: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 05/24 Fw(0) offered [0, 0, 0, 0] consumed [(0, 2), (0, 4), (0, 4), (0, 3)] unused [] faults left 2: Fw(0): append_facts["F1"] -> NotApplied NotWritten Conflict(new or retained cause MissingPrepared) [Open:Ok Facts:Ok Rollback:Ok]
+    branches ["append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)"]; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 05: {F1: MissingPrepared, F2: DuplicateRole}
+    classes after 05: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 05: F1 true, F2 true
+    ledger after 05: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 06/24 Wk offered [] consumed [] unused [] faults left 2: Wk: reads the agenda (frontier 0), chooses AppendX(CellToken { ledger: Shared { word: 2199023386756, tickets: 8 }, cell: X, occupancy: 1 })
+    branches []; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 06: {F1: MissingPrepared, F2: DuplicateRole}
+    classes after 06: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 06: F1 true, F2 true
+    ledger after 06: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 07/24 Wk offered [] consumed [] unused [] faults left 2: Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied
+    branches []; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Built))
+    refusal table after 07: {F1: MissingPrepared, F2: DuplicateRole}
+    classes after 07: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 07: F1 true, F2 true
+    ledger after 07: [Prepared(1), Holder(1)]
+C7 WITNESS F-PT step 08/24 Wk offered [0, 0, 0, 0] consumed [(0, 3), (0, 3), (0, 2), (0, 2)] unused [] faults left 2: Wk: append_cell X: Committed (inserted) [Open:Ok Present:Ok Insert:Ok Commit:Ok]
+    branches ["append_cell X: Committed (inserted)"]; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(3)))
+    refusal table after 08: {F1: MissingPrepared}
+    classes after 08: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 08: F1 true, F2 true
+    ledger after 08: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 09/24 Wk offered [] consumed [] unused [] faults left 2: Wk: reads the agenda (frontier 0), chooses EmptyX(CellToken { ledger: Shared { word: 2199023386756, tickets: 8 }, cell: X, occupancy: 1 }, 3)
+    branches []; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(3)))
+    refusal table after 09: {F1: MissingPrepared}
+    classes after 09: F1 Unattempted, F2 Conflict; debt 1; H 0; A 0
+    conflicted after 09: F1 true, F2 true
+    ledger after 09: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 10/24 Wk offered [] consumed [] unused [] faults left 2: Wk: [T] A becomes the larger of A and the agenda's frontier; H before X is emptied
+    branches []; word after 0x20000020084 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X Some((Explanation { original: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, cause: Cause { kind: DuplicateRole { part: Part { commitment: [9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], role: Started }, holder: Holder { id: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seq: 2 }, offered: RecordKey { id: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], digest: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } } } }, Committed(3)))
+    refusal table after 10: {F1: MissingPrepared}
+    classes after 10: F1 Unattempted, F2 Conflict; debt 1; H 3; A 0
+    conflicted after 10: F1 true, F2 true
+    ledger after 10: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 11/24 Wk offered [] consumed [] unused [] faults left 2: Wk: empty: Done []
+    branches ["empty: Done"]; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 11: {F1: MissingPrepared}
+    classes after 11: F1 Unattempted, F2 Conflict; debt 1; H 3; A 0
+    conflicted after 11: F1 true, F2 true
+    ledger after 11: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 12/24 Se offered [] consumed [] unused [] faults left 2: Se: [T] claims F2 for Explain
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 12: {F1: MissingPrepared}
+    classes after 12: F1 Unattempted, F2 Conflict; debt 1; H 3; A 0
+    conflicted after 12: F1 true, F2 true
+    ledger after 12: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 13/24 Se offered [0] consumed [(0, 4)] unused [] faults left 2: Se: explain F2 -> Explained [Explained:Ok]
+    branches ["explain: Explained"]; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 13: {F1: MissingPrepared}
+    classes after 13: F1 Unattempted, F2 Conflict; debt 1; H 3; A 0
+    conflicted after 13: F1 true, F2 true
+    ledger after 13: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 14/24 Se offered [] consumed [] unused [] faults left 2: Se: [T] applies Explain(Explained(3)); releases
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 14: {F1: MissingPrepared}
+    classes after 14: F1 Unattempted, F2 Retired; debt 0; H 3; A 0
+    conflicted after 14: F1 true, F2 true
+    ledger after 14: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 15/24 Fw(0) offered [1] consumed [(1, 2)] unused [] faults left 1: Fw(0): unwinds before recording   [fault]
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 15: {F1: MissingPrepared}
+    classes after 15: F1 Unattempted, F2 Retired; debt 0; H 3; A 0
+    conflicted after 15: F1 true, F2 true
+    ledger after 15: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 16/24 Fw(0) offered [] consumed [] unused [] faults left 1: Fw(0): [T] drop path records from Some(Counted { persistence: NotWritten, conflict_member: Some(0) })
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 16: {F1: MissingPrepared}
+    classes after 16: F1 Uncertain, F2 Retired; debt 1; H 3; A 0
+    conflicted after 16: F1 true, F2 true
+    ledger after 16: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 17/24 Se offered [] consumed [] unused [] faults left 1: Se: [T] claims F1 for Lookup
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 17: {F1: MissingPrepared}
+    classes after 17: F1 Uncertain, F2 Retired; debt 1; H 3; A 0
+    conflicted after 17: F1 true, F2 true
+    ledger after 17: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 18/24 Se offered [0] consumed [(0, 4)] unused [] faults left 1: Se: lookup F1 -> Absent [Row:Ok]
+    branches ["lookup: Absent"]; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 18: {F1: MissingPrepared}
+    classes after 18: F1 Uncertain, F2 Retired; debt 1; H 3; A 0
+    conflicted after 18: F1 true, F2 true
+    ledger after 18: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 19/24 Se offered [] consumed [] unused [] faults left 1: Se: [T] applies Lookup(Absent); releases
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 19: {F1: MissingPrepared}
+    classes after 19: F1 Refused, F2 Retired; debt 1; H 3; A 0
+    conflicted after 19: F1 true, F2 true
+    ledger after 19: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 20/24 Se offered [] consumed [] unused [] faults left 1: Se: [T] claims F1 for Append
+    branches []; word after 0x20000020004 (live 2, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 20: {F1: MissingPrepared}
+    classes after 20: F1 Refused, F2 Retired; debt 1; H 3; A 0
+    conflicted after 20: F1 true, F2 true
+    ledger after 20: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 21/24 Se offered [] consumed [] unused [] faults left 1: Se: arm -> Armed
+    branches []; word after 0x20000030004 (live 3, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 21: {F1: MissingPrepared}
+    classes after 21: F1 Refused, F2 Retired; debt 1; H 3; A 0
+    conflicted after 21: F1 true, F2 true
+    ledger after 21: [Prepared(1), Holder(1), Explanation(1)]
+C7 WITNESS F-PT step 22/24 Env offered [] consumed [] unused [] faults left 1: Env: F1's Prepared record appears
+    branches []; word after 0x20000030004 (live 3, unapplied 2); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 22: {F1: MissingPrepared}
+    classes after 22: F1 Refused, F2 Retired; debt 1; H 3; A 0
+    conflicted after 22: F1 true, F2 true
+    ledger after 22: [Prepared(1), Holder(1), Explanation(1), Prepared(0)]
+C7 WITNESS F-PT step 23/24 Se offered [0, 0, 0, 0] consumed [(0, 4), (0, 4), (0, 3)] unused [0] faults left 1: Se: append_facts["F1"] -> NotApplied NotWritten Conflict(new or retained cause MissingPrepared) [Open:Ok Facts:Ok Rollback:Ok]
+    branches ["append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)"]; word after 0x30000030004 (live 3, unapplied 3); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 23: {F1: MissingPrepared}
+    classes after 23: F1 Refused, F2 Retired; debt 1; H 3; A 0
+    conflicted after 23: F1 true, F2 true
+    ledger after 23: [Prepared(1), Holder(1), Explanation(1), Prepared(0)]
+C7 WITNESS F-PT step 24/24 Se offered [] consumed [] unused [] faults left 1: Se: [T] applies Fact(Counted(Counted { persistence: NotWritten, conflict_member: Some(0) })); releases
+    branches []; word after 0x30000030004 (live 3, unapplied 3); phase Healthy, latch None
+    U None; C None; X None
+    refusal table after 24: {F1: MissingPrepared}
+    classes after 24: F1 Conflict, F2 Retired; debt 1; H 3; A 0
+    conflicted after 24: F1 true, F2 true
+    ledger after 24: [Prepared(1), Holder(1), Explanation(1), Prepared(0)]
+C7 WITNESS F-PT: 24 steps, each enabled and consuming its choices as frozen; no violation; step 23 shows the healthy core's 'append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)', consuming 3 of its 4 offered choices, unused [0]; F1's refusal-table entry (MissingPrepared) kept after steps 13 and 24; step 24 records F1 as Conflict
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 348 filtered out; finished in 0.00s
+

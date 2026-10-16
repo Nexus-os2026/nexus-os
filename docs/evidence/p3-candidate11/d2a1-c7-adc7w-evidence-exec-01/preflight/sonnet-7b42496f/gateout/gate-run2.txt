@@ -1,0 +1,222 @@
+# C7-W authorisation gate (read-only, before any worktree)
+# mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+# started 2026-10-15T22:47:55+0100
+# host nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW
+# repo /home/nexus/NEXUS/nexus-os
+
+## 1. repository and remote provenance
+[INFO] GP-01: repo HEAD f727f5c39fab8d5c729a55eb28ad576d3d56ce47 on rebuild/phase0-trust-boundary; porcelain status: ''
+[PASS] GP-01: operating repository is the Nexus OS repository, clean, HEAD equals the rebuild branch snapshot
+[INFO] GP-02: remotes: github	git@github.com:Nexus-os2026/nexus-os.git (fetch) | github	git@github.com:Nexus-os2026/nexus-os.git (push) | gitlab	git@gitlab.com:nexaiceo/nexus-os.git (fetch) | gitlab	git@gitlab.com:nexaiceo/nexus-os.git (push) | origin	git@gitlab.com:nexaiceo/nexus-os.git (fetch) | origin	git@gitlab.com:nexaiceo/nexus-os.git (push)
+[PASS] GP-02: remote `github` is Nexus-os2026/nexus-os
+[INFO] GP-03: ls-remote github: 209 refs
+[PASS] GP-03: remote refs/heads/review/p3-c11-d2a1-c7-witness-source-w1-01 == 6c424c3aec57 -- remote=6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] GP-03L: local remote-tracking refs/heads/review/p3-c11-d2a1-c7-witness-source-w1-01 equals remote -- tracking=6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] GP-03: remote refs/heads/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 == 16e74908e922 -- remote=16e74908e922160993a726e71e45374f1e5ff8a1
+[PASS] GP-03L: local remote-tracking refs/heads/review/p3-c11-d2a1-c7-adc7w-final-freeze-01 equals remote -- tracking=16e74908e922160993a726e71e45374f1e5ff8a1
+[PASS] GP-03: remote refs/heads/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 == 4c29b2f0035e -- remote=4c29b2f0035ecaa86bca8d49238331485a1140e6
+[PASS] GP-03L: local remote-tracking refs/heads/review/p3-c11-d2a1-c7-adc7w-owner-adoption-01 equals remote -- tracking=4c29b2f0035ecaa86bca8d49238331485a1140e6
+[PASS] GP-03: remote refs/heads/main == 6e15dee613ea -- remote=6e15dee613ea35823d1adbf6d8917ed59eeda583
+[PASS] GP-03L: local remote-tracking refs/heads/main equals remote -- tracking=6e15dee613ea35823d1adbf6d8917ed59eeda583
+[PASS] GP-03: remote refs/heads/rebuild/phase0-trust-boundary == f727f5c39fab -- remote=f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+[PASS] GP-03L: local remote-tracking refs/heads/rebuild/phase0-trust-boundary equals remote -- tracking=f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+[PASS] GP-04: destination review ref absent on the remote
+[PASS] GP-04L: destination review ref absent locally (heads and remote-tracking)
+[INFO] GP-05: remote tags (58): refs/tags/beta=50fc91f52683 refs/tags/early-access=01f9a37630c2 refs/tags/v0.0.0=6f8073db6346 refs/tags/v0.1.0=80fc09b8e5d4 refs/tags/v0.10.0=601ace6abfd1 refs/tags/v0.11.0=f965dddec483 refs/tags/v0.12.0=e84a231b917e refs/tags/v0.12.5=d61c61a88626 refs/tags/v0.13.0=3db636a2946b refs/tags/v0.13.5=ae0724e68942 refs/tags/v0.14.0=9a015c454623 refs/tags/v0.14.5=3bedea671386 refs/tags/v0.15.0=7189d879c60e refs/tags/v0.16.0=94e80e834e07 refs/tags/v0.17.0=ccdba4c13af4 refs/tags/v0.18.0=eacec0263e32 refs/tags/v0.18.5=12653df1aa9a refs/tags/v0.2.0=795efee48060 refs/tags/v0.3.0=1db831ebfc3c refs/tags/v0.3.5=bdeb404be306 refs/tags/v0.3.7=66f260dab6a8 refs/tags/v0.4.0=de9e400abb8b refs/tags/v0.5.0=01f9a37630c2 refs/tags/v0.6.0=3db348fe3ce9 refs/tags/v0.7.0=d2cd9846e705 refs/tags/v0.8.0=50fc91f52683 refs/tags/v0.9.0=c8a3dff0f74f refs/tags/v1.0.0=abbcc099584d refs/tags/v1.0.0-release=39701bff32e8 refs/tags/v10.3.0=9c72292389a5 refs/tags/v10.5.0=8025c12995b5 refs/tags/v10.5.0^{}=b4a83b13e4ee refs/tags/v10.6.0=ed246698dbb1 refs/tags/v10.6.0^{}=0bd23c9cfc28 refs/tags/v10.7.0=228fa5f11118 refs/tags/v10.7.0^{}=4ad82471f0a0 refs/tags/v10.8.0=95e3deed58e6 refs/tags/v10.8.0^{}=e71037301d25 refs/tags/v10.9.0=4b28a695f9f4 refs/tags/v10.9.0^{}=29b9dcaac086 refs/tags/v2.0.0=22fa1ed650cb refs/tags/v2.0.0-alpha.1=244f721d80e9 refs/tags/v3.0.0=74bbf4a27a58 refs/tags/v3.0.1=ae7bf40c610c refs/tags/v4.0.0=73b1f703ffad refs/tags/v4.0.0^{}=15bc5c8e6bf9 refs/tags/v5.0.0=5af07262d16f refs/tags/v5.0.0^{}=6c26a7c7fdd6 refs/tags/v6.0.0=122ab89d2e83 refs/tags/v6.0.0^{}=2f4f9605877f refs/tags/v7.0.0=8e54de64aef1 refs/tags/v9.0.0=f0222bf281c4 refs/tags/v9.1.0=fbc2099b3abf refs/tags/v9.1.0^{}=4d012f7de798 refs/tags/v9.2.0=c2aaccd763bb refs/tags/v9.2.0^{}=cb8ac1d7e2be refs/tags/v9.3.0=c5cdd0b13ca3 refs/tags/v9.3.0^{}=5905543c8d64
+[INFO] GP-05b: remote branch count excluding the five pinned refs and c7 review refs: 120
+
+## 2. K1 frozen catalog
+[PASS] K1: catalog at c10681b3: blob 191837426374, sha256 d6c05a7cdc71
+[PASS] K1: catalog at 452b3cb5: blob 191837426374, sha256 d6c05a7cdc71
+[PASS] K1-C7: catalog has exactly one entry with id C7
+[PASS] K1-base: catalog baseline commit/tree equal C-BASE/C-TREE; baseline blobs equal the three recorded blobs
+
+## 3. K2 adopted document, K3 overlay, EC7
+[PASS] K2-commit: K2 commit 16e74908e922 has tree dbfdceca15fe
+[PASS] K2: K2 blob cb3a208e1d79 and sha256 989490ec9272
+[PASS] K2-reach: K2 commit is reachable from its remote review ref
+[PASS] K2-k4same: K2 file is byte-identical in the K4 commit (adoption did not edit it)
+[PASS] K3-X1: exactly one whole-line BEGIN OVERLAY-C7 and one END OVERLAY-C7 -- begin=[294] end=[331]
+[PASS] K3-X2: K3 is the bytes between the markers, final LF included, ends with the closing `}` line
+[PASS] K3-X3: K3 has exactly 36 LF-terminated lines and 1736 bytes and no CR -- lines=36 bytes=1736 cr=0
+[PASS] K3: K3 sha256 equals OVERLAY-SHA256 -- c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7
+[PASS] OVL-1: overlay catalog/c_base identities equal K1 and K5; entry is C7
+[PASS] P-2: overlay holds exactly 3 `set`, 3 `add`, 1 `append` keys and only the known top-level keys
+[PASS] P-1set: set key expected_primary_failure.printed_property_must_be exists in the catalog's C7 entry
+[PASS] P-1set: set key witness_required exists in the catalog's C7 entry
+[PASS] P-1set: set key receipt_type exists in the catalog's C7 entry
+[PASS] P-1add: add key primary_attribution is absent from the catalog's C7 entry
+[PASS] P-1add: add key named_property_attribution is absent from the catalog's C7 entry
+[PASS] P-1add: add key witness is absent from the catalog's C7 entry
+[PASS] P-1append: append key special_attribution_rules is an existing list (2 items)
+[PASS] P-1p6: catalog printed_property_must_be is "P6" and witness_required is false (the values the overlay replaces) -- printed='P6' witness_required=False
+[PASS] P-5: EC7 keeps C7 field named_property verbatim
+[PASS] P-5: EC7 keeps C7 field patch verbatim
+[PASS] P-5: EC7 keeps C7 field mutant_blob verbatim
+[PASS] P-5: EC7 keeps C7 field edits verbatim
+[PASS] P-5: EC7 keeps C7 field configuration verbatim
+[PASS] P-5: EC7 keeps C7 field ceiling_states verbatim
+[PASS] P-5: EC7 keeps C7 field restoration verbatim
+[PASS] P-5: EC7 keeps C7 field restored_receipt verbatim
+[PASS] P-5: EC7 keeps C7 field additional_comparison verbatim
+[PASS] P-5: EC7 keeps C7 field execution_dependent_uncertainty verbatim
+[PASS] P-5t: EC7 keeps `test`-bearing fields verbatim (additional_comparison.test is full_f3)
+[PASS] CE-1: EC7 derived by CE-1 (compact, sorted, UTF-8, no trailing newline)
+[INFO] EC7: EC7 canonical bytes: 7618; sha256 c3aa3d907d2036565d68a5f7c53d302a0d93ca986ee868875137cb0106c43109
+[PASS] 2A.4-5: every other entry and every top-level key (baseline included) is CE-1 byte-equal before and after
+[PASS] EC7-fields: EC7 witness test/mutation facts: witness test name, ignored false, violations_required
+
+## 4. K4 owner adoption record (AU-1 to AU-6)
+[PASS] AU-1c: K4 commit exists and is a commit with tree d44a9c5a1368
+[PASS] AU-4a: K4 commit is reachable from the named remote review ref, local equal to remote (ls-remote == tracking == K4 commit)
+[PASS] AU-4b: K4 path exists in the K4 commit
+[PASS] AU-4c: K4 blob equals the pinned blob
+[PASS] AU-4d: K4 recomputed sha256 equals the pinned sha256 -- 800f767d4df66f6a8c1c30306395042ff62a22bc3a354349d813ffc100066a54
+[PASS] AU-5p: K4 commit's sole parent is the K2 commit (record committed after the frozen document)
+[PASS] AU-5: record states K1 blob 1918374263740d2f9864
+[PASS] AU-5: record states K1 sha256 d6c05a7cdc71b3ca1812
+[PASS] AU-5: record states K1 path docs/evidence/p3-can
+[PASS] AU-5: record states K2 commit 16e74908e922160993a7
+[PASS] AU-5: record states K2 tree dbfdceca15feb58e0be6
+[PASS] AU-5: record states K2 blob cb3a208e1d79a7e94e2a
+[PASS] AU-5: record states K2 sha256 989490ec9272a528fe01
+[PASS] AU-5: record states K2 path docs/evidence/p3-can
+[PASS] AU-5: record states K3 sha256 c5a9f3d1ade663ca4ef5
+[PASS] AU-5: record states K5 commit d5964ee5326c27331773
+[PASS] AU-5: record states K5 tree 51bac5fd335999cc995c
+[PASS] AU-5k3: record states K3 is 36 LF-terminated lines, 1,736 bytes, no CR, markers excluded, final LF included
+[PASS] AU-3a: record states `A string is not authority`, claims no cryptographic signature
+[PASS] AU-3b: record names the conveying mission and section, the C7-only scope, and CR-B status (B-W/A OWNER APPROVED; B-W/B and B-W/C NOT ESTABLISHED)
+[PASS] AU-3c: record does not contain or claim its own commit, blob or sha256
+[PASS] AU-1: record quotes the explicit Owner decision naming K2 sha256 and K3 sha256, `C7 only`, `contract adoption only, not execution authorization`
+[PASS] AU-5m: the mission text names the same K1..K5 values (scratchpad copy of mission)
+[PASS] AU-5x: mission text states K1 blob
+[PASS] AU-5x: mission text states K1 sha256
+[PASS] AU-5x: mission text states K2 commit
+[PASS] AU-5x: mission text states K2 blob
+[PASS] AU-5x: mission text states K2 sha256
+[PASS] AU-5x: mission text states K3 sha256
+[PASS] AU-5x: mission text states K4 commit
+[PASS] AU-5x: mission text states K4 tree
+[PASS] AU-5x: mission text states K4 blob
+[PASS] AU-5x: mission text states K4 sha256
+[PASS] AU-5x: mission text states K4 path
+[PASS] AU-5x: mission text states C-BASE
+[PASS] AU-5x: mission text states C-TREE
+[PASS] AU-5x: mission text states W-COMMIT
+[PASS] AU-5x: mission text states W-TREE
+[PASS] AU-5x: mission text states W-BLOB
+[PASS] AU-5x: mission text states W-BLOB sha256
+[PASS] AU-5x: mission text states W-PATCH sha256
+[PASS] AU-5x: mission text states C7.patch sha256
+[PASS] AU-5x: mission text states mutant blob
+[PASS] AU-5x: mission text states mutant sha256
+[INFO] AU-2: the conveying mission (P3-C11-DR01-D2A1-C7-W-OWNER-ADOPTION-CONVEY-01) is not available to the executor as a separate document; the executor can compare only the execution mission, the record, K2 itself and git recomputation (three of the four places). Recorded as a limitation.
+
+## 5. K5 C-BASE
+[PASS] K5: C-BASE commit exists with tree 51bac5fd3359
+
+## 6. W-COMMIT source identities (NI-1 to NI-6)
+[PASS] W-1: W-COMMIT exists, tree == W-TREE, sole parent == C-BASE
+[PASS] W-2: W-COMMIT is reachable from the remote source review ref
+[PASS] NI-2: diff-tree -r --no-renames C-BASE W-COMMIT prints exactly one record: M model_tests.rs 100644->100644 -- [':100644 100644 28085ce232827301104b5d757af042ec933976f8 c18a6235a9eb32314931c51dd7bb574df77fbe28 M\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs']
+[PASS] W-3: W-BLOB git id, sha256 and size -- id=c18a6235a9eb sha=6762d91f3e4d size=329569
+[PASS] NI-1a: C-BASE model_tests.rs is blob 28085ce2, 310612 bytes, sha256 recorded
+[PASS] NI-1b: W-BLOB's first 310,612 bytes equal blob 28085ce2 byte for byte, and W-BLOB is longer
+[PASS] W-4: W-PATCH (git diff C-BASE W-COMMIT) sha256 -- c8509c025542c81fdc44e296a0da256e04ba533a971dfbe1b379ee6f9f76b0a9
+[PASS] W-5: W-PATCH removes no line and adds 516 lines -- removed=0 added=516
+[PASS] W-6: suffix S is 18957 bytes, 516 lines, no CR, no NUL, valid UTF-8
+[INFO] W-6: suffix sha256 013cbc1f1d96dba10da02c33deb1218eb27811dabfb676a649ede99e511e5e3b
+[PASS] NI-3a: suffix S is exactly one inline `mod c7_witness { ... }` item (no tokens before or after) -- tokens=3465 top_close=3464
+[PASS] NI-3b: no `pub` of any form, no re-export (NI-5e)
+[PASS] NI-5f: exactly one attribute in S and it is `#[test]` (so no ignore/should_panic/cfg/cfg_attr/lint/inner attribute, no derive) -- attribute count=1
+[PASS] NI-5f2: no inner attribute `#!`
+[PASS] NI-5b: none of ['AtomicBool', 'AtomicU32', 'AtomicU64', 'AtomicU8', 'AtomicUsize', 'Cell', 'LazyLock', 'Mutex', 'OnceCell', 'OnceLock', 'RefCell', 'RwLock', 'lazy_static', 'static', 'thread_local'] in S
+[PASS] NI-5c: none of ['export_name', 'extern', 'global_allocator', 'link', 'link_section', 'no_mangle', 'unsafe'] in S
+[PASS] NI-5d: none of ['macro_export', 'macro_rules', 'macro_use'] in S
+[PASS] NI-5c2: no `#[used]`, `#[link]`, `#[no_mangle]`, `#[export_name]`, `#[link_section]`, `#[global_allocator]` attribute (attribute names found: ['test'])
+[INFO] NI-5b-life: lifetime tokens in S (a lifetime `'static` is not a `static` item): ['static']
+[PASS] NI-5b2: no `static` item: the ident `static` never occurs as an item keyword (lifetime tokens are lexed separately)
+[PASS] NI-5a1: no trait declared in S
+[PASS] NI-5a2: every `impl` in S has as self type a struct/enum declared in S (no trait impl, no generic/blanket) -- declared=['Record', 'Run', 'Snap', 'Step'] impl_targets=['Run']
+[PASS] NI-5a3: no `impl Trait for Type` in S
+[PASS] NI-5g1: S neither calls nor names explorer/serial/hook-panic/randomness/time/process/net items
+[PASS] NI-5g2: no `std::{env,process,thread,fs,net,time,panic}` path and no hook::{install,remove,report}
+[PASS] NI-5g3: S names no C1/C25/C4 witness item
+[PASS] NI-5g4: S may call only hook::take_counts -- hook uses=['take_counts']
+[PASS] NI-5h: S defines no `Config` and uses FPT
+[INFO] NI-5-uses: `use` items in S: ['use super : : *']
+[PASS] NI-5-uses2: S's only `use` is `use super::*` -- uses=['use super : : *']
+[PASS] NI-S-counts: S holds exactly 1 `#[test]` and 0 `#[ignore` -- test=1 ignore=0
+[PASS] NI-4: `git grep -w c7_witness C-BASE` finds nothing -- rc=1 out=b''
+[PASS] CNT: lib-scope source counts: C-BASE 348 `#[test]`/35 `#[ignore`; W-TREE 349 `#[test]`/35 `#[ignore` -- C-BASE test=348 ignore=35; W test=349 ignore=35
+[PASS] NI-6: build input rust-toolchain.toml identical at C-BASE and W-COMMIT -- 726005b29561
+[PASS] NI-6: build input Cargo.lock identical at C-BASE and W-COMMIT -- 1af53a60aaf6
+[PASS] NI-6: build input Cargo.toml identical at C-BASE and W-COMMIT -- 2c558a4477d1
+[PASS] NI-6: build input crates/nexus-governed-control/Cargo.toml identical at C-BASE and W-COMMIT -- 2543c745d661
+[PASS] NI-6: build input .cargo/config.toml identical at C-BASE and W-COMMIT -- 05a42b50174e
+[PASS] NI-6: build input crates/nexus-governed-control/src/lib.rs identical at C-BASE and W-COMMIT -- b806ed577f8d
+[PASS] NI-6: build input crates/nexus-governed-control/src/ledger.rs identical at C-BASE and W-COMMIT -- d872b90816fd
+[PASS] NI-6: build input crates/nexus-governed-control/src/ledger/protocol.rs identical at C-BASE and W-COMMIT -- a2df2841b99c
+[PASS] NI-6: build input crates/nexus-governed-control/src/ledger/protocol/unit_tests.rs identical at C-BASE and W-COMMIT -- 55dc66409eac
+[PASS] NI-6p: protocol.rs at W-TREE is blob a2df2841 (Candidate C's)
+[PASS] NI-6u: unit_tests.rs at W-TREE is blob 55dc6640
+[INFO] NI-6t: rust-toolchain.toml: '[toolchain]\nchannel = "1.94.0"\ncomponents = ["rustfmt", "clippy"]\ntargets = ["wasm32-wasip1"]\n'
+[PASS] NI-6t2: rust-toolchain.toml pins channel 1.94.0
+[PASS] W-7: tree diff C-TREE -> W-TREE is exactly `M model_tests.rs` -- ['M\tcrates/nexus-governed-control/src/ledger/protocol/model_tests.rs']
+[PASS] W-8: W-TREE has no gitlinks (submodules)
+
+## 7. frozen C7 patch and mutant identity (verified without writing the object store)
+[PASS] PAT-1: C7.patch git blob df0dd584 and sha256 b5d8bc6c
+[PASS] PAT-2: catalog patch_sha256 and patch text equal the file
+[PASS] PAT-3: anchor occurs exactly once in protocol.rs at W-TREE -- count=1
+[PASS] PAT-4: in-memory patched protocol.rs has blob 0d4ab992 and sha256 6d2f2d49 -- id=0d4ab9929c0e15d910735a52b72a5f3855bef58a sha=6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+[PASS] PAT-5: patch touches only protocol.rs; one line removed, one added: remove(key) -> clear()
+[PASS] PAT-6: patch header index line matches a2df2841..0d4ab992
+[PASS] PAT-7: mutant blob is not in the object store before the mission
+[INFO] PAT-8: mutant protocol.rs size 64542 bytes (W-TREE 64546)
+
+## 8. E-C and accepted restored-side receipts (read from git objects, never rerun)
+[PASS] REC-0: evidence commit f023cc3d exists
+[PASS] REC-1: E-C pin: sha256 cde9f9d2.., 8984464 bytes, built from C-BASE/C-TREE, rustc 1.94.0 (4a4ef493e 2026-03-02)
+[INFO] REC-2: 44-full-F-PT: test=None raw_blob=a92cb8dabd81 raw_sha=0863794ef750 classification_first_line='CLASSIFICATION: PASS'
+[PASS] REC-2: 44-full-F-PT is a gc_symmetry receipt with CLASSIFICATION: PASS
+[INFO] REC-2: 43-full-F-3: test=None raw_blob=872ef461d465 raw_sha=6dfc796a0b51 classification_first_line='CLASSIFICATION: PASS'
+[PASS] REC-2: 43-full-F-3 is a gc_symmetry receipt with CLASSIFICATION: PASS
+[PASS] REC-3: catalog restored_receipt names f023cc3d, gc_symmetry_fpt, executable cde9f9d2, raw sha 0863794e..
+
+## 9. environment, ownership, resources
+[INFO] ENV-1: rustup toolchain list: stable-x86_64-unknown-linux-gnu (active, default) | nightly-x86_64-unknown-linux-gnu | 1.94.0-x86_64-unknown-linux-gnu
+[PASS] ENV-1: toolchain 1.94.0-x86_64-unknown-linux-gnu is installed
+[INFO] ENV-2: rustc +1.94.0 -vV: rustc 1.94.0 (4a4ef493e 2026-03-02) | binary: rustc | commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db | commit-date: 2026-03-02 | host: x86_64-unknown-linux-gnu | release: 1.94.0 | LLVM version: 21.1.8
+[INFO] ENV-2: cargo +1.94.0 -vV: cargo 1.94.0 (85eff7c80 2026-01-15) | release: 1.94.0 | commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643 | commit-date: 2026-01-15 | host: x86_64-unknown-linux-gnu | libgit2: 1.9.2 (sys:0.20.3 vendored) | libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4) | ssl: OpenSSL 3.5.4 30 Sep 2025 | os: Ubuntu 24.4.0 (noble) [64-bit]
+[PASS] ENV-2: rustc -vV matches E-C's record (release/commit-hash/date/host/LLVM)
+[PASS] ENV-3: cargo -vV matches E-C's record (release/commit-hash/date/libgit2/libcurl/ssl/os)
+[PASS] DEST: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy is absent (lexists false)
+[PASS] DEST2: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy not registered as a worktree
+[PASS] DEST: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant is absent (lexists false)
+[PASS] DEST2: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant not registered as a worktree
+[PASS] DEST: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01 is absent (lexists false)
+[PASS] DEST2: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01 not registered as a worktree
+[PASS] DEST3: no branch/ref named for nexus-os-p3-c11-c7w-healthy
+[PASS] DEST3: no branch/ref named for nexus-os-p3-c11-c7w-mutant
+[INFO] OWN: /home/nexus/NEXUS: realpath=/home/nexus/NEXUS uid=1000 gid=1000 mode=775 dev=66310 ino=47974510 symlink=False
+[PASS] OWN: parent /home/nexus/NEXUS is a real directory owned by uid 1000, not world-writable, not a symlink
+[INFO] OWN: /home/nexus/nexus-audits/claude-architect: realpath=/home/nexus/nexus-audits/claude-architect uid=1000 gid=1000 mode=775 dev=66310 ino=49184949 symlink=False
+[PASS] OWN: parent /home/nexus/nexus-audits/claude-architect is a real directory owned by uid 1000, not world-writable, not a symlink
+[INFO] OWN: /home/nexus/NEXUS/nexus-os/.git: uid=1000 mode=775
+[INFO] RET: retained worktree /home/nexus/NEXUS/nexus-os-p3-c11-c7-witness-source-w1-01 HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98 (not touched by this mission)
+[INFO] RET: retained worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7 HEAD d5964ee5326c2733177307db6f507328023d361a (not touched by this mission)
+[INFO] RES-1: MemTotal 65077588 KiB; MemAvailable 53100480 KiB; SwapTotal 16777212 KiB; SwapFree 7873760 KiB
+[PASS] RES-1: MemAvailable >= 18 GiB (the accepted supervisor's pre-flight threshold)
+[INFO] RES-2: free disk on /home/nexus/NEXUS filesystem: 13.2 GiB
+[PASS] RES-2: free disk >= 8 GiB (two builds ~0.8 GiB each plus worktrees ~0.2 GiB each; threshold set by this mission)
+[INFO] PROC: cargo/rustc/governed-control test processes: none
+[PASS] PROC: no cargo, rustc or governed-control test executable running (no conflicting mutation campaign on this host)
+[PASS] SCOPE-1: no active p3c11/c4w01/fbk scope unit (no concurrent campaign supervisor)
+[INFO] SCOPE-2: systemd-run: systemd 255 (255.4-1ubuntu8.18)
+[PASS] SCOPE-3: cgroup v2 mounted at /sys/fs/cgroup -- cgroup2fs
+[INFO] SCOPE-4: user slice controllers: cpu memory pids
+
+# finished 2026-10-15T22:47:56+0100
+GATE RESULT: PASS (every check passed)

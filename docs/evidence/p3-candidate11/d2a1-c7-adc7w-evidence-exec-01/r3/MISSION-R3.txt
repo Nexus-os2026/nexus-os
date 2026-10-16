@@ -1,0 +1,473 @@
+[Transcribed by the executor (Claude Opus 5.5, session 882e437e-0db3-409e-8b8f-72205c69d44d) from the Owner-relayed message of 2026-10-16. Not signed. A string is not authority.]
+
+SEND TO: CLAUDE CODE — IMPLEMENTATION
+
+MISSION ID:
+P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01-OPUS-R3
+
+FROM:
+ChatGPT GPT-6 — Primary / Sole Decision Architect
+
+TO:
+Claude Code — Implementation
+
+MODEL:
+Claude Opus 5.5
+
+EXACT MODEL ID:
+claude-opus-5-5
+
+EFFORT:
+Extra High
+
+TYPE:
+AUTHORIZE C7 EXECUTION AFTER FINAL PREFLIGHT
+
+============================================================
+1. ARCHITECT RULING
+============================================================
+
+The execution hold is LIFTED CONDITIONALLY.
+
+The executor reported:
+
+gate-run3:
+169 PASS, 0 FAIL, 27 INFO.
+
+Supervisor self-test A:
+12/12 PASS.
+
+Supervisor self-test B:
+6/6 PASS.
+
+Worktree:
+30/30 PASS.
+
+B-W/C inventory:
+30/30 PASS.
+
+Classifier:
+80/80 PASS.
+
+Historical linker:
+12/12 PASS.
+
+The Primary Architect independently checked
+the frozen GitHub provenance and found the
+expected source and adoption refs unchanged.
+
+The local test results remain
+EXECUTOR-REPORTED until independently audited.
+
+No C7 build or mutation was previously started.
+
+This is a continuation of the ORIGINAL
+EXEC-01 authorization, not another campaign.
+
+============================================================
+2. NO DUPLICATE PREFLIGHT
+============================================================
+
+DO NOT rerun:
+
+- gate-run1;
+- gate-run2;
+- gate-run3;
+- any of the six completed helper self-tests;
+- source authoring or source review.
+
+Do not modify the frozen helper scripts.
+
+Do not re-create tooling.
+
+Do not change models.
+
+No automatic retry.
+
+============================================================
+3. EXACT EXECUTION IDENTITIES
+============================================================
+
+C-BASE:
+d5964ee5326c2733177307db6f507328023d361a
+
+C-TREE:
+51bac5fd335999cc995c0ab9f582a30244973ef0
+
+W-COMMIT:
+6c424c3aec579401543ae010e3f8729e17c4ed98
+
+W-TREE:
+5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+
+W-BLOB:
+c18a6235a9eb32314931c51dd7bb574df77fbe28
+
+W-BLOB SHA256:
+6762d91f3e4de61902efb8f32eccf38fcf4166f5c036ba7a2832f05944b0be25
+
+W-PATCH SHA256:
+c8509c025542c81fdc44e296a0da256e04ba533a971dfbe1b379ee6f9f76b0a9
+
+ADOPTED K2 SHA256:
+989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b
+
+K3 SHA256:
+c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7
+
+K4 ADOPTION COMMIT:
+4c29b2f0035ecaa86bca8d49238331485a1140e6
+
+K4 RECORD SHA256:
+800f767d4df66f6a8c1c30306395042ff62a22bc3a354349d813ffc100066a54
+
+Frozen mutation patch SHA256:
+b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+
+Expected mutant protocol.rs blob:
+0d4ab9929c0e15d910735a52b72a5f3855bef58a
+
+All identities are fixed.
+
+Any mismatch:
+STOP.
+
+============================================================
+4. PRESERVE PREFLIGHT EVIDENCE FIRST
+============================================================
+
+The completed Opus R2 preflight is at:
+
+/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/
+35e734c1-5308-4f19-ae15-39e870b30974/
+scratchpad/preflight-r2/
+
+The original Sonnet scratchpad is at:
+
+/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/
+7b42496f-8d31-44a9-b5c7-079991353147/
+scratchpad/
+
+Before any build or mutation:
+
+A. Reauthenticate the paths and file identities.
+
+B. Verify the completed preflight receipts
+against the existing SHA256 manifest.
+
+C. Check that no new C7 execution has started.
+
+D. Create the ONE new owned evidence
+destination specified by original EXEC-01,
+using its exact canonical-root and ownership
+requirements.
+
+E. Copy the original raw preflight receipts,
+gate-run1 FAIL, gate-run2 PASS, gate-run3 PASS,
+tool hashes, frozen helper files, command log,
+and all six self-test receipts into that
+evidence destination.
+
+F. Hash and verify the copies byte-for-byte.
+
+G. Preserve the existing originals.
+
+Do not run the copied helper files.
+
+If evidence cannot be authenticated and
+durably preserved:
+STOP BEFORE THE FIRST BUILD.
+
+No historical evidence may be overwritten.
+
+============================================================
+5. RESOURCE AND PERMISSION GATES
+============================================================
+
+Before each build and major evidence write:
+
+Verify actual disk bytes and inodes available
+to the executing user.
+
+Maintain at least the original 8 GiB
+available-space threshold.
+
+Do not count root-reserved blocks.
+
+Check no conflicting campaign is running.
+
+Every build:
+- At most 2 jobs.
+- At most 900 seconds.
+- At most 16 GiB memory.
+- Zero swap.
+- One build per exact source identity.
+
+Every test:
+- At most 2700 seconds.
+- At most 16 GiB memory.
+- Zero swap.
+- One invocation at a time.
+
+Use the authenticated supervisor.
+
+Explicitly enforce the disk-space gate;
+c7sup's logging alone is insufficient.
+
+If an OOM or termination leaves an
+incomplete supervisor record:
+STOP, preserve evidence, and fail closed.
+
+The earlier Owner approval of seven preflight
+commands is not blanket approval for
+subsequent shell commands.
+
+Use the normal permission workflow for
+each newly required operation.
+
+If denied:
+STOP without bypass or substitution.
+
+============================================================
+6. EXECUTION — EXACT ADOPTED ORDER
+============================================================
+
+Read the already-authenticated original
+EXEC-01 mission and adopted AD-C7-W.
+
+Use them as the full command, path,
+receipt and classification specification.
+
+Do not invent new test arguments.
+
+After the evidence and resource gates:
+
+STAGE 1:
+Create the owned, isolated healthy worktree
+at exact W-COMMIT.
+
+Build E-W once.
+
+Pin the exact executable path and SHA256.
+
+STAGE 2:
+Create the separately owned mutant worktree
+at exact W-COMMIT.
+
+Apply the frozen C7 patch once.
+
+Verify the exact expected mutant source blob.
+
+Build E-W7 once.
+
+Pin its exact executable path and SHA256.
+
+STAGE 3:
+Run the required listings on both executables.
+
+Establish NI-6 build-time conditions,
+NI-7, NI-8 and section 6A.
+
+Record B-W/C mechanically only if every
+required check passes.
+
+If any fails:
+STOP BEFORE TEST EXECUTION.
+
+STAGE 4 — HEALTHY WITNESS (C):
+Run the exact non-ignored C7 witness on E-W.
+
+Expected:
+24 enabled steps.
+Healthy step-23 end.
+No property violations.
+Normal PASS.
+
+If inadmissible:
+STOP.
+
+STAGE 5 — ORIGINAL F-PT (A):
+Run the original F-PT explorer on E-W7.
+
+A4 ON.
+
+Expected:
+normal FAIL E11.
+
+Never relabel E11 as P6.
+
+If inadmissible:
+STOP.
+
+STAGE 6 — MUTANT WITNESS (B):
+Run the exact C7 witness on THE SAME E-W7.
+
+Expected:
+E11 at step 13 transition.
+P6 after step 24.
+
+Exactly two genuine canonical violations.
+
+Check the choice accounting, state,
+markers and panic summary independently.
+
+If inadmissible:
+STOP.
+
+STAGE 7 — INFORMATIONAL F-3:
+Run the original F-3 on THE SAME E-W7.
+
+A4 OFF.
+
+Record the actual completed outcome.
+
+Never use F-3 as C7 kill evidence.
+
+If the run is incomplete or externally
+terminated:
+STOP.
+
+STAGE 8:
+Perform authenticated, bounded restoration
+to EXACTLY_W.
+
+Follow adopted section 7.3A after any stop.
+
+Preserve evidence before restoration.
+
+Do not touch non-owned worktrees.
+
+STAGE 9:
+Link the existing accepted F-PT receipt
+without rerunning it.
+
+Independently classify the actual raw
+receipts under the adopted contract.
+
+Only admissible results may become a
+KILL_EVIDENCE_CANDIDATE.
+
+============================================================
+7. FAILURE DISCIPLINE
+============================================================
+
+No additional builds.
+
+No retries.
+
+No resource escalation.
+
+No source repair.
+
+No new mutation patch.
+
+No alternative validation route.
+
+No repeated accepted-control execution.
+
+No GitHub CI.
+
+No broad cleanup.
+
+No modification to C-BASE or W-COMMIT.
+
+If any stop condition fires:
+
+Preserve the actual state and raw receipts.
+
+If the mutant was applied, use only the
+ownership-authenticated restoration procedure.
+
+If restoration conditions cannot be established,
+preserve the worktree unchanged.
+
+Return the exact failing stage and evidence
+to the Architect.
+
+Never reinterpret a failed run as passing.
+
+============================================================
+8. EVIDENCE PUBLICATION
+============================================================
+
+Only after successful admissible local
+validation and restoration may the original
+EXEC-01 review-publication authorization
+be exercised.
+
+Required parent:
+4c29b2f0035ecaa86bca8d49238331485a1140e6
+
+Allowed new packet:
+docs/evidence/p3-candidate11/
+d2a1-c7-adc7w-evidence-exec-01/
+
+Destination:
+refs/heads/review/
+p3-c11-d2a1-c7-adc7w-evidence-exec-01
+
+One non-forced explicit-refspec push.
+
+No PR.
+No merge.
+No protected-ref change.
+No CI dispatch.
+
+If publication is blocked, retain the
+complete local evidence and return
+STOPPED BEFORE PUBLICATION.
+
+Do not retry automatically.
+
+============================================================
+9. REPORT
+============================================================
+
+RETURN TO:
+ChatGPT GPT-6 — Primary / Sole Decision Architect
+VIA: Owner
+
+Report:
+
+1. Actual model and effort.
+2. Preserved preflight evidence and hashes.
+3. Source/worktree identities.
+4. E-W and E-W7 build receipts.
+5. Executable SHA256s and inventories.
+6. B-W/C result.
+7. Healthy witness result.
+8. Original F-PT result.
+9. Mutant C7 witness result.
+10. Informational F-3 result.
+11. Resource and process evidence.
+12. Restoration result.
+13. Independent local classification.
+14. Evidence manifest.
+15. Publication identities, if applicable.
+16. Exact unresolved blockers.
+
+MAXIMUM RESULT:
+
+KILL_EVIDENCE_CANDIDATE —
+ARCHITECT REVIEW PENDING
+
+ALTERNATIVES:
+
+B-W/C VALIDATION BLOCKED
+C7 EXECUTION BLOCKED
+STOPPED BEFORE EXECUTION
+STOPPED BEFORE PUBLICATION
+
+STANDING STATUS:
+
+B-W/A: SATISFIED
+B-W/B: ACCEPTED FOR EXACT W-COMMIT
+B-W/C: PENDING
+C7: MUTATION_CONTROL_BLOCKED
+CAMPAIGN: 34/35 ACCEPTED
+PHASE THREE: ACTIVE — NOT COMPLETE
+
+NO C7 ACCEPTANCE WITHOUT
+INDEPENDENT ARCHITECT REVIEW.
+
+END OF MISSION

@@ -1,0 +1,7 @@
+gate-run3                exit=0 avail_bytes=14113841152 hashcheck=26/26 last="GATE RESULT: PASS (every check passed)"
+st-A-sup-build-invoke    exit=0 avail_bytes=14113558528 hashcheck=26/26 last="SELF-TEST (c7sup build/invoke) ALL OK: 12/12"
+st-B-sup-enforcement     exit=0 avail_bytes=14110826496 hashcheck=26/26 last="SELF-TEST RESULT: ALL OK"
+st-wt                    exit=0 avail_bytes=14110556160 hashcheck=26/26 last="SELF-TEST (c7wt) ALL OK: 30/30"
+st-bwc                   exit=0 avail_bytes=14109642752 hashcheck=26/26 last="SELF-TEST (c7bwc) ALL OK: 30/30"
+st-class                 exit=0 avail_bytes=14098743296 hashcheck=26/26 last="SELF-TEST (c7class) ALL OK: 80/80"
+st-link                  exit=0 avail_bytes=14096576512 hashcheck=26/26 last="SELF-TEST (c7link) ALL OK: 12/12"

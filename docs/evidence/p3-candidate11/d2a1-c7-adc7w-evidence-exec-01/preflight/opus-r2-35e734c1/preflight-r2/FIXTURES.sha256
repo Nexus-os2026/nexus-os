@@ -1,0 +1,14 @@
+426d3183d0c874670fd9633a6e941586e5586e598c21eadf9751ac777ccfe6e9  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listcrate/Cargo.toml
+9d6bff9618268c6743296de1635e894846655a8f42b4a0a0894511ea85a9bb09  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listcrate/Cargo.lock
+b4cda633da2ab21937850415a73f2bb1cc8c006c950ed85837fd95098a0d11c4  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listcrate/rust-toolchain.toml
+834a56ddd1bf8aecb31ed84a715be37e933df93c64490ecefeafe1d8a0246097  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f1.txt
+316406b5da3aa6c314a1c16d34a3be45f8d56a81985b9f78c0bfb9e460f99f20  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f2.txt
+8790acb48b94f52f017b2a3008a58fbd5b2777b048c2d16fd547729f5e19f736  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f3.txt
+316406b5da3aa6c314a1c16d34a3be45f8d56a81985b9f78c0bfb9e460f99f20  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f4.txt
+316406b5da3aa6c314a1c16d34a3be45f8d56a81985b9f78c0bfb9e460f99f20  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f5.txt
+414c144fa67f1df75f7b14a69af5641637772e81c4c3fa0a171e3228adbb922e  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f6.txt
+414c144fa67f1df75f7b14a69af5641637772e81c4c3fa0a171e3228adbb922e  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listfix/f7.txt
+15ec6132bf25eacac418f0b661bffe53985fe20506f95725b8c40ec23cbc9918  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/samples/C4-healthy-raw.txt
+5e8c54a49e885e170446e84ea54daf200cccb8d15fe86534a58458f6fc8fd443  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/samples/C4-mutant-raw.txt
+518e0e47108811b5e8069c693aa1963f7da3ee87aad824a1bbe7479fa9c798d2  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/samples/C9-fullfpt-raw.txt
+d594161872eceb750577c28f09c39e31163a9ea2efcce1bd6c72e617256107fe  /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/listcrate/src/lib.rs

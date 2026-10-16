@@ -1,0 +1,12 @@
+{
+ "kind": "C",
+ "exit_status": 0,
+ "step23_end": "healthy",
+ "kept": true,
+ "lost": false,
+ "records": [],
+ "verdict": "PASS_ADMISSIBLE",
+ "failed_checks": [],
+ "note": "",
+ "label": "(C) HEALTHY WITNESS: PASS \u2014 ADMISSIBLE"
+}

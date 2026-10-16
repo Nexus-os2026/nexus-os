@@ -1,0 +1,93 @@
+    488972 chrome
+  free disk 13.1 GiB
+scope unit: p3c11-c7w01-build-E-W-1792107538.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha
+command: systemd-run --user --scope --unit=p3c11-c7w01-build-E-W-1792107538 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-ok/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-ok/time-v.txt timeout -s KILL 900 cargo test --locked --release --lib --no-run -j 2
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.14 s, max RSS (largest single process) 110524 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 37113856 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+cargo stderr: 3 lines; compiling lines 1; finished lines ['Finished `release` profile [optimized] target(s) in 0.10s']
+warnings (lines starting 'warning'): 0; errors (lines starting 'error'): 0
+Executable lines parsed: ['target/release/deps/scratcha-f22cdd30e39d5c3e'] -> ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target/release/deps/scratcha-f22cdd30e39d5c3e']; executables found by the deps scan: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target/release/deps/scratcha-f22cdd30e39d5c3e']
+  executable /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target/release/deps/scratcha-f22cdd30e39d5c3e sha256 9f33b4c9200ded1c6908019d0772bdf10e771e8baa42db46a2ab9497825825d7 size 1027416
+artifact inventory: 7 regular files under target/release
+source verification after (W):
+build stdout (0 bytes): ''
+OUTCOME: BUILD COMPLETED; one executable; source unchanged (NI-7/NI-6 are judged by c7bwc from this receipt)
+[OK] clean build: rc 0 rc 0
+[OK] clean build: one executable pinned, zero warnings/errors ['target/release/deps/scratcha-f22cdd30e39d5c3e']
+[OK] clean build: Executable line resolved to the deps scan 
+[OK] clean build: inventory + fingerprint recorded 7 files
+[OK] clean build: toolchain recorded 
+    489168 chrome
+  free disk 13.1 GiB
+scope unit: p3c11-c7w01-build-E-W-1792107541.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratchw
+command: systemd-run --user --scope --unit=p3c11-c7w01-build-E-W-1792107541 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-warn/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratchw/target /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-warn/time-v.txt timeout -s KILL 900 cargo test --locked --release --lib --no-run -j 2
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.21 s, max RSS (largest single process) 116368 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 41140224 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+cargo stderr: 12 lines; compiling lines 1; finished lines ['Finished `release` profile [optimized] target(s) in 0.15s']
+warnings (lines starting 'warning'): 2; errors (lines starting 'error'): 0
+Executable lines parsed: ['target/release/deps/scratchw-9170c34150e06804'] -> ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratchw/target/release/deps/scratchw-9170c34150e06804']; executables found by the deps scan: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratchw/target/release/deps/scratchw-9170c34150e06804']
+  executable /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratchw/target/release/deps/scratchw-9170c34150e06804 sha256 660520dd828ed5997bcab594e56eec496a482075388596e5ce617b2d74743426 size 1027416
+artifact inventory: 8 regular files under target/release
+source verification after (W):
+build stdout (0 bytes): ''
+OUTCOME: BUILD COMPLETED; one executable; source unchanged (NI-7/NI-6 are judged by c7bwc from this receipt)
+[OK] warning build: warnings counted (>0) {'warnings': 2, 'errors': 0, 'warning_lines': ['warning: unused variable: `x`', 'warning: `scratchw` (lib test) generated 1 warning (run `cargo fix --lib -p scratchw --tests` to apply 1 suggestion)'], 'error_lines': []}
+    606772 python
+    489268 chrome
+  free disk 13.1 GiB
+scope unit: p3c11-c7w01-build-E-W-1792107543.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratche
+command: systemd-run --user --scope --unit=p3c11-c7w01-build-E-W-1792107543 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=910 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-err/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratche/target /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-err/time-v.txt timeout -s KILL 900 cargo test --locked --release --lib --no-run -j 2
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.11 s, max RSS (largest single process) 112728 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 27467776 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+cargo stderr: 11 lines; compiling lines 1; finished lines []
+warnings (lines starting 'warning'): 0; errors (lines starting 'error'): 2
+Executable lines parsed: [] -> []; executables found by the deps scan: []
+artifact inventory: 4 regular files under target/release
+source verification after (W):
+build stdout (0 bytes): ''
+OUTCOME: BUILD NOT CLEAN
+[OK] error build: rc != 0, errors counted, no executable pinned rc 4
+    606772 python
+    489256 chrome
+  free disk 13.1 GiB
+scope unit: p3c11-c7w01-build-E-W-1792107545.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha
+command: systemd-run --user --scope --unit=p3c11-c7w01-build-E-W-1792107545 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=13 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-timeout/scope-record.txt /usr/bin/env -i HOME=/home/nexus PATH=/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/b-timeout/time-v.txt timeout -s KILL 3 sleep 30
+supervisor return code 137; /usr/bin/time: exit status None, signal 9, wall 3.0 s, max RSS (largest single process) 1532 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 2883584 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+cargo stderr: 0 lines; compiling lines 0; finished lines []
+warnings (lines starting 'warning'): 0; errors (lines starting 'error'): 0
+Executable lines parsed: [] -> []; executables found by the deps scan: ['/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target/release/deps/scratcha-f22cdd30e39d5c3e']
+artifact inventory: 7 regular files under target/release
+source verification after (W):
+build stdout (0 bytes): ''
+OUTCOME: BUILD NOT CLEAN
+[OK] timeout: killed, flagged, not clean {'exit_status': None, 'signal': 9, 'supervisor_rc': 137, 'wrapper_recorded_status': '137'}
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 2428 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3432448 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+executable sha256 after: 9f33b4c9200ded1c6908019d0772bdf10e771e8baa42db46a2ab9497825825d7 MATCH
+source verification after (None):
+raw output: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/i-list/raw-output.txt sha256 7f208c208b4a51896539842551968fc65b409a6994cdcfae7846a1abcbf49ba8 bytes 49
+finished: 2026-10-16T00:39:09+0100
+[OK] invoke list 't::one: test\nt::two: test\n\n2 tests, 0 benchmarks\n'
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 2320 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3084288 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+executable sha256 after: 9f33b4c9200ded1c6908019d0772bdf10e771e8baa42db46a2ab9497825825d7 MATCH
+source verification after (None):
+raw output: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/i-list-ignored/raw-output.txt sha256 1fc41138cd164414f22f7993064aa0c3bc55ba75160ec158fcf456120fd1366c bytes 35
+finished: 2026-10-16T00:39:09+0100
+[OK] invoke list-ignored 't::two: test\n\n1 test, 0 benchmarks\n'
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 2672 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3633152 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+executable sha256 after: 9f33b4c9200ded1c6908019d0772bdf10e771e8baa42db46a2ab9497825825d7 MATCH
+source verification after (None):
+raw output: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/i-exact-one/raw-output.txt sha256 3568e7b5d6fc21221d2ef5310f06f78f29b14883a91583ea110f859f1719a1e6 bytes 131
+finished: 2026-10-16T00:39:09+0100
+[OK] invoke exact-one 'test\ntest t::one ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s\n\n'
+SUPERVISED INVOCATION (x) — P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+started: 2026-10-16T00:39:09+0100
+source verification before (None):
+executable /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-A-sup-build-invoke/scratcha/target/release/deps/scratcha-f22cdd30e39d5c3e: sha256 before 9f33b4c9200ded1c6908019d0772bdf10e771e8baa42db46a2ab9497825825d7 (1027416 bytes); pinned 0000000000000000000000000000000000000000000000000000000000000000
+OUTCOME: NOT STARTED (the executable is not the pinned one, or the source verification failed)
+[OK] invoke with a wrong pinned sha is NOT STARTED 
+
+SELF-TEST (c7sup build/invoke) ALL OK: 12/12

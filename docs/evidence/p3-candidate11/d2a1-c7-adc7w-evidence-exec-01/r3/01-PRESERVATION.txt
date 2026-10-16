@@ -1,0 +1,49 @@
+# R3 PRESERVATION RECORD — P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01-OPUS-R3 — 2026-10-16T00:54:54+01:00
+executor: Claude Opus 5.5 (claude-opus-5-5); session 882e437e-0db3-409e-8b8f-72205c69d44d
+## originals re-verified after copy
+TOOLS+FIXTURES (originals):      26 OK
+R2 MANIFEST lines OK (of 35; the self-entry is self-referential, = sha256 of the first 7 manifest lines): 34
+## named items (sha256 of the preserved copies)
+c514e587503da1d14c7ed35e7676c21d2f07cca1ff6deaab0f4cd9c2384e765f  sonnet-7b42496f/gateout/gate-run1.txt
+90494a3f71a6a80158dadce6b545144aadeacdf1c4342550638a2f931c420ebc  sonnet-7b42496f/gateout/gate-run2.txt
+90494a3f71a6a80158dadce6b545144aadeacdf1c4342550638a2f931c420ebc  sonnet-7b42496f/gateout/gate-run2.stdout
+e27dc8025c4ce14e6bc977fb8e7c1e7f51bdb830c56ea0424f2c28e6b0ea0937  opus-r2-35e734c1/preflight-r2/gate-run3.txt
+e27dc8025c4ce14e6bc977fb8e7c1e7f51bdb830c56ea0424f2c28e6b0ea0937  opus-r2-35e734c1/preflight-r2/gate-run3.stdout
+8c8e76044826d822f1d2775da13b836f765b09eab002d10233e82727cb891045  opus-r2-35e734c1/preflight-r2/TOOLS.sha256
+8b99400e0dd613815c3d89e783adebeaaa7ac4f153155aa8890c85f8dc0b348c  opus-r2-35e734c1/preflight-r2/FIXTURES.sha256
+ecf46be3ee4a0da9d5d8626a96907cc401f581c2c432998be88568d841b0887a  opus-r2-35e734c1/preflight-r2/MANIFEST.sha256
+b8cde8a1153f6cec61e7a28555bc7f427f83023d9e0b0525bcd0eb69ec9bbb08  opus-r2-35e734c1/preflight-r2/COMMANDS.txt
+119159a2179d60ab957c67b146e7454e9a51b1d0996a04bde9703ab830eb98f4  opus-r2-35e734c1/preflight-r2/RESULTS.txt
+ba6776398bc6ee6893dfcdecd064aa31f1b02a693d1c7f363642c49c8272f677  opus-r2-35e734c1/ran-gate-run3.txt
+a61fd20e38b004883c2a2868488dd177ff8c3f3cd574bea408b43396e3c12a28  opus-r1-f4afe1e2/PROGRESS.md
+959f4400c1529cbe606cb855a166d28c3bc025f5a1801b46bf385992bede03fc  opus-r1-f4afe1e2/FROZEN-TOOLS.sha256.txt
+1ddf8cd9e0c7a21385635987ca7c12480535bb7d80ff7fd027c0993a7d777c0e  opus-r1-f4afe1e2/expected.txt
+beba3d578d560e5a1b6d92a91342564116bc2e52004909315611fa26bf7a9c2f  sonnet-7b42496f/mission.txt
+2b72fed310d57ff8bb3a00ae7c6b251a91353f786badc221791e7b17a5e35c6b  sonnet-7b42496f/c7tools/c7bwc.py
+d474b25e3205aab68ec52c7ab5c586afa517fb43fc2ba9333d953d1623feef6a  sonnet-7b42496f/c7tools/c7class.py
+fc90eceebb845df5052cbe0cf0828bd7338d8e9a4a0c5358e228f38a1459d27d  sonnet-7b42496f/c7tools/c7class_selftest.py
+8dd89c472ccfdce267dbbf0cd53d3127646b4d2138903042a92e3315629dc0a0  sonnet-7b42496f/c7tools/c7lib.py
+1d2ace424b9a6c69ec1b69bd76cb4d7030f98dc1023a076cc851e3f0130ce053  sonnet-7b42496f/c7tools/c7link.py
+b43645b62a3a3251161cde31a48a605f3922a6658985f47e5cae6cf8c2e6435d  sonnet-7b42496f/c7tools/c7sup.py
+5dd2a3fd31367b1fb2e37f55180300705073df521957bd0d5ac3bc30dbe0a2e2  sonnet-7b42496f/c7tools/c7wt.py
+cf5d5cf3a7c8e460d6087f6d74d014218494b767e46de230de3458c289f0e6cd  sonnet-7b42496f/c7tools/gate.py
+4c84a4938cedabb651b6b3a985718a172cd967e387ee50022e8d2151dc8bc1f6  sonnet-7b42496f/c7tools/selftest_sup.py
+53a8665015df123f5eb755397f122a5a4c3b3aec91ebd6b4b6f96011c6d69b42  sonnet-7b42496f/c7tools/selftest_wt.py
+9e9cd1339f9130dc6bc379927ea1d9ed49edbb566ae71278c43dad6aa2b2dddc  sonnet-7b42496f/c7tools/scope-wrap.sh
+self-test st-A-sup-build-invoke: exit=0 | stdout sha256 decbaa7ebe0af8b54a2aa86d22bf6441c6103f96c4a538e3b4d4f86d18553bcf | last: SELF-TEST (c7sup build/invoke) ALL OK: 12/12
+self-test st-B-sup-enforcement: exit=0 | stdout sha256 5fbf6bd7e6057cb6421be2aad8e9d1b6d05713621f087f85d86124dd3c481d36 | last: SELF-TEST RESULT: ALL OK
+self-test st-wt: exit=0 | stdout sha256 82a926e6fe63509ecb2fd0bbfd38bc7bd342c2128ce0c1e9a9e8ac4239faede0 | last: SELF-TEST (c7wt) ALL OK: 30/30
+self-test st-bwc: exit=0 | stdout sha256 e671aaef21411555e7546e83ed5daa9dd3fff9389a4db6bfce91320e8f21018d | last: SELF-TEST (c7bwc) ALL OK: 30/30
+self-test st-class: exit=0 | stdout sha256 40bfa8f9546842bc61a68644379ee102b844221cb38c824d4a98823f9480bed2 | last: SELF-TEST (c7class) ALL OK: 80/80
+self-test st-link: exit=0 | stdout sha256 34bc8c236f600dcfb825cc1ee04806ee4fabd8841b65029463ccd9165cefffeb | last: SELF-TEST (c7link) ALL OK: 12/12
+gate-run1: GATE RESULT: FAIL (2 failing checks): NI-5b, NI-5c
+gate-run2: GATE RESULT: PASS (every check passed)
+gate-run3: GATE RESULT: PASS (every check passed) (PASS lines 169, FAIL lines 0, INFO lines 27)
+## copy manifests
+af38536d1736966be3bbad1025d1d49a6a6710889fcb16c12b97a90cde8d0f47  opus-r1-f4afe1e2.COPY.manifest
+af38536d1736966be3bbad1025d1d49a6a6710889fcb16c12b97a90cde8d0f47  opus-r1-f4afe1e2.SOURCE.manifest
+6875ee68d17f2d0a799df9e1b805f2861afb2bd5305cc39fa946b97c996f6eb3  opus-r2-35e734c1.COPY.manifest
+6875ee68d17f2d0a799df9e1b805f2861afb2bd5305cc39fa946b97c996f6eb3  opus-r2-35e734c1.SOURCE.manifest
+7804b97cce0d17141973afff34958ff599f691c1a723bdd7c1f33d8fe2b9578b  sonnet-7b42496f.COPY.manifest
+7804b97cce0d17141973afff34958ff599f691c1a723bdd7c1f33d8fe2b9578b  sonnet-7b42496f.SOURCE.manifest
+copies: identical to sources by content, mode and symlink target, and by diff -r --no-dereference; sealed a-w; originals left in place, unchanged.

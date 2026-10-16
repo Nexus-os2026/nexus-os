@@ -1,0 +1,24 @@
+stage 15-build-E-W7 gate at 2026-10-16T01:01:46+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 13022183424 bytes; required >= 10737418240
+inodes free: 115925865; required >= 1000000
+MemAvailable: 53325072 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+  PASS WT-HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98
+  PASS WT-DETACHED symbolic-ref rc=1
+  PASS WT-TREE 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+  PASS WT-LIST {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+  PASS WT-INDEX index equals HEAD
+  PASS WT-FLAGS unmerged/assume-unchanged/skip-worktree entries: 0
+  PASS WT-BLOBS 5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []
+  PASS WT-PROTOCOL 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+build stdout (0 bytes): ''
+OUTCOME: BUILD COMPLETED; one executable; source unchanged (NI-7/NI-6 are judged by c7bwc from this receipt)
+exit=0
+disk available after build: 12252008448 bytes (floor 8589934592)

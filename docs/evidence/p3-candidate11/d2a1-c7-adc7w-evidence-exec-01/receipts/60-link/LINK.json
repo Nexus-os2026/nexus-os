@@ -1,0 +1,152 @@
+{
+ "mission": "P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01",
+ "verdict": "(D) LINK USABLE \u2014 C-BASE PASS on E-C; NOT W-SRC PASS",
+ "usable": true,
+ "failed_checks": [],
+ "evidence_commit": "f023cc3d031a2a89e5ecbd4086e15f2e50869acd",
+ "evidence_tree": "646c4fe9fa96bfee7b4f731a38f20ebfff14239e",
+ "e_c": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+  "size": 8984464
+ },
+ "receipts": {
+  "44-full-F-PT": {
+   "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/44-full-F-PT",
+   "files": {
+    "CHECKS.txt": {
+     "git_blob": "95a6136f4d4db4b329b0eb839b964975dee5b2b4",
+     "git_blob_recomputed": "95a6136f4d4db4b329b0eb839b964975dee5b2b4",
+     "sha256": "ba44e0a91c0f544a041faf9938ae5bf54d85707944e13c7b66574eae5c77c71d",
+     "size": 4108
+    },
+    "CLASSIFICATION.txt": {
+     "git_blob": "19329769139e98d24bedae7fb494a4586443397c",
+     "git_blob_recomputed": "19329769139e98d24bedae7fb494a4586443397c",
+     "sha256": "51c135b5ed38aaf7284884b520c49630c6387a6d38cd5791cbe31496d0b981e9",
+     "size": 401
+    },
+    "PARSED-RECEIPT.json": {
+     "git_blob": "4f23ff55d37bfb5fe9064793cfdb204ec9bd58e2",
+     "git_blob_recomputed": "4f23ff55d37bfb5fe9064793cfdb204ec9bd58e2",
+     "sha256": "cb9834ee5857e72d76c3aa99ac5a3de3185b72bf5560179f60736883b6eeae57",
+     "size": 11846
+    },
+    "RECEIPT.txt": {
+     "git_blob": "6dde2a8ae1a992797f827ac64a3d7b0cff387010",
+     "git_blob_recomputed": "6dde2a8ae1a992797f827ac64a3d7b0cff387010",
+     "sha256": "e32b1bc4bdfcf40e681ba6009ff3517dbd1df2af9fe2315d965a77ec6dfff66b",
+     "size": 3757
+    },
+    "cgroup-samples.txt": {
+     "git_blob": "d3271b2fb52e53ad844dc8c01eeb7623012ae625",
+     "git_blob_recomputed": "d3271b2fb52e53ad844dc8c01eeb7623012ae625",
+     "sha256": "54686a0e9fdc91fadb0d1b15b2cc9922d45c9da452b5a10c0e8b8d5d799c4de7",
+     "size": 10849
+    },
+    "descriptor.json": {
+     "git_blob": "16156f7bee0f348b82edf0f763b657f69a830d8e",
+     "git_blob_recomputed": "16156f7bee0f348b82edf0f763b657f69a830d8e",
+     "sha256": "0ae0679bc4adc76cbf7786b27af394b9082ed90dae911ba5caa05d7e3909d87a",
+     "size": 3351
+    },
+    "raw-output.txt": {
+     "git_blob": "a92cb8dabd8109f7f237821ce3fba588eee9434e",
+     "git_blob_recomputed": "a92cb8dabd8109f7f237821ce3fba588eee9434e",
+     "sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8",
+     "size": 7584
+    },
+    "scope-record.txt": {
+     "git_blob": "f78c343ac16f62fb04fd427b0897413e4f9708a9",
+     "git_blob_recomputed": "f78c343ac16f62fb04fd427b0897413e4f9708a9",
+     "sha256": "6203e17f008f53ef55b0bc32f42756b4039036d11ab5f5049537dfbad5ac9c07",
+     "size": 622
+    },
+    "time-v.txt": {
+     "git_blob": "3371fb3932c78479c9a22acb0ef757830f4741d5",
+     "git_blob_recomputed": "3371fb3932c78479c9a22acb0ef757830f4741d5",
+     "sha256": "ccac615e5d7d91bbd19e42d6983c2662ddcfb04fb1630761f7ae030b8847911f",
+     "size": 974
+    }
+   },
+   "test": "ledger::protocol::model_tests::gc_symmetry_fpt",
+   "raw_sha256": "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8",
+   "raw_size": 7584,
+   "classification": "CLASSIFICATION: PASS",
+   "executable": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "executable_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "finished_wall_seconds": 487.53
+  },
+  "43-full-F-3": {
+   "directory": "docs/evidence/p3-candidate11/final-baseline-known-runs-01/receipts/43-full-F-3",
+   "files": {
+    "CHECKS.txt": {
+     "git_blob": "ae7188c2782c9aa9f3090909de1b3a53595c119d",
+     "git_blob_recomputed": "ae7188c2782c9aa9f3090909de1b3a53595c119d",
+     "sha256": "5ce946d020749cab859c45f79dd14d10250f8744a15084e780898ff62ad7b6c1",
+     "size": 4040
+    },
+    "CLASSIFICATION.txt": {
+     "git_blob": "321ffbd4fdfc56c0ac029eba6bc3a3037ff9599f",
+     "git_blob_recomputed": "321ffbd4fdfc56c0ac029eba6bc3a3037ff9599f",
+     "sha256": "321b621fdd88e6c74cfeec99461f5d7aec170776314079dae5a643adb891f710",
+     "size": 401
+    },
+    "PARSED-RECEIPT.json": {
+     "git_blob": "9d25f3c114c2b616eaef2f5d0a660f233fb6b6cc",
+     "git_blob_recomputed": "9d25f3c114c2b616eaef2f5d0a660f233fb6b6cc",
+     "sha256": "8f3067130d281b9db10791bdea95b40e5544e04b22d074acee4a275b398044f1",
+     "size": 11812
+    },
+    "RECEIPT.txt": {
+     "git_blob": "e14bd203a9c24bdef5342bb5d05fd380819ace07",
+     "git_blob_recomputed": "e14bd203a9c24bdef5342bb5d05fd380819ace07",
+     "sha256": "2c44d6d0e272019d5536aaafd0ee8b57b351eb94dea8a43bbcbb69ab7e785d4a",
+     "size": 3748
+    },
+    "cgroup-samples.txt": {
+     "git_blob": "cb727750317ce6ce74b47a983d55ab9660732c6c",
+     "git_blob_recomputed": "cb727750317ce6ce74b47a983d55ab9660732c6c",
+     "sha256": "734aaf8811e823e02d6e506e5feaf172f71769b2a5a16e48b4fe1c85336acea2",
+     "size": 7586
+    },
+    "descriptor.json": {
+     "git_blob": "a1e8d1ed58aa4c917190d0ae9250c216d4b0fd9c",
+     "git_blob_recomputed": "a1e8d1ed58aa4c917190d0ae9250c216d4b0fd9c",
+     "sha256": "1f550142013509d675a8a5b8648c2e03d6b2429b9b804d7842dfe436d178a607",
+     "size": 3346
+    },
+    "raw-output.txt": {
+     "git_blob": "872ef461d465070aabc4418dbe36fd47b86f9d91",
+     "git_blob_recomputed": "872ef461d465070aabc4418dbe36fd47b86f9d91",
+     "sha256": "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562",
+     "size": 7580
+    },
+    "scope-record.txt": {
+     "git_blob": "b9ce50ad5f95504f5bdab88d0b1b005e74bd6153",
+     "git_blob_recomputed": "b9ce50ad5f95504f5bdab88d0b1b005e74bd6153",
+     "sha256": "331ed0f11614b5ddaa571b20dbdfeb635333ad8dfe7c55f167daf4cd72d6aae8",
+     "size": 621
+    },
+    "time-v.txt": {
+     "git_blob": "8188557894cbc99336579ec031b7cdb6a7fbbee2",
+     "git_blob_recomputed": "8188557894cbc99336579ec031b7cdb6a7fbbee2",
+     "sha256": "aaac40521a08c8e3ad9756292798eb22f98f97be71bc3a8918d96ff0413b7a0d",
+     "size": 972
+    }
+   },
+   "test": "ledger::protocol::model_tests::gc_symmetry_f3",
+   "raw_sha256": "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562",
+   "raw_size": 7580,
+   "classification": "CLASSIFICATION: PASS",
+   "executable": "/home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "executable_sha256": "cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c",
+   "finished_wall_seconds": 338.97
+  }
+ },
+ "b_w_c_json": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-w-evidence-exec-01/receipts/30-bwc/B-W-C.json",
+ "b_w_c_satisfied": true,
+ "mission_sha256": "beba3d578d560e5a1b6d92a91342564116bc2e52004909315611fa26bf7a9c2f",
+ "statement": "C-BASE PASS on E-C, not W-SRC PASS; nothing is claimed about E-W or E-W7 reproducing it",
+ "finished": "2026-10-16T01:08:35+0100"
+}

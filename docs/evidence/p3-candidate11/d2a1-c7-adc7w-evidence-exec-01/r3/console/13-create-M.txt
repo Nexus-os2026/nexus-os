@@ -1,0 +1,23 @@
+stage 13-create-M gate at 2026-10-16T01:01:32+01:00
+disk available to uid 1000 (f_bavail*f_bsize, root-reserved excluded): 13136502784 bytes; required >= 8589934592
+inodes free: 115931939; required >= 1000000
+MemAvailable: 53319628 KiB (c7sup additionally requires >= 18874368 KiB)
+conflicting cargo/rustc/rustup/test processes: ''
+active p3c11-*/c4w01-*/fbk* scopes: 0
+frozen helpers vs TOOLS.sha256 (12 entries): OK
+GATE: PASS
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: []
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W after creation: OK
+exit=0

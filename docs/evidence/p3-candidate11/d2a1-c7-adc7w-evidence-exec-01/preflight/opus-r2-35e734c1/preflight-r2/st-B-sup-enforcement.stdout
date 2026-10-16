@@ -1,0 +1,39 @@
+SUPERVISION SELF-TEST 2026-10-16T00:39:27+0100 (non-Nexus processes only)
+systemd: systemd 255 (255.4-1ubuntu8.18)
+kernel: 6.17.0-35-generic; timeout: timeout (GNU coreutils) 9.4
+1. the 16 GiB, zero-swap scope's limits read back from inside it (a 10 MiB allocation)
+scope unit: p3c11-c7w01-selftest-1-1792107567.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement
+command: systemd-run --user --scope --unit=p3c11-c7w01-selftest-1-1792107567 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/1/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/1/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'b = b'"'"'x'"'"' * (10 << 20); print('"'"'allocated'"'"', len(b))'
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.03 s, max RSS (largest single process) 20352 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 16728064 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  RESULT OK
+
+2. memory cap enforced: a 64 MiB zero-swap scope, the process writes 256 MiB
+  supervisor rc -15; stdout ''; scope after: ['Result=oom-kill', 'ActiveState=failed']; wrapper record keys ['cgroup', 'memory.high', 'memory.max', 'memory.oom.group', 'memory.swap.max', 'processes at start', 'started']; complete record: False; command status recorded: None
+  RESULT OK
+
+3. time limit enforced: timeout -s KILL 2 around a 30 s sleep
+  rc -9; elapsed 2.02 s
+  RESULT OK
+
+4. backstop enforced: RuntimeMaxSec=2 around a 30 s sleep
+  rc -15; elapsed 2.10 s
+  RESULT OK
+
+5. a normal exit 101 through the run chain
+scope unit: p3c11-c7w01-selftest-5-1792107567.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement
+command: systemd-run --user --scope --unit=p3c11-c7w01-selftest-5-1792107567 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/5/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/5/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'import sys; sys.exit(101)'
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.02 s, max RSS (largest single process) 10100 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 6176768 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': 101, 'signal': None, 'supervisor_rc': 101, 'wrapper_recorded_status': '101'}
+  RESULT OK
+
+6. a process ended by SIGABRT through the run chain
+scope unit: p3c11-c7w01-selftest-6-1792107567.scope; cwd: /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement
+command: systemd-run --user --scope --unit=p3c11-c7w01-selftest-6-1792107567 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/c7tools/scope-wrap.sh /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/6/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/35e734c1-5308-4f19-ae15-39e870b30974/scratchpad/preflight-r2/st-B-sup-enforcement/6/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'import os; os.abort()'
+supervisor return code 134; /usr/bin/time: exit status None, signal 6, wall 0.15 s, max RSS (largest single process) 10224 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 6025216 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+  process {'exit_status': None, 'signal': 6, 'supervisor_rc': 134, 'wrapper_recorded_status': '134'}
+  RESULT OK
+
+SELF-TEST RESULT: ALL OK

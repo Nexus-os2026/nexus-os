@@ -1,0 +1,17 @@
+{
+ "kind": "F3",
+ "exit_status": 101,
+ "outcome": "FAIL",
+ "states": 930702,
+ "elapsed": 4.1,
+ "fail": [
+  "E11",
+  "a table entry left in a step that did not see its explanation in the ledger"
+ ],
+ "incomplete": null,
+ "f3_text": "INFORMATIONAL F-3: FAIL E11 (as expected)",
+ "verdict": "COMPLETED: FAIL E11 (as expected)",
+ "failed_checks": [],
+ "note": "INFORMATIONAL F-3: FAIL E11 (as expected)",
+ "label": "INFORMATIONAL \u2014 AD-1-R4 F (line 748) \u2014 NOT A KILL RECEIPT \u2014 NOT A G.7 RECEIPT: COMPLETED: FAIL E11 (as expected)"
+}

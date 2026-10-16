@@ -1,0 +1,13 @@
+ok   all synthetic worktrees faithful, real receipts via git objects
+ok   LINK.txt and LINK.json written, usable
+ok   LINK.txt is exclusive-create
+ok   B-W/C not satisfied
+ok   raw output tampered by one byte
+ok   descriptor executable sha256_after differs from E-C
+ok   descriptor argv drops --ignored
+ok   accepted classification is not PASS
+ok   E-W pin equals E-C
+ok   restored mutant worktree still has the mutant protocol.rs
+ok   restored mutant worktree model_tests.rs is C's, not W-BLOB
+ok   mutant blob not in the object store after the self-test
+SELF-TEST (c7link) ALL OK: 12/12

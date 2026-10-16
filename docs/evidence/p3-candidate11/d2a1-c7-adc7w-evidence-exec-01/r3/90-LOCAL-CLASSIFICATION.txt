@@ -1,0 +1,42 @@
+# LOCAL CLASSIFICATION RECORD — P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01 (continued under -OPUS-R3) — 2026-10-16T01:10:41+01:00
+Executor: Claude Opus 5.5 (claude-opus-5-5). Effort: requested Extra High; not independently readable back by the executor.
+Classifier: frozen c7class.py (sha256 d474b25e...) reading raw output + supervision records only; plus the executor's own separate read of each raw receipt (recorded in the session report).
+
+## 40-run-C-healthy-witness
+  label:   (C) HEALTHY WITNESS: PASS — ADMISSIBLE
+  checks:  34 PASS, 0 FAIL
+  raw-output.txt sha256 9df95b75de9a673d1af2658a8767227ec5afd98f829660580e2fd0cf7c5e64d6 (19885 bytes); descriptor.json sha256 3d299c8fb7206aba917eac4adc3c3aab863bb5220ee6652ea97a33a1532b2bc8; CLASSIFICATION.txt sha256 25b7295aa1031ec31a4c540cba0e0a4e2f944c9cea9ff6fe632dde42d3f5d94b
+  process: exit 0 signal None; wall 0.0 s; memory.peak 3252224 B; swap.peak 0; oom 0/0; completed True; timed_out False; exe sha256 before=after=042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825
+## 41-run-A-full_fpt
+  label:   (A) ORIGINAL F-PT: FAIL E11 — ADMISSIBLE (C7-1)
+  checks:  24 PASS, 0 FAIL
+  raw-output.txt sha256 8366f35b2d1d8736e2f0065c1465b5dff594b00a6939110674d683ccb8494629 (15853 bytes); descriptor.json sha256 3f7b33a60b116093340599c1406d5472f972127130b26786368fa81be9d1ba50; CLASSIFICATION.txt sha256 39f7f8eae6c03992edffca0ff0b0b20bbb5291caa75d6e9fb6385e0df789a47f
+  process: exit 101 signal None; wall 4.65 s; memory.peak 137269248 B; swap.peak 0; oom 0/0; completed True; timed_out False; exe sha256 before=after=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223
+## 42-run-B-mutant-witness
+  label:   (B) MUTANT WITNESS: ADMISSIBLE — exactly E11 (step 13 transition) and P6 (after 24)
+  checks:  47 PASS, 0 FAIL
+  raw-output.txt sha256 5b47e562f948745f0d331064fc30cbfd155fb25a6fc449bf3a2a0ccc14eff53c (20523 bytes); descriptor.json sha256 2df134b08d930116db6389a9884ccc574941fc6b4942b627717ffd52ece88f86; CLASSIFICATION.txt sha256 c1b094447ca9d235efb6d993fb28129a42040c93a27ef0ea0bddea35c61b2aa0
+  process: exit 101 signal None; wall 0.0 s; memory.peak 3452928 B; swap.peak 0; oom 0/0; completed True; timed_out False; exe sha256 before=after=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223
+## 43-run-F3-informational
+  label:   INFORMATIONAL — AD-1-R4 F (line 748) — NOT A KILL RECEIPT — NOT A G.7 RECEIPT: COMPLETED: FAIL E11 (as expected)
+  checks:  21 PASS, 0 FAIL
+  raw-output.txt sha256 ad9ed17c800f5a3b3866dc7035b2d0076eabeb753b4542ef6bc769ace59d8773 (15848 bytes); descriptor.json sha256 52a1d993e44ec661b02cb7ad2fc943fb5774b081ce8b28b7bba5bb95f4aad2f2; CLASSIFICATION.txt sha256 a3221399d963dc56c190fd789fe358702ddad9223f984aba407862f8a5b2373b
+  process: exit 101 signal None; wall 4.11 s; memory.peak 120291328 B; swap.peak 0; oom 0/0; completed True; timed_out False; exe sha256 before=after=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223
+
+## B-W/C (receipts/30-bwc): B-W/C: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8; four-way agreement holds). SUBJECT TO INDEPENDENT ARCHITECT AUDIT. Not a final acceptance of C7. [276 PASS, 0 FAIL]
+## Restoration (receipts/50-restoration): RESTORATION COMPLETE: EXACTLY_W; E-W7 sha256 after restoration MATCH
+## (D) link (receipts/60-link): (D) LINK USABLE — C-BASE PASS on E-C; NOT W-SRC PASS [50 PASS, 0 FAIL]
+
+## Separation (EXEC-01 section 12)
+- primary E11: (A) receipts/41-run-A-full_fpt — original F-PT explorer, A4 on, on E-W7: `FAIL: E11`, 1,071,165 states, two byte-equal report instances, assertion at model_tests.rs:4133:5, failed set {"E11"}. Never relabelled as P6.
+- witness E11: (B) receipts/42-run-B-mutant-witness — canonical record `VIOLATION step 13 transition: E11: ...` (REPLAY, step-13 block), copied once in SUMMARY.
+- witness P6: (B) — canonical record `VIOLATION after 24: P6: F1 was refused as a conflict and is Paid` (REPLAY, step-24 block), copied once in SUMMARY.
+- other property observations: none. (B) has exactly 2 canonical records and 4 raw VIOLATION lines; M4 is ["E11"]; (C) has 0 VIOLATION lines; (A) and F-3 name only E11.
+- fixture failures: none (no `WITNESS FIXTURE FAILURE` line in any receipt).
+- external process failures: none (every invocation: normal exit, no signal, scope record complete, no timeout, oom 0, oom_kill 0, swap peak 0).
+- informational F-3: receipts/43-run-F3-informational — `INFORMATIONAL F-3: FAIL E11 (as expected)`; NOT A KILL RECEIPT — NOT A G.7 RECEIPT.
+
+## Local result (maximum permitted)
+KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+Not "C7 ACCEPTED". Not "35/35 ACCEPTED". B-W/C is MECHANICALLY SATISFIED subject to independent Architect audit.
+C7 remains MUTATION_CONTROL_BLOCKED until the Primary Architect rules. Campaign: 34/35 accepted. Phase Three: active, not complete.

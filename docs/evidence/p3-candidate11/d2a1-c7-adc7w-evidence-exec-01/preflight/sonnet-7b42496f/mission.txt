@@ -1,0 +1,801 @@
+SEND TO: CLAUDE CODE — IMPLEMENTATION
+
+MISSION ID:
+P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+
+FROM:
+ChatGPT GPT-6 — Primary / Sole Decision Architect
+
+TO:
+Claude Code — Implementation
+
+MODEL:
+Claude Sonnet 5.5
+
+MODEL ID:
+claude-sonnet-5-5
+
+EFFORT:
+Extra High
+
+TYPE:
+BOUNDED LOCAL C7 EVIDENCE EXECUTION
+
+============================================================
+1. GOVERNING STATUS
+============================================================
+
+Nexus OS — Phase Three, Candidate 11.
+
+Current module:
+D2A-1 Governed Ledger Protocol.
+
+AD-C7-W:
+OWNER ADOPTED — C7 ONLY.
+
+CR-B:
+CONDITIONAL POLICY ADOPTED.
+
+B-W/A:
+SATISFIED.
+
+B-W/B:
+ARCHITECT SOURCE REVIEW PASSED.
+
+B-W/C:
+NOT ESTABLISHED.
+
+C7:
+MUTATION_CONTROL_BLOCKED.
+
+Mutation campaign:
+34/35 ARCHITECT ACCEPTED.
+
+This mission authorizes one bounded local
+validation campaign for C7.
+
+It does not accept C7 or close D2A-1.
+
+============================================================
+2. MODEL AND COST GATE
+============================================================
+
+Required:
+claude-sonnet-5-5
+Extra High effort.
+
+Confirm the actual running model.
+
+If the effort setting cannot be read back,
+report that limitation. Do not invent an
+effort-verification result.
+
+No model substitution or automatic escalation.
+
+The Owner confirmed that the earlier W-PATCH
+source was authored using Sonnet 5.5 Extra High.
+
+No additional cloud services or exceptional
+paid resources are authorized.
+
+All builds and tests must run locally.
+
+============================================================
+3. FROZEN SOURCE AND CONTRACT
+============================================================
+
+Repository:
+Nexus-os2026/nexus-os
+
+C-BASE:
+d5964ee5326c2733177307db6f507328023d361a
+
+C-BASE tree:
+51bac5fd335999cc995c0ab9f582a30244973ef0
+
+W-COMMIT:
+6c424c3aec579401543ae010e3f8729e17c4ed98
+
+W-TREE:
+5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+
+W-BLOB:
+c18a6235a9eb32314931c51dd7bb574df77fbe28
+
+W-BLOB SHA256:
+6762d91f3e4de61902efb8f32eccf38fcf4166f5c036ba7a2832f05944b0be25
+
+W-BLOB size:
+329569 bytes.
+
+W-PATCH SHA256:
+c8509c025542c81fdc44e296a0da256e04ba533a971dfbe1b379ee6f9f76b0a9
+
+Source review ref:
+refs/heads/review/
+p3-c11-d2a1-c7-witness-source-w1-01
+
+The Primary Architect has independently
+accepted B-W/B for this exact W-COMMIT only.
+
+No other source identity inherits acceptance.
+
+============================================================
+4. OWNER-ADOPTED CONTRACT IDENTITIES
+============================================================
+
+K1 — FROZEN CATALOG
+
+Blob:
+1918374263740d2f98640da00fc466737945975e
+
+SHA256:
+d6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83
+
+K2 — AD-C7-W
+
+Commit:
+16e74908e922160993a726e71e45374f1e5ff8a1
+
+Blob:
+cb3a208e1d79a7e94e2ae0001e208a2b6436bc46
+
+SHA256:
+989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b
+
+K3 — OVERLAY-C7
+
+SHA256:
+c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7
+
+K4 — OWNER ADOPTION RECORD
+
+Commit:
+4c29b2f0035ecaa86bca8d49238331485a1140e6
+
+Tree:
+d44a9c5a1368658b7527c1e5ab4f8778950c0771
+
+Blob:
+f9ce488c5db8fba8e3f0277334446b11d423c4de
+
+SHA256:
+800f767d4df66f6a8c1c30306395042ff62a22bc3a354349d813ffc100066a54
+
+Path:
+docs/evidence/p3-candidate11/
+d2a1-c7-adc7w-owner-adoption-01/
+OWNER-ADOPTION-2026-10-15.md
+
+K5:
+C-BASE commit and tree in section 3.
+
+Authenticate all identities before mutation
+or build.
+
+Derive EC7 exactly under adopted CE-1,
+P-1 through P-6 and K3-X.
+
+Any mismatch:
+STOPPED BEFORE EXECUTION.
+
+============================================================
+5. FROZEN C7 MUTATION
+============================================================
+
+Patch:
+catalog/patches/C7.patch
+
+SHA256:
+b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+
+Mutation:
+In protocol.rs, Publish::explain only:
+
+self.core.refusals.remove(key);
+
+becomes:
+
+self.core.refusals.clear();
+
+Expected mutant protocol.rs blob:
+0d4ab9929c0e15d910735a52b72a5f3855bef58a
+
+Expected mutant SHA256:
+6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+
+Apply only the frozen patch to a new,
+owned, disposable W-COMMIT worktree.
+
+Never commit the mutant source.
+
+Never change the patch.
+
+============================================================
+6. EXECUTION PRECONDITIONS
+============================================================
+
+Before any worktree creation:
+
+- Verify all Git provenance and review refs.
+- Verify the actual adopted contract.
+- Verify the B-W/B Architect-approved source.
+- Verify toolchain and build-input identities.
+- Verify no conflicting mutation campaign.
+- Verify sufficient free memory and disk space.
+- Verify protected refs.
+- Verify every proposed worktree destination
+  is absent and securely owned.
+- Verify the evidence destination is new.
+- Record canonical ownership identities.
+
+Do not touch the retained source-authoring
+worktree or historical C7 worktree.
+
+Do not terminate another workload to make
+resources available.
+
+If any precondition fails:
+STOP.
+
+============================================================
+7. LOCAL BUILDS — B-W/C
+============================================================
+
+Create two independent disposable worktrees:
+
+HEALTHY:
+W-COMMIT, unchanged.
+
+MUTANT:
+W-COMMIT plus the exact C7 patch.
+
+Use separate worktree-local real target
+directories, with no symlink or target sharing.
+
+Build exactly once per source identity:
+
+cargo test -p nexus-governed-control --locked
+--release --lib --no-run -j 2
+
+Cargo offline:
+CARGO_NET_OFFLINE=true
+
+Preserve the adopted toolchain, environment
+and compiler-flag restrictions.
+
+Record rustc -vV and cargo -vV.
+
+BUILD LIMITS:
+
+At most 2 jobs.
+900 seconds per build.
+16 GiB memory.
+Zero swap.
+Zero warnings.
+Zero errors.
+
+Record the actual process, cgroup, memory,
+swap, timeout and exit evidence.
+
+Pin:
+
+E-W:
+the healthy executable.
+
+E-W7:
+the mutant executable.
+
+Record for each:
+- source identity;
+- executable path;
+- SHA256;
+- byte size;
+- build output;
+- build artifact inventory.
+
+No reproducible-build equality is assumed.
+
+No cargo command after an executable is pinned.
+
+============================================================
+8. TEST INVENTORY — B-W/C
+============================================================
+
+Run only the required test listings
+using E-W and E-W7.
+
+Expected on each executable:
+
+349 total tests.
+35 ignored tests.
+
+Expected new test:
+
+ledger::protocol::model_tests::c7_witness::
+c7_witness_p6_after_settlement_on_fpt
+
+The test must be ordinary, not ignored.
+
+Check the complete inventory against
+the adopted section 6A requirements.
+
+The two executable listings must agree.
+
+Every intended exact-test selection must
+resolve to one test.
+
+Record all listing receipts and executable
+hashes before and after listing.
+
+Check the four-way inventory agreement.
+
+Check NI-6 build-time conditions, NI-7 and NI-8.
+
+If any condition fails:
+STOP BEFORE TEST EXECUTION.
+
+If they all hold:
+
+Record B-W/C as MECHANICALLY SATISFIED,
+subject to independent Architect audit.
+
+Bind that record to:
+- W-COMMIT;
+- W-TREE;
+- W-BLOB;
+- W-PATCH SHA256;
+- E-W and E-W7;
+- both build receipts;
+- both listing inventories.
+
+Do not claim final acceptance of C7.
+
+============================================================
+9. ONE AUTHORIZED TEST SEQUENCE
+============================================================
+
+Proceed only after B-W/C's local gates pass.
+
+Limits for each invocation:
+
+2700 seconds.
+16 GiB memory.
+Zero swap.
+One test at a time.
+
+No retries.
+No reruns.
+No additional builds.
+
+Test environment:
+
+env -i
+PATH=/usr/bin:/bin
+LANG=C.UTF-8
+RUST_BACKTRACE=0
+
+Working directory:
+crates/nexus-governed-control
+
+Use the exact absolute pinned executable paths.
+
+RUN 1 — HEALTHY WITNESS (C)
+
+Executable:
+E-W
+
+Test:
+ledger::protocol::model_tests::c7_witness::
+c7_witness_p6_after_settlement_on_fpt
+
+Flags:
+--exact --nocapture --test-threads=1
+
+Expected:
+normal exit 0;
+one passed;
+348 filtered out;
+H1;
+24 enabled steps;
+healthy step-23 branch;
+zero genuine violations.
+
+If not admissible:
+STOP.
+
+RUN 2 — MUTANT ORIGINAL EXPLORER (A)
+
+Executable:
+E-W7
+
+Test:
+ledger::protocol::model_tests::full_fpt
+
+Flags:
+--exact --ignored --nocapture --test-threads=1
+
+Use original explorer, never a quotient.
+
+F-PT with A4 ON.
+Maximum 30,000,000 discovered states.
+
+Expected primary failure:
+E11.
+
+Normal test assertion exit:
+101.
+
+Preserve the printed property and raw trace
+exactly.
+
+Do not require the historical state count
+or exact historical trace.
+
+Any different primary property, PASS,
+INCOMPLETE, excess ceiling or inadmissible
+receipt:
+STOP.
+
+Never relabel E11 as P6.
+
+RUN 3 — MUTANT WITNESS (B)
+
+Executable:
+the same pinned E-W7.
+
+Test:
+ledger::protocol::model_tests::c7_witness::
+c7_witness_p6_after_settlement_on_fpt
+
+Flags:
+--exact --nocapture --test-threads=1
+
+Expected:
+normal assertion exit 101;
+one failed;
+348 filtered out;
+24 enabled steps.
+
+Require EXACTLY TWO canonical violations:
+
+E11:
+step 13 transition.
+
+P6:
+world after step 24.
+
+Require:
+M1, M2, M3, M4;
+the exact adopted marker text;
+the exact canonical violation lines;
+matching panic-summary copies;
+G.9 offered/consumed-choice correctness;
+correct step-23 divergence;
+correct final state predicates.
+
+No third property or duplicate violation.
+
+If not admissible:
+STOP.
+
+RUN 4 — INFORMATIONAL F-3
+
+Executable:
+the same E-W7.
+
+Test:
+ledger::protocol::model_tests::full_f3
+
+Flags:
+--exact --ignored --nocapture --test-threads=1
+
+F-3 with A4 OFF.
+Original explorer.
+Maximum 30,000,000 discovered states.
+
+This run is informational.
+It never establishes a mutation kill.
+
+Record PASS, FAIL or INCOMPLETE exactly
+under AD-C7-W section 10 and F3-1 to F3-4.
+
+FAIL E11 is predicted, not guaranteed.
+
+A completed unexpected outcome is reported
+for Architect review, not reinterpreted.
+
+External termination, inconsistent receipt,
+OOM or supervisor timeout:
+STOP.
+
+============================================================
+10. ADMISSIBILITY AND RESTORATION
+============================================================
+
+Every invocation requires:
+
+- exact selected test;
+- full unedited raw output;
+- executable SHA256 before and after;
+- actual exit/signal;
+- resource and termination evidence;
+- test completion;
+- expected property evidence;
+- adopted K.1, K.2 and K.2-C7 checks.
+
+After successful run sequence:
+
+Restore the mutant worktree to EXACTLY_W
+by the frozen inverse patch.
+
+Authenticate ownership and source identities.
+Check the inverse patch before applying it.
+
+Make exactly one bounded restoration attempt.
+
+Verify all tracked blobs against W-TREE,
+index equality, detached HEAD, worktree status
+and executable integrity.
+
+On any stop after mutation application:
+
+Follow AD-C7-W section 7.3A exactly.
+
+Preserve evidence first.
+
+Attempt restoration only after authenticating
+R-1 through R-8.
+
+No new run, listing, build or retry after stop.
+
+If restoration cannot be safely authenticated:
+preserve the worktree and report the blocker.
+
+Never use broad git clean, reset, checkout,
+stash or worktree removal.
+
+============================================================
+11. RESTORED-SIDE EVIDENCE
+============================================================
+
+Only after an admissible run sequence and
+exact restoration:
+
+Link the accepted Candidate C F-PT
+composed-quotient PASS receipt:
+
+final-baseline-known-runs-01/
+receipts/44-full-F-PT
+
+Evidence commit:
+f023cc3d031a2a89e5ecbd4086e15f2e50869acd
+
+Verify its original source and executable
+identities against the adopted contract.
+
+This is a C-BASE PASS on E-C.
+
+It is NOT a W-SRC PASS.
+
+Do not rerun that accepted test.
+
+For the informational F-3 comparison,
+link the accepted 43-full-F-3 receipt under
+the same adopted conditions.
+
+Do not relabel either historical receipt.
+
+============================================================
+12. INDEPENDENT LOCAL CLASSIFICATION
+============================================================
+
+Classify the raw receipts under:
+
+G.7
+G.8
+G.9
+I-C7
+K.1
+K.2
+K.2-C7
+F3-1 through F3-4
+
+The classifier must read actual raw outputs,
+process records, source identities and
+executable identities.
+
+Do not classify by exit code alone.
+
+Do not trust witness marker strings alone.
+
+Separate:
+- primary E11;
+- witness E11;
+- witness P6;
+- other property observations;
+- fixture failures;
+- external process failures.
+
+Use exact canonical-record and panic-summary
+accounting.
+
+Any contradiction:
+NOT ADMISSIBLE.
+
+The maximum permitted local result is:
+
+KILL_EVIDENCE_CANDIDATE —
+ARCHITECT REVIEW PENDING.
+
+Never:
+C7 ACCEPTED.
+35/35 ACCEPTED.
+
+Only the Primary Architect may independently
+rule on the completed evidence.
+
+============================================================
+13. EVIDENCE RETENTION AND PUBLICATION
+============================================================
+
+Use a new, bounded evidence directory.
+
+Preserve:
+
+- provenance readback;
+- worktree ownership records;
+- build transcripts;
+- source and executable identities;
+- listings;
+- exact commands;
+- all raw test outputs;
+- process/cgroup supervision;
+- classification;
+- restoration evidence;
+- restored-receipt links;
+- manifest with SHA256.
+
+Do not copy the mutated protocol source
+into any evidence commit.
+
+Do not modify accepted or historical receipts.
+
+On a successful admissible evidence campaign,
+one review-only publication is permitted.
+
+Evidence review commit parent:
+
+4c29b2f0035ecaa86bca8d49238331485a1140e6
+
+Allowed new packet:
+
+docs/evidence/p3-candidate11/
+d2a1-c7-adc7w-evidence-exec-01/
+
+Destination review ref:
+
+refs/heads/review/
+p3-c11-d2a1-c7-adc7w-evidence-exec-01
+
+Require:
+- destination absent;
+- sole parent exact;
+- changed paths confined to new packet;
+- source/receipt identities checked;
+- complete manifest;
+- workflow-trigger preflight;
+- protected refs unchanged.
+
+If every gate passes:
+
+ONE normal, non-forced explicit-refspec push.
+
+Then verify the remote ref, commit,
+tree, parent, changed paths, hashes,
+Actions and protected refs.
+
+If any gate fails:
+STOP without retry.
+
+If the campaign stops early, preserve the
+local failure evidence and report it.
+Do not publish or retry automatically.
+
+============================================================
+14. STRICT PROHIBITIONS
+============================================================
+
+No modification to W-COMMIT.
+
+No modification to Candidate C.
+
+No changes to the frozen catalog or contract.
+
+No new witness source edits.
+
+No regeneration of C7.patch.
+
+No accepted-control reruns.
+
+No prototype or additional test run.
+
+No V-W alternative without separate authority.
+
+No GitHub CI or Actions dispatch.
+
+No PR, merge, integration or release.
+
+No automatic retry or resource escalation.
+
+No cleanup of existing retained worktrees.
+
+No protected-ref changes.
+
+No C7 acceptance or Phase Three completion.
+
+============================================================
+15. RETURN
+============================================================
+
+RETURN TO:
+ChatGPT GPT-6 — Primary / Sole Decision Architect
+VIA: Owner
+
+Report:
+
+1. Actual model and effort evidence.
+2. K1 through K5 and W-COMMIT provenance.
+3. Healthy and mutant worktree identities.
+4. E-W and E-W7 build receipts and SHA256.
+5. NI-7 and NI-8 inventory results.
+6. B-W/C mechanical verdict.
+7. Healthy witness (C) complete receipt.
+8. Original F-PT (A) complete receipt.
+9. Mutant witness (B) complete receipt.
+10. Informational F-3 receipt.
+11. G.7/G.9/K.2-C7 classification.
+12. Restoration result.
+13. Historical PASS receipt-link evidence.
+14. Manifest and retained evidence path.
+15. Evidence commit/tree/parent/ref if published.
+16. GitHub readback and Actions status.
+17. Exact blockers and remaining proof obligations.
+
+ALLOWED OUTCOMES:
+
+KILL_EVIDENCE_CANDIDATE —
+ARCHITECT REVIEW PENDING
+
+B-W/C VALIDATION BLOCKED
+
+C7 EXECUTION BLOCKED
+
+STOPPED BEFORE EXECUTION
+
+STOPPED BEFORE PUBLICATION
+
+AD-C7-W:
+OWNER ADOPTED.
+
+B-W/A:
+SATISFIED.
+
+B-W/B:
+ARCHITECT SOURCE REVIEW PASSED.
+
+B-W/C:
+PENDING EVIDENCE AND INDEPENDENT REVIEW.
+
+C7:
+MUTATION_CONTROL_BLOCKED.
+
+CAMPAIGN:
+34/35 ARCHITECT ACCEPTED.
+
+PHASE THREE:
+ACTIVE — NOT COMPLETE.
+
+NO FURTHER MISSION WITHOUT ARCHITECT REVIEW.
+
+END OF MISSION

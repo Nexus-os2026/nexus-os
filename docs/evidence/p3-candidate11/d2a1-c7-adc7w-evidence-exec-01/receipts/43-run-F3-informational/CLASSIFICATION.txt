@@ -1,0 +1,30 @@
+# C7 classification INFORMATIONAL F-3 on E-W7 — 43-run-F3-informational
+# mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01
+# started 2026-10-16T01:07:59+0100
+[PASS] ID-1: executable path equals the pinned E-W7 path (CL-10) -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 vs pinned /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-2: executable sha256 before and after equal the pinned E-W7 sha256 (C7-16) -- before=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 after=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 pinned=aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223 size=8995176/8995176
+[PASS] ID-3: not the other build, not E-C, not the historical C7 executable (C7-4, C7-14) -- other=/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-4: argv is the exact frozen invocation -- ["/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "ledger::protocol::model_tests::full_f3", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+[PASS] ID-5: environment is exactly env -i PATH LANG RUST_BACKTRACE; ceiling 2700 s -- {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "RUST_BACKTRACE": "0"}
+[PASS] ID-6: worktree and working directory are the mutant worktree's crate -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant | /home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/crates/nexus-governed-control
+[PASS] ID-7: descriptor's raw-output sha256 equals the file
+[PASS] ID-8: source identity verified before and after (CL-11: EXACTLY_W7) -- failed: []
+[PASS] CL1-1: process exited normally with status 0 or 101, no signal, supervisor and wrapper agree -- {"exit_status": 101, "signal": null, "supervisor_rc": 101, "wrapper_recorded_status": "101"}
+[PASS] CL1-2: scope record complete; no supervisor timeout (7.3) -- completed=True timed_out=False scope=gone
+[PASS] CL1-3: oom 0 and oom_kill 0 -- oom=0 oom_kill=0
+[PASS] CL1-4: zero swap: memory.swap.peak 0, no swap events -- peak=0 events={'swap.events.high': 0, 'swap.events.max': 0, 'swap.events.fail': 0}
+[PASS] CL1-5: cgroup limits memory.max 17179869184, memory.swap.max 0 -- max=17179869184 swap.max=0
+[PASS] CL1-6: memory.peak below the 16 GiB limit -- peak=120291328
+[PASS] CL1-7: wall time below the 2700 s ceiling -- wall=4.11 limit=2700
+[PASS] RAW-1: raw output is strict UTF-8 with LF only, no CR, no NUL, ends with a newline -- 15848 bytes
+[PASS] RAW-2: raw output has content
+[INFO] RAW-3: 253 lines, 8 blank (blank lines are not structural)
+[INFO] EX-1: instance 1: name=F-3 outcome=FAIL states=930702 elapsed=4.1 fail=('E11', 'a table entry left in a step that did not see its explanation in the ledger')
+[PASS] STR: the raw output has the frozen explorer layout (FAIL: two byte-equal instances)
+[PASS] EX-2: configuration is F-3 with A4 false and caps 30000000 states, 2700s -- name='F-3' a4='false' caps_ok=True
+[PASS] EX-3: no quotient or symmetry run
+[PASS] EX-4: states within the 30,000,000 ceiling and elapsed within 2700 s -- states=930702 elapsed=4.1
+
+KIND F3   VERDICT COMPLETED: FAIL E11 (as expected)   INFORMATIONAL F-3: FAIL E11 (as expected)
+FAILED CHECKS: none
+INFORMATIONAL — AD-1-R4 F (line 748) — NOT A KILL RECEIPT — NOT A G.7 RECEIPT: COMPLETED: FAIL E11 (as expected)

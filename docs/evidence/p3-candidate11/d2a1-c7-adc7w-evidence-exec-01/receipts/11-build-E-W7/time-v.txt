@@ -1,0 +1,23 @@
+	Command being timed: "timeout -s KILL 900 cargo test -p nexus-governed-control --locked --release --lib --no-run -j 2"
+	User time (seconds): 286.38
+	System time (seconds): 29.90
+	Percent of CPU this job got: 187%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:48.30
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1970312
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 359
+	Minor (reclaiming a frame) page faults: 8991368
+	Voluntary context switches: 58807
+	Involuntary context switches: 11326
+	Swaps: 0
+	File system inputs: 16496
+	File system outputs: 2504888
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -1,0 +1,16 @@
+{
+ "kind": "A",
+ "exit_status": 101,
+ "outcome": "FAIL",
+ "states": 1071165,
+ "elapsed": 4.6,
+ "fail": [
+  "E11",
+  "a table entry left in a step that did not see its explanation in the ledger"
+ ],
+ "incomplete": null,
+ "verdict": "FAIL_E11_ADMISSIBLE",
+ "failed_checks": [],
+ "note": "E11",
+ "label": "(A) ORIGINAL F-PT: FAIL E11 \u2014 ADMISSIBLE (C7-1)"
+}

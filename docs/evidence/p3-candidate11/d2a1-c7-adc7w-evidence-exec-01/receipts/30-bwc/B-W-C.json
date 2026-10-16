@@ -1,0 +1,51 @@
+{
+ "mission": "P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01",
+ "verdict": "B-W/C: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8; four-way agreement holds). SUBJECT TO INDEPENDENT ARCHITECT AUDIT. Not a final acceptance of C7.",
+ "satisfied": true,
+ "failed_checks": [],
+ "identity": {
+  "W_COMMIT": "6c424c3aec579401543ae010e3f8729e17c4ed98",
+  "W_TREE": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4",
+  "W_BLOB": "c18a6235a9eb32314931c51dd7bb574df77fbe28",
+  "W_BLOB_SHA": "6762d91f3e4de61902efb8f32eccf38fcf4166f5c036ba7a2832f05944b0be25",
+  "W_BLOB_SIZE": 329569,
+  "W_PATCH_SHA": "c8509c025542c81fdc44e296a0da256e04ba533a971dfbe1b379ee6f9f76b0a9",
+  "C7_PATCH_SHA": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+  "MUTANT_BLOB": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+  "MUTANT_SHA": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+ },
+ "pins": {
+  "E-W": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825",
+   "size": 8995112
+  },
+  "E-W7": {
+   "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+   "sha256": "aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223",
+   "size": 8995176
+  }
+ },
+ "four_way": {
+  "source_counts": [
+   349,
+   35
+  ],
+  "E-W": [
+   349,
+   35
+  ],
+  "E-W7": [
+   349,
+   35
+  ],
+  "expected": [
+   349,
+   35
+  ]
+ },
+ "filtered_out_expected": 348,
+ "all_listing_sha256": "4aec607794b5879dfe9353bf2338ea7180cdd5a0aa174c123e63d7e85ca649a2",
+ "ignored_listing_sha256": "4b13105f6ff6ebba618100e093d1fde445da6b5ed396006272b2761ea5a1ae1e",
+ "finished": "2026-10-16T01:05:49+0100"
+}
