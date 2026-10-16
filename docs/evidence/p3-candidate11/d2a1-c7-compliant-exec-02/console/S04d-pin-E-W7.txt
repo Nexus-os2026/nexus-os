@@ -1,0 +1,42 @@
+# stage S04d-pin-E-W7; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:12:11.688165927Z
+PRECONDITION S04d-pin-E-W7: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S04d-pin-E-W7
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:12:12+0100
+# utc 2026-10-16T14:12:12.021275294Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (524 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52213668 KiB
+[PASS] R-2: free disk 26942275584 B minus projected growth 0 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S04d-pin-E-W7: PASS
+[PASS] PROC-1: E-W7 build: normal exit status 0, no signal, supervisor rc 0
+[PASS] PROC-2: E-W7 build: scope record complete; not timed out
+[PASS] PROC-3: E-W7 build: oom 0 and oom_kill 0
+[PASS] PROC-4: E-W7 build: zero swap: memory.swap.peak 0 and no swap events
+[PASS] PROC-5: E-W7 build: cgroup limits memory.max 17179869184 and memory.swap.max 0
+[PASS] PROC-6: E-W7 build: memory.peak below the limit
+[PASS] PROC-7: E-W7 build: wall time below the ceiling 900 s
+[PASS] PROC-8: E-W7 build: disk floor preserved: no floor breach, and the minimum free space sampled stayed >= 16 GiB
+[PASS] NI-6a: E-W7 build: build command is exactly the 7.1 command
+[PASS] NI-6b: E-W7 build: environment is exactly HOME, PATH, CARGO_NET_OFFLINE=true and the worktree-local CARGO_TARGET_DIR; nothing else
+[PASS] NI-6c: E-W7 build: no RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, CARGO_PROFILE_*, CARGO_BUILD_*, RUSTC_WRAPPER or target override in the build environment
+[PASS] BLD-1: E-W7 build: built in the recorded worktree with -j 2
+[PASS] NI-6d: E-W7 build: rustc -vV equals E-C's build record (7 lines)
+[PASS] NI-6e: E-W7 build: cargo -vV equals E-C's build record (9 lines)
+[PASS] NI-7a: E-W7 build: zero warnings and zero errors (recorded and recounted from build.stderr)
+[PASS] NI-7b: E-W7 build: build.stderr matches its recorded sha256
+[PASS] NI-7c: E-W7 build: exactly one `Finished` line, release profile
+[PASS] NI-7d: E-W7 build: the package under test was compiled
+[PASS] BLD-2: E-W7 build: exactly one pinned test executable, named by cargo and found by the deps scan
+[PASS] BLD-3: E-W7 build: the executable lies under the worktree-local target/release/deps
+[PASS] BLD-4: E-W7 build: source verification (W7) passed before and after the build
+[PASS] PIN-1: executable /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 is a regular, non-symlink, executable file; sha256 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 equals the build receipt's; size 8995176
+PINNED E-W7: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 size 8995176
+  fingerprint target/release/.fingerprint/nexus-governed-control-2faa0b9718d3e6a3/test-lib-nexus_governed_control.json rustflags=[] profile=16029198466671918258
+# stage S04d-pin-E-W7 finished 2026-10-16T14:12:12.493328779Z; rc=0

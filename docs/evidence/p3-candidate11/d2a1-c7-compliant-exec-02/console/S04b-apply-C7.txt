@@ -1,0 +1,51 @@
+# stage S04b-apply-C7; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:09:08.073650845Z
+PRECONDITION S04b-apply-C7: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S04b-apply-C7
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:09:08+0100
+# utc 2026-10-16T14:09:08.410810252Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (526 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52289472 KiB
+[PASS] R-2: free disk 27712770048 B minus projected growth 0 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S04b-apply-C7: PASS
+C7 PATCH APPLICATION (13.3 step 4) started 2026-10-16T14:09:08.565078040Z
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: []
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W before the patch: OK
+patch file /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/00-worktrees/patch/C7.patch sha256 b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4 (catalog value b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4)
+git apply --check rc=0 
+git apply (worktree only: no --index, no --cached) rc=0 
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []
+[PASS] WT-PROTOCOL: 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+[PASS] WT-STATUS: status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs']
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W7 after the patch: OK
+APPLY: EXACTLY_W7 (W-TREE plus the frozen C7 patch at protocol.rs only); finished 2026-10-16T14:09:09.533124395Z
+# stage S04b-apply-C7 finished 2026-10-16T14:09:09.546837608Z; rc=0

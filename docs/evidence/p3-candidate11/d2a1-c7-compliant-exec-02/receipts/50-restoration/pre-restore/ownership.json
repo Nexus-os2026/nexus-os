@@ -1,0 +1,11 @@
+{
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+ "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+ "uid": 1000,
+ "gid": 1000,
+ "mode": "775",
+ "dev": 66310,
+ "ino": 66605255,
+ "is_symlink": false,
+ "is_dir": true
+}

@@ -1,0 +1,22 @@
+{
+ "kind": "A",
+ "exit_status": 101,
+ "frozen_config_refs": [
+  "f023cc3d:44-full-F-PT/raw-output.txt",
+  "c10681b3:85-C7/04-run/raw-output.txt"
+ ],
+ "bounds_line": "  bounds: facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell constraint false worker verbs unwind false DROP false REPLAY 0 A4 true; ticket limit 8, refusal limit 4; settlement and the worker on; caps 30000000 states, 2700s",
+ "actors_line": "  actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]",
+ "outcome": "FAIL",
+ "states": 1071165,
+ "elapsed": 4.7,
+ "fail": [
+  "E11",
+  "a table entry left in a step that did not see its explanation in the ledger"
+ ],
+ "incomplete": null,
+ "verdict": "FAIL_E11_ADMISSIBLE",
+ "failed_checks": [],
+ "note": "E11",
+ "label": "(A) ORIGINAL F-PT: FAIL E11 \u2014 ADMISSIBLE (C7-1)"
+}

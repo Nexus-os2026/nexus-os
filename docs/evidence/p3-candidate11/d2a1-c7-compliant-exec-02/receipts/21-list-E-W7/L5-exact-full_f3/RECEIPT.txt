@@ -1,0 +1,54 @@
+SUPERVISED INVOCATION (list-E-W7-L5-exact-full_f3) — P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+started: 2026-10-16T15:12:18+0100
+source verification before (W7):
+  PASS WT-PATH /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+  PASS WT-HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98
+  PASS WT-DETACHED symbolic-ref rc=1
+  PASS WT-TREE 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+  PASS WT-LIST {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+  PASS WT-INDEX index equals HEAD
+  PASS WT-FLAGS unmerged/assume-unchanged/skip-worktree entries: 0
+  PASS WT-BLOBS 5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []
+  PASS WT-PROTOCOL 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+executable /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: sha256 before 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 (8995176 bytes); pinned 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38
+pre-flight 2026-10-16T15:12:18+0100:
+  MemTotal 65077588 KiB; MemAvailable 51504592 KiB (needed 18874368 KiB = 16 GiB cap + 2 GiB margin)
+  SwapTotal 16777212 KiB; SwapFree 8257220 KiB (the scope has swap disabled)
+  load average ['2.12', '1.94', '1.48']; online CPUs 16
+  largest resident processes (comm only; none is stopped by this launcher):
+    889464 chrome
+    835356 brave
+    742696 2.1.281
+    727348 chrome
+    666700 chrome
+    652524 brave
+    599960 claude
+    548952 python
+  free disk on /home/nexus/NEXUS: 26943045632 B (25.09 GiB); projected growth 536870912 B; floor 17179869184 B (16 GiB); free - projected >= floor: True
+environment (env -i; only these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+scope unit: p3c11-c7w02-list-E-W7-L5-exact-full_f3-1792159938.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=p3c11-c7w02-list-E-W7-L5-exact-full_f3-1792159938 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=2710 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/tools/c7tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/21-list-E-W7/L5-exact-full_f3/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/21-list-E-W7/L5-exact-full_f3/time-v.txt timeout -s KILL 2700 /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 --exact --list ledger::protocol::model_tests::full_f3
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 3624 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3088384 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+disk: free before 26943045632 B, min 26943025152 B, after 26943025152 B, peak growth 20480 B, floor 17179869184 B, floor breach False; started 2026-10-16T14:12:18.994429261Z, finished 2026-10-16T14:12:19.032831211Z (UTC)
+executable sha256 after: 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 MATCH
+source verification after (W7):
+  PASS WT-PATH /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+  PASS WT-HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98
+  PASS WT-DETACHED symbolic-ref rc=1
+  PASS WT-TREE 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+  PASS WT-LIST {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+  PASS WT-INDEX index equals HEAD
+  PASS WT-FLAGS unmerged/assume-unchanged/skip-worktree entries: 0
+  PASS WT-BLOBS 5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []
+  PASS WT-PROTOCOL 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/21-list-E-W7/L5-exact-full_f3/raw-output.txt sha256 478c5980f49561676d1c561fc7bfd5a3348d7a6836518209028b582ea455cd98 bytes 67
+finished: 2026-10-16T15:12:19+0100

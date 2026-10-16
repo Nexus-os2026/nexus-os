@@ -1,0 +1,80 @@
+# stage S08-run-B; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:13:19.711600037Z
+PRECONDITION S08-run-B: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S08-run-B
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:13:20+0100
+# utc 2026-10-16T14:13:20.056447823Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (524 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52190652 KiB
+[PASS] R-2: free disk 26941980672 B minus projected growth 536870912 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S08-run-B: PASS
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/42-run-B-mutant-witness/raw-output.txt sha256 4c30badd26eb39629f8cf4bc5b914227291eef20be508847d4a34d61a32b6a16 bytes 20521
+finished: 2026-10-16T15:13:20+0100
+# C7 classification (B) MUTANT WITNESS on E-W7 — 42-run-B-mutant-witness
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:13:21+0100
+[PASS] ID-1: executable path equals the pinned E-W7 path (CL-10) -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 vs pinned /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-2: executable sha256 before and after equal the pinned E-W7 sha256 (C7-16) -- before=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 after=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 pinned=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 size=8995176/8995176
+[PASS] ID-3: not the other build, not E-C, not the historical C7 executable (C7-4, C7-14) -- other=/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-4: argv is the exact frozen invocation -- ["/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt", "--exact", "--nocapture", "--test-threads=1"]
+[PASS] ID-5: environment is exactly env -i PATH LANG RUST_BACKTRACE; ceiling 2700 s -- {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "RUST_BACKTRACE": "0"}
+[PASS] ID-6: worktree and working directory are the mutant worktree's crate -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant | /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/crates/nexus-governed-control
+[PASS] ID-7: descriptor's raw-output sha256 equals the file
+[PASS] ID-8: source identity verified before and after (CL-11: EXACTLY_W7) -- failed: []
+[PASS] CL1-1: process exited normally with status 0 or 101, no signal, supervisor and wrapper agree -- {"exit_status": 101, "signal": null, "supervisor_rc": 101, "wrapper_recorded_status": "101"}
+[PASS] CL1-2: scope record complete; no supervisor timeout (7.3) -- completed=True timed_out=False scope=gone
+[PASS] CL1-3: oom 0 and oom_kill 0 -- oom=0 oom_kill=0
+[PASS] CL1-4: zero swap: memory.swap.peak 0, no swap events -- peak=0 events={'swap.events.high': 0, 'swap.events.max': 0, 'swap.events.fail': 0}
+[PASS] CL1-5: cgroup limits memory.max 17179869184, memory.swap.max 0 -- max=17179869184 swap.max=0
+[PASS] CL1-6: memory.peak below the 16 GiB limit -- peak=3366912
+[PASS] CL1-7: wall time below the 2700 s ceiling -- wall=0.0 limit=2700
+[PASS] CL1-8: disk floor preserved during the run: no floor breach (no supervisor stop), minimum free space >= 16 GiB -- breach=False min_free=26941923328
+[PASS] RAW-1: raw output is strict UTF-8 with LF only, no CR, no NUL, ends with a newline -- 20521 bytes
+[PASS] RAW-2: raw output has content
+[INFO] RAW-3: 191 lines, 6 blank (blank lines are not structural)
+[PASS] REG-1: HEAD: the first non-blank line is exactly `running 1 test`, and it occurs once
+[PASS] REG-2: REPLAY begins with the harness prefix `test <path> ... ` (removed once) -- 'test ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt ... C7 WITNESS F-PT step 01/24 Fw('
+[PASS] REG-3: exactly one panic line `thread '<path>' (<tid>) panicked at <file>:<line>:<col>:` -- thread lines: 1
+[PASS] REG-5: `every violation:` and the RUST_BACKTRACE note each occur exactly once, in that order, after the panic line -- every=[174] note=[177] panic=169
+[PASS] REG-4: TAIL is the note, FAILED, failures:, failures:, the test path and the result line only -- ["note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace", "FAILED", "failures:", "failures:", "    ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt", "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 348 filtered out; finished in 0.00s"]
+[PASS] RP-1: H1 does not appear in (B)
+[PASS] RP-2: exactly 24 per-step lines, numbered 01..24 in order (CL-2) -- found 24
+[PASS] RP-3: the initial block is empty (no `initial` record is admissible) -- []
+[PASS] RP-6: REPLAY follows the strict schema: per-step line, six state lines, then records, for each of the 24 steps
+[PASS] G9-1: steps 1-22 and 24 equal Table A and G.9 rule 2/4 (identical on both cores)
+[PASS] G9-23: step 23 is exactly one of its two planned ends (G.9 rule 3) -- got offered=[0, 0, 0, 0] consumed=[(0, 4), (0, 4), (0, 4), (0, 3)] unused=[] faults=1 branches=['append_facts: Committed (inserted)']
+[PASS] G9-24: step 24 consumes nothing and pairs with step 23's changed end (F1 Paid after 24) -- F1=Paid
+[PASS] C7-11: (B): the panic is the witness's own verdict panic (thread ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt, location crates/nexus-governed-control/src/ledger/protocol/model_tests.rs:9705:9), not a fixture failure or an unrelated panic -- expected src/ledger/protocol/model_tests.rs:9705:9
+[PASS] C7-17b: (B): exit status 101 and `1 failed` on `348 filtered out`
+[PASS] CL8-B: (B): step 23 ended changed (CL-8)
+[PASS] C7-5: (B): exactly the two canonical records, in order -- ["    VIOLATION step 13 transition: E11: a table entry left in a step that did not see its explanation in the ledger", "    VIOLATION after 24: P6: F1 was refused as a conflict and is Paid"]
+[PASS] C7-6: (B): P6 observed together with E11 (not P6 alone)
+[PASS] C7-7: (B): E11 observed together with P6 (not E11 alone)
+[PASS] C7-8: (B): no third record; E11 and P6 each once, each at its own locus and in its own block -- records=2
+[PASS] C7-8b: (B): every property named by a record is in PROPERTIES (CL-3)
+[PASS] C7-9a: (B): the SUMMARY is a byte-for-byte ordered copy of the canonical records (CL-5) -- ["    VIOLATION step 13 transition: E11: a table entry left in a step that did not see its explanation in the ledger", "    VIOLATION after 24: P6: F1 was refused as a conflict and is Paid"]
+[PASS] C7-8c: (B): `VIOLATION ` occurs only in the 2 canonical records and their 2 copies (4 raw lines) -- raw lines containing VIOLATION: 4, outside REPLAY/SUMMARY: 0
+[PASS] C7-10a: (B): MARKERS hold exactly four lines (M1..M4), once each, in order -- got 4
+[PASS] C7-9b: (B): M1 n equals the canonical records and the SUMMARY lines, and is 2 -- n=2 records=2 summary=2
+[PASS] C7-10b: (B): M2 equals the text recomputed from the raw state (CL-7) -- got 'NAMED PROPERTY P6: OBSERVED on the world after step 24 (append_facts: Committed (inserted) at step 23; F1, refused as a conflict at step 5, is Paid, with no refusal-table entry and no explanation of F1 in the ledger)'
+[PASS] C7-10c: (B): M3 equals the text recomputed from the raw records (CL-7) -- got "SEPARATE PROPERTY E11: OBSERVED at the transition of step 13 (explain: Explained of F2; F1's refusal-table entry left in a step that did not see F1's explanation in the ledger); never counted as P6"
+[PASS] C7-10d: (B): M4 equals the recomputed list and is admissible only as ["E11"] -- got 'OTHER PROPERTIES VIOLATED, each reported separately and not counted as P6: ["E11"]'
+[PASS] C7-5b: (B): M1 is the admissible line; M2 and M3 say OBSERVED
+[PASS] CL9-B: (B): lost predicate holds (table {} after 13 and 24; after 24 F1 Paid and conflicted, Fact(0) present, Explanation(0) absent) -- after13='' after24='' cls=('Paid', 'Retired', '0', '3', '0')
+[PASS] C7-10e: (B): none of H1, fixture-failure, `WITNESS: no violation` appears anywhere
+
+KIND B   VERDICT ADMISSIBLE_TWO_CANONICAL   
+FAILED CHECKS: none
+(B) MUTANT WITNESS: ADMISSIBLE — exactly E11 (step 13 transition) and P6 (after 24)
+# stage S08-run-B finished 2026-10-16T14:13:21.097894607Z; rc=0

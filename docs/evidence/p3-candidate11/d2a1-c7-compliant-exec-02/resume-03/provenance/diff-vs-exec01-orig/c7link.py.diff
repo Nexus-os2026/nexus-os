@@ -1,0 +1,70 @@
+--- c7tools-orig/c7link.py	2026-10-15 23:57:41.913502511 +0100
++++ c7tools/c7link.py	2026-10-16 14:02:14.617936664 +0100
+@@ -1,4 +1,4 @@
+-"""G.7(D) / I-C7.7 link tool (mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01).
++"""G.7(D) / I-C7.7 link tool (mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02; adapted from the EXEC-01 tool, see ../TOOLS-PROVENANCE.txt).
+ 
+ LINKS (never reruns, never copies into the accepted evidence, never modifies) the two accepted restored-side receipts
+ 44-full-F-PT (F-PT) and 43-full-F-3 (F-3), read from git objects at the accepted evidence commit. The link states that they are
+@@ -79,9 +79,32 @@
+     bwc_ok = bool(bwc.get("satisfied") is True and str(bwc.get("verdict", "")).startswith("B-W/C: MECHANICALLY SATISFIED"))
+     rec.check("LK-0a", "B-W/C is MECHANICALLY SATISFIED in this mission's own receipts/30-bwc/B-W-C.json", bwc_ok, str(bwc.get("verdict", ""))[:120])
+     mission_sha = sha256_file(mission_file) if os.path.exists(mission_file) else None
+-    rec.check("LK-0b", "mission text retained (it conveys B-W/A and B-W/B)", mission_sha is not None, "sha256 %s" % mission_sha)
+-    rec.info("LK-0c", "B-W/A (Owner adoption of CR-B) and B-W/B (Architect source review for this exact W-COMMIT) are conveyed by the text of the mission; "
+-                      "they are recorded, not re-established, by this executor")
++    rec.check("LK-0b", "mission text retained (it conveys the Owner authorization, B-W/A and B-W/B)", mission_sha is not None, "sha256 %s" % mission_sha)
++    mt = open(mission_file, encoding="utf-8").read() if mission_sha else ""
++    mflat = re.sub(r"\s+", " ", mt)
++    # B-W/A: the Owner's CR-B adoption, in the mission's verbatim Owner decision AND in the pinned K4 record (git object, sha256 verified)
++    try:
++        k4 = blob_at(K4_COMMIT, K4_PATH, cwd=repo)
++        k4_ok = git_blob_id(k4) == K4_BLOB and sha256_bytes(k4) == K4_SHA
++        k4t = re.sub(r"\s+", " ", k4.decode("utf-8"))
++    except Exception as e:  # noqa: BLE001
++        k4_ok, k4t = False, repr(e)
++    crb = "CR-B is expressly adopted as a conditional C7-only policy (B-W/A)."
++    rec.check("LK-0c", "B-W/A: the pinned K4 record (blob %s, sha256 %s) and the mission's Owner decision both state CR-B's express adoption as a conditional C7-only policy"
++              % (K4_BLOB[:8], K4_SHA[:8]), k4_ok and crb in k4t and crb in mflat
++              and "CR-B status: expressly adopted as a conditional C7-only policy (B-W/A)." in k4t and "B-W/A: OWNER-ADOPTED POLICY." in mflat, "")
++    # B-W/B: the Sole Architect's statement for this exact W-SRC identity, in the mission text
++    bwb = "B-W/B: Previously Architect-approved for this exact W-SRC identity only."
++    rec.check("LK-0d", "B-W/B: the mission states the Architect's prior approval for this exact W-SRC identity only, bound to W-COMMIT %s, W-TREE %s, W-BLOB %s and W-PATCH %s"
++              % (W_COMMIT[:8], W_TREE[:8], W_BLOB[:8], W_PATCH_SHA[:8]),
++              bwb in mflat and "No changed source inherits B-W/B." in mflat and all(v in mt for v in (W_COMMIT, W_TREE, W_BLOB, W_BLOB_SHA, W_PATCH_SHA)), "")
++    rec.info("LK-0e", "B-W/A and B-W/B are conveyed (mission) and authenticated (K4 git object, identities); this executor does not re-establish them. B-W/C is this mission's own receipt.")
++    # 13.3: the link (step 12) follows exact restoration (step 11)
++    evdir_ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(bwc_json))))
++    rest = os.path.join(evdir_, "receipts/50-restoration/restoration.txt")
++    rtxt = open(rest, encoding="utf-8").read() if os.path.exists(rest) else ""
++    rec.check("LK-11", "the mutant worktree was restored first: this mission's restoration record ends `RESTORE: EXACTLY_W` (13.3 step 11 before step 12)",
++              "\nRESTORATION COMPLETE: EXACTLY_W\n" in rtxt and "\nRESTORE: EXACTLY_W; finished UTC " in rtxt, rest)
+ 
+     # ---- accepted evidence commit identity
+     ec = git_out("rev-parse", EC_EVID + "^{commit}", cwd=repo)
+@@ -238,10 +261,14 @@
+         pw = kw.get("pin_w_sha", "a" * 64)
+         for role, sha, path in (("E-W", pw, "/x/healthy"), ("E-W7", "b" * 64, "/x/mutant")):
+             json.dump({"executable": {"path": path, "sha256": sha, "size": 1}}, open(os.path.join(pins, role + ".json"), "w"))
+-        bw = os.path.join(d, "bwc.json")
++        os.makedirs(os.path.join(d, "receipts/30-bwc"))
++        os.makedirs(os.path.join(d, "receipts/50-restoration"))
++        bw = os.path.join(d, "receipts/30-bwc/B-W-C.json")
+         json.dump({"satisfied": kw.get("bwc_ok", True), "verdict": "B-W/C: MECHANICALLY SATISFIED (x)" if kw.get("bwc_ok", True) else "B-W/C: NOT ESTABLISHED"}, open(bw, "w"))
++        if kw.get("restored", True):
++            open(os.path.join(d, "receipts/50-restoration/restoration.txt"), "w").write("x\nRESTORATION COMPLETE: EXACTLY_W\nRESTORE: EXACTLY_W; finished UTC 2026-01-01T00:00:00.000000000Z\n")
+         mf = os.path.join(d, "mission.txt")
+-        open(mf, "w").write("mission text")
++        open(mf, "w").write(kw.get("mission_text", open(os.path.join(EV_DIR, "MISSION.txt"), encoding="utf-8").read()))
+         import io
+         import contextlib
+         buf = io.StringIO()
+@@ -281,6 +308,8 @@
+         ok += 1
+         print("ok   LINK.txt is exclusive-create", flush=True)
+     case("B-W/C not satisfied", "LK-0a", bwc_ok=False)
++    case("mission text without the B-W/B statement", "LK-0d", mission_text="mission text")
++    case("link attempted before restoration", "LK-11", restored=False)
+     case("raw output tampered by one byte", "LK-4a[44-full-F-PT]", tamper={rawF: raw_ok[:-1] + b"X"})
+     d2 = dict(desc_ok)
+     d2["executable"] = dict(desc_ok["executable"], sha256_after="0" * 64)

@@ -1,0 +1,20 @@
+--- c7tools-orig/selftest_wt.py	2026-10-15 23:17:03.483710280 +0100
++++ c7tools/selftest_wt.py	2026-10-16 14:06:38.400522647 +0100
+@@ -79,6 +79,9 @@
+     expect("M does not verify as EXACTLY_W7 before the patch", not ok("W7"))
+     rc, _ = quiet(c7wt.apply_patch, ev, os.path.join(ev, "apply.txt"))
+     expect("apply the frozen patch", rc == 0)
++    aj = json.load(open(os.path.join(ev, "receipts/00-worktrees/apply-C7.json")))
++    expect("apply receipt (EXEC-02): UTC times, patch identity, mutant identity, ok", aj["ok"] and aj["patch_sha256"] == PATCH_SHA and aj["mutant_protocol"]["git_blob"] == MUTANT_BLOB
++           and aj["started_utc"] <= aj["finished_utc"])
+     expect("M verifies as EXACTLY_W7", ok("W7"))
+     expect("M does not verify as EXACTLY_W after the patch", not ok("W"))
+     expect("mutant blob never written to the scratch object store", subprocess.run(["git", "-C", repo, "cat-file", "-e", MUTANT_BLOB]).returncode != 0)
+@@ -118,6 +121,7 @@
+     expect("files under the ignored target do not matter", ok("W"))
+     # staging is forbidden: it would write the mutant blob to the object store, which the verification detects.
+     os.remove(os.path.join(ev, "receipts/00-worktrees", c7wt.PATCH_FILE))  # scratch only: the tool never overwrites it
++    os.remove(os.path.join(ev, "receipts/00-worktrees/apply-C7.json"))  # scratch only (EXEC-02: apply now also writes this receipt)
+     rc, _ = quiet(c7wt.apply_patch, ev, os.path.join(ev, "apply2.txt"))
+     expect("second apply (scratch only)", rc == 0 and ok("W7"))
+     sg(M, "add", PROTOCOL_PATH)

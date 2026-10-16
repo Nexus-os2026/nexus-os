@@ -1,0 +1,228 @@
+--- c7tools-orig/c7sup.py	2026-10-15 23:19:26.168938616 +0100
++++ c7tools/c7sup.py	2026-10-16 13:59:23.493301735 +0100
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01 supervised launcher. One call = one supervised process = one receipt directory.
++"""P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02 supervised launcher (adapted from the EXEC-01 launcher; see ../TOOLS-PROVENANCE.txt). One call = one supervised process = one receipt directory.
+ 
+   c7sup.py selftest <dir>                                           enforcement self-test with NON-Nexus processes only
+   c7sup.py build  <dir> <worktree> <E-W|E-W7>                        the ONE test build of that identity (exact mission command)
+@@ -11,7 +11,9 @@
+ `timeout -s KILL <limit>` as the time limit. scope-wrap.sh, the scope's first process, records the scope's enforced
+ memory.max / memory.swap.max before the command and memory.peak / memory.swap.peak / memory.events after it. /usr/bin/time -v
+ records the exit status or terminating signal. A build has at most 2 compiler jobs (cargo -j 2) and 900 s.
+-Before starting: MemAvailable >= 16 GiB + 2 GiB margin, or NOT STARTED. No other workload is touched. Nothing is retried.
++Before starting: MemAvailable >= 16 GiB + 2 GiB margin, and free disk minus the operation's projected growth >= the 16 GiB floor,
++or NOT STARTED. While it runs, free disk is sampled every 2 s; if it falls below the 16 GiB floor, the launcher stops ITS OWN scope
++(systemctl --user kill of this unit only) and records the breach. No other workload is touched. Nothing is retried.
+ The receipt directory must not exist.
+ """
+ import hashlib
+@@ -30,7 +32,7 @@
+ 
+ HERE = os.path.dirname(os.path.abspath(__file__))
+ WRAP = os.path.join(HERE, "scope-wrap.sh")
+-UNIT = "p3c11-c7w01"
++UNIT = "p3c11-c7w02"
+ NEED_KIB = (16 + 2) * 1024 * 1024
+ BUILD_LIMIT = 900
+ BUILD_ARGV = ["cargo", "test", "-p", "nexus-governed-control", "--locked", "--release", "--lib", "--no-run", "-j", "2"]
+@@ -45,7 +47,7 @@
+             return int(line.split()[1])
+ 
+ 
+-def preflight(rec):
++def preflight(rec, projected=PROJECTED_INVOKE_BYTES):
+     avail = meminfo("MemAvailable")
+     rec.append("pre-flight %s:" % time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+     rec.append("  MemTotal %d KiB; MemAvailable %d KiB (needed %d KiB = 16 GiB cap + 2 GiB margin)" % (meminfo("MemTotal"), avail, NEED_KIB))
+@@ -54,12 +56,43 @@
+     top = subprocess.run(["ps", "-eo", "rss=,comm=", "--sort=-rss"], capture_output=True, text=True).stdout.splitlines()[:8]
+     rec.append("  largest resident processes (comm only; none is stopped by this launcher):")
+     rec += ["    " + l.strip() for l in top]
+-    st = os.statvfs(os.path.dirname(WT_HEALTHY))
+-    rec.append("  free disk %.1f GiB" % (st.f_bavail * st.f_frsize / 2**30))
+-    return avail >= NEED_KIB
+-
+-
+-def sampler(unit, path, stop):
++    free = disk_free()
++    ok_disk = free - projected >= DISK_FLOOR_BYTES
++    rec.append("  free disk on %s: %d B (%.2f GiB); projected growth %d B; floor %d B (16 GiB); free - projected >= floor: %s"
++               % (DISK_PATH, free, free / 2**30, projected, DISK_FLOOR_BYTES, ok_disk))
++    ok_mem = avail >= NEED_KIB
++    if not ok_mem:
++        rec.append("  RESOURCE GATE: memory below the threshold")
++    if not ok_disk:
++        rec.append("  RESOURCE GATE: disk headroom below the 16 GiB floor after projected growth")
++    return ok_mem and ok_disk
++
++
++def sampler(unit, path, stop, disk=None, floor=None):
++    """Samples the scope's cgroup and the free disk. `disk` (a dict) receives min_free_bytes / breach;
++    on a floor breach the launcher kills ITS OWN scope unit only."""
++    disk = disk if disk is not None else {}
++    floor = DISK_FLOOR_BYTES if floor is None else floor
++
++    def disk_tick(out):
++        f = disk_free()
++        disk["samples"] = disk.get("samples", 0) + 1
++        if disk.get("min_free_bytes") is None or f < disk["min_free_bytes"]:
++            disk["min_free_bytes"] = f
++        if f < floor and not disk.get("breach"):
++            disk["breach"] = True
++            disk["breach_free_bytes"] = f
++            out.write("%s DISK FLOOR BREACH: free %d B < floor %d B\n" % (time.strftime("%H:%M:%S"), f, floor))
++            out.flush()
++        if disk.get("breach") and disk.get("kill_rc") != 0:
++            # kill ITS OWN scope only; retried on each tick until the unit exists and the kill is accepted
++            k = subprocess.run(["systemctl", "--user", "kill", "--signal=SIGKILL", unit + ".scope"], capture_output=True, text=True)
++            disk["kill_rc"] = k.returncode
++            disk["kill_attempts"] = disk.get("kill_attempts", 0) + 1
++            if k.returncode == 0:
++                out.write("%s killed own scope %s.scope after %d attempt(s)\n" % (time.strftime("%H:%M:%S"), unit, disk["kill_attempts"]))
++                out.flush()
++        return f
+     with open(path, "w") as out:
+         cg = None
+         for _ in range(200):
+@@ -71,11 +104,12 @@
+                 break
+             if stop.is_set():
+                 break
++            disk_tick(out)
+             time.sleep(0.05)
+         if not cg:
+             out.write("sampler: the scope's cgroup was not found while it ran (a short run; scope-wrap.sh records it)\n")
+             return
+-        out.write("scope cgroup: %s\ntime memory.current memory.peak memory.swap.current oom_kill host.MemAvailable(KiB)\n" % cg)
++        out.write("scope cgroup: %s\ntime memory.current memory.peak memory.swap.current oom_kill host.MemAvailable(KiB) disk.free(B)\n" % cg)
+         while os.path.isdir(cg) and not stop.is_set():
+             try:
+                 cur = open(cg + "/memory.current").read().strip()
+@@ -84,9 +118,11 @@
+                 ev = dict(l.split() for l in open(cg + "/memory.events"))
+             except OSError:
+                 break
+-            out.write("%s %s %s %s %s %s\n" % (time.strftime("%H:%M:%S"), cur, peak, swp, ev.get("oom_kill"), meminfo("MemAvailable")))
++            f = disk_tick(out)
++            out.write("%s %s %s %s %s %s %d\n" % (time.strftime("%H:%M:%S"), cur, peak, swp, ev.get("oom_kill"), meminfo("MemAvailable"), f))
+             out.flush()
+             time.sleep(2)
++        disk_tick(out)
+         out.write("sampler: stopped at %s\n" % time.strftime("%H:%M:%S"))
+ 
+ 
+@@ -121,7 +157,7 @@
+     return d
+ 
+ 
+-def supervised(limit, outdir, unit, cwd, inner, env_inner, stdout_path, stderr_path, rec):
++def supervised(limit, outdir, unit, cwd, inner, env_inner, stdout_path, stderr_path, rec, floor=None):
+     scope_rec = os.path.join(outdir, "scope-record.txt")
+     time_v = os.path.join(outdir, "time-v.txt")
+     cmd = ["systemd-run", "--user", "--scope", "--unit=%s" % unit, "-p", "MemoryMax=16G", "-p", "MemorySwapMax=0",
+@@ -131,17 +167,25 @@
+     rec.append("scope unit: %s.scope; cwd: %s" % (unit, cwd))
+     rec.append("command: " + " ".join(shlex.quote(c) for c in cmd))
+     stop = threading.Event()
+-    th = threading.Thread(target=sampler, args=(unit, os.path.join(outdir, "cgroup-samples.txt"), stop), daemon=True)
++    disk = {"free_before_bytes": disk_free(), "min_free_bytes": None, "breach": False, "floor_bytes": DISK_FLOOR_BYTES if floor is None else floor}
++    th = threading.Thread(target=sampler, args=(unit, os.path.join(outdir, "cgroup-samples.txt"), stop, disk, floor), daemon=True)
+     th.start()
+     t0 = time.time()
++    t_start_utc = utcns()
+     with open(stdout_path, "wb") as so:
+         se = open(stderr_path, "wb") if stderr_path else subprocess.STDOUT
+         r = subprocess.run(cmd, cwd=cwd, stdout=so, stderr=se)
+         if stderr_path:
+             se.close()
+     elapsed = time.time() - t0
++    t_end_utc = utcns()
+     stop.set()
+     th.join(timeout=10)
++    disk["free_after_bytes"] = disk_free()
++    lo = min(x for x in (disk["min_free_bytes"], disk["free_after_bytes"], disk["free_before_bytes"]) if x is not None)
++    disk["min_free_bytes"] = lo
++    disk["peak_growth_bytes"] = disk["free_before_bytes"] - lo
++    disk["net_growth_bytes"] = disk["free_before_bytes"] - disk["free_after_bytes"]
+     show = subprocess.run(["systemctl", "--user", "show", unit + ".scope", "-p", "LoadState", "-p", "ActiveState", "-p", "Result"],
+                           capture_output=True, text=True).stdout.split()
+     show = dict(s.split("=", 1) for s in show if "=" in s)
+@@ -154,7 +198,8 @@
+            "swap_events": {k: v for k, v in sr.items() if k.startswith("swap.events.")},
+            "completed": all(k in sr for k in ("finished", "command exit status", "events.oom_kill")), "timed_out": timed_out,
+            "wall_seconds": tv["wall_seconds"], "time_limit_seconds": limit, "scope_result": scope_result, "scope_show": show,
+-           "launcher_elapsed_seconds": round(elapsed, 3), "max_rss_kib_largest_process": tv["max_rss_kib"]}
++           "launcher_elapsed_seconds": round(elapsed, 3), "max_rss_kib_largest_process": tv["max_rss_kib"],
++           "started_utc": t_start_utc, "finished_utc": t_end_utc, "disk": disk, "disk_floor_breach": bool(disk.get("breach"))}
+     proc = {"exit_status": tv["exit_status"], "signal": tv["signal"], "supervisor_rc": r.returncode,
+             "wrapper_recorded_status": sr.get("command exit status")}
+     rec.append("supervisor return code %s; /usr/bin/time: exit status %s, signal %s, wall %s s, max RSS (largest single process) %s KiB"
+@@ -162,6 +207,9 @@
+     rec.append("scope (scope-wrap.sh record): memory.max %s, memory.swap.max %s, memory.peak %s B, memory.swap.peak %s B, oom %s, "
+                "oom_kill %s, completed %s; systemctl after: %s" % (sup["memory_max"], sup["swap_max"], sup["memory_peak_bytes"],
+                                                                     sup["swap_peak_bytes"], sup["oom"], sup["oom_kill"], sup["completed"], show))
++    rec.append("disk: free before %s B, min %s B, after %s B, peak growth %s B, floor %s B, floor breach %s; started %s, finished %s (UTC)"
++               % (disk["free_before_bytes"], disk["min_free_bytes"], disk["free_after_bytes"], disk["peak_growth_bytes"], disk["floor_bytes"],
++                  sup["disk_floor_breach"], t_start_utc, t_end_utc))
+     return sup, proc
+ 
+ 
+@@ -230,6 +278,25 @@
+         good = want(sup, proc)
+         ok &= good
+         rec += r + ["  process %s" % proc, "  RESULT %s" % ("OK" if good else "FAILED"), ""]
++    # 7. disk-floor guard: a floor set ABOVE the current free space must stop the launcher's own scope quickly
++    d = os.path.join(outdir, "7")
++    os.makedirs(d)
++    r = ["7. disk-floor guard: floor = current free + 1 GiB around a 30 s sleep; the launcher must kill its own scope and flag the breach"]
++    t0 = time.time()
++    sup, proc = supervised(60, d, "%s-selftest-disk-%d" % (UNIT, ts), outdir, ["/usr/bin/sleep", "30"], [("PATH", "/usr/bin:/bin")],
++                           os.path.join(d, "out.txt"), None, r, floor=disk_free() + 2**30)
++    el = time.time() - t0
++    good = sup["disk_floor_breach"] and el < 15 and proc["exit_status"] != 0
++    ok &= good
++    rec += r + ["  elapsed %.2f s; process %s; disk %s" % (el, proc, sup["disk"]), "  RESULT %s" % ("OK" if good else "FAILED"), ""]
++    # 8. the real floor is respected by preflight: a projected growth larger than (free - floor) refuses to start
++    r8 = []
++    refused = not preflight(r8, disk_free() - DISK_FLOOR_BYTES + 2**30)
++    allowed = preflight([], 0) if disk_free() >= DISK_FLOOR_BYTES else False
++    good = refused and allowed
++    ok &= good
++    rec += ["8. preflight disk gate: projected growth 1 GiB beyond the headroom is refused; zero projected growth is allowed (free >= floor)"] + ["  " + x for x in r8[-3:]] + \
++           ["  refused %s allowed %s" % (refused, allowed), "  RESULT %s" % ("OK" if good else "FAILED"), ""]
+     rec.append("SELF-TEST RESULT: %s" % ("ALL OK" if ok else "FAILED"))
+     open(os.path.join(outdir, "SELFTEST.txt"), "x").write("\n".join(rec) + "\n")
+     print("\n".join(rec))
+@@ -290,8 +357,8 @@
+         open(os.path.join(outdir, "RECEIPT.txt"), "x").write("\n".join(rec) + "\n")
+         print("\n".join(rec))
+         return 5
+-    if not preflight(rec):
+-        rec.append("OUTCOME: NOT STARTED (not enough free memory; no workload was stopped)")
++    if not preflight(rec, PROJECTED_BUILD_BYTES):
++        rec.append("OUTCOME: NOT STARTED (a resource gate failed: memory or disk floor; no workload was stopped)")
+         open(os.path.join(outdir, "RECEIPT.txt"), "x").write("\n".join(rec) + "\n")
+         print("\n".join(rec))
+         return 3
+@@ -340,7 +407,7 @@
+     json.dump(desc, open(os.path.join(outdir, "descriptor.json"), "x"), indent=1)
+     good = (proc["exit_status"] == 0 and proc["signal"] is None and not sup["timed_out"] and len(pinned) == 1
+             and cands == [p["path"] for p in pinned] and ok_after and sup["completed"] and sup["oom_kill"] == 0
+-            and sup["swap_peak_bytes"] == "0")
++            and sup["swap_peak_bytes"] == "0" and not sup["disk_floor_breach"])
+     rec.append("OUTCOME: %s" % ("BUILD COMPLETED; one executable; source unchanged (NI-7/NI-6 are judged by c7bwc from this receipt)" if good else "BUILD NOT CLEAN"))
+     open(os.path.join(outdir, "RECEIPT.txt"), "x").write("\n".join(rec) + "\n")
+     print("\n".join(rec[-14:]))
+@@ -360,8 +427,8 @@
+         open(os.path.join(outdir, "RECEIPT.txt"), "x").write("\n".join(rec) + "\n")
+         print("\n".join(rec))
+         return 5
+-    if not preflight(rec):
+-        rec.append("OUTCOME: NOT STARTED (not enough free memory; no workload was stopped)")
++    if not preflight(rec, PROJECTED_INVOKE_BYTES):
++        rec.append("OUTCOME: NOT STARTED (a resource gate failed: memory or disk floor; no workload was stopped)")
+         open(os.path.join(outdir, "RECEIPT.txt"), "x").write("\n".join(rec) + "\n")
+         print("\n".join(rec))
+         return 3

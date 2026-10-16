@@ -1,0 +1,85 @@
+# stage S11-link; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:14:14.736578383Z
+PRECONDITION S11-link: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S11-link
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:14:15+0100
+# utc 2026-10-16T14:14:15.007479461Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (524 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52216824 KiB
+[PASS] R-2: free disk 26940653568 B minus projected growth 0 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S11-link: PASS
+# G.7(D) link — restored-side evidence (I-C7.7)
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:14:15+0100
+[PASS] LK-0a: B-W/C is MECHANICALLY SATISFIED in this mission's own receipts/30-bwc/B-W-C.json -- B-W/C: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8; four-way agreement holds). SUBJECT TO INDEPENDENT ARC
+[PASS] LK-0b: mission text retained (it conveys the Owner authorization, B-W/A and B-W/B) -- sha256 17adfc3541fb928cf58841acf17552f9a955b0899d8b92eb4d9771e7b136b561
+[PASS] LK-0c: B-W/A: the pinned K4 record (blob cfcbf998, sha256 4b74b90a) and the mission's Owner decision both state CR-B's express adoption as a conditional C7-only policy
+[PASS] LK-0d: B-W/B: the mission states the Architect's prior approval for this exact W-SRC identity only, bound to W-COMMIT 6c424c3a, W-TREE 5cc7ae59, W-BLOB c18a6235 and W-PATCH c8509c02
+[INFO] LK-0e: B-W/A and B-W/B are conveyed (mission) and authenticated (K4 git object, identities); this executor does not re-establish them. B-W/C is this mission's own receipt.
+[PASS] LK-11: the mutant worktree was restored first: this mission's restoration record ends `RESTORE: EXACTLY_W` (13.3 step 11 before step 12) -- /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/50-restoration/restoration.txt
+[PASS] LK-1: accepted evidence commit resolves to the frozen id -- f023cc3d031a2a89e5ecbd4086e15f2e50869acd
+[INFO] LK-1b: tree of the evidence commit: 646c4fe9fa96bfee7b4f731a38f20ebfff14239e
+[PASS] LK-2a: E-C PIN.json blob id -- 688fa49b494ab1c4982422f63b93bd87b853674a
+[PASS] LK-2b: E-C PIN.json executable path, sha256, size equal the frozen E-C -- /home/nexus/NEXUS/nexus-os-p3-c11-final-baseline-known-runs-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c 8984464
+[PASS] LK-2c: E-C PIN.json names C-BASE (commit and tree) -- d5964ee5326c2733177307db6f507328023d361a 51bac5fd335999cc995c0ab9f582a30244973ef0
+[PASS] LK-3a[44-full-F-PT]: receipt directory contents read from git objects -- CHECKS.txt,CLASSIFICATION.txt,PARSED-RECEIPT.json,RECEIPT.txt,cgroup-samples.txt,descriptor.json,raw-output.txt,scope-record.txt,time-v.txt
+[PASS] LK-3b[44-full-F-PT]: every file's recomputed git blob id equals the tree entry
+[PASS] LK-4a[44-full-F-PT]: raw-output sha256 equals the frozen value -- 0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8
+[PASS] LK-4b[44-full-F-PT]: raw-output sha256 equals the descriptor's value -- 0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8
+[PASS] LK-4c[44-full-F-PT]: raw-output size equals the frozen value -- 7584
+[PASS] LK-4d[44-full-F-PT]: raw-output git blob id has the frozen prefix -- a92cb8dabd8109f7f237821ce3fba588eee9434e
+[PASS] LK-5a[44-full-F-PT]: argv is the frozen test name with --exact --ignored --nocapture --test-threads=1 on the E-C executable -- ["ledger::protocol::model_tests::gc_symmetry_fpt", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+[PASS] LK-5b[44-full-F-PT]: executable path, pinned sha256, sha256 before and after all equal E-C -- cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c size 8984464
+[PASS] LK-5c[44-full-F-PT]: exit status 0, no signal, supervisor clean -- {"exit_status": 0, "signal": null, "supervisor_rc": 0, "wrapper_recorded_status": "0"}
+[PASS] LK-5d[44-full-F-PT]: no OOM, no swap, completed, not timed out
+[PASS] LK-5e[44-full-F-PT]: source was EXACTLY_C at C-BASE before and after the run (this is C-BASE, not W-SRC)
+[PASS] LK-5f[44-full-F-PT]: the exact selection resolved to exactly one test -- ["ledger::protocol::model_tests::gc_symmetry_fpt: test"]
+[PASS] LK-6a[44-full-F-PT]: accepted CLASSIFICATION is PASS -- CLASSIFICATION: PASS
+[PASS] LK-6b[44-full-F-PT]: accepted checks line -- 37 of 37 hold
+[PASS] LK-6c[44-full-F-PT]: raw output ends in `1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out` (E-C has 348 tests)
+[PASS] LK-3a[43-full-F-3]: receipt directory contents read from git objects -- CHECKS.txt,CLASSIFICATION.txt,PARSED-RECEIPT.json,RECEIPT.txt,cgroup-samples.txt,descriptor.json,raw-output.txt,scope-record.txt,time-v.txt
+[PASS] LK-3b[43-full-F-3]: every file's recomputed git blob id equals the tree entry
+[PASS] LK-4a[43-full-F-3]: raw-output sha256 equals the frozen value -- 6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562
+[PASS] LK-4b[43-full-F-3]: raw-output sha256 equals the descriptor's value -- 6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562
+[PASS] LK-4c[43-full-F-3]: raw-output size equals the frozen value -- 7580
+[PASS] LK-4d[43-full-F-3]: raw-output git blob id has the frozen prefix -- 872ef461d465070aabc4418dbe36fd47b86f9d91
+[PASS] LK-5a[43-full-F-3]: argv is the frozen test name with --exact --ignored --nocapture --test-threads=1 on the E-C executable -- ["ledger::protocol::model_tests::gc_symmetry_f3", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+[PASS] LK-5b[43-full-F-3]: executable path, pinned sha256, sha256 before and after all equal E-C -- cde9f9d20f32f2b8a17b7dcc2f521462ab6c7a6292d5e2cbd1dd2ba2c3d0d30c size 8984464
+[PASS] LK-5c[43-full-F-3]: exit status 0, no signal, supervisor clean -- {"exit_status": 0, "signal": null, "supervisor_rc": 0, "wrapper_recorded_status": "0"}
+[PASS] LK-5d[43-full-F-3]: no OOM, no swap, completed, not timed out
+[PASS] LK-5e[43-full-F-3]: source was EXACTLY_C at C-BASE before and after the run (this is C-BASE, not W-SRC)
+[PASS] LK-5f[43-full-F-3]: the exact selection resolved to exactly one test -- ["ledger::protocol::model_tests::gc_symmetry_f3: test"]
+[PASS] LK-6a[43-full-F-3]: accepted CLASSIFICATION is PASS -- CLASSIFICATION: PASS
+[PASS] LK-6b[43-full-F-3]: accepted checks line -- 36 of 36 hold
+[PASS] LK-6c[43-full-F-3]: raw output ends in `1 passed; 0 failed; 0 ignored; 0 measured; 347 filtered out` (E-C has 348 tests)
+[PASS] LK-7b[E-W]: E-W is a different artifact from E-C (different sha256 and path) -- e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843 /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] LK-7b[E-W7]: E-W7 is a different artifact from E-C (different sha256 and path) -- 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] LK-7c: E-W and E-W7 differ from each other
+[INFO] LK-7d: Identity check is made against E-C only. Nothing here is a claim that E-W or E-W7 reproduces these receipts.
+[PASS] LK-8a: protocol.rs blob in C-BASE is Candidate C's -- a2df2841b99cad5d452008a6d4150e9369d07e66
+[PASS] LK-8b: protocol.rs blob in W-TREE is Candidate C's (the append-only patch does not touch it)
+[PASS] LK-8c: model_tests.rs at C-BASE has the frozen blob/size/sha256 -- 28085ce232827301104b5d757af042ec933976f8
+[PASS] LK-8d: model_tests.rs at C-BASE is a byte prefix of W-BLOB (append-only) -- W-BLOB c18a6235a9eb32314931c51dd7bb574df77fbe28
+[PASS] LK-9a[healthy]: protocol.rs in the healthy worktree is Candidate C's (blob a2df2841, sha256 a5454944…) -- a2df2841b99cad5d452008a6d4150e9369d07e66
+[PASS] LK-9b[healthy]: protocol.rs in the healthy worktree is not the mutant (0d4ab992…)
+[PASS] LK-9c[healthy]: model_tests.rs in the healthy worktree is W-BLOB -- c18a6235a9eb32314931c51dd7bb574df77fbe28
+[PASS] LK-9a[restored mutant]: protocol.rs in the restored mutant worktree is Candidate C's (blob a2df2841, sha256 a5454944…) -- a2df2841b99cad5d452008a6d4150e9369d07e66
+[PASS] LK-9b[restored mutant]: protocol.rs in the restored mutant worktree is not the mutant (0d4ab992…)
+[PASS] LK-9c[restored mutant]: model_tests.rs in the restored mutant worktree is W-BLOB -- c18a6235a9eb32314931c51dd7bb574df77fbe28
+[PASS] LK-10: mutant protocol.rs blob 0d4ab992 was never written to the object store -- git cat-file -e rc=1
+
+## What this link is
+(D) is the accepted C-BASE F-PT PASS (receipt 44-full-F-PT) and the accepted C-BASE F-3 PASS (43-full-F-3), each on E-C (cde9f9d20f32f2b8…), at the accepted evidence commit f023cc3d031a2a89e5ecbd4086e15f2e50869acd.
+They are C-BASE PASS on E-C. They are NOT W-SRC PASS. This link makes no claim that E-W or E-W7 reproduces them; E-W and E-W7 were not run on these tests and the receipts were not rerun.
+Their link to W-SRC rests only on: (i) protocol.rs is blob a2df2841b99cad5d452008a6d4150e9369d07e66 in C-BASE, in W-TREE, and in both worktrees; (ii) model_tests.rs of C-BASE is a byte prefix of W-BLOB (append-only); (iii) the build inputs listed in AD-C7-W NI-6 are blob-equal to C-BASE (checked by the authorisation gate and by receipts/30-bwc).
+The link is usable only when B-W/A, B-W/B and B-W/C all hold. B-W/C is mechanical, subject to independent Architect audit.
+
+(D) LINK USABLE — C-BASE PASS on E-C; NOT W-SRC PASS
+# stage S11-link finished 2026-10-16T14:14:15.242968472Z; rc=0

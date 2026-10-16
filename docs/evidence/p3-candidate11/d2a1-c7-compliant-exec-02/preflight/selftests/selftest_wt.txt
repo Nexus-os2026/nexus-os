@@ -1,0 +1,34 @@
+scratch repo /tmp/claude-1000/-home-nexus-NEXUS-nexus-os/e310105c-97cc-47c3-ad33-3a9f372c111e/scratchpad/st/wt/repo commit 4056b88e4bdbab4a5a69877f41159f6c39492a90
+[OK] scratch protocol.rs is the C-BASE blob 
+[OK] mutant blob absent from the scratch object store 
+[OK] create H 
+[OK] create M 
+[OK] create M twice is refused 
+[OK] M verifies as EXACTLY_W 
+[OK] M does not verify as EXACTLY_W7 before the patch 
+[OK] apply the frozen patch 
+[OK] apply receipt (EXEC-02): UTC times, patch identity, mutant identity, ok 
+[OK] M verifies as EXACTLY_W7 
+[OK] M does not verify as EXACTLY_W after the patch 
+[OK] mutant blob never written to the scratch object store 
+[OK] H still EXACTLY_W 
+[OK] R-1..R-8 all hold in the mutated state ['R-1', 'R-2', 'R-3', 'R-4', 'R-5', 'R-6', 'R-7', 'R-8']
+[OK] preserve writes evidence 
+[OK] hand edit -> not EXACTLY_W7 
+[OK] hand edit -> R-5 fails (an appended byte leaves the reverse patch applicable, so R-8 still holds) ['R-5']
+[OK] hand edit -> RESTORATION NOT PERFORMED 
+[OK] bytes put back -> EXACTLY_W7 again 
+[OK] stray untracked file -> not EXACTLY_W7 
+[OK] second tracked path changed -> R-4 fails 
+[OK] restored -> EXACTLY_W7 
+[OK] no creation record -> R-3 fails 
+[OK] restoration completes: EXACTLY_W 
+[OK] M verifies as EXACTLY_W after restoration 
+[OK] mutant blob still absent from the scratch object store 
+[OK] files under the ignored target do not matter 
+[OK] second apply (scratch only) 
+[OK] staged change -> not EXACTLY_W7 
+[OK] staged change -> WT-INDEX and WT-OBJECT both fail ['WT-INDEX', 'WT-STATUS', 'WT-OBJECT']
+[OK] staged change -> R-6 fails 
+
+SELF-TEST (c7wt) ALL OK: 31/31

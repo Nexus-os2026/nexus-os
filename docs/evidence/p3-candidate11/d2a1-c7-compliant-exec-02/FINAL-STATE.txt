@@ -1,0 +1,92 @@
+# FINAL STATE after Stage 12 — P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02 (Part C of P3-C11-DR01-D2A1-C7-TOOL-REPAIR-RESUME-03)
+# utc 2026-10-16T14:16:29.843724395Z; recorded read-only by the executor before any publication step
+
+## primary checkout
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+refs/heads/rebuild/phase0-trust-boundary
+status porcelain: []
+
+## worktree /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy
+HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98
+detached
+HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98; tree 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4; symbolic-ref rc 1
+status --porcelain=v1 --ignored: [!! target/;]
+protocol.rs: git a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+executable: e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843  /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+
+## worktree /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+worktree /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98
+detached
+HEAD 6c424c3aec579401543ae010e3f8729e17c4ed98; tree 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4; symbolic-ref rc 1
+status --porcelain=v1 --ignored: [!! target/;]
+protocol.rs: git a2df2841b99cad5d452008a6d4150e9369d07e66 sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+executable: 156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38  /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+
+## object store and refs
+mutant blob 0d4ab992 absent from the object store
+local destination ref: []
+remote destination ref (git ls-remote github, read-only): []
+remote main: 6e15dee613ea35823d1adbf6d8917ed59eeda583; remote rebuild/phase0-trust-boundary: f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+
+## processes (by executable identity)
+cargo/rustc/test-executable/runner processes: 0
+systemd user scopes p3c11-c7w02-*: []
+observation (pre-existing, not touched): pid 2306315, started 2026-10-13 20:04:47 local, a bash wait loop of an earlier Claude session polling with pgrep for a full_f3 process of mission p3-c11-dr01-d2a1-f3-cap60-01; it matches its own argv so it never exits; bash/sleep only, not a cargo/rustc/test/runner executable; judged non-conflicting by PROC-1/P-1 at every gate.
+
+## resources
+/dev/nvme0n1p1 1966746755072 1899807064064 26937503744  99% /
+MemAvailable:   52136724 kB
+SwapTotal:      16777212 kB
+SwapFree:        8257836 kB
+
+## sequence
+SEQUENCE.log sha256 9d795ce77099519b95b51b42799277b42db2105c35987807c88ba162d1409652
+2026-10-16T13:47:46.526499161Z GATE S01-authorisation-gate PASS free=28722876416 memavail_kib=52293960
+2026-10-16T13:47:48.520584401Z END S01-authorisation-gate rc=0
+2026-10-16T14:04:59.419897706Z GATE S02-preflight-repeat PASS free=28714369024 memavail_kib=51653800
+2026-10-16T14:05:08.593604312Z END S02-preflight-repeat rc=0
+2026-10-16T14:05:17.723584489Z GATE S03a-create-H PASS free=28713803776 memavail_kib=51497780
+2026-10-16T14:05:18.633734164Z END S03a-create-H rc=0
+2026-10-16T14:05:24.063880183Z GATE S03b-build-E-W PASS free=28599640064 memavail_kib=51550880
+2026-10-16T14:08:13.734640488Z END S03b-build-E-W rc=0
+2026-10-16T14:08:26.118424134Z GATE S03c-pin-E-W PASS free=27829035008 memavail_kib=52118076
+2026-10-16T14:08:26.685138900Z END S03c-pin-E-W rc=0
+2026-10-16T14:08:35.090566908Z GATE S03d-list-E-W PASS free=27828482048 memavail_kib=52201848
+2026-10-16T14:08:42.143382149Z END S03d-list-E-W rc=0
+2026-10-16T14:08:57.348996615Z GATE S03e-stage3-gate PASS free=27827023872 memavail_kib=52244488
+2026-10-16T14:08:57.518240324Z END S03e-stage3-gate rc=0
+2026-10-16T14:09:01.926791354Z GATE S04a-create-M PASS free=27826896896 memavail_kib=52288764
+2026-10-16T14:09:02.935259707Z END S04a-create-M rc=0
+2026-10-16T14:09:08.467335233Z GATE S04b-apply-C7 PASS free=27712770048 memavail_kib=52289472
+2026-10-16T14:09:09.545666382Z END S04b-apply-C7 rc=0
+2026-10-16T14:09:14.734644639Z GATE S04c-build-E-W7 PASS free=27712524288 memavail_kib=52197516
+2026-10-16T14:12:04.099314881Z END S04c-build-E-W7 rc=0
+2026-10-16T14:12:12.076758291Z GATE S04d-pin-E-W7 PASS free=26942275584 memavail_kib=52213668
+2026-10-16T14:12:12.491680193Z END S04d-pin-E-W7 rc=0
+2026-10-16T14:12:16.220255984Z GATE S04e-list-E-W7 PASS free=26943270912 memavail_kib=51963460
+2026-10-16T14:12:21.057178107Z END S04e-list-E-W7 rc=0
+2026-10-16T14:12:31.957059505Z GATE S05-bwc PASS free=26942763008 memavail_kib=52021948
+2026-10-16T14:12:32.133459930Z END S05-bwc rc=0
+2026-10-16T14:12:40.032725031Z GATE S06-run-C PASS free=26942582784 memavail_kib=52168856
+2026-10-16T14:12:41.304696622Z END S06-run-C rc=0
+2026-10-16T14:12:56.812418408Z GATE S07-run-A PASS free=26942341120 memavail_kib=52199284
+2026-10-16T14:13:03.792943609Z END S07-run-A rc=0
+2026-10-16T14:13:20.113027154Z GATE S08-run-B PASS free=26941980672 memavail_kib=52190652
+2026-10-16T14:13:21.096117219Z END S08-run-B rc=0
+2026-10-16T14:13:41.512832617Z GATE S09-run-F3 PASS free=26941407232 memavail_kib=52095964
+2026-10-16T14:13:48.480857050Z END S09-run-F3 rc=0
+2026-10-16T14:13:59.021625547Z GATE S10-restore PASS free=26941083648 memavail_kib=52222464
+2026-10-16T14:14:00.432931034Z END S10-restore rc=0
+2026-10-16T14:14:15.048598890Z GATE S11-link PASS free=26940653568 memavail_kib=52216824
+2026-10-16T14:14:15.241407321Z END S11-link rc=0
+2026-10-16T14:14:21.696039092Z GATE S12-final PASS free=26940510208 memavail_kib=52254660
+2026-10-16T14:14:22.793673120Z END S12-final rc=0
+
+## frozen tools
+TOOLS.sha256 (sha256 dc75fcb2afdb931dc37dac819e3038ff8e66837ab0412dd14010573afd0fce22): all 26 entries OK
+
+## Stage 12
+FINAL-CLASSIFICATION.json sha256 05153f0053c27716441993862a80e1fbd9a21bad27cd8eb882d9a1662c2c7cc5
+STAGE 12 RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING

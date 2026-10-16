@@ -1,0 +1,128 @@
+{
+ "mission": "P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02",
+ "role": "M",
+ "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+ "started": "2026-10-16T15:09:02+0100",
+ "finished": "2026-10-16T15:09:02+0100",
+ "started_utc": "2026-10-16T14:09:02.033575032Z",
+ "finished_utc": "2026-10-16T14:09:02.429476237Z",
+ "command": [
+  "git",
+  "-C",
+  "/home/nexus/NEXUS/nexus-os",
+  "worktree",
+  "add",
+  "--detach",
+  "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+  "6c424c3aec579401543ae010e3f8729e17c4ed98"
+ ],
+ "returncode": 0,
+ "stdout": "HEAD is now at 6c424c3a test(model): add C7-only deterministic witness source (W-PATCH, unexecuted)\n",
+ "stderr": "Preparing worktree (detached HEAD 6c424c3a)\n",
+ "parent_ownership": {
+  "path": "/home/nexus/NEXUS",
+  "realpath": "/home/nexus/NEXUS",
+  "uid": 1000,
+  "gid": 1000,
+  "mode": "775",
+  "dev": 66310,
+  "ino": 47974510,
+  "is_symlink": false,
+  "is_dir": true
+ },
+ "ownership": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+  "uid": 1000,
+  "gid": 1000,
+  "mode": "775",
+  "dev": 66310,
+  "ino": 66605255,
+  "is_symlink": false,
+  "is_dir": true
+ },
+ "target_ownership": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target",
+  "realpath": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target",
+  "uid": 1000,
+  "gid": 1000,
+  "mode": "775",
+  "dev": 66310,
+  "ino": 66605254,
+  "is_symlink": false,
+  "is_dir": true
+ },
+ "worktree_list_entry": {
+  "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+  "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98",
+  "detached": ""
+ },
+ "dot_git": "gitdir: /home/nexus/NEXUS/nexus-os/.git/worktrees/nexus-os-p3-c11-c7w02-mutant",
+ "verification_EXACTLY_W": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE; differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: []"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: []"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ]
+}

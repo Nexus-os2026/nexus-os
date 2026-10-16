@@ -1,0 +1,15 @@
+{
+ "kind": "B",
+ "exit_status": 101,
+ "step23_end": "changed",
+ "kept": false,
+ "lost": true,
+ "records": [
+  "    VIOLATION step 13 transition: E11: a table entry left in a step that did not see its explanation in the ledger",
+  "    VIOLATION after 24: P6: F1 was refused as a conflict and is Paid"
+ ],
+ "verdict": "ADMISSIBLE_TWO_CANONICAL",
+ "failed_checks": [],
+ "note": "",
+ "label": "(B) MUTANT WITNESS: ADMISSIBLE \u2014 exactly E11 (step 13 transition) and P6 (after 24)"
+}

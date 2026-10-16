@@ -1,0 +1,56 @@
+# stage S09-run-F3; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:13:41.117392458Z
+PRECONDITION S09-run-F3: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S09-run-F3
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:13:41+0100
+# utc 2026-10-16T14:13:41.459611482Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (525 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52095964 KiB
+[PASS] R-2: free disk 26941407232 B minus projected growth 536870912 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S09-run-F3: PASS
+  PASS WT-DIFF tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+  PASS WT-STATUS status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+  PASS WT-TARGET target real directory
+  PASS WT-OBJECT blob 0d4ab992 ABSENT in the object store
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/43-run-F3-informational/raw-output.txt sha256 5a4a041a77c2d4d895f63fb65b117464bff3cbf8295522d8196171a9a9751c9a bytes 15846
+finished: 2026-10-16T15:13:48+0100
+# C7 classification INFORMATIONAL F-3 on E-W7 — 43-run-F3-informational
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:13:48+0100
+[PASS] ID-1: executable path equals the pinned E-W7 path (CL-10) -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 vs pinned /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-2: executable sha256 before and after equal the pinned E-W7 sha256 (C7-16) -- before=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 after=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 pinned=156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38 size=8995176/8995176
+[PASS] ID-3: not the other build, not E-C, not the historical C7 executable (C7-4, C7-14) -- other=/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-4: argv is the exact frozen invocation -- ["/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "ledger::protocol::model_tests::full_f3", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+[PASS] ID-5: environment is exactly env -i PATH LANG RUST_BACKTRACE; ceiling 2700 s -- {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "RUST_BACKTRACE": "0"}
+[PASS] ID-6: worktree and working directory are the mutant worktree's crate -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant | /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/crates/nexus-governed-control
+[PASS] ID-7: descriptor's raw-output sha256 equals the file
+[PASS] ID-8: source identity verified before and after (CL-11: EXACTLY_W7) -- failed: []
+[PASS] CL1-1: process exited normally with status 0 or 101, no signal, supervisor and wrapper agree -- {"exit_status": 101, "signal": null, "supervisor_rc": 101, "wrapper_recorded_status": "101"}
+[PASS] CL1-2: scope record complete; no supervisor timeout (7.3) -- completed=True timed_out=False scope=gone
+[PASS] CL1-3: oom 0 and oom_kill 0 -- oom=0 oom_kill=0
+[PASS] CL1-4: zero swap: memory.swap.peak 0, no swap events -- peak=0 events={'swap.events.high': 0, 'swap.events.max': 0, 'swap.events.fail': 0}
+[PASS] CL1-5: cgroup limits memory.max 17179869184, memory.swap.max 0 -- max=17179869184 swap.max=0
+[PASS] CL1-6: memory.peak below the 16 GiB limit -- peak=120139776
+[PASS] CL1-7: wall time below the 2700 s ceiling -- wall=4.25 limit=2700
+[PASS] CL1-8: disk floor preserved during the run: no floor breach (no supervisor stop), minimum free space >= 16 GiB -- breach=False min_free=26941272064
+[PASS] RAW-1: raw output is strict UTF-8 with LF only, no CR, no NUL, ends with a newline -- 15846 bytes
+[PASS] RAW-2: raw output has content
+[INFO] RAW-3: 253 lines, 8 blank (blank lines are not structural)
+[INFO] EX-1: instance 1: name=F-3 outcome=FAIL states=930702 elapsed=4.2 fail=('E11', 'a table entry left in a step that did not see its explanation in the ledger')
+[PASS] STR: the raw output has the frozen explorer layout (FAIL: two byte-equal instances)
+[PASS] EX-2: configuration is F-3 with A4 false and caps 30000000 states, 2700s -- name='F-3' a4='false' caps_ok=True
+[PASS] EX-3: no quotient or symmetry run: the header is exactly `EXPLORATION F-3` and no `quotient:`/`symmetry:` line appears
+[PASS] EX-2b: exact frozen configuration: the `bounds:` and `actors:` lines are byte-equal to those of f023cc3d:43-full-F-3/raw-output.txt -- got '  bounds: facts 2 conflicting [true, true] ENV true batch false faults 2 admissions 2 gating callers 2 gating conflict false acknowledgement actors 0 attempts each 0 malformed snapshots false cell con' / '  actors: [Fw(0), Fw(1), Se, Wk, Gc(0), Gc(1), Adm, Env]'
+[PASS] EX-4: states within the 30,000,000 ceiling and elapsed within 2700 s -- states=930702 elapsed=4.2
+
+KIND F3   VERDICT COMPLETED: FAIL E11 (as expected)   INFORMATIONAL F-3: FAIL E11 (as expected)
+FAILED CHECKS: none
+INFORMATIONAL — AD-1-R4 F (line 748) — NOT A KILL RECEIPT — NOT A G.7 RECEIPT: COMPLETED: FAIL E11 (as expected)
+# stage S09-run-F3 finished 2026-10-16T14:13:48.482096755Z; rc=0

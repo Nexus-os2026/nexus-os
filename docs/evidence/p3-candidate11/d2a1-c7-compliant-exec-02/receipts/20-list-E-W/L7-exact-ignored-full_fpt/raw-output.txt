@@ -1,0 +1,3 @@
+ledger::protocol::model_tests::full_fpt: test
+
+1 test, 0 benchmarks

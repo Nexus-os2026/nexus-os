@@ -1,0 +1,60 @@
+# stage S10-restore; runner sha256 2a3e8cd796b4125f58d70603728b00d34bc26babe1d356f63d710d018e3c9041; started 2026-10-16T14:13:58.729449863Z
+PRECONDITION S10-restore: ALLOWED (every earlier stage of the 13.3 sequence completed with rc 0, in order)
+# STAGE GATE before S10-restore
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:13:58+0100
+# utc 2026-10-16T14:13:58.978419137Z
+[PASS] T-1: every frozen tool file hashes to tools/TOOLS.sha256 (sha256 dc75fcb2afdb931d) -- c7tools/c7bwc.py: OK | c7tools/c7class.py: OK | c7tools/c7class_selftest.py: OK | c7tools/c7lib.py: OK | c7tools/c7link.py: OK | c7tools/c7sup.py: OK | c7tools/c7wt.py: OK | c7tools/final.py: OK | c7tools/final_selftest.py: OK | c7tools/gate.py: OK | c7tools/scope-wrap.sh: OK | c7tools/selftest_sup.
+[PASS] T-2: no unlisted tool file exists beside the frozen ones -- present=15 listed=26
+[PASS] P-1: no cargo/rustc/clippy/test-executable/Actions-runner process by executable identity (525 processes scanned)
+[PASS] P-2: no Actions runner script in any process argv -- []
+[PASS] P-3: no active campaign scope unit (p3c11/c4w01/fbk/c7w)
+[PASS] R-1: MemAvailable >= 18 GiB -- 52222464 KiB
+[PASS] R-2: free disk 26941083648 B minus projected growth 0 B >= floor 17179869184 B
+[PASS] G-1: primary checkout unchanged (f727f5c3, clean) -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 ''
+[PASS] G-2: destination ref absent locally
+[PASS] G-3: mutant protocol.rs blob 0d4ab992 absent from the object store
+STAGE GATE S10-restore: PASS
+RESTORATION (frozen inverse patch) 2026-10-16T15:13:59+0100 (UTC 2026-10-16T14:13:59.271792678Z)
+[PASS] R-1: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+[PASS] R-2: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] R-3: creation record names this worktree
+[PASS] R-4: tracked paths differing from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']
+[PASS] R-5: 0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+[PASS] R-6: status: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']
+[PASS] R-7: patch sha256 b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4
+[PASS] R-8: git apply -R --check rc=0 
+7.3A authentication R-1..R-8: OK
+git apply -R --check rc=0 
+git apply -R (one attempt, 60 s ceiling) rc=0 
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: ['!! target/']
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W after restoration: OK
+RESTORATION COMPLETE: EXACTLY_W
+RESTORE: EXACTLY_W; finished UTC 2026-10-16T14:13:59.761860079Z
+[PASS] WT-PATH: /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy
+[PASS] WT-HEAD: 6c424c3aec579401543ae010e3f8729e17c4ed98
+[PASS] WT-DETACHED: symbolic-ref rc=1
+[PASS] WT-TREE: 5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4
+[PASS] WT-LIST: {"worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy", "HEAD": "6c424c3aec579401543ae010e3f8729e17c4ed98", "detached": ""}
+[PASS] WT-INDEX: index equals HEAD
+[PASS] WT-FLAGS: unmerged/assume-unchanged/skip-worktree entries: 0
+[PASS] WT-BLOBS: 5364 tracked paths compared with W-TREE; differing: []
+[PASS] WT-PROTOCOL: a2df2841b99cad5d452008a6d4150e9369d07e66 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+[PASS] WT-DIFF: tracked paths whose content differs from W-TREE: []
+[PASS] WT-STATUS: status lines: ['!! target/']
+[PASS] WT-TARGET: target real directory
+[PASS] WT-OBJECT: blob 0d4ab992 ABSENT in the object store
+EXACTLY_W: OK
+# stage S10-restore finished 2026-10-16T14:14:00.433892866Z; rc=0

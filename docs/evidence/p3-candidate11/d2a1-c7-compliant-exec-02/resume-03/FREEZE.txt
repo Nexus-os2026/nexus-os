@@ -1,0 +1,5 @@
+FREEZE 2026-10-16T13:47:12.123680445Z UTC
+TOOLS.sha256 dc75fcb2afdb931dc37dac819e3038ff8e66837ab0412dd14010573afd0fce22
+entries 26
+frozen by P3-C11-DR01-D2A1-C7-TOOL-REPAIR-RESUME-03 after every non-cargo self-test passed on these exact bytes (selftests/tool-hashes-before-tests.sha256).
+No checker may be modified after this freeze; any change invalidates it.

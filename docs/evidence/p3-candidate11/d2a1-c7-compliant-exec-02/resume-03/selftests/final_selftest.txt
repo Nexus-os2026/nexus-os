@@ -1,0 +1,66 @@
+[OK] GATE_IDS equals the set of check ids of the real passing gate receipt (gate-dryrun2) list 136, receipt 136
+[OK] the real failing dry-run gate receipt (gate-dryrun1) would fail AUTH-1 (it has [FAIL] lines) 
+[OK] POSITIVE: the complete synthetic 13.3 evidence tree is KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING result=KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING failed=[]
+[OK] POSITIVE: FINAL-CLASSIFICATION.txt/json written; raw observations kept apart from admissibility; no acceptance written 
+[OK] POSITIVE: (A) recorded as E11, never P6; P6 only from (B) 
+[OK] Stage 12 runs once: a second classification is refused 
+[OK] NEGATIVE 1 missing mandatory receipt: (A)'s descriptor deleted -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-0', 'EXE-0', 'IN-1', 'RES-0', 'RUN-A-0', 'SEQ-0'] want⊇['IN-1']
+[OK] NEGATIVE 2 altered receipt sha256: one byte appended to (C)'s raw output -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['RUN-C-1', 'RUN-C-2', 'RUN-C-3'] want⊇['RUN-C-2', 'RUN-C-1']
+[OK] NEGATIVE 3 mutant build before the healthy listings completed (E-W7 build inside the E-W listing sequence) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'SEQ-3'] want⊇['BWC-1', 'SEQ-3']
+[OK] NEGATIVE 4 missing one of the eight listings (E-W L5 removed) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'IN-1', 'RES-0', 'SEQ-0'] want⊇['IN-1', 'BWC-1']
+[OK] NEGATIVE 5a incorrect test inventory: 350 tests in both all-listings -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1'] want⊇['BWC-1']
+[OK] NEGATIVE 5b incorrect recorded four-way agreement (350 in the stored B-W/C record) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-4'] want⊇['BWC-4']
+[OK] NEGATIVE 6a incorrect E11/P6 attribution: (A) printed P6 while its stored classification says FAIL_E11_ADMISSIBLE -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-1', 'RUN-A-1', 'RUN-A-3'] want⊇['RUN-A-1', 'RUN-A-3', 'ATT-1']
+[OK] NEGATIVE 6b incorrect attribution: (B) records E11 at step 23 instead of step 13 (re-classified, stored equal) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-2', 'RUN-B-3'] want⊇['RUN-B-3', 'ATT-2']
+[OK] NEGATIVE 7a incorrect Oracle accounting: (B) step 08 offered stream differs from (C)'s (G.9 rule 1) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['G9X-1', 'RUN-B-3'] want⊇['RUN-B-3', 'G9X-1']
+[OK] NEGATIVE 7b incorrect Oracle accounting: (B) step 23 consumed like the healthy end while showing the changed branch -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['G9X-3', 'RUN-B-3'] want⊇['RUN-B-3']
+[OK] NEGATIVE 8a failed restoration: `RESTORATION FAILED` / `RESTORE: NOT EXACTLY_W` -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['LNK-2', 'RST-1', 'SEQ-3', 'SEQ-4'] want⊇['RST-1', 'LNK-2']
+[OK] NEGATIVE 8b absent restoration record -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['IN-1', 'LNK-2', 'RST-0', 'SEQ-0'] want⊇['IN-1', 'RST-0', 'LNK-2']
+[OK] NEGATIVE 8c restoration not authenticated: R-5 failed -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['RST-1'] want⊇['RST-1']
+[OK] NEGATIVE 8d live worktree not EXACTLY_W after restoration -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['OBJ-1'] want⊇['OBJ-1']
+[OK] NEGATIVE 9a incorrect linked baseline identity: 44-full-F-PT raw sha256 differs -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['LNK-3'] want⊇['LNK-3']
+[OK] NEGATIVE 9b incorrect linked baseline identity: E-C executable differs -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['LNK-3'] want⊇['LNK-3']
+[OK] NEGATIVE 10a resource-limit breach: (A) used swap (re-classified, stored equal) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['RES-1', 'RUN-A-3'] want⊇['RES-1', 'RUN-A-3']
+[OK] NEGATIVE 10b resource-limit breach: the E-W build's memory peak reached the 16 GiB cap -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'RES-1'] want⊇['RES-1', 'BWC-1']
+[OK] NEGATIVE 10c resource-limit breach: a listing breached the disk floor -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'RES-1'] want⊇['RES-1', 'BWC-1']
+[OK] NEGATIVE 11a wrong Owner approval identity: the gate authenticated the historical K4 record -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['AUTH-3.S01'] want⊇['AUTH-3.S01']
+[OK] NEGATIVE 11b wrong Owner approval identity: the mission text differs from the one the gates authenticated -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['AUTH-5.S01', 'AUTH-5.S02', 'LNK-4'] want⊇['AUTH-5.S01', 'AUTH-5.S02', 'LNK-4']
+[OK] NEGATIVE 12a incomplete Stage 12 input: the S12 gate line is missing -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['SEQ-1'] want⊇['SEQ-1']
+[OK] NEGATIVE 12b incomplete Stage 12 input: (B)'s classification was never written -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-0', 'IN-1', 'RUN-B-0'] want⊇['IN-1', 'RUN-B-0']
+[OK] NEGATIVE 12c incomplete Stage 12 input: no B-W/C record -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-0', 'IN-1', 'LNK-2'] want⊇['IN-1', 'BWC-0']
+[OK] NEGATIVE 13 run order: (A) started before (C) finished -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['SEQ-3', 'SEQ-4'] want⊇['SEQ-3', 'SEQ-4']
+[OK] NEGATIVE 14 the healthy witness was not PASS: a violation in (C) (re-classified, stored equal) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-3', 'RUN-C-3'] want⊇['RUN-C-3', 'ATT-3']
+[OK] NEGATIVE 15 (A) INCOMPLETE is never a PASS or a kill (re-classified, stored equal) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-1', 'RUN-A-3'] want⊇['RUN-A-3', 'ATT-1']
+[OK] NEGATIVE 16 (A) printed another property (E4) (re-classified, stored equal) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['ATT-1', 'RUN-A-3'] want⊇['RUN-A-3', 'ATT-1']
+[OK] NEGATIVE 17 E-W7 changed after the pin (live executable differs) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'EXE-3'] want⊇['EXE-3']
+[OK] NEGATIVE 18 (B) ran on a different executable path than (A) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['EXE-1', 'RUN-B-1', 'RUN-B-3'] want⊇['EXE-1']
+[OK] NEGATIVE 19 Stage-3 gate taken after the mutant worktree existed -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-1', 'BWC-5'] want⊇['BWC-5', 'BWC-1']
+[OK] NEGATIVE 20 the stored B-W/C record is not satisfied -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['BWC-2', 'LNK-2'] want⊇['BWC-2']
+[OK] NEGATIVE 21 a gate receipt with a failing check -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['AUTH-1.S02', 'AUTH-2.S02'] want⊇['AUTH-1.S02', 'AUTH-2.S02']
+[OK] NEGATIVE 22 a stage gate record that failed -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['SEQ-2'] want⊇['SEQ-2']
+[OK] NEGATIVE 23 the frozen tool manifest does not match -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['TOOL-1'] want⊇['TOOL-1']
+[OK] NEGATIVE 24 the stored link is not usable -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['LNK-1'] want⊇['LNK-1']
+[OK] NEGATIVE 25 restoration began from a protocol.rs that was not the authenticated mutant -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['RST-2'] want⊇['RST-2']
+[OK] NEGATIVE 26 E-W7 after restoration did not match its pin -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['RST-3'] want⊇['RST-3']
+[OK] NEGATIVE 27 a SEQUENCE.log with a stage out of order (S07 before S06) -> NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED failed=['SEQ-1', 'SEQ-3', 'SEQ-4'] want⊇['SEQ-1']
+[OK] F-3 PASS (completed, not E11): still a candidate, listed for the Architect's review (section 10) KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING ["F-3 outcome differs from the expected FAIL E11: INFORMATIONAL F-3: PASS (section 10: listed for the Architect's review)"]
+[OK] F-3 NOT COMPLETED (killed by a signal): MUTATION_CONTROL_BLOCKED — INFORMATIONAL F-3 NOT COMPLETED, never a candidate MUTATION_CONTROL_BLOCKED — INFORMATIONAL F-3 NOT COMPLETED ['RUN-F3-3']
+[OK] F-3 NOT COMPLETED (supervisor timeout): MUTATION_CONTROL_BLOCKED — INFORMATIONAL F-3 NOT COMPLETED, never a candidate MUTATION_CONTROL_BLOCKED — INFORMATIONAL F-3 NOT COMPLETED ['RES-1', 'RUN-F3-3']
+[OK] F-3 NOT COMPLETED together with another defect ((A) OOM): NOT A KILL EVIDENCE CANDIDATE (the F-3 label is not used to hide it) NOT A KILL EVIDENCE CANDIDATE — STAGE 12 FAILED ['RES-1', 'RUN-A-1', 'RUN-A-3', 'RUN-F3-3']
+[OK] precondition: S01 allowed on an empty evidence directory; S02 refused 
+[OK] precondition: after the whole sequence, S12 (already started) and S11 are refused 
+[OK] precondition: after S05 the next stage S06 is allowed; S07 and S10 are refused 
+[OK] precondition: a stop at S06 (rc 1): S07 refused, S10-restore allowed on the 7.3A stop path, S11 refused 
+[OK] precondition: a failed stage gate at S07: S10-restore allowed (stop path), S08 refused 
+[OK] precondition: a stop before the mutant patch (S03d): S10-restore refused (nothing to restore), S03e refused 
+[OK] precondition: a malformed SEQUENCE.log refuses every stage 
+[OK] precondition: the clean prefix S01..S02 allows S03a; an unknown stage is refused 
+[OK] stagegate: PASS with zero projected growth; its SEQUENCE.log line parses as one GATE PASS rc=0 [] []
+[OK] stagegate: a second gate for the same stage is refused 
+[OK] stagegate: projected growth beyond the 16 GiB floor -> FAIL R-2 
+[OK] stagegate: a changed frozen tool -> FAIL T-1 
+[OK] stagegate: an unlisted tool file -> FAIL T-2 
+[OK] stagegate: FAIL gate lines parse as GATE FAIL 
+[OK] the self-test never wrote the mutant blob to the object store 
+
+SELF-TEST (final + stagegate) ALL OK: 64/64

@@ -1,0 +1,83 @@
+--- c7tools-orig/c7class_selftest.py	2026-10-15 23:53:07.254041771 +0100
++++ c7tools/c7class_selftest.py	2026-10-16 14:07:55.345054259 +0100
+@@ -15,7 +15,7 @@
+ from c7lib import *  # noqa
+ 
+ RESULTS = []
+-SAMPLES = "/tmp/claude-1000/-home-nexus-NEXUS-nexus-os/7b42496f-8d31-44a9-b5c7-079991353147/scratchpad/samples"
++SAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "samples")  # EXEC-02: copied fixtures
+ EW = "/fake/c7w-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3"
+ EW7 = "/fake/c7w-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3"
+ SHA_W, SHA_W7 = "a" * 64, "b" * 64
+@@ -98,12 +98,16 @@
+             "    [taken    ] explain: Explained", "    [taken    ] extra thing (not in the listed set)"]
+ 
+ 
+-def instance(name, a4, outcome, prop=None, incomplete=None, steps=4, states=1234, extra_outcome=False):
++FROZEN_LINES = {"F-PT": K.frozen_config_lines("A")[0][1:], "F-3": K.frozen_config_lines("F3")[0][1:]}  # EXEC-02: the exact frozen bounds/actors lines
++
++
++def instance(name, a4, outcome, prop=None, incomplete=None, steps=4, states=1234, extra_outcome=False, bounds=None):
+     L = ["EXPLORATION %s" % name, "  outcome: %s" % outcome]
+     if extra_outcome:
+         L.append("  outcome: PASS")
+-    L += ["  bounds: facts 2 conflicting [false, false] ENV true A4 %s; ticket limit 1; refusal limit 1; settlement and the worker on; caps 30000000 states, 2700s" % a4,
+-          "  actors: [Fw(0), Fw(1), Se, Wk, Env]",
++    fb, fa = FROZEN_LINES.get(name, FROZEN_LINES["F-PT"])
++    L += [bounds or fb,
++          fa,
+           "  states %d (expanded %d), transitions 5000 (with a fault 100), states with no enabled step 3" % (states, states),
+           "  elapsed 41.5 s; explorer tables 12 MiB"]
+     if incomplete:
+@@ -125,10 +129,10 @@
+     return L
+ 
+ 
+-def gen_explorer(kind, outcome, prop=None, incomplete=None, copies=None, extra_outcome=False, exit_override=None, panic_loc="4133:5", left=None):
++def gen_explorer(kind, outcome, prop=None, incomplete=None, copies=None, extra_outcome=False, exit_override=None, panic_loc="4133:5", left=None, bounds=None):
+     test = TEST_FULL_FPT if kind == "A" else TEST_FULL_F3
+     name, a4 = ("F-PT", "true") if kind == "A" else ("F-3", "false")
+-    inst = instance(name, a4, outcome, prop, incomplete, extra_outcome=extra_outcome)
++    inst = instance(name, a4, outcome, prop, incomplete, extra_outcome=extra_outcome, bounds=bounds)
+     lines = ["", "running 1 test", "test %s ... %s" % (test, inst[0])] + inst[1:]
+     if outcome == "PASS":
+         lines += ["", "ok", "", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 348 filtered out; finished in 41.60s", ""]
+@@ -157,7 +161,9 @@
+         "process": {"exit_status": code, "signal": None, "supervisor_rc": code, "wrapper_recorded_status": str(code)},
+         "supervisor": {"memory_max": "17179869184", "swap_max": "0", "memory_high": "max", "memory_peak_bytes": "2000000000", "swap_peak_bytes": "0",
+                        "oom": 0, "oom_kill": 0, "swap_events": {"high": 0, "max": 0, "fail": 0}, "completed": True, "timed_out": False, "wall_seconds": 12.5,
+-                       "time_limit_seconds": 2700, "scope_result": "success", "scope_show": "", "launcher_elapsed_seconds": 12.6, "max_rss_kib_largest_process": 1000},
++                       "time_limit_seconds": 2700, "scope_result": "success", "scope_show": "", "launcher_elapsed_seconds": 12.6, "max_rss_kib_largest_process": 1000,
++                       "disk_floor_breach": False, "disk": {"min_free_bytes": DISK_FLOOR_BYTES + 2**30, "floor_bytes": DISK_FLOOR_BYTES},
++                       "started_utc": "2026-10-16T13:00:00.000000000Z", "finished_utc": "2026-10-16T13:00:12.500000000Z"},
+         "output_path": "raw-output.txt", "raw_output_sha256": hashlib.sha256(text.encode()).hexdigest(),
+         "source_verification_before": ok, "source_verification_after": ok, "finished_at": "2026-10-15T23:59:59+01:00",
+     }
+@@ -380,6 +386,18 @@
+     case("(A) with a supervisor timeout is not admissible", "A", t, c, want_ok=False, want_fail="CL1-2", edit=lambda d: d["supervisor"].update(timed_out=True))
+     t2 = t.replace("348 filtered out", "347 filtered out")
+     case("(A) with `347 filtered out` is not admissible", "A", t2, c, want_ok=False)
++    # EXEC-02 additions: the exact frozen configuration lines and the disk floor
++    fb = FROZEN_LINES["F-PT"][0]
++    t4, c4 = gen_explorer("A", "FAIL", prop="E11", bounds=fb.replace(" faults 2 ", " faults 3 "))
++    case("(A) with a bounds line differing from the frozen F-PT bounds is not admissible (EX-2b)", "A", t4, c4, want_ok=False, want_fail="EX-2b")
++    t5, c5 = gen_explorer("A", "FAIL", prop="E11", bounds=FROZEN_LINES["F-3"][0])
++    case("(A) carrying F-3's bounds (A4 false) is not admissible (EX-2 / EX-2b)", "A", t5, c5, want_ok=False, want_fail="EX-2b")
++    case("(A) with a disk-floor breach during the run is not admissible (CL1-8)", "A", t, c, want_ok=False, want_fail="CL1-8",
++         edit=lambda d: d["supervisor"].update(disk_floor_breach=True))
++    case("(C) whose sampled minimum free space fell below 16 GiB is not admissible (CL1-8)", "C", *wit("C"), want_ok=False, want_fail="CL1-8",
++         edit=lambda d: d["supervisor"]["disk"].update(min_free_bytes=DISK_FLOOR_BYTES - 1))
++    tq = t.replace("test %s ... EXPLORATION F-PT" % TEST_FULL_FPT, "test %s ... EXPLORATION F-PT (gating-caller symmetry quotient)" % TEST_FULL_FPT)
++    case("(A) whose header names a quotient/symmetry explorer is not admissible (EX-3)", "A", tq, c, want_ok=False)
+     t3 = t.replace("states 1234 (expanded 1234)", "states 31000000 (expanded 1234)")
+     case("(A) with states beyond the ceiling is not admissible (C7-3)", "A", t3.replace("states 31000000", "states 31000000"), c, want_ok=False)
+ 
+@@ -415,6 +433,8 @@
+          edit=lambda d: d["process"].update(signal=9, exit_status=137, supervisor_rc=137, wrapper_recorded_status="137"))
+     case("F-3 with an oom kill is NOT COMPLETED", "F3", t, c, want_verdict="NOT_COMPLETED", want_ok=False, want_fail="CL1-3", edit=lambda d: d["supervisor"].update(oom=1, oom_kill=1))
+     case("F-3 with a timeout is NOT COMPLETED", "F3", t, c, want_verdict="NOT_COMPLETED", want_ok=False, want_fail="CL1-2", edit=lambda d: d["supervisor"].update(timed_out=True))
++    t, c = gen_explorer("F3", "FAIL", prop="E11", bounds=FROZEN_LINES["F-PT"][0])
++    case("F-3 carrying F-PT's bounds (A4 true) is NOT COMPLETED (EX-2b)", "F3", t, c, want_verdict="NOT_COMPLETED", want_ok=False, want_fail="EX-2b")
+     t, c = gen_explorer("F3", "FAIL", prop="E11")
+     case("F-3 whose instance is for F-PT is NOT COMPLETED", "F3", t.replace("EXPLORATION F-3", "EXPLORATION F-PT"), c, want_verdict="NOT_COMPLETED", want_ok=False)
+ 

@@ -1,0 +1,65 @@
+--- c7tools-orig/c7wt.py	2026-10-15 23:17:32.574845794 +0100
++++ c7tools/c7wt.py	2026-10-16 14:00:48.417218576 +0100
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""C7-W worktree handling: creation records, identity verification (EXACTLY_W / EXACTLY_W7), patch application,
++"""C7-W worktree handling (mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02; adapted from the EXEC-01 tool): creation records, identity verification (EXACTLY_W / EXACTLY_W7), patch application,
+ restoration through the frozen inverse patch, and the 7.3A authentication R-1..R-8.
+ 
+   c7wt.py create  <H|M> <evdir>        add the detached worktree at W-COMMIT, make its real target dir, write the creation record
+@@ -188,9 +188,9 @@
+     if worktree_entry(wt) is not None:
+         raise SystemExit("REFUSED: %s is already registered" % wt)
+     before = ownership(os.path.dirname(wt))
+-    t0 = now()
++    t0, t0u = now(), utcns()
+     p = git("worktree", "add", "--detach", wt, SPEC["commit"], cwd=SPEC["repo"], check=False)
+-    rec = {"mission": MISSION, "role": role, "path": wt, "started": t0, "finished": now(),
++    rec = {"mission": MISSION, "role": role, "path": wt, "started": t0, "finished": now(), "started_utc": t0u, "finished_utc": utcns(),
+            "command": ["git", "-C", SPEC["repo"], "worktree", "add", "--detach", wt, SPEC["commit"]],
+            "returncode": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"), "stderr": p.stderr.decode("utf-8", "replace"),
+            "parent_ownership": before}
+@@ -227,7 +227,8 @@
+ 
+ def apply_patch(evdir, out):
+     wt = SPEC["wt"]["M"]
+-    lines = []
++    t0u = utcns()
++    lines = ["C7 PATCH APPLICATION (13.3 step 4) started %s" % t0u]
+     chk = verify(wt, "W")
+     ok, text = report(chk, "EXACTLY_W before the patch")
+     lines.append(text)
+@@ -249,7 +250,16 @@
+     chk = verify(wt, "W7")
+     ok2, text2 = report(chk, "EXACTLY_W7 after the patch")
+     lines.append(text2)
++    pdata = open(os.path.join(wt, SPEC["protocol_path"]), "rb").read()
++    t1u = utcns()
++    lines.append("APPLY: %s; finished %s" % ("EXACTLY_W7 (W-TREE plus the frozen C7 patch at protocol.rs only)" if (a.returncode == 0 and ok2) else "FAILED", t1u))
+     write_new(out, "\n".join(lines))
++    write_new(os.path.join(evdir, "receipts/00-worktrees/apply-C7.json"), json.dumps({
++        "mission": MISSION, "worktree": wt, "started_utc": t0u, "finished_utc": t1u, "patch_file": pth, "patch_sha256": sha256_file(pth),
++        "patch_git_blob": git_blob_id(open(pth, "rb").read()), "catalog_patch_sha256": SPEC["patch_sha"], "apply_returncode": a.returncode,
++        "mutant_protocol": {"path": SPEC["protocol_path"], "git_blob": git_blob_id(pdata), "sha256": sha256_bytes(pdata), "bytes": len(pdata)},
++        "expected_mutant": {"git_blob": SPEC["mutant_blob"], "sha256": SPEC["mutant_sha"]},
++        "verification_EXACTLY_W7": [{"id": x, "ok": y, "detail": z} for x, y, z in chk], "ok": a.returncode == 0 and ok2}, indent=1))
+     print("\n".join(lines))
+     return 0 if (a.returncode == 0 and ok2) else 1
+ 
+@@ -324,7 +334,7 @@
+ 
+ def restore(evdir, outdir):
+     wt = SPEC["wt"]["M"]
+-    lines = ["RESTORATION (frozen inverse patch) %s" % now()]
++    lines = ["RESTORATION (frozen inverse patch) %s (UTC %s)" % (now(), utcns())]
+     auth = auth_r(evdir)
+     ok, text = report(auth, "7.3A authentication R-1..R-8")
+     lines.append(text)
+@@ -355,6 +365,7 @@
+     lines.append(text2)
+     final = applied and ok2
+     lines.append("RESTORATION %s" % ("COMPLETE: EXACTLY_W" if final else "FAILED"))
++    lines.append("RESTORE: %s; finished UTC %s" % ("EXACTLY_W" if final else "NOT EXACTLY_W", utcns()))
+     write_new(os.path.join(outdir, "restoration.txt"), "\n".join(lines))
+     print("\n".join(lines))
+     return 0 if final else 3

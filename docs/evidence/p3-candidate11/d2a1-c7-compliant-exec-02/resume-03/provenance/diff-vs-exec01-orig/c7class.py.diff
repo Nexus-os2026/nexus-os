@@ -1,0 +1,76 @@
+--- c7tools-orig/c7class.py	2026-10-15 23:51:03.293323891 +0100
++++ c7tools/c7class.py	2026-10-16 14:08:05.302714733 +0100
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env python3
+-"""P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01: independent classifier for the four test runs.
++"""P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02: independent classifier for the four test runs (adapted from the EXEC-01 classifier;
++every change is listed in ../TOOLS-PROVENANCE.txt).
+ 
+ Reads RAW output only (never the witness's own verdict or the exit code alone) and applies AD-C7-W G.7/G.8/G.9, I-C7,
+ K.2-C7, CL-1..CL-12, C7-1..C7-21 and F3-1..F3-4.
+@@ -180,6 +181,10 @@
+        "peak=%s" % s["memory_peak_bytes"])
+     ck("CL1-7", "wall time below the 2700 s ceiling", s["wall_seconds"] is not None and s["wall_seconds"] < LIMIT and s["time_limit_seconds"] == LIMIT,
+        "wall=%s limit=%s" % (s["wall_seconds"], s["time_limit_seconds"]))
++    dk = s.get("disk") or {}
++    ck("CL1-8", "disk floor preserved during the run: no floor breach (no supervisor stop), minimum free space >= 16 GiB",
++       s.get("disk_floor_breach") is False and dk.get("min_free_bytes") is not None and dk["min_free_bytes"] >= DISK_FLOOR_BYTES,
++       "breach=%s min_free=%s" % (s.get("disk_floor_breach"), dk.get("min_free_bytes")))
+     return code
+ 
+ 
+@@ -465,6 +470,33 @@
+ # --------------------------------------------------------------------------------------------------------------------
+ RE_OUT = re.compile(r"^  outcome: (PASS|FAIL|INCOMPLETE)$")
+ 
++# Exact frozen configuration lines, read from git objects (raw sha256 verified before use): the accepted Candidate C receipts
++# (E-C, unchanged core, same Config constants under NI-1) and, for F-PT, the historical 85-C7 receipt cited by AD-C7-W as
++# G.7(A)'s prediction. Only their `bounds:` and `actors:` lines are used; nothing else in them is relied on.
++FROZEN_CONFIG_REFS = {
++    "A": [(EC_EVID, EC_RECEIPTS + "/44-full-F-PT/raw-output.txt", "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8"),
++          ("c10681b3c65dd377b5a13d08140427e8b34441d0", "docs/evidence/p3-candidate11/d2a1-mutation-tranche3-continue-02/receipts/85-C7/04-run/raw-output.txt",
++           "db3bf1643cb5f1d367004400f5caa9d975ebeb2bf45aca2e8b64dae98691154d")],
++    "F3": [(EC_EVID, EC_RECEIPTS + "/43-full-F-3/raw-output.txt", "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562")],
++}
++
++
++def frozen_config_lines(kind):
++    """[(ref, bounds line, actors line)] from git objects; raises if a reference's sha256 differs."""
++    out = []
++    for commit, path, sha in FROZEN_CONFIG_REFS[kind]:
++        b = blob_at(commit, path)
++        if sha256_bytes(b) != sha:
++            raise RuntimeError("frozen configuration reference %s:%s has sha256 %s, not %s" % (commit[:8], path, sha256_bytes(b), sha))
++        ls = b.decode("utf-8").split("\n")
++        bl = [l for l in ls if l.startswith("  bounds: ")]
++        al = [l for l in ls if l.startswith("  actors: ")]
++        # a PASS receipt prints one report; a FAIL receipt prints it twice (the panic copy): the copies must agree
++        if len(bl) not in (1, 2) or len(al) != len(bl) or len(set(bl)) != 1 or len(set(al)) != 1:
++            raise RuntimeError("reference %s has %d bounds and %d actors lines (not one agreeing value)" % (path, len(bl), len(al)))
++        out.append(("%s:%s" % (commit[:8], path.split("/receipts/")[-1]), bl[0], al[0]))
++    return out
++
+ 
+ def parse_instance(block):
+     """One exploration report (EXPLORATION ... `  state key fields:`). Returns (info, problems)."""
+@@ -639,7 +671,19 @@
+     want_name, want_a4 = ("F-PT", "true") if kind == "A" else ("F-3", "false")
+     ck("EX-2", "configuration is %s with A4 %s and caps 30000000 states, 2700s" % (want_name, want_a4), i1["name"] == want_name and i1["a4"] == want_a4 and i1["caps"],
+        "name=%r a4=%r caps_ok=%s" % (i1["name"], i1["a4"], i1["caps"]))
+-    ck("EX-3", "no quotient or symmetry run", "quotient" not in i1["text"].split("\n")[0] and "symmetry" not in i1["text"].split("\n")[0])
++    ck("EX-3", "no quotient or symmetry run: the header is exactly `EXPLORATION %s` and no `quotient:`/`symmetry:` line appears" % want_name,
++       i1["text"].split("\n")[0] == "EXPLORATION " + want_name and "quotient" not in i1["text"].split("\n")[0] and "symmetry" not in i1["text"].split("\n")[0]
++       and not any(l.startswith("  quotient:") or l.startswith("  symmetry:") for l in lines))
++    blk = i1["text"].split("\n")
++    try:
++        refs = frozen_config_lines(kind)
++        for ref, bl, al in refs:
++            ck("EX-2b", "exact frozen configuration: the `bounds:` and `actors:` lines are byte-equal to those of %s" % ref, blk[2] == bl and blk[3] == al,
++               "got %r / %r" % (blk[2][:200], blk[3][:120]))
++        facts["frozen_config_refs"] = [r[0] for r in refs]
++    except Exception as e:  # noqa: BLE001
++        ck("EX-2b", "frozen configuration references readable from git objects with their frozen sha256", False, repr(e))
++    facts["bounds_line"], facts["actors_line"] = blk[2], blk[3]
+     ck("EX-4", "states within the 30,000,000 ceiling and elapsed within 2700 s", i1["states"] <= MAX_STATES and i1["elapsed"] <= LIMIT, "states=%s elapsed=%s" % (i1["states"], i1["elapsed"]))
+     facts.update(outcome=layout, states=i1["states"], elapsed=i1["elapsed"], fail=i1["fail"], incomplete=i1["incomplete"])
+     structural_ok = not ck.fails

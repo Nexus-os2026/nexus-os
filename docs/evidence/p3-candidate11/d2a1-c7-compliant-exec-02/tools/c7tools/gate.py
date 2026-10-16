@@ -1,0 +1,723 @@
+#!/usr/bin/env python3
+"""Read-only authorisation gate (13.3 step 1 and step 2) for P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02.
+Adapted from the EXEC-01 gate: lex_rust and scan_suffix are unchanged; main() is rewritten for the new K4, the
+four-place Owner-quote agreement, SR mechanical evidence, executable-identity process checks, the runner,
+historical-evidence preservation and the disk floor (see ../TOOLS-PROVENANCE.txt).
+
+Verifies identities, contract, source, patch and environment BEFORE any worktree
+or evidence directory is created. Creates nothing in the repository.
+Usage: gate.py <output-file>   (the output file must not exist)
+Exit 0 only if every check passes.
+"""
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from c7lib import *  # noqa: F401,F403
+
+MISSION_FILE = os.path.join(EV_DIR, "MISSION.txt")
+COMPLETION02_QUOTE = "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-owner-identity-completion-02/preflight/OWNER-QUOTE-MISSION-02-SECTION-2.txt"
+
+
+def lex_rust(src):
+    """Minimal Rust tokenizer: comments and string/char literal contents are dropped."""
+    toks = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c.isspace():
+            i += 1
+        elif src.startswith("//", i):
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+        elif src.startswith("/*", i):
+            depth, i = 1, i + 2
+            while i < n and depth:
+                if src.startswith("/*", i):
+                    depth, i = depth + 1, i + 2
+                elif src.startswith("*/", i):
+                    depth, i = depth - 1, i + 2
+                else:
+                    i += 1
+        elif c == '"':
+            i += 1
+            while i < n and src[i] != '"':
+                i += 2 if src[i] == "\\" else 1
+            i += 1
+            toks.append(("str", ""))
+        elif c == "'":
+            if src.startswith("'\\", i):
+                j = src.find("'", i + 2)
+                i = j + 1
+                toks.append(("chr", ""))
+            elif i + 2 < n and src[i + 2] == "'":
+                i += 3
+                toks.append(("chr", ""))
+            else:
+                j = i + 1
+                while j < n and (src[j].isalnum() or src[j] == "_"):
+                    j += 1
+                toks.append(("life", src[i + 1:j]))
+                i = j
+        elif c.isalpha() or c == "_":
+            j = i
+            while j < n and (src[j].isalnum() or src[j] == "_"):
+                j += 1
+            word = src[i:j]
+            if word in ("r", "br", "cr") and j < n and src[j] in '#"':
+                k = j
+                hashes = 0
+                while k < n and src[k] == "#":
+                    hashes += 1
+                    k += 1
+                if k < n and src[k] == '"':
+                    end = '"' + "#" * hashes
+                    e = src.find(end, k + 1)
+                    i = e + len(end)
+                    toks.append(("str", ""))
+                    continue
+            if word in ("b", "c") and j < n and src[j] == '"':
+                i = j
+                continue
+            toks.append(("ident", word))
+            i = j
+        elif c.isdigit():
+            j = i
+            while j < n and (src[j].isalnum() or src[j] in "_."):
+                if src[j] == "." and not (j + 1 < n and src[j + 1].isdigit()):
+                    break
+                j += 1
+            toks.append(("num", src[i:j]))
+            i = j
+        else:
+            toks.append(("punct", c))
+            i += 1
+    return toks
+
+
+def scan_suffix(rec, suffix_bytes):
+    src = suffix_bytes.decode("utf-8")
+    toks = lex_rust(src)
+    idents = [t[1] for t in toks if t[0] == "ident"]
+    vals = [t[1] for t in toks]
+    # NI-3: exactly one item: `mod c7_witness { ... }`, inline, no visibility, no attribute on it.
+    ok = vals[:3] == ["mod", "c7_witness", "{"] and vals[-1] == "}"
+    depth, top_close = 0, None
+    for idx, t in enumerate(toks):
+        if t[1] == "{":
+            depth += 1
+        elif t[1] == "}":
+            depth -= 1
+            if depth == 0:
+                top_close = idx
+                break
+    rec.check("NI-3a", "suffix S is exactly one inline `mod c7_witness { ... }` item (no tokens before or after)",
+              ok and top_close == len(toks) - 1, "tokens=%d top_close=%s" % (len(toks), top_close))
+    rec.check("NI-3b", "no `pub` of any form, no re-export (NI-5e)", "pub" not in idents)
+    # NI-5(f): exactly one #[test]; no other attribute at all
+    hashes = [i for i, t in enumerate(toks) if t[1] == "#"]
+    attr_ok = len(hashes) == 1 and [t[1] for t in toks[hashes[0]:hashes[0] + 4]] == ["#", "[", "test", "]"]
+    rec.check("NI-5f", "exactly one attribute in S and it is `#[test]` (so no ignore/should_panic/cfg/cfg_attr/lint/inner attribute, no derive)",
+              attr_ok, "attribute count=%d" % len(hashes))
+    rec.check("NI-5f2", "no inner attribute `#!`", not any(vals[i:i + 2] == ["#", "!"] for i in range(len(vals) - 1)))
+    for name, bad in (
+        ("NI-5b", {"static", "thread_local", "lazy_static", "OnceLock", "OnceCell", "LazyLock", "Cell", "RefCell", "Mutex", "RwLock", "AtomicBool", "AtomicUsize", "AtomicU64", "AtomicU32", "AtomicU8"}),
+        ("NI-5c", {"unsafe", "extern", "no_mangle", "export_name", "link_section", "link", "global_allocator"}),
+        ("NI-5d", {"macro_rules", "macro_export", "macro_use"}),
+    ):
+        hit = sorted(set(idents) & bad)
+        rec.check(name, "none of %s in S" % sorted(bad), not hit, "found=%s" % hit if hit else "")
+    attr_names = []
+    for h in hashes:
+        k = h + 1
+        if k < len(toks) and toks[k][1] == "[":
+            depth_b, m = 0, k
+            names = []
+            while m < len(toks):
+                if toks[m][1] == "[":
+                    depth_b += 1
+                elif toks[m][1] == "]":
+                    depth_b -= 1
+                    if depth_b == 0:
+                        break
+                elif toks[m][0] == "ident":
+                    names.append(toks[m][1])
+                m += 1
+            attr_names.extend(names)
+    rec.check("NI-5c2", "no `#[used]`, `#[link]`, `#[no_mangle]`, `#[export_name]`, `#[link_section]`, `#[global_allocator]` attribute (attribute names found: %s)" % attr_names,
+              not (set(attr_names) & {"used", "link", "no_mangle", "export_name", "link_section", "global_allocator"}))
+    lifetimes = sorted({t[1] for t in toks if t[0] == "life"})
+    rec.info("NI-5b-life", "lifetime tokens in S (a lifetime `'static` is not a `static` item): %s" % lifetimes)
+    rec.check("NI-5b2", "no `static` item: the ident `static` never occurs as an item keyword (lifetime tokens are lexed separately)", "static" not in idents)
+    # NI-5(a): trait / impl / derive / generic blanket
+    rec.check("NI-5a1", "no trait declared in S", "trait" not in idents)
+    declared = set()
+    for i, t in enumerate(toks):
+        if t == ("ident", "struct") or t == ("ident", "enum"):
+            declared.add(toks[i + 1][1])
+    impl_targets = []
+    for i, t in enumerate(toks):
+        if t == ("ident", "impl"):
+            impl_targets.append(toks[i + 1][1] if toks[i + 1][0] == "ident" else toks[i + 1][1])
+    rec.check("NI-5a2", "every `impl` in S has as self type a struct/enum declared in S (no trait impl, no generic/blanket)",
+              all(x in declared for x in impl_targets) and "for" not in vals[: 0] and not any(
+                  toks[i] == ("ident", "impl") and toks[i + 1] == ("punct", "<") for i in range(len(toks) - 1)),
+              "declared=%s impl_targets=%s" % (sorted(declared), impl_targets))
+    # an `impl X for Y` (trait impl) would put `for` right after the type ident
+    trait_impl = False
+    for i, t in enumerate(toks):
+        if t == ("ident", "impl"):
+            j = i + 1
+            d = 0
+            while j < len(toks) and not (toks[j][1] == "{" and d == 0):
+                if toks[j][1] == "<":
+                    d += 1
+                elif toks[j][1] == ">":
+                    d -= 1
+                if toks[j] == ("ident", "for") and d == 0:
+                    trait_impl = True
+                j += 1
+    rec.check("NI-5a3", "no `impl Trait for Type` in S", not trait_impl)
+    # NI-5(g) forbidden names
+    forbidden = {"explore", "explore_experimental", "explore_symmetric", "explore_symmetric_kept", "successors", "expand",
+                 "SERIAL", "set_hook", "take_hook", "thread_rng", "getrandom", "SystemTime", "Instant", "Command", "TcpStream", "TcpListener", "UdpSocket"}
+    hit = sorted(set(idents) & forbidden)
+    rec.check("NI-5g1", "S neither calls nor names explorer/serial/hook-panic/randomness/time/process/net items", not hit, "found=%s" % hit if hit else "")
+    pre_hits = []
+    for i in range(len(toks) - 3):
+        if toks[i][1] == "std" and toks[i + 1][1] == ":" and toks[i + 2][1] == ":" and toks[i + 3][1] in ("env", "process", "thread", "fs", "net", "time", "panic"):
+            pre_hits.append(toks[i + 3][1])
+        if toks[i][1] == "hook" and toks[i + 1][1] == ":" and toks[i + 2][1] == ":" and toks[i + 3][1] in ("install", "remove", "report"):
+            pre_hits.append("hook::" + toks[i + 3][1])
+    rec.check("NI-5g2", "no `std::{env,process,thread,fs,net,time,panic}` path and no hook::{install,remove,report}", not pre_hits, "found=%s" % pre_hits if pre_hits else "")
+    witness_names = sorted({x for x in idents if re.match(r"^(c1|c25|c4)_", x) or x in ("c1_witness", "c25_witness", "c4_witness")})
+    rec.check("NI-5g3", "S names no C1/C25/C4 witness item", not witness_names, "found=%s" % witness_names if witness_names else "")
+    hook_uses = []
+    for i in range(len(toks) - 3):
+        if toks[i][1] == "hook" and toks[i + 1][1] == ":" and toks[i + 2][1] == ":":
+            hook_uses.append(toks[i + 3][1])
+    rec.check("NI-5g4", "S may call only hook::take_counts", set(hook_uses) <= {"take_counts"}, "hook uses=%s" % sorted(set(hook_uses)))
+    rec.check("NI-5h", "S defines no `Config` and uses FPT", not any(toks[i] in (("ident", "struct"), ("ident", "enum")) and toks[i + 1] == ("ident", "Config") for i in range(len(toks) - 1)) and "FPT" in idents)
+    uses = []
+    for i, t in enumerate(toks):
+        if t == ("ident", "use"):
+            j = i
+            s = []
+            while j < len(toks) and toks[j][1] != ";":
+                s.append(toks[j][1])
+                j += 1
+            uses.append(" ".join(s))
+    rec.info("NI-5-uses", "`use` items in S: %s" % uses)
+    rec.check("NI-5-uses2", "S's only `use` is `use super::*`", uses == ["use super : : *"], "uses=%s" % uses)
+    n_test = len(re.findall(r"#\[test\]", src))
+    n_ignore = len(re.findall(r"#\[ignore", src))
+    rec.check("NI-S-counts", "S holds exactly 1 `#[test]` and 0 `#[ignore`", n_test == 1 and n_ignore == 0, "test=%d ignore=%d" % (n_test, n_ignore))
+    return declared
+
+
+
+
+def sr_evidence(rec, suffix_bytes):
+    """Mechanical evidence for SR-1..SR-6 (AD-C7-W 6.2). SR-1..SR-6 are Architect source-review obligations established
+    by B-W/B for this exact W-SRC identity; these checks only add executor evidence and fail closed on any contradiction."""
+    src = suffix_bytes.decode("utf-8")
+
+    def ordered(parts, text):
+        pos, out = 0, []
+        for p in parts:
+            j = text.find(p, pos)
+            if j < 0:
+                return False, "missing or out of order: %r" % p
+            out.append(j)
+            pos = j + len(p)
+        return True, "offsets %s" % out
+    loop = src[src.index("for (index, planned) in steps.iter().enumerate() {"):src.index("    // The healthy core keeps F1's refusal-table entry")]
+    ok, det = ordered(["let base = decode(config, &key);", "let mut w = decode(config, &key);", "let mut oracle = Oracle::new(planned.offered.to_vec(), w.faults);",
+                       "hook::take_counts();", "let enabled = step(config, &mut w, planned.actor, &mut oracle, &mut obs);", "let counts = hook::take_counts();",
+                       "w.faults = oracle.faults;", "let m = obs.violations.len();", "transition_properties(&base, &w, &mut obs, counts);",
+                       "key = encode(config, &w);", "violations_at(config, &key)"], loop)
+    rec.check("SR-1m", "SR-1 order in the replay loop: decode base and w; Oracle::new(offered, w.faults); take_counts; step; take_counts; w.faults = oracle.faults; "
+                       "m = obs.violations.len(); transition_properties; after = violations_at(encode(w))", ok, det)
+    ok2, det2 = ordered(["let mut key = encode(config, &initial(config));", "for (property, detail) in violations_at(config, &key) {", 'run.record("initial".to_string()'], src)
+    rec.check("SR-1i", "SR-1: the initial violations are violations_at of the initial key", ok2, det2)
+    rec.check("SR-1s", "SR-1 split: in-step = obs.violations[..m], transition = obs.violations[m..]",
+              "obs.violations[..m].iter()" in loop and "obs.violations[m..].iter()" in loop and loop.count("obs.violations[") == 2, "")
+    rec.check("SR-2m", "SR-2: the only `VIOLATION ` text in S is the one canonical-record format in Run::record, printed once and kept as the record's line; "
+                       "the panic summary joins exactly those lines",
+              src.count("VIOLATION") == 1 and 'let line = format!("    VIOLATION {locus}: {property}: {detail}");' in src and 'println!("{line}");' in src
+              and "summary.join(\"\\n\")" in src and ".map(|record| record.line.as_str())" in src, "VIOLATION occurrences=%d" % src.count("VIOLATION"))
+    ok3, det3 = ordered(["let p6_record = found(\"after 24\", \"P6\");", "let e11_record = found(\"step 13 transition\", \"E11\");",
+                         "let changed_end = run.changed == Some(true);", "let lost_state = is_lost(at13, at24);", "let n = run.records.len();",
+                         ".filter(|property| *property != \"P6\")", "let m1 = format!(", "{n} violations",
+                         "let m2 = if p6_record && changed_end && lost_state {", "NAMED PROPERTY P6: OBSERVED", "NAMED PROPERTY P6: NOT OBSERVED",
+                         "let m3 = if e11_record {", "SEPARATE PROPERTY E11: OBSERVED", "SEPARATE PROPERTY E11: NOT OBSERVED",
+                         "let m4 = format!(", "not counted as P6: {others:?}"], src[src.index("fn judge("):])
+    rec.check("SR-3m", "SR-3: M1's n, M2/M3 OBSERVED or NOT OBSERVED and M4's list are computed from the collected records, step 23's end and the predicates; "
+                       "each positive marker text occurs once, inside its condition", ok3 and src.count("NAMED PROPERTY P6: OBSERVED") == 1
+              and src.count("SEPARATE PROPERTY E11: OBSERVED") == 1, det3)
+    rec.check("SR-4m", "SR-4: the replay leaves the loop only by `break` after a fixture failure (run.fail), and returns early only for inconsistent frozen data",
+              loop.count("break;") == 1 and "run.fail(format!(\"step {number:02} {reason}\"));\n                break;" in loop and src.count("return run;") == 1
+              and "if let Some(reason) = inconsistent() {" in src, "breaks=%d" % loop.count("break;"))
+    rec.check("SR-5m", "SR-5: the kept and lost predicates take shared references to snapshots only",
+              "fn is_kept(at13: &Snap, at24: &Snap) -> bool {" in src and "fn is_lost(at13: &Snap, at24: &Snap) -> bool {" in src, "")
+    assigns = sorted(set(re.findall(r"(?<![A-Za-z0-9_.])w\.([a-z_]+)\s*=(?!=)", src)))
+    rec.check("SR-6m", "SR-6: S changes worlds only through `step` (the one `&mut w`) and `w.faults = oracle.faults`",
+              src.count("&mut w") == 1 and assigns == ["faults"] and "&mut World" not in src, "assignments to w.*: %s; &mut w count %d" % (assigns, src.count("&mut w")))
+
+
+def proc_scan():
+    """Executable identities of every readable process (never pgrep -f). Returns a list of (pid, exe, argv0..2, cwd)."""
+    rows = []
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            exe = os.readlink("/proc/%s/exe" % d)
+        except OSError:
+            exe = None
+        try:
+            argv = open("/proc/%s/cmdline" % d, "rb").read().split(b"\0")
+            argv = [a.decode("utf-8", "replace") for a in argv if a]
+        except OSError:
+            argv = []
+        try:
+            cwd = os.readlink("/proc/%s/cwd" % d)
+        except OSError:
+            cwd = None
+        rows.append((int(d), exe, argv[:3], cwd))
+    return rows
+
+
+CONFLICT_EXE = re.compile(r"(^|/)(cargo|rustc|rustdoc|cargo-clippy|clippy-driver|rustfmt|Runner\.Listener|Runner\.Worker|Runner\.PluginHost)( \(deleted\))?$")
+DEPS_EXE = re.compile(r"/target/(release|debug)/deps/[^/]+$|(^|/)nexus_governed_control-[0-9a-f]{16}( \(deleted\))?$")
+
+
+def main():
+    out = sys.argv[1]
+    rec = Rec("C7-W authorisation gate (13.3 steps 1-2; read-only, before any worktree, build or test)")
+    rec.log("# host %s" % os.uname().nodename)
+    rec.log("# repo %s" % REPO)
+    rec.log("# utc %s" % utcns())
+    mission = open(MISSION_FILE, "r", encoding="utf-8").read()
+    mflat = re.sub(r"\s+", "", mission)
+    rec.info("MIS", "mission text %s sha256 %s (executor transcription; a string is never authority)" % (MISSION_FILE, sha256_file(MISSION_FILE)))
+    rec.check("MIS-1", "mission text names this mission", "P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02" in mission and MISSION == "P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02")
+
+    # ---------------- 1. repository provenance ----------------
+    rec.log("\n## 1. repository, primary checkout and remote provenance")
+    head = git_out("rev-parse", "HEAD")
+    branch = git_out("rev-parse", "--abbrev-ref", "HEAD")
+    st = git("status", "--porcelain=v1").stdout.decode().strip()
+    rec.info("GP-01", "primary checkout HEAD %s on %s; porcelain status: %r" % (head, branch, st))
+    rec.check("GP-01", "primary checkout unchanged: HEAD f727f5c3 on rebuild/phase0-trust-boundary, clean", head == PROTECTED_REBUILD and branch == "rebuild/phase0-trust-boundary" and st == "")
+    rem = git_out("remote", "-v")
+    rec.check("GP-02", "remote `%s` is Nexus-os2026/nexus-os" % REMOTE, re.search(r"^github\s+git@github\.com:Nexus-os2026/nexus-os\.git\s+\(push\)$", rem, re.M) is not None)
+    rec.check("GP-02b", "no pushurl override for `github`", git("config", "--get", "remote.github.pushurl", check=False).returncode != 0)
+    lr = git_out("ls-remote", REMOTE)
+    refs = {}
+    for line in lr.splitlines():
+        sha, ref = line.split("\t")
+        refs[ref] = sha
+    rec.info("GP-03", "ls-remote %s: %d refs" % (REMOTE, len(refs)))
+    want = {W_REF: W_COMMIT, K2_REF: K2_COMMIT, K4_REF: K4_COMMIT, HIST_K4_REF: HIST_K4_COMMIT, HIST_EXEC01_REF: HIST_EXEC01_COMMIT,
+            "refs/heads/main": PROTECTED_MAIN, "refs/heads/rebuild/phase0-trust-boundary": PROTECTED_REBUILD}
+    for ref, sha in want.items():
+        rec.check("GP-03", "remote %s == %s" % (ref, sha[:12]), refs.get(ref) == sha, "remote=%s" % refs.get(ref))
+        loc = git("rev-parse", "--verify", "-q", "refs/remotes/%s/%s" % (REMOTE, ref[len("refs/heads/"):]), check=False)
+        rec.check("GP-03L", "local remote-tracking %s equals remote" % ref, loc.returncode == 0 and loc.stdout.decode().strip() == sha,
+                  "tracking=%s" % loc.stdout.decode().strip())
+    rec.check("GP-04", "destination review ref %s absent on the remote" % DEST_REF, DEST_REF not in refs)
+    rec.check("GP-04L", "destination review ref absent locally (heads and remote-tracking)",
+              git("rev-parse", "--verify", "-q", DEST_REF, check=False).returncode != 0 and
+              git("rev-parse", "--verify", "-q", "refs/remotes/%s/%s" % (REMOTE, DEST_REF[len("refs/heads/"):]), check=False).returncode != 0)
+    tags = sorted(r for r in refs if r.startswith("refs/tags/"))
+    rec.info("GP-05", "remote tags (%d), sha256 of the sorted tag list: %s" % (len(tags), sha256_bytes("\n".join("%s %s" % (t, refs[t]) for t in tags).encode())))
+
+    # ---------------- 2. K1 ----------------
+    rec.log("\n## 2. K1 frozen catalog")
+    k1_bytes = None
+    for c in K1_COMMITS + [K4_COMMIT]:
+        b = blob_at(c, K1_PATH)
+        bid = blob_id_at(c, K1_PATH)
+        rec.check("K1", "catalog at %s: blob %s, sha256 %s" % (c[:8], bid[:12], sha256_bytes(b)[:12]), bid == K1_BLOB and sha256_bytes(b) == K1_SHA and git_blob_id(b) == K1_BLOB)
+        k1_bytes = b
+    cat = json.loads(k1_bytes.decode("utf-8"))
+    c7s = [e for e in cat["controls"] if e.get("id") == "C7"]
+    rec.check("K1-C7", "catalog has exactly one entry with id C7", len(c7s) == 1)
+    rec.check("K1-base", "catalog baseline commit/tree equal C-BASE/C-TREE; baseline blobs equal the three recorded blobs",
+              cat["baseline"]["commit"] == C_BASE and cat["baseline"]["tree"] == C_TREE and
+              cat["baseline"]["blobs"] == {PROTOCOL_PATH: PROTOCOL_C_BLOB, MODEL_TESTS_PATH: MODEL_TESTS_C_BLOB, UNIT_TESTS_PATH: UNIT_TESTS_C_BLOB})
+    c7 = c7s[0]
+    rec.check("K1-C7b", "catalog C7 entry: mutant blob/sha256, test_line_at_C 4220, ceiling 30,000,000 states and 2700 s",
+              c7.get("mutant_blob") == MUTANT_BLOB and c7.get("mutant_sha256", MUTANT_SHA) == MUTANT_SHA and c7.get("test_line_at_C") == 4220
+              and c7.get("ceiling_states") == 30000000 and c7.get("time_limit_seconds") == 2700,
+              "mutant_blob=%s test_line=%s ceiling=%s time=%s" % (c7.get("mutant_blob"), c7.get("test_line_at_C"), c7.get("ceiling_states"), c7.get("time_limit_seconds")))
+
+    # ---------------- 3. K2 / K3 / overlay / EC7 ----------------
+    rec.log("\n## 3. K2 adopted document, K3 overlay, EC7 (2A)")
+    rec.check("K2-commit", "K2 commit %s has tree %s" % (K2_COMMIT[:12], K2_TREE[:12]), git_out("rev-parse", K2_COMMIT + "^{tree}") == K2_TREE)
+    k2 = blob_at(K2_COMMIT, K2_PATH)
+    rec.check("K2", "K2 blob %s and sha256 %s" % (blob_id_at(K2_COMMIT, K2_PATH)[:12], sha256_bytes(k2)[:12]),
+              blob_id_at(K2_COMMIT, K2_PATH) == K2_BLOB and sha256_bytes(k2) == K2_SHA and git_blob_id(k2) == K2_BLOB)
+    anc = git("merge-base", "--is-ancestor", K2_COMMIT, "refs/remotes/%s/%s" % (REMOTE, K2_REF[len("refs/heads/"):]), check=False).returncode
+    rec.check("K2-reach", "K2 commit is reachable from its remote review ref", anc == 0)
+    rec.check("K2-k4same", "K2 file is byte-identical in the K4 commit and in the historical K4 commit", blob_id_at(K4_COMMIT, K2_PATH) == K2_BLOB and blob_id_at(HIST_K4_COMMIT, K2_PATH) == K2_BLOB)
+    lines = k2.split(b"\n")
+    begin = [i for i, l in enumerate(lines) if l == b"BEGIN OVERLAY-C7"]
+    end = [i for i, l in enumerate(lines) if l == b"END OVERLAY-C7"]
+    rec.check("K3-X1", "exactly one whole-line BEGIN OVERLAY-C7 and one END OVERLAY-C7", len(begin) == 1 and len(end) == 1, "begin=%s end=%s" % (begin, end))
+    k3 = b"\n".join(lines[begin[0] + 1:end[0]]) + b"\n"
+    rec.check("K3-X2", "K3 is the bytes between the markers, final LF included, ends with the closing `}` line", lines[end[0] - 1] == b"}" and k3.endswith(b"}\n"))
+    rec.check("K3-X3", "K3 has exactly 36 LF-terminated lines and 1736 bytes and no CR", k3.count(b"\n") == K3_LINES and len(k3) == K3_BYTES and b"\r" not in k3,
+              "lines=%d bytes=%d cr=%d" % (k3.count(b"\n"), len(k3), k3.count(b"\r")))
+    rec.check("K3", "K3 sha256 equals OVERLAY-SHA256", sha256_bytes(k3) == K3_SHA, sha256_bytes(k3))
+    overlay = json.loads(k3.decode("utf-8"))
+    rec.check("OVL-1", "overlay catalog/c_base identities equal K1 and K5; entry is C7",
+              overlay["catalog"] == {"path": K1_PATH, "git_blob": K1_BLOB, "sha256": K1_SHA} and overlay["c_base"] == {"commit": C_BASE, "tree": C_TREE} and overlay["entry"] == "C7")
+    rec.check("P-2", "overlay holds exactly 3 `set`, 3 `add`, 1 `append` keys and only the known top-level keys",
+              sorted(overlay.keys()) == ["add", "append", "c_base", "catalog", "entry", "overlay", "set"] and len(overlay["set"]) == 3 and len(overlay["add"]) == 3 and len(overlay["append"]) == 1)
+
+    def get_path(d, dotted):
+        cur = d
+        for part in dotted.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                return (False, None)
+            cur = cur[part]
+        return (True, cur)
+
+    def set_path(d, dotted, v):
+        parts = dotted.split(".")
+        cur = d
+        for part in parts[:-1]:
+            cur = cur[part]
+        cur[parts[-1]] = v
+
+    import copy
+    ec7 = copy.deepcopy(c7)
+    for k, v in overlay["set"].items():
+        ex, _ = get_path(c7, k)
+        rec.check("P-1set", "set key %s exists in the catalog's C7 entry" % k, ex)
+        set_path(ec7, k, v)
+    for k, v in overlay["add"].items():
+        ex, _ = get_path(c7, k)
+        rec.check("P-1add", "add key %s is absent from the catalog's C7 entry" % k, not ex)
+        set_path(ec7, k, v)
+    for k, items in overlay["append"].items():
+        ex, cur = get_path(c7, k)
+        rec.check("P-1append", "append key %s is an existing list (%s items)" % (k, len(cur) if ex else "-"), ex and isinstance(cur, list))
+        set_path(ec7, k, list(cur) + items)
+    ok_set, cur = get_path(c7, "expected_primary_failure.printed_property_must_be")
+    rec.check("P-1p6", "catalog printed_property_must_be is \"P6\" and witness_required is false (the values the overlay replaces)",
+              cur == "P6" and c7.get("witness_required") is False, "printed=%r witness_required=%r" % (cur, c7.get("witness_required")))
+    for field in ("named_property", "patch", "mutant_blob", "edits", "configuration", "ceiling_states", "restoration", "restored_receipt", "additional_comparison", "execution_dependent_uncertainty", "test"):
+        rec.check("P-5", "EC7 keeps C7 field %s verbatim" % field, ec7.get(field) == c7.get(field))
+    rec.check("P-5t", "EC7 keeps `test`-bearing fields verbatim (additional_comparison.test is full_f3)", ec7["additional_comparison"]["test"] == TEST_FULL_F3)
+    rec.check("P-6", "EC7 carries execution_dependent_uncertainty verbatim (2 items; item [1] has no operative force, S-C7-18)",
+              ec7.get("execution_dependent_uncertainty") == c7.get("execution_dependent_uncertainty") and len(c7.get("execution_dependent_uncertainty", [])) == 2)
+
+    def ce1(v):
+        return json.dumps(v, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    ec7_bytes = ce1(ec7)
+    rec.check("CE-1", "EC7 derived by CE-1 (compact, sorted, UTF-8, no trailing newline)", not ec7_bytes.endswith(b"\n") and b"\n" not in ec7_bytes)
+    ec7_sha = sha256_bytes(ec7_bytes)
+    rec.info("EC7", "EC7 canonical bytes: %d; sha256 %s" % (len(ec7_bytes), ec7_sha))
+    with open(out + ".EC7.json", "xb") as f:
+        f.write(ec7_bytes)
+    cat2 = copy.deepcopy(cat)
+    for i, e in enumerate(cat2["controls"]):
+        if e.get("id") == "C7":
+            cat2["controls"][i] = ec7
+    tl_same = all(ce1(cat[k]) == ce1(cat2[k]) for k in cat if k != "controls")
+    oth_same = all(ce1(a) == ce1(b) for a, b in zip(cat["controls"], cat2["controls"]) if a.get("id") != "C7")
+    rec.check("2A.4-5", "every other entry and every top-level key (baseline included) is CE-1 byte-equal before and after", tl_same and oth_same and len(cat["controls"]) == len(cat2["controls"]))
+    rec.check("EC7-fields", "EC7 witness test/mutation facts: witness test name, ignored false, violations_required, primary E11, witness_required true",
+              ec7["witness"]["test"] == TEST_WITNESS and ec7["witness"]["ignored"] is False and ec7["witness"]["violations_required"] == ["step 13 transition: E11", "after 24: P6"]
+              and ec7["expected_primary_failure"]["printed_property_must_be"] == "E11" and ec7["witness_required"] is True)
+    rec.info("2A.4-6", "K1 %s/%s; K2 %s/%s; K3 %s; K4 %s/%s/%s; K5 %s/%s; EC7 %s" % (K1_BLOB, K1_SHA, K2_BLOB, K2_SHA, K3_SHA, K4_COMMIT, K4_BLOB, K4_SHA, C_BASE, C_TREE, ec7_sha))
+
+    # ---------------- 4. K4 / AU ----------------
+    rec.log("\n## 4. K4 Owner approval record (AU-1 to AU-6), authenticated from git objects")
+    rec.check("AU-4a", "K4 commit exists, tree %s, single parent %s" % (K4_TREE[:12], K4_PARENT[:12]),
+              git_out("cat-file", "-t", K4_COMMIT) == "commit" and git_out("rev-parse", K4_COMMIT + "^{tree}") == K4_TREE
+              and git_out("rev-list", "--parents", "-n1", K4_COMMIT).split() == [K4_COMMIT, K4_PARENT])
+    anc4 = git("merge-base", "--is-ancestor", K4_COMMIT, "refs/remotes/%s/%s" % (REMOTE, K4_REF[len("refs/heads/"):]), check=False).returncode
+    rec.check("AU-4b", "K4 commit is reachable from the named remote review ref; ls-remote == remote-tracking == K4 commit", anc4 == 0 and refs.get(K4_REF) == K4_COMMIT)
+    dt4 = git("diff-tree", "-r", "--no-renames", "--no-commit-id", K4_PARENT, K4_COMMIT).stdout.decode().strip().splitlines()
+    rec.check("AU-4c", "K4 one-file diff: exactly `A` of the record, mode 100644, blob %s" % K4_BLOB[:12],
+              dt4 == [":000000 100644 0000000000000000000000000000000000000000 %s A\t%s" % (K4_BLOB, K4_PATH)], repr(dt4))
+    k4 = blob_at(K4_COMMIT, K4_PATH)
+    rec.check("AU-4d", "K4 path exists; blob equals the pinned blob (recomputed from bytes)", blob_id_at(K4_COMMIT, K4_PATH) == K4_BLOB and git_blob_id(k4) == K4_BLOB)
+    rec.check("AU-4e", "K4 recomputed sha256 equals the pinned sha256", sha256_bytes(k4) == K4_SHA, sha256_bytes(k4))
+    k4t = k4.decode("utf-8")
+    k4flat = re.sub(r"\s+", " ", k4t)
+    for label, val in (("K1 path", K1_PATH), ("K1 blob", K1_BLOB), ("K1 sha256", K1_SHA), ("K2 path", K2_PATH), ("K2 freeze commit", K2_COMMIT), ("K2 blob", K2_BLOB),
+                       ("K2 sha256", K2_SHA), ("K3 sha256", K3_SHA), ("K5 commit", C_BASE), ("K5 tree", C_TREE), ("conveying mission", K4_CONVEYING_MISSION)):
+        rec.check("AU-5r", "record states %s %s" % (label, val[:24]), val in k4t)
+    rec.check("AU-5k3", "record states K3-X: 36 LF-terminated lines, 1,736 bytes, no CR, markers excluded, final LF included",
+              "exactly 36 LF-terminated lines, exactly 1,736 bytes, no CR. Marker lines excluded; final LF included." in k4flat)
+    rec.check("AU-3a", "record states `A string is never authority.` and claims no cryptographic signature",
+              "A string is never authority." in k4t and "No cryptographic Owner signature exists or is claimed." in k4t)
+    rec.check("AU-3b", "record: scope C7 only; CR-B expressly adopted as a conditional C7-only policy (B-W/A); establishes no other B-W stage",
+              "Scope: C7 only." in k4t and "CR-B status: expressly adopted as a conditional C7-only policy (B-W/A)." in k4flat
+              and "This record establishes no other B-W stage." in k4flat)
+    rec.check("AU-3c", "record does not contain or claim its own commit, tree, blob or sha256",
+              K4_COMMIT not in k4t and K4_TREE not in k4t and K4_BLOB not in k4t and K4_SHA not in k4t and K4_COMMIT[:8] not in k4t and K4_SHA[:8] not in k4t)
+    rec.check("AU-3d", "record preserves the historical K4 identity as history only (commit, blob, sha256) and states it is not re-validated",
+              all(v in k4t for v in (HIST_K4_COMMIT, HIST_K4_BLOB, HIST_K4_SHA, HIST_K4_PATH)) and "does not retrospectively validate the historical C7 execution" in k4flat)
+    rec.check("AU-3e", "record limits execution to one new C7-only compliant execution beginning only after the Architect pins the new K4",
+              "The Owner permits one new C7-only compliant execution" in k4flat and "independently pins the new K4 identity of this record" in k4flat)
+    # AU-1 / AU-5: the Owner's decision text agrees byte for byte in four places
+    rq = [l for l in k4.split(b"\n") if l.startswith(b'> "As Nexus OS Owner')]
+    mq = [l for l in mission.encode("utf-8").split(b"\n") if l.startswith(b'"As Nexus OS Owner')]
+    cq = open(COMPLETION02_QUOTE, "rb").read() if os.path.exists(COMPLETION02_QUOTE) else b""
+    rec.check("AU-1a", "exactly one Owner-decision line in the record and in this mission", len(rq) == 1 and len(mq) == 1, "record=%d mission=%d" % (len(rq), len(mq)))
+    if len(rq) == 1 and len(mq) == 1:
+        q = mq[0]
+        rec.check("AU-1b", "the record's quotation (after its leading `> `) is byte-identical to this mission's Owner decision", rq[0][2:] == q)
+        rec.check("AU-1c", "the conveying mission's quotation (COMPLETION-02 evidence, executor transcription) is byte-identical (four places agree: conveying mission, record, this mission, git)",
+                  cq == q + b"\n", "conveying-quote sha256 %s" % sha256_bytes(cq))
+        qt = q.decode("utf-8")
+        rec.check("AU-1d", "the Owner decision names K2 path, git blob and sha256, K3 sha256, `for C7 only`, CR-B adopted (B-W/A), one new compliant execution, 13.3 order",
+                  all(v in qt for v in (K2_PATH, K2_BLOB, K2_SHA, K3_SHA)) and "for C7 only" in qt and "CR-B is expressly adopted as a conditional C7-only policy (B-W/A)." in qt
+                  and "I authorize one new C7-only compliant execution under the existing limits and exact AD-C7-W section 13.3 order" in qt
+                  and "No further retry, protected-ref publication, integration, hosted CI, source changes, or Phase Three completion is authorized." in qt)
+        rec.info("AU-1", "Owner decision sha256 (without LF) %s" % sha256_bytes(q))
+    for label, val in (("K1 path", K1_PATH), ("K1 blob", K1_BLOB), ("K1 sha256", K1_SHA), ("K2 path", K2_PATH), ("K2 blob", K2_BLOB), ("K2 sha256", K2_SHA),
+                       ("K3 sha256", K3_SHA), ("K4 commit", K4_COMMIT), ("K4 tree", K4_TREE), ("K4 parent", K4_PARENT), ("K4 path", K4_PATH), ("K4 blob", K4_BLOB),
+                       ("K4 sha256", K4_SHA), ("K4 ref", K4_REF), ("K5 commit", C_BASE), ("K5 tree", C_TREE), ("W-COMMIT", W_COMMIT), ("W-TREE", W_TREE), ("W-BLOB", W_BLOB),
+                       ("W-BLOB sha256", W_BLOB_SHA), ("W-PATCH sha256", W_PATCH_SHA), ("W source review ref", W_REF), ("C7.patch sha256", PATCH_SHA),
+                       ("mutant blob", MUTANT_BLOB), ("mutant sha256", MUTANT_SHA), ("E-C sha256", E_C_SHA), ("44-full-F-PT raw sha256", "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8"),
+                       ("evidence commit f023cc3d", EC_EVID), ("publication parent", DEST_PARENT), ("destination ref", DEST_REF)):
+        rec.check("AU-5x", "mission text states %s" % label, re.sub(r"\s+", "", val) in mflat)
+    rec.check("AU-2", "the record names the conveying mission (%s); this mission conveys the Owner's execution authorization and the Architect's K4 pin (ruling P3-C11-DR01-D2A1-C7-K4-AUTHENTICATION-01)" % K4_CONVEYING_MISSION,
+              K4_CONVEYING_MISSION in k4t and "P3-C11-DR01-D2A1-C7-K4-AUTHENTICATION-01" in mission and "This mission conveys that Owner authorization." in mission)
+    rec.check("BWA", "B-W/A: CR-B adopted, equal in the record, the Owner decision and this mission",
+              "CR-B status: expressly adopted as a conditional C7-only policy (B-W/A)." in k4flat and "B-W/A: OWNER-ADOPTED POLICY." in re.sub(r"\s+", " ", mission))
+    rec.check("BWB", "B-W/B: this mission states the Architect's prior approval for this exact W-SRC identity only, bound to W-COMMIT, W-TREE, W-BLOB and W-PATCH sha256",
+              "B-W/B: Previously Architect-approved for this exact W-SRC identity only." in re.sub(r"\s+", " ", mission)
+              and "No changed source inherits B-W/B." in re.sub(r"\s+", " ", mission))
+    # historical K4 preserved
+    rec.check("HIST-K4", "historical K4 record preserved: blob f9ce488c (sha256 800f767d) at the new K4 commit, and its review ref still names 4c29b2f0",
+              blob_id_at(K4_COMMIT, HIST_K4_PATH) == HIST_K4_BLOB and sha256_bytes(blob_at(HIST_K4_COMMIT, HIST_K4_PATH)) == HIST_K4_SHA and refs.get(HIST_K4_REF) == HIST_K4_COMMIT)
+    rec.check("HIST-CHAIN", "K4 parent chain: 2148c5a5 -> 643e54ba (EXEC-01 evidence) -> 4c29b2f0 (historical K4) -> 16e74908 (K2 freeze); C-BASE is an ancestor",
+              git_out("rev-list", "--parents", "-n1", K4_PARENT).split() == [K4_PARENT, HIST_K4_COMMIT]
+              and git_out("rev-list", "--parents", "-n1", HIST_K4_COMMIT).split() == [HIST_K4_COMMIT, K2_COMMIT]
+              and git("merge-base", "--is-ancestor", C_BASE, K4_COMMIT, check=False).returncode == 0)
+
+    # ---------------- 5. K5 ----------------
+    rec.log("\n## 5. K5 C-BASE (unrelaxed)")
+    rec.check("K5", "C-BASE commit exists with tree %s" % C_TREE[:12], git_out("cat-file", "-t", C_BASE) == "commit" and git_out("rev-parse", C_BASE + "^{tree}") == C_TREE)
+    for path, blob in ((PROTOCOL_PATH, PROTOCOL_C_BLOB), (MODEL_TESTS_PATH, MODEL_TESTS_C_BLOB), (UNIT_TESTS_PATH, UNIT_TESTS_C_BLOB)):
+        rec.check("K5b", "C-BASE %s is blob %s" % (path.split("/")[-1], blob[:8]), blob_id_at(C_BASE, path) == blob)
+    rec.check("K5c", "C-BASE protocol.rs sha256 a5454944", sha256_bytes(blob_at(C_BASE, PROTOCOL_PATH)) == PROTOCOL_C_SHA)
+
+    # ---------------- 6. W-SRC (13.3 step 2) ----------------
+    rec.log("\n## 6. W-SRC authentication (13.3 step 2): W-COMMIT, W-TREE, W-BLOB, W-PATCH, NI-1 to NI-6, SR evidence, inventory")
+    rec.check("W-1", "W-COMMIT exists, tree == W-TREE, sole parent == C-BASE",
+              git_out("cat-file", "-t", W_COMMIT) == "commit" and git_out("rev-parse", W_COMMIT + "^{tree}") == W_TREE
+              and git_out("rev-list", "--parents", "-n1", W_COMMIT).split() == [W_COMMIT, C_BASE])
+    rec.check("W-2", "W-COMMIT is the remote source review ref's commit", git("merge-base", "--is-ancestor", W_COMMIT, "refs/remotes/%s/%s" % (REMOTE, W_REF[len("refs/heads/"):]), check=False).returncode == 0 and refs.get(W_REF) == W_COMMIT)
+    dt = git("diff-tree", "-r", "--no-renames", C_BASE, W_COMMIT).stdout.decode().strip().splitlines()
+    exp = [":100644 100644 %s %s M\t%s" % (MODEL_TESTS_C_BLOB, W_BLOB, MODEL_TESTS_PATH)]
+    rec.check("NI-2", "diff-tree -r --no-renames C-BASE W-COMMIT prints exactly one record: M model_tests.rs 100644->100644", dt == exp, repr(dt))
+    wb = blob_at(W_COMMIT, MODEL_TESTS_PATH)
+    cb = blob_at(C_BASE, MODEL_TESTS_PATH)
+    rec.check("W-3", "W-BLOB git id, sha256 and size", git_blob_id(wb) == W_BLOB and blob_id_at(W_COMMIT, MODEL_TESTS_PATH) == W_BLOB and sha256_bytes(wb) == W_BLOB_SHA and len(wb) == W_BLOB_SIZE,
+              "id=%s sha=%s size=%d" % (git_blob_id(wb)[:12], sha256_bytes(wb)[:12], len(wb)))
+    rec.check("NI-1a", "C-BASE model_tests.rs is blob 28085ce2, %d bytes, sha256 recorded" % MODEL_TESTS_C_SIZE,
+              git_blob_id(cb) == MODEL_TESTS_C_BLOB and len(cb) == MODEL_TESTS_C_SIZE and sha256_bytes(cb) == MODEL_TESTS_C_SHA)
+    rec.check("NI-1b", "W-BLOB's first 310,612 bytes equal blob 28085ce2 byte for byte, and W-BLOB is longer (pure append)", wb[:MODEL_TESTS_C_SIZE] == cb and len(wb) > len(cb))
+    patch = git("diff", C_BASE, W_COMMIT).stdout
+    rec.check("W-4", "W-PATCH (git diff C-BASE W-COMMIT) sha256", sha256_bytes(patch) == W_PATCH_SHA, sha256_bytes(patch))
+    nl_removed = [l for l in patch.split(b"\n") if l.startswith(b"-") and not l.startswith(b"---")]
+    added = [l for l in patch.split(b"\n") if l.startswith(b"+") and not l.startswith(b"+++")]
+    rec.check("W-5", "W-PATCH removes no line and adds 516 lines", not nl_removed and len(added) == 516, "removed=%d added=%d" % (len(nl_removed), len(added)))
+    suffix = wb[MODEL_TESTS_C_SIZE:]
+    rec.check("W-6", "suffix S is %d bytes, %d lines, no CR, no NUL, valid UTF-8" % (len(suffix), suffix.count(b"\n")), b"\r" not in suffix and b"\0" not in suffix and suffix.decode("utf-8") is not None, "")
+    rec.info("W-6", "suffix sha256 %s" % sha256_bytes(suffix))
+    scan_suffix(rec, suffix)
+    sr_evidence(rec, suffix)
+    rec.info("SR", "SR-1 to SR-6 are Architect source-review obligations established at B-W/B for this exact identity; the SR-*m checks above are executor mechanical evidence only")
+    g = git("grep", "-w", "-n", "c7_witness", C_BASE, check=False)
+    rec.check("NI-4", "`git grep -w c7_witness C-BASE` finds nothing", g.returncode == 1 and g.stdout == b"", "rc=%d out=%r" % (g.returncode, g.stdout[:100]))
+
+    def count(commit, pat):
+        r = git("grep", "-E", "-c", pat, commit, "--", "crates/nexus-governed-control/src", check=False).stdout.decode().strip().splitlines()
+        return sum(int(x.rsplit(":", 1)[1]) for x in r if x)
+    tc, ic = count(C_BASE, r"#\[test\]"), count(C_BASE, r"#\[ignore")
+    tw, iw = count(W_COMMIT, r"#\[test\]"), count(W_COMMIT, r"#\[ignore")
+    rec.check("CNT", "frozen source inventory: C-BASE 348 `#[test]`/35 `#[ignore`; W-TREE 349 `#[test]`/35 `#[ignore`",
+              (tc, ic, tw, iw) == (348, 35, 349, 35), "C-BASE test=%d ignore=%d; W test=%d ignore=%d" % (tc, ic, tw, iw))
+    for p in BUILD_INPUTS:
+        a, b = blob_id_at(C_BASE, p), blob_id_at(W_COMMIT, p)
+        rec.check("NI-6", "build input %s identical at C-BASE and W-COMMIT" % p, a == b, "%s" % a[:12])
+    rec.check("NI-6p", "protocol.rs at W-TREE is blob a2df2841 (Candidate C's)", blob_id_at(W_COMMIT, PROTOCOL_PATH) == PROTOCOL_C_BLOB)
+    rec.check("NI-6u", "unit_tests.rs at W-TREE is blob 55dc6640", blob_id_at(W_COMMIT, UNIT_TESTS_PATH) == UNIT_TESTS_C_BLOB)
+    tct = blob_at(W_COMMIT, "rust-toolchain.toml").decode()
+    rec.info("NI-6t", "rust-toolchain.toml: %r" % tct)
+    rec.check("NI-6t2", "rust-toolchain.toml pins channel 1.94.0", re.search(r'channel\s*=\s*"1\.94\.0"', tct) is not None)
+    tdiff = git("diff", "--name-status", C_TREE, W_TREE).stdout.decode().strip().splitlines()
+    rec.check("W-7", "tree diff C-TREE -> W-TREE is exactly `M model_tests.rs`", tdiff == ["M\t" + MODEL_TESTS_PATH], repr(tdiff))
+    gl = [l for l in git("ls-tree", "-r", W_COMMIT).stdout.decode().splitlines() if l.startswith("160000")]
+    rec.check("W-8", "W-TREE has no gitlinks (submodules)", not gl)
+    rec.check("W-9", "the W-SRC identity named by this mission equals the one bound by B-W/B (mission section 3) and by the historical source review ref",
+              all(re.sub(r"\s+", "", v) in mflat for v in (W_COMMIT, W_TREE, W_BLOB, W_BLOB_SHA, W_PATCH_SHA)) and refs.get(W_REF) == W_COMMIT)
+
+    # ---------------- 7. frozen C7 patch ----------------
+    rec.log("\n## 7. frozen C7 patch and mutant identity (verified without writing the object store)")
+    pb = blob_at(K1_COMMITS[0], K1_PATCH_PATH)
+    rec.check("PAT-1", "C7.patch git blob df0dd584 and sha256 b5d8bc6c (at both catalog commits)", git_blob_id(pb) == K1_PATCH_BLOB and sha256_bytes(pb) == PATCH_SHA
+              and blob_id_at(K1_COMMITS[1], K1_PATCH_PATH) == K1_PATCH_BLOB)
+    rec.check("PAT-2", "catalog patch_sha256 and patch text equal the file", c7["patch_sha256"] == PATCH_SHA and c7["patch"].encode() == pb)
+    prot = blob_at(W_COMMIT, PROTOCOL_PATH)
+    anchor = c7["edits"][0]["anchor"].encode()
+    repl = c7["edits"][0]["replacement"].encode()
+    rec.check("PAT-3", "anchor occurs exactly once in protocol.rs at W-TREE", prot.count(anchor) == 1, "count=%d" % prot.count(anchor))
+    mut = prot.replace(anchor, repl)
+    rec.check("PAT-4", "in-memory patched protocol.rs has blob 0d4ab992 and sha256 6d2f2d49", git_blob_id(mut) == MUTANT_BLOB and sha256_bytes(mut) == MUTANT_SHA,
+              "id=%s sha=%s" % (git_blob_id(mut), sha256_bytes(mut)))
+    pl = pb.decode().splitlines()
+    rec.check("PAT-5", "patch touches only protocol.rs; one line removed, one added: remove(key) -> clear()",
+              [l for l in pl if l.startswith("diff --git")] == ["diff --git a/%s b/%s" % (PROTOCOL_PATH, PROTOCOL_PATH)]
+              and [l for l in pl if l.startswith("-") and not l.startswith("---")] == ["-                self.core.refusals.remove(key);"]
+              and [l for l in pl if l.startswith("+") and not l.startswith("+++")] == ["+                self.core.refusals.clear();"])
+    rec.check("PAT-6", "patch header index line matches a2df2841..0d4ab992", ("index %s..%s 100644" % (PROTOCOL_C_BLOB, MUTANT_BLOB)) in pb.decode())
+    rec.check("PAT-7", "mutant blob is not in the object store before the mission", git("cat-file", "-e", MUTANT_BLOB, check=False).returncode != 0)
+    rec.info("PAT-8", "mutant protocol.rs size %d bytes (W-TREE %d); its bytes are held in memory only, never written" % (len(mut), len(prot)))
+
+    # ---------------- 8. E-C / accepted receipts ----------------
+    rec.log("\n## 8. E-C and accepted restored-side receipts (read from git objects, never rerun)")
+    ev = EC_EVID
+    rec.check("REC-0", "evidence commit f023cc3d exists", git_out("cat-file", "-t", ev) == "commit")
+    base = EC_RECEIPTS
+    pin = json.loads(blob_at(ev, base + "/10-build/PIN.json"))
+    rec.check("REC-1", "E-C pin: sha256 cde9f9d2.., %d bytes, built from C-BASE/C-TREE, rustc 1.94.0 (4a4ef493e 2026-03-02)" % E_C_SIZE,
+              pin["sha256"] == E_C_SHA and pin["size"] == E_C_SIZE and pin["commit"] == C_BASE and pin["tree"] == C_TREE and pin["rustc"] == "rustc 1.94.0 (4a4ef493e 2026-03-02)")
+    for rid, tname, rsha in (("44-full-F-PT", "gc_symmetry_fpt", "0863794ef7500c25382f55307213c65557f2d02b7bc4bb433511a71e082119a8"),
+                             ("43-full-F-3", "gc_symmetry_f3", "6dfc796a0b5144184e3e50c9b1b873c21bb31bf26405c572fe858fb694245562")):
+        d = json.loads(blob_at(ev, "%s/%s/descriptor.json" % (base, rid)))
+        cls = blob_at(ev, "%s/%s/CLASSIFICATION.txt" % (base, rid)).decode()
+        raw = blob_at(ev, "%s/%s/raw-output.txt" % (base, rid))
+        rec.check("REC-2", "%s is a %s receipt with CLASSIFICATION: PASS and raw sha256 %s" % (rid, tname, rsha[:8]),
+                  tname in json.dumps(d) and cls.splitlines()[0] == "CLASSIFICATION: PASS" and sha256_bytes(raw) == rsha)
+    ca = c7["restored_receipt"]
+    rec.check("REC-3", "catalog restored_receipt names f023cc3d, gc_symmetry_fpt, executable cde9f9d2, raw sha 0863794e..",
+              ca["commit"] == ev and ca["descriptor_test"].endswith("gc_symmetry_fpt") and ca["executable_after"] == E_C_SHA and ca["descriptor_raw_output_sha256"].startswith("0863794e"))
+
+    # ---------------- 9. environment, ownership, processes, runner, resources ----------------
+    rec.log("\n## 9. environment, ownership, processes, runner, resources")
+    rustup = subprocess.run(["rustup", "toolchain", "list"], capture_output=True, text=True)
+    rec.info("ENV-1", "rustup toolchain list: %s" % rustup.stdout.strip().replace("\n", " | "))
+    rec.check("ENV-1", "toolchain 1.94.0-x86_64-unknown-linux-gnu is installed", "1.94.0-x86_64-unknown-linux-gnu" in rustup.stdout)
+    envp = "/home/nexus/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+    rc = subprocess.run(["/usr/bin/env", "-i", "HOME=/home/nexus", "PATH=" + envp, "rustc", "+1.94.0", "-vV"], capture_output=True, text=True)
+    cg = subprocess.run(["/usr/bin/env", "-i", "HOME=/home/nexus", "PATH=" + envp, "cargo", "+1.94.0", "-vV"], capture_output=True, text=True)
+    rec.info("ENV-2", "rustc +1.94.0 -vV: %s" % rc.stdout.strip().replace("\n", " | "))
+    rec.info("ENV-2", "cargo +1.94.0 -vV: %s" % cg.stdout.strip().replace("\n", " | "))
+    rec.check("ENV-2", "rustc -vV matches E-C's record (release/commit-hash/date/host/LLVM)",
+              all(x in rc.stdout for x in ("rustc 1.94.0 (4a4ef493e 2026-03-02)", "commit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db", "commit-date: 2026-03-02", "host: x86_64-unknown-linux-gnu", "LLVM version: 21.1.8")))
+    rec.check("ENV-3", "cargo -vV matches E-C's record (release/commit-hash/date/libgit2/libcurl/ssl/os)",
+              all(x in cg.stdout for x in ("cargo 1.94.0 (85eff7c80 2026-01-15)", "commit-hash: 85eff7c80277b57f78b11e28d14154ab12fcf643", "commit-date: 2026-01-15", "libgit2: 1.9.2 (sys:0.20.3 vendored)", "libcurl: 8.17.0-DEV (sys:0.4.84+curl-8.17.0 vendored ssl:OpenSSL/3.5.4)", "ssl: OpenSSL 3.5.4 30 Sep 2025", "os: Ubuntu 24.4.0 (noble) [64-bit]")))
+    wl = git("worktree", "list", "--porcelain").stdout.decode()
+    for p in (WT_HEALTHY, WT_MUTANT):
+        rec.check("DEST", "%s is absent (lexists false)" % p, not os.path.lexists(p))
+        rec.check("DEST2", "%s not registered as a worktree" % p, ("worktree " + p + "\n") not in wl)
+        rec.check("DEST3", "no branch/ref named for %s" % os.path.basename(p), git("for-each-ref", "--format=%(refname)", "refs/heads/*%s*" % os.path.basename(p), check=False).stdout.decode().strip() == "")
+    evst = os.lstat(EV_DIR)
+    evlist = sorted(os.listdir(EV_DIR))
+    rec.check("DEST-EV", "evidence root is this mission's own (mode 700, owned by uid %d, not a symlink) and holds only this mission's preparatory files (no receipts yet)" % os.getuid(),
+              stat.S_ISDIR(evst.st_mode) and not os.path.islink(EV_DIR) and evst.st_uid == os.getuid() and stat.S_IMODE(evst.st_mode) == 0o700
+              and os.listdir(os.path.join(EV_DIR, "receipts")) == [], "entries=%s" % evlist)
+    for parent in sorted({os.path.dirname(WT_HEALTHY), os.path.dirname(WT_MUTANT), os.path.dirname(EV_DIR)}):
+        s_ = os.stat(parent)
+        rec.check("OWN", "parent %s is a real directory owned by uid %d, not world-writable, not a symlink" % (parent, os.getuid()),
+                  os.path.realpath(parent) == parent and s_.st_uid == os.getuid() and not (s_.st_mode & stat.S_IWOTH) and not os.path.islink(parent) and stat.S_ISDIR(s_.st_mode))
+    gd = git_out("rev-parse", "--git-common-dir")
+    gd = gd if gd.startswith("/") else os.path.join(REPO, gd)
+    locks = [os.path.join(dp, f) for dp, dn, fn in os.walk(gd) for f in fn if f.endswith(".lock") and dp.count(os.sep) - gd.count(os.sep) <= 2]
+    rec.check("GIT-LOCK", "no git lock files in the common git dir", not locks, str(locks[:5]))
+    rows = proc_scan()
+    me = os.getpid()
+    conflicts = [r for r in rows if r[0] != me and r[1] and (CONFLICT_EXE.search(r[1]) or DEPS_EXE.search(r[1]))]
+    # processes whose /proc/<pid>/exe is unreadable (other users): judged by argv[0] instead; kernel threads have no argv
+    conflicts += [r for r in rows if r[0] != me and not r[1] and r[2] and (CONFLICT_EXE.search(r[2][0]) or DEPS_EXE.search(r[2][0]))]
+    rec.info("PROC-0", "processes scanned by executable identity (/proc/<pid>/exe): %d; unreadable exe (other users/kernel threads): %d, of which with an argv (judged by argv[0]): %d"
+             % (len(rows), sum(1 for r in rows if not r[1]), sum(1 for r in rows if not r[1] and r[2])))
+    rec.check("PROC-1", "no cargo, rustc, rustdoc, clippy, test executable (target/*/deps or nexus_governed_control-<hash>) or Actions runner process, by executable identity",
+              not conflicts, "; ".join("pid %d exe %s argv %s cwd %s" % r for r in conflicts)[:600])
+    runsh = [r for r in rows if any(("actions-runner" in a or a.endswith("/run.sh") or a.endswith("/runsvc.sh")) for a in r[2])]
+    rec.check("PROC-2", "no Actions runner script (run.sh / runsvc.sh / actions-runner) in any process argv", not runsh, "; ".join("pid %d argv %s" % (r[0], r[2]) for r in runsh)[:400])
+    gitp = [r for r in rows if r[1] and re.search(r"(^|/)git(-[a-z-]+)?$", r[1]) and r[0] != me]
+    gitpub = [r for r in gitp if len(r[2]) > 1 and any(a in ("push", "fetch", "pull", "send-pack", "gc", "repack", "worktree", "commit", "rebase", "merge", "apply", "stash", "reset", "checkout", "clean") for a in r[2][1:])]
+    rec.info("PROC-3", "git processes: %s" % ["pid %d %s" % (r[0], r[2]) for r in gitp])
+    rec.check("PROC-3", "no git publication or mutation process", not gitpub, str(gitpub)[:300])
+    cl = [r for r in rows if r[1] and os.path.basename(r[1].replace(" (deleted)", "")) in ("claude", "node") and r[2] and ("claude" in " ".join(r[2]))]
+    rec.info("PROC-4", "other Claude sessions observed (not touched; none performs builds or publication by the checks above): %s" % ["pid %d argv %s cwd %s" % (r[0], r[2], r[3]) for r in cl][:8])
+    units = subprocess.run(["systemctl", "--user", "list-units", "--type=scope", "--all", "--no-legend", "--plain"], capture_output=True, text=True).stdout.splitlines()
+    active = [l for l in units if re.match(r"^(p3c11|c4w01|fbk|c7w)", l) and (" active " in l or " activating " in l)]
+    rec.check("SCOPE-1", "no active p3c11/c4w01/fbk/c7w scope unit (no concurrent campaign supervisor)", not active, "; ".join(active))
+    sysr = subprocess.run(["systemctl", "list-units", "--all", "--no-legend", "--plain"], capture_output=True, text=True).stdout
+    usrr = subprocess.run(["systemctl", "--user", "list-units", "--all", "--no-legend", "--plain"], capture_output=True, text=True).stdout
+    runner_units = [l for l in (sysr + usrr).splitlines() if "actions.runner" in l.lower() or "actions-runner" in l.lower()]
+    rec.check("RUNNER-1", "no systemd (system or user) actions-runner unit is loaded or active", not [l for l in runner_units if " active " in l or " activating " in l],
+              "; ".join(runner_units)[:300])
+    rec.info("RUNNER-2", "runner unit lines (any state): %s" % (runner_units or "none"))
+    rec.check("SCOPE-3", "cgroup v2 mounted at /sys/fs/cgroup", subprocess.run(["stat", "-fc", "%T", "/sys/fs/cgroup"], capture_output=True, text=True).stdout.strip() == "cgroup2fs")
+    ctlp = "/sys/fs/cgroup/user.slice/user-%d.slice/cgroup.controllers" % os.getuid()
+    ctl = open(ctlp).read().strip() if os.path.exists(ctlp) else ""
+    rec.check("SCOPE-4", "the user slice delegates the memory controller (MemoryMax/MemorySwapMax enforceable)", "memory" in ctl.split(), ctl)
+    rec.info("SCOPE-5", "systemd-run: %s" % subprocess.run(["systemd-run", "--version"], capture_output=True, text=True).stdout.splitlines()[0])
+    mi = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
+    rec.info("RES-1", "MemTotal %d KiB; MemAvailable %d KiB; SwapTotal %d KiB; SwapFree %d KiB (scopes run with MemorySwapMax=0)" % (mi["MemTotal"], mi["MemAvailable"], mi["SwapTotal"], mi["SwapFree"]))
+    rec.check("RES-1", "MemAvailable >= 18 GiB (16 GiB cap + 2 GiB margin)", mi["MemAvailable"] >= 18 * 1024 * 1024)
+    sv = os.statvfs(DISK_PATH)
+    total, free = sv.f_blocks * sv.f_frsize, sv.f_bavail * sv.f_frsize
+    wsz = sum(int(l.split()[3]) for l in git("ls-tree", "-r", "-l", W_COMMIT).stdout.decode().splitlines() if l.split()[1] == "blob")
+    projected = 2 * PROJECTED_BUILD_BYTES + 2 * wsz + 2**30  # two builds, two checkouts, 1 GiB for every invocation's records and the evidence
+    rec.info("RES-2", "filesystem %s: capacity %d B (%.1f GiB); free %d B (%.2f GiB); W-TREE checkout blobs %d B; projected mission growth %d B "
+                      "(2 builds x %d + 2 checkouts + 1 GiB for all invocation records and evidence; each single invocation is separately gated at %d)"
+             % (DISK_PATH, total, total / 2**30, free, free / 2**30, wsz, projected, PROJECTED_BUILD_BYTES, PROJECTED_INVOKE_BYTES))
+    rec.check("RES-2", "free disk minus the whole projected mission growth stays >= the 16 GiB floor", free - projected >= DISK_FLOOR_BYTES, "headroom after projection %d B" % (free - projected))
+
+    # ---------------- 10. historical evidence preserved ----------------
+    rec.log("\n## 10. historical evidence preserved (read-only)")
+    hp = os.path.join(HIST_EXEC01_EVDIR, "SHA256SUMS.final")
+    r = subprocess.run(["sha256sum", "-c", "--quiet", "--strict", "SHA256SUMS.final"], cwd=HIST_EXEC01_EVDIR, capture_output=True, text=True)
+    n = sum(1 for _ in open(hp)) if os.path.exists(hp) else 0
+    rec.check("HIST-1", "EXEC-01 local evidence verifies against its own SHA256SUMS.final (%d entries)" % n, r.returncode == 0 and n > 0, (r.stdout + r.stderr)[:300])
+    for name, msha in (("p3-c11-dr01-d2a1-c7-owner-identity-completion-01", "c40d162b9e719d18de3ad15f644a85807be5ebb7744f5bf9d91196a992fa60a5"),
+                       ("p3-c11-dr01-d2a1-c7-owner-identity-completion-02", "c02c6123b4d654c249ceecf3e52570fa8fdcd75c6ebd5ff69d0af08b81e549dc"),
+                       ("p3-c11-dr01-d2a1-c7-owner-identity-publish-03", None)):
+        d = os.path.join(os.path.dirname(EV_DIR), name)
+        r = subprocess.run(["sha256sum", "-c", "--quiet", "--strict", "MANIFEST.sha256"], cwd=d, capture_output=True, text=True)
+        ms = sha256_file(os.path.join(d, "MANIFEST.sha256"))
+        rec.check("HIST-2", "%s manifest verifies%s" % (name, " and has sha256 %s" % msha[:8] if msha else ""), r.returncode == 0 and (msha is None or ms == msha), "manifest sha256 %s" % ms)
+    for wt, pin_sha in ((HIST_WT_HEALTHY, "042b11e69964df40487a93f307900499a8c0253e24abe4ea598b11b53871c825"), (HIST_WT_MUTANT, "aa0c0577ebbd651dbcc6a7a27849cb6a2d1f7004f87732a59f3a123fda9b1223")):
+        h = git("rev-parse", "HEAD", cwd=wt, check=False).stdout.decode().strip()
+        sym = git("symbolic-ref", "-q", "HEAD", cwd=wt, check=False).returncode
+        exe = os.path.join(wt, "target/release/deps/nexus_governed_control-2faa0b9718d3e6a3")
+        es = sha256_file(exe) if os.path.exists(exe) else None
+        rec.check("HIST-3", "historical worktree %s still detached at W-COMMIT with its EXEC-01 executable sha256 %s (not reused, not touched)" % (os.path.basename(wt), pin_sha[:8]),
+                  h == W_COMMIT and sym != 0 and es == pin_sha, "head=%s exe=%s" % (h, es))
+    ent = [b for b in wl.strip().split("\n\n") if b.startswith("worktree /home/nexus/NEXUS/nexus-os-p3-c11-mt3c-C7\n")]
+    rec.check("HIST-4", "historical C7 worktree nexus-os-p3-c11-mt3c-C7 is still registered, locked, detached at C-BASE", len(ent) == 1 and "\nlocked" in ent[0] and ("HEAD " + C_BASE) in ent[0], ent[0][:200] if ent else "")
+    rec.check("HIST-5", "historical EXEC-01 evidence review ref unchanged (643e54ba)", refs.get(HIST_EXEC01_REF) == HIST_EXEC01_COMMIT)
+
+    rec.log("\n# finished %s (UTC %s)" % (now(), utcns()))
+    if rec.fails:
+        rec.log("GATE RESULT: FAIL (%d failing checks): %s" % (len(rec.fails), ", ".join(rec.fails)))
+        rec.write(out)
+        return 2
+    rec.log("GATE RESULT: PASS (every check passed)")
+    rec.write(out)
+    return 0
+
+
+if __name__ == "__main__":
+    if os.path.exists(sys.argv[1]):
+        raise SystemExit("REFUSED: %s exists" % sys.argv[1])
+    sys.exit(main())

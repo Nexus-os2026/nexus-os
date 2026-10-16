@@ -1,0 +1,45 @@
+TOOLS-PROVENANCE — P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02 tools (written under P3-C11-DR01-D2A1-C7-TOOL-REPAIR-RESUME-03, 2026-10-16T13:47:38Z)
+The tool headers refer to this file; EXEC-02 never wrote it. Frozen manifest: TOOLS.sha256 sha256 dc75fcb2afdb931dc37dac819e3038ff8e66837ab0412dd14010573afd0fce22.
+
+Columns: file | EXEC-01 original (c7tools-orig; equal to EXEC-01's sealed SHA256SUMS.final) | EXEC-02 adapted (read-only snapshot taken at
+RESUME-03 start: resume-03/snapshot-initial/) | FROZEN by RESUME-03 | change
+
+c7bwc.py             2b72fed310d57ff8 0fe8c307b5bc96e0 0fe8c307b5bc96e0  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7bwc.py.diff); unchanged by RESUME-03
+c7class.py           d474b25e3205aab6 738c43c2da3bbcb8 738c43c2da3bbcb8  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7class.py.diff); unchanged by RESUME-03
+c7class_selftest.py  fc90eceebb845df5 8601bd76baf63106 8601bd76baf63106  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7class_selftest.py.diff); unchanged by RESUME-03
+c7lib.py             8dd89c472ccfdce2 e1be2aa5533de4d4 e1be2aa5533de4d4  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7lib.py.diff); unchanged by RESUME-03
+c7link.py            1d2ace424b9a6c69 b487ea0fd7117603 b487ea0fd7117603  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7link.py.diff); unchanged by RESUME-03
+c7sup.py             b43645b62a3a3251 8fa044427ec61b80 8fa044427ec61b80  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7sup.py.diff); unchanged by RESUME-03
+c7wt.py              5dd2a3fd31367b1f a1241c655e1602ae a1241c655e1602ae  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/c7wt.py.diff); unchanged by RESUME-03
+final.py             -                492aa1c5b384c82a 2289a16462abc477  EXEC-02: new, left truncated (does not parse); RESUME-03: completed as the Stage 12 orchestrator
+final_selftest.py    -                -                d42871a9e04ae1cf  RESUME-03: new (positive + negative Stage 12 fixtures; stagegate tests)
+gate.py              cf5d5cf3a7c8e460 c5cc559ecbdf6215 c5cc559ecbdf6215  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/gate.py.diff); unchanged by RESUME-03
+scope-wrap.sh        9e9cd1339f9130dc ba79b7e81a258316 ba79b7e81a258316  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/scope-wrap.sh.diff); unchanged by RESUME-03
+selftest_sup.py      4c84a4938cedabb6 4c84a4938cedabb6 4c84a4938cedabb6  unchanged since EXEC-01
+selftest_wt.py       53a8665015df123f 736614759262e583 736614759262e583  EXEC-02 adaptation (diff: resume-03/provenance/diff-vs-exec01-orig/selftest_wt.py.diff); unchanged by RESUME-03
+st_bwc_nocargo.py    -                dd01d85e7730dba7 dd01d85e7730dba7  EXEC-02: new; unchanged by RESUME-03
+stagegate.py         -                eea522dc92871c7d eea522dc92871c7d  EXEC-02: new; unchanged by RESUME-03
+run-stage.sh         -                -                2a3e8cd796b4125f  RESUME-03: new stage runner (EXEC-02 left cmd/ empty); modelled on EXEC-01 r3/cmd
+
+EXEC-02 adaptations reviewed in RESUME-03 (every removed line was replaced by a stricter one; no check was weakened):
+  c7lib: new mission, K4 (2148c5a5; parent 643e54ba), worktree/evidence paths, destination ref; disk floor constants; utcns(), disk_free().
+  c7sup: unit p3c11-c7w02; preflight and in-run sampler enforce the 16 GiB disk floor (own scope killed on breach); UTC start/finish; self-tests 7, 8.
+  c7bwc: Stage-3 hard order gate (stage3); ORD-1..ORD-3 (13.3 order from UTC receipt times); PROC-8 disk floor; O-6 text for the new mission.
+  c7wt:  UTC timestamps in creation/apply/restoration records; apply-C7.json receipt.
+  c7class: EX-2b exact frozen bounds/actors lines read from git; EX-3 also rejects any quotient:/symmetry: line; CL1-8 disk floor.
+  c7link: LK-0c (B-W/A from the pinned K4 git object and the mission's Owner decision) and LK-0d (B-W/B, exact W-SRC) are checks, not info.
+  gate:  main() rewritten for the new K4: EXEC-01's AU-5p (K4 parent == K2 commit) cannot hold for the Architect-pinned K4 (parent
+         643e54ba); replaced by AU-4a (parent == the pinned parent) and HIST-CHAIN (2148c5a5 -> 643e54ba -> 4c29b2f0 -> 16e74908 = K2 commit).
+         EXEC-01's AU-5m was a vacuous True; replaced by AU-5x (every identity in the mission text). New: AU-1a..d (four-place Owner-quote
+         agreement), BWA, BWB, SR-1m..SR-6m, PROC-1..3 by executable identity, RUNNER-1, SCOPE-4, HIST-1..5, DEST-EV, GIT-LOCK, RES-2 disk.
+         EXEC-02 dry-run 1 failed (SR-3m pattern order; RES-2 counted 18 x 512 MiB of invocation growth); dry-run 2 passed after the SR-3m
+         pattern was corrected and RES-2's aggregate projection set to 1 GiB for all invocation records (each invocation is still gated
+         at 512 MiB by c7sup and stagegate, and the in-run sampler enforces the floor). gate.py was modified once more after dry-run 2
+         (14:09:21 local) by EXEC-02; RESUME-03 re-ran the current file: resume-03/selftests/gate-dryrun3-resume03-pre-freeze.txt, 221 PASS.
+  stagegate, st_bwc_nocargo: new in EXEC-02, unchanged by RESUME-03 (stagegate first tested by RESUME-03's final_selftest).
+
+Self-tests (RESUME-03, on the frozen bytes; receipts in resume-03/selftests/): c7class 86/86, c7link 14/14, c7wt 31/31, c7bwc-no-cargo 17/17,
+c7sup supervision 8/8, final+stagegate 64/64. Omitted (cargo builds, not permitted before the authorised builds): selftest_sup.py and
+c7bwc.py selftest (scratch-crate builds); recorded as omitted, never as passed.
+Run all tools with: env PYTHONPYCACHEPREFIX=/nonexistent/c7w02-no-pycache PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B (the stale
+c7tools/__pycache__ left by EXEC-02 is never read or written).

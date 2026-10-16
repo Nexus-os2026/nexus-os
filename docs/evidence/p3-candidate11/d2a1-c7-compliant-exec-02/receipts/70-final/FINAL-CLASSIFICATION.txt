@@ -1,0 +1,103 @@
+# STAGE 12 FINAL INDEPENDENT CLASSIFICATION (AD-C7-W 13.3 step 13; 8.2; G.7)
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:14:21+0100
+# utc 2026-10-16T14:14:21.823876244Z
+# evidence directory /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02
+
+## IN. the complete Stage 12 input
+[PASS] IN-1: every mandatory receipt file exists (174 required) -- missing 0: []
+
+## SEQ. the exact 13.3 stage sequence and every receipt inside its stage window
+[PASS] SEQ-1: SEQUENCE.log is exactly S01..S11 (each GATE PASS then END rc=0, in order, strictly increasing UTC) then the S12 GATE PASS -- got [('GATE', 'S10-restore', True), ('END', 'S10-restore', True), ('GATE', 'S11-link', True), ('END', 'S11-link', True)]
+[PASS] SEQ-2: every stage gate record says `STAGE GATE <stage>: PASS` with no failing check -- bad: []
+[PASS] SEQ-3: every receipt's own UTC times lie inside its stage's GATE..END window
+[PASS] SEQ-4: 13.3 run order from receipt times: B-W/C < (C) < (A) < (B) < F-3 < restoration < link, each finished before the next began -- [["B-W/C END", "2026-10-16T14:12:32.133459930Z"], ["(C)", "2026-10-16T14:12:40.721234192Z"], ["(A)", "2026-10-16T14:12:57.348446942Z"], ["(B)", "2026-10-16T14:13:20.650259535Z"], ["(F3)", "2026-10-16T14:13:42.043435718Z"], ["restoration", "2026-10-16T14:13:59.271792678Z"], ["link GATE", "2026-10-16T14:14:15.048598890Z"]]
+
+## AUTH. Stage 1-2 authorisation gates; identities; mission text; git objects re-read now
+[PASS] AUTH-1.S01: gates/AUTH-S01.txt: `GATE RESULT: PASS (every check passed)` and no failing check -- GATE RESULT: PASS (every check passed)
+[PASS] AUTH-2.S01: gates/AUTH-S01.txt: every one of the 136 mandatory gate checks PASSed (AU-1..AU-6, B-W/A, B-W/B, NI-1..NI-6, SR-1..SR-6, K1..K5, W-SRC, patch, E-C, environment, resources, history) -- missing: []
+[PASS] AUTH-3.S01: gates/AUTH-S01.txt: the recorded K1..K5 identities equal the pinned ones (K4 = the NEW Owner record 2148c5a5, blob cfcbf998, sha256 4b74b90a) -- ('1918374263740d2f98640da00fc466737945975e', 'd6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83', 'cb3a208e1d79a7e94e2ae0001e208a2b6436bc46', '989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b', 'c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7', '2148c5a524b6979dde2eb63b6d1442e39dcfb960', 'cfcbf9982add53dee8f0b4d9c6b634474b4e072b', '4b74b90a73b7f93d80
+[PASS] AUTH-4.S01: gates/AUTH-S01.txt: EC7 file sha256 and size equal the gate's EC7 record and its 2A.4-6 line -- c3aa3d907d2036565d68a5f7c53d302a0d93ca986ee868875137cb0106c43109
+[PASS] AUTH-5.S01: gates/AUTH-S01.txt: the mission text has the sha256 the gate authenticated -- 17adfc3541fb928cf58841acf17552f9a955b0899d8b92eb4d9771e7b136b561
+[PASS] AUTH-1.S02: gates/AUTH-S02.txt: `GATE RESULT: PASS (every check passed)` and no failing check -- GATE RESULT: PASS (every check passed)
+[PASS] AUTH-2.S02: gates/AUTH-S02.txt: every one of the 136 mandatory gate checks PASSed (AU-1..AU-6, B-W/A, B-W/B, NI-1..NI-6, SR-1..SR-6, K1..K5, W-SRC, patch, E-C, environment, resources, history) -- missing: []
+[PASS] AUTH-3.S02: gates/AUTH-S02.txt: the recorded K1..K5 identities equal the pinned ones (K4 = the NEW Owner record 2148c5a5, blob cfcbf998, sha256 4b74b90a) -- ('1918374263740d2f98640da00fc466737945975e', 'd6c05a7cdc71b3ca1812b5199b8529cbe6db0363ca11bacc26d1f21c2cd11a83', 'cb3a208e1d79a7e94e2ae0001e208a2b6436bc46', '989490ec9272a528fe0185ad0dc9f41e3aed1e414d2eb4a88346197dc60b3f3b', 'c5a9f3d1ade663ca4ef57143c5ae5a1392296d9a05bf226888ba99df2ca44af7', '2148c5a524b6979dde2eb63b6d1442e39dcfb960', 'cfcbf9982add53dee8f0b4d9c6b634474b4e072b', '4b74b90a73b7f93d80
+[PASS] AUTH-4.S02: gates/AUTH-S02.txt: EC7 file sha256 and size equal the gate's EC7 record and its 2A.4-6 line -- c3aa3d907d2036565d68a5f7c53d302a0d93ca986ee868875137cb0106c43109
+[PASS] AUTH-5.S02: gates/AUTH-S02.txt: the mission text has the sha256 the gate authenticated -- 17adfc3541fb928cf58841acf17552f9a955b0899d8b92eb4d9771e7b136b561
+[PASS] AUTH-6: both gates derived the same EC7 -- ['c3aa3d907d2036565d68a5f7c53d302a0d93ca986ee868875137cb0106c43109', 'c3aa3d907d2036565d68a5f7c53d302a0d93ca986ee868875137cb0106c43109']
+[PASS] AUTH-7: re-read now from git objects: K1, K2 and K4 blobs/sha256, W-COMMIT tree and W-BLOB, C-BASE tree
+
+## BWC. B-W/C re-judged in memory by c7bwc.check (this mission's own builds and listings)
+[PASS] BWC-1: B-W/C re-judged now: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8, 6A, ORD-1..3) -- rc=0 failed=[]
+[PASS] BWC-2: the stored B-W/C record is MECHANICALLY SATISFIED with no failed check -- B-W/C: MECHANICALLY SATISFIED (NI-6 build-time clause, NI-7, NI-8; four-way agreement holds). SUBJECT TO INDEPENDENT ARC
+[PASS] BWC-3: the stored B-W/C pins equal the 12-pin records (path, sha256, size)
+[PASS] BWC-4: the stored four-way agreement is the frozen expectation (349 total, 35 ignored in W-TREE, E-W, E-W7 and 6A) and 348 filtered out -- {"source_counts": [349, 35], "E-W": [349, 35], "E-W7": [349, 35], "expected": [349, 35]}
+[PASS] BWC-5: the Stage-3 hard order gate judged E-W admissible before the mutant worktree existed, for the pinned E-W
+
+## RUN. the four runs re-classified in memory from raw output (never from a stored verdict or an exit status alone)
+[PASS] RUN-C-1: 40-run-C-healthy-witness: the in-memory re-classification equals the stored one (PASS_ADMISSIBLE) -- now PASS_ADMISSIBLE []
+[PASS] RUN-C-2: 40-run-C-healthy-witness: raw output still matches its descriptor sha256
+[PASS] RUN-C-3: 40-run-C-healthy-witness: verdict PASS_ADMISSIBLE -- PASS_ADMISSIBLE
+[PASS] RUN-A-1: 41-run-A-full_fpt: the in-memory re-classification equals the stored one (FAIL_E11_ADMISSIBLE) -- now FAIL_E11_ADMISSIBLE []
+[PASS] RUN-A-2: 41-run-A-full_fpt: raw output still matches its descriptor sha256
+[PASS] RUN-A-3: 41-run-A-full_fpt: verdict FAIL_E11_ADMISSIBLE -- FAIL_E11_ADMISSIBLE
+[PASS] RUN-B-1: 42-run-B-mutant-witness: the in-memory re-classification equals the stored one (ADMISSIBLE_TWO_CANONICAL) -- now ADMISSIBLE_TWO_CANONICAL []
+[PASS] RUN-B-2: 42-run-B-mutant-witness: raw output still matches its descriptor sha256
+[PASS] RUN-B-3: 42-run-B-mutant-witness: verdict ADMISSIBLE_TWO_CANONICAL -- ADMISSIBLE_TWO_CANONICAL
+[PASS] RUN-F3-1: 43-run-F3-informational: the in-memory re-classification equals the stored one (COMPLETED: FAIL E11 (as expected)) -- now COMPLETED: FAIL E11 (as expected) []
+[PASS] RUN-F3-2: 43-run-F3-informational: raw output still matches its descriptor sha256
+[PASS] RUN-F3-3: 43-run-F3-informational: informational F-3 is a COMPLETED receipt (any completed outcome; F3-1..F3-4) -- COMPLETED: FAIL E11 (as expected)
+
+## EXE. executable identities (CL-10, C7-4, C7-14, C7-16, 0A, 7.4)
+[PASS] EXE-1: (A), (B) and F-3 ran the one pinned E-W7 (same path, sha256 equal before and after each); (C) ran the pinned E-W -- bad: []
+[PASS] EXE-2: 0A: E-W != E-W7, E-W != E-C, E-W7 != E-C, E-W7 != the historical C7 executable b320977a (they only differ; nothing more is claimed)
+[PASS] EXE-3: 7.4: both executables now still have their pinned sha256, size, inode and mtime (nothing rebuilt after the pin) -- changed: []
+
+## G9X. G.9 across the two cores (c7class also checks each receipt against Table A)
+[PASS] G9X-0: both witness receipts parse into 24 steps with c7class's own parsers
+[PASS] G9X-1: rule 1: the same actor and the same offered stream at every one of the 24 steps on both cores -- differ at []
+[PASS] G9X-2: rules 2 and 4: steps 1-22 and 24 consume, leave unused, keep faults and show branches identically on both cores -- differ at []
+[PASS] G9X-3: rule 3: step 23 healthy end in (C) (consumed [(0,4),(0,4),(0,3)], unused [0]) and changed end in (B) (consumed [(0,4),(0,4),(0,4),(0,3)], unused [])
+
+## ATT. attribution: E11 stays E11; P6 only from (B)
+[PASS] ATT-1: (A) printed FAIL with property E11 and is recorded as E11, never as P6 (G.7(A), S-C7-6) -- ('E11', 'a table entry left in a step that did not see its explanation in the ledger')
+[PASS] ATT-2: (B) has exactly the two canonical records: E11 at the step-13 transition, then P6 after step 24 (G.7(B), CL-4/5) -- ["    VIOLATION step 13 transition: E11: a table entry left in a step that did not see its explanation in the ledger", "    VIOLATION after 24: P6: F1 was refused as a conflict and is Paid"]
+[PASS] ATT-3: (C) has no violation record, the healthy step-23 end and the kept predicate (G.7(C))
+
+## RES. limits of every supervised build, listing and run (7.1, 7.2, 7.3; the disk floor)
+[PASS] RES-1: all 22 supervised processes: 16 GiB cap, zero swap, no OOM, complete, within the time ceiling, disk floor kept
+
+## RST. restoration EXACTLY_W (I-C7.6, 7.3A, 7.4)
+[PASS] RST-1: restoration record: R-1..R-8 PASS, one inverse-patch attempt rc 0, EXACTLY_W after it, `RESTORE: EXACTLY_W`, never EXACTLY_C -- RESTORE: EXACTLY_W; finished UTC 2026-10-16T14:13:59.761860079Z
+[PASS] RST-2: evidence was preserved first, and it shows the restoration began from the authenticated mutant protocol.rs (0d4ab992, 6d2f2d49) -- git blob id 0d4ab9929c0e15d910735a52b72a5f3855bef58a
+sha256 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa
+bytes 64542
+
+[PASS] RST-3: E-W7's sha256 after restoration equals its pin (7.4)
+[PASS] RST-4: the healthy worktree verified EXACTLY_W after the run sequence
+[PASS] RST-5: W7-SRC was exact: the frozen patch (b5d8bc6c) applied once, protocol.rs became 0d4ab992/6d2f2d49 only
+
+## LNK. the (D) link (I-C7.7; CR-B with B-W/A, B-W/B and B-W/C)
+[PASS] LNK-1: the stored link is USABLE with no failed check -- (D) LINK USABLE — C-BASE PASS on E-C; NOT W-SRC PASS
+[PASS] LNK-2: c7link re-made the link in memory now: USABLE (LK-0a..LK-11) -- failed: []
+[PASS] LNK-3: linked identities are Candidate C's accepted receipts at f023cc3d on E-C cde9f9d2 (44-full-F-PT raw 0863794e; 43-full-F-3 raw 6dfc796a), never rerun -- bad: []
+[PASS] LNK-4: the link names this mission's B-W/C record and mission text
+[PASS] LNK-5: the link states it is C-BASE PASS on E-C and NOT a W-SRC PASS
+
+## F3. informational F-3 (section 10; never a kill, never a G.7 receipt)
+[INFO] F3: INFORMATIONAL F-3: FAIL E11 (as expected)
+
+## OBJ. live state now
+[PASS] OBJ-1: both worktrees are EXACTLY_W now (c7wt.verify) -- {"H": [], "M": []}
+[PASS] OBJ-2: the mutant protocol.rs blob 0d4ab992 is absent from the object store
+[PASS] OBJ-3: primary checkout unchanged: f727f5c3 on rebuild/phase0-trust-boundary, clean -- f727f5c39fab8d5c729a55eb28ad576d3d56ce47 rebuild/phase0-trust-boundary ''
+[PASS] OBJ-4: destination review ref absent locally (no publication before classification)
+[PASS] OBJ-5: historical evidence preserved: the C7 worktree mt3c-C7 still registered, locked, detached at C-BASE; EXEC-01 evidence verifies against SHA256SUMS.final
+
+## TOOL. frozen tools
+[PASS] TOOL-1: every frozen tool file still hashes to the manifest (sha256 dc75fcb2afdb931d), and no unlisted tool exists -- mismatch []; unlisted []
+
+## RESULT
+FAILED CHECKS: none
+STAGE 12 RESULT: KILL_EVIDENCE_CANDIDATE — ARCHITECT REVIEW PENDING
+Executor maximum; not an acceptance. G.7(E)'s independent Architect review and any G.7(F) recording are ARCHITECT DECISION PENDING.

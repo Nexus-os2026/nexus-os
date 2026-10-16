@@ -1,0 +1,3 @@
+14:43:17 DISK FLOOR BREACH: free 28814364672 B < floor 29888106496 B
+14:43:17 killed own scope p3c11-c7w02-selftest-disk-1792158190.scope after 1 attempt(s)
+sampler: the scope's cgroup was not found while it ran (a short run; scope-wrap.sh records it)

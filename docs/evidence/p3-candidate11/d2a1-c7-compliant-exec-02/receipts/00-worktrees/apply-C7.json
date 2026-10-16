@@ -1,0 +1,89 @@
+{
+ "mission": "P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+ "started_utc": "2026-10-16T14:09:08.565078040Z",
+ "finished_utc": "2026-10-16T14:09:09.533124395Z",
+ "patch_file": "/home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/receipts/00-worktrees/patch/C7.patch",
+ "patch_sha256": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+ "patch_git_blob": "df0dd5846f9003da1c46642dac6673882085f661",
+ "catalog_patch_sha256": "b5d8bc6c9254e0ca2853fcf2f9f220f24782ac6cfa77efe7032365d76f0efbc4",
+ "apply_returncode": 0,
+ "mutant_protocol": {
+  "path": "crates/nexus-governed-control/src/ledger/protocol.rs",
+  "git_blob": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+  "sha256": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa",
+  "bytes": 64542
+ },
+ "expected_mutant": {
+  "git_blob": "0d4ab9929c0e15d910735a52b72a5f3855bef58a",
+  "sha256": "6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+ },
+ "verification_EXACTLY_W7": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs']"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ],
+ "ok": true
+}

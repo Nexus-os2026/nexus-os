@@ -1,0 +1,43 @@
+# C7 classification (C) HEALTHY WITNESS on E-W — 40-run-C-healthy-witness
+# mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02
+# started 2026-10-16T15:12:41+0100
+[PASS] ID-1: executable path equals the pinned E-W path (CL-10) -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 vs pinned /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-2: executable sha256 before and after equal the pinned E-W sha256 (C7-16) -- before=e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843 after=e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843 pinned=e8b4e986b36d31c313d307991c51b3a7f8b3cc169a39afc459ee49974313b843 size=8995112/8995112
+[PASS] ID-3: not the other build, not E-C, not the historical C7 executable (C7-4, C7-14) -- other=/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3
+[PASS] ID-4: argv is the exact frozen invocation -- ["/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3", "ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt", "--exact", "--nocapture", "--test-threads=1"]
+[PASS] ID-5: environment is exactly env -i PATH LANG RUST_BACKTRACE; ceiling 2700 s -- {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "RUST_BACKTRACE": "0"}
+[PASS] ID-6: worktree and working directory are the healthy worktree's crate -- /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy | /home/nexus/NEXUS/nexus-os-p3-c11-c7w02-healthy/crates/nexus-governed-control
+[PASS] ID-7: descriptor's raw-output sha256 equals the file
+[PASS] ID-8: source identity verified before and after (CL-11: EXACTLY_W) -- failed: []
+[PASS] CL1-1: process exited normally with status 0 or 101, no signal, supervisor and wrapper agree -- {"exit_status": 0, "signal": null, "supervisor_rc": 0, "wrapper_recorded_status": "0"}
+[PASS] CL1-2: scope record complete; no supervisor timeout (7.3) -- completed=True timed_out=False scope=gone
+[PASS] CL1-3: oom 0 and oom_kill 0 -- oom=0 oom_kill=0
+[PASS] CL1-4: zero swap: memory.swap.peak 0, no swap events -- peak=0 events={'swap.events.high': 0, 'swap.events.max': 0, 'swap.events.fail': 0}
+[PASS] CL1-5: cgroup limits memory.max 17179869184, memory.swap.max 0 -- max=17179869184 swap.max=0
+[PASS] CL1-6: memory.peak below the 16 GiB limit -- peak=3772416
+[PASS] CL1-7: wall time below the 2700 s ceiling -- wall=0.0 limit=2700
+[PASS] CL1-8: disk floor preserved during the run: no floor breach (no supervisor stop), minimum free space >= 16 GiB -- breach=False min_free=26942529536
+[PASS] RAW-1: raw output is strict UTF-8 with LF only, no CR, no NUL, ends with a newline -- 19885 bytes
+[PASS] RAW-2: raw output has content
+[INFO] RAW-3: 175 lines, 3 blank (blank lines are not structural)
+[PASS] REG-1: HEAD: the first non-blank line is exactly `running 1 test`, and it occurs once
+[PASS] REG-2: REPLAY begins with the harness prefix `test <path> ... ` (removed once) -- 'test ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt ... C7 WITNESS F-PT step 01/24 Fw('
+[PASS] REG-3: REPLAY ends at exactly one harness line `ok` -- found 1
+[PASS] REG-4: TAIL is `ok` and the result line only (nothing else follows) -- ["ok", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 348 filtered out; finished in 0.00s"]
+[PASS] RP-1: H1 appears exactly once in REPLAY, as its last line -- count=1
+[PASS] RP-2: exactly 24 per-step lines, numbered 01..24 in order (CL-2) -- found 24
+[PASS] RP-3: the initial block is empty (no `initial` record is admissible) -- []
+[PASS] RP-6: REPLAY follows the strict schema: per-step line, six state lines, then records, for each of the 24 steps
+[PASS] G9-1: steps 1-22 and 24 equal Table A and G.9 rule 2/4 (identical on both cores)
+[PASS] G9-23: step 23 is exactly one of its two planned ends (G.9 rule 3) -- got offered=[0, 0, 0, 0] consumed=[(0, 4), (0, 4), (0, 3)] unused=[0] faults=1 branches=['append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)']
+[PASS] G9-24: step 24 consumes nothing and pairs with step 23's healthy end (F1 Conflict after 24) -- F1=Conflict
+[PASS] C7-12: (C): exit status 0 with `1 passed; 0 failed` (C7-13: a line-940 stop otherwise)
+[PASS] C7-13: (C): zero VIOLATION lines anywhere in the raw output -- raw lines containing VIOLATION: 0
+[PASS] CL8-C: (C): step 23 ended healthy
+[PASS] CL9-C: (C): kept predicate holds (table exactly {F1: MissingPrepared} after 13 and 24; after 24 F1 Conflict, conflicted, Fact(0) absent, X empty) -- after13='F1: MissingPrepared' after24='F1: MissingPrepared' cls=('Conflict', 'Retired', '1', '3', '0') x=None
+[PASS] M-C: (C): none of M1-M4 or a fixture-failure or a panic marker appears anywhere
+[PASS] RAW-C: (C): all REPLAY lines are accounted for (24 blocks + H1)
+
+KIND C   VERDICT PASS_ADMISSIBLE   
+FAILED CHECKS: none
+(C) HEALTHY WITNESS: PASS — ADMISSIBLE

@@ -1,0 +1,88 @@
+[OK] (C) healthy synthetic output is PASS — ADMISSIBLE verdict=PASS_ADMISSIBLE fails=[]
+[OK] (B) mutant synthetic output is ADMISSIBLE with exactly two canonical records verdict=ADMISSIBLE_TWO_CANONICAL fails=[]
+[OK] (C) with a VIOLATION line is a STOP (C7-13) verdict=STOP_C7-12_13 fails=['C7-13'] (want C7-13)
+[OK] (C) exit status 101 is a STOP (C7-12) verdict=STOP_C7-12_13 fails=['C7-12'] (want C7-12)
+[OK] (C) without H1 is not admissible verdict=NOT_ADMISSIBLE fails=['RP-1'] (want RP-1)
+[OK] (C) with H1 twice is not admissible verdict=NOT_ADMISSIBLE fails=['RP-1', 'RP-5.24', 'RP-5.24', 'RP-6']
+[OK] (C) whose step 23 took the changed end is not (C) verdict=STOP_C7-12_13 fails=['G9-24', 'CL8-C'] (want CL8-C)
+[OK] (C) with a changed offered stream at step 8 breaks G.9 verdict=NOT_ADMISSIBLE fails=['G9-08', 'G9-1', 'G9-5.08'] (want G9-08)
+[OK] (C) with the fault flag missing at step 15 breaks G.9 verdict=NOT_ADMISSIBLE fails=['G9-15', 'G9-1'] (want G9-15)
+[OK] (C) whose step 24 shows the lost state fails the kept predicate / pairing verdict=STOP_C7-12_13 fails=['G9-24', 'C7-13', 'CL9-C']
+[OK] (C) whose refusal-table entry is missing after 13 fails the kept predicate verdict=STOP_C7-12_13 fails=['CL9-C'] (want CL9-C)
+[OK] (C) with a fixture-failure line is not admissible verdict=NOT_ADMISSIBLE fails=['RP-5.04', 'RP-6']
+[OK] (C) with an extra line in REPLAY is not admissible (strict schema) verdict=NOT_ADMISSIBLE fails=['RP-5.06', 'RP-6'] (want RP-6)
+[OK] (C) with 23 step blocks is not admissible verdict=NOT_ADMISSIBLE fails=['RP-2'] (want RP-2)
+[OK] (C) with a stray line before `ok` is not admissible verdict=NOT_ADMISSIBLE fails=['RP-1', 'RP-5.24', 'RP-5.24', 'RP-6']
+[OK] (C) swapped onto the mutant executable is not admissible (C7-14) verdict=NOT_ADMISSIBLE fails=['ID-1', 'ID-2', 'ID-3', 'ID-4'] (want ID-2)
+[OK] (C) run under the wrong argv is not admissible verdict=NOT_ADMISSIBLE fails=['ID-4'] (want ID-4)
+[OK] (C) with an oom kill is not admissible verdict=NOT_ADMISSIBLE fails=['CL1-3'] (want CL1-3)
+[OK] (C) with nonzero swap is not admissible verdict=NOT_ADMISSIBLE fails=['CL1-4'] (want CL1-4)
+[OK] (C) with a supervisor timeout is not admissible verdict=NOT_ADMISSIBLE fails=['CL1-2'] (want CL1-2)
+[OK] (C) with a signal is not admissible verdict=NOT_ADMISSIBLE fails=['CL1-1'] (want CL1-1)
+[OK] (C) on the E-C executable hash is not admissible (C7-4) verdict=NOT_ADMISSIBLE fails=['ID-2', 'ID-3'] (want ID-2)
+[OK] (C) with a source-verification failure after the run is not admissible verdict=NOT_ADMISSIBLE fails=['ID-8'] (want ID-8)
+[OK] (C) with CRLF line endings is not admissible verdict=NOT_ADMISSIBLE fails=['RAW-1'] (want RAW-1)
+[OK] (C) without a trailing newline is not admissible verdict=NOT_ADMISSIBLE fails=['RAW-1'] (want RAW-1)
+[OK] (B) with a third record is not admissible (C7-8) verdict=NOT_ADMISSIBLE fails=['C7-5', 'C7-8', 'C7-8c', 'C7-9b', 'C7-10d'] (want C7-5)
+[OK] (B) with a second E11 record is not admissible verdict=NOT_ADMISSIBLE fails=['C7-5', 'C7-8', 'C7-8c', 'C7-9b'] (want C7-8)
+[OK] (B) with E11 in step 14's block is not admissible (locus block) verdict=NOT_ADMISSIBLE fails=['RP-5.14', 'RP-6']
+[OK] (B) whose M1 says n=3 is not admissible (C7-9) verdict=NOT_ADMISSIBLE fails=['C7-9b'] (want C7-9b)
+[OK] (B) without M3 is not admissible verdict=NOT_ADMISSIBLE fails=['C7-10a'] (want C7-10a)
+[OK] (B) whose M2 disagrees with the raw state is not admissible verdict=NOT_ADMISSIBLE fails=['C7-10b', 'C7-5b'] (want C7-10b)
+[OK] (B) whose M4 lists another property is not admissible verdict=NOT_ADMISSIBLE fails=['C7-10d'] (want C7-10d)
+[OK] (B) panicking at the fixture-failure location is an unrelated panic (C7-11) verdict=NOT_ADMISSIBLE fails=['C7-11'] (want C7-11)
+[OK] (B) with a VIOLATION line in the TAIL is not admissible verdict=NOT_ADMISSIBLE fails=['C7-9a', 'C7-8c', 'C7-9b']
+[OK] (B) whose SUMMARY is not an ordered copy is not admissible verdict=NOT_ADMISSIBLE fails=['C7-9a'] (want C7-9a)
+[OK] (B) with P6 but without E11 is not admissible (C7-6) verdict=NOT_ADMISSIBLE fails=['C7-5', 'C7-6', 'C7-8', 'C7-8c', 'C7-9b', 'C7-10d'] (want C7-6)
+[OK] (B) with E11 but without P6 is not admissible (C7-7) verdict=NOT_ADMISSIBLE fails=['C7-5', 'C7-7', 'C7-8', 'C7-8c', 'C7-9b', 'C7-10b'] (want C7-7)
+[OK] (B) whose step 23 took the healthy end is not admissible (CL-8) verdict=NOT_ADMISSIBLE fails=['G9-24', 'CL8-B', 'C7-10b'] (want CL8-B)
+[OK] (B) with exit status 0 is not admissible verdict=NOT_ADMISSIBLE fails=['C7-17b'] (want C7-17b)
+[OK] (B) containing H1 is not admissible verdict=NOT_ADMISSIBLE fails=['RP-1', 'RP-5.24', 'RP-6']
+[OK] (B) with `347 filtered out` is not admissible (C7-17) verdict=NOT_ADMISSIBLE fails=['REG-4'] (want REG-4)
+[OK] (B) with an extra record inside a step block is not admissible verdict=NOT_ADMISSIBLE fails=['C7-5', 'C7-8', 'C7-9a', 'C7-8c', 'C7-9b', 'C7-10d']
+[OK] (B) run on the healthy executable E-W is not admissible (C7-14) verdict=NOT_ADMISSIBLE fails=['ID-1', 'ID-2', 'ID-3', 'ID-4'] (want ID-2)
+[OK] (B) after hand-edit of the raw file (descriptor hash mismatch) is not admissible verdict=NOT_ADMISSIBLE fails=['ID-7'] (want ID-7)
+[OK] (B) with the historical C7 executable hash is not admissible (C7-4) verdict=NOT_ADMISSIBLE fails=['ID-2', 'ID-3'] (want ID-2)
+[OK] (A) FAIL E11 with two byte-equal instances is ADMISSIBLE (C7-1) verdict=FAIL_E11_ADMISSIBLE fails=[]
+[OK] (A) printing P6 is a STOP for a ruling (C7-2); E11 is never relabelled verdict=STOP_C7-2_P6 fails=['C7-2']
+[OK] (A) printing another property is a STOP (C7-3) verdict=STOP_C7-3 fails=['C7-3']
+[OK] (A) PASS is a STOP (C7-3) verdict=STOP_C7-3 fails=['C7-3']
+[OK] (A) INCOMPLETE is a STOP (C7-3) verdict=STOP_C7-3 fails=['C7-3']
+[OK] (A) FAIL with one instance only is not admissible verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) FAIL with three instances is not admissible verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) with the panic at another location is not admissible verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) with exit status 0 and a FAIL report is not admissible verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) on the E-W executable is not admissible verdict=NOT_ADMISSIBLE fails=['ID-1', 'ID-2', 'ID-3', 'ID-4'] (want ID-2)
+[OK] (A) with a supervisor timeout is not admissible verdict=NOT_ADMISSIBLE fails=['CL1-2'] (want CL1-2)
+[OK] (A) with `347 filtered out` is not admissible verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) with a bounds line differing from the frozen F-PT bounds is not admissible (EX-2b) verdict=NOT_ADMISSIBLE fails=['EX-2b', 'EX-2b'] (want EX-2b)
+[OK] (A) carrying F-3's bounds (A4 false) is not admissible (EX-2 / EX-2b) verdict=NOT_ADMISSIBLE fails=['EX-2', 'EX-2b', 'EX-2b'] (want EX-2b)
+[OK] (A) with a disk-floor breach during the run is not admissible (CL1-8) verdict=NOT_ADMISSIBLE fails=['CL1-8'] (want CL1-8)
+[OK] (C) whose sampled minimum free space fell below 16 GiB is not admissible (CL1-8) verdict=NOT_ADMISSIBLE fails=['CL1-8'] (want CL1-8)
+[OK] (A) whose header names a quotient/symmetry explorer is not admissible (EX-3) verdict=NOT_ADMISSIBLE fails=['STR']
+[OK] (A) with states beyond the ceiling is not admissible (C7-3) verdict=NOT_ADMISSIBLE fails=['EX-4']
+[OK] F-3 FAIL E11 is informational (as expected) verdict=COMPLETED: FAIL E11 (as expected) fails=[]
+[OK] F-3 FAIL E11 text INFORMATIONAL F-3: FAIL E11 (as expected)
+[OK] F-3 FAIL P6 is recorded verbatim and flagged (never a kill) verdict=COMPLETED: FAIL P6 (FLAGGED: not E11; never counted as P6) fails=[]
+[OK] F-3 FAIL P6 flagged INFORMATIONAL F-3: FAIL P6 (FLAGGED: not E11; never counted as P6)
+[OK] F-3 PASS is recorded verdict=COMPLETED: PASS fails=[]
+[OK] F-3 PASS text INFORMATIONAL F-3: PASS
+[OK] F-3 INCOMPLETE stays INCOMPLETE (F3-3) verdict=COMPLETED: INCOMPLETE (the time cap of 2700s was reached; no property established; F3-3: stays INCOMPLETE) fails=[]
+[OK] F-3 INCOMPLETE text INFORMATIONAL F-3: INCOMPLETE (the time cap of 2700s was reached; no property established; F3-3: stays INCOMPLETE)
+[OK] F-3 PASS report with exit 101 is NOT COMPLETED (F3-4) verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 FAIL report with exit 0 is NOT COMPLETED (F3-4) verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 FAIL with one instance is NOT COMPLETED (F3-4) verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 FAIL with three instances is NOT COMPLETED (F3-4) verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 with the panic at another location is NOT COMPLETED verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 with two outcome lines in an instance is NOT COMPLETED verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 with a mismatching `left:` line is NOT COMPLETED verdict=NOT_COMPLETED fails=['STR']
+[OK] F-3 killed by a signal is NOT COMPLETED (supervisor facts) verdict=NOT_COMPLETED fails=['CL1-1', 'STR'] (want CL1-1)
+[OK] F-3 with an oom kill is NOT COMPLETED verdict=NOT_COMPLETED fails=['CL1-3'] (want CL1-3)
+[OK] F-3 with a timeout is NOT COMPLETED verdict=NOT_COMPLETED fails=['CL1-2'] (want CL1-2)
+[OK] F-3 carrying F-PT's bounds (A4 true) is NOT COMPLETED (EX-2b) verdict=NOT_COMPLETED fails=['EX-2', 'EX-2b'] (want EX-2b)
+[OK] F-3 whose instance is for F-PT is NOT COMPLETED verdict=NOT_COMPLETED fails=['EX-2', 'EX-3']
+[OK] real C9 sample: instance parses with no problems []
+[OK] real C9 sample: outcome FAIL, property E4, 2-step trace ('FAIL', ('E4', 'append_facts said Not written but the ledger changed: Open:Ok Facts:Ok Facts:Ok Insert:Ok Insert:Constraint Rollback:Unknown'))
+[OK] real C9 sample is NOT accepted as the F-3 target (other test, 347 filtered) NOT_COMPLETED
+
+SELF-TEST (c7class) ALL OK: 86/86

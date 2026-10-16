@@ -1,0 +1,9 @@
+--- c7tools-orig/scope-wrap.sh	2026-10-15 23:15:26.228494874 +0100
++++ c7tools/scope-wrap.sh	2026-10-16 14:06:38.401043909 +0100
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01. Runs as the first process inside the transient systemd user scope.
++# P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02 (unchanged from EXEC-01 except this comment). Runs as the first process inside the transient systemd user scope.
+ # Records the scope's own cgroup and its enforced limits, runs the command, then records the cgroup's peak
+ # memory, peak swap and memory events, and exits with the command's status.
+ #   scope-wrap.sh <record-file> <command> [args...]

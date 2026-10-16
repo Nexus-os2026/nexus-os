@@ -1,0 +1,85 @@
+[Transcribed by the executor (Claude Code, claude-opus-5-5) from the Owner message received in session 929aa21f on 2026-10-16. Not signed. A string is never authority; this file is a record of what the executor received, not a source of authority for any tool.]
+
+NEXUS OS — OWNER PART C EXECUTION AUTHORISATION
+
+MISSION:
+P3-C11-DR01-D2A1-C7-TOOL-REPAIR-RESUME-03
+
+FROM:
+Nexus OS Owner
+
+TO:
+Claude Code — Implementation
+
+ARCHITECT:
+ChatGPT GPT-6 — Sole Decision Architect
+
+MODEL:
+claude-opus-5-5
+
+EFFORT:
+Extra High
+
+OWNER DECISION:
+
+I explicitly authorise ONE compliant C7 execution
+under Part C of the existing mission.
+
+This authorisation is conditional on the frozen
+AD-C7-W contract and all previously adopted
+security, evidence and execution requirements.
+
+FROZEN TOOL MANIFEST SHA256:
+dc75fcb2afdb931dc37dac819e3038ff8e66837ab0412dd14010573afd0fce22
+
+Before execution:
+
+1. Reauthenticate the frozen tools and all
+   governing source and contract identities.
+
+2. Run S02 preflight and verify actual resource
+   availability, process isolation, ownership
+   and disk-floor enforcement.
+
+3. Do not proceed if any required condition fails.
+
+4. Follow AD-C7-W section 13.3 exactly.
+
+MANDATORY ORDER:
+
+Healthy build.
+All eight healthy listings.
+Healthy order gate.
+Mutant source and build.
+All eight mutant listings.
+NI-7, NI-8 and B-W/C.
+Healthy witness.
+Original mutant F-PT.
+Mutant deterministic witness.
+Informational F-3.
+EXACTLY_W restoration.
+Accepted Candidate C evidence link.
+Frozen Stage 12 final verification.
+
+No additional builds or unapproved tests.
+
+No changes to frozen verification tools.
+
+No automatic retries or resource escalation.
+
+Preserve every raw receipt and every stop.
+
+Publication remains restricted to the existing
+evidence-only review-ref conditions and requires
+genuine native Manual approval.
+
+No GitHub CI dispatch, PR, merge or integration.
+
+Claude Code may classify a kill evidence candidate
+but may not accept C7 independently.
+
+RETURN:
+Full execution report and authenticated evidence
+to ChatGPT GPT-6 via the Owner for independent review.
+
+END OWNER AUTHORISATION

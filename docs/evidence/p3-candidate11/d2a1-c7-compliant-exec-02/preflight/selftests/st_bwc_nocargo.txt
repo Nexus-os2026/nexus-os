@@ -1,0 +1,19 @@
+[OK] parser: real libtest --list (3 tests) []
+[OK] parser: real libtest --list --ignored (1 test, singular trailer) 
+[OK] parser: real libtest empty selection 
+[OK] render_listing reproduces real output byte for byte 
+[OK] parser: E-C 20-list-all (348 tests, sorted) []
+[OK] render_listing reproduces E-C 20-list-all byte for byte 
+[OK] parser: E-C 21-list-ignored (35 tests) 
+[OK] E-C listings hash to the frozen values 
+[OK] E-C toolchain lines read from the E-C build record 7/9
+[OK] parser rejects 9 malformed listings 
+[OK] order checks: the compliant 13.3 order passes [('ORD-1', True, ''), ('ORD-2', True, ''), ('ORD-3', True, 'admissible=True mutant_existed=False')]
+[OK] order checks: the EXEC-01 order (E-W7 built before the E-W listings) FAILS ORD-2 [('ORD-1', True), ('ORD-2', False), ('ORD-3', True)]
+[OK] order checks: a Stage-3 gate taken after the mutant worktree existed FAILS ORD-3 [('ORD-1', True), ('ORD-2', True), ('ORD-3', False)]
+[OK] order checks: a missing receipt FAILS ORD-0 [('ORD-0', 'every order receipt is present', False, "FileNotFoundError(2, 'No such file or directory')")]
+[OK] PROC-1..8 pass on a clean synthetic descriptor 
+[OK] PROC-8 fails when the sampled minimum free space fell below 16 GiB 
+[OK] PROC-8 fails on a recorded floor breach 
+
+SELF-TEST (c7bwc, no cargo) ALL OK: 17/17

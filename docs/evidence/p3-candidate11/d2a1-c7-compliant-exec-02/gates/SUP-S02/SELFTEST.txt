@@ -1,0 +1,58 @@
+SUPERVISION SELF-TEST 2026-10-16T15:05:02+0100 (non-Nexus processes only)
+systemd: systemd 255 (255.4-1ubuntu8.18)
+kernel: 6.17.0-35-generic; timeout: timeout (GNU coreutils) 9.4
+1. the 16 GiB, zero-swap scope's limits read back from inside it (a 10 MiB allocation)
+scope unit: p3c11-c7w02-selftest-1-1792159502.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02
+command: systemd-run --user --scope --unit=p3c11-c7w02-selftest-1-1792159502 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/tools/c7tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/1/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/1/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'b = b'"'"'x'"'"' * (10 << 20); print('"'"'allocated'"'"', len(b))'
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.02 s, max RSS (largest single process) 20412 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 17190912 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+disk: free before 28714283008 B, min 28714266624 B, after 28714266624 B, peak growth 16384 B, floor 17179869184 B, floor breach False; started 2026-10-16T14:05:02.009615125Z, finished 2026-10-16T14:05:02.071826973Z (UTC)
+  RESULT OK
+
+2. memory cap enforced: a 64 MiB zero-swap scope, the process writes 256 MiB
+  supervisor rc -15; stdout ''; scope after: ['Result=oom-kill', 'ActiveState=failed']; wrapper record keys ['cgroup', 'command exit status', 'finished', 'memory.high', 'memory.max', 'memory.oom.group', 'memory.peak', 'memory.swap.max', 'memory.swap.peak', 'processes at start', 'started']; complete record: False; command status recorded: 137
+  RESULT OK
+
+3. time limit enforced: timeout -s KILL 2 around a 30 s sleep
+  rc -9; elapsed 2.02 s
+  RESULT OK
+
+4. backstop enforced: RuntimeMaxSec=2 around a 30 s sleep
+  rc -15; elapsed 2.05 s
+  RESULT OK
+
+5. a normal exit 101 through the run chain
+scope unit: p3c11-c7w02-selftest-5-1792159502.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02
+command: systemd-run --user --scope --unit=p3c11-c7w02-selftest-5-1792159502 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/tools/c7tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/5/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/5/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'import sys; sys.exit(101)'
+supervisor return code 101; /usr/bin/time: exit status 101, signal None, wall 0.02 s, max RSS (largest single process) 10320 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 5668864 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+disk: free before 28714205184 B, min 28714188800 B, after 28714188800 B, peak growth 16384 B, floor 17179869184 B, floor breach False; started 2026-10-16T14:05:06.273922584Z, finished 2026-10-16T14:05:06.335053265Z (UTC)
+  process {'exit_status': 101, 'signal': None, 'supervisor_rc': 101, 'wrapper_recorded_status': '101'}
+  RESULT OK
+
+6. a process ended by SIGABRT through the run chain
+scope unit: p3c11-c7w02-selftest-6-1792159502.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02
+command: systemd-run --user --scope --unit=p3c11-c7w02-selftest-6-1792159502 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/tools/c7tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/6/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/6/time-v.txt timeout -s KILL 60 /usr/bin/python3 -c 'import os; os.abort()'
+supervisor return code 134; /usr/bin/time: exit status None, signal 6, wall 0.15 s, max RSS (largest single process) 10220 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 5632000 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+disk: free before 28714184704 B, min 28714164224 B, after 28714164224 B, peak growth 20480 B, floor 17179869184 B, floor breach False; started 2026-10-16T14:05:06.348555592Z, finished 2026-10-16T14:05:06.543697109Z (UTC)
+  process {'exit_status': None, 'signal': 6, 'supervisor_rc': 134, 'wrapper_recorded_status': '134'}
+  RESULT OK
+
+7. disk-floor guard: floor = current free + 1 GiB around a 30 s sleep; the launcher must kill its own scope and flag the breach
+scope unit: p3c11-c7w02-selftest-disk-1792159502.scope; cwd: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02
+command: systemd-run --user --scope --unit=p3c11-c7w02-selftest-disk-1792159502 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=70 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/tools/c7tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/7/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c7-compliant-exec-02/gates/SUP-S02/7/time-v.txt timeout -s KILL 60 /usr/bin/sleep 30
+supervisor return code -9; /usr/bin/time: exit status None, signal None, wall None s, max RSS (largest single process) None KiB
+scope (scope-wrap.sh record): memory.max None, memory.swap.max None, memory.peak None B, memory.swap.peak None B, oom None, oom_kill None, completed False; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+disk: free before 28714160128 B, min 28714156032 B, after 28714156032 B, peak growth 4096 B, floor 29787901952 B, floor breach True; started 2026-10-16T14:05:08.425157403Z, finished 2026-10-16T14:05:08.446481184Z (UTC)
+  elapsed 0.09 s; process {'exit_status': None, 'signal': None, 'supervisor_rc': -9, 'wrapper_recorded_status': None}; disk {'free_before_bytes': 28714160128, 'min_free_bytes': 28714156032, 'breach': True, 'floor_bytes': 29787901952, 'samples': 1, 'breach_free_bytes': 28714160128, 'kill_rc': 0, 'kill_attempts': 1, 'free_after_bytes': 28714156032, 'peak_growth_bytes': 4096, 'net_growth_bytes': 4096}
+  RESULT OK
+
+8. preflight disk gate: projected growth 1 GiB beyond the headroom is refused; zero projected growth is allowed (free >= floor)
+      543960 python
+    free disk on /home/nexus/NEXUS: 28714074112 B (26.74 GiB); projected growth 12608028672 B; floor 17179869184 B (16 GiB); free - projected >= floor: False
+    RESOURCE GATE: disk headroom below the 16 GiB floor after projected growth
+  refused True allowed True
+  RESULT OK
+
+SELF-TEST RESULT: ALL OK

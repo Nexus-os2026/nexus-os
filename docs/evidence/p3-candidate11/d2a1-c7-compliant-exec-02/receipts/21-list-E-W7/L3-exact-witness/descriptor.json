@@ -1,0 +1,208 @@
+{
+ "id": "L3-exact-witness",
+ "type": "invocation",
+ "label": "list-E-W7-L3-exact-witness",
+ "mission": "P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02",
+ "worktree": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant",
+ "cwd": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/crates/nexus-governed-control",
+ "argv": [
+  "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "--exact",
+  "--list",
+  "ledger::protocol::model_tests::c7_witness::c7_witness_p6_after_settlement_on_fpt"
+ ],
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "LANG": "C.UTF-8",
+  "RUST_BACKTRACE": "0"
+ },
+ "limit_seconds": 2700,
+ "executable": {
+  "path": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3",
+  "sha256_before": "156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38",
+  "sha256_after": "156cf0cc27ac1ed50d31e3a2a2adc924211da2a2be77bc6f617f774f27e04a38",
+  "size": 8995176
+ },
+ "process": {
+  "exit_status": 0,
+  "signal": null,
+  "supervisor_rc": 0,
+  "wrapper_recorded_status": "0"
+ },
+ "supervisor": {
+  "memory_max": "17179869184",
+  "swap_max": "0",
+  "memory_high": "max",
+  "memory_peak_bytes": "3997696",
+  "swap_peak_bytes": "0",
+  "oom": 0,
+  "oom_kill": 0,
+  "swap_events": {
+   "swap.events.high": 0,
+   "swap.events.max": 0,
+   "swap.events.fail": 0
+  },
+  "completed": true,
+  "timed_out": false,
+  "wall_seconds": 0.0,
+  "time_limit_seconds": 2700,
+  "scope_result": "gone",
+  "scope_show": {
+   "Result": "success",
+   "LoadState": "not-found",
+   "ActiveState": "inactive"
+  },
+  "launcher_elapsed_seconds": 0.032,
+  "max_rss_kib_largest_process": 3604,
+  "started_utc": "2026-10-16T14:12:17.837220231Z",
+  "finished_utc": "2026-10-16T14:12:17.869436659Z",
+  "disk": {
+   "free_before_bytes": 26943123456,
+   "min_free_bytes": 26943102976,
+   "breach": false,
+   "floor_bytes": 17179869184,
+   "samples": 1,
+   "free_after_bytes": 26943102976,
+   "peak_growth_bytes": 20480,
+   "net_growth_bytes": 20480
+  },
+  "disk_floor_breach": false
+ },
+ "output_path": "raw-output.txt",
+ "raw_output_sha256": "07d89fc7db930b0854bd7be984bd0b88d07fd93826d7f613d5e40d89a46de0ab",
+ "source_verification_before": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ],
+ "source_verification_after": [
+  {
+   "id": "WT-PATH",
+   "ok": true,
+   "detail": "/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant"
+  },
+  {
+   "id": "WT-HEAD",
+   "ok": true,
+   "detail": "6c424c3aec579401543ae010e3f8729e17c4ed98"
+  },
+  {
+   "id": "WT-DETACHED",
+   "ok": true,
+   "detail": "symbolic-ref rc=1"
+  },
+  {
+   "id": "WT-TREE",
+   "ok": true,
+   "detail": "5cc7ae59a6a5ef38b5630e76849a1f5b468ac4a4"
+  },
+  {
+   "id": "WT-LIST",
+   "ok": true,
+   "detail": "{\"worktree\": \"/home/nexus/NEXUS/nexus-os-p3-c11-c7w02-mutant\", \"HEAD\": \"6c424c3aec579401543ae010e3f8729e17c4ed98\", \"detached\": \"\"}"
+  },
+  {
+   "id": "WT-INDEX",
+   "ok": true,
+   "detail": "index equals HEAD"
+  },
+  {
+   "id": "WT-FLAGS",
+   "ok": true,
+   "detail": "unmerged/assume-unchanged/skip-worktree entries: 0"
+  },
+  {
+   "id": "WT-BLOBS",
+   "ok": true,
+   "detail": "5364 tracked paths compared with W-TREE (protocol.rs against the mutant blob); differing: []"
+  },
+  {
+   "id": "WT-PROTOCOL",
+   "ok": true,
+   "detail": "0d4ab9929c0e15d910735a52b72a5f3855bef58a 6d2f2d49842cdf5cc155dd1cb0984e121ada154cfc69a412219c7ac12dc846aa"
+  },
+  {
+   "id": "WT-DIFF",
+   "ok": true,
+   "detail": "tracked paths whose content differs from W-TREE: ['crates/nexus-governed-control/src/ledger/protocol.rs']"
+  },
+  {
+   "id": "WT-STATUS",
+   "ok": true,
+   "detail": "status lines: [' M crates/nexus-governed-control/src/ledger/protocol.rs', '!! target/']"
+  },
+  {
+   "id": "WT-TARGET",
+   "ok": true,
+   "detail": "target real directory"
+  },
+  {
+   "id": "WT-OBJECT",
+   "ok": true,
+   "detail": "blob 0d4ab992 ABSENT in the object store"
+  }
+ ],
+ "finished_at": "2026-10-16T15:12:18+0100"
+}

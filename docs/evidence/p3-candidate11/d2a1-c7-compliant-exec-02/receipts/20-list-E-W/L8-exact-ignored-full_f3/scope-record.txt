@@ -1,0 +1,21 @@
+cgroup: /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/p3c11-c7w02-list-E-W-L8-exact-ignored-full_f3-1792159721.scope
+memory.max: 17179869184
+memory.swap.max: 0
+memory.high: max
+memory.oom.group: 0
+processes at start: 9257 9289 
+started: 2026-10-16T15:08:41+01:00
+finished: 2026-10-16T15:08:41+01:00
+command exit status: 0
+memory.peak: 3694592
+memory.swap.peak: 0
+memory.current: 2912256
+memory.events: low 0
+memory.events: high 0
+memory.events: max 0
+memory.events: oom 0
+memory.events: oom_kill 0
+memory.events: oom_group_kill 0
+memory.swap.events: high 0
+memory.swap.events: max 0
+memory.swap.events: fail 0

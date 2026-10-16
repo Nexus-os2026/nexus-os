@@ -1,0 +1,162 @@
+--- c7tools-orig/c7bwc.py	2026-10-15 23:32:21.879008426 +0100
++++ c7tools/c7bwc.py	2026-10-16 14:00:12.971347957 +0100
+@@ -1,9 +1,11 @@
+ #!/usr/bin/env python3
+ """B-W/C: pin E-W and E-W7, run the 6A listings, and judge NI-6 (build-time clause), NI-7, NI-8 and the four-way agreement.
+-Mission P3-C11-DR01-D2A1-C7-W-EVIDENCE-EXEC-01 (AD-C7-W 6.2, 6.3 O-1..O-6, 6A, 7.1, 13.3 steps 3-6).
++Mission P3-C11-DR01-D2A1-C7-COMPLIANT-EXEC-02 (AD-C7-W 6.2, 6.3 O-1..O-6, 6A, 7.1, 13.3 steps 3-6); adapted from the EXEC-01 tool.
+ 
+   c7bwc.py pin   <evdir> <E-W|E-W7>   write receipts/12-pin/<role>.json from the build receipt (re-hashes the executable)
+   c7bwc.py list  <evdir> <E-W|E-W7>   the eight supervised listings of that executable
++  c7bwc.py stage3 <evdir>             13.3 step 3 HARD ORDER GATE: judge E-W's build and its eight listings ALONE, before the mutant
++                                      worktree exists; write receipts/25-stage3-gate/STAGE3-E-W.{txt,json}; exit 0 = admissible
+   c7bwc.py check <evdir>              judge everything; write receipts/30-bwc/B-W-C.{txt,json}; exit 0 = MECHANICALLY SATISFIED, 1 = BLOCKED
+   c7bwc.py selftest <dir>             synthetic + scratch-crate tests of this module (never touches the Nexus repository)
+ 
+@@ -160,6 +162,10 @@
+     c("PROC-6", "memory.peak below the limit", s["memory_peak_bytes"] is not None and int(s["memory_peak_bytes"]) < 17179869184, "peak=%s" % s["memory_peak_bytes"])
+     c("PROC-7", "wall time below the ceiling %d s" % limit, s["wall_seconds"] is not None and s["wall_seconds"] < limit and s["time_limit_seconds"] == limit,
+       "wall=%s limit=%s" % (s["wall_seconds"], s["time_limit_seconds"]))
++    dk = s.get("disk") or {}
++    c("PROC-8", "disk floor preserved: no floor breach, and the minimum free space sampled stayed >= 16 GiB",
++      s.get("disk_floor_breach") is False and dk.get("min_free_bytes") is not None and dk["min_free_bytes"] >= DISK_FLOOR_BYTES,
++      "breach=%s min_free=%s" % (s.get("disk_floor_breach"), dk.get("min_free_bytes")))
+     return out
+ 
+ 
+@@ -374,6 +380,105 @@
+     return out, info
+ 
+ 
++# ----------------------------------------------------------------------------- 13.3 order evidence
++def _desc_times(d):
++    s = d.get("supervisor", {})
++    return s.get("started_utc"), s.get("finished_utc")
++
++
++def order_checks(evdir):
++    """Proves 13.3 steps 3-4 from this mission's receipts: E-W build -> 8 E-W listings -> Stage-3 gate -> mutant worktree creation
++    -> patch -> E-W7 build -> 8 E-W7 listings. Every time is a UTC string with nanoseconds, so string order is time order."""
++    out = []
++    rp = lambda *a: os.path.join(evdir, "receipts", *a)  # noqa
++    try:
++        bw = jload(rp("10-build-E-W", "descriptor.json"))
++        lw = [jload(rp("20-list-E-W", sp[0], "descriptor.json")) for sp in LIST_SPECS]
++        g3 = jload(rp("25-stage3-gate", "STAGE3-E-W.json"))
++        cm = jload(rp("00-worktrees", "creation-M.json"))
++        ap = jload(rp("00-worktrees", "apply-C7.json"))
++        b7 = jload(rp("11-build-E-W7", "descriptor.json"))
++        l7 = [jload(rp("21-list-E-W7", sp[0], "descriptor.json")) for sp in LIST_SPECS]
++    except Exception as e:  # noqa: BLE001
++        return [("ORD-0", "every order receipt is present", False, repr(e))]
++    seq = [("E-W build", _desc_times(bw))] + [("E-W %s" % sp[0], _desc_times(d)) for sp, d in zip(LIST_SPECS, lw)] + \
++          [("Stage-3 gate", (g3.get("started_utc"), g3.get("finished_utc")))] + \
++          [("mutant worktree creation", (cm.get("started_utc"), cm.get("finished_utc")))] + \
++          [("C7 patch application", (ap.get("started_utc"), ap.get("finished_utc")))] + \
++          [("E-W7 build", _desc_times(b7))] + [("E-W7 %s" % sp[0], _desc_times(d)) for sp, d in zip(LIST_SPECS, l7)]
++    ok_all = all(a and b and a <= b for _, (a, b) in seq)
++    out.append(("ORD-1", "every stage of 13.3 steps 3-4 has a UTC start and finish, start <= finish", ok_all, ""))
++    bad = [(seq[i][0], seq[i + 1][0]) for i in range(len(seq) - 1) if not (seq[i][1][1] and seq[i + 1][1][0] and seq[i][1][1] <= seq[i + 1][1][0])]
++    out.append(("ORD-2", "strict sequence: E-W build < 8 E-W listings (in order) < Stage-3 gate < mutant worktree creation < C7 patch < E-W7 build < 8 E-W7 listings",
++                not bad, "out of order: %s" % bad if bad else ""))
++    out.append(("ORD-3", "the Stage-3 gate record judged E-W admissible before the mutant worktree existed",
++                g3.get("admissible") is True and g3.get("mutant_worktree_existed") is False, "admissible=%s mutant_existed=%s" % (g3.get("admissible"), g3.get("mutant_worktree_existed"))))
++    return out
++
++
++def stage3(evdir, cfg=None):
++    """13.3 step 3 HARD ORDER GATE for E-W alone. Must run before the mutant worktree is created."""
++    cfg = cfg or default_cfg()
++    t0 = utcns()
++    mutant_exists = os.path.lexists(cfg["wt"]["E-W7"]) or c7wt.worktree_entry(cfg["wt"]["E-W7"]) is not None
++    ec = load_ec(cfg)
++    rec = Rec("STAGE 3 HARD ORDER GATE: E-W build, pin and its eight listings, judged alone (13.3 step 3; mission section 7)")
++    rec.check("S3-0", "the mutant worktree does not exist yet (no E-W7 creation or build has begun)", not mutant_exists, cfg["wt"]["E-W7"])
++    rec.check("S3-0b", "no E-W7 build or listing receipt exists yet",
++              not os.path.lexists(os.path.join(evdir, "receipts", ROLES["E-W7"]["build"])) and not os.path.lexists(os.path.join(evdir, "receipts", ROLES["E-W7"]["list"]))
++              and not os.path.lexists(os.path.join(evdir, "receipts/12-pin/E-W7.json")), "")
++    ec_all, ec_ign = parse_listing(ec["all_raw"]), parse_listing(ec["ign_raw"])
++    rec.check("EC-1", "E-C baseline listings read from git objects at %s have the frozen sha256 values" % EC_EVID[:8],
++              ec["all_sha"] == cfg["ec_all_sha"] and ec["ign_sha"] == cfg["ec_ign_sha"], "")
++    rec.check("EC-2", "E-C listings are well formed with %d all / %d ignored tests" % (cfg["all_count"] - 1, cfg["ign_count"]),
++              not ec_all["problems"] and not ec_ign["problems"] and ec_all["count"] == cfg["all_count"] - 1 and ec_ign["count"] == cfg["ign_count"], "")
++    role = "E-W"
++    R = ROLES[role]
++    pp = os.path.join(evdir, "receipts/12-pin", role + ".json")
++    info = {}
++    if not rec.check("PIN", "E-W pin exists", os.path.exists(pp), pp):
++        pj = None
++    else:
++        pj = jload(pp)
++        bdir = os.path.join(evdir, "receipts", R["build"])
++        d = jload(os.path.join(bdir, "descriptor.json"))
++        for cid, desc, ok, det in build_checks(d, role, cfg, bdir):
++            rec.check(cid, desc, ok, det if not ok else "")
++        rec.check("PIN-2", "E-W pin equals the build receipt's executable (path, sha256, size) and its descriptor/receipt hashes still match",
++                  pj["executable"]["path"] == d["pinned_executables"][0]["path"] and pj["executable"]["sha256"] == d["pinned_executables"][0]["sha256"]
++                  and pj["executable"]["size"] == d["pinned_executables"][0]["size"] and pj["build"]["descriptor_sha256"] == sha256_file(os.path.join(bdir, "descriptor.json"))
++                  and pj["build"]["receipt_sha256"] == sha256_file(os.path.join(bdir, "RECEIPT.txt")), "")
++        rec.check("PIN-3", "E-W: the compile fingerprint shows rustflags == []", len(pj["fingerprints"]) >= 1 and all(f["rustflags"] == [] for f in pj["fingerprints"]), "")
++        rec.check("0A-2", "E-W is not E-C (cde9f9d2…)", pj["executable"]["sha256"] != cfg["e_c_sha"] and pj["executable"]["path"] != ec["pin"]["executable"], pj["executable"]["sha256"][:12])
++        checks, info = listing_checks(evdir, role, cfg, ec)
++        for cid, desc, ok, det in checks:
++            rec.check(cid, desc, ok, det if not ok else "")
++        sc = (cfg["src_counts"] or default_src_counts)()
++        tw = (info.get("parsed", {}).get("L1-list-all", {}).get("count"), info.get("parsed", {}).get("L2-list-ignored", {}).get("count"))
++        rec.check("S3-INV", "healthy inventory: W-TREE source %s, E-W listings %s, expectation (%d, %d)" % (sc, tw, cfg["all_count"], cfg["ign_count"]),
++                  tuple(sc) == tw == (cfg["all_count"], cfg["ign_count"]), "")
++        ts = []
++        for sp in LIST_SPECS:
++            dd = jload(os.path.join(evdir, "receipts", R["list"], sp[0], "descriptor.json"))
++            ts.append((sp[0],) + _desc_times(dd))
++        seq_ok = all(ts[i][2] <= ts[i + 1][1] for i in range(len(ts) - 1)) and d["supervisor"]["finished_utc"] <= ts[0][1]
++        rec.check("S3-ORD", "the E-W build finished before the first listing, and the eight listings ran one at a time in order", seq_ok,
++                  json.dumps(ts) if not seq_ok else "")
++    ok = not rec.fails
++    verdict = ("STAGE 3: E-W BUILD AND ALL EIGHT LISTINGS ADMISSIBLE — the mutant worktree may now be created (13.3 step 4)" if ok else
++               "STAGE 3: NOT ADMISSIBLE (failed: %s) — STOP; the mutant build must not begin" % ", ".join(sorted(set(rec.fails))))
++    rec.log("\n" + verdict)
++    t1 = utcns()
++    od = os.path.join(evdir, "receipts/25-stage3-gate")
++    os.makedirs(od)
++    rec.write(os.path.join(od, "STAGE3-E-W.txt"))
++    with open(os.path.join(od, "STAGE3-E-W.json"), "x") as f:
++        json.dump({"mission": MISSION, "verdict": verdict, "admissible": ok, "failed_checks": sorted(set(rec.fails)), "mutant_worktree_existed": mutant_exists,
++                   "pin": pj["executable"] if pj else None, "all_listing_sha256": info.get("all_sha"), "ignored_listing_sha256": info.get("ign_sha"),
++                   "started_utc": t0, "finished_utc": t1}, f, indent=1)
++    return 0 if ok else 1
++
++
+ # ----------------------------------------------------------------------------- check = B-W/C
+ def check(evdir, cfg=None, selfwrite=True):
+     cfg = cfg or default_cfg()
+@@ -409,6 +514,9 @@
+         for cid, desc, ok, det in checks:
+             rec.check(cid, desc, ok, det if not ok else "")
+         info[role] = linfo
++    rec.log("\n## 13.3 order (this mission's own receipts; UTC timestamps)")
++    for cid, desc, ok, det in order_checks(evdir):
++        rec.check(cid, desc, ok, det)
+     rec.log("\n## cross checks")
+     if len(pins) == 2:
+         pw, p7 = pins["E-W"]["executable"], pins["E-W7"]["executable"]
+@@ -440,8 +548,10 @@
+     o6 = ["", "## O-6 record (AD-C7-W 6.3)",
+           "W-SRC identity: W-COMMIT %s; W-TREE %s; W-BLOB %s (sha256 %s, %d bytes); W-PATCH sha256 %s; sole parent C-BASE %s." % (W_COMMIT, W_TREE, W_BLOB, W_BLOB_SHA, W_BLOB_SIZE, W_PATCH_SHA, C_BASE),
+           "W7-SRC = W-SRC plus the frozen C7 patch (sha256 %s), never committed or staged; protocol.rs blob %s sha256 %s." % (PATCH_SHA, MUTANT_BLOB, MUTANT_SHA),
+-          "B-W/B was conveyed by: the Architect (Primary / Sole Decision Architect) statement in the text of mission %s ('The Primary Architect has independently accepted B-W/B for this exact W-COMMIT only'). "
+-          "This executor did not review the source for B-W/B; it authenticated only the frozen identities." % MISSION]
++          "B-W/B was conveyed by: the Sole Decision Architect's statement in section 3 of mission %s ('B-W/B: Previously Architect-approved for this exact W-SRC identity only. "
++          "The source review remains bound to its exact W-COMMIT, W-TREE, W-BLOB and W-PATCH SHA256.'). "
++          "This executor did not review the source for B-W/B; it authenticated only the frozen identities and recorded mechanical NI/SR evidence (preflight gate)." % MISSION,
++          "B-W/A: CR-B expressly adopted by the Owner as a conditional C7-only policy (K4 record %s, authenticated by the preflight gate)." % K4_COMMIT]
+     for role in ("E-W", "E-W7"):
+         if role in pins:
+             pj = pins[role]
+@@ -620,4 +730,6 @@
+         sys.exit(run_lists(ev, sys.argv[3]))
+     if mode == "check":
+         sys.exit(check(ev))
++    if mode == "stage3":
++        sys.exit(stage3(ev))
+     raise SystemExit("usage")
