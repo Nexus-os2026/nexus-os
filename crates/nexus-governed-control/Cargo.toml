@@ -27,3 +27,5 @@ x11rb = { version = "0.13", features = ["xtest"] }
 
 [dev-dependencies]
 serde_json = "1.0"
+# PROVISIONAL (unadopted full D2a draft): the test-only ledger storage shell.
+rusqlite = { version = "0.31", features = ["bundled"] }
