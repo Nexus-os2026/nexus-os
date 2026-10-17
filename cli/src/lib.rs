@@ -77,6 +77,7 @@ pub enum TopLevelCommand {
         #[command(subcommand)]
         command: ModelCommand,
     },
+    /// Governance tasks (unavailable: no governance model is available to the CLI)
     Governance {
         #[command(subcommand)]
         command: GovernanceCommand,
@@ -237,7 +238,9 @@ pub enum ProtocolsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum GovernanceCommand {
-    /// Run a governance task locally (pii_detection, prompt_safety, capability_risk, content_classification)
+    /// Governance task (pii_detection, prompt_safety, capability_risk, content_classification).
+    /// Unavailable: no governance model is available to the CLI, so the command
+    /// reports that and performs no inference.
     Test {
         /// Task type: pii_detection, prompt_safety, capability_risk, content_classification
         task_type: String,
@@ -1091,4 +1094,28 @@ fn run_self_improve_hook(
     let storage_dir = resolve_self_improve_storage_dir(agent_id.as_str())?;
     run_once_with_storage(storage_dir, agent_id.as_str(), observation)
         .map_err(|error| format!("self-improve hook failed: {error}"))
+}
+
+#[cfg(test)]
+mod help_tests {
+    use super::Cli;
+    use clap::CommandFactory;
+
+    /// P3 D-2 R2 (D-4 documentation): the governance help promises no local
+    /// inference while the feature is unavailable.
+    #[test]
+    fn p3_d2r2_governance_help_does_not_promise_local_inference() {
+        let mut command = Cli::command();
+        let governance = command.find_subcommand_mut("governance").unwrap();
+        let mut texts = vec![governance.render_long_help().to_string()];
+        let test = governance.find_subcommand_mut("test").unwrap();
+        texts.push(test.render_long_help().to_string());
+        for text in texts {
+            assert!(!text.to_lowercase().contains("locally"), "{text}");
+            assert!(
+                text.contains("Unavailable") || text.contains("unavailable"),
+                "{text}"
+            );
+        }
+    }
 }
