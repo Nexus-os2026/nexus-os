@@ -367,6 +367,10 @@ fn a_cleared_acknowledgement_flag_is_corrupt_not_omitted() {
         append(&store.conn, &store.identity(), &draft),
         Insert::Inserted(_)
     ));
+    // A later row, so that the explanation is not the head: the survey
+    // verifies the head row on its own, which would hide a filtered range.
+    let after = store.fact(b"after", None, b"c");
+    commit_fact(&mut store, &after);
     let mut ack = AckIo {
         conn: &store.conn,
         store: store.identity(),
@@ -375,13 +379,13 @@ fn a_cleared_acknowledgement_flag_is_corrupt_not_omitted() {
         panic!()
     };
     assert_eq!(set.count, 1);
+    assert!(set.head > set.top, "the explanation is below the head");
     tamper(&store, "UPDATE ledger SET needs_ack = 0 WHERE family = 4");
     let mut ack = AckIo {
         conn: &store.conn,
         store: store.identity(),
     };
     assert_eq!(ack.survey(), Read::Corrupt);
-    let _ = &mut store;
 }
 
 /// A cause the core built, obtained the only way a cause can be: by a

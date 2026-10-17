@@ -50,12 +50,15 @@ const FAULTS: [Fault; 6] = [
 /// The payload of an injected unwind.
 struct Injected;
 
-/// Which call gets the fault, and what the run saw.
+/// Which call gets the fault (and, for a pair, which later call gets a
+/// second), and what the run saw.
 struct Plan {
     at: usize,
     fault: Fault,
+    second: Option<(usize, Fault)>,
     calls: usize,
     hit: Option<&'static str>,
+    hit_second: Option<&'static str>,
 }
 
 impl Plan {
@@ -63,8 +66,17 @@ impl Plan {
         Plan {
             at,
             fault,
+            second: None,
             calls: 0,
             hit: None,
+            hit_second: None,
+        }
+    }
+
+    fn pair(at: usize, fault: Fault, later: usize, second: Fault) -> Plan {
+        Plan {
+            second: Some((later, second)),
+            ..Plan::new(at, fault)
         }
     }
 
@@ -76,10 +88,17 @@ impl Plan {
     fn next(&mut self, verb: &'static str) -> Option<Fault> {
         let n = self.calls;
         self.calls += 1;
-        (n == self.at).then(|| {
+        if n == self.at {
             self.hit = Some(verb);
-            self.fault
-        })
+            return Some(self.fault);
+        }
+        match self.second {
+            Some((later, fault)) if later == n => {
+                self.hit_second = Some(verb);
+                Some(fault)
+            }
+            _ => None,
+        }
     }
 }
 
@@ -302,168 +321,327 @@ fn every_case(mut run: impl FnMut(usize, Fault) -> Option<&'static str>) -> usiz
     cases
 }
 
-/// A gating append, faulted at every verb, then brought to rest.
-#[test]
-fn gating_append_answers_truthfully_under_every_single_fault() {
-    let cases = every_case(|at, fault| {
-        let scratch = Scratch::new();
-        let path = scratch.path("l.db");
-        let mut store = opened(&path);
-        let mut worker = store.take_worker().unwrap();
-        let gating = store.gating(b"g", part(1, Role::Prepared), b"c");
-        let staged = [Staged {
-            member: *gating.record().member(),
-            draft: gating.draft.clone(),
-        }];
-        let mut plan = Plan::new(at, fault);
-        let outcome = {
-            let Store {
-                conn,
-                core,
-                binding,
-                ..
-            } = &mut store;
-            let mut io = Faulty {
-                inner: AppendIo {
-                    conn,
-                    store: binding.identity,
-                    staged: &staged,
-                },
-                plan: &mut plan,
-            };
-            caught(|| core.append_gating(gating.record(), &mut io))
-        };
-        let hit = plan.hit?;
-        let context = format!("fault {fault:?} at call {at} ({hit}): {outcome:?}");
-        let rest = drive(&mut store, &mut worker, 16);
-        let (present, corrections) = holds(&store, &gating.key());
-        match outcome {
-            Some(GatingOutcome::Committed(seq)) => {
-                assert_eq!(present, Some(seq), "{context}");
-                assert_eq!(corrections, 0, "{context}");
+/// Where a scenario starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Start {
+    /// An empty, open store: the append inserts.
+    Fresh,
+    /// The record already committed: the clean path rolls back an empty
+    /// transaction.
+    Present,
+    /// A record of the same identity with other content committed: the
+    /// clean path refuses a conflict and rolls back.
+    Conflicting,
+}
+
+const STARTS: [Start; 3] = [Start::Fresh, Start::Present, Start::Conflicting];
+
+/// The verbs a run's faults landed on.
+#[derive(Clone, Copy, Debug)]
+struct Hits {
+    first: &'static str,
+    second: Option<&'static str>,
+}
+
+impl Plan {
+    fn hits(&self) -> Option<Hits> {
+        Some(Hits {
+            first: self.hit?,
+            second: self.hit_second,
+        })
+    }
+}
+
+/// Every single fault at every position.
+fn every_single(mut run: impl FnMut(Plan) -> Option<Hits>) -> usize {
+    every_case(|at, fault| run(Plan::new(at, fault)).map(|hits| hits.first))
+}
+
+/// Every pair: a first fault that lets the operation continue (it does not
+/// unwind), at every position, and any second fault at every later position.
+fn every_pair(mut run: impl FnMut(Plan) -> Option<Hits>) -> usize {
+    let mut cases = 0;
+    for first in [Fault::Fail, Fault::Lost, Fault::Constraint, Fault::Corrupt] {
+        for at in 0.. {
+            if run(Plan::new(at, first)).is_none() {
+                break;
             }
-            Some(GatingOutcome::Refused {
-                persistence: Persistence::NotWritten,
-                ..
-            }) => {
-                assert_eq!(present, None, "{context}");
-                assert_eq!(corrections, 0, "{context}");
-            }
-            Some(GatingOutcome::Refused {
-                persistence: Persistence::Uncertain,
-                ..
-            })
-            | None => {
-                if rest.latch.is_none() {
-                    assert_eq!(corrections, usize::from(present.is_some()), "{context}");
+            for second in FAULTS {
+                for later in at + 1.. {
+                    match run(Plan::pair(at, first, later, second)) {
+                        Some(Hits {
+                            second: Some(_), ..
+                        }) => cases += 1,
+                        _ => break,
+                    }
+                    assert!(later < 64);
                 }
             }
+            assert!(at < 64);
         }
-        if rest.latch.is_none() {
-            assert_eq!(rest.phase, Phase::Healthy, "{context}");
-            assert!(
-                rest.u.is_none() && rest.c.is_none() && rest.x.is_none(),
-                "{context}"
-            );
-            // Offered again: corrected, or committed (present or fresh).
-            match store.append_gating(&gating).unwrap() {
+    }
+    cases
+}
+
+/// One gating append from `start` under `plan`, brought to rest and checked
+/// against the reopened file.
+fn gating_case(start: Start, mut plan: Plan) -> Option<Hits> {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    let mut store = opened(&path);
+    let mut worker = store.take_worker().unwrap();
+    let gating = store.gating(b"g", part(1, Role::Prepared), b"c");
+    match start {
+        Start::Fresh => {}
+        Start::Present => {
+            assert!(matches!(
+                store.append_gating(&gating).unwrap(),
+                GatingOutcome::Committed(_)
+            ));
+        }
+        Start::Conflicting => {
+            let other = store.gating(b"g", part(1, Role::Prepared), b"other");
+            assert!(matches!(
+                store.append_gating(&other).unwrap(),
+                GatingOutcome::Committed(_)
+            ));
+        }
+    }
+    let before = holds(&store, &gating.key());
+    let outcome = gating_with(&mut store, &gating, &mut plan);
+    let hits = plan.hits()?;
+    let context = format!(
+        "{start:?}; {hits:?} ({:?}): {outcome:?}",
+        (plan.at, plan.fault, plan.second)
+    );
+    let rest = drive(&mut store, &mut worker, 16);
+    let (present, corrections) = holds(&store, &gating.key());
+    match outcome {
+        Some(GatingOutcome::Committed(seq)) => {
+            assert_eq!(present, Some(seq), "{context}");
+            assert_eq!(corrections, 0, "{context}");
+        }
+        Some(GatingOutcome::Refused {
+            persistence: Persistence::NotWritten,
+            ..
+        }) => {
+            assert_eq!((present, corrections), before, "{context}");
+        }
+        Some(GatingOutcome::Refused {
+            persistence: Persistence::Uncertain,
+            ..
+        })
+        | None => {
+            if rest.latch.is_none() {
+                let written = present.is_some() && before.0.is_none();
+                assert_eq!(corrections, usize::from(written), "{context}");
+            }
+        }
+    }
+    if start == Start::Conflicting {
+        assert_eq!(
+            present, None,
+            "{context}: a conflicting record is never written"
+        );
+    }
+    if rest.latch.is_none() {
+        assert_eq!(rest.phase, Phase::Healthy, "{context}");
+        assert!(
+            rest.u.is_none() && rest.c.is_none() && rest.x.is_none(),
+            "{context}"
+        );
+        match (start, store.append_gating(&gating).unwrap()) {
+            (
+                _,
                 GatingOutcome::Refused {
                     persistence: Persistence::NotWritten,
                     reason: Reason::Corrected { .. },
-                } => assert_eq!(corrections, 1, "{context}"),
-                GatingOutcome::Committed(_) => assert_eq!(corrections, 0, "{context}"),
-                other => panic!("{context}; offered again: {other:?}"),
+                },
+            ) => assert_eq!(corrections, 1, "{context}"),
+            (Start::Fresh | Start::Present, GatingOutcome::Committed(_)) => {
+                assert_eq!(corrections, 0, "{context}")
             }
+            (
+                Start::Conflicting,
+                GatingOutcome::Refused {
+                    persistence: Persistence::NotWritten,
+                    reason: Reason::Conflict { .. },
+                },
+            ) => {}
+            (_, other) => panic!("{context}; offered again: {other:?}"),
         }
-        let held = holds(&store, &gating.key());
-        drop(store);
-        assert_eq!(reopened(&path, &gating.key()), held, "{context}");
-        Some(hit)
-    });
-    eprintln!("gating append: {cases} faulted runs");
-    assert!(cases > 20);
+    }
+    let held = holds(&store, &gating.key());
+    drop(store);
+    assert_eq!(reopened(&path, &gating.key()), held, "{context}");
+    Some(hits)
 }
 
-/// A batch of two facts, faulted at every verb. A batch is one transaction:
-/// both members or neither.
+/// One fact batch (two members, one transaction) from `start` under `plan`.
+fn fact_case(start: Start, mut plan: Plan) -> Option<Hits> {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    let mut store = opened(&path);
+    let mut worker = store.take_worker().unwrap();
+    let batch = [
+        store.fact(b"p", part(1, Role::Prepared), b"c"),
+        store.fact(b"s", part(1, Role::Started), b"c"),
+    ];
+    let commit = |store: &mut Store, batch: &[Built<FactRecord>]| {
+        let mut ticket = store.health().arm().unwrap();
+        assert_eq!(
+            store.append_facts(&mut ticket, batch).unwrap(),
+            FactOutcome::Committed
+        );
+        ticket.confirm();
+    };
+    match start {
+        Start::Fresh => {}
+        Start::Present => commit(&mut store, &batch),
+        Start::Conflicting => {
+            let other = store.fact(b"p", part(2, Role::Prepared), b"other");
+            commit(&mut store, &[other]);
+        }
+    }
+    let before: Vec<_> = batch.iter().map(|b| holds(&store, &b.key())).collect();
+    let staged: Vec<Staged> = batch
+        .iter()
+        .map(|built| Staged {
+            member: *built.record().member(),
+            draft: built.draft.clone(),
+        })
+        .collect();
+    let records: Vec<FactRecord> = batch.iter().map(|b| b.record().clone()).collect();
+    let mut ticket = store.health().arm().unwrap();
+    let outcome = {
+        let Store {
+            conn,
+            core,
+            binding,
+            ..
+        } = &mut store;
+        let mut io = Faulty {
+            inner: AppendIo {
+                conn,
+                store: binding.identity,
+                staged: &staged,
+            },
+            plan: &mut plan,
+        };
+        caught(|| core.append_facts(&mut ticket, &records, &mut io))
+    };
+    let counted = ticket.counted();
+    ticket.confirm();
+    let hits = plan.hits()?;
+    let context = format!(
+        "{start:?}; {hits:?} ({:?}): {outcome:?} {counted:?}",
+        (plan.at, plan.fault, plan.second)
+    );
+    let rest = drive(&mut store, &mut worker, 16);
+    let now: Vec<_> = batch.iter().map(|b| holds(&store, &b.key())).collect();
+    let present: Vec<bool> = now.iter().map(|h| h.0.is_some()).collect();
+    assert!(present[0] == present[1], "atomic: {context}; {present:?}");
+    match (outcome, counted) {
+        (Some(FactOutcome::Committed), _) => assert!(present[0], "{context}"),
+        (Some(FactOutcome::NotApplied { counted, .. }), _) | (None, Some(counted))
+            if counted.persistence == Persistence::NotWritten =>
+        {
+            assert_eq!(now, before, "{context}")
+        }
+        (Some(FactOutcome::NotApplied { .. }), _) | (None, Some(_)) => {}
+        other => panic!("{context}: {other:?}"),
+    }
+    if start == Start::Conflicting {
+        assert!(
+            !present[0],
+            "{context}: a conflicting batch is never written"
+        );
+    }
+    if rest.latch.is_none() {
+        assert_eq!(rest.phase, Phase::Healthy, "{context}");
+        let mut ticket = store.health().arm().unwrap();
+        let again = store.append_facts(&mut ticket, &batch).unwrap();
+        ticket.confirm();
+        match (start, again) {
+            (Start::Fresh | Start::Present, FactOutcome::Committed) => {}
+            (
+                Start::Conflicting,
+                FactOutcome::NotApplied {
+                    reason: Reason::Conflict { member: 0, .. },
+                    ..
+                },
+            ) => {}
+            (_, other) => panic!("{context}: offered again: {other:?}"),
+        }
+    }
+    assert!(!store.health().view().handover_fault(), "{context}");
+    let held: Vec<_> = batch.iter().map(|b| holds(&store, &b.key())).collect();
+    drop(store);
+    for (built, held) in batch.iter().zip(held) {
+        assert_eq!(reopened(&path, &built.key()), held, "{context}");
+    }
+    Some(hits)
+}
+
+/// A gating append from each start, faulted at every verb.
+#[test]
+fn gating_append_answers_truthfully_under_every_single_fault() {
+    for start in STARTS {
+        let cases = every_single(|plan| gating_case(start, plan));
+        eprintln!("gating append from {start:?}: {cases} faulted runs");
+        assert!(cases >= 18);
+    }
+}
+
+/// A fact batch from each start, faulted at every verb.
 #[test]
 fn fact_append_answers_truthfully_under_every_single_fault() {
-    let cases = every_case(|at, fault| {
-        let scratch = Scratch::new();
-        let path = scratch.path("l.db");
-        let mut store = opened(&path);
-        let mut worker = store.take_worker().unwrap();
-        let batch = [
-            store.fact(b"p", part(1, Role::Prepared), b"c"),
-            store.fact(b"s", part(1, Role::Started), b"c"),
-        ];
-        let staged: Vec<Staged> = batch
-            .iter()
-            .map(|built| Staged {
-                member: *built.record().member(),
-                draft: built.draft.clone(),
-            })
-            .collect();
-        let records: Vec<FactRecord> = batch.iter().map(|b| b.record().clone()).collect();
-        let mut ticket = store.health().arm().unwrap();
-        let mut plan = Plan::new(at, fault);
-        let outcome = {
-            let Store {
-                conn,
-                core,
-                binding,
-                ..
-            } = &mut store;
-            let mut io = Faulty {
-                inner: AppendIo {
-                    conn,
-                    store: binding.identity,
-                    staged: &staged,
-                },
-                plan: &mut plan,
-            };
-            caught(|| core.append_facts(&mut ticket, &records, &mut io))
-        };
-        let counted = ticket.counted();
-        ticket.confirm();
-        let hit = plan.hit?;
-        let context = format!("fault {fault:?} at call {at} ({hit}): {outcome:?} {counted:?}");
-        let rest = drive(&mut store, &mut worker, 16);
-        let present: Vec<bool> = batch
-            .iter()
-            .map(|built| holds(&store, &built.key()).0.is_some())
-            .collect();
-        assert!(present[0] == present[1], "atomic: {context}; {present:?}");
-        match (outcome, counted) {
-            (Some(FactOutcome::Committed), _) => assert!(present[0], "{context}"),
-            (Some(FactOutcome::NotApplied { counted, .. }), _) | (None, Some(counted))
-                if counted.persistence == Persistence::NotWritten =>
-            {
-                assert!(!present[0], "{context}")
-            }
-            (Some(FactOutcome::NotApplied { .. }), _) | (None, Some(_)) => {}
-            other => panic!("{context}: {other:?}"),
-        }
-        if rest.latch.is_none() {
-            assert_eq!(rest.phase, Phase::Healthy, "{context}");
-            let mut ticket = store.health().arm().unwrap();
-            assert_eq!(
-                store.append_facts(&mut ticket, &batch).unwrap(),
-                FactOutcome::Committed,
-                "{context}: offered again"
-            );
-            ticket.confirm();
-        }
-        assert!(!store.health().view().handover_fault(), "{context}");
-        let held: Vec<_> = batch.iter().map(|b| holds(&store, &b.key())).collect();
-        drop(store);
-        for (built, held) in batch.iter().zip(held) {
-            assert_eq!(reopened(&path, &built.key()), held, "{context}");
-        }
-        Some(hit)
-    });
-    eprintln!("fact append: {cases} faulted runs");
-    assert!(cases > 20);
+    for start in STARTS {
+        let cases = every_single(|plan| fact_case(start, plan));
+        eprintln!("fact append from {start:?}: {cases} faulted runs");
+        assert!(cases >= 18);
+    }
+}
+
+/// Two faults in one gating append: a first that lets it continue, then any
+/// second, including on the one rollback a failure leads to.
+#[test]
+fn gating_append_answers_truthfully_under_every_pair_of_faults() {
+    for start in STARTS {
+        let cases = every_pair(|plan| gating_case(start, plan));
+        eprintln!("gating append from {start:?}: {cases} runs with two faults");
+        assert!(cases > 0);
+    }
+}
+
+#[test]
+fn fact_append_answers_truthfully_under_every_pair_of_faults() {
+    for start in STARTS {
+        let cases = every_pair(|plan| fact_case(start, plan));
+        eprintln!("fact append from {start:?}: {cases} runs with two faults");
+        assert!(cases > 0);
+    }
+}
+
+/// The rollback verb is faulted: by pairs after a failure, and by single
+/// faults where the clean path itself rolls back (Present, Conflicting).
+#[test]
+fn the_rollback_verb_is_among_the_faulted_verbs() {
+    let mut rollbacks = 0;
+    for start in STARTS {
+        every_single(|plan| {
+            let hits = gating_case(start, plan)?;
+            rollbacks += usize::from(hits.first == "rollback");
+            Some(hits)
+        });
+        every_pair(|plan| {
+            let hits = fact_case(start, plan)?;
+            rollbacks += usize::from(hits.second == Some("rollback"));
+            Some(hits)
+        });
+    }
+    eprintln!("runs with a faulted rollback: {rollbacks}");
+    assert!(rollbacks >= 12);
 }
 
 /// A store with one explanation in the ledger, ready to acknowledge.
@@ -703,4 +881,351 @@ fn the_harness_without_a_fault_changes_nothing() {
     ));
     assert_eq!(plan.hit, None);
     assert_eq!(plan.calls, 4, "open, facts, insert, commit");
+}
+
+/// One gating append through the harness.
+fn gating_with(
+    store: &mut Store,
+    built: &Built<GatingRecord>,
+    plan: &mut Plan,
+) -> Option<GatingOutcome> {
+    let staged = [Staged {
+        member: *built.record().member(),
+        draft: built.draft.clone(),
+    }];
+    let Store {
+        conn,
+        core,
+        binding,
+        ..
+    } = store;
+    let mut io = Faulty {
+        inner: AppendIo {
+            conn,
+            store: binding.identity,
+            staged: &staged,
+        },
+        plan,
+    };
+    caught(|| core.append_gating(built.record(), &mut io))
+}
+
+fn row_count(store: &Store) -> i64 {
+    store
+        .conn
+        .query_row("SELECT count(*) FROM ledger", [], |row| row.get(0))
+        .unwrap()
+}
+
+/// Every row of CONTRACT-02-R1 section 4.5's table of re-offers, on a real
+/// file (REVIEW-02, condition 6: "a test of every re-offer row is still
+/// owed"). Each row reaches its earlier attempt's state through real verbs,
+/// with at most one injected fault.
+#[test]
+fn every_re_offer_row_of_section_4_5_on_a_real_file() {
+    let fresh = || {
+        let scratch = Scratch::new();
+        let mut store = opened(&scratch.path("l.db"));
+        let worker = store.take_worker().unwrap();
+        let gating = store.gating(b"g", part(9, Role::Prepared), b"c");
+        (scratch, store, worker, gating)
+    };
+    let refused = |reason| GatingOutcome::Refused {
+        persistence: Persistence::NotWritten,
+        reason,
+    };
+
+    // 1. Committed, no correction, offered while Healthy with cells empty:
+    //    Committed again with its sequence; nothing is written.
+    let (_s, mut store, _w, gating) = fresh();
+    let GatingOutcome::Committed(seq) = store.append_gating(&gating).unwrap() else {
+        panic!()
+    };
+    let rows = row_count(&store);
+    assert_eq!(
+        store.append_gating(&gating).unwrap(),
+        GatingOutcome::Committed(seq)
+    );
+    assert_eq!(row_count(&store), rows);
+    assert!(store.agenda().u.is_none());
+
+    // 2. Committed, offered while an entry rule refuses: the entry refusal;
+    //    U untouched; no correction exists or is made.
+    let (_s, mut store, mut worker, gating) = fresh();
+    assert!(matches!(
+        store.append_gating(&gating).unwrap(),
+        GatingOutcome::Committed(_)
+    ));
+    let mut failing = Plan::new(0, Fault::Fail);
+    {
+        let Store {
+            conn,
+            core,
+            binding,
+            ..
+        } = &mut store;
+        let mut io = Faulty {
+            inner: ReadIo {
+                conn,
+                store: binding.identity,
+            },
+            plan: &mut failing,
+        };
+        assert_eq!(core.lookup(&gating.key(), &mut io), Lookup::Failed);
+    }
+    assert_eq!(store.agenda().phase, Phase::NeedBarrier);
+    assert_eq!(
+        store.append_gating(&gating).unwrap(),
+        refused(Reason::Entry(Entry::NotHealthy))
+    );
+    assert!(store.agenda().u.is_none());
+    drive(&mut store, &mut worker, 8);
+    assert_eq!(holds(&store, &gating.key()).1, 0);
+
+    // 3. Ended Uncertain, still in U: the entry refusal.
+    let (_s, mut store, _w, gating) = fresh();
+    let outcome = gating_with(&mut store, &gating, &mut Plan::new(3, Fault::Fail));
+    assert!(matches!(
+        outcome,
+        Some(GatingOutcome::Refused {
+            persistence: Persistence::Uncertain,
+            ..
+        })
+    ));
+    assert!(store.agenda().u.is_some());
+    assert_eq!(
+        store.append_gating(&gating).unwrap(),
+        refused(Reason::Entry(Entry::NotHealthy))
+    );
+
+    // 4. Resolved as present, its correction in C: the entry refusal (C is
+    //    occupied).
+    let (_s, mut store, mut worker, gating) = fresh();
+    gating_with(&mut store, &gating, &mut Plan::new(3, Fault::Lost));
+    assert_eq!(store.barrier(&mut worker), BarrierOutcome::Passed);
+    let token = store.agenda().u.unwrap();
+    assert!(matches!(
+        store.resolve(&mut worker, token),
+        Resolve::Corrected(_)
+    ));
+    assert!(store.agenda().c.is_some());
+    assert_eq!(
+        store.append_gating(&gating).unwrap(),
+        refused(Reason::Entry(Entry::CellsBusy))
+    );
+
+    // 5. Its correction committed: refused, Not written, reason corrected,
+    //    with the correction's sequence.
+    drive(&mut store, &mut worker, 8);
+    let store_id = store.identity();
+    let correction = [Exit::ReturnedUncertain, Exit::Unwound]
+        .into_iter()
+        .find_map(|exit| {
+            match by_id(
+                &store.conn,
+                &store_id,
+                &correction_id(&store_id, &gating.key(), exit_code(exit)),
+            ) {
+                Read::Got(Some(row)) => Some(row.seq),
+                _ => None,
+            }
+        })
+        .expect("the correction is in the ledger");
+    assert_eq!(
+        store.append_gating(&gating).unwrap(),
+        refused(Reason::Corrected { seq: correction })
+    );
+
+    // 6. Resolved as absent: a fresh attempt.
+    let (_s, mut store, mut worker, gating) = fresh();
+    gating_with(&mut store, &gating, &mut Plan::new(3, Fault::Fail));
+    let rest = drive(&mut store, &mut worker, 8);
+    assert!(rest.u.is_none() && rest.c.is_none() && rest.phase == Phase::Healthy);
+    assert_eq!(holds(&store, &gating.key()), (None, 0));
+    assert!(matches!(
+        store.append_gating(&gating).unwrap(),
+        GatingOutcome::Committed(_)
+    ));
+
+    // 7. Ended Not written: a fresh attempt.
+    let (_s, mut store, mut worker, gating) = fresh();
+    let outcome = gating_with(&mut store, &gating, &mut Plan::new(2, Fault::Fail));
+    assert!(matches!(
+        outcome,
+        Some(GatingOutcome::Refused {
+            persistence: Persistence::NotWritten,
+            ..
+        })
+    ));
+    drive(&mut store, &mut worker, 8);
+    assert!(matches!(
+        store.append_gating(&gating).unwrap(),
+        GatingOutcome::Committed(_)
+    ));
+
+    // 8. Refused as a conflict: a conflict again, as already explained.
+    let (_s, mut store, mut worker, gating) = fresh();
+    assert!(matches!(
+        store.append_gating(&gating).unwrap(),
+        GatingOutcome::Committed(_)
+    ));
+    let other = store.gating(b"g", part(9, Role::Prepared), b"other content");
+    assert!(matches!(
+        store.append_gating(&other).unwrap(),
+        GatingOutcome::Refused {
+            reason: Reason::Conflict {
+                known: Known::Cause(_),
+                ..
+            },
+            ..
+        }
+    ));
+    drive(&mut store, &mut worker, 8);
+    assert!(matches!(
+        store.append_gating(&other).unwrap(),
+        GatingOutcome::Refused {
+            persistence: Persistence::NotWritten,
+            reason: Reason::Conflict {
+                known: Known::Explained(_),
+                ..
+            }
+        }
+    ));
+}
+
+/// The worker's append of an explanation (cell X), faulted at every verb:
+/// in the end the explanation is in the file exactly once, X is empty and
+/// explain finds it.
+#[test]
+fn cell_append_answers_truthfully_under_every_single_fault() {
+    let cases = every_case(|at, fault| {
+        let scratch = Scratch::new();
+        let path = scratch.path("l.db");
+        let mut store = opened(&path);
+        let mut worker = store.take_worker().unwrap();
+        let mut keys = Vec::new();
+        for content in [b"one".as_slice(), b"two"] {
+            let built = store.fact(b"x", None, content);
+            keys.push(built.key());
+            let mut ticket = store.health().arm().unwrap();
+            store.append_facts(&mut ticket, &[built]).unwrap();
+            ticket.confirm();
+        }
+        let conflicting = keys[1];
+        let Some((token, Stage::Built)) = store.agenda().x else {
+            panic!("an explanation waits in X")
+        };
+        let mut plan = Plan::new(at, fault);
+        let outcome = {
+            let Store {
+                conn,
+                core,
+                binding,
+                ..
+            } = &mut store;
+            let mut io = Faulty {
+                inner: CellIo {
+                    conn,
+                    store: binding.identity,
+                },
+                plan: &mut plan,
+            };
+            caught(|| core.append_cell(&mut worker, token, &mut io))
+        };
+        let hit = plan.hit?;
+        let context = format!("fault {fault:?} at call {at} ({hit}): {outcome:?}");
+        let store_id = store.identity();
+        let explanation = explanation_id(&store_id, &conflicting);
+        let in_file = |store: &Store| {
+            matches!(
+                by_id(&store.conn, &store_id, &explanation),
+                Read::Got(Some(_))
+            )
+        };
+        match outcome {
+            Some(CellAppend::Committed(_)) => assert!(in_file(&store), "{context}"),
+            Some(CellAppend::NotWritten) => assert!(!in_file(&store), "{context}"),
+            _ => {}
+        }
+        let rest = drive(&mut store, &mut worker, 16);
+        if rest.latch.is_none() {
+            assert!(rest.x.is_none(), "{context}");
+            assert!(in_file(&store), "{context}");
+            assert!(
+                matches!(store.explain(&conflicting), Explain::Explained(_)),
+                "{context}"
+            );
+        }
+        let explanations: i64 = store
+            .conn
+            .query_row("SELECT count(*) FROM ledger WHERE family = 4", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(explanations <= 1, "{context}");
+        drop(store);
+        Store::open(&path, LIMITS).expect("the file reopens");
+        Some(hit)
+    });
+    eprintln!("cell append: {cases} faulted runs");
+    assert!(cases > 10);
+}
+
+/// Lookup and explain, faulted at every read: they write nothing, a failed
+/// read moves the phase to barrier needed, and a corrupt one latches.
+#[test]
+fn lookup_and_explain_write_nothing_under_every_single_fault() {
+    for which in ["lookup", "explain"] {
+        let cases = every_case(|at, fault| {
+            let scratch = Scratch::new();
+            let mut store = opened(&scratch.path("l.db"));
+            let first = store.fact(b"x", None, b"one");
+            let mut ticket = store.health().arm().unwrap();
+            store.append_facts(&mut ticket, &[first]).unwrap();
+            ticket.confirm();
+            let probe = store.fact(b"x", None, b"two").key();
+            let rows = row_count(&store);
+            let mut plan = Plan::new(at, fault);
+            {
+                let Store {
+                    conn,
+                    core,
+                    binding,
+                    ..
+                } = &mut store;
+                let mut io = Faulty {
+                    inner: ReadIo {
+                        conn,
+                        store: binding.identity,
+                    },
+                    plan: &mut plan,
+                };
+                let _ = caught(|| {
+                    if which == "lookup" {
+                        format!("{:?}", core.lookup(&probe, &mut io))
+                    } else {
+                        format!("{:?}", core.explain(&probe, &mut io))
+                    }
+                });
+            }
+            let hit = plan.hit?;
+            let context = format!("{which}: fault {fault:?} at call {at} ({hit})");
+            assert_eq!(row_count(&store), rows, "{context}");
+            let agenda = store.agenda();
+            match fault {
+                Fault::Corrupt => assert_eq!(agenda.latch, Some(LatchCause::Corrupt), "{context}"),
+                Fault::Unwind
+                | Fault::LostUnwind
+                | Fault::Fail
+                | Fault::Lost
+                | Fault::Constraint => {
+                    assert_eq!(agenda.latch, None, "{context}");
+                    assert_eq!(agenda.phase, Phase::NeedBarrier, "{context}");
+                }
+            }
+            Some(hit)
+        });
+        eprintln!("{which}: {cases} faulted runs");
+        assert!(cases >= 6);
+    }
 }

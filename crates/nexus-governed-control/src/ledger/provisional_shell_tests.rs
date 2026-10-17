@@ -26,6 +26,7 @@ use sha2::{Digest, Sha256};
 use super::protocol::*;
 
 mod composition_tests;
+mod concurrency_tests;
 mod crash_tests;
 mod fault_tests;
 mod schema_tests;
@@ -1825,13 +1826,19 @@ pub(super) fn opened(path: &Path) -> Store {
 
 /// Plays the layer above's worker (B2's code; the tests play it, as in
 /// CONTRACT-02-R1 section 6.3): barrier, resolve, append C, append and empty
-/// X, until the store is Healthy with empty cells or a step fails. At most
-/// `steps` steps.
+/// X, until the store is Healthy with empty cells or a step fails. On a
+/// latched store only the barrier runs. At most `steps` steps.
 pub(super) fn drive(store: &mut Store, worker: &mut Worker, steps: usize) -> Agenda {
     for _ in 0..steps {
         let agenda = store.agenda();
         if agenda.latch.is_some() {
-            return agenda;
+            // The barrier's entry admits any latch (CONTRACT-02-R1 5.3): it
+            // still returns the connection to a known state. Nothing else
+            // runs on a latched store.
+            if agenda.phase == Phase::NeedBarrier {
+                store.barrier(worker);
+            }
+            return store.agenda();
         }
         match agenda.phase {
             Phase::NeedBarrier => {
