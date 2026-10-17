@@ -5,3 +5,9 @@
 
 #[cfg_attr(not(test), allow(dead_code))]
 mod protocol;
+
+// PROVISIONAL, test builds only: a SQLite storage shell written against the
+// unadopted draft P3-C11-D2A-FULL-CONTRACT-DRAFT-01. No production build
+// contains it; SQLite is a dev-dependency.
+#[cfg(test)]
+mod provisional_shell_tests;
