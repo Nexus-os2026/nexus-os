@@ -2828,9 +2828,10 @@ pub(crate) fn start_hivemind(
 /// (P3 HiveMind), established before any model call. Every requested id must
 /// be an agent the supervisor registers, named once; an invalid, unknown or
 /// repeated id, or no participant, refuses the session (none is skipped).
-/// Each participant's policy comes from its own identity
-/// ([`resolve_agent_llm_policy`]); the session is local-only when any is,
-/// and a participant whose policy cannot be established refuses it.
+/// The session's policy is its participants' common policy
+/// ([`hivemind_session_policy`]): a mix of local-only and unrestricted
+/// participants, or a participant whose policy cannot be established,
+/// refuses it.
 pub(crate) fn hivemind_participants(
     state: &AppState,
     agent_ids: &[String],
@@ -2859,21 +2860,41 @@ pub(crate) fn hivemind_participants(
             });
         }
     }
-    let mut policy = AgentLlmPolicy::Unrestricted;
-    for agent in &agents {
-        match resolve_agent_llm_policy(state, &agent.id) {
+    let ids: Vec<String> = agents.iter().map(|agent| agent.id.clone()).collect();
+    let policy = hivemind_session_policy(state, &ids).map_err(refused)?;
+    Ok((agents, policy))
+}
+
+/// The routing policy of a HiveMind session of the registered agents `ids`
+/// (P3 HiveMind INFOFLOW, provisional): every participant's own policy
+/// ([`resolve_agent_llm_policy`]), which must be the same for all. A
+/// sub-task's loop stores what it did under the participant that ran it,
+/// and an unrestricted participant's later work is bound by no session, so
+/// a session with a local-only participant admits only local-only ones. A
+/// mix, or a participant whose policy cannot be established, is refused.
+fn hivemind_session_policy(state: &AppState, ids: &[String]) -> Result<AgentLlmPolicy, String> {
+    let (mut local_only, mut unrestricted) = (false, false);
+    for id in ids {
+        match resolve_agent_llm_policy(state, id) {
             AgentLlmPolicy::Unresolved => {
-                return Err(refused(format!(
-                    "'{}': {}",
-                    agent.id,
-                    unresolved_policy_error()
-                )))
+                return Err(format!("'{id}': {}", unresolved_policy_error()))
             }
-            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
-            AgentLlmPolicy::Unrestricted => {}
+            AgentLlmPolicy::LocalOnly => local_only = true,
+            AgentLlmPolicy::Unrestricted => unrestricted = true,
         }
     }
-    Ok((agents, policy))
+    if local_only && unrestricted {
+        return Err(
+            "the session mixes local-only and unrestricted participants; \
+                    with a local-only participant every participant must be local-only"
+                .to_string(),
+        );
+    }
+    Ok(if local_only {
+        AgentLlmPolicy::LocalOnly
+    } else {
+        AgentLlmPolicy::Unrestricted
+    })
 }
 
 pub(crate) fn get_hivemind_status(

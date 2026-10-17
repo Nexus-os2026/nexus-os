@@ -641,6 +641,11 @@ struct FakeOllama {
     models: Vec<&'static str>,
     remote: Vec<&'static str>,
     generate_status: u16,
+    /// P3 HiveMind INFOFLOW: the recording proxy also answers a plain HTTP
+    /// request (one that would have left the machine) as this runtime
+    /// would, so work on a configured route runs on and every one of its
+    /// prompts is recorded with its content.
+    proxy_answers: bool,
 }
 
 impl FakeOllama {
@@ -649,6 +654,7 @@ impl FakeOllama {
             models: models.to_vec(),
             remote: Vec::new(),
             generate_status: 200,
+            proxy_answers: false,
         }
     }
 }
@@ -692,6 +698,19 @@ impl Witness {
 fn read_request(stream: &TcpStream) -> Option<(String, String)> {
     let mut reader = BufReader::new(stream);
     let mut head = String::new();
+    if reader.read_line(&mut head).ok()? == 0 {
+        return None;
+    }
+    if head == "\r\n" {
+        return Some((String::new(), String::new()));
+    }
+    let body = read_rest(&mut reader)?;
+    Some((head.trim_end().to_string(), body))
+}
+
+/// The rest of a request whose first line `reader` has read: its headers,
+/// then the body its `content-length` gives.
+fn read_rest(reader: &mut BufReader<&TcpStream>) -> Option<String> {
     let mut length = 0usize;
     loop {
         let mut line = String::new();
@@ -706,13 +725,10 @@ fn read_request(stream: &TcpStream) -> Option<(String, String)> {
                 length = value.trim().parse().ok()?;
             }
         }
-        if head.is_empty() {
-            head = line.trim_end().to_string();
-        }
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body).ok()?;
-    Some((head, String::from_utf8_lossy(&body).into_owned()))
+    Some(String::from_utf8_lossy(&body).into_owned())
 }
 
 fn serve_ollama(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<String>) {
@@ -729,78 +745,124 @@ fn serve_ollama(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<Str
             return;
         }
         let _ = log.send(format!("{method} {path} {body}"));
-        let model = serde_json::from_str::<serde_json::Value>(&body)
-            .ok()
-            .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string))
-            .unwrap_or_default();
-        let (status, reply) = match path.as_str() {
-            "/api/tags" => (
+        let (status, reply) = runtime_reply(&serves, &path, &body);
+        respond(&mut stream, status, &reply);
+    }
+}
+/// The fake runtime's answer to a request for `path` with `body`.
+fn runtime_reply(serves: &FakeOllama, path: &str, body: &str) -> (u16, serde_json::Value) {
+    let model = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string))
+        .unwrap_or_default();
+    match path {
+        "/api/tags" => (
+            200,
+            serde_json::json!({"models": serves.models.iter()
+                .map(|name| serde_json::json!({"name": name}))
+                .collect::<Vec<_>>()}),
+        ),
+        "/api/show" if !serves.models.contains(&model.as_str()) => {
+            (404, serde_json::json!({"error": "model not found"}))
+        }
+        "/api/show" if serves.remote.contains(&model.as_str()) => (
+            200,
+            serde_json::json!({"remote_host": "https://ollama.com:443", "remote_model": model}),
+        ),
+        "/api/show" => (
+            200,
+            serde_json::json!({"modelfile": "FROM local", "details": {}}),
+        ),
+        // P3 HiveMind: a member loop's plan, one model step.
+        "/api/generate"
+            if serves.generate_status == 200
+                && (body.contains("Output ONLY a JSON array")
+                    || body.contains("ONLY a valid JSON array")) =>
+        {
+            (
                 200,
-                serde_json::json!({"models": serves.models.iter()
-                    .map(|name| serde_json::json!({"name": name}))
-                    .collect::<Vec<_>>()}),
-            ),
-            "/api/show" if !serves.models.contains(&model.as_str()) => {
-                (404, serde_json::json!({"error": "model not found"}))
-            }
-            "/api/show" if serves.remote.contains(&model.as_str()) => (
+                serde_json::json!({"response": MEMBER_PLAN, "eval_count": 2}),
+            )
+        }
+        // P3 HiveMind INFOFLOW: the decomposition of a goal carrying
+        // restricted information carries it into each sub-task.
+        "/api/generate"
+            if serves.generate_status == 200
+                && body.contains("task decomposition engine")
+                && body.contains(RESTRICTED) =>
+        {
+            (
                 200,
-                serde_json::json!({"remote_host": "https://ollama.com:443", "remote_model": model}),
-            ),
-            "/api/show" => (
+                serde_json::json!({"response": RESTRICTED_PLAN, "eval_count": 2}),
+            )
+        }
+        // P3 D-2 R2: a team decomposition, two sub-tasks any member does.
+        "/api/generate"
+            if serves.generate_status == 200 && body.contains("task decomposition engine") =>
+        {
+            (
                 200,
-                serde_json::json!({"modelfile": "FROM local", "details": {}}),
-            ),
-            // P3 HiveMind: a member loop's plan, one model step.
-            "/api/generate"
-                if serves.generate_status == 200
-                    && (body.contains("Output ONLY a JSON array")
-                        || body.contains("ONLY a valid JSON array")) =>
-            {
-                (
-                    200,
-                    serde_json::json!({"response": MEMBER_PLAN, "eval_count": 2}),
-                )
-            }
-            // P3 D-2 R2: a team decomposition, two sub-tasks any member does.
-            "/api/generate"
-                if serves.generate_status == 200 && body.contains("task decomposition engine") =>
-            {
-                (
-                    200,
-                    serde_json::json!({"response": TEAM_PLAN, "eval_count": 2}),
-                )
-            }
-            "/api/generate" if serves.generate_status == 200 => (
-                200,
-                serde_json::json!({"response": "local answer", "eval_count": 2}),
-            ),
-            "/api/generate" => (
-                serves.generate_status,
-                serde_json::json!({"error": "failed"}),
-            ),
-            _ => (404, serde_json::json!({"error": "not found"})),
-        };
-        let body = reply.to_string();
-        let _ = write!(
-            stream,
-            "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        );
+                serde_json::json!({"response": TEAM_PLAN, "eval_count": 2}),
+            )
+        }
+        "/api/generate" if serves.generate_status == 200 => (
+            200,
+            serde_json::json!({"response": "local answer", "eval_count": 2}),
+        ),
+        "/api/generate" => (
+            serves.generate_status,
+            serde_json::json!({"error": "failed"}),
+        ),
+        _ => (404, serde_json::json!({"error": "not found"})),
     }
 }
 
-fn serve_proxy(listener: TcpListener, log: mpsc::Sender<String>) {
+fn respond(stream: &mut TcpStream, status: u16, reply: &serde_json::Value) {
+    let body = reply.to_string();
+    let _ = write!(
+        stream,
+        "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    );
+}
+
+fn serve_proxy(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<String>) {
     for stream in listener.incoming() {
-        let Ok(stream) = stream else { continue };
+        let Ok(mut stream) = stream else { continue };
         stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+        let mut reader = BufReader::new(&stream);
         let mut first = String::new();
-        let _ = BufReader::new(&stream).read_line(&mut first);
+        let _ = reader.read_line(&mut first);
         if first.starts_with("GET /stop") {
             return;
         }
+        let first = first.trim_end().to_string();
+        let plain = !first.is_empty() && !first.starts_with("CONNECT ");
+        // P3 HiveMind INFOFLOW: a plain HTTP request is read whole, so the
+        // prompt it carries is recorded.
+        let body = if plain {
+            read_rest(&mut reader).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        drop(reader);
         // Every connection is a request that would have left the machine.
-        let _ = log.send(first.trim_end().to_string());
+        let _ = log.send(if body.is_empty() {
+            first.clone()
+        } else {
+            format!("{first} {body}")
+        });
+        if serves.proxy_answers && plain {
+            // The request names its absolute URL: `http://host:port/path`.
+            let path = first
+                .split(' ')
+                .nth(1)
+                .and_then(|target| target.splitn(4, '/').nth(3))
+                .map(|path| format!("/{path}"))
+                .unwrap_or_default();
+            let (status, reply) = runtime_reply(&serves, &path, &body);
+            respond(&mut stream, status, &reply);
+        }
     }
 }
 
@@ -832,8 +894,10 @@ fn e2e(
     let (ollama_addr, proxy_addr) = (ollama.local_addr().unwrap(), proxy.local_addr().unwrap());
     let (ollama_log, ollama_seen) = mpsc::channel();
     let (proxy_log, proxy_seen) = mpsc::channel();
+    let config = std::env::temp_dir().join(format!("p3-d2-{}.toml", Uuid::new_v4()));
+    let proxy_serves = serves.clone();
     let ollama_thread = std::thread::spawn(move || serve_ollama(ollama, serves, ollama_log));
-    let proxy_thread = std::thread::spawn(move || serve_proxy(proxy, proxy_log));
+    let proxy_thread = std::thread::spawn(move || serve_proxy(proxy, proxy_serves, proxy_log));
 
     let mut child = Command::new(std::env::current_exe().unwrap());
     child
@@ -841,10 +905,7 @@ fn e2e(
         .env("NEXUS_P3_D2_CHILD", &full_name)
         .env("NEXUS_ORACLE_EPHEMERAL", "1")
         .env("NEXUS_DB_PATH", ":memory:")
-        .env(
-            "NEXUS_CONFIG_PATH",
-            std::env::temp_dir().join(format!("p3-d2-{}.toml", Uuid::new_v4())),
-        )
+        .env("NEXUS_CONFIG_PATH", &config)
         .env("OLLAMA_URL", format!("http://{ollama_addr}"))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -1556,8 +1617,13 @@ fn register_participant(state: &AppState, (name, local_only, model): Participant
 /// Runs one HiveMind session through the desktop's own path (admission,
 /// the real coordinator with `GatewayHivemindLlm`, real sub-task loops).
 fn hive_session(state: &AppState, agent_ids: Vec<String>) -> Result<String, String> {
+    hive_session_on(state, PROMPT, agent_ids)
+}
+
+/// [`hive_session`] for `goal`.
+fn hive_session_on(state: &AppState, goal: &str, agent_ids: Vec<String>) -> Result<String, String> {
     let session = admit_hivemind(state)?;
-    start_hivemind(state, &session, PROMPT.to_string(), agent_ids).map(|o| o.to_string())
+    start_hivemind(state, &session, goal.to_string(), agent_ids).map(|o| o.to_string())
 }
 
 fn hive(participants: &[Participant]) -> Result<String, AgentError> {
@@ -1609,58 +1675,93 @@ impl Witness {
     }
 }
 
-/// A. One local-only participant: the unrestricted participant listed
-/// first is assigned every sub-task, and its loops, the decomposition and
-/// the merge all stay on the local runtime.
+/// A and B. A session that mixes local-only and unrestricted participants
+/// is refused (P3 HiveMind INFOFLOW, provisional), whichever is listed
+/// first: no model is asked anything, nothing reaches the proxy, and
+/// nothing of the session is stored for any participant.
 #[test]
-fn p3_hive_e2e_a_local_only_member_makes_the_whole_session_local() {
+fn p3_hive_e2e_a_mixed_session_is_refused_before_any_model_call() {
     let Some(w) = e2e(
-        "p3_hive_e2e_a_local_only_member_makes_the_whole_session_local",
+        "p3_hive_e2e_a_mixed_session_is_refused_before_any_model_call",
         FakeOllama::serving(&["qwen3:8b"]),
-        || hive(&[("p3-hive-open", false, ""), ("p3-hive-local", true, "")]),
+        || {
+            let state = AppState::new_in_memory();
+            let open = register_participant(&state, ("p3-hive-open", false, ""));
+            let local = register_participant(&state, ("p3-hive-local", true, ""));
+            let before = stored_rows(&state, &[&open, &local]);
+            let open_first = hive_session(&state, vec![open.clone(), local.clone()]);
+            let local_first = hive_session(&state, vec![local.clone(), open.clone()]);
+            let after = stored_rows(&state, &[&open, &local]);
+            Ok(format!(
+                "open_first={open_first:?} local_first={local_first:?} stored={before}->{after}"
+            ))
+        },
     ) else {
         return;
     };
-    w.assert_hive_ran_locally("local-only member");
+    assert!(w.ollama.is_empty(), "a model was asked: {:?}", w.ollama);
+    assert!(w.proxy.is_empty(), "remote invocation {:?}", w.proxy);
+    let stored = w.result.rsplit("stored=").next().unwrap();
+    let (before, after) = stored.split_once("->").unwrap();
+    assert_eq!(before, after, "the refused sessions stored something");
+    for order in ["open_first", "local_first"] {
+        assert!(
+            w.result.contains(&format!(
+                "{order}=Err(\"hivemind session refused: the session mixes local-only and unrestricted participants"
+            )),
+            "{order}: {}",
+            w.result
+        );
+    }
 }
 
-/// B. HiveMind has no director; its equivalent is the participant listed
-/// first, which the coordinator assigns every sub-task. A local-only one
-/// has the same effect.
+/// The rows the desktop's database holds for `agents` (tasks and memories)
+/// and its HiveMind sessions, as one count.
+fn stored_rows(state: &AppState, agents: &[&String]) -> usize {
+    let mut rows = state.db.list_hivemind_sessions().unwrap().len();
+    for agent in agents {
+        rows += state.db.load_tasks_by_agent(agent, 1000).unwrap().len();
+        rows += state.db.load_memories(agent, None, 1000).unwrap().len();
+    }
+    rows
+}
+
+/// A and B, admitted: a session whose participants are all local-only
+/// runs, and its loops, the decomposition and the merge all stay on the
+/// local runtime.
 #[test]
-fn p3_hive_e2e_a_local_only_lead_participant_makes_the_whole_session_local() {
+fn p3_hive_e2e_an_all_local_session_stays_local() {
     let Some(w) = e2e(
-        "p3_hive_e2e_a_local_only_lead_participant_makes_the_whole_session_local",
+        "p3_hive_e2e_an_all_local_session_stays_local",
         FakeOllama::serving(&["qwen3:8b"]),
-        || hive(&[("p3-hive-local", true, ""), ("p3-hive-open", false, "")]),
+        || hive(&[("p3-hive-local", true, ""), ("p3-hive-local-2", true, "")]),
     ) else {
         return;
     };
-    w.assert_hive_ran_locally("local-only lead participant");
+    w.assert_hive_ran_locally("all-local session");
 }
 
-/// C and D. The unrestricted participant assigned every sub-task has a
-/// cloud model assigned: under the session's local-only policy its loop is
-/// refused that model (no cloud call), and each sub-task is reassigned to
-/// the local-only participant, which runs it locally. Nothing reaches the
-/// proxy.
+/// C and D. The local-only participant assigned every sub-task has a cloud
+/// model assigned: its loop is refused that model (no cloud call), and each
+/// sub-task is reassigned to the other local-only participant, which runs
+/// it locally. Nothing reaches the proxy.
 #[test]
-fn p3_hive_e2e_an_unrestricted_member_and_reassignment_stay_local() {
+fn p3_hive_e2e_a_member_refused_its_cloud_model_and_reassignment_stay_local() {
     let Some(w) = e2e(
-        "p3_hive_e2e_an_unrestricted_member_and_reassignment_stay_local",
+        "p3_hive_e2e_a_member_refused_its_cloud_model_and_reassignment_stay_local",
         FakeOllama::serving(&["qwen3:8b"]),
         || {
             let state = AppState::new_in_memory();
             let cloud = register_participant(
                 &state,
-                ("p3-hive-cloud", false, "anthropic/claude-sonnet-4-6"),
+                ("p3-hive-cloud", true, "anthropic/claude-sonnet-4-6"),
             );
             let local = register_participant(&state, ("p3-hive-local", true, ""));
             let outcome = hive_session(&state, vec![cloud.clone(), local.clone()])
                 .map_err(AgentError::SupervisorError)?;
-            // The cloud member was given each sub-task first and refused it
-            // under the session's policy; each was reassigned to the
-            // local-only member.
+            // The cloud-assigned member was given each sub-task first and
+            // refused it under its local-only policy; each was reassigned to
+            // the other member.
             let value: serde_json::Value = serde_json::from_str(&outcome).unwrap();
             let assignments = value["assignments"].as_object().unwrap();
             let reassigned =
@@ -1689,7 +1790,7 @@ fn p3_hive_e2e_an_unrestricted_member_and_reassignment_stay_local() {
     ) else {
         return;
     };
-    w.assert_hive_ran_locally("unrestricted cloud member, reassigned");
+    w.assert_hive_ran_locally("cloud-assigned member, reassigned");
 }
 
 /// E and F. An invalid, unknown, repeated or missing participant, or a
@@ -1748,7 +1849,7 @@ fn p3_hive_e2e_a_failed_local_runtime_is_not_a_cloud_fallback() {
     let Some(w) = e2e(
         "p3_hive_e2e_a_failed_local_runtime_is_not_a_cloud_fallback",
         serves,
-        || hive(&[("p3-hive-open", false, ""), ("p3-hive-local", true, "")]),
+        || hive(&[("p3-hive-local", true, ""), ("p3-hive-local-2", true, "")]),
     ) else {
         return;
     };
@@ -1768,8 +1869,9 @@ fn p3_hive_e2e_a_later_unrestricted_session_inherits_no_policy() {
         || {
             let state = AppState::new_in_memory();
             let local = register_participant(&state, ("p3-hive-local", true, ""));
+            let other = register_participant(&state, ("p3-hive-local-2", true, ""));
             let open = register_participant(&state, ("p3-hive-open", false, ""));
-            let first = hive_session(&state, vec![open.clone(), local]);
+            let first = hive_session(&state, vec![local, other]);
             let second = hive_session(&state, vec![open]);
             Ok(format!("first={first:?} second={second:?}"))
         },
@@ -1813,4 +1915,209 @@ fn p3_hive_e2e_unrestricted_session_keeps_the_configured_provider() {
         w.result
     );
     assert!(w.generates().is_empty(), "{:?}", w.ollama);
+}
+
+// ── P3 HiveMind INFOFLOW ─────────────────────────────────────────────────
+
+/// Synthetic restricted information: a local-only session's goal carries
+/// it, and its decomposition carries it into each sub-task.
+const RESTRICTED: &str = "P3-INFOFLOW-SYNTHETIC-RESTRICTED-7f3a";
+const RESTRICTED_PLAN: &str = r#"[
+  {"id": "t1", "description": "Summarize the synthetic note P3-INFOFLOW-SYNTHETIC-RESTRICTED-7f3a", "required_capabilities": ["llm.query"], "estimated_fuel": 1.0, "dependencies": []},
+  {"id": "t2", "description": "List the synthetic note's points P3-INFOFLOW-SYNTHETIC-RESTRICTED-7f3a", "required_capabilities": ["llm.query"], "estimated_fuel": 1.0, "dependencies": []}
+]"#;
+
+fn is_decomposition(body: &str) -> bool {
+    body.contains("task decomposition engine")
+}
+
+fn is_plan(body: &str) -> bool {
+    body.contains("Output ONLY a JSON array")
+}
+
+fn is_merge(body: &str) -> bool {
+    body.contains("Combine these sub-task results")
+}
+
+fn is_step(body: &str) -> bool {
+    body.contains("P3 HiveMind synthetic step") && !is_plan(body) && !is_merge(body)
+}
+
+/// Unrestricted work's default model is an Ollama model reached on the
+/// configured route: with no proxy exemption its every request goes to the
+/// recording proxy, as plain HTTP whose prompt the proxy records.
+fn route_unrestricted_work_through_the_proxy() {
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    config.llm.default_model = "ollama/qwen3:8b".to_string();
+    nexus_kernel::config::save_config(&config).unwrap();
+}
+
+/// An agent's own goal, outside any session: assigned, its loop started,
+/// and waited for (within 30 s) until its task completes.
+fn run_own_goal(state: &AppState, agent_id: &str, goal: &str) -> Result<String, String> {
+    let goal_id = execute_agent_goal(state, agent_id.to_string(), goal.to_string(), 5, None)?;
+    spawn_cognitive_loop_with_bridge(
+        BackendEventBridge::default(),
+        state.clone(),
+        agent_id.to_string(),
+        goal_id.clone(),
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        let tasks = state.db.load_tasks_by_agent(agent_id, 100).unwrap();
+        if let Some(task) = tasks.into_iter().find(|task| task.id == goal_id) {
+            if task.completed_at.is_some() {
+                let result = task.result_json.unwrap_or_default();
+                return if task.success {
+                    Ok(result)
+                } else {
+                    Err(result)
+                };
+            }
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("the goal did not complete within 30 s".to_string())
+}
+
+impl Witness {
+    /// The proxy connections whose recorded request `matches`.
+    fn proxied(&self, matches: fn(&str) -> bool) -> usize {
+        self.proxy.iter().filter(|line| matches(line)).count()
+    }
+}
+
+/// Stage A. A mixed session carrying restricted information, then the
+/// unrestricted participant's own later goal on its configured route.
+/// Before the admission rule the session ran (under its local-only floor),
+/// the unrestricted participant stored the restricted sub-tasks in its
+/// tasks and memories, and its later planning recalled them into a prompt
+/// on the cloud route. Now the session is refused, nothing restricted is
+/// stored for it, and its later cloud prompts carry nothing restricted;
+/// the witness does see those prompts.
+#[test]
+fn p3_hive_e2e_a_mixed_session_leaves_nothing_restricted_for_later_cloud_work() {
+    let mut serves = FakeOllama::serving(&["qwen3:8b"]);
+    serves.proxy_answers = true;
+    let Some(w) = e2e(
+        "p3_hive_e2e_a_mixed_session_leaves_nothing_restricted_for_later_cloud_work",
+        serves,
+        || {
+            let state = AppState::new_in_memory();
+            let open = register_participant(&state, ("p3-hive-open", false, ""));
+            let local = register_participant(&state, ("p3-hive-local", true, ""));
+            route_unrestricted_work_through_the_proxy();
+            let goal = format!("{PROMPT}: {RESTRICTED}");
+            let session = hive_session_on(&state, &goal, vec![open.clone(), local]);
+            let tasks = state.db.load_tasks_by_agent(&open, 1000).unwrap();
+            let memories = state.db.load_memories(&open, None, 1000).unwrap();
+            let stored = tasks
+                .iter()
+                .filter(|task| {
+                    task.goal.contains(RESTRICTED)
+                        || task
+                            .result_json
+                            .as_deref()
+                            .is_some_and(|json| json.contains(RESTRICTED))
+                })
+                .count()
+                + memories
+                    .iter()
+                    .filter(|memory| {
+                        memory.key.contains(RESTRICTED) || memory.value_json.contains(RESTRICTED)
+                    })
+                    .count();
+            let later = run_own_goal(&state, &open, "Summarize the synthetic note again");
+            Ok(format!(
+                "session={session:?} restricted_rows_of_unrestricted={stored} later={later:?}"
+            ))
+        },
+    ) else {
+        return;
+    };
+    // What reached the cloud route first: the witness saw the later
+    // planning, and none of it carried the restricted information.
+    assert!(
+        w.proxied(is_plan) >= 1,
+        "the witness saw the later cloud planning: {:?}",
+        w.proxy
+    );
+    let carried: Vec<&String> = w
+        .proxy
+        .iter()
+        .filter(|line| line.contains(RESTRICTED))
+        .collect();
+    assert!(
+        carried.is_empty(),
+        "restricted information on the cloud route: {carried:?}"
+    );
+    assert!(
+        !w.ollama.iter().any(|r| r.contains(RESTRICTED)),
+        "the refused session asked a model: {:?}",
+        w.ollama
+    );
+    assert!(
+        w.result.contains("restricted_rows_of_unrestricted=0 "),
+        "{}",
+        w.result
+    );
+    assert!(
+        w.result.contains(
+            "session=Err(\"hivemind session refused: the session mixes local-only and unrestricted participants"
+        ),
+        "{}",
+        w.result
+    );
+}
+
+/// An unrestricted session of "p3-hive-open" (listed first, so assigned
+/// every sub-task) and "p3-hive-other", whose work runs on the configured
+/// route, which the recording proxy answers.
+fn configured_route_session() -> Result<String, AgentError> {
+    let state = AppState::new_in_memory();
+    let open = register_participant(&state, ("p3-hive-open", false, ""));
+    let other = register_participant(&state, ("p3-hive-other", false, ""));
+    route_unrestricted_work_through_the_proxy();
+    let status = match hive_session(&state, vec![open.clone(), other.clone()]) {
+        Ok(outcome) => {
+            serde_json::from_str::<serde_json::Value>(&outcome).unwrap()["status"].to_string()
+        }
+        Err(error) => format!("Err({error})"),
+    };
+    let open_tasks = state.db.load_tasks_by_agent(&open, 100).unwrap().len();
+    // Whether the owner's change took effect.
+    let other_policy = crate::resolve_agent_llm_policy(&state, &other);
+    Ok(format!(
+        "status={status} open_tasks={open_tasks} other_policy={other_policy:?}"
+    ))
+}
+
+fn configured_route() -> FakeOllama {
+    let mut serves = FakeOllama::serving(&["qwen3:8b"]);
+    serves.proxy_answers = true;
+    serves
+}
+
+/// J, on a configured route that answers: an unrestricted session runs to
+/// completion, every model call of it on that route.
+#[test]
+fn p3_hive_e2e_an_unrestricted_session_completes_on_its_configured_route() {
+    let Some(w) = e2e(
+        "p3_hive_e2e_an_unrestricted_session_completes_on_its_configured_route",
+        configured_route(),
+        configured_route_session,
+    ) else {
+        return;
+    };
+    assert!(w.result.contains("status=\"Completed\" "), "{}", w.result);
+    assert_eq!(w.proxied(is_decomposition), 1, "{:?}", w.proxy);
+    assert_eq!(w.proxied(is_plan), 2, "{:?}", w.proxy);
+    assert!(w.proxied(is_step) >= 2, "{:?}", w.proxy);
+    assert_eq!(w.proxied(is_merge), 1, "{:?}", w.proxy);
+    assert!(w.generates().is_empty(), "{:?}", w.ollama);
+    assert!(
+        w.result.contains("other_policy=Unrestricted"),
+        "{}",
+        w.result
+    );
 }
