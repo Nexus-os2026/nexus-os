@@ -66,6 +66,9 @@ fn the_file_is_wal_with_a_full_sync_and_an_exclusive_lock() {
     assert_eq!(get("journal_mode"), "wal");
     assert_eq!(get("synchronous"), "2", "FULL");
     assert_eq!(get("locking_mode"), "exclusive");
+    assert_eq!(get("fullfsync"), "1");
+    assert_eq!(get("checkpoint_fullfsync"), "1");
+    assert_eq!(get("trusted_schema"), "0");
     assert_eq!(get("foreign_keys"), "0");
 }
 

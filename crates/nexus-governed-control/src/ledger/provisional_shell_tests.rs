@@ -1312,8 +1312,11 @@ fn connect(path: &Path) -> Result<Connection, StoreError> {
     if journal != "wal" {
         return Err(StoreError::Busy);
     }
+    // `fullfsync` makes a sync on macOS reach the device (F_FULLFSYNC); it
+    // changes nothing on Linux, where `fsync` already does.
     conn.execute_batch(
-        "PRAGMA synchronous = FULL; PRAGMA foreign_keys = OFF; PRAGMA trusted_schema = OFF",
+        "PRAGMA synchronous = FULL; PRAGMA fullfsync = ON; PRAGMA checkpoint_fullfsync = ON; \
+         PRAGMA foreign_keys = OFF; PRAGMA trusted_schema = OFF",
     )
     .map_err(sqlite)?;
     conn.execute_batch("BEGIN IMMEDIATE; COMMIT")
