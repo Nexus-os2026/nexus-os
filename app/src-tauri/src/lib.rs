@@ -204,6 +204,11 @@ thread_local! {
     /// D-2). Set by `with_agent_llm_route` and `with_agent_llm_policy`, read
     /// where the planner dispatches a prompt.
     static ACTIVE_AGENT_LLM_POLICY: std::cell::Cell<AgentLlmPolicy> = const { std::cell::Cell::new(AgentLlmPolicy::Unrestricted) };
+    /// The least restrictive policy any work on this thread may run under
+    /// (P3 HiveMind): a HiveMind session's policy, set by
+    /// `with_llm_policy_floor`. Every agent policy installed or read on this
+    /// thread is at least this restrictive.
+    static ACTIVE_LLM_POLICY_FLOOR: std::cell::Cell<AgentLlmPolicy> = const { std::cell::Cell::new(AgentLlmPolicy::Unrestricted) };
 }
 
 /// Which providers an agent's prompt may reach (P3 D-2).
@@ -337,9 +342,47 @@ pub(crate) fn with_agent_llm_policy<T>(policy: AgentLlmPolicy, op: impl FnOnce()
     op()
 }
 
-/// This thread's agent routing policy (P3 D-2).
+/// This thread's agent routing policy (P3 D-2), never less restrictive than
+/// the thread's policy floor.
 pub(crate) fn active_agent_llm_policy() -> AgentLlmPolicy {
-    ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.get())
+    ACTIVE_AGENT_LLM_POLICY
+        .with(|slot| slot.get())
+        .at_least(active_llm_policy_floor())
+}
+
+impl AgentLlmPolicy {
+    /// This policy, made at least as restrictive as `floor`: `Unresolved`
+    /// over `LocalOnly` over `Unrestricted`.
+    pub(crate) fn at_least(self, floor: AgentLlmPolicy) -> AgentLlmPolicy {
+        use AgentLlmPolicy::{LocalOnly, Unresolved, Unrestricted};
+        match (self, floor) {
+            (Unresolved, _) | (_, Unresolved) => Unresolved,
+            (LocalOnly, _) | (_, LocalOnly) => LocalOnly,
+            (Unrestricted, Unrestricted) => Unrestricted,
+        }
+    }
+}
+
+/// Runs `op` with this thread's policy floor raised to `floor` (P3 HiveMind):
+/// every agent policy installed or read on this thread inside `op` is at
+/// least that restrictive. A floor is only ever raised inside `op`, and the
+/// previous floor is restored afterwards, also when `op` unwinds.
+pub(crate) fn with_llm_policy_floor<T>(floor: AgentLlmPolicy, op: impl FnOnce() -> T) -> T {
+    struct Restore(AgentLlmPolicy);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.set(self.0));
+        }
+    }
+    let previous = active_llm_policy_floor();
+    let _restore = Restore(previous);
+    ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.set(floor.at_least(previous)));
+    op()
+}
+
+/// This thread's policy floor (P3 HiveMind).
+pub(crate) fn active_llm_policy_floor() -> AgentLlmPolicy {
+    ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.get())
 }
 
 /// How strongly agent reasoning prefers an Ollama model, by its name: the
@@ -604,7 +647,8 @@ fn auto_select_best_model(
 fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
     // P3 D-2: the agent's own policy governs every prompt dispatched for it
     // here, whatever the route says.
-    let policy = resolve_agent_llm_policy(state, agent_id);
+    // P3 HiveMind: a session's floor restricts the agent's own policy.
+    let policy = resolve_agent_llm_policy(state, agent_id).at_least(active_llm_policy_floor());
     let route = resolve_agent_llm_route(state, agent_id, policy);
 
     // If the route points to Flash, resolve the cached provider now

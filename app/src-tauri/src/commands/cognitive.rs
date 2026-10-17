@@ -1944,6 +1944,11 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     // loop cleanly. Flag handle is stored in AppState keyed by agent_id so the
     // Tauri `stop_agent` command can look it up and set it.
     let (cancel_flag, cancel_guard) = CognitiveCancelGuard::register(&state, &agent_id);
+    // P3 HiveMind: a loop started under a policy floor (a HiveMind session's
+    // sub-task) keeps that floor, by value, for every model call it makes
+    // until it ends, including its post-goal evolution. Elsewhere the floor
+    // is the unrestricted default and changes nothing.
+    let policy_floor = crate::active_llm_policy_floor();
 
     tauri::async_runtime::spawn(async move {
         // The task owns the guard: it removes this loop's own entry on any
@@ -2023,7 +2028,9 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
             // Run the cognitive cycle inside catch_unwind
             let cycle_result_or_panic =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_cognitive_cycle(&state, &agent_id, &planner, &memory_mgr, &executor)
+                    crate::with_llm_policy_floor(policy_floor, || {
+                        run_cognitive_cycle(&state, &agent_id, &planner, &memory_mgr, &executor)
+                    })
                 }));
 
             // G1b: poll cancellation again immediately after the potentially
@@ -2399,14 +2406,16 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                             success,
                             cycle_result.fuel_consumed,
                         );
-                        run_post_goal_evolution(
-                            &bridge,
-                            &state,
-                            &agent_id,
-                            &goal_id,
-                            success,
-                            cycle_result.fuel_consumed,
-                        );
+                        crate::with_llm_policy_floor(policy_floor, || {
+                            run_post_goal_evolution(
+                                &bridge,
+                                &state,
+                                &agent_id,
+                                &goal_id,
+                                success,
+                                cycle_result.fuel_consumed,
+                            )
+                        });
                         return;
                     }
 
@@ -2768,30 +2777,21 @@ pub(crate) fn start_hivemind(
     goal: String,
     agent_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
-    // Build AgentInfo from supervisor state
-    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let agents: Vec<nexus_kernel::cognitive::AgentInfo> = agent_ids
-        .iter()
-        .filter_map(|id| {
-            // Optional: skip agent IDs that are not valid UUIDs
-            let uuid = Uuid::parse_str(id).ok()?;
-            supervisor
-                .get_agent(uuid)
-                .map(|handle| nexus_kernel::cognitive::AgentInfo {
-                    id: id.clone(),
-                    capabilities: handle.manifest.capabilities.clone(),
-                    available_fuel: handle.remaining_fuel as f64,
-                })
-        })
-        .collect();
-    drop(supervisor);
+    let (agents, policy) = hivemind_participants(state, &agent_ids)?;
 
-    let outcome = state
-        .hivemind
-        .execute_with_executor(&goal, agents, |_task_id, assigned_agent_id, task_desc| {
-            execute_hivemind_subtask(state, session, assigned_agent_id, task_desc)
-        })
-        .map_err(|e| e.to_string())?;
+    // P3 HiveMind: the session's policy is the floor of every model call
+    // the session makes on this thread (decomposition, merge) and of every
+    // sub-task loop it starts (including reassignments).
+    let outcome = crate::with_llm_policy_floor(policy, || {
+        state.hivemind.execute_with_executor(
+            &goal,
+            agents,
+            |_task_id, assigned_agent_id, task_desc| {
+                execute_hivemind_subtask(state, session, assigned_agent_id, task_desc)
+            },
+        )
+    })
+    .map_err(|e| e.to_string())?;
 
     // Persist session
     let row = nexus_persistence::HivemindSessionRow {
@@ -2822,6 +2822,58 @@ pub(crate) fn start_hivemind(
     );
 
     serde_json::to_value(&outcome).map_err(|e| format!("serialize error: {e}"))
+}
+
+/// The participants of a HiveMind session and the session's routing policy
+/// (P3 HiveMind), established before any model call. Every requested id must
+/// be an agent the supervisor registers, named once; an invalid, unknown or
+/// repeated id, or no participant, refuses the session (none is skipped).
+/// Each participant's policy comes from its own identity
+/// ([`resolve_agent_llm_policy`]); the session is local-only when any is,
+/// and a participant whose policy cannot be established refuses it.
+pub(crate) fn hivemind_participants(
+    state: &AppState,
+    agent_ids: &[String],
+) -> Result<(Vec<nexus_kernel::cognitive::AgentInfo>, AgentLlmPolicy), String> {
+    let refused = |reason: String| format!("hivemind session refused: {reason}");
+    if agent_ids.is_empty() {
+        return Err(refused("no participant was named".to_string()));
+    }
+    let mut agents: Vec<nexus_kernel::cognitive::AgentInfo> = Vec::new();
+    {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        for id in agent_ids {
+            let uuid =
+                Uuid::parse_str(id).map_err(|_| refused(format!("'{id}' is not an agent id")))?;
+            let canonical = uuid.to_string();
+            if agents.iter().any(|agent| agent.id == canonical) {
+                return Err(refused(format!("'{id}' is named more than once")));
+            }
+            let handle = supervisor
+                .get_agent(uuid)
+                .ok_or_else(|| refused(format!("'{id}' is not a registered agent")))?;
+            agents.push(nexus_kernel::cognitive::AgentInfo {
+                id: canonical,
+                capabilities: handle.manifest.capabilities.clone(),
+                available_fuel: handle.remaining_fuel as f64,
+            });
+        }
+    }
+    let mut policy = AgentLlmPolicy::Unrestricted;
+    for agent in &agents {
+        match resolve_agent_llm_policy(state, &agent.id) {
+            AgentLlmPolicy::Unresolved => {
+                return Err(refused(format!(
+                    "'{}': {}",
+                    agent.id,
+                    unresolved_policy_error()
+                )))
+            }
+            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
+            AgentLlmPolicy::Unrestricted => {}
+        }
+    }
+    Ok((agents, policy))
 }
 
 pub(crate) fn get_hivemind_status(
