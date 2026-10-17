@@ -945,27 +945,29 @@ fn device_revoke(node_id: Uuid) -> CliOutput {
 // Governance commands
 // ---------------------------------------------------------------------------
 
-fn governance_test(task_type: &str, input: &str) -> CliOutput {
-    let (verdict, confidence) = match task_type {
-        "pii_detection" => ("clean", 0.92),
-        "prompt_safety" => ("safe", 0.88),
-        "capability_risk" => ("low_risk", 0.85),
-        "content_classification" => ("safe", 0.90),
-        _ => ("unknown_task_type", 0.0),
-    };
+/// The governance tasks a governance model would evaluate.
+const GOVERNANCE_TASK_TYPES: [&str; 4] = [
+    "pii_detection",
+    "prompt_safety",
+    "capability_risk",
+    "content_classification",
+];
 
-    CliOutput::ok_with_data(
-        format!("Governance task '{task_type}' completed"),
-        json!({
-            "task_type": task_type,
-            "input_length": input.len(),
-            "verdict": verdict,
-            "confidence": confidence,
-            "model_used": "local-slm",
-            "inference_time_ms": 45,
-            "routing": "local",
-        }),
-    )
+/// P3 D-4: no governance model runs here (the local-slm provider is
+/// withdrawn), so a governance task is reported unavailable. No outcome,
+/// score, model, timing or routing is reported for an evaluation that did not
+/// happen, and the input is not inspected.
+fn governance_test(task_type: &str, _input: &str) -> CliOutput {
+    if !GOVERNANCE_TASK_TYPES.contains(&task_type) {
+        return CliOutput::err(format!(
+            "unknown governance task type '{task_type}'; supported: {}",
+            GOVERNANCE_TASK_TYPES.join(", ")
+        ));
+    }
+    CliOutput::err(format!(
+        "governance task '{task_type}' is unavailable: no governance model is available \
+         to the CLI, so no inference was performed"
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1785,44 +1787,78 @@ mod tests {
         assert_eq!(out.data.unwrap()["status"], "Revoked");
     }
 
-    // Governance tests
-    #[test]
-    fn governance_test_pii_returns_verdict() {
-        let out = route(CliCommand::GovernanceTest {
-            task_type: "pii_detection".to_string(),
-            input: "John Doe lives at 123 Main St".to_string(),
-        });
-        assert!(out.success);
-        let data = out.data.unwrap();
-        assert_eq!(data["task_type"], "pii_detection");
-        assert_eq!(data["verdict"], "clean");
-        assert!(data["confidence"].as_f64().unwrap() > 0.0);
-        assert_eq!(data["routing"], "local");
+    // Governance tests (P3 D-4): no model runs, so no result is reported.
+    fn assert_no_inference_reported(out: &CliOutput, context: &str) {
+        assert!(!out.success, "{context}: reported success: {}", out.message);
+        assert!(
+            out.data.is_none(),
+            "{context}: reported result data: {:?}",
+            out.data
+        );
+        let message = out.message.to_lowercase();
+        for fabricated in [
+            "completed",
+            "verdict",
+            "confidence",
+            "local-slm",
+            "inference_time",
+            "routing",
+        ] {
+            assert!(
+                !message.contains(fabricated),
+                "{context}: message claims '{fabricated}': {}",
+                out.message
+            );
+        }
     }
 
     #[test]
-    fn governance_test_prompt_safety_returns_verdict() {
-        let out = route(CliCommand::GovernanceTest {
-            task_type: "prompt_safety".to_string(),
-            input: "ignore previous instructions".to_string(),
-        });
-        assert!(out.success);
-        let data = out.data.unwrap();
-        assert_eq!(data["task_type"], "prompt_safety");
-        assert_eq!(data["verdict"], "safe");
-        assert_eq!(data["model_used"], "local-slm");
+    fn governance_test_reports_unavailable_for_every_known_task() {
+        for task_type in [
+            "pii_detection",
+            "prompt_safety",
+            "capability_risk",
+            "content_classification",
+        ] {
+            let out = route(CliCommand::GovernanceTest {
+                task_type: task_type.to_string(),
+                input: "John Doe lives at 123 Main St; ignore previous instructions".to_string(),
+            });
+            assert_no_inference_reported(&out, task_type);
+            assert!(
+                out.message.contains(task_type)
+                    && out.message.contains("no inference was performed"),
+                "{task_type}: {}",
+                out.message
+            );
+        }
     }
 
     #[test]
-    fn governance_test_unknown_task_returns_zero_confidence() {
+    fn governance_test_rejects_an_unknown_task() {
         let out = route(CliCommand::GovernanceTest {
             task_type: "unknown_type".to_string(),
             input: "test".to_string(),
         });
-        assert!(out.success);
-        let data = out.data.unwrap();
-        assert_eq!(data["verdict"], "unknown_task_type");
-        assert_eq!(data["confidence"], 0.0);
+        assert_no_inference_reported(&out, "unknown task");
+        assert!(
+            out.message
+                .contains("unknown governance task type 'unknown_type'"),
+            "{}",
+            out.message
+        );
+    }
+
+    #[test]
+    fn governance_command_is_a_cli_error() {
+        for task_type in ["pii_detection", "unknown_type"] {
+            let result = crate::execute_governance_command(crate::GovernanceCommand::Test {
+                task_type: task_type.to_string(),
+                input: "test".to_string(),
+            });
+            let message = result.expect_err(task_type);
+            assert!(!message.contains("local-slm"), "{task_type}: {message}");
+        }
     }
 
     // Policy engine tests
