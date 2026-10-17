@@ -194,15 +194,16 @@ fn model_registry_discover_load_unload_lifecycle() {
     assert_eq!(registry.available_models()[0].model_id, "tiny/llama");
     assert!(registry.find_model("tiny/llama").is_some());
 
-    // Load — without the local-slm feature, returns a feature error.
+    // Load — while Candle-backed local inference is withdrawn (no
+    // local-slm feature), returns its explicit unavailability error.
     // With the feature enabled, returns a file-not-found error (no real weights).
     // Either way, load fails gracefully for a mock model directory.
     let load_result = registry.load("tiny/llama");
     assert!(load_result.is_err());
     let err = load_result.unwrap_err();
     assert!(
-        err.contains("local-slm") || err.contains("failed to load"),
-        "expected feature or file error, got: {err}"
+        err.contains("pending security review") || err.contains("failed to load"),
+        "expected unavailability or file error, got: {err}"
     );
 
     // Unload (returns false since load didn't succeed)

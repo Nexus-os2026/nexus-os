@@ -352,7 +352,7 @@ impl ModelRegistry {
         }
 
         Err(format!(
-            "cannot load model '{model_id}': compile with `local-slm` feature to enable candle inference"
+            "cannot load model '{model_id}': Candle-backed local inference is temporarily unavailable in this build pending security review"
         ))
     }
 
@@ -671,7 +671,12 @@ quantization = "F32"
 
         let result = registry.load("small/model");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("local-slm"));
+        let error = result.unwrap_err();
+        assert!(error.contains(
+            "Candle-backed local inference is temporarily unavailable in this build pending security review"
+        ));
+        // The withdrawn feature cannot be enabled, so no guidance to enable it.
+        assert!(!error.contains("feature"), "{error}");
         let _ = fs::remove_dir_all(&dir);
     }
 

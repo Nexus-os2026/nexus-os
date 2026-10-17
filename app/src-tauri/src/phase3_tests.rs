@@ -8229,6 +8229,35 @@ fn p3_g6_18_the_production_dependency_surface_is_pinned() {
             "connectors/llm depends on withdrawn {withdrawn}"
         );
     }
+    // The retired `local-slm` feature stays undeclared, so Cargo refuses
+    // any manifest or command that enables it and its gated Candle source
+    // is never compiled.
+    let features_in = |text: &str| -> BTreeSet<String> {
+        let mut section = String::new();
+        let mut names = BTreeSet::new();
+        for line in text.lines() {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            if line.starts_with('[') {
+                section = line.trim_matches(['[', ']']).to_string();
+                continue;
+            }
+            if let (true, Some((key, _))) = (section == "features", line.split_once('=')) {
+                names.insert(key.trim().trim_matches('"').to_string());
+            }
+        }
+        names
+    };
+    let llm_manifest = workspace_file("connectors/llm/Cargo.toml");
+    assert!(
+        !features_in(&llm_manifest).contains("local-slm"),
+        "connectors/llm declares the retired local-slm feature"
+    );
+    let redeclared = llm_manifest.replacen(
+        "[features]\n",
+        "[features]\nlocal-slm = [\"dep:candle-core\"]\n",
+        1,
+    );
+    assert!(features_in(&redeclared).contains("local-slm"));
     // The toolkit's own classification: the native approval window's APIs
     // are allowed and nothing else of it; each mechanism it offers is
     // classified as one.
