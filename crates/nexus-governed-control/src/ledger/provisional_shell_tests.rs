@@ -1373,9 +1373,24 @@ fn random<const N: usize>() -> [u8; N] {
     bytes
 }
 
+/// D-30d: the store opens only an absolute path. A `file:` name, an
+/// in-memory name and an empty name are not absolute, so each is refused
+/// here, before anything is opened or created. The open flag is no
+/// safeguard: this build parses a `file:` name as a URI without it
+/// (`schema_tests::this_build_parses_a_file_name_as_a_uri`), so the file
+/// SQLite opened could differ from the one `create_new` or `is_file` saw.
+fn absolute(path: &Path) -> Result<(), StoreError> {
+    if path.is_absolute() {
+        Ok(())
+    } else {
+        Err(StoreError::Path)
+    }
+}
+
 impl Store {
     /// Creates a new store file. Refuses a path that exists.
     pub(super) fn create(path: &Path, limits: Limits) -> Result<Store, StoreError> {
+        absolute(path)?;
         std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -1407,6 +1422,7 @@ impl Store {
     /// (DESIGN-03 4.6 item 1), then its whole chain and every index, before
     /// anything else reads it.
     pub(super) fn open(path: &Path, limits: Limits) -> Result<Store, StoreError> {
+        absolute(path)?;
         if !path.is_file() {
             return Err(StoreError::Path);
         }

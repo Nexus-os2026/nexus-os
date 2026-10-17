@@ -117,6 +117,58 @@ fn open_refuses_a_missing_file_and_creates_none() {
     assert!(!path.exists());
 }
 
+/// D-30d: only an absolute path is a store path. A `file:` name, an
+/// in-memory name, an empty name and any other relative name are refused
+/// before anything is opened or created.
+#[test]
+fn only_an_absolute_path_is_a_store_path() {
+    let scratch = Scratch::new();
+    let inside = scratch.path("l.db");
+    let uri = format!("file:{}", inside.display());
+    for name in [
+        "",
+        ":memory:",
+        "file::memory:",
+        "file:l.db",
+        uri.as_str(),
+        "l.db",
+    ] {
+        assert!(
+            matches!(absolute(Path::new(name)), Err(StoreError::Path)),
+            "{name:?}"
+        );
+    }
+    assert!(absolute(&inside).is_ok());
+    assert!(matches!(
+        Store::create(Path::new(&uri), LIMITS),
+        Err(StoreError::Path)
+    ));
+    assert!(matches!(
+        Store::open(Path::new(&uri), LIMITS),
+        Err(StoreError::Path)
+    ));
+    assert!(!inside.exists());
+}
+
+/// D-30d's control: this build parses a `file:` name as a URI although the
+/// open flag is not passed, so the flag is no safeguard and the name check
+/// above is the one that counts.
+#[test]
+fn this_build_parses_a_file_name_as_a_uri() {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    drop(Store::create(&path, LIMITS).unwrap());
+    let conn = Connection::open_with_flags(
+        format!("file:{}?mode=ro", path.display()),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .expect("the name is parsed as a URI naming the store file");
+    let rows: i64 = conn
+        .query_row("SELECT count(*) FROM meta", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(rows, 2);
+}
+
 /// One connection owns the file: a second store cannot open it while the
 /// first is alive, and can once it is gone.
 #[test]
