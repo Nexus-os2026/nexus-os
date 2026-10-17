@@ -8069,10 +8069,10 @@ fn p3_g6_16_test_only_features_are_enabled_only_by_tests() {
 /// is, by `TOOLKIT_CRATES` and `TOOLKIT_UI`) and it is pinned.
 #[test]
 fn p3_g6_18_the_production_dependency_surface_is_pinned() {
-    let direct = |manifest: &str| -> BTreeSet<String> {
+    let direct_in = |text: &str| -> BTreeSet<String> {
         let mut section = String::new();
         let mut names = BTreeSet::new();
-        for line in workspace_file(manifest).lines() {
+        for line in text.lines() {
             let line = line.split('#').next().unwrap_or_default().trim();
             if line.starts_with('[') {
                 section = line.trim_matches(['[', ']']).to_string();
@@ -8088,6 +8088,7 @@ fn p3_g6_18_the_production_dependency_surface_is_pinned() {
         }
         names
     };
+    let direct = |manifest: &str| direct_in(&workspace_file(manifest));
     let pinned = |names: &[&str]| -> BTreeSet<String> {
         names.iter().map(|name| name.to_string()).collect()
     };
@@ -8185,9 +8186,49 @@ fn p3_g6_18_the_production_dependency_surface_is_pinned() {
             "uuid",
             "web-builder-agent",
             "windows-sys",
-            "zip",
         ])
     );
+    // PROVISIONAL (P3-C11-48H-ZIP-Z1-PROVISIONAL-01): the desktop's and the
+    // web builder's `zip` dependencies had no caller and were removed with
+    // Candle's (RUSTSEC-2026-0367, -0368, -0369). Their return is refused
+    // here, and the pin above still refuses any addition: a manifest that
+    // adds a dependency in a production section parses to a different set.
+    let desktop = workspace_file("app/src-tauri/Cargo.toml");
+    let desktop_now = direct_in(&desktop);
+    for added in [
+        "[dependencies]\nzip = \"9\"\n",
+        "[target.'cfg(unix)'.dependencies]\nzip = \"9\"\n",
+        "[dependencies]\nunreviewed-mechanism = \"1\" # a comment is ignored\n",
+    ] {
+        let probe = format!("{desktop}\n{added}");
+        assert_ne!(
+            direct_in(&probe),
+            desktop_now,
+            "an added production dependency was not detected: {added:?}"
+        );
+    }
+    let dev_only = format!("{desktop}\n[dev-dependencies]\nzip = \"9\"\n");
+    assert_eq!(direct_in(&dev_only), desktop_now);
+    for manifest in ["app/src-tauri/Cargo.toml", "agents/web-builder/Cargo.toml"] {
+        assert!(
+            !direct(manifest).contains("zip"),
+            "{manifest} depends on zip"
+        );
+    }
+    let llm = direct("connectors/llm/Cargo.toml");
+    for withdrawn in [
+        "candle-core",
+        "candle-nn",
+        "candle-transformers",
+        "tokenizers",
+        "hf-hub",
+        "safetensors",
+    ] {
+        assert!(
+            !llm.contains(withdrawn),
+            "connectors/llm depends on withdrawn {withdrawn}"
+        );
+    }
     // The toolkit's own classification: the native approval window's APIs
     // are allowed and nothing else of it; each mechanism it offers is
     // classified as one.

@@ -13,14 +13,16 @@ default = []
 real-claude = []
 real-api-tests = []
 flash-infer = ["dep:nexus-flash-infer", "dep:nexus-llama-bridge"]
-local-slm = [
-    "dep:candle-core",
-    "dep:candle-nn",
-    "dep:candle-transformers",
-    "dep:tokenizers",
-    "dep:hf-hub",
-    "dep:safetensors",
-]
+# PROVISIONAL (P3-C11-48H-ZIP-Z1-PROVISIONAL-01, Owner adoption required):
+# the `local-slm` feature and its Candle dependencies are withdrawn. Every
+# candle-core release requires a zip below 9.0.0 (RUSTSEC-2026-0367, -0368,
+# -0369), and Cargo.lock records optional dependencies whether or not a
+# feature enables them. No workspace crate enabled `local-slm`. Its source
+# stays behind `cfg(feature = "local-slm")`, declared below as an expected
+# cfg so it is never compiled; the `not(feature = "local-slm")` paths
+# (ModelRegistry::load, WhisperTranscriber) return their explicit errors.
+# Reintroduce the feature and these dependencies only with a candle-core
+# that accepts zip >= 9.0.0.
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }
@@ -33,14 +35,6 @@ tracing = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
-# Local SLM dependencies (behind "local-slm" feature flag)
-candle-core = { version = "0.8", optional = true }
-candle-nn = { version = "0.8", optional = true }
-candle-transformers = { version = "0.8", optional = true }
-tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
-hf-hub = { version = "0.3", optional = true }
-safetensors = { version = "0.4", optional = true }
-
 # Flash inference (behind "flash-infer" feature flag)
 nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["real-llama"], optional = true }
 nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], optional = true }
@@ -48,3 +42,8 @@ nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], o
 [dev-dependencies]
 nexus-sdk = { path = "../../sdk" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }
+
+[lints.rust]
+# The withdrawn `local-slm` feature (see [features]): its gated source is
+# kept and must stay uncompiled, not reported as an unknown cfg.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("local-slm"))'] }
