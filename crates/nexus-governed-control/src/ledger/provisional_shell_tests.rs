@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
+use rusqlite::config::DbConfig;
 use rusqlite::{params, Connection, ErrorCode, OpenFlags};
 use sha2::{Digest, Sha256};
 
@@ -1073,13 +1074,17 @@ impl Reads for ReadIo<'_> {
 
 impl BarrierRun for ReadIo<'_> {
     /// The durability barrier: the connection back to a known state (a
-    /// transaction an unwind left open is rolled back), then the whole chain
-    /// and every index verified. True only if all of it passed.
+    /// transaction an unwind left open is rolled back), then the truncating
+    /// checkpoint of DESIGN-03 4.6 item 5, then the whole chain and every
+    /// index verified. True only if all of it passed. It does not close and
+    /// requalify the connection (DESIGN-03 4.6 items 3 and 4): not done here.
     fn run(&mut self) -> bool {
         if !self.conn.is_autocommit() {
             let _ = self.conn.execute_batch("ROLLBACK");
         }
-        self.conn.is_autocommit() && matches!(verify_all(self.conn, &self.store), Read::Got(_))
+        self.conn.is_autocommit()
+            && checkpoint(self.conn)
+            && matches!(verify_all(self.conn, &self.store), Read::Got(_))
     }
 }
 
@@ -1316,12 +1321,50 @@ fn connect(path: &Path) -> Result<Connection, StoreError> {
     // changes nothing on Linux, where `fsync` already does.
     conn.execute_batch(
         "PRAGMA synchronous = FULL; PRAGMA fullfsync = ON; PRAGMA checkpoint_fullfsync = ON; \
-         PRAGMA foreign_keys = OFF; PRAGMA trusted_schema = OFF",
+         PRAGMA foreign_keys = OFF; PRAGMA trusted_schema = OFF; PRAGMA wal_autocheckpoint = 0",
     )
     .map_err(sqlite)?;
+    // Every checkpoint is the barrier's, explicit and with its result read
+    // (DESIGN-03 4.4 item 3): none automatically, none on close. Each setting
+    // is read back; one that did not take refuses the connection.
+    let no_checkpoint_on_close = conn
+        .set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)
+        .map_err(sqlite)?;
+    let synchronous: i64 = conn
+        .query_row("PRAGMA synchronous", [], |row| row.get(0))
+        .map_err(sqlite)?;
+    let autocheckpoint: i64 = conn
+        .query_row("PRAGMA wal_autocheckpoint", [], |row| row.get(0))
+        .map_err(sqlite)?;
+    if !no_checkpoint_on_close || synchronous != 2 || autocheckpoint != 0 {
+        return Err(StoreError::Sqlite(format!(
+            "settings: no checkpoint on close {no_checkpoint_on_close}, \
+             synchronous {synchronous}, wal_autocheckpoint {autocheckpoint}"
+        )));
+    }
     conn.execute_batch("BEGIN IMMEDIATE; COMMIT")
         .map_err(sqlite)?;
     Ok(conn)
+}
+
+/// The barrier's checkpoint (DESIGN-03 4.6 item 5): a truncating checkpoint
+/// whose one result row must say not busy, no frames left in the
+/// write-ahead log, and none checkpointed into a log that is now empty. A
+/// missing, extra or other row, the not-in-WAL answer included, is a
+/// failure; the call returning without an error is not success.
+fn checkpoint(conn: &Connection) -> bool {
+    let rows = conn
+        .prepare("PRAGMA main.wal_checkpoint(TRUNCATE)")
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                .collect::<Result<Vec<(i64, i64, i64)>, _>>()
+        });
+    matches!(rows.as_deref(), Ok(rows) if checkpoint_passed(rows))
+}
+
+fn checkpoint_passed(rows: &[(i64, i64, i64)]) -> bool {
+    rows == [(0, 0, 0)]
 }
 
 fn random<const N: usize>() -> [u8; N] {
@@ -1350,11 +1393,19 @@ impl Store {
         )
         .map_err(sqlite)?;
         conn.execute_batch("COMMIT").map_err(sqlite)?;
+        // DESIGN-03 4.3 step 3: the barrier's checkpoint after initialising.
+        if !checkpoint(&conn) {
+            return Err(StoreError::Sqlite(
+                "the checkpoint after creation failed".into(),
+            ));
+        }
         Ok(Store::with(conn, identity, limits))
     }
 
-    /// Opens an existing store file: its schema exactly, its identity, its
-    /// whole chain and every index, before anything else reads it.
+    /// Opens an existing store file: its schema exactly and its identity
+    /// (reads that can only refuse it), then the barrier's checkpoint
+    /// (DESIGN-03 4.6 item 1), then its whole chain and every index, before
+    /// anything else reads it.
     pub(super) fn open(path: &Path, limits: Limits) -> Result<Store, StoreError> {
         if !path.is_file() {
             return Err(StoreError::Path);
@@ -1389,6 +1440,9 @@ impl Store {
             }
             _ => return Err(StoreError::Corrupt),
         };
+        if !checkpoint(&conn) {
+            return Err(StoreError::Sqlite("the checkpoint at open failed".into()));
+        }
         match verify_all(&conn, &identity) {
             Read::Got(_) => Ok(Store::with(conn, identity, limits)),
             Read::Failed => Err(StoreError::Sqlite("verification failed".into())),

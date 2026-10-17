@@ -495,6 +495,111 @@ fn the_barrier_closes_a_transaction_left_open() {
     assert!(store.conn.is_autocommit());
 }
 
+/// The length of a store's write-ahead log on disk; zero if there is none.
+fn log_bytes(path: &Path) -> u64 {
+    let mut log = path.as_os_str().to_owned();
+    log.push("-wal");
+    std::fs::metadata(log).map_or(0, |meta| meta.len())
+}
+
+/// The settings every checkpoint depends on hold on the store's connection
+/// (DESIGN-03 4.4 item 3, 4.6 item 4): WAL, a full sync, no automatic
+/// checkpoint, no checkpoint on close.
+#[test]
+fn the_connection_settings_hold() {
+    let scratch = Scratch::new();
+    let store = opened(&scratch.path("l.db"));
+    let pragma = |name: &str| -> String {
+        store
+            .conn
+            .query_row(&format!("PRAGMA {name}"), [], |row| {
+                row.get::<_, rusqlite::types::Value>(0)
+            })
+            .map(|value| format!("{value:?}"))
+            .unwrap()
+    };
+    assert_eq!(pragma("journal_mode"), "Text(\"wal\")");
+    assert_eq!(pragma("synchronous"), "Integer(2)");
+    assert_eq!(pragma("wal_autocheckpoint"), "Integer(0)");
+    assert!(store
+        .conn
+        .db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE)
+        .unwrap());
+}
+
+/// A new store's write-ahead log is empty: creation ends with the barrier's
+/// checkpoint (DESIGN-03 4.3 step 3).
+#[test]
+fn a_new_store_leaves_its_log_empty() {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    let store = Store::create(&path, LIMITS).unwrap();
+    assert_eq!(log_bytes(&path), 0);
+    drop(store);
+}
+
+/// A commit leaves frames in the log, which no automatic checkpoint takes;
+/// the barrier's checkpoint empties it, and the record is still there.
+#[test]
+fn the_barrier_empties_the_log() {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    let mut store = opened(&path);
+    let built = store.fact(b"f", None, b"c");
+    commit_fact(&mut store, &built);
+    assert!(log_bytes(&path) > 0, "the commit is in the log");
+    let mut io = ReadIo {
+        conn: &store.conn,
+        store: store.identity(),
+    };
+    assert!(io.run());
+    assert_eq!(log_bytes(&path), 0);
+    assert!(matches!(
+        by_id(&store.conn, &store.identity(), &built.key().id),
+        Read::Got(Some(_))
+    ));
+}
+
+/// Closing does not checkpoint, so the log outlives the connection; opening
+/// runs the checkpoint before it reads, and the record is there.
+#[test]
+fn the_log_outlives_a_close_and_open_empties_it() {
+    let scratch = Scratch::new();
+    let path = scratch.path("l.db");
+    let mut store = opened(&path);
+    let built = store.fact(b"f", None, b"c");
+    commit_fact(&mut store, &built);
+    drop(store);
+    assert!(log_bytes(&path) > 0, "no checkpoint on close");
+    let store = Store::open(&path, LIMITS).unwrap();
+    assert_eq!(log_bytes(&path), 0);
+    assert!(matches!(
+        by_id(&store.conn, &store.identity(), &built.key().id),
+        Read::Got(Some(_))
+    ));
+}
+
+/// The checkpoint passes on exactly one row (0, 0, 0) and on nothing else,
+/// including the answer of a database that is not in WAL mode.
+#[test]
+fn the_checkpoint_passes_only_on_one_clean_row() {
+    assert!(checkpoint_passed(&[(0, 0, 0)]));
+    for rows in [
+        &[][..],
+        &[(1, 0, 0)],
+        &[(0, 3, 3)],
+        &[(0, 0, 3)],
+        &[(0, -1, -1)],
+        &[(0, 0, 0), (0, 0, 0)],
+    ] {
+        assert!(!checkpoint_passed(rows), "{rows:?}");
+    }
+    let scratch = Scratch::new();
+    let conn = Connection::open(scratch.path("rollback-journal.db")).unwrap();
+    conn.execute_batch("CREATE TABLE t (x)").unwrap();
+    assert!(!checkpoint(&conn));
+}
+
 #[test]
 fn the_barrier_fails_on_a_tampered_row() {
     let scratch = Scratch::new();
