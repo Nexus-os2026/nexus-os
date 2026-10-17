@@ -403,6 +403,13 @@ pub(crate) fn send_chat(
         (None, String::new())
     };
 
+    // P3 D-2: a chat routed to an agent follows that agent's routing policy.
+    let chat_policy = effective_agent_name
+        .as_deref()
+        .map_or(AgentLlmPolicy::Unrestricted, |name| {
+            resolve_named_agent_llm_policy(state, name)
+        });
+
     // ── Pipeline Step 3: ComplexProject → generate plan, set awaiting_approval ──
     if auto_route && complexity == ComplexityLevel::ComplexProject && agent_name.is_none() {
         // Build a project-planning prompt and send it through the normal LLM path.
@@ -425,7 +432,15 @@ pub(crate) fn send_chat(
 
         let config = load_config().map_err(agent_error)?;
         let provider_config = build_provider_config(&config);
-        let (provider, model_name) = if let Some(ref full_model) = model_id {
+        let local = local_only_provider(
+            chat_policy,
+            model_id.as_deref(),
+            authorized_ollama_base_url(),
+            &OllamaLocalRuntime,
+        )?;
+        let (provider, model_name) = if let Some(local) = local {
+            local
+        } else if let Some(ref full_model) = model_id {
             provider_from_prefixed_model(full_model, &provider_config)?
         } else {
             let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
@@ -481,7 +496,15 @@ pub(crate) fn send_chat(
     let provider_config = build_provider_config(&config);
 
     // Determine provider and model from prefixed string (e.g. "anthropic/claude-sonnet-4-20250514")
-    let (provider, model_name) = if let Some(ref full_model) = model_id {
+    let local = local_only_provider(
+        chat_policy,
+        model_id.as_deref(),
+        authorized_ollama_base_url(),
+        &OllamaLocalRuntime,
+    )?;
+    let (provider, model_name) = if let Some(local) = local {
+        local
+    } else if let Some(ref full_model) = model_id {
         provider_from_prefixed_model(full_model, &provider_config)?
     } else {
         let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
@@ -607,10 +630,13 @@ pub(crate) fn send_chat(
         let evo_agent_name = evo_name.clone();
         let evo_user_msg = message.clone();
         let evo_agent_resp = response.output_text.clone();
+        // P3 D-2: the exchange is scored by a model under the agent's policy.
+        let evo_policy = resolve_named_agent_llm_policy(state, evo_name);
         std::thread::spawn(move || {
             let llm = GatewayPlannerLlm;
-            let score_val =
-                auto_evo.score_and_record(&evo_agent_name, &evo_user_msg, &evo_agent_resp, &llm);
+            let score_val = with_agent_llm_policy(evo_policy, || {
+                auto_evo.score_and_record(&evo_agent_name, &evo_user_msg, &evo_agent_resp, &llm)
+            });
 
             // Feed routing learner with the score
             {

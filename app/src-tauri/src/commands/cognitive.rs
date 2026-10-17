@@ -591,14 +591,18 @@ pub(crate) fn run_post_goal_evolution(
             agent_name
         );
         let llm = GatewayPlannerLlm;
+        // P3 D-2: the agent's outcomes go to a model under the agent's policy.
+        let policy = resolve_agent_llm_policy(state, agent_id);
         // Best-effort: prompt optimization is a background improvement; failure is non-fatal
-        let _ = state.evolution_tracker.optimize_planning_prompt(
-            agent_id,
-            &current_prompt,
-            &outcomes,
-            &llm,
-            &memory_mgr,
-        );
+        let _ = with_agent_llm_policy(policy, || {
+            state.evolution_tracker.optimize_planning_prompt(
+                agent_id,
+                &current_prompt,
+                &outcomes,
+                &llm,
+                &memory_mgr,
+            )
+        });
     }
 }
 
@@ -621,6 +625,11 @@ impl nexus_kernel::cognitive::LlmQueryHandler for BridgeLlmQueryHandler {
 
 impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
     fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        // P3 D-2: an agent's work whose policy is unknown dispatches nothing.
+        let policy = active_agent_llm_policy();
+        if policy == AgentLlmPolicy::Unresolved {
+            return Err(unresolved_policy_error());
+        }
         // If a Flash Inference provider is loaded, use it. The agent WAITS for Flash
         // (blocking lock) rather than falling back to Ollama, because Ollama may be dead
         // and Flash is the primary local provider. llama.cpp is single-threaded, so queries
@@ -683,83 +692,262 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
         let prov_config = build_provider_config(&config);
         let route_model = ACTIVE_AGENT_LLM_ROUTE
             .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
-        let (provider, model) = if let Some(route_model) = route_model {
-            // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
-            // If we reach here, Flash was requested but couldn't be resolved.
-            if route_model.starts_with("flash:")
-                || route_model.starts_with("flash/")
-                || route_model == "flash"
-            {
-                // Flash provider wasn't available — return clear error instead of
-                // silently falling back to Ollama (which causes confusing 404 errors).
-                return Err(nexus_kernel::errors::AgentError::SupervisorError(
-                    "Flash Inference is selected but no model is loaded. \
-                     Go to the Agents page and click 'Load Model' to start a Flash session."
-                        .to_string(),
-                ));
-            } else {
-                provider_from_prefixed_model(&route_model, &prov_config).map_err(|e| {
-                    nexus_kernel::errors::AgentError::SupervisorError(format!(
-                        "Cannot resolve model '{}': {}. Please select a different model.",
-                        route_model, e
-                    ))
-                })?
-            }
-        } else {
-            // Use smart default model detection (checks API keys in priority order)
-            let default_model = crate::commands::chat_llm::get_default_model();
-            if default_model.contains('/') {
-                // Prefixed model (e.g. "anthropic/claude-sonnet-4-6") — resolve provider from it
-                provider_from_prefixed_model(&default_model, &prov_config).map_err(|e| {
-                    nexus_kernel::errors::AgentError::SupervisorError(format!(
-                        "Cannot resolve default model '{}': {}. Add an API key in Settings.",
-                        default_model, e
-                    ))
-                })?
-            } else if default_model == "mock-1" {
-                // No provider configured at all — fail with clear message
-                return Err(nexus_kernel::errors::AgentError::SupervisorError(
-                    "No LLM provider configured. Add an API key in Settings (Anthropic, OpenAI, etc.) \
-                     or install Ollama for local models."
-                        .to_string(),
-                ));
-            } else {
-                let provider = select_provider(&prov_config)?;
-                (provider, default_model)
-            }
-        };
-        // Wrap the LLM query in catch_unwind as a last resort — if the provider
-        // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
-        // we return an error instead of killing the app.
-        let query_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            provider.query(prompt, 2048, &model)
-        }));
-        match query_result {
-            Ok(Ok(response)) => {
-                let pre_strip_len = response.output_text.len();
-                let starts_with_think = response.output_text.trim_start().starts_with("<think>");
-                let has_closing_think = response.output_text.contains("</think>");
-                let stripped = strip_think_tags(&response.output_text);
-                let post_strip_len = stripped.len();
-                eprintln!(
-                    "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
-                    prompt.len(),
-                    pre_strip_len,
-                    post_strip_len
-                );
-                if pre_strip_len > 0 && post_strip_len == 0 {
-                    eprintln!(
-                        "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
-                        pre_strip_len, starts_with_think, has_closing_think
-                    );
-                }
-                Ok(stripped)
-            }
-            Ok(Err(e)) => Err(e),
-            Err(_panic) => Err(nexus_kernel::errors::AgentError::SupervisorError(
-                "LLM provider panicked during query — model may be corrupted or out of memory"
+        planner_dispatch(
+            policy,
+            route_model,
+            &prov_config,
+            crate::commands::chat_llm::authorized_ollama_base_url(),
+            &OllamaLocalRuntime,
+            prompt,
+            &live_planner_dispatch,
+        )
+    }
+}
+
+/// Sends `prompt` to `provider`. The query runs under catch_unwind as a last
+/// resort — if the provider crashes (e.g., llama.cpp segfault caught by
+/// signal handler, or Ollama timeout), we return an error instead of killing
+/// the app.
+fn live_planner_dispatch(
+    provider: &dyn LlmProvider,
+    prompt: &str,
+    model: &str,
+) -> Result<nexus_connectors_llm::providers::LlmResponse, AgentError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        provider.query(prompt, 2048, model)
+    }))
+    .unwrap_or_else(|_panic| {
+        Err(AgentError::SupervisorError(
+            "LLM provider panicked during query — model may be corrupted or out of memory"
+                .to_string(),
+        ))
+    })
+}
+
+/// A provider dispatch: sends a prompt to a provider for a model.
+pub(crate) type PlannerDispatch<'a> =
+    &'a dyn Fn(
+        &dyn LlmProvider,
+        &str,
+        &str,
+    ) -> Result<nexus_connectors_llm::providers::LlmResponse, AgentError>;
+
+/// Chooses the planner's provider under `policy` and sends `prompt` to it
+/// through `dispatch`, once. A failed dispatch is the result: no other
+/// provider is tried.
+pub(crate) fn planner_dispatch(
+    policy: AgentLlmPolicy,
+    route_model: Option<String>,
+    prov_config: &ProviderSelectionConfig,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+    prompt: &str,
+    dispatch: PlannerDispatch<'_>,
+) -> Result<String, AgentError> {
+    let (provider, model) =
+        planner_provider(policy, route_model, prov_config, ollama_base, runtime)?;
+    let response = dispatch(provider.as_ref(), prompt, &model)?;
+    let pre_strip_len = response.output_text.len();
+    let starts_with_think = response.output_text.trim_start().starts_with("<think>");
+    let has_closing_think = response.output_text.contains("</think>");
+    let stripped = strip_think_tags(&response.output_text);
+    let post_strip_len = stripped.len();
+    eprintln!(
+        "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
+        prompt.len(),
+        pre_strip_len,
+        post_strip_len
+    );
+    if pre_strip_len > 0 && post_strip_len == 0 {
+        eprintln!(
+            "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
+            pre_strip_len, starts_with_think, has_closing_think
+        );
+    }
+    Ok(stripped)
+}
+
+/// The planner's provider and model for `route_model` under `policy`. A
+/// local-only policy is decided by [`local_only_provider`] and never reaches
+/// the route resolution or default model below. `ollama_base` is the
+/// authorized Ollama address.
+pub(crate) fn planner_provider(
+    policy: AgentLlmPolicy,
+    route_model: Option<String>,
+    prov_config: &ProviderSelectionConfig,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<(Box<dyn LlmProvider>, String), AgentError> {
+    // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
+    // If we reach here, Flash was requested but couldn't be resolved.
+    if let Some(route_model) = route_model.as_deref() {
+        if route_model.starts_with("flash:")
+            || route_model.starts_with("flash/")
+            || route_model == "flash"
+        {
+            // Flash provider wasn't available — return clear error instead of
+            // silently falling back to Ollama (which causes confusing 404 errors).
+            return Err(AgentError::SupervisorError(
+                "Flash Inference is selected but no model is loaded. \
+                 Go to the Agents page and click 'Load Model' to start a Flash session."
                     .to_string(),
-            )),
+            ));
+        }
+    }
+    if let Some(local) = local_only_provider(policy, route_model.as_deref(), ollama_base, runtime)
+        .map_err(AgentError::SupervisorError)?
+    {
+        return Ok(local);
+    }
+    let (provider, model) = if let Some(route_model) = route_model {
+        provider_from_prefixed_model(&route_model, prov_config).map_err(|e| {
+            AgentError::SupervisorError(format!(
+                "Cannot resolve model '{}': {}. Please select a different model.",
+                route_model, e
+            ))
+        })?
+    } else {
+        // Use smart default model detection (checks API keys in priority order)
+        let default_model = crate::commands::chat_llm::get_default_model();
+        if default_model.contains('/') {
+            // Prefixed model (e.g. "anthropic/claude-sonnet-4-6") — resolve provider from it
+            provider_from_prefixed_model(&default_model, prov_config).map_err(|e| {
+                AgentError::SupervisorError(format!(
+                    "Cannot resolve default model '{}': {}. Add an API key in Settings.",
+                    default_model, e
+                ))
+            })?
+        } else if default_model == "mock-1" {
+            // No provider configured at all — fail with clear message
+            return Err(AgentError::SupervisorError(
+                "No LLM provider configured. Add an API key in Settings (Anthropic, OpenAI, etc.) \
+                 or install Ollama for local models."
+                    .to_string(),
+            ));
+        } else {
+            let provider = select_provider(prov_config)?;
+            (provider, default_model)
+        }
+    };
+    Ok((provider, model))
+}
+
+// ── Local-only routing (P3 D-2) ──────────────────────────────────────────
+
+/// The refusal for an agent's work whose routing policy is unknown.
+pub(crate) fn unresolved_policy_error() -> AgentError {
+    AgentError::SupervisorError(
+        "local-only: the agent's routing policy could not be established, so no model is used"
+            .to_string(),
+    )
+}
+
+/// A local Ollama runtime, as a local-only request consults it before any
+/// prompt is sent.
+pub(crate) trait LocalOllamaRuntime {
+    /// The names of the models installed at `base`.
+    fn installed_models(&self, base: &str) -> Result<Vec<String>, String>;
+    /// Whether `model` is installed at `base` and runs there.
+    fn verify_local_model(&self, base: &str, model: &str) -> Result<(), String>;
+}
+
+/// The Ollama runtime at the authorized loopback address.
+pub(crate) struct OllamaLocalRuntime;
+
+impl LocalOllamaRuntime for OllamaLocalRuntime {
+    fn installed_models(&self, base: &str) -> Result<Vec<String>, String> {
+        nexus_connectors_llm::providers::OllamaProvider::new(base)
+            .list_models()
+            .map(|models| models.into_iter().map(|model| model.name).collect())
+            .map_err(|e| e.to_string())
+    }
+
+    fn verify_local_model(&self, base: &str, model: &str) -> Result<(), String> {
+        nexus_connectors_llm::gateway::verify_local_ollama_model(base, model)
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Where a local-only agent's prompt goes: a model of the Ollama runtime at
+/// a loopback address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocalOnlyTarget {
+    pub(crate) base: String,
+    pub(crate) model: String,
+}
+
+/// The verified local target for a local-only agent's `route` (P3 D-2).
+///
+/// The address is the authorized Ollama address, and only when it is a
+/// loopback address. The model is the one the route names (`ollama/<model>`
+/// or an Ollama `name:tag`), or, with no model named (`auto`, `ollama`, no
+/// route), the runtime's preferred installed model. Any other route, a cloud
+/// provider, a CLI provider, a bare provider id, is refused, never
+/// substituted. A cloud model of the runtime is refused by its name, and
+/// the runtime must then confirm the model runs locally.
+pub(crate) fn local_only_target(
+    route: Option<&str>,
+    authorized_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<LocalOnlyTarget, String> {
+    let base = authorized_base.map_err(|reason| format!("local-only: {reason}"))?;
+    let base =
+        nexus_connectors_llm::gateway::local_only_ollama_base(&base).map_err(|e| e.to_string())?;
+    let route = route.map(str::trim).unwrap_or_default();
+    let model = if route.is_empty() || route == "auto" || route == "ollama" {
+        let mut installed: Vec<String> = runtime
+            .installed_models(&base)
+            .map_err(|reason| format!("local-only: no local model is available: {reason}"))?
+            .into_iter()
+            .filter(|model| !nexus_connectors_llm::gateway::ollama_model_name_is_cloud(model))
+            .collect();
+        installed.sort_by_key(|model| std::cmp::Reverse(ollama_model_preference(model)));
+        installed
+            .into_iter()
+            .next()
+            .ok_or_else(|| "local-only: no local model is installed".to_string())?
+    } else if let Some(model) = route.strip_prefix("ollama/") {
+        model.to_string()
+    } else if !route.contains('/') && route.contains(':') {
+        route.to_string()
+    } else {
+        return Err(format!(
+            "local-only: the route '{route}' is not a local model, and the agent may use only local models"
+        ));
+    };
+    if nexus_connectors_llm::gateway::ollama_model_name_is_cloud(&model) {
+        return Err(format!(
+            "local-only: '{model}' is a cloud model of the Ollama runtime, which relays it to a remote service"
+        ));
+    }
+    runtime.verify_local_model(&base, &model)?;
+    Ok(LocalOnlyTarget { base, model })
+}
+
+/// A provider and the model it is asked for.
+pub(crate) type ChosenProvider = (Box<dyn LlmProvider>, String);
+
+/// The provider a prompt goes to under `policy`, when the policy decides it
+/// (P3 D-2): `None` for an unrestricted policy, the verified local Ollama
+/// model for a local-only one, and a refusal when the policy is unknown.
+/// `ollama_base` is the authorized Ollama address.
+pub(crate) fn local_only_provider(
+    policy: AgentLlmPolicy,
+    route: Option<&str>,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<Option<ChosenProvider>, String> {
+    match policy {
+        AgentLlmPolicy::Unrestricted => Ok(None),
+        AgentLlmPolicy::Unresolved => Err(unresolved_policy_error().to_string()),
+        AgentLlmPolicy::LocalOnly => {
+            let target = local_only_target(route, ollama_base, runtime)?;
+            Ok(Some((
+                Box::new(nexus_connectors_llm::providers::OllamaProvider::new(
+                    &target.base,
+                )),
+                target.model,
+            )))
         }
     }
 }
@@ -2721,6 +2909,8 @@ pub(crate) mod hive;
 
 #[cfg(test)]
 mod hive_tests;
+#[cfg(test)]
+mod local_only_tests;
 #[cfg(test)]
 mod lock_tests;
 #[cfg(test)]

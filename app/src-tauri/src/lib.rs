@@ -200,6 +200,134 @@ thread_local! {
     /// Cached Flash provider for the current agent's cognitive loop.
     /// Set by `with_agent_llm_route` when a `flash:*` route is active.
     static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
+    /// The routing policy of the agent whose work runs on this thread (P3
+    /// D-2). Set by `with_agent_llm_route` and `with_agent_llm_policy`, read
+    /// where the planner dispatches a prompt.
+    static ACTIVE_AGENT_LLM_POLICY: std::cell::Cell<AgentLlmPolicy> = const { std::cell::Cell::new(AgentLlmPolicy::Unrestricted) };
+}
+
+/// Which providers an agent's prompt may reach (P3 D-2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AgentLlmPolicy {
+    /// No agent's work, or an agent whose configuration allows any provider.
+    #[default]
+    Unrestricted,
+    /// The agent's configuration is local-only: a verified local model only.
+    LocalOnly,
+    /// An agent's work whose policy could not be established: nothing is
+    /// dispatched.
+    Unresolved,
+}
+
+/// The policy the configuration sets for an agent known by `keys`:
+/// local-only when the assignment under any of them is.
+fn agent_llm_policy_in(
+    config: &nexus_kernel::config::NexusConfig,
+    keys: &[String],
+) -> AgentLlmPolicy {
+    let local_only = keys.iter().any(|key| {
+        config
+            .agent_llm_assignments
+            .get(key)
+            .is_some_and(|assignment| assignment.local_only)
+    });
+    if local_only {
+        AgentLlmPolicy::LocalOnly
+    } else {
+        AgentLlmPolicy::Unrestricted
+    }
+}
+
+/// The policy of the registered agent `agent_id` (P3 D-2), from the
+/// assignments under its id and its registered names. An id that is not a
+/// registered agent, or a configuration that cannot be read, leaves the
+/// policy `Unresolved`.
+pub(crate) fn resolve_agent_llm_policy(state: &AppState, agent_id: &str) -> AgentLlmPolicy {
+    let Ok(uuid) = Uuid::parse_str(agent_id) else {
+        return AgentLlmPolicy::Unresolved;
+    };
+    let mut names = Vec::new();
+    if let Some(entry) = state
+        .meta
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(&uuid)
+    {
+        names.push(entry.name.clone());
+    }
+    if let Some(handle) = state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get_agent(uuid)
+    {
+        names.push(handle.manifest.name.clone());
+    }
+    if names.is_empty() {
+        return AgentLlmPolicy::Unresolved;
+    }
+    let mut keys = vec![agent_id.to_string(), normalize_agent_config_key(agent_id)];
+    for name in names {
+        keys.push(normalize_agent_config_key(&name));
+        keys.push(name);
+    }
+    match load_config() {
+        Ok(config) => agent_llm_policy_in(&config, &keys),
+        Err(_) => AgentLlmPolicy::Unresolved,
+    }
+}
+
+/// The policy of the agent a chat is routed to, known only by `name` (P3
+/// D-2): from the assignments under the name and under the id of each
+/// registered agent of that name. A configuration that cannot be read
+/// leaves the policy `Unresolved`.
+pub(crate) fn resolve_named_agent_llm_policy(state: &AppState, name: &str) -> AgentLlmPolicy {
+    let normalized = normalize_agent_config_key(name);
+    let mut keys = vec![name.to_string(), normalized.clone()];
+    for (id, entry) in state.meta.lock().unwrap_or_else(|p| p.into_inner()).iter() {
+        if normalize_agent_config_key(&entry.name) == normalized {
+            keys.push(id.to_string());
+        }
+    }
+    match load_config() {
+        Ok(config) => agent_llm_policy_in(&config, &keys),
+        Err(_) => AgentLlmPolicy::Unresolved,
+    }
+}
+
+/// Runs `op` with `policy` as this thread's agent routing policy, and
+/// restores the previous policy afterwards, also when `op` unwinds.
+pub(crate) fn with_agent_llm_policy<T>(policy: AgentLlmPolicy, op: impl FnOnce() -> T) -> T {
+    struct Restore(AgentLlmPolicy);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.set(self.0));
+        }
+    }
+    let _restore = Restore(ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.replace(policy)));
+    op()
+}
+
+/// This thread's agent routing policy (P3 D-2).
+pub(crate) fn active_agent_llm_policy() -> AgentLlmPolicy {
+    ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.get())
+}
+
+/// How strongly agent reasoning prefers an Ollama model, by its name: the
+/// larger and coding models first.
+fn ollama_model_preference(name: &str) -> u8 {
+    let name = name.to_lowercase();
+    if name.contains("35b") || name.contains("32b") || name.contains("70b") {
+        3
+    } else if name.contains("14b")
+        || name.contains("13b")
+        || name.contains("9b")
+        || name.contains("coder")
+    {
+        2 // Prefer medium and coder models
+    } else {
+        1
+    }
 }
 
 fn normalize_agent_config_key(value: &str) -> String {
@@ -415,20 +543,7 @@ fn auto_select_best_model(
                 // Prefer larger models for agent reasoning (35b > 9b > 4b)
                 let best = models
                     .iter()
-                    .max_by_key(|m| {
-                        let name = m.name.to_lowercase();
-                        if name.contains("35b") || name.contains("32b") || name.contains("70b") {
-                            3
-                        } else if name.contains("14b")
-                            || name.contains("13b")
-                            || name.contains("9b")
-                            || name.contains("coder")
-                        {
-                            2 // Prefer medium and coder models
-                        } else {
-                            1
-                        }
-                    })
+                    .max_by_key(|m| ollama_model_preference(&m.name))
                     .map(|m| m.name.clone())
                     .unwrap_or_else(|| models[0].name.clone());
 
@@ -492,14 +607,19 @@ fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -
         None
     });
 
-    ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
-        ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
-            let prev_route = route_slot.replace(route);
-            let prev_flash = flash_slot.replace(flash_prov);
-            let output = op();
-            route_slot.replace(prev_route);
-            flash_slot.replace(prev_flash);
-            output
+    // P3 D-2: the agent's own policy governs every prompt dispatched for it
+    // here, whatever the route says.
+    let policy = resolve_agent_llm_policy(state, agent_id);
+    with_agent_llm_policy(policy, || {
+        ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
+            ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
+                let prev_route = route_slot.replace(route);
+                let prev_flash = flash_slot.replace(flash_prov);
+                let output = op();
+                route_slot.replace(prev_route);
+                flash_slot.replace(prev_flash);
+                output
+            })
         })
     })
 }
