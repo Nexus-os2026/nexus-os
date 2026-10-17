@@ -1150,3 +1150,179 @@ fn p3_d2_e2e_unrestricted_cloud_route_reaches_the_witness() {
     );
     assert!(w.generates().is_empty(), "{:?}", w.ollama);
 }
+
+// ── P3 D-2 R2: a chat routed to an agent by its name ─────────────────────
+
+/// Registers `name` with the supervisor only (no desktop metadata entry)
+/// and keys its assignment by its UUID, as the agents page does.
+fn register_by_supervisor(state: &AppState, name: &str, local_only: bool) -> String {
+    let manifest = parse_manifest(&format!(
+        r#"
+name = "{name}"
+version = "1.0.0"
+capabilities = ["llm.query"]
+fuel_budget = 10000
+autonomy_level = 3
+"#
+    ))
+    .unwrap();
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    config.agent_llm_assignments.insert(
+        id.clone(),
+        nexus_kernel::config::AgentLlmAssignment {
+            provider_id: String::new(),
+            local_only,
+            budget_dollars: 0,
+            budget_tokens: 0,
+        },
+    );
+    nexus_kernel::config::save_config(&config).unwrap();
+    id
+}
+
+/// The desktop chat, routed to `agent` by name (no model chosen, no
+/// auto-routing).
+fn chat(state: &AppState, agent: Option<&str>) -> Result<String, AgentError> {
+    crate::commands::chat_llm::send_chat(
+        state,
+        PROMPT.to_string(),
+        None,
+        agent.map(str::to_string),
+        Some(false),
+    )
+    .map(|response| response.text)
+    .map_err(AgentError::SupervisorError)
+}
+
+impl Witness {
+    fn assert_answered_locally(&self, context: &str) {
+        assert!(
+            self.result.starts_with("OK ") && self.result.contains("local answer"),
+            "{context}: {}",
+            self.result
+        );
+        assert!(
+            self.proxy.is_empty(),
+            "{context}: remote invocation {:?}",
+            self.proxy
+        );
+        assert!(
+            self.generates().iter().any(|r| r.contains(PROMPT)),
+            "{context}: {:?}",
+            self.ollama
+        );
+    }
+}
+
+/// The reviewed counterexample: a supervisor-registered agent whose
+/// UUID-keyed assignment is local-only, absent from the desktop metadata,
+/// chatted to by its registered name. The chat is local-only.
+#[test]
+fn p3_d2r2_e2e_chat_by_registered_name_follows_the_uuid_assignment() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_chat_by_registered_name_follows_the_uuid_assignment",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            register_by_supervisor(&state, "p3-d2r2-named", true);
+            assert!(state.meta.lock().unwrap().is_empty());
+            chat(&state, Some("p3-d2r2-named"))
+        },
+    ) else {
+        return;
+    };
+    w.assert_answered_locally("supervisor-registered local-only agent");
+}
+
+/// Two registered agents share a name (after normalization); one is
+/// local-only. A chat by that name is local-only.
+#[test]
+fn p3_d2r2_e2e_a_shared_name_is_local_only_when_any_agent_is() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_a_shared_name_is_local_only_when_any_agent_is",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            register_by_supervisor(&state, "p3-d2r2-twin", false);
+            register_by_supervisor(&state, "P3-D2R2-Twin", true);
+            chat(&state, Some("p3-d2r2-twin"))
+        },
+    ) else {
+        return;
+    };
+    w.assert_answered_locally("shared name");
+}
+
+/// A name no registered agent has is not an identity: the agent-scoped chat
+/// is refused and nothing is dispatched.
+#[test]
+fn p3_d2r2_e2e_chat_to_an_unregistered_agent_name_is_refused() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_chat_to_an_unregistered_agent_name_is_refused",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            register_by_supervisor(&state, "p3-d2r2-named", true);
+            chat(&state, Some("p3-d2r2-nobody"))
+        },
+    ) else {
+        return;
+    };
+    w.assert_refused_without_remote("unregistered name");
+    assert!(
+        w.result.contains("routing policy could not be established"),
+        "{}",
+        w.result
+    );
+}
+
+/// The intentional unrestricted behaviour is kept, and is the witness's
+/// control: a chat with no agent goes to the configured cloud provider.
+#[test]
+fn p3_d2r2_e2e_non_agent_chat_keeps_the_configured_provider() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_non_agent_chat_keeps_the_configured_provider",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || chat(&AppState::new_in_memory(), None),
+    ) else {
+        return;
+    };
+    assert!(
+        w.proxy.iter().any(|line| line.starts_with("CONNECT ")),
+        "the cloud dispatch reached the witness: {:?} {}",
+        w.proxy,
+        w.result
+    );
+    assert!(w.generates().is_empty(), "{:?}", w.ollama);
+}
+
+/// A registered unrestricted agent chatted to by name keeps the configured
+/// cloud provider.
+#[test]
+fn p3_d2r2_e2e_unrestricted_named_agent_keeps_the_configured_provider() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_unrestricted_named_agent_keeps_the_configured_provider",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            register_by_supervisor(&state, "p3-d2r2-open", false);
+            chat(&state, Some("p3-d2r2-open"))
+        },
+    ) else {
+        return;
+    };
+    assert!(
+        w.proxy.iter().any(|line| line.starts_with("CONNECT ")),
+        "the cloud dispatch reached the witness: {:?} {}",
+        w.proxy,
+        w.result
+    );
+    assert!(w.generates().is_empty(), "{:?}", w.ollama);
+}

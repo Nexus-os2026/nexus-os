@@ -278,21 +278,50 @@ pub(crate) fn resolve_agent_llm_policy(state: &AppState, agent_id: &str) -> Agen
 }
 
 /// The policy of the agent a chat is routed to, known only by `name` (P3
-/// D-2): from the assignments under the name and under the id of each
-/// registered agent of that name. A configuration that cannot be read
-/// leaves the policy `Unresolved`.
+/// D-2 R2). The name is not an identity: it only selects the registered
+/// agents of that name (after normalization), in the supervisor or in the
+/// desktop's metadata. Each one's policy comes from its own identity
+/// ([`resolve_agent_llm_policy`]), and assignments under the name itself
+/// also apply; the chat is local-only when any of them is. A name no
+/// registered agent has, an agent whose policy cannot be established, or a
+/// configuration that cannot be read leaves the policy `Unresolved`, so the
+/// agent-scoped chat dispatches nothing.
 pub(crate) fn resolve_named_agent_llm_policy(state: &AppState, name: &str) -> AgentLlmPolicy {
     let normalized = normalize_agent_config_key(name);
-    let mut keys = vec![name.to_string(), normalized.clone()];
-    for (id, entry) in state.meta.lock().unwrap_or_else(|p| p.into_inner()).iter() {
-        if normalize_agent_config_key(&entry.name) == normalized {
-            keys.push(id.to_string());
+    let mut ids: Vec<Uuid> = state
+        .meta
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .filter(|(_, entry)| normalize_agent_config_key(&entry.name) == normalized)
+        .map(|(id, _)| *id)
+        .collect();
+    {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        for status in supervisor.health_check() {
+            let named = supervisor.get_agent(status.id).is_some_and(|handle| {
+                normalize_agent_config_key(&handle.manifest.name) == normalized
+            });
+            if named && !ids.contains(&status.id) {
+                ids.push(status.id);
+            }
         }
     }
-    match load_config() {
-        Ok(config) => agent_llm_policy_in(&config, &keys),
-        Err(_) => AgentLlmPolicy::Unresolved,
+    if ids.is_empty() {
+        return AgentLlmPolicy::Unresolved;
     }
+    let mut policy = match load_config() {
+        Ok(config) => agent_llm_policy_in(&config, &[name.to_string(), normalized]),
+        Err(_) => return AgentLlmPolicy::Unresolved,
+    };
+    for id in ids {
+        match resolve_agent_llm_policy(state, &id.to_string()) {
+            AgentLlmPolicy::Unresolved => return AgentLlmPolicy::Unresolved,
+            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
+            AgentLlmPolicy::Unrestricted => {}
+        }
+    }
+    policy
 }
 
 /// Runs `op` with `policy` as this thread's agent routing policy, and
