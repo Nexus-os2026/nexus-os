@@ -1,6 +1,9 @@
 //! Scheduler, team orchestration, and content pipeline commands.
 
-use crate::{agent_error, AppState, BridgeLlmQueryHandler};
+use crate::{
+    agent_error, resolve_agent_llm_policy, with_agent_llm_policy, AgentLlmPolicy, AppState,
+    BridgeLlmQueryHandler,
+};
 use serde_json::json;
 use std::sync::Arc;
 #[cfg(all(
@@ -128,42 +131,57 @@ pub async fn execute_team_workflow(
     goal: String,
     member_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
+    run_team_workflow(&state, &director_id, &goal, &member_ids)
+}
+
+/// Runs a team workflow for registered agents (P3 D-2 R2). The director and
+/// every member must be registered agents; one that is not refuses the
+/// workflow (no participant is skipped, no name is assumed). Every model call
+/// of the workflow runs under [`team_llm_policy`].
+pub(crate) fn run_team_workflow(
+    state: &AppState,
+    director_id: &str,
+    goal: &str,
+    member_ids: &[String],
+) -> Result<serde_json::Value, String> {
     let supervisor = state.supervisor.clone();
+    let unregistered =
+        |id: &str| format!("team workflow refused: '{id}' is not a registered agent");
 
     // Build team config from registered agents
     let config = {
         let sup = supervisor.lock().unwrap_or_else(|p| p.into_inner());
 
         let director_uuid =
-            Uuid::parse_str(&director_id).map_err(|e| format!("invalid director id: {e}"))?;
+            Uuid::parse_str(director_id).map_err(|e| format!("invalid director id: {e}"))?;
         let director_name = sup
             .get_agent(director_uuid)
             .map(|h| h.manifest.name.clone())
-            .unwrap_or_else(|| "director".into());
+            .ok_or_else(|| unregistered(director_id))?;
 
         let mut members = Vec::new();
-        for mid in &member_ids {
+        for mid in member_ids {
             let uuid = Uuid::parse_str(mid).map_err(|e| format!("invalid member id: {e}"))?;
-            if let Some(handle) = sup.get_agent(uuid) {
-                members.push(nexus_kernel::team_orchestrator::TeamMember {
-                    agent_id: mid.clone(),
-                    name: handle.manifest.name.clone(),
-                    role: infer_team_role(&handle.manifest.name),
-                    capabilities: handle.manifest.capabilities.clone(),
-                    fuel_budget: handle.remaining_fuel,
-                });
-            }
+            let handle = sup.get_agent(uuid).ok_or_else(|| unregistered(mid))?;
+            members.push(nexus_kernel::team_orchestrator::TeamMember {
+                agent_id: mid.clone(),
+                name: handle.manifest.name.clone(),
+                role: infer_team_role(&handle.manifest.name),
+                capabilities: handle.manifest.capabilities.clone(),
+                fuel_budget: handle.remaining_fuel,
+            });
         }
 
         nexus_kernel::team_orchestrator::TeamConfig {
-            director_id: director_id.clone(),
+            director_id: director_id.to_string(),
             director_name,
             members,
         }
     };
 
+    let policy = team_llm_policy(state, director_id, member_ids)?;
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(BridgeLlmQueryHandler);
+        Arc::new(TeamPolicyLlm { policy });
 
     let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
         supervisor,
@@ -172,10 +190,54 @@ pub async fn execute_team_workflow(
     );
 
     let result = orchestrator
-        .execute_team_workflow(&config, &goal)
+        .execute_team_workflow(&config, goal)
         .map_err(agent_error)?;
 
     serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+}
+
+/// The routing policy of a team workflow (P3 D-2 R2). Any model call of the
+/// workflow can carry any participant's data: the decomposition carries the
+/// director's goal, a failed task is reassigned to another member, and the
+/// merge carries every member's result. So the whole workflow runs under one
+/// policy, local-only when the director or any member is. A participant
+/// whose policy cannot be established refuses the workflow before any call.
+pub(crate) fn team_llm_policy(
+    state: &AppState,
+    director_id: &str,
+    member_ids: &[String],
+) -> Result<AgentLlmPolicy, String> {
+    let mut policy = AgentLlmPolicy::Unrestricted;
+    for id in std::iter::once(director_id).chain(member_ids.iter().map(String::as_str)) {
+        match resolve_agent_llm_policy(state, id) {
+            AgentLlmPolicy::Unresolved => {
+                return Err(format!(
+                    "team workflow refused for '{id}': {}",
+                    crate::commands::cognitive::unresolved_policy_error()
+                ))
+            }
+            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
+            AgentLlmPolicy::Unrestricted => {}
+        }
+    }
+    Ok(policy)
+}
+
+/// A team workflow's model calls: the decomposition, each member's task and
+/// the merge, each under the team's policy on the thread that makes it.
+struct TeamPolicyLlm {
+    policy: AgentLlmPolicy,
+}
+
+impl nexus_kernel::cognitive::loop_runtime::LlmQueryHandler for TeamPolicyLlm {
+    fn query(&self, prompt: &str) -> Result<String, String> {
+        with_agent_llm_policy(self.policy, || {
+            nexus_kernel::cognitive::loop_runtime::LlmQueryHandler::query(
+                &BridgeLlmQueryHandler,
+                prompt,
+            )
+        })
+    }
 }
 
 /// Transfer fuel from one agent to another (Director privilege).

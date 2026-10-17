@@ -751,6 +751,15 @@ fn serve_ollama(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<Str
                 200,
                 serde_json::json!({"modelfile": "FROM local", "details": {}}),
             ),
+            // P3 D-2 R2: a team decomposition, two sub-tasks any member does.
+            "/api/generate"
+                if serves.generate_status == 200 && body.contains("task decomposition engine") =>
+            {
+                (
+                    200,
+                    serde_json::json!({"response": TEAM_PLAN, "eval_count": 2}),
+                )
+            }
             "/api/generate" if serves.generate_status == 200 => (
                 200,
                 serde_json::json!({"response": "local answer", "eval_count": 2}),
@@ -1315,6 +1324,177 @@ fn p3_d2r2_e2e_unrestricted_named_agent_keeps_the_configured_provider() {
             register_by_supervisor(&state, "p3-d2r2-open", false);
             chat(&state, Some("p3-d2r2-open"))
         },
+    ) else {
+        return;
+    };
+    assert!(
+        w.proxy.iter().any(|line| line.starts_with("CONNECT ")),
+        "the cloud dispatch reached the witness: {:?} {}",
+        w.proxy,
+        w.result
+    );
+    assert!(w.generates().is_empty(), "{:?}", w.ollama);
+}
+
+// ── P3 D-2 R2: team workflows ─────────────────────────────────────────────
+
+const TEAM_PLAN: &str = r#"[
+  {"id": "t1", "description": "Summarize the synthetic note", "required_capabilities": ["llm.query"], "estimated_fuel": 1.0, "dependencies": []},
+  {"id": "t2", "description": "List the synthetic note's points", "required_capabilities": ["llm.query"], "estimated_fuel": 1.0, "dependencies": []}
+]"#;
+
+/// Runs a team workflow of a director and two members, registered with the
+/// given local-only settings, through the desktop's team command path.
+fn team(director: bool, members: [bool; 2]) -> Result<String, AgentError> {
+    let state = AppState::new_in_memory();
+    let director_id = register_by_supervisor(&state, "p3-d2r2-director", director);
+    let member_ids = vec![
+        register_by_supervisor(&state, "p3-d2r2-member-a", members[0]),
+        register_by_supervisor(&state, "p3-d2r2-member-b", members[1]),
+    ];
+    crate::commands::orchestration::run_team_workflow(&state, &director_id, PROMPT, &member_ids)
+        .map(|result| result.to_string())
+        .map_err(AgentError::SupervisorError)
+}
+
+impl Witness {
+    /// Every model call of a team workflow went to the local runtime: the
+    /// decomposition, both member tasks and the merge, and nothing else.
+    fn assert_team_ran_locally(&self, context: &str) {
+        assert!(self.result.starts_with("OK "), "{context}: {}", self.result);
+        let result: serde_json::Value =
+            serde_json::from_str(self.result.trim_start_matches("OK ")).unwrap();
+        assert_eq!(result["success"], true, "{context}: {result}");
+        assert!(
+            self.proxy.is_empty(),
+            "{context}: remote invocation {:?}",
+            self.proxy
+        );
+        let generates = self.generates();
+        let count = |marker: &str| generates.iter().filter(|r| r.contains(marker)).count();
+        assert_eq!(
+            count("task decomposition engine"),
+            1,
+            "{context}: {generates:?}"
+        );
+        assert_eq!(
+            count("Execute this task assigned by the Director"),
+            2,
+            "{context}: {generates:?}"
+        );
+        assert_eq!(
+            count("Combine these sub-task results"),
+            1,
+            "{context}: {generates:?}"
+        );
+        assert_eq!(generates.len(), 4, "{context}: {generates:?}");
+    }
+}
+
+/// A local-only member: the decomposition, every member's task and the
+/// merge of their results stay on the local runtime.
+#[test]
+fn p3_d2r2_e2e_team_with_a_local_only_member_stays_local() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_team_with_a_local_only_member_stays_local",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || team(false, [true, false]),
+    ) else {
+        return;
+    };
+    w.assert_team_ran_locally("local-only member");
+}
+
+/// A local-only director: its decomposition, and so the whole workflow,
+/// stays on the local runtime.
+#[test]
+fn p3_d2r2_e2e_team_with_a_local_only_director_stays_local() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_team_with_a_local_only_director_stays_local",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || team(true, [false, false]),
+    ) else {
+        return;
+    };
+    w.assert_team_ran_locally("local-only director");
+}
+
+/// The local runtime fails every call of a local-only team: the workflow
+/// fails, nothing reaches the cloud, and nothing is reported successful.
+#[test]
+fn p3_d2r2_e2e_local_only_team_failure_is_not_success_or_cloud_fallback() {
+    let mut serves = FakeOllama::serving(&["qwen3:8b"]);
+    serves.generate_status = 500;
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_local_only_team_failure_is_not_success_or_cloud_fallback",
+        serves,
+        || team(false, [true, false]),
+    ) else {
+        return;
+    };
+    assert!(w.result.starts_with("ERR "), "{}", w.result);
+    assert!(w.proxy.is_empty(), "remote invocation {:?}", w.proxy);
+    assert_eq!(w.generates().len(), 1, "one local attempt: {:?}", w.ollama);
+}
+
+/// A director or member that is not a registered agent, or a configuration
+/// that cannot be read, refuses the workflow before any model call.
+#[test]
+fn p3_d2r2_e2e_team_without_established_identities_dispatches_nothing() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_team_without_established_identities_dispatches_nothing",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            let known = register_by_supervisor(&state, "p3-d2r2-known", false);
+            let stranger = Uuid::new_v4().to_string();
+            let run = |director: &str, members: Vec<String>| {
+                crate::commands::orchestration::run_team_workflow(
+                    &state, director, PROMPT, &members,
+                )
+            };
+            let unregistered_member = run(&known, vec![known.clone(), stranger.clone()]);
+            let unregistered_director = run(&stranger, vec![known.clone()]);
+            std::fs::write(
+                std::env::var("NEXUS_CONFIG_PATH").unwrap(),
+                "local_only = [",
+            )
+            .unwrap();
+            let unreadable = run(&known, vec![known.clone()]);
+            match (unregistered_member, unregistered_director, unreadable) {
+                (Err(a), Err(b), Err(c)) => {
+                    Err(AgentError::SupervisorError(format!("{a} | {b} | {c}")))
+                }
+                other => Ok(format!("not refused: {other:?}")),
+            }
+        },
+    ) else {
+        return;
+    };
+    assert!(w.result.starts_with("ERR "), "{}", w.result);
+    assert_eq!(
+        w.result.matches("not a registered agent").count(),
+        2,
+        "{}",
+        w.result
+    );
+    assert!(
+        w.result.contains("routing policy could not be established"),
+        "{}",
+        w.result
+    );
+    assert!(w.proxy.is_empty(), "remote invocation {:?}", w.proxy);
+    assert!(w.ollama.is_empty(), "{:?}", w.ollama);
+}
+
+/// The witness's control, and the unrestricted behaviour kept: a team with
+/// no local-only participant uses the configured cloud provider.
+#[test]
+fn p3_d2r2_e2e_unrestricted_team_keeps_the_configured_provider() {
+    let Some(w) = e2e(
+        "p3_d2r2_e2e_unrestricted_team_keeps_the_configured_provider",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || team(false, [false, false]),
     ) else {
         return;
     };

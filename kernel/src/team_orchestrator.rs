@@ -7,7 +7,7 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::cognitive::hivemind::{
     AgentInfo, CollectingHivemindEmitter, HivemindCoordinator, HivemindEvent, HivemindEventEmitter,
-    HivemindLlm, HivemindSession, HivemindStatus,
+    HivemindLlm, HivemindSession, HivemindStatus, SubTaskStatus,
 };
 use crate::cognitive::loop_runtime::LlmQueryHandler;
 use crate::errors::AgentError;
@@ -166,9 +166,11 @@ impl TeamOrchestrator {
                      If this is a publishing task, confirm the actions taken."
                 );
 
-                let result = llm.query(&prompt).unwrap_or_else(|e| {
-                    format!("Task execution failed: {e}")
-                });
+                // P3 D-2 R2: a failed or refused model call is a failed
+                // task, for the record and for the coordinator.
+                let result = llm
+                    .query(&prompt)
+                    .map_err(|e| format!("Task execution failed: {e}"));
 
                 let fuel_cost = estimate_task_fuel(task_desc);
 
@@ -180,12 +182,14 @@ impl TeamOrchestrator {
                         agent_id: agent_id.to_string(),
                         agent_name: agent_name.clone(),
                         description: task_desc.to_string(),
-                        success: true,
-                        output: result.clone(),
+                        success: result.is_ok(),
+                        output: match &result {
+                            Ok(output) | Err(output) => output.clone(),
+                        },
                         fuel_cost,
                     });
 
-                Ok(result)
+                result
             },
         )?;
 
@@ -195,10 +199,16 @@ impl TeamOrchestrator {
             .unwrap_or_else(|p| p.into_inner())
             .clone();
 
-        let success = session.status == HivemindStatus::Completed;
+        // P3 D-2 R2: successful only when every sub-task completed; the
+        // coordinator completes a session with a minority of failed tasks.
+        let success = session.status == HivemindStatus::Completed
+            && session
+                .sub_tasks
+                .iter()
+                .all(|task| task.status == SubTaskStatus::Completed);
 
-        // Generate summary using LLM
-        let summary = self.generate_team_summary(config, goal, &session, &task_results);
+        // The summary is composed here; no model is asked.
+        let summary = self.generate_team_summary(config, goal, &session, &task_results, success);
 
         // Log completion
         {
@@ -328,6 +338,7 @@ impl TeamOrchestrator {
         goal: &str,
         session: &HivemindSession,
         results: &[TaskAssignmentResult],
+        success: bool,
     ) -> String {
         let completed = results.iter().filter(|r| r.success).count();
         let total = results.len();
@@ -353,11 +364,7 @@ impl TeamOrchestrator {
              \nTask Results:\n{}",
             config.director_name,
             goal,
-            if session.status == HivemindStatus::Completed {
-                "SUCCESS"
-            } else {
-                "PARTIAL"
-            },
+            if success { "SUCCESS" } else { "PARTIAL" },
             completed,
             total,
             session.total_fuel_consumed,
@@ -659,6 +666,77 @@ mod tests {
             result.total_fuel,
             result.duration_secs
         );
+    }
+
+    /// The mock team, except that every attempt at the writing task fails,
+    /// as a refused or failed model call does.
+    struct WriterFailsLlm;
+
+    impl LlmQueryHandler for WriterFailsLlm {
+        fn query(&self, prompt: &str) -> Result<String, String> {
+            if prompt.contains("Task: Write a 1500-word article") {
+                return Err("local-only: no local model is installed".to_string());
+            }
+            TeamMockLlm.query(prompt)
+        }
+    }
+
+    /// P3 D-2 R2: a member task whose model call fails (here, on its
+    /// reassignment too) is reported as a failed task, not as a success with
+    /// the error as its output, and the workflow is not reported successful
+    /// although most sub-tasks completed.
+    #[test]
+    fn p3_d2r2_a_failed_member_task_is_not_reported_successful() {
+        let mut sup = Supervisor::new();
+        let director_id = create_agent(&mut sup, "nexus-director", vec!["llm.query"], 50000);
+        let researcher_id = create_agent(
+            &mut sup,
+            "nexus-researcher",
+            vec!["web.search", "web.read", "llm.query", "fs.write"],
+            10000,
+        );
+        let writer_id = create_agent(
+            &mut sup,
+            "nexus-writer",
+            vec!["llm.query", "fs.read", "fs.write"],
+            10000,
+        );
+        let publisher_id = create_agent(
+            &mut sup,
+            "nexus-publisher",
+            vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+            5000,
+        );
+        let orchestrator = TeamOrchestrator::new(
+            Arc::new(Mutex::new(sup)),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            Arc::new(WriterFailsLlm),
+        );
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+        let result = orchestrator
+            .execute_team_workflow(&config, "Research, write and publish")
+            .unwrap();
+
+        let writes: Vec<_> = result
+            .task_results
+            .iter()
+            .filter(|t| t.task_id == "write")
+            .collect();
+        assert!(!writes.is_empty());
+        for write in &writes {
+            assert!(
+                !write.success,
+                "a failed task reported successful: {write:?}"
+            );
+            assert!(write.output.contains("local-only"), "{write:?}");
+        }
+        for other in result.task_results.iter().filter(|t| t.task_id != "write") {
+            assert!(other.success, "{other:?}");
+        }
+        assert!(!result.success, "the workflow reported successful");
+        assert!(result.error.is_some());
+        assert!(result.summary.contains("PARTIAL"), "{}", result.summary);
     }
 
     /// Test fuel transfer between agents.
