@@ -973,6 +973,9 @@ impl NexusDatabase {
 
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
+        // Same as `open`: enforce foreign keys before migration, rather
+        // than relying on the SQLite build's compile-time default.
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let db = Self {
             conn: Mutex::new(conn),
         };
@@ -4933,5 +4936,54 @@ mod tests {
         });
         // The openai row must NOT have been committed.
         assert!(db.lookup_secret("llm", "openai_api_key").unwrap().is_none());
+    }
+
+    // ── Foreign-Key Enforcement (P3-C11-HM-FK01) ───────────────────────
+
+    #[test]
+    fn in_memory_enables_foreign_keys() {
+        let db = test_db();
+        let conn = db.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let enabled: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(enabled, 1, "in-memory database must enforce foreign keys");
+    }
+
+    #[test]
+    fn in_memory_rejects_child_row_without_parent() {
+        let db = test_db();
+        let conn = db.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute_batch(
+            "CREATE TABLE fk01_parent (id INTEGER PRIMARY KEY);
+             CREATE TABLE fk01_child (
+                 id INTEGER PRIMARY KEY,
+                 parent_id INTEGER NOT NULL REFERENCES fk01_parent(id)
+             );",
+        )
+        .unwrap();
+
+        let orphan = conn.execute("INSERT INTO fk01_child (id, parent_id) VALUES (1, 42)", []);
+        match orphan {
+            Err(rusqlite::Error::SqliteFailure(e, _)) => assert_eq!(
+                e.extended_code,
+                rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY,
+                "orphan insert must fail on the foreign-key constraint"
+            ),
+            other => panic!("orphan child insert must be rejected, got {other:?}"),
+        }
+
+        conn.execute("INSERT INTO fk01_parent (id) VALUES (42)", [])
+            .unwrap();
+        conn.execute("INSERT INTO fk01_child (id, parent_id) VALUES (1, 42)", [])
+            .unwrap();
+
+        // No violations anywhere in the migrated schema or the fixture.
+        let violations: i64 = conn
+            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(violations, 0);
     }
 }
