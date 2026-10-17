@@ -345,11 +345,7 @@ impl TeamOrchestrator {
         let member_summaries: Vec<String> = results
             .iter()
             .map(|r| {
-                let preview = if r.output.len() > 100 {
-                    format!("{}...", &r.output[..100])
-                } else {
-                    r.output.clone()
-                };
+                let preview = summary_preview(&r.output);
                 format!("- {} ({}): {}", r.agent_name, r.task_id, preview)
             })
             .collect();
@@ -370,6 +366,17 @@ impl TeamOrchestrator {
             session.total_fuel_consumed,
             member_summaries.join("\n"),
         )
+    }
+}
+
+/// A task output as the team summary shows it: at most its first 100 bytes,
+/// cut at a character boundary (never inside a character), followed by
+/// "..." when it is longer.
+fn summary_preview(output: &str) -> String {
+    if output.len() > 100 {
+        format!("{}...", &output[..output.floor_char_boundary(100)])
+    } else {
+        output.to_string()
     }
 }
 
@@ -737,6 +744,45 @@ mod tests {
         assert!(!result.success, "the workflow reported successful");
         assert!(result.error.is_some());
         assert!(result.summary.contains("PARTIAL"), "{}", result.summary);
+    }
+
+    /// P3: the summary preview keeps at most 100 bytes and never cuts a
+    /// character, whatever its encoded width.
+    #[test]
+    fn p3_summary_preview_keeps_100_bytes_on_a_character_boundary() {
+        let check = |output: &str, kept: &str, cut: bool| {
+            let preview = summary_preview(output);
+            let expected = if cut {
+                format!("{kept}...")
+            } else {
+                kept.to_string()
+            };
+            assert_eq!(preview, expected, "{output:?}");
+            assert!(preview.trim_end_matches("...").len() <= 100);
+        };
+        // Empty, ASCII, and exactly 100 bytes.
+        check("", "", false);
+        check(&"a".repeat(150), &"a".repeat(100), true);
+        check(&"a".repeat(100), &"a".repeat(100), false);
+        let exact = format!("{}a", "\u{20ac}".repeat(33));
+        assert_eq!(exact.len(), 100);
+        check(&exact, &exact, false);
+        // Two-byte characters: byte 100 on a boundary, then crossing it.
+        check(&"\u{e9}".repeat(60), &"\u{e9}".repeat(50), true);
+        check(
+            &format!("a{}", "\u{e9}".repeat(60)),
+            &format!("a{}", "\u{e9}".repeat(49)),
+            true,
+        );
+        // Three-byte characters: byte 100 inside the 34th.
+        check(&"\u{20ac}".repeat(40), &"\u{20ac}".repeat(33), true);
+        // Four-byte characters: byte 100 on a boundary, then crossing it.
+        check(&"\u{1f600}".repeat(30), &"\u{1f600}".repeat(25), true);
+        check(
+            &format!("ab{}", "\u{1f600}".repeat(30)),
+            &format!("ab{}", "\u{1f600}".repeat(24)),
+            true,
+        );
     }
 
     /// Test fuel transfer between agents.
