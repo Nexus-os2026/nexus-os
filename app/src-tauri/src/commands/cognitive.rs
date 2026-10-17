@@ -625,6 +625,9 @@ impl nexus_kernel::cognitive::LlmQueryHandler for BridgeLlmQueryHandler {
 
 impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
     fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        // P3 HiveMind INFOFLOW: a HiveMind session's work dispatches only
+        // while the session still qualifies as admitted.
+        requalify_active_hivemind_session().map_err(AgentError::SupervisorError)?;
         // P3 D-2: an agent's work whose policy is unknown dispatches nothing.
         let policy = active_agent_llm_policy();
         if policy == AgentLlmPolicy::Unresolved {
@@ -1949,6 +1952,9 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     // until it ends, including its post-goal evolution. Elsewhere the floor
     // is the unrestricted default and changes nothing.
     let policy_floor = crate::active_llm_policy_floor();
+    // P3 HiveMind INFOFLOW: and the session's admission, so each of those
+    // calls first requalifies the session.
+    let hivemind_admission = active_hivemind_admission();
 
     tauri::async_runtime::spawn(async move {
         // The task owns the guard: it removes this loop's own entry on any
@@ -2029,7 +2035,9 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
             let cycle_result_or_panic =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     crate::with_llm_policy_floor(policy_floor, || {
-                        run_cognitive_cycle(&state, &agent_id, &planner, &memory_mgr, &executor)
+                        with_hivemind_admission(hivemind_admission.clone(), || {
+                            run_cognitive_cycle(&state, &agent_id, &planner, &memory_mgr, &executor)
+                        })
                     })
                 }));
 
@@ -2407,14 +2415,16 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                             cycle_result.fuel_consumed,
                         );
                         crate::with_llm_policy_floor(policy_floor, || {
-                            run_post_goal_evolution(
-                                &bridge,
-                                &state,
-                                &agent_id,
-                                &goal_id,
-                                success,
-                                cycle_result.fuel_consumed,
-                            )
+                            with_hivemind_admission(hivemind_admission.clone(), || {
+                                run_post_goal_evolution(
+                                    &bridge,
+                                    &state,
+                                    &agent_id,
+                                    &goal_id,
+                                    success,
+                                    cycle_result.fuel_consumed,
+                                )
+                            })
                         });
                         return;
                     }
@@ -2546,6 +2556,9 @@ pub(crate) fn execute_hivemind_subtask(
     if agent_stopped(state, agent_id) {
         return Err(format!("sub-task refused: agent '{agent_id}' is stopped"));
     }
+    // P3 HiveMind INFOFLOW: a sub-task is started (and stored) only while
+    // its session still qualifies as admitted.
+    requalify_active_hivemind_session().map_err(|reason| format!("sub-task refused: {reason}"))?;
     let goal_id = execute_agent_goal(
         state,
         agent_id.to_string(),
@@ -2778,18 +2791,27 @@ pub(crate) fn start_hivemind(
     agent_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
     let (agents, policy) = hivemind_participants(state, &agent_ids)?;
+    // P3 HiveMind INFOFLOW: the session's admission, requalified before each
+    // sub-task it starts and each model call of its work.
+    let admission = Arc::new(HivemindAdmission {
+        state: state.clone(),
+        participants: agents.iter().map(|agent| agent.id.clone()).collect(),
+        policy,
+    });
 
     // P3 HiveMind: the session's policy is the floor of every model call
     // the session makes on this thread (decomposition, merge) and of every
     // sub-task loop it starts (including reassignments).
     let outcome = crate::with_llm_policy_floor(policy, || {
-        state.hivemind.execute_with_executor(
-            &goal,
-            agents,
-            |_task_id, assigned_agent_id, task_desc| {
-                execute_hivemind_subtask(state, session, assigned_agent_id, task_desc)
-            },
-        )
+        with_hivemind_admission(Some(admission), || {
+            state.hivemind.execute_with_executor(
+                &goal,
+                agents,
+                |_task_id, assigned_agent_id, task_desc| {
+                    execute_hivemind_subtask(state, session, assigned_agent_id, task_desc)
+                },
+            )
+        })
     })
     .map_err(|e| e.to_string())?;
 
@@ -2895,6 +2917,69 @@ fn hivemind_session_policy(state: &AppState, ids: &[String]) -> Result<AgentLlmP
     } else {
         AgentLlmPolicy::Unrestricted
     })
+}
+
+/// A HiveMind session's admission, kept for the session's work (P3 HiveMind
+/// INFOFLOW): its participants and the policy it was admitted under. Each
+/// sub-task the session starts and each model call of its work, on its own
+/// thread or in a sub-task loop it started, first requalifies it.
+pub(crate) struct HivemindAdmission {
+    state: AppState,
+    participants: Vec<String>,
+    policy: AgentLlmPolicy,
+}
+
+impl HivemindAdmission {
+    /// The session still qualifies as it was admitted: its participants'
+    /// current policies give the same session policy. A participant's
+    /// policy changed either way, a mix, or a policy that can no longer be
+    /// established ends the session's work.
+    fn requalify(&self) -> Result<(), String> {
+        let changed =
+            "hivemind session ended: a participant's routing policy changed during the session";
+        match hivemind_session_policy(&self.state, &self.participants) {
+            Ok(policy) if policy == self.policy => Ok(()),
+            Ok(_) => Err(changed.to_string()),
+            Err(reason) => Err(format!("{changed}: {reason}")),
+        }
+    }
+}
+
+thread_local! {
+    /// The admission of the HiveMind session whose work runs on this thread
+    /// (P3 HiveMind INFOFLOW). Set by `with_hivemind_admission`.
+    static ACTIVE_HIVEMIND_ADMISSION: std::cell::RefCell<Option<Arc<HivemindAdmission>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `op` as work of the HiveMind session admitted by `admission` (none:
+/// of no session), and restores the previous one afterwards, also when `op`
+/// unwinds.
+pub(crate) fn with_hivemind_admission<T>(
+    admission: Option<Arc<HivemindAdmission>>,
+    op: impl FnOnce() -> T,
+) -> T {
+    struct Restore(Option<Arc<HivemindAdmission>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            ACTIVE_HIVEMIND_ADMISSION.with(|slot| *slot.borrow_mut() = previous);
+        }
+    }
+    let previous = ACTIVE_HIVEMIND_ADMISSION.with(|slot| slot.replace(admission));
+    let _restore = Restore(previous);
+    op()
+}
+
+/// The admission of the HiveMind session whose work runs on this thread.
+pub(crate) fn active_hivemind_admission() -> Option<Arc<HivemindAdmission>> {
+    ACTIVE_HIVEMIND_ADMISSION.with(|slot| slot.borrow().clone())
+}
+
+/// Requalifies the HiveMind session whose work runs on this thread, if any
+/// (P3 HiveMind INFOFLOW).
+pub(crate) fn requalify_active_hivemind_session() -> Result<(), String> {
+    active_hivemind_admission().map_or(Ok(()), |admission| admission.requalify())
 }
 
 pub(crate) fn get_hivemind_status(

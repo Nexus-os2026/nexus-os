@@ -646,6 +646,8 @@ struct FakeOllama {
     /// would, so work on a configured route runs on and every one of its
     /// prompts is recorded with its content.
     proxy_answers: bool,
+    /// P3 HiveMind INFOFLOW: a policy-tightening event at the proxy.
+    tighten: Option<Tighten>,
 }
 
 impl FakeOllama {
@@ -655,8 +657,20 @@ impl FakeOllama {
             remote: Vec::new(),
             generate_status: 200,
             proxy_answers: false,
+            tighten: None,
         }
     }
+}
+
+/// A policy-tightening event (P3 HiveMind INFOFLOW): when the recording
+/// proxy receives the `nth` request (from 1) whose body `matches`, it first
+/// makes the agent named `name` local-only in the scenario's configuration,
+/// as an owner would, then answers it.
+#[derive(Clone, Copy)]
+struct Tighten {
+    name: &'static str,
+    matches: fn(&str) -> bool,
+    nth: usize,
 }
 
 /// What a child scenario did: its result line, the requests the fake
@@ -826,7 +840,13 @@ fn respond(stream: &mut TcpStream, status: u16, reply: &serde_json::Value) {
     );
 }
 
-fn serve_proxy(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<String>) {
+fn serve_proxy(
+    listener: TcpListener,
+    serves: FakeOllama,
+    config: std::path::PathBuf,
+    log: mpsc::Sender<String>,
+) {
+    let mut matched = 0usize;
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
@@ -852,6 +872,14 @@ fn serve_proxy(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<Stri
         } else {
             format!("{first} {body}")
         });
+        if let Some(tighten) = serves.tighten {
+            if (tighten.matches)(&body) {
+                matched += 1;
+                if matched == tighten.nth {
+                    make_local_only(&config, tighten.name);
+                }
+            }
+        }
         if serves.proxy_answers && plain {
             // The request names its absolute URL: `http://host:port/path`.
             let path = first
@@ -864,6 +892,23 @@ fn serve_proxy(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<Stri
             respond(&mut stream, status, &reply);
         }
     }
+}
+
+/// The owner makes the agent named `name` local-only (P3 HiveMind
+/// INFOFLOW): an assignment under its name, in the scenario's
+/// configuration.
+fn make_local_only(config: &std::path::Path, name: &str) {
+    let mut settings = nexus_kernel::config::load_config_from_path(config).unwrap();
+    settings.agent_llm_assignments.insert(
+        name.to_string(),
+        nexus_kernel::config::AgentLlmAssignment {
+            provider_id: String::new(),
+            local_only: true,
+            budget_dollars: 0,
+            budget_tokens: 0,
+        },
+    );
+    nexus_kernel::config::save_config_to_path(config, &settings).unwrap();
 }
 
 fn stop(addr: std::net::SocketAddr) {
@@ -896,8 +941,10 @@ fn e2e(
     let (proxy_log, proxy_seen) = mpsc::channel();
     let config = std::env::temp_dir().join(format!("p3-d2-{}.toml", Uuid::new_v4()));
     let proxy_serves = serves.clone();
+    let proxy_config = config.clone();
     let ollama_thread = std::thread::spawn(move || serve_ollama(ollama, serves, ollama_log));
-    let proxy_thread = std::thread::spawn(move || serve_proxy(proxy, proxy_serves, proxy_log));
+    let proxy_thread =
+        std::thread::spawn(move || serve_proxy(proxy, proxy_serves, proxy_config, proxy_log));
 
     let mut child = Command::new(std::env::current_exe().unwrap());
     child
@@ -2092,9 +2139,10 @@ fn configured_route_session() -> Result<String, AgentError> {
     ))
 }
 
-fn configured_route() -> FakeOllama {
+fn configured_route(tighten: Option<Tighten>) -> FakeOllama {
     let mut serves = FakeOllama::serving(&["qwen3:8b"]);
     serves.proxy_answers = true;
+    serves.tighten = tighten;
     serves
 }
 
@@ -2104,7 +2152,7 @@ fn configured_route() -> FakeOllama {
 fn p3_hive_e2e_an_unrestricted_session_completes_on_its_configured_route() {
     let Some(w) = e2e(
         "p3_hive_e2e_an_unrestricted_session_completes_on_its_configured_route",
-        configured_route(),
+        configured_route(None),
         configured_route_session,
     ) else {
         return;
@@ -2117,6 +2165,99 @@ fn p3_hive_e2e_an_unrestricted_session_completes_on_its_configured_route() {
     assert!(w.generates().is_empty(), "{:?}", w.ollama);
     assert!(
         w.result.contains("other_policy=Unrestricted"),
+        "{}",
+        w.result
+    );
+}
+
+/// Stage C. The owner makes "p3-hive-other" local-only during the
+/// session, when the proxy receives the `nth` request that `matches`. The
+/// session no longer qualifies: no later model call of it is dispatched,
+/// on any route, and no later sub-task is started.
+fn assert_nothing_after_tightening(w: &Witness, plans: usize, steps: usize, open_tasks: usize) {
+    // What was dispatched first, on either route.
+    assert_eq!(
+        w.proxied(is_merge),
+        0,
+        "merge after tightening: {:?}",
+        w.proxy
+    );
+    assert_eq!(w.proxied(is_step), steps, "{:?}", w.proxy);
+    assert_eq!(w.proxied(is_plan), plans, "{:?}", w.proxy);
+    assert_eq!(w.proxied(is_decomposition), 1, "{:?}", w.proxy);
+    assert!(w.generates().is_empty(), "{:?}", w.ollama);
+    assert!(
+        w.result.contains(&format!("open_tasks={open_tasks} ")),
+        "{}",
+        w.result
+    );
+    assert!(w.result.contains("other_policy=LocalOnly"), "{}", w.result);
+    assert!(!w.result.contains("status=\"Completed\""), "{}", w.result);
+}
+
+fn tightened(matches: fn(&str) -> bool, nth: usize) -> FakeOllama {
+    configured_route(Some(Tighten {
+        name: "p3-hive-other",
+        matches,
+        nth,
+    }))
+}
+
+/// Stage C, after the decomposition: no sub-task starts, no merge.
+#[test]
+fn p3_hive_e2e_tightened_after_decomposition_dispatches_nothing_more() {
+    let Some(w) = e2e(
+        "p3_hive_e2e_tightened_after_decomposition_dispatches_nothing_more",
+        tightened(is_decomposition, 1),
+        configured_route_session,
+    ) else {
+        return;
+    };
+    assert_nothing_after_tightening(&w, 0, 0, 0);
+}
+
+/// Stage C, inside a sub-task loop (after its plan): the loop's next model
+/// call (its step) is not dispatched, and nothing after it.
+#[test]
+fn p3_hive_e2e_tightened_inside_a_subtask_loop_dispatches_nothing_more() {
+    let Some(w) = e2e(
+        "p3_hive_e2e_tightened_inside_a_subtask_loop_dispatches_nothing_more",
+        tightened(is_plan, 1),
+        configured_route_session,
+    ) else {
+        return;
+    };
+    assert_nothing_after_tightening(&w, 1, 0, 1);
+}
+
+/// Stage C, between sub-tasks: the second sub-task does not start, and no
+/// merge.
+#[test]
+fn p3_hive_e2e_tightened_between_subtasks_dispatches_nothing_more() {
+    let Some(w) = e2e(
+        "p3_hive_e2e_tightened_between_subtasks_dispatches_nothing_more",
+        tightened(is_step, 1),
+        configured_route_session,
+    ) else {
+        return;
+    };
+    assert_nothing_after_tightening(&w, 1, 1, 1);
+}
+
+/// Stage C, before the merge: the merge is not dispatched.
+#[test]
+fn p3_hive_e2e_tightened_before_the_merge_does_not_merge() {
+    let Some(w) = e2e(
+        "p3_hive_e2e_tightened_before_the_merge_does_not_merge",
+        tightened(is_step, 2),
+        configured_route_session,
+    ) else {
+        return;
+    };
+    assert_nothing_after_tightening(&w, 2, 2, 2);
+    assert!(
+        w.result
+            .contains("routing policy changed during the session"),
         "{}",
         w.result
     );
