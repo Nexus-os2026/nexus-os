@@ -29,6 +29,7 @@ mod composition_tests;
 mod concurrency_tests;
 mod crash_tests;
 mod fault_tests;
+mod scale_tests;
 mod schema_tests;
 mod session_tests;
 mod verb_tests;
@@ -892,19 +893,25 @@ fn verify_all(conn: &Connection, store: &[u8; 32]) -> Read<Seq> {
         Ok(_) => return Read::Corrupt,
         Err(error) => return read_error(&error),
     }
-    let rows = match select(
-        conn,
-        store,
-        &format!("SELECT {COLUMNS} FROM ledger ORDER BY seq"),
-        [],
-    ) {
-        Read::Got(rows) => rows,
-        Read::Failed => return Read::Failed,
-        Read::Corrupt => return Read::Corrupt,
+    // Streamed: one row in memory at a time, however long the ledger.
+    let mut statement = match conn.prepare(&format!("SELECT {COLUMNS} FROM ledger ORDER BY seq")) {
+        Ok(statement) => statement,
+        Err(error) => return read_error(&error),
+    };
+    let rows = match statement.query_map([], raw) {
+        Ok(rows) => rows,
+        Err(error) => return read_error(&error),
     };
     let mut expected_seq = 1;
     let mut prev = [0; 32];
-    for row in &rows {
+    for row in rows {
+        let row = match row {
+            Ok(raw) => match stored(raw) {
+                Some(row) if row.verified(store) => row,
+                _ => return Read::Corrupt,
+            },
+            Err(error) => return read_error(&error),
+        };
         if row.seq != expected_seq || row.prev != prev {
             return Read::Corrupt;
         }
