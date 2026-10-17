@@ -1,6 +1,6 @@
 use super::{
-    curl_get_status, curl_post_json, curl_post_json_with_timeout, EmbeddingResponse, LlmProvider,
-    LlmResponse, ProviderRequest,
+    curl_get_status, curl_post_json, curl_post_json_with_timeout, CurlRoute, EmbeddingResponse,
+    LlmProvider, LlmResponse, ProviderRequest,
 };
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,8 @@ pub struct OllamaProvider {
     streaming_timeout_secs: u32,
     /// Timeout for non-streaming requests in seconds (default: 300 = 5 minutes).
     request_timeout_secs: u32,
+    /// How every request of this provider reaches `base_url` (P3 D-2 R2).
+    route: CurlRoute,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -39,7 +41,25 @@ impl OllamaProvider {
             base_url: base_url.into(),
             streaming_timeout_secs: 900,
             request_timeout_secs: 300,
+            route: CurlRoute::Configured,
         }
+    }
+
+    /// A provider for local-only work (P3 D-2 R2). `base` must be a loopback
+    /// address ([`crate::gateway::local_only_ollama_base`]), and every
+    /// request this provider makes connects to it directly: no proxy setting
+    /// of the environment applies, and no redirect is followed.
+    pub fn local_only(base: &str) -> Result<Self, AgentError> {
+        let base = crate::gateway::local_only_ollama_base(base)?;
+        Ok(Self {
+            route: CurlRoute::DirectLoopback,
+            ..Self::new(base)
+        })
+    }
+
+    /// Whether this provider connects only directly to a loopback runtime.
+    pub fn is_local_only(&self) -> bool {
+        self.route == CurlRoute::DirectLoopback
     }
 
     /// Set timeout for streaming requests (chat, pull) in seconds.
@@ -125,7 +145,7 @@ impl OllamaProvider {
         image_base64: &str,
         model: &str,
     ) -> Result<String, AgentError> {
-        let tags_status = curl_get_status(self.tags_endpoint().as_str());
+        let tags_status = curl_get_status(self.tags_endpoint().as_str(), self.route);
         match tags_status {
             Ok(code) if (200..300).contains(&code) => {}
             _ => {
@@ -141,8 +161,13 @@ impl OllamaProvider {
         let mut headers = BTreeMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
         let body = self.build_image_request_body(prompt, image_base64, &model_name);
-        let (status, payload) =
-            curl_post_json_with_timeout(&endpoint, &headers, &body, self.request_timeout_secs)?;
+        let (status, payload) = curl_post_json_with_timeout(
+            &endpoint,
+            &headers,
+            &body,
+            self.request_timeout_secs,
+            self.route,
+        )?;
         if !(200..300).contains(&status) {
             return Err(AgentError::SupervisorError(format!(
                 "ollama vision request failed with status {status}"
@@ -217,10 +242,24 @@ impl OllamaProvider {
         }
     }
 
+    /// The runtime's `/api/show` description of `model`: its status and
+    /// reply, asked within 5 seconds.
+    pub fn show_model(&self, model: &str) -> Result<(u16, Value), AgentError> {
+        let mut headers = BTreeMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        curl_post_json_with_timeout(
+            &format!("{}/api/show", self.base_url.trim_end_matches('/')),
+            &headers,
+            &json!({ "model": model }),
+            5,
+            self.route,
+        )
+    }
+
     /// List all locally installed Ollama models.
     pub fn list_models(&self) -> Result<Vec<OllamaModel>, AgentError> {
         let endpoint = self.tags_endpoint();
-        let (status, payload) = curl_get_json(&endpoint)?;
+        let (status, payload) = curl_get_json(&endpoint, self.route)?;
         if !(200..300).contains(&status) {
             return Err(AgentError::SupervisorError(format!(
                 "Ollama list models failed with status {status}"
@@ -277,9 +316,10 @@ impl OllamaProvider {
 
         eprintln!("[nexus-llm][governance] ollama::chat_stream endpoint={endpoint} model={model}");
         let timeout_str = self.streaming_timeout_secs.to_string();
-        let endpoint = super::checked_endpoint(&endpoint)?;
+        let endpoint = super::checked_route_endpoint(&endpoint, self.route)?;
         let mut child = Command::new("curl")
             .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(self.route.args())
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .args(["--max-filesize", "67108864"])
             .arg("-H")
@@ -386,9 +426,10 @@ impl OllamaProvider {
             "[nexus-llm][governance] ollama::pull_model endpoint={endpoint} model={model_name}"
         );
         let timeout_str = self.streaming_timeout_secs.to_string();
-        let endpoint = super::checked_endpoint(&endpoint)?;
+        let endpoint = super::checked_route_endpoint(&endpoint, self.route)?;
         let mut child = Command::new("curl")
             .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(self.route.args())
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .args(["--max-filesize", "67108864"])
             .arg("-H")
@@ -452,19 +493,20 @@ impl OllamaProvider {
 }
 
 /// GET request using curl (returns status + json body).
-fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
+fn curl_get_json(endpoint: &str, route: CurlRoute) -> Result<(u16, Value), AgentError> {
     // Rate-limit logging: only print the first call, then stay silent.
     use std::sync::atomic::{AtomicBool, Ordering};
     static LOGGED_ONCE: AtomicBool = AtomicBool::new(false);
     if !LOGGED_ONCE.swap(true, Ordering::Relaxed) {
         eprintln!("[nexus-llm][governance] ollama::curl_get_json endpoint={endpoint}");
     }
-    let endpoint = super::checked_endpoint(endpoint)?;
+    let endpoint = super::checked_route_endpoint(endpoint, route)?;
     let marker = "__NEXUS_STATUS__:";
     // Final Gate item B: no redirect is followed. The authorized Ollama
     // address was checked, not wherever it might redirect.
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(route.args())
         .args(["-sS", "-m", "10", "--max-filesize", "33554432"])
         .arg("-w")
         .arg(format!("\n{marker}%{{http_code}}"))
@@ -582,6 +624,7 @@ impl LlmProvider for OllamaProvider {
             &request.headers,
             &request.body,
             self.request_timeout_secs,
+            self.route,
         )?;
         if !(200..300).contains(&status) {
             // G3: a 404 from /api/generate means Ollama itself is reachable
@@ -664,7 +707,7 @@ impl LlmProvider for OllamaProvider {
                 "model": model,
                 "prompt": *text,
             });
-            let (status, payload) = curl_post_json(&endpoint, &headers, &body)?;
+            let (status, payload) = curl_post_json(&endpoint, &headers, &body, self.route)?;
             if !(200..300).contains(&status) {
                 return Err(AgentError::SupervisorError(format!(
                     "ollama embedding request failed with status {status}"

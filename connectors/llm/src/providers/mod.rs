@@ -165,18 +165,70 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Arc<T> {
 /// as an http(s) URL before it reaches curl, which receives only its
 /// normalized spelling after `--` (P0-002C5B).
 pub(crate) fn checked_endpoint(endpoint: &str) -> Result<String, AgentError> {
-    nexus_kernel::governed_http::http_url(endpoint)
-        .map(|url| url.as_str().to_string())
-        .map_err(|error| AgentError::SupervisorError(format!("invalid endpoint: {error}")))
+    checked_route_endpoint(endpoint, CurlRoute::Configured)
 }
 
-pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
-    let endpoint = checked_endpoint(endpoint)?;
+/// How a curl request reaches its endpoint (P3 D-2 R2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CurlRoute {
+    /// The process's proxy settings apply (`http_proxy`, `HTTPS_PROXY`,
+    /// `ALL_PROXY`, `NO_PROXY`, ...), as they do for every provider.
+    Configured,
+    /// A local-only request: the endpoint must be a loopback IP literal, and
+    /// curl connects to it directly. `--noproxy *` overrides every proxy
+    /// setting of the environment, whatever `NO_PROXY` says, so no HTTP,
+    /// HTTPS or SOCKS proxy receives the request. As on every route, no
+    /// redirect is followed.
+    DirectLoopback,
+}
+
+/// The curl arguments of [`CurlRoute::DirectLoopback`]: no proxy for any host.
+const CURL_DIRECT: [&str; 2] = ["--noproxy", "*"];
+
+impl CurlRoute {
+    /// The arguments that select this route, placed after the protocol
+    /// allowlist.
+    pub(crate) fn args(self) -> &'static [&'static str] {
+        match self {
+            CurlRoute::Configured => &[],
+            CurlRoute::DirectLoopback => &CURL_DIRECT,
+        }
+    }
+}
+
+/// [`checked_endpoint`] for `route`: a direct loopback request is refused
+/// unless the endpoint's host is a loopback IP literal, so no resolver and
+/// no other host is involved.
+pub(crate) fn checked_route_endpoint(
+    endpoint: &str,
+    route: CurlRoute,
+) -> Result<String, AgentError> {
+    let url = nexus_kernel::governed_http::http_url(endpoint)
+        .map_err(|error| AgentError::SupervisorError(format!("invalid endpoint: {error}")))?;
+    if route == CurlRoute::DirectLoopback {
+        let host = url.host_str().unwrap_or_default();
+        let loopback = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
+        if !loopback {
+            return Err(AgentError::SupervisorError(
+                "local-only: the endpoint is not a loopback address".to_string(),
+            ));
+        }
+    }
+    Ok(url.as_str().to_string())
+}
+
+pub(crate) fn curl_get_status(endpoint: &str, route: CurlRoute) -> Result<u16, AgentError> {
+    let endpoint = checked_route_endpoint(endpoint, route)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
     // Final Gate item B: no redirect is followed; the checked address is the
     // one contacted.
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(route.args())
         .args([
             "-sS",
             "-m",
@@ -217,8 +269,9 @@ pub(crate) fn curl_post_json(
     endpoint: &str,
     headers: &BTreeMap<String, String>,
     body: &Value,
+    route: CurlRoute,
 ) -> Result<(u16, Value), AgentError> {
-    curl_post_json_with_timeout(endpoint, headers, body, 20)
+    curl_post_json_with_timeout(endpoint, headers, body, 20, route)
 }
 
 /// Header names that carry a credential (Final Gate item C). Such a header is
@@ -251,18 +304,20 @@ fn curl_post_command(
     headers: &BTreeMap<String, String>,
     timeout_secs: u32,
     status_marker: &str,
+    route: CurlRoute,
 ) -> Result<Command, AgentError> {
     if headers.keys().any(|name| is_credential_header(name)) {
         return Err(AgentError::SupervisorError(
             "a credential header is never passed on a process command line".to_string(),
         ));
     }
-    let endpoint = checked_endpoint(endpoint)?;
+    let endpoint = checked_route_endpoint(endpoint, route)?;
     eprintln!("[nexus-llm][governance] curl_post_json endpoint={endpoint} timeout={timeout_secs}s");
     let timeout_str = timeout_secs.to_string();
     let mut command = Command::new("curl");
     command
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(route.args())
         .args(["-sS", "-m", &timeout_str, "--max-filesize", "33554432"]);
     for (header_name, header_value) in headers {
         let header = nexus_kernel::governed_http::http_header(header_name, header_value)
@@ -289,9 +344,10 @@ pub(crate) fn curl_post_json_with_timeout(
     headers: &BTreeMap<String, String>,
     body: &Value,
     timeout_secs: u32,
+    route: CurlRoute,
 ) -> Result<(u16, Value), AgentError> {
     let marker = "__NEXUS_STATUS__:";
-    let mut command = curl_post_command(endpoint, headers, timeout_secs, marker)?;
+    let mut command = curl_post_command(endpoint, headers, timeout_secs, marker, route)?;
     let encoded_body = serde_json::to_string(body).map_err(|error| {
         AgentError::SupervisorError(format!("failed to encode request body: {error}"))
     })?;
@@ -1032,24 +1088,37 @@ mod tests {
             "https://a@example.com/x",
         ] {
             assert!(super::checked_endpoint(endpoint).is_err(), "{endpoint:?}");
-            let status = super::curl_get_status(endpoint).unwrap_err().to_string();
+            let status = super::curl_get_status(endpoint, super::CurlRoute::Configured)
+                .unwrap_err()
+                .to_string();
             assert!(
                 status.contains("invalid endpoint"),
                 "{endpoint:?}: {status}"
             );
-            let posted =
-                super::curl_post_json_with_timeout(endpoint, &BTreeMap::new(), &json!({}), 1)
-                    .unwrap_err()
-                    .to_string();
+            let posted = super::curl_post_json_with_timeout(
+                endpoint,
+                &BTreeMap::new(),
+                &json!({}),
+                1,
+                super::CurlRoute::Configured,
+            )
+            .unwrap_err()
+            .to_string();
             assert!(
                 posted.contains("invalid endpoint"),
                 "{endpoint:?}: {posted}"
             );
         }
         let header = BTreeMap::from([("x-a".to_string(), "v\r\nx-b: 1".to_string())]);
-        let err = super::curl_post_json_with_timeout("http://127.0.0.1:9/", &header, &json!({}), 1)
-            .unwrap_err()
-            .to_string();
+        let err = super::curl_post_json_with_timeout(
+            "http://127.0.0.1:9/",
+            &header,
+            &json!({}),
+            1,
+            super::CurlRoute::Configured,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("invalid HTTP header"), "{err}");
         assert_eq!(
             super::checked_endpoint("http://127.0.0.1:11434/api/tags").unwrap(),
@@ -1115,6 +1184,68 @@ mod tests {
         (base, handle)
     }
 
+    /// P3 D-2 R2: a direct loopback command disables every proxy right after
+    /// the protocol allowlist, follows no redirect, and exists only for a
+    /// loopback IP literal; the configured route adds nothing.
+    #[test]
+    fn p3_d2r2_direct_loopback_commands_use_no_proxy() {
+        let (listener, base) = quiet_listener();
+        let endpoint = format!("{base}/api/generate");
+        let headers =
+            BTreeMap::from([("content-type".to_string(), "application/json".to_string())]);
+        let args = |route| -> Vec<String> {
+            super::curl_post_command(&endpoint, &headers, 7, "__M__:", route)
+                .unwrap()
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        };
+        let direct = args(super::CurlRoute::DirectLoopback);
+        assert_eq!(direct[..6], nexus_kernel::governed_http::CURL_HTTP_ONLY);
+        assert_eq!(direct[6..8], ["--noproxy", "*"]);
+        for redirect in ["-L", "--location", "--location-trusted"] {
+            assert!(!direct.iter().any(|arg| arg == redirect), "{direct:?}");
+        }
+        assert_eq!(
+            direct[direct.len() - 2..],
+            ["--".to_string(), endpoint.clone()]
+        );
+        let configured = args(super::CurlRoute::Configured);
+        assert!(!configured.iter().any(|arg| arg == "--noproxy"));
+        assert_eq!(configured.len() + 2, direct.len());
+        for remote in [
+            "http://localhost:11434/api/show",
+            "http://10.0.0.5:11434/api/show",
+            "http://ollama.example.com/api/show",
+            "http://0.0.0.0:11434/api/show",
+        ] {
+            let error = super::curl_post_command(
+                remote,
+                &headers,
+                1,
+                "M",
+                super::CurlRoute::DirectLoopback,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(
+                error.contains("not a loopback address"),
+                "{remote}: {error}"
+            );
+            assert!(super::curl_get_status(remote, super::CurlRoute::DirectLoopback).is_err());
+        }
+        for loopback in [
+            "http://127.0.0.1:1/x",
+            "http://[::1]:1/x",
+            "https://127.0.0.2/",
+        ] {
+            assert!(
+                super::checked_route_endpoint(loopback, super::CurlRoute::DirectLoopback).is_ok()
+            );
+        }
+        assert_never_contacted(&listener);
+    }
+
     /// Final Gate item C: the curl helper refuses every credential-bearing
     /// header, in any letter case, before a command exists, so no process
     /// starts and nothing is contacted. The command it builds for other
@@ -1136,13 +1267,20 @@ mod tests {
             "cookie",
         ] {
             let headers = BTreeMap::from([(name.to_string(), "fg-secret-value".to_string())]);
-            let error = super::curl_post_json_with_timeout(&endpoint, &headers, &json!({}), 1)
-                .unwrap_err()
-                .to_string();
+            let error = super::curl_post_json_with_timeout(
+                &endpoint,
+                &headers,
+                &json!({}),
+                1,
+                super::CurlRoute::Configured,
+            )
+            .unwrap_err()
+            .to_string();
             assert!(error.contains("credential header"), "{name}: {error}");
             assert!(!error.contains("fg-secret-value"), "{name}: {error}");
             assert!(
-                super::curl_post_command(&endpoint, &headers, 1, "M").is_err(),
+                super::curl_post_command(&endpoint, &headers, 1, "M", super::CurlRoute::Configured)
+                    .is_err(),
                 "{name}"
             );
         }
@@ -1150,7 +1288,14 @@ mod tests {
 
         let headers =
             BTreeMap::from([("content-type".to_string(), "application/json".to_string())]);
-        let command = super::curl_post_command(&endpoint, &headers, 7, "__M__:").unwrap();
+        let command = super::curl_post_command(
+            &endpoint,
+            &headers,
+            7,
+            "__M__:",
+            super::CurlRoute::Configured,
+        )
+        .unwrap();
         assert_eq!(command.get_program(), "curl");
         let args: Vec<String> = command
             .get_args()

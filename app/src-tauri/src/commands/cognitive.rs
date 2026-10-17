@@ -856,7 +856,10 @@ pub(crate) struct OllamaLocalRuntime;
 
 impl LocalOllamaRuntime for OllamaLocalRuntime {
     fn installed_models(&self, base: &str) -> Result<Vec<String>, String> {
-        nexus_connectors_llm::providers::OllamaProvider::new(base)
+        // P3 D-2 R2: listed over the direct loopback connection, as the
+        // prompt is sent.
+        nexus_connectors_llm::providers::OllamaProvider::local_only(base)
+            .map_err(|e| e.to_string())?
             .list_models()
             .map(|models| models.into_iter().map(|model| model.name).collect())
             .map_err(|e| e.to_string())
@@ -942,12 +945,13 @@ pub(crate) fn local_only_provider(
         AgentLlmPolicy::Unresolved => Err(unresolved_policy_error().to_string()),
         AgentLlmPolicy::LocalOnly => {
             let target = local_only_target(route, ollama_base, runtime)?;
-            Ok(Some((
-                Box::new(nexus_connectors_llm::providers::OllamaProvider::new(
-                    &target.base,
-                )),
-                target.model,
-            )))
+            // P3 D-2 R2: the prompt goes to the verified runtime directly,
+            // over the same route the verification used: no proxy setting
+            // applies and no redirect is followed.
+            let provider =
+                nexus_connectors_llm::providers::OllamaProvider::local_only(&target.base)
+                    .map_err(|e| e.to_string())?;
+            Ok(Some((Box::new(provider), target.model)))
         }
     }
 }

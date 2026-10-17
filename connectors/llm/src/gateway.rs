@@ -381,9 +381,11 @@ pub fn ollama_show_names_remote(show: &serde_json::Value) -> bool {
 /// before any prompt is sent: it must be installed there and the runtime
 /// must not report that it runs elsewhere. Every failure (a non-loopback
 /// address, a cloud model name, an unreachable runtime, an error status, a
-/// reply that is not an object, a remote model) refuses the model.
+/// reply that is not an object, a remote model) refuses the model. The
+/// question goes over the same direct loopback connection as the prompt
+/// that may follow ([`OllamaProvider::local_only`]): no proxy, no redirect.
 pub fn verify_local_ollama_model(base: &str, model: &str) -> Result<(), AgentError> {
-    let base = local_only_ollama_base(base)?;
+    let runtime = OllamaProvider::local_only(base)?;
     let refused = |reason: &str| {
         AgentError::SupervisorError(format!(
             "local-only: the model '{model}' is not verified local: {reason}"
@@ -395,15 +397,9 @@ pub fn verify_local_ollama_model(base: &str, model: &str) -> Result<(), AgentErr
     if ollama_model_name_is_cloud(model) {
         return Err(refused("it is a cloud model"));
     }
-    let mut headers = std::collections::BTreeMap::new();
-    headers.insert("content-type".to_string(), "application/json".to_string());
-    let (status, reply) = crate::providers::curl_post_json_with_timeout(
-        &format!("{base}/api/show"),
-        &headers,
-        &json!({ "model": model }),
-        5,
-    )
-    .map_err(|_| refused("the local runtime did not answer"))?;
+    let (status, reply) = runtime
+        .show_model(model)
+        .map_err(|_| refused("the local runtime did not answer"))?;
     if !(200..300).contains(&status) {
         return Err(refused(&format!("the local runtime answered {status}")));
     }

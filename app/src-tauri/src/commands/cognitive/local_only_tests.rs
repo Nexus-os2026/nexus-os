@@ -863,8 +863,10 @@ fn e2e(
     ] {
         child.env(key, &proxy_url);
     }
+    // P3 D-2 R2: no proxy exemption is configured. A local-only request must
+    // reach the loopback runtime directly whatever the proxy settings say.
     for key in ["NO_PROXY", "no_proxy"] {
-        child.env(key, "127.0.0.1,localhost,::1");
+        child.env(key, "");
     }
     let mut child = child.spawn().unwrap();
     let (done, finished) = mpsc::channel();

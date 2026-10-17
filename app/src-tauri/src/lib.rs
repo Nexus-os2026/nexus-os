@@ -395,7 +395,11 @@ fn route_from_model_mapping(value: &Value) -> Option<String> {
     })
 }
 
-fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmRoute> {
+fn resolve_agent_llm_route(
+    state: &AppState,
+    agent_id: &str,
+    policy: AgentLlmPolicy,
+) -> Option<AgentLlmRoute> {
     // 0. BUG-DROP: per-goal override set by the Chat page model dropdown.
     //    Takes priority over memory mappings and config assignments so the UI
     //    selection is authoritative for the lifetime of the active goal.
@@ -498,7 +502,7 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
     // 3. Smart auto-routing: pick the best available model.
     //    Priority: Flash Inference (local GGUF) → Ollama → Cloud providers.
     //    Returns None if nothing is available (GatewayPlannerLlm handles fallback).
-    auto_select_best_model(state, &config)
+    auto_select_best_model(state, &config, policy)
 }
 
 /// Smart model selection: pick the best available LLM provider and model.
@@ -512,6 +516,7 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
 fn auto_select_best_model(
     state: &AppState,
     config: &nexus_kernel::config::NexusConfig,
+    policy: AgentLlmPolicy,
 ) -> Option<AgentLlmRoute> {
     // --- Tier 0: Check Flash Inference sessions (best: local, fast, free, smart) ---
     // If a Flash Inference model is loaded, use it — these are larger/smarter models
@@ -534,6 +539,13 @@ fn auto_select_best_model(
     // --- Tier 1 (P0-002C5A): no environment variable selects a model file. ---
 
     // --- Tier 2: Check Ollama for available models ---
+    // P3 D-2 R2: only for an unrestricted agent. This probe asks the
+    // operator's Ollama address with the environment's proxy settings; a
+    // local-only agent's model is chosen by `local_only_target` over the
+    // direct loopback connection, and an unresolved agent dispatches nothing.
+    if policy != AgentLlmPolicy::Unrestricted {
+        return None;
+    }
     // Fast TCP probe first — if Ollama isn't running, skip the slow list_models() call
     let prov_config = build_provider_config(config);
     let ollama = OllamaProvider::from_env();
@@ -561,7 +573,10 @@ fn auto_select_best_model(
 }
 
 fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
-    let route = resolve_agent_llm_route(state, agent_id);
+    // P3 D-2: the agent's own policy governs every prompt dispatched for it
+    // here, whatever the route says.
+    let policy = resolve_agent_llm_policy(state, agent_id);
+    let route = resolve_agent_llm_route(state, agent_id, policy);
 
     // If the route points to Flash, resolve the cached provider now
     // so GatewayPlannerLlm can use it without needing AppState access.
@@ -607,9 +622,6 @@ fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -
         None
     });
 
-    // P3 D-2: the agent's own policy governs every prompt dispatched for it
-    // here, whatever the route says.
-    let policy = resolve_agent_llm_policy(state, agent_id);
     with_agent_llm_policy(policy, || {
         ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
             ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
