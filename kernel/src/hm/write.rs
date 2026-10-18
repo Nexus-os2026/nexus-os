@@ -161,7 +161,7 @@ pub(in crate::hm) fn is_migrated(tx: &HmTx<'_>) -> StoreResult<bool> {
 }
 
 /// The current evaluated label of a record, inside the transaction.
-fn evaluate_ref(tx: &HmTx<'_>, r: &RecordRef) -> StoreResult<OriginLabel> {
+pub(in crate::hm) fn evaluate_ref(tx: &HmTx<'_>, r: &RecordRef) -> StoreResult<OriginLabel> {
     let current = tx.current_row(r.table.table_name(), &r.record_id)?;
     Ok(evaluate_in(tx, r.table, &r.record_id, current.as_ref())
         .map_err(abort)?

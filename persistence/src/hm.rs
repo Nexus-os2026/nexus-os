@@ -635,6 +635,21 @@ pub struct RecallRow {
     pub label: Option<LabelBinding>,
 }
 
+/// One `hm_dispatch_admission` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdmissionRow {
+    pub admission_id: String,
+    pub agent_id: Option<String>,
+    pub unit_kind: String,
+    pub route_class: String,
+    pub policy_generation: i64,
+    pub revocation_seq: i64,
+    pub record_count: i64,
+    pub grant_dep_count: i64,
+    pub raw_label: String,
+    pub outcome: String,
+}
+
 /// The order of a recall over each in-scope table: most relevant first,
 /// newest id breaking ties.
 fn recall_order(table: &str) -> &'static str {
@@ -1220,6 +1235,38 @@ impl HmTx<'_> {
         Ok(self.tx.query_row(&sql, params![agent_id, origin], |r| {
             Ok((r.get(0)?, r.get(1)?))
         })?)
+    }
+
+    pub fn insert_admission(&self, a: &AdmissionRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_dispatch_admission
+               (admission_id, agent_id, unit_kind, route_class, policy_generation, revocation_seq,
+                record_count, grant_dep_count, raw_label, outcome)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                a.admission_id,
+                a.agent_id,
+                a.unit_kind,
+                a.route_class,
+                a.policy_generation,
+                a.revocation_seq,
+                a.record_count,
+                a.grant_dep_count,
+                a.raw_label,
+                a.outcome
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Sets the outcome of an admission still recorded as `admitted`.
+    /// Returns the number of rows changed.
+    pub fn update_admission_outcome(&self, admission_id: &str, outcome: &str) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE hm_dispatch_admission SET outcome = ?2
+             WHERE admission_id = ?1 AND outcome = 'admitted'",
+            params![admission_id, outcome],
+        )?)
     }
 
     pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {

@@ -15,9 +15,11 @@
 //! submodules: the sealed `DispatchContext` and the unit-taint algebra
 //! (`context`); the `DispatchIssuer`, §4.2 resolution and the context
 //! derivations (`issuer`); labelled writes (`write`); route-first recall
-//! (`recall`); content-free events (`events`).
+//! (`recall`); the §12.4 admission point and §12.6 reply acceptance
+//! (`dispatch`); content-free events (`events`).
 
 mod context;
+mod dispatch;
 mod events;
 mod issuer;
 mod recall;
@@ -28,6 +30,10 @@ pub use issuer::{
     Unresolved, MAX_RECORDS,
 };
 
+pub use dispatch::{
+    Admission, BuildDispatch, Refused, ReplyRefused, RouteAttestation, TransportEvidence,
+    TransportFailure,
+};
 pub use recall::{RecallQuery, RecallRefused};
 pub use write::{
     NewMemory, Parent, SourceKind, StrategyWrite, TaskWrite, WriteReceipt, WriteRefused,

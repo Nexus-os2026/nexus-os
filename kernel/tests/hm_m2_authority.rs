@@ -17,9 +17,11 @@ use std::time::Duration;
 use nexus_kernel::hm::{
     evaluate_label, run_t0_option_a, unit_start_state, unit_taint_step, verify_at_start,
     AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchContext, DispatchIssuer,
-    EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent, Principal, ProbePoint,
-    RecallQuery, RecallRefused, RecalledRecord, RecordTable, RouteClass, SourceKind, StartStatus,
-    StrategyWrite, TaskWrite, Unit, Unresolved, WriteRefused, MAX_RECORDS,
+    EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent, PolicySnapshot, Principal,
+    ProbePoint, PromptBuilder, PromptEnvelope, RecallQuery, RecallRefused, RecalledRecord,
+    RecordTable, Refused, ReplyRefused, RouteAttestation, RouteClass, SourceKind, StartStatus,
+    StrategyWrite, TaskWrite, TransportEvidence, TransportFailure, Unit, Unresolved, WriteRefused,
+    MAX_RECORDS,
 };
 use nexus_persistence::hm::{PolicyChangeRow, PolicyRow};
 use nexus_persistence::NexusDatabase;
@@ -2200,5 +2202,760 @@ fn hm_m2_n4_recall_scope_limits_refusals_and_write_reevaluation() {
     assert_eq!(
         e.issuer.recall(&mut holder, memories(5)).unwrap_err(),
         RecallRefused::NotMigrated
+    );
+}
+
+// ── N5: admission and reply acceptance (§12.4–§12.7) ────────────────────────
+
+fn attest(route: RouteClass) -> RouteAttestation {
+    RouteAttestation::from_transport_evidence(match route {
+        RouteClass::Local => TransportEvidence::VerifiedLoopbackOllama,
+        RouteClass::NonLocal => TransportEvidence::Unattested,
+    })
+}
+
+/// The transport a dispatch selects, given the unit's route class.
+fn follow(route: RouteClass) -> RouteClass {
+    route
+}
+
+fn non_local(_: RouteClass) -> RouteClass {
+    RouteClass::NonLocal
+}
+
+type Build<'a> =
+    Box<dyn FnMut(&mut DispatchContext) -> Option<(PromptEnvelope, RouteAttestation)> + 'a>;
+
+/// Builds a prompt from fixed text and a fresh recall of `recall` memories,
+/// for the transport `transport` selects.
+fn build_with(
+    issuer: &DispatchIssuer,
+    recall: usize,
+    transport: fn(RouteClass) -> RouteClass,
+) -> Build<'_> {
+    Box::new(move |ctx| {
+        let recs = if recall > 0 {
+            issuer.recall(ctx, memories(recall)).ok()?
+        } else {
+            Vec::new()
+        };
+        let mut b = PromptBuilder::new(ctx);
+        b.text("SYNTH-instruction\n");
+        for r in &recs {
+            b.include(r);
+        }
+        Some((b.build(), attest(transport(ctx.route_class()))))
+    })
+}
+
+/// `route_class|outcome|raw_label|policy_generation|record_count|grant_dep_count`.
+fn admission_rows(db: &NexusDatabase) -> Vec<String> {
+    strings(
+        db,
+        "SELECT route_class || '|' || outcome || '|' || raw_label || '|' || policy_generation
+                || '|' || record_count || '|' || grant_dep_count
+         FROM hm_dispatch_admission ORDER BY rowid",
+    )
+}
+
+fn outcome_of(db: &NexusDatabase, admission_id: &str) -> String {
+    strings(
+        db,
+        &format!("SELECT outcome FROM hm_dispatch_admission WHERE admission_id = '{admission_id}'"),
+    )
+    .join(";")
+}
+
+fn non_local_admissions(db: &NexusDatabase) -> i64 {
+    count(
+        db,
+        "SELECT COUNT(*) FROM hm_dispatch_admission WHERE route_class = 'non_local'",
+    )
+}
+
+/// An unrestricted agent B with two unrestricted memories.
+fn env_open_b() -> Env {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let w = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for k in ["SYNTH-open-1", "SYNTH-open-2"] {
+        e.issuer.write_memory(&w, &mem_r(k, 0.5), &[]).unwrap();
+    }
+    e
+}
+
+#[test]
+fn hm_m2_n5_admission_records_row_and_event_and_releases_the_prompt() {
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    assert_eq!(a.route_class(), RouteClass::NonLocal);
+    assert_eq!(a.raw_label(), OriginLabel::UnrestrictedOrigin);
+    assert_eq!(a.admission_id().len(), 32);
+    assert!(a.prompt().starts_with("SYNTH-instruction\n"));
+    assert!(a.prompt().contains("key: SYNTH-open-1") && a.prompt().contains("key: SYNTH-open-2"));
+    assert_eq!(
+        admission_rows(&e.db),
+        vec!["non_local|admitted|UNRESTRICTED_ORIGIN|2|2|0"]
+    );
+    let ev = events_of(&e.db, "memory.dispatch_admitted");
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].0, format!("admission:{}", a.admission_id()));
+    assert_eq!(ev[0].1.as_deref(), Some(AGENT_B));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&ev[0].2).unwrap(),
+        serde_json::json!({"route_class":"non_local","record_count":2,"grant_dep_count":0,
+            "raw_label":"UNRESTRICTED_ORIGIN","policy_generation":2,"revocation_seq":0})
+    );
+
+    // Reply used: a derived item labelled with the raw label; it enters the
+    // working set and can be carried into the next non-local prompt.
+    let id_a = a.admission_id().to_string();
+    let reply = e
+        .issuer
+        .accept_reply(&mut ctx, a, Ok("SYNTH-reply".into()))
+        .unwrap();
+    assert_eq!(reply.label(), OriginLabel::UnrestrictedOrigin);
+    assert_eq!(reply.text(), "SYNTH-reply");
+    assert_eq!(outcome_of(&e.db, &id_a), "reply_used");
+    assert_eq!(
+        ctx.working_set().derived_labels(),
+        &[OriginLabel::UnrestrictedOrigin]
+    );
+    let mut carry = |c: &mut DispatchContext| {
+        let mut b = PromptBuilder::new(c);
+        b.carry(&reply);
+        Some((b.build(), attest(RouteClass::NonLocal)))
+    };
+    let next = e.issuer.admit(&mut ctx, &mut carry).unwrap();
+    assert_eq!(next.route_class(), RouteClass::NonLocal);
+
+    // A transport error: recorded as possibly disclosed, with its event.
+    let id_n = next.admission_id().to_string();
+    assert_eq!(
+        e.issuer
+            .accept_reply(&mut ctx, next, Err(TransportFailure))
+            .unwrap_err(),
+        ReplyRefused::TransportFailed
+    );
+    assert_eq!(outcome_of(&e.db, &id_n), "transport_failed");
+    assert_eq!(
+        events_of(&e.db, "memory.transport_failed")[0].0,
+        format!("admission:{id_n}:outcome")
+    );
+
+    // A local-only agent's prompt with its own records: a local admission
+    // whose reply is LOCAL_ONLY, and the unit stays restricted.
+    let mut la = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    e.issuer
+        .write_memory(&la, &mem_r("SYNTH-a-own", 0.5), &[])
+        .unwrap();
+    let a = e
+        .issuer
+        .admit(&mut la, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    assert_eq!(a.route_class(), RouteClass::Local);
+    assert_eq!(a.raw_label(), OriginLabel::LocalOnlyOrigin);
+    let lo_reply = e
+        .issuer
+        .accept_reply(&mut la, a, Ok("SYNTH-local-reply".into()))
+        .unwrap();
+    assert_eq!(lo_reply.label(), OriginLabel::LocalOnlyOrigin);
+    // A derived parent joins its fixed label into a write elsewhere.
+    let w = e
+        .issuer
+        .write_memory(
+            &ctx,
+            &mem_r("SYNTH-from-local-reply", 0.1),
+            &[Parent::Derived(&lo_reply)],
+        )
+        .unwrap();
+    assert_eq!(w.label(), OriginLabel::LocalOnlyOrigin);
+    // ... and carrying it into a non-local prompt is ineligible (§2.13).
+    let mut carry_lo = |c: &mut DispatchContext| {
+        let mut b = PromptBuilder::new(c);
+        b.carry(&lo_reply);
+        Some((b.build(), attest(RouteClass::NonLocal)))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut ctx, &mut carry_lo).unwrap_err(),
+        Refused::Ineligible
+    );
+    let refused = event_fields(&e.db, "memory.dispatch_refused");
+    assert_eq!(
+        refused.last().unwrap(),
+        &serde_json::json!({"reason":"ineligible","route_class":"non_local"})
+    );
+}
+
+#[test]
+fn hm_m2_n5_a_p1_tighten_before_admission_after_admission_and_twice() {
+    // (a) Tightened before the admission: O2 commits it, the admission
+    // transaction sees the moved generation, one rebuild, local only.
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    let mut calls = 0;
+    let mut inner = build_with(&e.issuer, 10, follow);
+    let mut counting = |c: &mut DispatchContext| {
+        calls += 1;
+        inner(c)
+    };
+    let a = e.issuer.admit(&mut ctx, &mut counting).unwrap();
+    assert_eq!(calls, 2, "one rebuild");
+    assert_eq!(a.route_class(), RouteClass::Local);
+    assert_eq!(state(&ctx), LO);
+    assert_eq!(non_local_admissions(&e.db), 0);
+    assert_eq!(
+        history_of(&e.db, AGENT_B).last().unwrap(),
+        "3|1|tightened|config_tighten"
+    );
+    // A non-local transport after the same tightening is refused.
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    assert_eq!(
+        e.issuer
+            .admit(&mut ctx, &mut *build_with(&e.issuer, 10, non_local))
+            .unwrap_err(),
+        Refused::RouteMismatch
+    );
+    assert!(admission_rows(&e.db).is_empty());
+
+    // (b) Tightened after the admission, before the reply: discarded and
+    // recorded; the disclosure stands.
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    let aid = a.admission_id().to_string();
+    e.cfg.set(id(AGENT_B), true);
+    assert_eq!(
+        e.issuer
+            .accept_reply(&mut ctx, a, Ok("SYNTH-late-reply".into()))
+            .unwrap_err(),
+        ReplyRefused::Discarded
+    );
+    assert_eq!(outcome_of(&e.db, &aid), "reply_discarded");
+    let ev = events_of(&e.db, "memory.reply_discarded");
+    assert_eq!(ev[0].0, format!("admission:{aid}:outcome"));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&ev[0].2).unwrap(),
+        serde_json::json!({"outcome":"reply_discarded","route_class":"non_local"})
+    );
+    assert_eq!(state(&ctx), LO, "the observed tightening reaches the unit");
+    assert!(ctx.working_set().derived_labels().is_empty());
+
+    // (c) Moved twice in one window: generation_unstable, nothing admitted.
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    let mut calls = 0;
+    let (db, cfg) = (e.db.clone(), e.cfg.clone());
+    let mut moving = |c: &mut DispatchContext| {
+        calls += 1;
+        if calls == 2 {
+            // Between the rebuild and its admission: another change commits.
+            cfg.set(id(AGENT_B), false);
+            fixture_owner_loosen(&db, AGENT_B);
+        }
+        let b = PromptBuilder::new(c);
+        Some((b.build(), attest(c.route_class())))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut ctx, &mut moving).unwrap_err(),
+        Refused::GenerationUnstable
+    );
+    assert_eq!(calls, 2, "no retry loop");
+    assert!(admission_rows(&e.db).is_empty());
+    assert_eq!(
+        event_fields(&e.db, "memory.dispatch_refused")
+            .last()
+            .unwrap()["reason"],
+        "generation_unstable"
+    );
+}
+
+#[test]
+fn hm_m2_n5_a_p2_route_class_mismatch_and_ineligible_prompts_refused() {
+    let e = env_open_b();
+    // A local-only agent: a transport without a complete attestation (an
+    // unattested Flash override) is non-local and refused.
+    let mut la = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let mut unattested = |c: &mut DispatchContext| {
+        Some((
+            PromptBuilder::new(c).build(),
+            RouteAttestation::from_transport_evidence(TransportEvidence::Unattested),
+        ))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut la, &mut unattested).unwrap_err(),
+        Refused::RouteMismatch
+    );
+    // A verified in-process Flash (L2) is local and admitted.
+    let mut flash = |c: &mut DispatchContext| {
+        Some((
+            PromptBuilder::new(c).build(),
+            RouteAttestation::from_transport_evidence(TransportEvidence::VerifiedInProcessFlash),
+        ))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut la, &mut flash).unwrap().route_class(),
+        RouteClass::Local
+    );
+    // A local transport always fits, also for a non-local unit.
+    let mut nb = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(
+        e.issuer
+            .admit(
+                &mut nb,
+                &mut *build_with(&e.issuer, 10, |_| RouteClass::Local)
+            )
+            .unwrap()
+            .route_class(),
+        RouteClass::Local
+    );
+    // A-T1: a local-only member of an unrestricted director never
+    // dispatches non-locally.
+    let director = e
+        .issuer
+        .begin_unit(
+            agent(AGENT_B),
+            Unit::TeamTask {
+                workflow_id: Uuid::new_v4(),
+                task_index: 0,
+            },
+        )
+        .unwrap();
+    let mut member = director.derive_member(&e.issuer, id(AGENT_A), 1).unwrap();
+    assert_eq!(
+        e.issuer
+            .admit(&mut member, &mut *build_with(&e.issuer, 0, non_local))
+            .unwrap_err(),
+        Refused::RouteMismatch
+    );
+    // An envelope built from another context is refused.
+    let other = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let mut foreign = |_: &mut DispatchContext| {
+        Some((
+            PromptBuilder::new(&other).build(),
+            attest(RouteClass::NonLocal),
+        ))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut nb, &mut foreign).unwrap_err(),
+        Refused::EnvelopeMismatch
+    );
+    // A unit without retained data cannot include a record.
+    let mut holder = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let recs = e.issuer.recall(&mut holder, memories(1)).unwrap();
+    let mut chat = e
+        .issuer
+        .begin_unit(
+            agent(AGENT_B),
+            Unit::ChatTurn {
+                turn_id: Uuid::new_v4(),
+            },
+        )
+        .unwrap();
+    let mut smuggle = |c: &mut DispatchContext| {
+        let mut b = PromptBuilder::new(c);
+        b.include(&recs[0]);
+        Some((b.build(), attest(RouteClass::NonLocal)))
+    };
+    assert_eq!(
+        e.issuer.admit(&mut chat, &mut smuggle).unwrap_err(),
+        Refused::RetainedDataNotPermitted
+    );
+    // No transport could be built: refused, nothing admitted.
+    let rows = admission_rows(&e.db).len();
+    assert_eq!(
+        e.issuer.admit(&mut nb, &mut |_| None).unwrap_err(),
+        Refused::NoTransport
+    );
+    assert_eq!(admission_rows(&e.db).len(), rows);
+}
+
+#[test]
+fn hm_m2_n5_a_c2_inclusion_unbound_at_admission_is_refused() {
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let recs = e.issuer.recall(&mut ctx, memories(10)).unwrap();
+    assert_eq!(recs.len(), 2);
+    // Both eligible when recalled; one label is deleted, one record's
+    // content altered, before the admission re-evaluates them.
+    let ids: Vec<String> = recs
+        .iter()
+        .map(|r| r.record_ref().record_id().to_string())
+        .collect();
+    for (i, r) in recs.iter().enumerate() {
+        let mut fresh = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+        let mut one = |c: &mut DispatchContext| {
+            let mut b = PromptBuilder::new(c);
+            b.include(r);
+            Some((b.build(), attest(RouteClass::NonLocal)))
+        };
+        if i == 0 {
+            must(
+                &e.db,
+                &format!(
+                    "DELETE FROM hm_record_label WHERE record_table = 'agent_memory' AND record_id = '{}'",
+                    ids[0]
+                ),
+            );
+        } else {
+            must(
+                &e.db,
+                &format!(
+                    "UPDATE agent_memory SET value_json = '\"SYNTH-x\"' WHERE id = {}",
+                    ids[1]
+                ),
+            );
+        }
+        assert_eq!(
+            e.issuer.admit(&mut fresh, &mut one).unwrap_err(),
+            Refused::Ineligible,
+            "inclusion {i}"
+        );
+    }
+    assert_eq!(non_local_admissions(&e.db), 0);
+    // On a local transport the same prompt is admitted with a LOCAL_ONLY
+    // raw label (UNBOUND evaluates as LOCAL_ONLY_ORIGIN).
+    let mut local = local_unit(&e, AGENT_B);
+    let mut both = |c: &mut DispatchContext| {
+        let mut b = PromptBuilder::new(c);
+        for r in &recs {
+            b.include(r);
+        }
+        Some((b.build(), attest(RouteClass::Local)))
+    };
+    let a = e.issuer.admit(&mut local, &mut both).unwrap();
+    assert_eq!(a.raw_label(), OriginLabel::LocalOnlyOrigin);
+}
+
+#[test]
+fn hm_m2_n5_a_p4_two_handles_ordering_by_the_admission_transaction() {
+    // (1) A tightening on another handle that commits before the admission
+    // transaction refuses a non-local admission.
+    let e = env_open_b();
+    let cfg2 = Arc::new(TestConfig::default());
+    cfg2.set(id(AGENT_B), true);
+    let issuer2 = Arc::new(DispatchIssuer::new(e.second_handle(), e.reg.clone(), cfg2).unwrap());
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(ctx.policy().policy_generation(), 2);
+    let p = issuer2.resolve_agent_route_policy(id(AGENT_B)).unwrap();
+    assert_eq!((p.local_only(), p.policy_generation()), (true, 3));
+    assert_eq!(
+        e.issuer
+            .admit(&mut ctx, &mut *build_with(&e.issuer, 10, non_local))
+            .unwrap_err(),
+        Refused::RouteMismatch
+    );
+    assert!(admission_rows(&e.db).is_empty());
+
+    // (2) An admission holding the write lock makes a tightening on the
+    // other handle wait: the tightening commits after the admission.
+    let e = env_open_b();
+    let cfg2 = Arc::new(TestConfig::default());
+    cfg2.set(id(AGENT_B), true);
+    let issuer2 = Arc::new(DispatchIssuer::new(e.second_handle(), e.reg.clone(), cfg2).unwrap());
+    let db3 = e.second_handle();
+    must(&db3, "PRAGMA busy_timeout = 0;");
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let lock_held: Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
+    type Tighten = std::thread::JoinHandle<Result<PolicySnapshot, Unresolved>>;
+    let worker: Arc<Mutex<Option<Tighten>>> = Arc::new(Mutex::new(None));
+    let fired = AtomicBool::new(false);
+    let (held, slot) = (lock_held.clone(), worker.clone());
+    e.issuer.install_probe(Box::new(move |p| {
+        if p != ProbePoint::AdmissionPolicyRead || fired.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        // Inside the admission transaction: a writer that does not wait
+        // fails at once, so the write lock is held now.
+        *held.lock().unwrap() = Some(db3.hm().immediate(|_| Ok(())).is_err());
+        let (started, ready) = mpsc::channel();
+        let i2 = issuer2.clone();
+        *slot.lock().unwrap() = Some(std::thread::spawn(move || {
+            started.send(()).unwrap();
+            i2.resolve_agent_route_policy(id(AGENT_B))
+        }));
+        ready.recv_timeout(CHILD_DEADLINE).unwrap();
+    }));
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    let tightened = worker
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap()
+        .join()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        *lock_held.lock().unwrap(),
+        Some(true),
+        "lock held during admission"
+    );
+    assert_eq!(a.route_class(), RouteClass::NonLocal);
+    assert_eq!(
+        a.policy_generation(),
+        2,
+        "governed by changes committed before it"
+    );
+    assert_eq!(
+        (tightened.local_only(), tightened.policy_generation()),
+        (true, 3)
+    );
+    assert_eq!(
+        admission_rows(&e.db),
+        vec!["non_local|admitted|UNRESTRICTED_ORIGIN|2|2|0"]
+    );
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    // The tightening governs the reply and every later admission.
+    assert_eq!(
+        e.issuer
+            .accept_reply(&mut ctx, a, Ok("SYNTH-r".into()))
+            .unwrap_err(),
+        ReplyRefused::Discarded
+    );
+}
+
+#[test]
+fn hm_m2_n5_admission_event_failure_refuses() {
+    let e = env_open_b();
+    must(
+        &e.db,
+        "CREATE TRIGGER synthetic_fail_admitted BEFORE INSERT ON hm_event
+         WHEN NEW.kind = 'memory.dispatch_admitted'
+         BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;",
+    );
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for transport in [follow as fn(RouteClass) -> RouteClass, |_| {
+        RouteClass::Local
+    }] {
+        assert_eq!(
+            e.issuer
+                .admit(&mut ctx, &mut *build_with(&e.issuer, 10, transport))
+                .unwrap_err(),
+            Refused::AdmissionNotRecorded
+        );
+    }
+    assert!(
+        admission_rows(&e.db).is_empty(),
+        "rolled back with its event"
+    );
+    must(&e.db, "DROP TRIGGER synthetic_fail_admitted;");
+    e.issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    assert_eq!(admission_rows(&e.db).len(), 1);
+}
+
+/// The names of the public functions in `src`.
+fn pub_fn_names(src: &str) -> Vec<String> {
+    src.match_indices("pub fn ")
+        .map(|(i, m)| {
+            src[i + m.len()..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn hm_m2_n5_a_g0_no_grant_state_and_no_grant_entry_point() {
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for _ in 0..3 {
+        let a = e
+            .issuer
+            .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+            .unwrap();
+        e.issuer.accept_reply(&mut ctx, a, Ok("r".into())).unwrap();
+    }
+    assert_eq!(count(&e.db, "SELECT COUNT(*) FROM hm_grant"), 0);
+    assert_eq!(
+        count(
+            &e.db,
+            "SELECT COUNT(*) FROM hm_dispatch_admission WHERE grant_dep_count <> 0"
+        ),
+        0
+    );
+    assert_eq!(
+        count(&e.db, "SELECT COUNT(*) FROM hm_dispatch_admission"),
+        3
+    );
+    // Negative control for the name scan.
+    assert_eq!(
+        pub_fn_names("impl X { pub fn grant_record(&self) {} pub fn other() {} }"),
+        vec!["grant_record", "other"]
+    );
+    for (file, src) in hm_sources() {
+        for name in pub_fn_names(&src) {
+            let n = name.to_lowercase();
+            assert!(
+                !n.contains("grant") && !n.contains("revok") && !n.contains("declassif"),
+                "{file}: grant entry point {name}"
+            );
+        }
+        assert!(!src.contains("hm_grant"), "{file} names hm_grant");
+    }
+    let store = std::fs::read_to_string(workspace_root().join("persistence/src/hm.rs")).unwrap();
+    let squashed = store
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    for write in ["into hm_grant", "update hm_grant", "from hm_grant"] {
+        assert!(!squashed.contains(write), "persistence: {write}");
+    }
+}
+
+/// Makes the agent's policy unresolvable in one of the four §4.6 ways.
+fn make_unresolvable(e: &Env, how: &str) -> Unresolved {
+    match how {
+        "unregistered" => {
+            e.reg.remove(id(AGENT_B));
+            Unresolved::UnregisteredAgent
+        }
+        "unmigrated" => {
+            must(&e.db, "DROP TABLE hm_migration;");
+            Unresolved::StoreNotMigrated
+        }
+        "malformed" => {
+            fixture_corrupt_policy(&e.db, AGENT_B, "policy_generation = 0");
+            Unresolved::MalformedPolicy
+        }
+        "config" => {
+            e.cfg.set_failing(true);
+            Unresolved::ConfigUnreadable
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn hm_m2_n5_o2_refuses_and_o3_discards_when_the_policy_is_unresolved() {
+    for how in ["unregistered", "unmigrated", "malformed", "config"] {
+        // O2: the dispatch is refused; nothing is admitted.
+        let e = env_open_b();
+        let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+        let why = make_unresolvable(&e, how);
+        assert_eq!(
+            e.issuer
+                .admit(&mut ctx, &mut *build_with(&e.issuer, 0, follow))
+                .unwrap_err(),
+            Refused::Unresolved(why),
+            "O2 {how}"
+        );
+        assert!(admission_rows(&e.db).is_empty(), "O2 {how}");
+
+        // O3: the reply is discarded and the outcome recorded.
+        let e = env_open_b();
+        let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+        let a = e
+            .issuer
+            .admit(&mut ctx, &mut *build_with(&e.issuer, 0, follow))
+            .unwrap();
+        let aid = a.admission_id().to_string();
+        make_unresolvable(&e, how);
+        assert_eq!(
+            e.issuer
+                .accept_reply(&mut ctx, a, Ok("SYNTH-r".into()))
+                .unwrap_err(),
+            ReplyRefused::Discarded,
+            "O3 {how}"
+        );
+        assert_eq!(outcome_of(&e.db, &aid), "reply_discarded", "O3 {how}");
+    }
+}
+
+#[test]
+fn hm_m2_n5_a_p3_out_of_band_config_edit() {
+    // (i) An admission committed before the next observation point stands
+    // and its request is sent; (iii) the reply that returns after the O3
+    // commit is discarded.
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    assert_eq!(
+        policy_of(&e.db, AGENT_B),
+        "0|2|0|owner_confirmed",
+        "no effect yet"
+    );
+    assert_eq!(outcome_of(&e.db, a.admission_id()), "admitted");
+    let sent = a.prompt().to_string();
+    assert!(sent.contains("SYNTH-open-1"));
+    let aid = a.admission_id().to_string();
+    assert_eq!(
+        e.issuer
+            .accept_reply(&mut ctx, a, Ok("SYNTH-r".into()))
+            .unwrap_err(),
+        ReplyRefused::Discarded
+    );
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    assert_eq!(
+        history_of(&e.db, AGENT_B).last().unwrap(),
+        "3|1|tightened|config_tighten"
+    );
+    assert_eq!(outcome_of(&e.db, &aid), "reply_discarded");
+
+    // (ii) First observed at O2: committed with its generation and history
+    // row; the dispatch is rebuilt local-only (or refused, see A-P1 (a)).
+    let e = env_open_b();
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap();
+    assert_eq!(a.route_class(), RouteClass::Local);
+    assert_eq!(a.policy_generation(), 3);
+    assert_eq!(
+        history_of(&e.db, AGENT_B).last().unwrap(),
+        "3|1|tightened|config_tighten"
+    );
+    assert_eq!(
+        events_of(&e.db, "memory.policy_tightened_by_config").len(),
+        1
+    );
+
+    // (iv) An unreadable config refuses at O2 and discards at O3: see
+    // hm_m2_n5_o2_refuses_and_o3_discards_when_the_policy_is_unresolved.
+
+    // (v) A config edit to false never loosens at O2 or O3.
+    let e = env();
+    e.cfg.set(id(AGENT_A), false);
+    let mut la = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let a = e
+        .issuer
+        .admit(&mut la, &mut *build_with(&e.issuer, 0, non_local))
+        .unwrap_err();
+    assert_eq!(a, Refused::RouteMismatch);
+    let a = e
+        .issuer
+        .admit(&mut la, &mut *build_with(&e.issuer, 0, follow))
+        .unwrap();
+    e.issuer.accept_reply(&mut la, a, Ok("r".into())).unwrap();
+    assert_eq!(policy_of(&e.db, AGENT_A), "1|1|0|t0_baseline");
+    assert_eq!(history_of(&e.db, AGENT_A).len(), 1);
+    assert_eq!(state(&la), LO);
+    assert_eq!(
+        events_of(&e.db, "memory.policy_loosening_not_authorised").len(),
+        1,
+        "once per (agent, digest) across O1, O2 and O3"
     );
 }

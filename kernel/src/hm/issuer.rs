@@ -131,6 +131,11 @@ pub enum ProbePoint {
     /// Inside a labelled-write transaction: its derivation edges are
     /// written; next is COMMIT.
     WriteEdgesWritten,
+    /// Inside the admission transaction: the policy row has been re-read.
+    AdmissionPolicyRead,
+    /// Inside the admission transaction: the admission row is written; its
+    /// event and COMMIT follow.
+    AdmissionRowWritten,
 }
 
 type Probe = Box<dyn FnMut(ProbePoint) + Send>;
