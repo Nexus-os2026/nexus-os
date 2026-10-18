@@ -12,10 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use nexus_connectors_llm::attest::{
-    attest_route, attest_route_in, flash_model_dir_for_home, verify_local_ollama,
-};
-use nexus_connectors_llm::providers::{FlashProvider, LlmProvider, LlmResponse, OllamaProvider};
+#[cfg(not(feature = "flash-infer"))]
+use nexus_connectors_llm::attest::attest_route_in;
+use nexus_connectors_llm::attest::{attest_route, flash_model_dir_for_home, verify_local_ollama};
+#[cfg(not(feature = "flash-infer"))]
+use nexus_connectors_llm::providers::FlashProvider;
+use nexus_connectors_llm::providers::{LlmProvider, LlmResponse, OllamaProvider};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hm::RouteClass;
 
@@ -158,6 +160,11 @@ fn hm_m3_n2_l1_no_proof_without_the_d2_r2_verification() {
 /// A-F4 (feature off): this crate is built here without `flash-infer`, so
 /// a Flash provider runs no in-process inference and is non-local, even
 /// with its model a regular file inside the model directory.
+///
+/// Built only without `flash-infer`: a workspace build unifies the feature
+/// on (the desktop enables it), and the feature-on conditions are tested in
+/// the desktop crate (`hm_wiring` A-F4 and A1.5 (b)).
+#[cfg(not(feature = "flash-infer"))]
 #[test]
 fn hm_m3_n2_a_f4_flash_without_in_process_inference_is_non_local() {
     const { assert!(!cfg!(feature = "flash-infer")) };
