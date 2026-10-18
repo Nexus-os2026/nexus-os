@@ -10,6 +10,18 @@
 //!
 //! AD-4 (declassification) is disabled: there is no grant creation,
 //! revocation or bulk-scope code here. Events are content-free (§15.1).
+//!
+//! The authority core (§4.2, §6, §11, §12.3–§12.7, §15) lives in the
+//! submodules: the sealed `DispatchContext` and the unit-taint algebra
+//! (`context`).
+
+mod context;
+
+pub use context::{
+    unit_start_state, unit_taint_step, DerivedItem, DispatchContext, PolicySnapshot, Principal,
+    PromptBuilder, PromptEnvelope, RecalledRecord, RecordRef, Restrictions, RouteClass, Unit,
+    WorkingSet,
+};
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -64,6 +76,37 @@ impl From<PersistenceError> for HmError {
 /// A stored origin label, ordered by restriction (§2.3). There is no public
 /// `FromStr` and no public constructor from a string: stored text is decoded
 /// only by the private `decode_origin`.
+///
+/// Positive control (compiles):
+/// ```
+/// use nexus_kernel::hm::OriginLabel;
+/// let l = OriginLabel::LegacyUnknown;
+/// assert_eq!(l.class_name(), "LEGACY_UNKNOWN");
+/// ```
+/// No parse, conversion or deserialisation from a string:
+/// ```compile_fail
+/// use nexus_kernel::hm::OriginLabel;
+/// let _ = "UNRESTRICTED_ORIGIN".parse::<OriginLabel>();
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::OriginLabel;
+/// let _ = OriginLabel::from("UNRESTRICTED_ORIGIN");
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::OriginLabel;
+/// let _ = OriginLabel::from(String::from("UNRESTRICTED_ORIGIN"));
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::OriginLabel;
+/// let _ = <OriginLabel as TryFrom<&str>>::try_from("UNRESTRICTED_ORIGIN");
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::OriginLabel;
+/// let _ = serde_json::from_str::<OriginLabel>("\"UNRESTRICTED_ORIGIN\"");
+/// ```
+/// ```compile_fail
+/// let _ = nexus_kernel::hm::decode_origin("UNRESTRICTED_ORIGIN");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum OriginLabel {
     UnrestrictedOrigin,
