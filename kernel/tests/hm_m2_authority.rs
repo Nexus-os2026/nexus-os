@@ -7,14 +7,19 @@
 //! line on a pipe, never a sleep. Test names carry their node (`n1_` …).
 
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::Duration;
 
 use nexus_kernel::hm::{
-    run_t0_option_a, unit_start_state, unit_taint_step, AgentRegistry, ConfigInput,
-    ConfigReadError, ConfigReading, DispatchContext, DispatchIssuer, EvaluatedLabel, OriginLabel,
-    Principal, ProbePoint, RouteClass, Unit, Unresolved, MAX_RECORDS,
+    evaluate_label, run_t0_option_a, unit_start_state, unit_taint_step, verify_at_start,
+    AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchContext, DispatchIssuer,
+    EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent, Principal, ProbePoint,
+    RecordTable, RouteClass, SourceKind, StartStatus, StrategyWrite, TaskWrite, Unit, Unresolved,
+    WriteRefused, MAX_RECORDS,
 };
 use nexus_persistence::hm::{PolicyChangeRow, PolicyRow};
 use nexus_persistence::NexusDatabase;
@@ -158,9 +163,17 @@ fn open(path: &Path) -> NexusDatabase {
 
 /// T₀ (Option A) over `t0_agents`; `registered` are known to the registry.
 fn env_with(t0_agents: &[&str], registered: &[&str]) -> Env {
+    env_seeded(t0_agents, registered, "")
+}
+
+/// As `env_with`, with pre-T₀ rows inserted by `seed_sql` first.
+fn env_seeded(t0_agents: &[&str], registered: &[&str], seed_sql: &str) -> Env {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let db = Arc::new(open(&path));
+    if !seed_sql.is_empty() {
+        must(&db, seed_sql);
+    }
     let t0: Vec<Uuid> = t0_agents.iter().map(|s| id(s)).collect();
     run_t0_option_a(&db, &t0).unwrap();
     let reg = Arc::new(TestRegistry::default());
@@ -1019,4 +1032,746 @@ fn hm_m2_n2_contexts_are_bound_to_their_issuer() {
     let child = mine.derive_member(&e.issuer, id(AGENT_B), 1).unwrap();
     assert!(mine.same_issuer(&child));
     mine.join_child(&child).unwrap();
+}
+
+// ── N3: labelled writes (§6.1–§6.3, §6.7, §14) ──────────────────────────────
+
+fn mem<'a>(key: &'a str, value_json: &'a str) -> NewMemory<'a> {
+    NewMemory {
+        source_kind: SourceKind::MemoryStoreAction,
+        memory_type: "episodic",
+        key,
+        value_json,
+        relevance_score: 0.5,
+    }
+}
+
+/// `origin|source_kind|policy_generation|content_sha256` of a label row.
+fn label_row(db: &NexusDatabase, table: &str, record_id: &str) -> String {
+    strings(
+        db,
+        &format!(
+            "SELECT origin || '|' || source_kind || '|' || policy_generation || '|' || content_sha256
+             FROM hm_record_label WHERE record_table = '{table}' AND record_id = '{record_id}'"
+        ),
+    )
+    .join(";")
+}
+
+fn origin_of(db: &NexusDatabase, table: &str, record_id: &str) -> String {
+    label_row(db, table, record_id)
+        .split('|')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+fn edges(db: &NexusDatabase) -> Vec<String> {
+    strings(
+        db,
+        "SELECT child_table || ':' || child_id || '<-' || parent_table || ':' || parent_id
+                || '=' || parent_label_at_derivation
+         FROM hm_derivation ORDER BY child_table, child_id, parent_table, parent_id",
+    )
+}
+
+#[test]
+fn hm_m2_n3_write_is_labelled_from_the_context_and_binds() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let ca = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let cb = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+
+    let ra = e
+        .issuer
+        .write_memory(&ca, &mem("SYNTH-a", "\"SYNTH-va\""), &[])
+        .unwrap();
+    assert_eq!(ra.label(), OriginLabel::LocalOnlyOrigin);
+    assert_eq!(ra.record_ref().table(), RecordTable::AgentMemory);
+    let a_id = ra.record_ref().record_id().to_string();
+    assert!(label_row(&e.db, "agent_memory", &a_id)
+        .starts_with("LOCAL_ONLY_ORIGIN|memory_store_action|1|"));
+    assert_eq!(
+        evaluate_label(&e.db, RecordTable::AgentMemory, &a_id).unwrap(),
+        EvaluatedLabel::Bound(OriginLabel::LocalOnlyOrigin)
+    );
+
+    let rb = e
+        .issuer
+        .write_memory(&cb, &mem("SYNTH-b", "\"SYNTH-vb\""), &[])
+        .unwrap();
+    let b_id = rb.record_ref().record_id().to_string();
+    assert_eq!(rb.label(), OriginLabel::UnrestrictedOrigin);
+    // Bookkeeping columns need no context and keep the binding (§6.7).
+    must(
+        &e.db,
+        &format!(
+            "UPDATE agent_memory SET relevance_score = 0.01, access_count = 7,
+               last_accessed = '2030-01-01T00:00:00Z', expires_at = '2031-01-01T00:00:00Z'
+             WHERE id = {b_id}"
+        ),
+    );
+    assert_eq!(
+        evaluate_label(&e.db, RecordTable::AgentMemory, &b_id).unwrap(),
+        EvaluatedLabel::Bound(OriginLabel::UnrestrictedOrigin)
+    );
+
+    // An explicit record parent joins its evaluated label and gets an edge.
+    let rc = e
+        .issuer
+        .write_memory(
+            &cb,
+            &mem("SYNTH-c", "\"SYNTH-vc\""),
+            &[
+                Parent::Record(ra.record_ref()),
+                Parent::Record(rb.record_ref()),
+            ],
+        )
+        .unwrap();
+    assert_eq!(rc.label(), OriginLabel::LocalOnlyOrigin);
+    let c_id = rc.record_ref().record_id().to_string();
+    assert_eq!(
+        edges(&e.db),
+        vec![
+            format!("agent_memory:{c_id}<-agent_memory:{a_id}=LOCAL_ONLY_ORIGIN"),
+            format!("agent_memory:{c_id}<-agent_memory:{b_id}=UNRESTRICTED_ORIGIN"),
+        ]
+    );
+
+    // A context from another issuer cannot write here.
+    let other = e.issuer_on(e.second_handle());
+    assert_eq!(
+        other
+            .write_memory(&ca, &mem("SYNTH-x", "1"), &[])
+            .unwrap_err(),
+        WriteRefused::WrongIssuer
+    );
+
+    // Not migrated (§9.4): refused, nothing written.
+    must(&e.db, "DROP TABLE hm_migration;");
+    let before = count(&e.db, "SELECT COUNT(*) FROM agent_memory");
+    assert_eq!(
+        e.issuer
+            .write_memory(&cb, &mem("SYNTH-y", "1"), &[])
+            .unwrap_err(),
+        WriteRefused::NotMigrated
+    );
+    assert_eq!(count(&e.db, "SELECT COUNT(*) FROM agent_memory"), before);
+}
+
+#[test]
+fn hm_m2_n3_a_n12_loosening_mid_unit_keeps_step2_local() {
+    let e = env();
+    let ctx = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    assert_eq!(state(&ctx), LO);
+    let step1 = e
+        .issuer
+        .write_memory(&ctx, &mem("SYNTH-step1", "1"), &[])
+        .unwrap();
+    assert_eq!(step1.label(), OriginLabel::LocalOnlyOrigin);
+
+    // The Owner loosens A between step 1 and step 2 (fixture).
+    fixture_owner_loosen(&e.db, AGENT_A);
+    let step2 = e
+        .issuer
+        .write_memory(&ctx, &mem("SYNTH-step2", "2"), &[])
+        .unwrap();
+    assert_eq!(step2.label(), OriginLabel::LocalOnlyOrigin);
+    assert_eq!(state(&ctx), LO, "step 2 stays local");
+    assert_eq!(
+        origin_of(&e.db, "agent_memory", step2.record_ref().record_id()),
+        "LOCAL_ONLY_ORIGIN"
+    );
+
+    // Only a unit that starts after the loosening commit is unrestricted.
+    let next = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    assert_eq!(state(&next), UN);
+    assert_eq!(
+        e.issuer
+            .write_memory(&next, &mem("SYNTH-next", "3"), &[])
+            .unwrap()
+            .label(),
+        OriginLabel::UnrestrictedOrigin
+    );
+}
+
+#[test]
+fn hm_m2_n3_a_d1_strategy_upsert_across_a_tightening_keeps_local_only() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_A);
+    let s = |goal_type: &'static str| StrategyWrite {
+        strategy_hash: "SYNTH-hash",
+        goal_type,
+        success: true,
+        fuel: 1.0,
+        duration_secs: 2.0,
+    };
+
+    let u1 = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let r1 = e.issuer.upsert_strategy(&u1, &s("SYNTH-t1"), &[]).unwrap();
+    assert_eq!(r1.label(), OriginLabel::UnrestrictedOrigin);
+    let sid = r1.record_ref().record_id().to_string();
+
+    // Out-of-band tightening, observed at the next unit start.
+    e.cfg.set(id(AGENT_A), true);
+    let u2 = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    assert_eq!(state(&u2), LO);
+    let r2 = e.issuer.upsert_strategy(&u2, &s("SYNTH-t2"), &[]).unwrap();
+    assert_eq!(r2.record_ref().record_id(), sid, "same aggregate");
+    assert_eq!(r2.label(), OriginLabel::LocalOnlyOrigin);
+
+    // Loosened again (fixture); a later unrestricted contribution never
+    // lowers the aggregate: the last writer does not decide.
+    e.cfg.set(id(AGENT_A), false);
+    fixture_owner_loosen(&e.db, AGENT_A);
+    let u3 = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    assert_eq!(state(&u3), UN);
+    let r3 = e.issuer.upsert_strategy(&u3, &s("SYNTH-t3"), &[]).unwrap();
+    assert_eq!(r3.label(), OriginLabel::LocalOnlyOrigin);
+    assert_eq!(
+        origin_of(&e.db, "strategy_scores", &sid),
+        "LOCAL_ONLY_ORIGIN"
+    );
+    // The label binds the overwritten goal_type; the counters aggregate.
+    assert_eq!(
+        evaluate_label(&e.db, RecordTable::StrategyScores, &sid).unwrap(),
+        EvaluatedLabel::Bound(OriginLabel::LocalOnlyOrigin)
+    );
+    assert_eq!(
+        strings(
+            &e.db,
+            &format!("SELECT goal_type || '|' || uses || '|' || successes FROM strategy_scores WHERE id = {sid}")
+        ),
+        vec!["SYNTH-t3|3|3"]
+    );
+}
+
+const PRE_T0_TASK_A: &str = "11111111-0000-4000-8000-0000000000a1";
+const PRE_T0_TASK_B: &str = "11111111-0000-4000-8000-0000000000b1";
+
+#[test]
+fn hm_m2_n3_a_d2_pre_t0_task_completed_after_t0() {
+    let seed = format!(
+        "INSERT INTO task_history (id, agent_id, goal, status, steps_json, result_json, fuel_consumed, started_at, completed_at, success) VALUES
+           ('{PRE_T0_TASK_A}', '{AGENT_A}', 'SYNTH-goal-a', 'running', '[]', NULL, 0.0, '2026-01-01T00:00:00Z', NULL, 0),
+           ('{PRE_T0_TASK_B}', '{AGENT_B}', 'SYNTH-goal-b', 'running', '[]', NULL, 0.0, '2026-01-01T00:00:00Z', NULL, 0);"
+    );
+    let e = env_seeded(
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D],
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E],
+        &seed,
+    );
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let ledger = |task: &str| {
+        strings(
+            &e.db,
+            &format!(
+                "SELECT t0_content_sha256 FROM hm_t0_member
+                 WHERE record_table = 'task_history' AND record_id = '{task}'"
+            ),
+        )
+    };
+    let ledger_a = ledger(PRE_T0_TASK_A);
+    let ledger_b = ledger(PRE_T0_TASK_B);
+    assert_eq!(
+        origin_of(&e.db, "task_history", PRE_T0_TASK_A),
+        "LEGACY_UNKNOWN"
+    );
+
+    let complete = |task: &str| TaskWrite {
+        task_id: id(task),
+        goal: "ignored on update",
+        status: "completed",
+        steps_json: "[\"SYNTH-s\"]",
+        result_json: Some("\"SYNTH-r\""),
+        completed: true,
+        success: true,
+    };
+    // A is local-only: LEGACY ⊔ LOCAL_ONLY.
+    let ca = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let ra = e
+        .issuer
+        .save_task(&ca, &complete(PRE_T0_TASK_A), &[])
+        .unwrap();
+    assert_eq!(ra.label(), OriginLabel::LocalOnlyOrigin);
+    // B is unrestricted: the join keeps LEGACY_UNKNOWN.
+    let cb = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let rb = e
+        .issuer
+        .save_task(&cb, &complete(PRE_T0_TASK_B), &[])
+        .unwrap();
+    assert_eq!(rb.label(), OriginLabel::LegacyUnknown);
+
+    for (task, label, ledger_before) in [
+        (PRE_T0_TASK_A, OriginLabel::LocalOnlyOrigin, ledger_a),
+        (PRE_T0_TASK_B, OriginLabel::LegacyUnknown, ledger_b),
+    ] {
+        // The label binds the new digest; the ledger row is unchanged.
+        let row = label_row(&e.db, "task_history", task);
+        assert!(
+            row.starts_with(&format!("{}|legacy|0|", label.class_name())),
+            "{row}"
+        );
+        assert_ne!(row.rsplit('|').next().unwrap(), ledger_before[0]);
+        assert_eq!(ledger(task), ledger_before);
+        assert_eq!(
+            evaluate_label(&e.db, RecordTable::TaskHistory, task).unwrap(),
+            EvaluatedLabel::Bound(label)
+        );
+    }
+    let StartStatus::Verified(report) = verify_at_start(&e.db).unwrap() else {
+        panic!("migrated")
+    };
+    assert!(report.checks.all_pass());
+    for (task, label) in [
+        (PRE_T0_TASK_A, OriginLabel::LocalOnlyOrigin),
+        (PRE_T0_TASK_B, OriginLabel::LegacyUnknown),
+    ] {
+        let m = report
+            .members
+            .iter()
+            .find(|m| m.table == RecordTable::TaskHistory && m.record_id == task)
+            .unwrap();
+        assert_eq!(
+            m.state,
+            MemberState::Present {
+                label: EvaluatedLabel::Bound(label),
+                unchanged_since_t0: false
+            }
+        );
+    }
+    // Another agent's task cannot be updated through this context.
+    assert_eq!(
+        e.issuer
+            .save_task(&ca, &complete(PRE_T0_TASK_B), &[])
+            .unwrap_err(),
+        WriteRefused::WrongAgent
+    );
+}
+
+#[test]
+fn hm_m2_n3_a_n10_derived_records_inherit_their_parents() {
+    let e = env();
+    // A local-only goal writes its task record.
+    let goal_ctx = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let task = e
+        .issuer
+        .save_task(
+            &goal_ctx,
+            &TaskWrite {
+                task_id: Uuid::new_v4(),
+                goal: "SYNTH-goal",
+                status: "completed",
+                steps_json: "[]",
+                result_json: Some("\"SYNTH-result\""),
+                completed: true,
+                success: true,
+            },
+            &[],
+        )
+        .unwrap();
+    assert_eq!(task.label(), OriginLabel::LocalOnlyOrigin);
+
+    // A is loosened; a later unrestricted post-goal evolution derives a
+    // strategy row and a procedural memory from that task.
+    fixture_owner_loosen(&e.db, AGENT_A);
+    let later = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let evo = later.derive_post_goal().unwrap();
+    assert_eq!(state(&evo), UN);
+    let parent = [Parent::Record(task.record_ref())];
+    let strat = e
+        .issuer
+        .upsert_strategy(
+            &evo,
+            &StrategyWrite {
+                strategy_hash: "SYNTH-derived-hash",
+                goal_type: "SYNTH-type",
+                success: true,
+                fuel: 0.5,
+                duration_secs: 0.5,
+            },
+            &parent,
+        )
+        .unwrap();
+    assert_eq!(strat.label(), OriginLabel::LocalOnlyOrigin);
+    let proc_mem = e
+        .issuer
+        .write_memory(
+            &evo,
+            &NewMemory {
+                source_kind: SourceKind::EvolutionProcedural,
+                memory_type: "procedural",
+                key: "SYNTH-proc",
+                value_json: "\"SYNTH-p\"",
+                relevance_score: 0.9,
+            },
+            &parent,
+        )
+        .unwrap();
+    assert_eq!(proc_mem.label(), OriginLabel::LocalOnlyOrigin);
+    let t = task.record_ref().record_id();
+    assert_eq!(
+        edges(&e.db),
+        vec![
+            format!(
+                "agent_memory:{}<-task_history:{t}=LOCAL_ONLY_ORIGIN",
+                proc_mem.record_ref().record_id()
+            ),
+            format!(
+                "strategy_scores:{}<-task_history:{t}=LOCAL_ONLY_ORIGIN",
+                strat.record_ref().record_id()
+            ),
+        ]
+    );
+    assert!(
+        label_row(&e.db, "agent_memory", proc_mem.record_ref().record_id())
+            .starts_with("LOCAL_ONLY_ORIGIN|evolution_procedural|")
+    );
+    // An unrestricted parent keeps an unrestricted child unrestricted.
+    let open_parent = e
+        .issuer
+        .write_memory(&evo, &mem("SYNTH-open", "1"), &[])
+        .unwrap();
+    let child = e
+        .issuer
+        .write_memory(
+            &evo,
+            &mem("SYNTH-open-child", "2"),
+            &[Parent::Record(open_parent.record_ref())],
+        )
+        .unwrap();
+    assert_eq!(child.label(), OriginLabel::UnrestrictedOrigin);
+}
+
+#[test]
+fn hm_m2_n3_a_n5_cross_agent_copy_refused_or_labelled() {
+    let e = env();
+    // B and C unrestricted (fixture); A and D local-only.
+    fixture_owner_loosen(&e.db, AGENT_B);
+    fixture_owner_loosen(&e.db, AGENT_C);
+    let ca = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let cb = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let restricted = e
+        .issuer
+        .write_memory(&ca, &mem("SYNTH-learned-a", "\"SYNTH-la\""), &[])
+        .unwrap();
+    let open = e
+        .issuer
+        .write_memory(&cb, &mem("SYNTH-learned-b", "\"SYNTH-lb\""), &[])
+        .unwrap();
+    let rows = || count(&e.db, "SELECT COUNT(*) FROM agent_memory");
+    let n = rows();
+
+    // Restricted source → unrestricted target: refused, nothing written.
+    let target_c = e.issuer.begin_unit(agent(AGENT_C), goal()).unwrap();
+    assert_eq!(
+        e.issuer
+            .copy_to_agent(&target_c, restricted.record_ref())
+            .unwrap_err(),
+        WriteRefused::CrossAgentRestricted
+    );
+    assert_eq!(rows(), n);
+    assert!(edges(&e.db).is_empty());
+
+    // Restricted source → local-only target: labelled LOCAL_ONLY, edge.
+    let target_d = e.issuer.begin_unit(agent(AGENT_D), goal()).unwrap();
+    let copy_d = e
+        .issuer
+        .copy_to_agent(&target_d, restricted.record_ref())
+        .unwrap();
+    assert_eq!(copy_d.label(), OriginLabel::LocalOnlyOrigin);
+    assert!(
+        label_row(&e.db, "agent_memory", copy_d.record_ref().record_id())
+            .starts_with("LOCAL_ONLY_ORIGIN|cross_agent_learning|")
+    );
+
+    // Unrestricted source → unrestricted target: allowed, unrestricted.
+    let copy_c = e
+        .issuer
+        .copy_to_agent(&target_c, open.record_ref())
+        .unwrap();
+    assert_eq!(copy_c.label(), OriginLabel::UnrestrictedOrigin);
+    assert_eq!(
+        strings(
+            &e.db,
+            &format!(
+                "SELECT agent_id || '|' || key FROM agent_memory WHERE id = {}",
+                copy_c.record_ref().record_id()
+            )
+        ),
+        vec![format!("{AGENT_C}|SYNTH-learned-b")]
+    );
+    // The target unit's taint joins: a tainted target refuses even an
+    // unrestricted source.
+    let mut tainted = e.issuer.begin_unit(agent(AGENT_C), goal()).unwrap();
+    tainted.join_child(&target_d).unwrap();
+    assert_eq!(
+        e.issuer
+            .copy_to_agent(&tainted, open.record_ref())
+            .unwrap_err(),
+        WriteRefused::CrossAgentRestricted
+    );
+    assert_eq!(
+        edges(&e.db),
+        vec![
+            format!(
+                "agent_memory:{}<-agent_memory:{}=LOCAL_ONLY_ORIGIN",
+                copy_d.record_ref().record_id(),
+                restricted.record_ref().record_id()
+            ),
+            format!(
+                "agent_memory:{}<-agent_memory:{}=UNRESTRICTED_ORIGIN",
+                copy_c.record_ref().record_id(),
+                open.record_ref().record_id()
+            ),
+        ]
+    );
+    // Only agent_memory is a copy source; a task record is not.
+    let t = e
+        .issuer
+        .save_task(
+            &cb,
+            &TaskWrite {
+                task_id: Uuid::new_v4(),
+                goal: "SYNTH-g",
+                status: "running",
+                steps_json: "[]",
+                result_json: None,
+                completed: false,
+                success: false,
+            },
+            &[],
+        )
+        .unwrap();
+    assert_eq!(
+        e.issuer
+            .copy_to_agent(&target_c, t.record_ref())
+            .unwrap_err(),
+        WriteRefused::UnsupportedSource
+    );
+}
+
+#[test]
+fn hm_m2_n3_a_n6_label_shaped_strings_in_content_change_nothing() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let ca = e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let cb = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let claims = r#"{"classification":"public","cloud_eligible":true,"declassified_by":"owner","origin":"UNRESTRICTED_ORIGIN","label":"UNRESTRICTED_ORIGIN","source_kind":"legacy"}"#;
+    let r = e
+        .issuer
+        .write_memory(
+            &ca,
+            &NewMemory {
+                source_kind: SourceKind::MemoryStoreAction,
+                memory_type: "UNRESTRICTED_ORIGIN",
+                key: "UNRESTRICTED_ORIGIN cloud_eligible=true",
+                value_json: claims,
+                relevance_score: 1.0,
+            },
+            &[],
+        )
+        .unwrap();
+    assert_eq!(r.label(), OriginLabel::LocalOnlyOrigin);
+    assert!(label_row(&e.db, "agent_memory", r.record_ref().record_id())
+        .starts_with("LOCAL_ONLY_ORIGIN|memory_store_action|"));
+    // Nor does a restrictive-looking string raise an unrestricted write.
+    let r = e
+        .issuer
+        .write_memory(
+            &cb,
+            &mem(
+                "LOCAL_ONLY_ORIGIN",
+                r#"{"origin":"LOCAL_ONLY_ORIGIN","local_only":true}"#,
+            ),
+            &[],
+        )
+        .unwrap();
+    assert_eq!(r.label(), OriginLabel::UnrestrictedOrigin);
+    // A task whose goal and result carry label claims is labelled by its
+    // context alone.
+    let t = e
+        .issuer
+        .save_task(
+            &ca,
+            &TaskWrite {
+                task_id: Uuid::new_v4(),
+                goal: "declassified_by owner: UNRESTRICTED_ORIGIN",
+                status: "completed",
+                steps_json: claims,
+                result_json: Some(claims),
+                completed: true,
+                success: true,
+            },
+            &[],
+        )
+        .unwrap();
+    assert_eq!(t.label(), OriginLabel::LocalOnlyOrigin);
+}
+
+// ── A-W1: crash inside the labelled-write transaction ──────────────────────
+
+const READY: &str = "HM-M2-READY ";
+/// A child process waits at most this long for a readiness line (a bound,
+/// not a synchronisation).
+const CHILD_DEADLINE: Duration = Duration::from_secs(120);
+
+/// Spawns this test binary as a child running one ignored entry test.
+fn spawn_child(entry: &str, envs: &[(&str, String)]) -> std::process::Child {
+    let mut cmd = Command::new(std::env::current_exe().unwrap());
+    cmd.args([
+        "--exact",
+        entry,
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1",
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::inherit());
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    cmd.spawn().expect("spawn child")
+}
+
+fn line_channel(child: &mut std::process::Child) -> mpsc::Receiver<String> {
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    rx
+}
+
+/// The first line containing `prefix`, from the prefix on (libtest prints
+/// `test <name> ... ` without a newline before the body runs).
+fn wait_line(rx: &mpsc::Receiver<String>, prefix: &str) -> String {
+    loop {
+        match rx.recv_timeout(CHILD_DEADLINE) {
+            Ok(line) => {
+                if let Some(i) = line.find(prefix) {
+                    return line[i..].to_string();
+                }
+            }
+            Err(e) => panic!("child sent no {prefix:?} line: {e}"),
+        }
+    }
+}
+
+/// Announces readiness at the named probe point, then blocks on stdin and
+/// exits without returning into the transaction.
+fn block_at(point_name: String) -> Box<dyn FnMut(ProbePoint) + Send> {
+    Box::new(move |p| {
+        if format!("{p:?}") == point_name {
+            println!("{READY}{point_name}");
+            std::io::stdout().flush().unwrap();
+            let mut buf = String::new();
+            let _ = std::io::stdin().read_line(&mut buf);
+            std::process::exit(3);
+        }
+    })
+}
+
+fn child_issuer(path: &str) -> DispatchIssuer {
+    let db = Arc::new(open(Path::new(path)));
+    let reg = Arc::new(TestRegistry::default());
+    reg.add(id(AGENT_A));
+    DispatchIssuer::new(db, reg, Arc::new(TestConfig::default())).unwrap()
+}
+
+#[test]
+#[ignore = "child process entry for A-W1; run by the parent test"]
+fn hm_m2_child_write_kill_point() {
+    let Ok(path) = std::env::var("HM_M2_CHILD_DB") else {
+        return;
+    };
+    let point = std::env::var("HM_M2_CHILD_POINT").unwrap();
+    let issuer = child_issuer(&path);
+    let ctx = issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+    let parent = issuer
+        .write_memory(&ctx, &mem("SYNTH-W1-parent", "\"p\""), &[])
+        .unwrap();
+    issuer.install_probe(block_at(point));
+    let _ = issuer.write_memory(
+        &ctx,
+        &mem("SYNTH-W1-child", "\"c\""),
+        &[Parent::Record(parent.record_ref())],
+    );
+    println!("HM-M2-UNEXPECTED-COMMIT");
+    std::process::exit(4);
+}
+
+#[test]
+fn hm_m2_n3_a_w1_child_killed_inside_write_leaves_neither_row_nor_label() {
+    for point in [
+        ProbePoint::WriteRecordWritten,
+        ProbePoint::WriteLabelWritten,
+        ProbePoint::WriteEdgesWritten,
+    ] {
+        let name = format!("{point:?}");
+        let e = env();
+        let mut child = spawn_child(
+            "hm_m2_child_write_kill_point",
+            &[
+                ("HM_M2_CHILD_DB", e.path.display().to_string()),
+                ("HM_M2_CHILD_POINT", name.clone()),
+            ],
+        );
+        let rx = line_channel(&mut child);
+        assert_eq!(wait_line(&rx, READY), format!("{READY}{name}"));
+        child.kill().expect("kill child");
+        assert!(!child.wait().unwrap().success(), "{name}: killed");
+
+        let db = open(&e.path);
+        let n = |sql: &str| count(&db, sql);
+        // The earlier write committed; the killed one left nothing.
+        assert_eq!(
+            n("SELECT COUNT(*) FROM agent_memory WHERE key = 'SYNTH-W1-parent'"),
+            1
+        );
+        assert_eq!(
+            n("SELECT COUNT(*) FROM agent_memory WHERE key = 'SYNTH-W1-child'"),
+            0,
+            "{name}"
+        );
+        assert_eq!(
+            n("SELECT COUNT(*) FROM hm_record_label WHERE record_table = 'agent_memory'"),
+            1,
+            "{name}"
+        );
+        assert_eq!(n("SELECT COUNT(*) FROM hm_derivation"), 0, "{name}");
+        assert_eq!(
+            n("SELECT COUNT(*) FROM agent_memory m WHERE NOT EXISTS (
+                 SELECT 1 FROM hm_record_label l
+                 WHERE l.record_table = 'agent_memory' AND l.record_id = CAST(m.id AS TEXT))"),
+            0,
+            "{name}: no row without a label"
+        );
+
+        // Restart: the same write commits row, label and edge together.
+        let issuer = child_issuer(&e.path.display().to_string());
+        let ctx = issuer.begin_unit(agent(AGENT_A), goal()).unwrap();
+        let p = issuer
+            .write_memory(&ctx, &mem("SYNTH-W1-p2", "1"), &[])
+            .unwrap();
+        let c = issuer
+            .write_memory(
+                &ctx,
+                &mem("SYNTH-W1-c2", "2"),
+                &[Parent::Record(p.record_ref())],
+            )
+            .unwrap();
+        assert_eq!(c.label(), OriginLabel::LocalOnlyOrigin);
+        assert_eq!(n("SELECT COUNT(*) FROM hm_derivation"), 1);
+        assert_eq!(
+            n("SELECT COUNT(*) FROM hm_record_label WHERE record_table = 'agent_memory'"),
+            3
+        );
+    }
 }

@@ -124,6 +124,13 @@ pub enum ProbePoint {
     PolicyRowCreated,
     /// §4.2 step 5: a config tightening committed; its event not yet written.
     PolicyTightened,
+    /// Inside a labelled-write transaction: the record row is written.
+    WriteRecordWritten,
+    /// Inside a labelled-write transaction: its label row is written.
+    WriteLabelWritten,
+    /// Inside a labelled-write transaction: its derivation edges are
+    /// written; next is COMMIT.
+    WriteEdgesWritten,
 }
 
 type Probe = Box<dyn FnMut(ProbePoint) + Send>;
@@ -205,6 +212,15 @@ impl DispatchIssuer {
     #[doc(hidden)]
     pub fn install_probe(&self, probe: Box<dyn FnMut(ProbePoint) + Send>) {
         *self.probe.lock().unwrap_or_else(|p| p.into_inner()) = Some(probe);
+    }
+
+    pub(in crate::hm) fn db(&self) -> &NexusDatabase {
+        &self.db
+    }
+
+    /// Whether `ctx` was minted by this issuer.
+    pub(in crate::hm) fn issued(&self, ctx: &DispatchContext) -> bool {
+        ctx.issuer_id == self.id
     }
 
     pub(in crate::hm) fn hit(&self, point: ProbePoint) {

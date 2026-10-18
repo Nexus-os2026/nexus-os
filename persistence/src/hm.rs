@@ -567,6 +567,53 @@ fn text_or_none(v: ValueRef<'_>) -> Option<String> {
     }
 }
 
+/// A new `agent_memory` row: `access_count` starts at 0, `last_accessed`
+/// equals `created_at`, `expires_at` is NULL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewMemoryRow {
+    pub agent_id: String,
+    pub memory_type: String,
+    pub key: String,
+    pub value_json: String,
+    pub relevance_score: f64,
+    pub created_at: String,
+}
+
+/// The content columns of one `agent_memory` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryContent {
+    pub agent_id: String,
+    pub memory_type: String,
+    pub key: String,
+    pub value_json: String,
+}
+
+/// A new `task_history` row (fuel and timing columns take their defaults).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTaskRow {
+    pub id: String,
+    pub agent_id: String,
+    pub goal: String,
+    pub status: String,
+    pub steps_json: String,
+    pub result_json: Option<String>,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub success: bool,
+}
+
+/// One contribution to a `strategy_scores` aggregate.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrategyContribution {
+    pub agent_id: String,
+    pub strategy_hash: String,
+    pub goal_type: String,
+    pub success: bool,
+    pub fuel: f64,
+    pub duration_secs: f64,
+    pub updated_at: String,
+}
+
 /// One `hm_policy_change` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyChangeRow {
@@ -891,6 +938,169 @@ impl HmTx<'_> {
                 p.basis
             ],
         )?)
+    }
+
+    /// Inserts one `agent_memory` row and returns its id.
+    pub fn insert_agent_memory(&self, m: &NewMemoryRow) -> Result<i64> {
+        self.tx.execute(
+            "INSERT INTO agent_memory
+               (agent_id, memory_type, key, value_json, relevance_score, access_count,
+                created_at, last_accessed, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6, NULL)",
+            params![
+                m.agent_id,
+                m.memory_type,
+                m.key,
+                m.value_json,
+                m.relevance_score,
+                m.created_at
+            ],
+        )?;
+        Ok(self.tx.last_insert_rowid())
+    }
+
+    /// The content columns of one `agent_memory` row, if present.
+    pub fn memory_content(&self, id: i64) -> Result<Option<MemoryContent>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT agent_id, memory_type, key, value_json FROM agent_memory WHERE id = ?1",
+                params![id],
+                |r| {
+                    Ok(MemoryContent {
+                        agent_id: r.get(0)?,
+                        memory_type: r.get(1)?,
+                        key: r.get(2)?,
+                        value_json: r.get(3)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    pub fn insert_task(&self, t: &NewTaskRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO task_history
+               (id, agent_id, goal, status, steps_json, result_json, started_at, completed_at,
+                success)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                t.id,
+                t.agent_id,
+                t.goal,
+                t.status,
+                t.steps_json,
+                t.result_json,
+                t.started_at,
+                t.completed_at,
+                t.success
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Updates the progress columns of one `task_history` row (`goal` and
+    /// `started_at` are unchanged). Returns the number of rows changed.
+    pub fn update_task_progress(
+        &self,
+        id: &str,
+        status: &str,
+        steps_json: &str,
+        result_json: Option<&str>,
+        completed_at: Option<&str>,
+        success: bool,
+    ) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE task_history
+             SET status = ?2, steps_json = ?3, result_json = ?4, completed_at = ?5, success = ?6
+             WHERE id = ?1",
+            params![id, status, steps_json, result_json, completed_at, success],
+        )?)
+    }
+
+    /// The id of the `strategy_scores` row of `(agent_id, strategy_hash)`.
+    pub fn strategy_id(&self, agent_id: &str, strategy_hash: &str) -> Result<Option<i64>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT id FROM strategy_scores WHERE agent_id = ?1 AND strategy_hash = ?2",
+                params![agent_id, strategy_hash],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Inserts the first contribution of an aggregate and returns its id.
+    pub fn insert_strategy(&self, c: &StrategyContribution) -> Result<i64> {
+        self.tx.execute(
+            "INSERT INTO strategy_scores
+               (agent_id, strategy_hash, goal_type, uses, successes, total_fuel,
+                total_duration_secs, composite_score, updated_at)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, 0.0, ?7)",
+            params![
+                c.agent_id,
+                c.strategy_hash,
+                c.goal_type,
+                i64::from(c.success),
+                c.fuel,
+                c.duration_secs,
+                c.updated_at
+            ],
+        )?;
+        Ok(self.tx.last_insert_rowid())
+    }
+
+    /// Adds one contribution to an aggregate; `goal_type` is overwritten.
+    pub fn add_strategy_contribution(&self, id: i64, c: &StrategyContribution) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE strategy_scores
+             SET goal_type = ?2, uses = uses + 1, successes = successes + ?3,
+                 total_fuel = total_fuel + ?4, total_duration_secs = total_duration_secs + ?5,
+                 updated_at = ?6
+             WHERE id = ?1",
+            params![
+                id,
+                c.goal_type,
+                i64::from(c.success),
+                c.fuel,
+                c.duration_secs,
+                c.updated_at
+            ],
+        )?)
+    }
+
+    /// Sets `origin` and `content_sha256` of one label row. The §5.1
+    /// trigger rejects a lowering. Returns the number of rows changed.
+    pub fn update_label(
+        &self,
+        table: &str,
+        record_id: &str,
+        origin: &str,
+        content_sha256: &str,
+    ) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE hm_record_label SET origin = ?3, content_sha256 = ?4
+             WHERE record_table = ?1 AND record_id = ?2",
+            params![table, record_id, origin, content_sha256],
+        )?)
+    }
+
+    /// Inserts one derivation edge; an existing identical edge is kept.
+    pub fn insert_derivation(
+        &self,
+        child_table: &str,
+        child_id: &str,
+        parent_table: &str,
+        parent_id: &str,
+        parent_label: &str,
+    ) -> Result<()> {
+        self.tx.execute(
+            "INSERT OR IGNORE INTO hm_derivation
+               (child_table, child_id, parent_table, parent_id, parent_label_at_derivation)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![child_table, child_id, parent_table, parent_id, parent_label],
+        )?;
+        Ok(())
     }
 
     pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {
