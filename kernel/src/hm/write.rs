@@ -149,14 +149,14 @@ type Outcome = Result<WriteReceipt, WriteRefused>;
 /// Any failure inside a write transaction is returned as a store error, so
 /// the transaction rolls back: a record is never committed without its
 /// label (§6.2). Refusals are decided before the first write.
-fn abort(e: HmError) -> PersistenceError {
+pub(in crate::hm) fn abort(e: HmError) -> PersistenceError {
     match e {
         HmError::Store(p) => p,
         other => PersistenceError::NotFound(other.to_string()),
     }
 }
 
-fn is_migrated(tx: &HmTx<'_>) -> StoreResult<bool> {
+pub(in crate::hm) fn is_migrated(tx: &HmTx<'_>) -> StoreResult<bool> {
     migrated(tx).map_err(abort)
 }
 

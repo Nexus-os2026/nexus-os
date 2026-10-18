@@ -14,12 +14,13 @@
 //! The authority core (§4.2, §6, §11, §12.3–§12.7, §15) lives in the
 //! submodules: the sealed `DispatchContext` and the unit-taint algebra
 //! (`context`); the `DispatchIssuer`, §4.2 resolution and the context
-//! derivations (`issuer`); labelled writes (`write`); content-free events
-//! (`events`).
+//! derivations (`issuer`); labelled writes (`write`); route-first recall
+//! (`recall`); content-free events (`events`).
 
 mod context;
 mod events;
 mod issuer;
+mod recall;
 mod write;
 
 pub use issuer::{
@@ -27,6 +28,7 @@ pub use issuer::{
     Unresolved, MAX_RECORDS,
 };
 
+pub use recall::{RecallQuery, RecallRefused};
 pub use write::{
     NewMemory, Parent, SourceKind, StrategyWrite, TaskWrite, WriteReceipt, WriteRefused,
 };
@@ -209,6 +211,28 @@ impl RecordTable {
     }
 }
 
+/// The §5.2 digest-covered columns of an in-scope table.
+fn digest_columns_of(table: RecordTable) -> &'static [&'static str] {
+    store::digest_columns(table.table_name()).unwrap_or(&[])
+}
+
+/// The §5.2 binding rule. `label` is `(agent_id, origin, content_sha256)`
+/// of the record's label row, or `None` when the row is missing or
+/// unreadable. The label binds only when its origin decodes and its agent
+/// and digest equal the current row's; anything else is `Unbound`.
+fn bind(label: Option<(&str, &str, &str)>, current: &ScannedRow) -> EvaluatedLabel {
+    let Some((agent_id, origin, content_sha256)) = label else {
+        return EvaluatedLabel::Unbound;
+    };
+    let Some(origin) = decode_origin(origin) else {
+        return EvaluatedLabel::Unbound;
+    };
+    if agent_id != current.agent_id || content_sha256 != current.content_sha256 {
+        return EvaluatedLabel::Unbound;
+    }
+    EvaluatedLabel::Bound(origin)
+}
+
 /// Evaluates one record's label against its current row (§5.2 binding rule).
 fn evaluate_in(
     tx: &HmTx<'_>,
@@ -219,16 +243,17 @@ fn evaluate_in(
     let Some(current) = current else {
         return Ok(EvaluatedLabel::Unbound);
     };
-    let Some(label) = tx.label_row(table.table_name(), record_id)? else {
-        return Ok(EvaluatedLabel::Unbound);
-    };
-    let Some(origin) = decode_origin(&label.origin) else {
-        return Ok(EvaluatedLabel::Unbound);
-    };
-    if label.agent_id != current.agent_id || label.content_sha256 != current.content_sha256 {
-        return Ok(EvaluatedLabel::Unbound);
-    }
-    Ok(EvaluatedLabel::Bound(origin))
+    let label = tx.label_row(table.table_name(), record_id)?;
+    Ok(bind(
+        label.as_ref().map(|l| {
+            (
+                l.agent_id.as_str(),
+                l.origin.as_str(),
+                l.content_sha256.as_str(),
+            )
+        }),
+        current,
+    ))
 }
 
 /// Whether the T₀ migration is recorded as complete. A missing migration

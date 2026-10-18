@@ -18,8 +18,8 @@ use nexus_kernel::hm::{
     evaluate_label, run_t0_option_a, unit_start_state, unit_taint_step, verify_at_start,
     AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchContext, DispatchIssuer,
     EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent, Principal, ProbePoint,
-    RecordTable, RouteClass, SourceKind, StartStatus, StrategyWrite, TaskWrite, Unit, Unresolved,
-    WriteRefused, MAX_RECORDS,
+    RecallQuery, RecallRefused, RecalledRecord, RecordTable, RouteClass, SourceKind, StartStatus,
+    StrategyWrite, TaskWrite, Unit, Unresolved, WriteRefused, MAX_RECORDS,
 };
 use nexus_persistence::hm::{PolicyChangeRow, PolicyRow};
 use nexus_persistence::NexusDatabase;
@@ -1774,4 +1774,431 @@ fn hm_m2_n3_a_w1_child_killed_inside_write_leaves_neither_row_nor_label() {
             3
         );
     }
+}
+
+// ── N4: route-first recall (§12.3) ──────────────────────────────────────────
+
+fn memories(limit: usize) -> RecallQuery {
+    RecallQuery {
+        table: RecordTable::AgentMemory,
+        limit,
+    }
+}
+
+fn mem_r(key: &str, relevance_score: f64) -> NewMemory<'_> {
+    NewMemory {
+        source_kind: SourceKind::LoopEpisodic,
+        memory_type: "episodic",
+        key,
+        value_json: "\"SYNTH\"",
+        relevance_score,
+    }
+}
+
+/// The `agent_memory.key` of each recalled record, in recall order.
+fn recalled_keys(db: &NexusDatabase, recs: &[RecalledRecord]) -> Vec<String> {
+    recs.iter()
+        .map(|r| {
+            assert_eq!(r.record_ref().table(), RecordTable::AgentMemory);
+            strings(
+                db,
+                &format!(
+                    "SELECT key FROM agent_memory WHERE id = {}",
+                    r.record_ref().record_id()
+                ),
+            )
+            .remove(0)
+        })
+        .collect()
+}
+
+fn sorted(mut v: Vec<String>) -> Vec<String> {
+    v.sort();
+    v
+}
+
+/// The fields of the events of `kind`, parsed.
+fn event_fields(db: &NexusDatabase, kind: &str) -> Vec<serde_json::Value> {
+    events_of(db, kind)
+        .into_iter()
+        .map(|(subject, _, fields)| {
+            assert_obs_subject(&subject, kind);
+            serde_json::from_str(&fields).unwrap()
+        })
+        .collect()
+}
+
+/// An older binary's write: a row with no label.
+fn insert_unlabelled(db: &NexusDatabase, agent_id: &str, key: &str, relevance: f64) {
+    must(
+        db,
+        &format!(
+            "INSERT INTO agent_memory (agent_id, memory_type, key, value_json, relevance_score,
+               access_count, created_at, last_accessed)
+             VALUES ('{agent_id}', 'episodic', '{key}', '\"SYNTH\"', {relevance}, 0,
+               '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z')"
+        ),
+    );
+}
+
+/// Content changed out of band: the label no longer binds.
+fn tamper(db: &NexusDatabase, key: &str) {
+    must(
+        db,
+        &format!("UPDATE agent_memory SET value_json = '\"SYNTH-tampered\"' WHERE key = '{key}'"),
+    );
+}
+
+fn seed_legacy_memories(agent_id: &str, keys: &[(&str, f64)]) -> String {
+    keys.iter()
+        .map(|(k, r)| {
+            format!(
+                "INSERT INTO agent_memory (agent_id, memory_type, key, value_json, relevance_score,
+                   access_count, created_at, last_accessed)
+                 VALUES ('{agent_id}', 'semantic', '{k}', '\"SYNTH\"', {r}, 0,
+                   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');"
+            )
+        })
+        .collect()
+}
+
+/// A unit of `who` whose route class is local through its taint.
+fn local_unit(e: &Env, who: &str) -> DispatchContext {
+    let mut ctx = e.issuer.begin_unit(agent(who), goal()).unwrap();
+    let restricted = e.issuer.begin_unit(agent(AGENT_D), goal()).unwrap();
+    ctx.join_child(&restricted).unwrap();
+    assert_eq!(ctx.route_class(), RouteClass::Local);
+    ctx
+}
+
+#[test]
+fn hm_m2_n4_a_n1_non_local_recall_excludes_legacy_local_only_and_unbound() {
+    let seed = seed_legacy_memories(AGENT_B, &[("SYNTH-legacy-1", 0.9), ("SYNTH-legacy-2", 0.8)])
+        + &format!(
+            "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at)
+               VALUES ('{PRE_T0_TASK_B}', '{AGENT_B}', 'SYNTH-goal', 'running', '[]', '2026-01-01T00:00:00Z');
+             INSERT INTO world_model_entities (agent_id, entity_json, created_at)
+               VALUES ('{AGENT_B}', '{{\"SYNTH\":1}}', '2026-01-01T00:00:00Z');"
+        );
+    let e = env_seeded(
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D],
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E],
+        &seed,
+    );
+    // B local-only: two LOCAL_ONLY records.
+    let lo = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for k in ["SYNTH-lo-1", "SYNTH-lo-2"] {
+        e.issuer.write_memory(&lo, &mem_r(k, 0.7), &[]).unwrap();
+    }
+    // B loosened: three unrestricted records, one later tampered.
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let un = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for k in ["SYNTH-u-1", "SYNTH-u-2", "SYNTH-u-3", "SYNTH-u-altered"] {
+        e.issuer.write_memory(&un, &mem_r(k, 0.5), &[]).unwrap();
+    }
+    tamper(&e.db, "SYNTH-u-altered");
+    insert_unlabelled(&e.db, AGENT_B, "SYNTH-unlabelled", 0.6);
+    // Another agent's unrestricted record is never in B's recall.
+    fixture_owner_loosen(&e.db, AGENT_C);
+    let other = e.issuer.begin_unit(agent(AGENT_C), goal()).unwrap();
+    e.issuer
+        .write_memory(&other, &mem_r("SYNTH-other-agent", 0.99), &[])
+        .unwrap();
+
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(ctx.route_class(), RouteClass::NonLocal);
+    let recs = e.issuer.recall(&mut ctx, memories(64)).unwrap();
+    assert_eq!(
+        sorted(recalled_keys(&e.db, &recs)),
+        vec!["SYNTH-u-1", "SYNTH-u-2", "SYNTH-u-3"]
+    );
+    for r in &recs {
+        assert_eq!(
+            r.label(),
+            EvaluatedLabel::Bound(OriginLabel::UnrestrictedOrigin)
+        );
+        assert_eq!(r.agent_id(), AGENT_B);
+        assert_eq!(r.source_kind(), "loop_episodic");
+    }
+    assert_eq!(ctx.working_set().verbatim().count(), 3);
+    for table in [RecordTable::TaskHistory, RecordTable::WorldModelEntities] {
+        assert!(e
+            .issuer
+            .recall(&mut ctx, RecallQuery { table, limit: 64 })
+            .unwrap()
+            .is_empty());
+    }
+    let filtered = event_fields(&e.db, "memory.recall_filtered");
+    assert_eq!(
+        filtered[0],
+        serde_json::json!({"route_class":"non_local","eligible_count":3,"withheld_count":6})
+    );
+    let unlabelled = event_fields(&e.db, "memory.unlabelled_record_observed");
+    assert_eq!(
+        unlabelled,
+        vec![serde_json::json!({"route_class":"non_local","unbound_count":2})]
+    );
+
+    // A local unit sees every label; UNBOUND rows evaluate as such.
+    let mut local = local_unit(&e, AGENT_B);
+    let all = e.issuer.recall(&mut local, memories(64)).unwrap();
+    let mut by_key: Vec<(String, EvaluatedLabel)> = recalled_keys(&e.db, &all)
+        .into_iter()
+        .zip(all.iter().map(|r| r.label()))
+        .collect();
+    by_key.sort_by(|a, b| a.0.cmp(&b.0));
+    use EvaluatedLabel::{Bound, Unbound};
+    use OriginLabel::*;
+    assert_eq!(
+        by_key,
+        vec![
+            ("SYNTH-legacy-1".into(), Bound(LegacyUnknown)),
+            ("SYNTH-legacy-2".into(), Bound(LegacyUnknown)),
+            ("SYNTH-lo-1".into(), Bound(LocalOnlyOrigin)),
+            ("SYNTH-lo-2".into(), Bound(LocalOnlyOrigin)),
+            ("SYNTH-u-1".into(), Bound(UnrestrictedOrigin)),
+            ("SYNTH-u-2".into(), Bound(UnrestrictedOrigin)),
+            ("SYNTH-u-3".into(), Bound(UnrestrictedOrigin)),
+            ("SYNTH-u-altered".into(), Unbound),
+            ("SYNTH-unlabelled".into(), Unbound),
+        ]
+    );
+    assert_eq!(
+        event_fields(&e.db, "memory.unlabelled_record_observed")[1],
+        serde_json::json!({"route_class":"local","unbound_count":2})
+    );
+    assert_eq!(event_fields(&e.db, "memory.recall_filtered").len(), 3);
+}
+
+#[test]
+fn hm_m2_n4_withheld_rows_never_displace_eligible_rows() {
+    let seed = seed_legacy_memories(
+        AGENT_B,
+        &[
+            ("SYNTH-legacy-1", 0.97),
+            ("SYNTH-legacy-2", 0.97),
+            ("SYNTH-legacy-3", 0.97),
+        ],
+    );
+    let e = env_seeded(
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D],
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E],
+        &seed,
+    );
+    let lo = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for i in 0..5 {
+        e.issuer
+            .write_memory(&lo, &mem_r(&format!("SYNTH-lo-{i}"), 0.98), &[])
+            .unwrap();
+    }
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let un = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    // Unrestricted-labelled, most relevant, then tampered: they pass the
+    // SQL filter and fail the binding while the cursor is walked.
+    for i in 0..5 {
+        let k = format!("SYNTH-altered-{i}");
+        e.issuer.write_memory(&un, &mem_r(&k, 0.99), &[]).unwrap();
+        tamper(&e.db, &k);
+    }
+    insert_unlabelled(&e.db, AGENT_B, "SYNTH-unlabelled-1", 0.995);
+    insert_unlabelled(&e.db, AGENT_B, "SYNTH-unlabelled-2", 0.995);
+    for (k, r) in [
+        ("SYNTH-eligible-1", 0.1),
+        ("SYNTH-eligible-2", 0.2),
+        ("SYNTH-eligible-3", 0.3),
+        ("SYNTH-eligible-4", 0.4),
+    ] {
+        e.issuer.write_memory(&un, &mem_r(k, r), &[]).unwrap();
+    }
+
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let top3 = e.issuer.recall(&mut ctx, memories(3)).unwrap();
+    assert_eq!(
+        recalled_keys(&e.db, &top3),
+        vec!["SYNTH-eligible-4", "SYNTH-eligible-3", "SYNTH-eligible-2"]
+    );
+    assert_eq!(
+        event_fields(&e.db, "memory.recall_filtered"),
+        vec![serde_json::json!({"route_class":"non_local","eligible_count":3,"withheld_count":15})]
+    );
+    let all = e.issuer.recall(&mut ctx, memories(10)).unwrap();
+    assert_eq!(
+        recalled_keys(&e.db, &all),
+        vec![
+            "SYNTH-eligible-4",
+            "SYNTH-eligible-3",
+            "SYNTH-eligible-2",
+            "SYNTH-eligible-1"
+        ]
+    );
+}
+
+#[test]
+fn hm_m2_n4_a_c2_deleted_or_mismatched_label_is_unbound() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let un = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let r1 = e
+        .issuer
+        .write_memory(&un, &mem_r("SYNTH-label-deleted", 0.9), &[])
+        .unwrap();
+    let r2 = e
+        .issuer
+        .write_memory(&un, &mem_r("SYNTH-digest-altered", 0.8), &[])
+        .unwrap();
+    e.issuer
+        .write_memory(&un, &mem_r("SYNTH-intact", 0.7), &[])
+        .unwrap();
+    let id1 = r1.record_ref().record_id().to_string();
+    let id2 = r2.record_ref().record_id().to_string();
+    must(
+        &e.db,
+        &format!(
+            "DELETE FROM hm_record_label WHERE record_table = 'agent_memory' AND record_id = '{id1}'"
+        ),
+    );
+    tamper(&e.db, "SYNTH-digest-altered");
+    for i in [&id1, &id2] {
+        assert_eq!(
+            evaluate_label(&e.db, RecordTable::AgentMemory, i).unwrap(),
+            EvaluatedLabel::Unbound
+        );
+    }
+
+    // Never eligible non-locally.
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let recs = e.issuer.recall(&mut ctx, memories(64)).unwrap();
+    assert_eq!(recalled_keys(&e.db, &recs), vec!["SYNTH-intact"]);
+    assert_eq!(
+        event_fields(&e.db, "memory.unlabelled_record_observed"),
+        vec![serde_json::json!({"route_class":"non_local","unbound_count":2})]
+    );
+
+    // Still visible locally, as UNBOUND (= LOCAL_ONLY); observed.
+    let mut local = local_unit(&e, AGENT_B);
+    let all = e.issuer.recall(&mut local, memories(64)).unwrap();
+    let labels: Vec<(String, EvaluatedLabel)> = recalled_keys(&e.db, &all)
+        .into_iter()
+        .zip(all.iter().map(|r| r.label()))
+        .collect();
+    assert_eq!(
+        labels,
+        vec![
+            ("SYNTH-label-deleted".to_string(), EvaluatedLabel::Unbound),
+            ("SYNTH-digest-altered".to_string(), EvaluatedLabel::Unbound),
+            (
+                "SYNTH-intact".to_string(),
+                EvaluatedLabel::Bound(OriginLabel::UnrestrictedOrigin)
+            ),
+        ]
+    );
+    assert_eq!(all[0].source_kind(), "unlabelled");
+    assert_eq!(
+        event_fields(&e.db, "memory.unlabelled_record_observed")[1],
+        serde_json::json!({"route_class":"local","unbound_count":2})
+    );
+    // A write in the unit that holds them is LOCAL_ONLY: UNBOUND verbatim
+    // items evaluate as LOCAL_ONLY_ORIGIN.
+    let mut holder = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(holder.route_class(), RouteClass::NonLocal);
+    let intact = e.issuer.recall(&mut holder, memories(64)).unwrap();
+    assert_eq!(intact.len(), 1);
+    let w = e
+        .issuer
+        .write_memory(&holder, &mem_r("SYNTH-after", 0.1), &[])
+        .unwrap();
+    assert_eq!(w.label(), OriginLabel::UnrestrictedOrigin);
+    let w = e
+        .issuer
+        .write_memory(&local, &mem_r("SYNTH-after-local", 0.1), &[])
+        .unwrap();
+    assert_eq!(w.label(), OriginLabel::LocalOnlyOrigin);
+}
+
+#[test]
+fn hm_m2_n4_recall_scope_limits_refusals_and_write_reevaluation() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let un = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for i in 0..(MAX_RECORDS + 6) {
+        e.issuer
+            .write_memory(&un, &mem_r(&format!("SYNTH-many-{i}"), 0.5), &[])
+            .unwrap();
+    }
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(
+        e.issuer.recall(&mut ctx, memories(10_000)).unwrap().len(),
+        MAX_RECORDS
+    );
+    assert!(e.issuer.recall(&mut ctx, memories(0)).unwrap().is_empty());
+
+    // A chat turn carries no retained data; another issuer's context is
+    // refused.
+    let mut chat = e
+        .issuer
+        .begin_unit(
+            agent(AGENT_B),
+            Unit::ChatTurn {
+                turn_id: Uuid::new_v4(),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        e.issuer.recall(&mut chat, memories(5)).unwrap_err(),
+        RecallRefused::RetainedDataNotPermitted
+    );
+    let other = e.issuer_on(e.second_handle());
+    assert_eq!(
+        other.recall(&mut ctx, memories(5)).unwrap_err(),
+        RecallRefused::WrongIssuer
+    );
+
+    // A recalled verbatim item is re-evaluated at every write: its label
+    // raised elsewhere raises the holder's next write.
+    let s = |goal_type: &'static str| StrategyWrite {
+        strategy_hash: "SYNTH-shared",
+        goal_type,
+        success: true,
+        fuel: 1.0,
+        duration_secs: 1.0,
+    };
+    e.issuer.upsert_strategy(&un, &s("SYNTH-a"), &[]).unwrap();
+    let mut holder = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let got = e
+        .issuer
+        .recall(
+            &mut holder,
+            RecallQuery {
+                table: RecordTable::StrategyScores,
+                limit: 5,
+            },
+        )
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(
+        e.issuer
+            .write_memory(&holder, &mem_r("SYNTH-before", 0.1), &[])
+            .unwrap()
+            .label(),
+        OriginLabel::UnrestrictedOrigin
+    );
+    e.cfg.set(id(AGENT_B), true);
+    let tightened = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    e.issuer
+        .upsert_strategy(&tightened, &s("SYNTH-b"), &[])
+        .unwrap();
+    assert_eq!(
+        e.issuer
+            .write_memory(&holder, &mem_r("SYNTH-after", 0.1), &[])
+            .unwrap()
+            .label(),
+        OriginLabel::LocalOnlyOrigin
+    );
+
+    // Not migrated: refused.
+    must(&e.db, "DROP TABLE hm_migration;");
+    assert_eq!(
+        e.issuer.recall(&mut holder, memories(5)).unwrap_err(),
+        RecallRefused::NotMigrated
+    );
 }

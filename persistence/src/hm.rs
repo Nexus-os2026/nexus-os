@@ -614,6 +614,38 @@ pub struct StrategyContribution {
     pub updated_at: String,
 }
 
+/// The label columns a recall walk reads with each row. A column is `None`
+/// when it is not TEXT.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelBinding {
+    pub agent_id: Option<String>,
+    pub origin: Option<String>,
+    pub source_kind: Option<String>,
+    pub content_sha256: Option<String>,
+}
+
+/// One row met by a recall walk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecallRow {
+    /// Identity, owner and §5.2 digest of the row as stored now.
+    pub row: ScannedRow,
+    /// The digest-covered column values, in `digest_columns` order.
+    pub values: Vec<Option<String>>,
+    /// Its label row, if one exists.
+    pub label: Option<LabelBinding>,
+}
+
+/// The order of a recall over each in-scope table: most relevant first,
+/// newest id breaking ties.
+fn recall_order(table: &str) -> &'static str {
+    match table {
+        "agent_memory" => "m.relevance_score DESC, m.id DESC",
+        "task_history" => "m.started_at DESC, m.id DESC",
+        "strategy_scores" => "m.composite_score DESC, m.id DESC",
+        _ => "m.created_at DESC, m.id DESC",
+    }
+}
+
 /// One `hm_policy_change` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyChangeRow {
@@ -1101,6 +1133,93 @@ impl HmTx<'_> {
             params![child_table, child_id, parent_table, parent_id, parent_label],
         )?;
         Ok(())
+    }
+
+    /// Walks one agent's rows of an in-scope table in recall order, with
+    /// each row's label row (LEFT JOIN). With `origin`, only rows whose
+    /// label row has that origin are selected, in the query, before the
+    /// ORDER BY. `visit` returns false to stop the walk.
+    pub fn recall_walk(
+        &self,
+        table: &str,
+        agent_id: &str,
+        origin: Option<&str>,
+        visit: &mut dyn FnMut(RecallRow) -> bool,
+    ) -> Result<()> {
+        let cols = digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let selected = cols
+            .iter()
+            .map(|c| format!("m.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let filter = if origin.is_some() {
+            " AND l.origin = ?2"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT m.id, m.agent_id, {selected},
+                    l.agent_id, l.origin, l.source_kind, l.content_sha256, l.record_id
+             FROM {table} m
+             LEFT JOIN hm_record_label l
+               ON l.record_table = '{table}' AND l.record_id = CAST(m.id AS TEXT)
+             WHERE m.agent_id = ?1{filter}
+             ORDER BY {}",
+            recall_order(table)
+        );
+        let mut stmt = self.tx.prepare(&sql)?;
+        let mut rows = match origin {
+            Some(o) => stmt.query(params![agent_id, o])?,
+            None => stmt.query(params![agent_id])?,
+        };
+        let n = cols.len() + 2;
+        while let Some(r) = rows.next()? {
+            let row = scanned_row(table, cols, r)?;
+            let mut values = Vec::with_capacity(cols.len());
+            for i in 0..cols.len() {
+                values.push(match r.get_ref(i + 2)? {
+                    ValueRef::Text(b) | ValueRef::Blob(b) => {
+                        Some(String::from_utf8_lossy(b).into_owned())
+                    }
+                    _ => None,
+                });
+            }
+            let label = match r.get_ref(n + 4)? {
+                ValueRef::Null => None,
+                _ => Some(LabelBinding {
+                    agent_id: text_or_none(r.get_ref(n)?),
+                    origin: text_or_none(r.get_ref(n + 1)?),
+                    source_kind: text_or_none(r.get_ref(n + 2)?),
+                    content_sha256: text_or_none(r.get_ref(n + 3)?),
+                }),
+            };
+            if !visit(RecallRow { row, values, label }) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// For one agent's rows of an in-scope table: the number whose label
+    /// row is missing or has an origin other than `origin`, and the number
+    /// with no label row.
+    pub fn recall_withheld_counts(
+        &self,
+        table: &str,
+        agent_id: &str,
+        origin: &str,
+    ) -> Result<(i64, i64)> {
+        digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(SUM(l.record_id IS NULL), 0)
+             FROM {table} m
+             LEFT JOIN hm_record_label l
+               ON l.record_table = '{table}' AND l.record_id = CAST(m.id AS TEXT)
+             WHERE m.agent_id = ?1 AND (l.record_id IS NULL OR l.origin IS NOT ?2)"
+        );
+        Ok(self.tx.query_row(&sql, params![agent_id, origin], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?)
     }
 
     pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {
