@@ -374,7 +374,7 @@ pub fn run_t0_option_a(
     db: &NexusDatabase,
     registered_agents: &[Uuid],
 ) -> Result<T0Outcome, HmError> {
-    run_t0_option_a_probed(db, registered_agents, &mut |_| {})
+    run_t0(db, registered_agents, false, &mut |_| {})
 }
 
 /// `run_t0_option_a` with a probe called inside the transaction after each
@@ -386,9 +386,27 @@ pub fn run_t0_option_a_probed(
     registered_agents: &[Uuid],
     probe: &mut dyn FnMut(T0Point),
 ) -> Result<T0Outcome, HmError> {
+    run_t0(db, registered_agents, false, probe)
+}
+
+/// The T₀ migration at backend start (mission R6): the Option A baseline is
+/// given to the registered agents ∪ every agent id of the in-scope rows that
+/// is an agent UUID, read inside the T₀ transaction itself. An id that is
+/// not a UUID is no principal and gets no policy row.
+pub fn run_t0_option_a_at_start(
+    db: &NexusDatabase,
+    registered_agents: &[Uuid],
+) -> Result<T0Outcome, HmError> {
+    run_t0(db, registered_agents, true, &mut |_| {})
+}
+
+fn run_t0(
+    db: &NexusDatabase,
+    registered_agents: &[Uuid],
+    with_row_agents: bool,
+    probe: &mut dyn FnMut(T0Point),
+) -> Result<T0Outcome, HmError> {
     let mut agents: Vec<String> = registered_agents.iter().map(Uuid::to_string).collect();
-    agents.sort();
-    agents.dedup();
     let t0_wallclock = chrono::Utc::now().to_rfc3339();
 
     db.hm().immediate(|tx| {
@@ -425,8 +443,17 @@ pub fn run_t0_option_a_probed(
                     policy_generation: 0,
                 })?;
             }
+            if with_row_agents {
+                agents.extend(
+                    rows.iter()
+                        .filter_map(|row| Uuid::parse_str(&row.agent_id).ok())
+                        .map(|id| id.to_string()),
+                );
+            }
             rows_per_table.insert(name, rows.len() as u64);
         }
+        agents.sort();
+        agents.dedup();
         probe(T0Point::MembersLabelled);
 
         // Step 3: AD-5 Option A. History row first (§5.1 trigger).

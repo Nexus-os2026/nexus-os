@@ -1,5 +1,6 @@
 //! Governed LLM connector with provider abstraction, policy gateway, and prompt-injection defense.
 
+pub mod attest;
 pub mod chunking;
 pub mod circuit_breaker;
 pub mod defense;

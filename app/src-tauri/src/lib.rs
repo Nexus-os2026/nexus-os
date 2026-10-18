@@ -8,6 +8,7 @@ mod commands;
 // Phase Three: governed real-world control (the one front door to every
 // governed process, network, browser, display, input and connector effect).
 mod governed_real_world;
+mod hm_wiring;
 mod nx_bridge;
 pub mod oracle_runtime;
 mod phase0_surface;
@@ -1204,6 +1205,10 @@ pub struct AppState {
         Arc<Mutex<HashMap<String, std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>>>,
     /// Speculative decoding engine — pairs a fast draft model with the loaded target.
     flash_speculative: Arc<Mutex<Option<nexus_flash_infer::SpeculativeEngine>>>,
+    /// P3-HM-CONTRACT-02 §11.0: the process's single dispatch issuer, over
+    /// `db`. Without it no agent-scoped dispatch happens on any route.
+    #[allow(dead_code)] // N2 interim: the dispatch adapters read it from N3 on.
+    hm_issuer: Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
     adversarial_arena:
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
     capability_measurement: Arc<MeasurementState>,
@@ -1382,6 +1387,21 @@ impl AppState {
                     })
                 }),
         );
+        // P3-HM-CONTRACT-02 §9 (mission R6): after the legacy cleanup and the
+        // database open (or its in-memory fallback), and before any work is
+        // accepted: T₀, the ledger checks, the event back-fill; then the
+        // single dispatch issuer.
+        let meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>> = Arc::new(Mutex::new(HashMap::new()));
+        let hm_registry = Arc::new(hm_wiring::DesktopAgentRegistry::new(
+            supervisor.clone(),
+            meta.clone(),
+        ));
+        hm_wiring::start_historical_memory(&db, &hm_registry);
+        let hm_issuer = hm_wiring::build_dispatch_issuer(
+            db.clone(),
+            hm_registry,
+            Arc::new(hm_wiring::DesktopConfigInput::live()),
+        );
         // Bug AK Commit 2: run the one-shot credential-vault
         // migration before any consumer reads `config.social.x_*`
         // (twitter / social-poster / etc.), and install the
@@ -1508,7 +1528,7 @@ impl AppState {
             coding,
             real_world,
             audit,
-            meta: Arc::new(Mutex::new(HashMap::new())),
+            meta,
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
@@ -1713,6 +1733,7 @@ impl AppState {
                 nexus_flash_infer::detect_hardware(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            hm_issuer,
             flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
@@ -1770,6 +1791,13 @@ impl AppState {
     fn load_agents_deferred(&self) {
         restore_persisted_agents(self);
         self.load_prebuilt_agents();
+    }
+
+    /// The process's single dispatch issuer (P3-HM-CONTRACT-02 §11.0), or
+    /// why there is none: then no agent-scoped dispatch happens.
+    #[allow(dead_code)] // N2 interim: the dispatch adapters call it from N3 on.
+    pub(crate) fn hm_issuer(&self) -> Result<&Arc<nexus_kernel::hm::DispatchIssuer>, String> {
+        self.hm_issuer.as_ref().map_err(Clone::clone)
     }
 
     /// Clone a `Sender<OracleRequest>` for submitting governance capability
@@ -1839,6 +1867,19 @@ impl AppState {
             eprintln!("in-memory DB must succeed: {e}");
             std::process::exit(1)
         }));
+        // The start-up sequence of `new` (mission R6), over the in-memory
+        // database.
+        let meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>> = Arc::new(Mutex::new(HashMap::new()));
+        let hm_registry = Arc::new(hm_wiring::DesktopAgentRegistry::new(
+            supervisor.clone(),
+            meta.clone(),
+        ));
+        hm_wiring::start_historical_memory(&test_db, &hm_registry);
+        let hm_issuer = hm_wiring::build_dispatch_issuer(
+            test_db.clone(),
+            hm_registry,
+            Arc::new(hm_wiring::DesktopConfigInput::live()),
+        );
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore {
                 db: test_db.clone(),
@@ -1863,7 +1904,7 @@ impl AppState {
                 "governed real-world control is not configured for this test AppState".into(),
             ),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
-            meta: Arc::new(Mutex::new(HashMap::new())),
+            meta,
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
@@ -2026,6 +2067,7 @@ impl AppState {
                 nexus_flash_infer::HardwareInfo::default(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            hm_issuer,
             flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
@@ -9275,3 +9317,6 @@ mod p2_entry_tests;
 #[cfg(test)]
 #[path = "phase3_tests.rs"]
 mod phase3_tests;
+
+#[cfg(test)]
+mod hm_m3_tests;
