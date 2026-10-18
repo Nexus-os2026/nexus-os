@@ -1,0 +1,456 @@
+//! Historical-memory storage core (P3-HM-CONTRACT-02 §5, §9).
+//!
+//! Dormant: no production path calls this module. It holds the §5.1 DDL and
+//! triggers, the SQL and plain row methods used by `nexus_kernel::hm`. It
+//! returns row data and decides nothing; every authority decision (T₀,
+//! ledger checks, member states, evaluated labels) belongs to the kernel.
+
+use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
+
+use crate::{NexusDatabase, Result};
+
+/// The five in-scope record tables (§2.1), in a fixed order.
+pub const IN_SCOPE_TABLES: [&str; 5] = [
+    "agent_memory",
+    "task_history",
+    "strategy_scores",
+    "world_model_entities",
+    "world_model_relationships",
+];
+
+// ── §5.1 tables ─────────────────────────────────────────────────────────────
+
+pub const DDL_HM_MIGRATION: &str = "CREATE TABLE hm_migration (
+  k                 TEXT PRIMARY KEY CHECK (k = 'hm'),
+  contract_version  TEXT NOT NULL,            -- 'P3-HM-CONTRACT-02'
+  state             TEXT NOT NULL CHECK (state IN ('COMPLETE')),
+  t0_wallclock      TEXT NOT NULL,            -- informational only; no decision reads it
+  member_count      INTEGER NOT NULL,         -- rows of hm_t0_member, fixed at T0
+  member_set_sha256 TEXT NOT NULL             -- over hm_t0_member, §9.5; fixed at T0
+)";
+
+pub const DDL_HM_T0_MEMBER: &str =
+    "CREATE TABLE hm_t0_member (                    -- immutable T0 membership ledger (M1)
+  record_table       TEXT NOT NULL CHECK (record_table IN
+                       ('agent_memory','task_history','strategy_scores',
+                        'world_model_entities','world_model_relationships')),
+  record_id          TEXT NOT NULL,
+  agent_id           TEXT NOT NULL,
+  t0_content_sha256  TEXT NOT NULL,           -- §5.2 digest of the row at T0
+  PRIMARY KEY (record_table, record_id)
+) WITHOUT ROWID";
+
+pub const DDL_HM_T0_TOMBSTONE: &str =
+    "CREATE TABLE hm_t0_tombstone (                 -- a T0 member that was later deleted (M1)
+  record_table  TEXT NOT NULL,
+  record_id     TEXT NOT NULL,
+  PRIMARY KEY (record_table, record_id),
+  FOREIGN KEY (record_table, record_id)
+    REFERENCES hm_t0_member (record_table, record_id)
+) WITHOUT ROWID";
+
+pub const DDL_HM_AGENT_POLICY: &str = "CREATE TABLE hm_agent_policy (
+  agent_id           TEXT PRIMARY KEY,        -- supervisor UUID, canonical lowercase
+  local_only         INTEGER NOT NULL CHECK (local_only IN (0,1)),
+  policy_generation  INTEGER NOT NULL CHECK (policy_generation >= 1),
+  revocation_seq     INTEGER NOT NULL CHECK (revocation_seq >= 0),
+  basis              TEXT NOT NULL CHECK (basis IN
+                       ('t0_baseline','default_restrictive','owner_confirmed','tightened'))
+)";
+
+pub const DDL_HM_POLICY_CHANGE: &str =
+    "CREATE TABLE hm_policy_change (                -- authority history, not audit (§5.3)
+  agent_id           TEXT NOT NULL,
+  policy_generation  INTEGER NOT NULL,         -- the generation this change produced
+  local_only         INTEGER NOT NULL CHECK (local_only IN (0,1)),
+  basis              TEXT NOT NULL,
+  cause              TEXT NOT NULL CHECK (cause IN
+                       ('t0_baseline','row_created','governed_tighten','config_tighten',
+                        'owner_loosen')),
+  PRIMARY KEY (agent_id, policy_generation)
+)";
+
+pub const DDL_HM_RECORD_LABEL: &str = "CREATE TABLE hm_record_label (
+  record_table       TEXT NOT NULL CHECK (record_table IN
+                       ('agent_memory','task_history','strategy_scores',
+                        'world_model_entities','world_model_relationships')),
+  record_id          TEXT NOT NULL,           -- decimal id or goal UUID
+  agent_id           TEXT NOT NULL,
+  origin             TEXT NOT NULL CHECK (origin IN
+                       ('UNRESTRICTED_ORIGIN','LEGACY_UNKNOWN','LOCAL_ONLY_ORIGIN')),
+  source_kind        TEXT NOT NULL,           -- closed enum, §6.5
+  content_sha256     TEXT NOT NULL,           -- §5.2, current content
+  policy_generation  INTEGER NOT NULL,        -- writer's snapshot (0 for T0 labels)
+  PRIMARY KEY (record_table, record_id)
+)";
+
+pub const DDL_HM_DERIVATION: &str = "CREATE TABLE hm_derivation (
+  child_table   TEXT NOT NULL, child_id  TEXT NOT NULL,
+  parent_table  TEXT NOT NULL, parent_id TEXT NOT NULL,
+  parent_label_at_derivation TEXT NOT NULL,
+  PRIMARY KEY (child_table, child_id, parent_table, parent_id)
+)";
+
+pub const DDL_HM_GRANT: &str = "CREATE TABLE hm_grant (
+  grant_id         TEXT PRIMARY KEY,          -- 128-bit random, backend-generated
+  agent_id         TEXT NOT NULL,
+  scope            TEXT NOT NULL CHECK (scope IN ('record','pre_t0_legacy_set')),
+  record_table     TEXT,                      -- record scope only
+  record_id        TEXT,                      -- record scope only
+  bound_content_sha256 TEXT,                  -- record scope only
+  state            TEXT NOT NULL CHECK (state IN ('live','revoked')),
+  revoked_at_revocation_seq INTEGER            -- agent's revocation_seq after this revocation; NULL while live
+)";
+
+pub const DDL_HM_DISPATCH_ADMISSION: &str = "CREATE TABLE hm_dispatch_admission (
+  admission_id      TEXT PRIMARY KEY,         -- 128-bit random
+  agent_id          TEXT,                     -- NULL for an OwnerDirect (HR/HB) admission
+  unit_kind         TEXT NOT NULL,
+  route_class       TEXT NOT NULL CHECK (route_class IN ('local','non_local')),
+  policy_generation INTEGER NOT NULL,
+  revocation_seq    INTEGER NOT NULL,
+  record_count      INTEGER NOT NULL,
+  grant_dep_count   INTEGER NOT NULL,
+  raw_label         TEXT NOT NULL,           -- envelope raw_label (§11.2)
+  outcome           TEXT NOT NULL CHECK (outcome IN
+                      ('admitted','reply_used','reply_discarded','transport_failed'))
+)";
+
+pub const DDL_HM_EVENT: &str =
+    "CREATE TABLE hm_event (                        -- content-free audit outbox (§15)
+  n        INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject  TEXT NOT NULL UNIQUE,               -- the authority row it describes, §5.3
+  kind     TEXT NOT NULL,
+  agent_id TEXT,
+  fields   TEXT NOT NULL                       -- JSON of counts, classes, generations only
+)";
+
+/// The §5.1 tables in creation order (the tombstone's foreign key names the
+/// ledger, so the ledger comes first).
+pub const HM_TABLES: [(&str, &str); 10] = [
+    ("hm_migration", DDL_HM_MIGRATION),
+    ("hm_t0_member", DDL_HM_T0_MEMBER),
+    ("hm_t0_tombstone", DDL_HM_T0_TOMBSTONE),
+    ("hm_agent_policy", DDL_HM_AGENT_POLICY),
+    ("hm_policy_change", DDL_HM_POLICY_CHANGE),
+    ("hm_record_label", DDL_HM_RECORD_LABEL),
+    ("hm_derivation", DDL_HM_DERIVATION),
+    ("hm_grant", DDL_HM_GRANT),
+    ("hm_dispatch_admission", DDL_HM_DISPATCH_ADMISSION),
+    ("hm_event", DDL_HM_EVENT),
+];
+
+// ── §5.1 triggers ───────────────────────────────────────────────────────────
+//
+// Each text starts with `CREATE TRIGGER` and has no trailing semicolon, so
+// `sqlite_master.sql` stores it byte for byte; check L4 (§9.5) compares the
+// stored text with these constants.
+
+pub const TRG_T0_MEMBER_NO_INSERT_AFTER_T0: &str = "CREATE TRIGGER hm_t0_member_no_insert_after_t0
+BEFORE INSERT ON hm_t0_member
+WHEN EXISTS (SELECT 1 FROM hm_migration)
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_member: ledger is closed after T0');
+END";
+
+pub const TRG_T0_MEMBER_NO_UPDATE: &str = "CREATE TRIGGER hm_t0_member_no_update
+BEFORE UPDATE ON hm_t0_member
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_member: ledger is immutable');
+END";
+
+pub const TRG_T0_MEMBER_NO_DELETE: &str = "CREATE TRIGGER hm_t0_member_no_delete
+BEFORE DELETE ON hm_t0_member
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_member: ledger is immutable');
+END";
+
+pub const TRG_T0_TOMBSTONE_REQUIRES_ABSENT_ROW: &str =
+    "CREATE TRIGGER hm_t0_tombstone_requires_absent_row
+BEFORE INSERT ON hm_t0_tombstone
+WHEN (NEW.record_table = 'agent_memory'
+      AND EXISTS (SELECT 1 FROM agent_memory WHERE id = CAST(NEW.record_id AS INTEGER)))
+  OR (NEW.record_table = 'task_history'
+      AND EXISTS (SELECT 1 FROM task_history WHERE id = NEW.record_id))
+  OR (NEW.record_table = 'strategy_scores'
+      AND EXISTS (SELECT 1 FROM strategy_scores WHERE id = CAST(NEW.record_id AS INTEGER)))
+  OR (NEW.record_table = 'world_model_entities'
+      AND EXISTS (SELECT 1 FROM world_model_entities WHERE id = CAST(NEW.record_id AS INTEGER)))
+  OR (NEW.record_table = 'world_model_relationships'
+      AND EXISTS (SELECT 1 FROM world_model_relationships WHERE id = CAST(NEW.record_id AS INTEGER)))
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_tombstone: the named row still exists');
+END";
+
+pub const TRG_T0_TOMBSTONE_NO_UPDATE: &str = "CREATE TRIGGER hm_t0_tombstone_no_update
+BEFORE UPDATE ON hm_t0_tombstone
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_tombstone: tombstones are immutable');
+END";
+
+pub const TRG_T0_TOMBSTONE_NO_DELETE: &str = "CREATE TRIGGER hm_t0_tombstone_no_delete
+BEFORE DELETE ON hm_t0_tombstone
+BEGIN
+  SELECT RAISE(ABORT, 'hm_t0_tombstone: tombstones are immutable');
+END";
+
+pub const TRG_DEL_AGENT_MEMORY: &str = "CREATE TRIGGER hm_del_agent_memory
+AFTER DELETE ON agent_memory
+BEGIN
+  DELETE FROM hm_record_label
+    WHERE record_table = 'agent_memory' AND record_id = CAST(OLD.id AS TEXT);
+  DELETE FROM hm_derivation
+    WHERE child_table = 'agent_memory' AND child_id = CAST(OLD.id AS TEXT);
+  INSERT OR IGNORE INTO hm_t0_tombstone (record_table, record_id)
+    SELECT record_table, record_id FROM hm_t0_member
+    WHERE record_table = 'agent_memory' AND record_id = CAST(OLD.id AS TEXT);
+END";
+
+pub const TRG_DEL_TASK_HISTORY: &str = "CREATE TRIGGER hm_del_task_history
+AFTER DELETE ON task_history
+BEGIN
+  DELETE FROM hm_record_label
+    WHERE record_table = 'task_history' AND record_id = CAST(OLD.id AS TEXT);
+  DELETE FROM hm_derivation
+    WHERE child_table = 'task_history' AND child_id = CAST(OLD.id AS TEXT);
+  INSERT OR IGNORE INTO hm_t0_tombstone (record_table, record_id)
+    SELECT record_table, record_id FROM hm_t0_member
+    WHERE record_table = 'task_history' AND record_id = CAST(OLD.id AS TEXT);
+END";
+
+pub const TRG_DEL_STRATEGY_SCORES: &str = "CREATE TRIGGER hm_del_strategy_scores
+AFTER DELETE ON strategy_scores
+BEGIN
+  DELETE FROM hm_record_label
+    WHERE record_table = 'strategy_scores' AND record_id = CAST(OLD.id AS TEXT);
+  DELETE FROM hm_derivation
+    WHERE child_table = 'strategy_scores' AND child_id = CAST(OLD.id AS TEXT);
+  INSERT OR IGNORE INTO hm_t0_tombstone (record_table, record_id)
+    SELECT record_table, record_id FROM hm_t0_member
+    WHERE record_table = 'strategy_scores' AND record_id = CAST(OLD.id AS TEXT);
+END";
+
+pub const TRG_DEL_WORLD_MODEL_ENTITIES: &str = "CREATE TRIGGER hm_del_world_model_entities
+AFTER DELETE ON world_model_entities
+BEGIN
+  DELETE FROM hm_record_label
+    WHERE record_table = 'world_model_entities' AND record_id = CAST(OLD.id AS TEXT);
+  DELETE FROM hm_derivation
+    WHERE child_table = 'world_model_entities' AND child_id = CAST(OLD.id AS TEXT);
+  INSERT OR IGNORE INTO hm_t0_tombstone (record_table, record_id)
+    SELECT record_table, record_id FROM hm_t0_member
+    WHERE record_table = 'world_model_entities' AND record_id = CAST(OLD.id AS TEXT);
+END";
+
+pub const TRG_DEL_WORLD_MODEL_RELATIONSHIPS: &str =
+    "CREATE TRIGGER hm_del_world_model_relationships
+AFTER DELETE ON world_model_relationships
+BEGIN
+  DELETE FROM hm_record_label
+    WHERE record_table = 'world_model_relationships' AND record_id = CAST(OLD.id AS TEXT);
+  DELETE FROM hm_derivation
+    WHERE child_table = 'world_model_relationships' AND child_id = CAST(OLD.id AS TEXT);
+  INSERT OR IGNORE INTO hm_t0_tombstone (record_table, record_id)
+    SELECT record_table, record_id FROM hm_t0_member
+    WHERE record_table = 'world_model_relationships' AND record_id = CAST(OLD.id AS TEXT);
+END";
+
+pub const TRG_RECORD_LABEL_NO_LOWERING: &str = "CREATE TRIGGER hm_record_label_no_lowering
+BEFORE UPDATE OF origin ON hm_record_label
+WHEN (CASE NEW.origin WHEN 'UNRESTRICTED_ORIGIN' THEN 0 WHEN 'LEGACY_UNKNOWN' THEN 1
+                      WHEN 'LOCAL_ONLY_ORIGIN' THEN 2 END)
+   < (CASE OLD.origin WHEN 'UNRESTRICTED_ORIGIN' THEN 0 WHEN 'LEGACY_UNKNOWN' THEN 1
+                      WHEN 'LOCAL_ONLY_ORIGIN' THEN 2 END)
+BEGIN
+  SELECT RAISE(ABORT, 'hm_record_label: origin cannot be lowered');
+END";
+
+pub const TRG_GRANT_NO_UNREVOKE: &str = "CREATE TRIGGER hm_grant_no_unrevoke
+BEFORE UPDATE OF state ON hm_grant
+WHEN OLD.state = 'revoked' AND NEW.state = 'live'
+BEGIN
+  SELECT RAISE(ABORT, 'hm_grant: a revoked grant cannot become live');
+END";
+
+pub const TRG_GRANT_REVOKED_SEQ_FIXED: &str = "CREATE TRIGGER hm_grant_revoked_seq_fixed
+BEFORE UPDATE OF revoked_at_revocation_seq ON hm_grant
+WHEN OLD.revoked_at_revocation_seq IS NOT NULL
+ AND NEW.revoked_at_revocation_seq IS NOT OLD.revoked_at_revocation_seq
+BEGIN
+  SELECT RAISE(ABORT, 'hm_grant: revoked_at_revocation_seq is fixed once set');
+END";
+
+pub const TRG_AGENT_POLICY_NO_LOWERING: &str = "CREATE TRIGGER hm_agent_policy_no_lowering
+BEFORE UPDATE ON hm_agent_policy
+WHEN NEW.policy_generation < OLD.policy_generation
+  OR NEW.revocation_seq < OLD.revocation_seq
+BEGIN
+  SELECT RAISE(ABORT, 'hm_agent_policy: generation and revocation sequence never fall');
+END";
+
+pub const TRG_POLICY_CHANGE_NO_UPDATE: &str = "CREATE TRIGGER hm_policy_change_no_update
+BEFORE UPDATE ON hm_policy_change
+BEGIN
+  SELECT RAISE(ABORT, 'hm_policy_change: insert-only');
+END";
+
+pub const TRG_POLICY_CHANGE_NO_DELETE: &str = "CREATE TRIGGER hm_policy_change_no_delete
+BEFORE DELETE ON hm_policy_change
+BEGIN
+  SELECT RAISE(ABORT, 'hm_policy_change: insert-only');
+END";
+
+pub const TRG_AGENT_POLICY_INSERT_REQUIRES_HISTORY: &str =
+    "CREATE TRIGGER hm_agent_policy_insert_requires_history
+BEFORE INSERT ON hm_agent_policy
+WHEN NOT EXISTS (SELECT 1 FROM hm_policy_change
+                 WHERE agent_id = NEW.agent_id
+                   AND policy_generation = NEW.policy_generation
+                   AND local_only = NEW.local_only)
+BEGIN
+  SELECT RAISE(ABORT, 'hm_agent_policy: write its hm_policy_change row first');
+END";
+
+pub const TRG_AGENT_POLICY_UPDATE_REQUIRES_HISTORY: &str =
+    "CREATE TRIGGER hm_agent_policy_update_requires_history
+BEFORE UPDATE ON hm_agent_policy
+WHEN (NEW.local_only IS NOT OLD.local_only
+      OR NEW.policy_generation IS NOT OLD.policy_generation)
+ AND NOT EXISTS (SELECT 1 FROM hm_policy_change
+                 WHERE agent_id = NEW.agent_id
+                   AND policy_generation = NEW.policy_generation
+                   AND local_only = NEW.local_only)
+BEGIN
+  SELECT RAISE(ABORT, 'hm_agent_policy: write its hm_policy_change row first');
+END";
+
+/// Every §5.1 trigger, in creation order.
+pub const HM_TRIGGERS: [(&str, &str); 19] = [
+    (
+        "hm_t0_member_no_insert_after_t0",
+        TRG_T0_MEMBER_NO_INSERT_AFTER_T0,
+    ),
+    ("hm_t0_member_no_update", TRG_T0_MEMBER_NO_UPDATE),
+    ("hm_t0_member_no_delete", TRG_T0_MEMBER_NO_DELETE),
+    (
+        "hm_t0_tombstone_requires_absent_row",
+        TRG_T0_TOMBSTONE_REQUIRES_ABSENT_ROW,
+    ),
+    ("hm_t0_tombstone_no_update", TRG_T0_TOMBSTONE_NO_UPDATE),
+    ("hm_t0_tombstone_no_delete", TRG_T0_TOMBSTONE_NO_DELETE),
+    ("hm_del_agent_memory", TRG_DEL_AGENT_MEMORY),
+    ("hm_del_task_history", TRG_DEL_TASK_HISTORY),
+    ("hm_del_strategy_scores", TRG_DEL_STRATEGY_SCORES),
+    ("hm_del_world_model_entities", TRG_DEL_WORLD_MODEL_ENTITIES),
+    (
+        "hm_del_world_model_relationships",
+        TRG_DEL_WORLD_MODEL_RELATIONSHIPS,
+    ),
+    ("hm_record_label_no_lowering", TRG_RECORD_LABEL_NO_LOWERING),
+    ("hm_grant_no_unrevoke", TRG_GRANT_NO_UNREVOKE),
+    ("hm_grant_revoked_seq_fixed", TRG_GRANT_REVOKED_SEQ_FIXED),
+    ("hm_agent_policy_no_lowering", TRG_AGENT_POLICY_NO_LOWERING),
+    ("hm_policy_change_no_update", TRG_POLICY_CHANGE_NO_UPDATE),
+    ("hm_policy_change_no_delete", TRG_POLICY_CHANGE_NO_DELETE),
+    (
+        "hm_agent_policy_insert_requires_history",
+        TRG_AGENT_POLICY_INSERT_REQUIRES_HISTORY,
+    ),
+    (
+        "hm_agent_policy_update_requires_history",
+        TRG_AGENT_POLICY_UPDATE_REQUIRES_HISTORY,
+    ),
+];
+
+/// The triggers check L4 (§9.5) compares against `sqlite_master`: the
+/// ledger, tombstone and delete triggers.
+pub const L4_TRIGGERS: [(&str, &str); 11] = [
+    (
+        "hm_t0_member_no_insert_after_t0",
+        TRG_T0_MEMBER_NO_INSERT_AFTER_T0,
+    ),
+    ("hm_t0_member_no_update", TRG_T0_MEMBER_NO_UPDATE),
+    ("hm_t0_member_no_delete", TRG_T0_MEMBER_NO_DELETE),
+    (
+        "hm_t0_tombstone_requires_absent_row",
+        TRG_T0_TOMBSTONE_REQUIRES_ABSENT_ROW,
+    ),
+    ("hm_t0_tombstone_no_update", TRG_T0_TOMBSTONE_NO_UPDATE),
+    ("hm_t0_tombstone_no_delete", TRG_T0_TOMBSTONE_NO_DELETE),
+    ("hm_del_agent_memory", TRG_DEL_AGENT_MEMORY),
+    ("hm_del_task_history", TRG_DEL_TASK_HISTORY),
+    ("hm_del_strategy_scores", TRG_DEL_STRATEGY_SCORES),
+    ("hm_del_world_model_entities", TRG_DEL_WORLD_MODEL_ENTITIES),
+    (
+        "hm_del_world_model_relationships",
+        TRG_DEL_WORLD_MODEL_RELATIONSHIPS,
+    ),
+];
+
+// ── Store handle ────────────────────────────────────────────────────────────
+
+/// Row-level access to the historical-memory tables. Obtained only through
+/// `NexusDatabase::hm`. Its single legitimate caller is `nexus_kernel::hm`
+/// (§11.0); it carries no label or route-class decision.
+#[doc(hidden)]
+pub struct HmStore<'a> {
+    db: &'a NexusDatabase,
+}
+
+impl<'a> HmStore<'a> {
+    pub(crate) fn new(db: &'a NexusDatabase) -> Self {
+        Self { db }
+    }
+
+    /// Runs `f` inside one `BEGIN IMMEDIATE` transaction on this database's
+    /// connection. Commits only if `f` returns `Ok`; otherwise the
+    /// transaction is rolled back when it is dropped.
+    pub fn immediate<R>(&self, f: impl FnOnce(&HmTx<'_>) -> Result<R>) -> Result<R> {
+        let mut conn = self.db.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let out = f(&HmTx { tx: &tx })?;
+        tx.commit()?;
+        Ok(out)
+    }
+}
+
+/// Plain row methods inside one `HmStore::immediate` transaction.
+#[doc(hidden)]
+pub struct HmTx<'t> {
+    tx: &'t Transaction<'t>,
+}
+
+impl HmTx<'_> {
+    /// Whether a table of this name exists.
+    pub fn table_exists(&self, name: &str) -> Result<bool> {
+        let n: i64 = self.tx.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![name],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Creates the §5.1 tables, then the §5.1 triggers.
+    pub fn create_schema(&self) -> Result<()> {
+        for (_, ddl) in HM_TABLES {
+            self.tx.execute_batch(ddl)?;
+        }
+        for (_, ddl) in HM_TRIGGERS {
+            self.tx.execute_batch(ddl)?;
+        }
+        Ok(())
+    }
+
+    /// The stored `sqlite_master.sql` of a trigger, if one of that name exists.
+    pub fn trigger_sql(&self, name: &str) -> Result<Option<String>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1",
+                params![name],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+}

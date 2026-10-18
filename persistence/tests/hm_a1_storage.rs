@@ -1,0 +1,964 @@
+//! P3-C11-HM-A1: storage-core tests for the dormant historical-memory module
+//! (P3-HM-CONTRACT-02 §5.1 schema and triggers, §5.2 digest, persistence-scope
+//! guards of A-S1). Synthetic in-memory or test-owned databases only.
+
+use nexus_persistence::hm::{HM_TABLES, HM_TRIGGERS};
+use nexus_persistence::NexusDatabase;
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+fn db_with_schema() -> NexusDatabase {
+    let db = NexusDatabase::in_memory().expect("in-memory database");
+    db.hm()
+        .immediate(|tx| tx.create_schema())
+        .expect("create hm schema");
+    db
+}
+
+/// Runs a batch on a test transaction; returns the SQLite error text on failure.
+fn exec(db: &NexusDatabase, sql: &str) -> Result<(), String> {
+    db.with_transaction(|tx| {
+        tx.execute_batch(sql)?;
+        Ok(())
+    })
+    .map_err(|e| e.to_string())
+}
+
+fn count(db: &NexusDatabase, sql: &str) -> i64 {
+    db.with_transaction(|tx| Ok(tx.query_row(sql, [], |r| r.get::<_, i64>(0))?))
+        .expect("count query")
+}
+
+fn text(db: &NexusDatabase, sql: &str) -> Option<String> {
+    db.with_transaction(|tx| Ok(tx.query_row(sql, [], |r| r.get::<_, Option<String>>(0))?))
+        .expect("text query")
+}
+
+fn assert_rejected(db: &NexusDatabase, sql: &str, needle: &str) {
+    match exec(db, sql) {
+        Ok(()) => panic!("expected rejection containing {needle:?} for: {sql}"),
+        Err(e) => assert!(
+            e.contains(needle),
+            "rejection {e:?} lacks {needle:?} for: {sql}"
+        ),
+    }
+}
+
+fn assert_accepted(db: &NexusDatabase, sql: &str) {
+    if let Err(e) = exec(db, sql) {
+        panic!("expected acceptance, got {e} for: {sql}");
+    }
+}
+
+const MIGRATION_ROW: &str = "INSERT INTO hm_migration
+    (k, contract_version, state, t0_wallclock, member_count, member_set_sha256)
+    VALUES ('hm', 'P3-HM-CONTRACT-02', 'COMPLETE', '2026-01-01T00:00:00Z', 1, 'x')";
+
+/// One agent_memory row (id 1), labelled and ledgered as a T0 member, with
+/// the migration row written (the ledger is then closed).
+fn db_with_member() -> NexusDatabase {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, created_at, last_accessed)
+           VALUES (1, 'a', 'episodic', 'SYNTH-k1', '\"SYNTH-v1\"', 't', 't');
+         INSERT INTO hm_t0_member VALUES ('agent_memory', '1', 'a', 'd1');
+         INSERT INTO hm_record_label VALUES ('agent_memory', '1', 'a', 'LEGACY_UNKNOWN', 'legacy', 'd1', 0);",
+    );
+    assert_accepted(&db, MIGRATION_ROW);
+    db
+}
+
+// ── N1: exact §5.1 schema ───────────────────────────────────────────────────
+
+/// Independent transcription of the contract's §5.1 DDL (02-P3-HM-CONTRACT-02.md
+/// lines 366-465). Compared after removing `--` comments and collapsing
+/// whitespace.
+const CONTRACT_5_1_DDL: &str = r#"
+CREATE TABLE hm_migration (
+  k                 TEXT PRIMARY KEY CHECK (k = 'hm'),
+  contract_version  TEXT NOT NULL,            -- 'P3-HM-CONTRACT-02'
+  state             TEXT NOT NULL CHECK (state IN ('COMPLETE')),
+  t0_wallclock      TEXT NOT NULL,            -- informational only; no decision reads it
+  member_count      INTEGER NOT NULL,         -- rows of hm_t0_member, fixed at T0
+  member_set_sha256 TEXT NOT NULL             -- over hm_t0_member, §9.5; fixed at T0
+);
+
+CREATE TABLE hm_t0_member (                    -- immutable T0 membership ledger (M1)
+  record_table       TEXT NOT NULL CHECK (record_table IN
+                       ('agent_memory','task_history','strategy_scores',
+                        'world_model_entities','world_model_relationships')),
+  record_id          TEXT NOT NULL,
+  agent_id           TEXT NOT NULL,
+  t0_content_sha256  TEXT NOT NULL,           -- §5.2 digest of the row at T0
+  PRIMARY KEY (record_table, record_id)
+) WITHOUT ROWID;
+
+CREATE TABLE hm_t0_tombstone (                 -- a T0 member that was later deleted (M1)
+  record_table  TEXT NOT NULL,
+  record_id     TEXT NOT NULL,
+  PRIMARY KEY (record_table, record_id),
+  FOREIGN KEY (record_table, record_id)
+    REFERENCES hm_t0_member (record_table, record_id)
+) WITHOUT ROWID;
+
+CREATE TABLE hm_agent_policy (
+  agent_id           TEXT PRIMARY KEY,        -- supervisor UUID, canonical lowercase
+  local_only         INTEGER NOT NULL CHECK (local_only IN (0,1)),
+  policy_generation  INTEGER NOT NULL CHECK (policy_generation >= 1),
+  revocation_seq     INTEGER NOT NULL CHECK (revocation_seq >= 0),
+  basis              TEXT NOT NULL CHECK (basis IN
+                       ('t0_baseline','default_restrictive','owner_confirmed','tightened'))
+);
+
+CREATE TABLE hm_policy_change (                -- authority history, not audit (§5.3)
+  agent_id           TEXT NOT NULL,
+  policy_generation  INTEGER NOT NULL,         -- the generation this change produced
+  local_only         INTEGER NOT NULL CHECK (local_only IN (0,1)),
+  basis              TEXT NOT NULL,
+  cause              TEXT NOT NULL CHECK (cause IN
+                       ('t0_baseline','row_created','governed_tighten','config_tighten',
+                        'owner_loosen')),
+  PRIMARY KEY (agent_id, policy_generation)
+);
+
+CREATE TABLE hm_record_label (
+  record_table       TEXT NOT NULL CHECK (record_table IN
+                       ('agent_memory','task_history','strategy_scores',
+                        'world_model_entities','world_model_relationships')),
+  record_id          TEXT NOT NULL,           -- decimal id or goal UUID
+  agent_id           TEXT NOT NULL,
+  origin             TEXT NOT NULL CHECK (origin IN
+                       ('UNRESTRICTED_ORIGIN','LEGACY_UNKNOWN','LOCAL_ONLY_ORIGIN')),
+  source_kind        TEXT NOT NULL,           -- closed enum, §6.5
+  content_sha256     TEXT NOT NULL,           -- §5.2, current content
+  policy_generation  INTEGER NOT NULL,        -- writer's snapshot (0 for T0 labels)
+  PRIMARY KEY (record_table, record_id)
+);
+
+CREATE TABLE hm_derivation (
+  child_table   TEXT NOT NULL, child_id  TEXT NOT NULL,
+  parent_table  TEXT NOT NULL, parent_id TEXT NOT NULL,
+  parent_label_at_derivation TEXT NOT NULL,
+  PRIMARY KEY (child_table, child_id, parent_table, parent_id)
+);
+
+CREATE TABLE hm_grant (
+  grant_id         TEXT PRIMARY KEY,          -- 128-bit random, backend-generated
+  agent_id         TEXT NOT NULL,
+  scope            TEXT NOT NULL CHECK (scope IN ('record','pre_t0_legacy_set')),
+  record_table     TEXT,                      -- record scope only
+  record_id        TEXT,                      -- record scope only
+  bound_content_sha256 TEXT,                  -- record scope only
+  state            TEXT NOT NULL CHECK (state IN ('live','revoked')),
+  revoked_at_revocation_seq INTEGER            -- agent's revocation_seq after this revocation; NULL while live
+);
+
+CREATE TABLE hm_dispatch_admission (
+  admission_id      TEXT PRIMARY KEY,         -- 128-bit random
+  agent_id          TEXT,                     -- NULL for an OwnerDirect (HR/HB) admission
+  unit_kind         TEXT NOT NULL,
+  route_class       TEXT NOT NULL CHECK (route_class IN ('local','non_local')),
+  policy_generation INTEGER NOT NULL,
+  revocation_seq    INTEGER NOT NULL,
+  record_count      INTEGER NOT NULL,
+  grant_dep_count   INTEGER NOT NULL,
+  raw_label         TEXT NOT NULL,           -- envelope raw_label (§11.2)
+  outcome           TEXT NOT NULL CHECK (outcome IN
+                      ('admitted','reply_used','reply_discarded','transport_failed'))
+);
+
+CREATE TABLE hm_event (                        -- content-free audit outbox (§15)
+  n        INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject  TEXT NOT NULL UNIQUE,               -- the authority row it describes, §5.3
+  kind     TEXT NOT NULL,
+  agent_id TEXT,
+  fields   TEXT NOT NULL                       -- JSON of counts, classes, generations only
+);
+"#;
+
+fn normalize_sql(sql: &str) -> String {
+    let no_comments: Vec<&str> = sql
+        .lines()
+        .map(|l| match l.find("--") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect();
+    no_comments
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_end_matches(';')
+        .trim()
+        .to_string()
+}
+
+#[test]
+fn hm_n1_schema_matches_contract_5_1_exactly() {
+    let db = db_with_schema();
+    // Comments are removed before splitting: one of them contains a ';'.
+    let contract: Vec<String> = normalize_sql(CONTRACT_5_1_DDL)
+        .split(';')
+        .map(normalize_sql)
+        .filter(|s| !s.is_empty())
+        .collect();
+    assert_eq!(contract.len(), 10, "the contract defines ten tables");
+    assert_eq!(HM_TABLES.len(), 10);
+    for stmt in &contract {
+        let name = stmt
+            .strip_prefix("CREATE TABLE ")
+            .and_then(|r| r.split_whitespace().next())
+            .expect("table name");
+        let stored = text(
+            &db,
+            &format!("SELECT sql FROM sqlite_master WHERE type='table' AND name='{name}'"),
+        )
+        .unwrap_or_else(|| panic!("table {name} missing"));
+        assert_eq!(
+            normalize_sql(&stored),
+            *stmt,
+            "table {name} differs from §5.1"
+        );
+    }
+    // No other hm_* table exists.
+    assert_eq!(
+        count(
+            &db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'hm\\_%' ESCAPE '\\'"
+        ),
+        10
+    );
+    // WITHOUT ROWID on the ledger and the tombstone table.
+    for t in ["hm_t0_member", "hm_t0_tombstone"] {
+        let sql = text(
+            &db,
+            &format!("SELECT sql FROM sqlite_master WHERE name='{t}'"),
+        )
+        .unwrap();
+        assert!(
+            sql.trim_end().ends_with("WITHOUT ROWID"),
+            "{t} must be WITHOUT ROWID"
+        );
+    }
+    // Every §5.1 trigger exists, and no other hm_* trigger.
+    for (name, _) in HM_TRIGGERS {
+        assert_eq!(
+            count(
+                &db,
+                &format!(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='{name}'"
+                )
+            ),
+            1,
+            "trigger {name} missing"
+        );
+    }
+    assert_eq!(
+        count(
+            &db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'hm\\_%' ESCAPE '\\'"
+        ),
+        HM_TRIGGERS.len() as i64
+    );
+    // Stored trigger text is byte-identical to the constants (L4 relies on it).
+    for (name, sql) in HM_TRIGGERS {
+        let stored = text(
+            &db,
+            &format!("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='{name}'"),
+        )
+        .unwrap();
+        assert_eq!(stored, sql, "stored text of {name}");
+    }
+}
+
+#[test]
+fn hm_n1_schema_check_constraints_reject_out_of_domain_values() {
+    let db = db_with_schema();
+    for (sql, needle) in [
+        ("INSERT INTO hm_migration VALUES ('x','c','COMPLETE','t',0,'d')", "CHECK"),
+        ("INSERT INTO hm_migration VALUES ('hm','c','PARTIAL','t',0,'d')", "CHECK"),
+        ("INSERT INTO hm_t0_member VALUES ('agents','1','a','d')", "CHECK"),
+        ("INSERT INTO hm_record_label VALUES ('agent_memory','1','a','PUBLIC','legacy','d',0)", "CHECK"),
+        ("INSERT INTO hm_policy_change VALUES ('a',1,2,'t0_baseline','t0_baseline')", "CHECK"),
+        ("INSERT INTO hm_policy_change VALUES ('a',1,1,'t0_baseline','webview')", "CHECK"),
+        ("INSERT INTO hm_grant VALUES ('g','a','everything',NULL,NULL,NULL,'live',NULL)", "CHECK"),
+        ("INSERT INTO hm_grant VALUES ('g','a','record',NULL,NULL,NULL,'pending',NULL)", "CHECK"),
+        ("INSERT INTO hm_dispatch_admission VALUES ('d','a','Goal','cloud',1,0,0,0,'L','admitted')", "CHECK"),
+        ("INSERT INTO hm_dispatch_admission VALUES ('d','a','Goal','local',1,0,0,0,'L','sent')", "CHECK"),
+    ] {
+        assert_rejected(&db, sql, needle);
+    }
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',1,1,'t0_baseline','t0_baseline');
+         INSERT INTO hm_agent_policy VALUES ('a',1,1,0,'t0_baseline');",
+    );
+    for (sql, needle) in [
+        (
+            "UPDATE hm_agent_policy SET basis='webview' WHERE agent_id='a'",
+            "CHECK",
+        ),
+        (
+            "INSERT INTO hm_policy_change VALUES ('b',0,1,'x','row_created');
+          INSERT INTO hm_agent_policy VALUES ('b',1,0,0,'tightened')",
+            "CHECK",
+        ),
+        (
+            "UPDATE hm_agent_policy SET revocation_seq=-1 WHERE agent_id='a'",
+            "",
+        ),
+    ] {
+        assert_rejected(&db, sql, needle);
+    }
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_event (subject, kind, agent_id, fields) VALUES ('s','k',NULL,'{}')",
+    );
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_event (subject, kind, agent_id, fields) VALUES ('s','k2',NULL,'{}')",
+        "UNIQUE",
+    );
+}
+
+// ── N1: ledger triggers ─────────────────────────────────────────────────────
+
+#[test]
+fn hm_n1_ledger_insert_accepted_before_migration_row() {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_t0_member VALUES ('agent_memory','7','a','d')",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 1);
+}
+
+#[test]
+fn hm_n1_ledger_insert_rejected_after_migration_row() {
+    let db = db_with_member();
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_t0_member VALUES ('agent_memory','2','a','d2')",
+        "ledger is closed after T0",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 1);
+}
+
+#[test]
+fn hm_n1_ledger_update_rejected() {
+    let db = db_with_member();
+    for set in [
+        "t0_content_sha256='forged'",
+        "agent_id='b'",
+        "record_id='9'",
+        "record_table='task_history'",
+    ] {
+        assert_rejected(
+            &db,
+            &format!("UPDATE hm_t0_member SET {set} WHERE record_id='1'"),
+            "ledger is immutable",
+        );
+    }
+    assert_eq!(
+        text(&db, "SELECT t0_content_sha256 FROM hm_t0_member").as_deref(),
+        Some("d1")
+    );
+}
+
+#[test]
+fn hm_n1_ledger_update_trigger_accepts_label_content_update() {
+    // §6.7: a content update rewrites the label digest, never the ledger.
+    let db = db_with_member();
+    assert_accepted(
+        &db,
+        "UPDATE hm_record_label SET content_sha256='d1-new', origin='LOCAL_ONLY_ORIGIN'
+           WHERE record_table='agent_memory' AND record_id='1'",
+    );
+    assert_eq!(
+        text(&db, "SELECT t0_content_sha256 FROM hm_t0_member").as_deref(),
+        Some("d1")
+    );
+}
+
+#[test]
+fn hm_n1_ledger_delete_rejected() {
+    let db = db_with_member();
+    assert_rejected(&db, "DELETE FROM hm_t0_member", "ledger is immutable");
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 1);
+}
+
+#[test]
+fn hm_n1_ledger_delete_trigger_accepts_member_row_deletion() {
+    // Deleting the in-scope row is accepted; the ledger row survives (§6.8).
+    let db = db_with_member();
+    assert_accepted(&db, "DELETE FROM agent_memory WHERE id=1");
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 1);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 1);
+}
+
+// ── N1: tombstone triggers ──────────────────────────────────────────────────
+
+#[test]
+fn hm_n1_tombstone_insert_rejected_while_row_exists() {
+    let db = db_with_member();
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_t0_tombstone VALUES ('agent_memory','1')",
+        "the named row still exists",
+    );
+    // Same for a UUID-keyed table.
+    assert_accepted(
+        &db,
+        "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at)
+           VALUES ('11111111-1111-4111-8111-111111111111','a','SYNTH-goal','done','[]','t')",
+    );
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_t0_tombstone VALUES ('task_history','11111111-1111-4111-8111-111111111111')",
+        "the named row still exists",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 0);
+}
+
+#[test]
+fn hm_n1_tombstone_insert_accepted_once_row_is_absent() {
+    let db = db_with_member();
+    // Remove the row out of band (no delete trigger), then tombstone it directly.
+    assert_accepted(
+        &db,
+        "DROP TRIGGER hm_del_agent_memory; DELETE FROM agent_memory WHERE id=1;",
+    );
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_t0_tombstone VALUES ('agent_memory','1')",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 1);
+}
+
+#[test]
+fn hm_n1_tombstone_update_rejected() {
+    let db = db_with_member();
+    assert_accepted(&db, "DELETE FROM agent_memory WHERE id=1");
+    assert_rejected(
+        &db,
+        "UPDATE hm_t0_tombstone SET record_id='2'",
+        "tombstones are immutable",
+    );
+    assert_eq!(
+        text(&db, "SELECT record_id FROM hm_t0_tombstone").as_deref(),
+        Some("1")
+    );
+}
+
+#[test]
+fn hm_n1_tombstone_update_trigger_accepts_idempotent_reinsert() {
+    // The delete triggers use INSERT OR IGNORE: a repeated tombstone is a no-op.
+    let db = db_with_member();
+    assert_accepted(&db, "DELETE FROM agent_memory WHERE id=1");
+    assert_accepted(
+        &db,
+        "INSERT OR IGNORE INTO hm_t0_tombstone VALUES ('agent_memory','1')",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 1);
+}
+
+#[test]
+fn hm_n1_tombstone_delete_rejected() {
+    let db = db_with_member();
+    assert_accepted(&db, "DELETE FROM agent_memory WHERE id=1");
+    assert_rejected(
+        &db,
+        "DELETE FROM hm_t0_tombstone",
+        "tombstones are immutable",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 1);
+}
+
+#[test]
+fn hm_n1_tombstone_delete_trigger_accepts_trigger_written_tombstone() {
+    let db = db_with_member();
+    assert_accepted(&db, "DELETE FROM agent_memory WHERE id=1");
+    assert_eq!(
+        text(
+            &db,
+            "SELECT record_table || ':' || record_id FROM hm_t0_tombstone"
+        )
+        .as_deref(),
+        Some("agent_memory:1")
+    );
+}
+
+// ── N1: the five delete triggers ────────────────────────────────────────────
+
+struct InScope {
+    table: &'static str,
+    insert_member: &'static str,
+    insert_other: &'static str,
+    member_id: &'static str,
+    other_id: &'static str,
+    delete_member: &'static str,
+    delete_other: &'static str,
+}
+
+const IN_SCOPE: [InScope; 5] = [
+    InScope {
+        table: "agent_memory",
+        insert_member: "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, created_at, last_accessed) VALUES (10,'a','episodic','SYNTH-k','\"v\"','t','t')",
+        insert_other: "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, created_at, last_accessed) VALUES (11,'a','episodic','SYNTH-k2','\"v\"','t','t')",
+        member_id: "10",
+        other_id: "11",
+        delete_member: "DELETE FROM agent_memory WHERE id=10",
+        delete_other: "DELETE FROM agent_memory WHERE id=11",
+    },
+    InScope {
+        table: "task_history",
+        insert_member: "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at) VALUES ('aaaaaaaa-0000-4000-8000-000000000010','a','SYNTH-g','done','[]','t')",
+        insert_other: "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at) VALUES ('aaaaaaaa-0000-4000-8000-000000000011','a','SYNTH-g2','done','[]','t')",
+        member_id: "aaaaaaaa-0000-4000-8000-000000000010",
+        other_id: "aaaaaaaa-0000-4000-8000-000000000011",
+        delete_member: "DELETE FROM task_history WHERE id='aaaaaaaa-0000-4000-8000-000000000010'",
+        delete_other: "DELETE FROM task_history WHERE id='aaaaaaaa-0000-4000-8000-000000000011'",
+    },
+    InScope {
+        table: "strategy_scores",
+        insert_member: "INSERT INTO strategy_scores (id, agent_id, strategy_hash, goal_type, updated_at) VALUES (10,'a','h10','g','t')",
+        insert_other: "INSERT INTO strategy_scores (id, agent_id, strategy_hash, goal_type, updated_at) VALUES (11,'a','h11','g','t')",
+        member_id: "10",
+        other_id: "11",
+        delete_member: "DELETE FROM strategy_scores WHERE id=10",
+        delete_other: "DELETE FROM strategy_scores WHERE id=11",
+    },
+    InScope {
+        table: "world_model_entities",
+        insert_member: "INSERT INTO world_model_entities (id, agent_id, entity_json, created_at) VALUES (10,'a','{}','t')",
+        insert_other: "INSERT INTO world_model_entities (id, agent_id, entity_json, created_at) VALUES (11,'a','{}','t')",
+        member_id: "10",
+        other_id: "11",
+        delete_member: "DELETE FROM world_model_entities WHERE id=10",
+        delete_other: "DELETE FROM world_model_entities WHERE id=11",
+    },
+    InScope {
+        table: "world_model_relationships",
+        insert_member: "INSERT INTO world_model_relationships (id, agent_id, relationship_json, created_at) VALUES (10,'a','{}','t')",
+        insert_other: "INSERT INTO world_model_relationships (id, agent_id, relationship_json, created_at) VALUES (11,'a','{}','t')",
+        member_id: "10",
+        other_id: "11",
+        delete_member: "DELETE FROM world_model_relationships WHERE id=10",
+        delete_other: "DELETE FROM world_model_relationships WHERE id=11",
+    },
+];
+
+/// Member row and non-member row, both labelled; each is the child of one
+/// derivation edge and the parent of another. The migration row closes the
+/// ledger afterwards.
+fn db_for_delete_trigger(s: &InScope) -> NexusDatabase {
+    let db = db_with_schema();
+    let t = s.table;
+    let (m, o) = (s.member_id, s.other_id);
+    assert_accepted(&db, s.insert_member);
+    assert_accepted(&db, s.insert_other);
+    assert_accepted(
+        &db,
+        &format!(
+            "INSERT INTO hm_t0_member VALUES ('{t}','{m}','a','dm');
+             INSERT INTO hm_record_label VALUES ('{t}','{m}','a','LEGACY_UNKNOWN','legacy','dm',0);
+             INSERT INTO hm_record_label VALUES ('{t}','{o}','a','LOCAL_ONLY_ORIGIN','loop_episodic','do',1);
+             INSERT INTO hm_derivation VALUES ('{t}','{m}','agent_memory','900','LEGACY_UNKNOWN');
+             INSERT INTO hm_derivation VALUES ('{t}','{o}','agent_memory','901','LOCAL_ONLY_ORIGIN');
+             INSERT INTO hm_derivation VALUES ('agent_memory','902','{t}','{m}','LEGACY_UNKNOWN');
+             INSERT INTO hm_derivation VALUES ('agent_memory','903','{t}','{o}','LOCAL_ONLY_ORIGIN');"
+        ),
+    );
+    assert_accepted(&db, MIGRATION_ROW);
+    db
+}
+
+fn label_count(db: &NexusDatabase, t: &str, id: &str) -> i64 {
+    count(
+        db,
+        &format!(
+            "SELECT COUNT(*) FROM hm_record_label WHERE record_table='{t}' AND record_id='{id}'"
+        ),
+    )
+}
+
+fn child_edge_count(db: &NexusDatabase, t: &str, id: &str) -> i64 {
+    count(
+        db,
+        &format!("SELECT COUNT(*) FROM hm_derivation WHERE child_table='{t}' AND child_id='{id}'"),
+    )
+}
+
+fn parent_edge_count(db: &NexusDatabase, t: &str, id: &str) -> i64 {
+    count(
+        db,
+        &format!(
+            "SELECT COUNT(*) FROM hm_derivation WHERE parent_table='{t}' AND parent_id='{id}'"
+        ),
+    )
+}
+
+fn tombstone_count(db: &NexusDatabase, t: &str, id: &str) -> i64 {
+    count(
+        db,
+        &format!(
+            "SELECT COUNT(*) FROM hm_t0_tombstone WHERE record_table='{t}' AND record_id='{id}'"
+        ),
+    )
+}
+
+#[test]
+fn hm_n1_delete_triggers_remove_label_and_child_edges_and_tombstone_members() {
+    for s in &IN_SCOPE {
+        let db = db_for_delete_trigger(s);
+        let (t, m) = (s.table, s.member_id);
+        assert_accepted(&db, s.delete_member);
+        assert_eq!(label_count(&db, t, m), 0, "{t}: member label removed");
+        assert_eq!(child_edge_count(&db, t, m), 0, "{t}: child edges removed");
+        assert_eq!(tombstone_count(&db, t, m), 1, "{t}: member tombstoned");
+        assert_eq!(
+            count(
+                &db,
+                &format!("SELECT COUNT(*) FROM hm_t0_member WHERE record_table='{t}'")
+            ),
+            1,
+            "{t}: ledger untouched"
+        );
+    }
+}
+
+#[test]
+fn hm_n1_delete_triggers_reject_tombstone_for_non_member_and_touch_nothing_else() {
+    for s in &IN_SCOPE {
+        let db = db_for_delete_trigger(s);
+        let (t, m, o) = (s.table, s.member_id, s.other_id);
+        assert_accepted(&db, s.delete_other);
+        assert_eq!(label_count(&db, t, o), 0, "{t}: non-member label removed");
+        assert_eq!(
+            child_edge_count(&db, t, o),
+            0,
+            "{t}: non-member child edges removed"
+        );
+        assert_eq!(
+            tombstone_count(&db, t, o),
+            0,
+            "{t}: no tombstone for a non-member"
+        );
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 0);
+        // Parent edges are kept (§6.8); the surviving member is untouched.
+        assert_eq!(parent_edge_count(&db, t, o), 1, "{t}: parent edge kept");
+        assert_eq!(label_count(&db, t, m), 1, "{t}: other label untouched");
+        assert_eq!(
+            child_edge_count(&db, t, m),
+            1,
+            "{t}: other child edge untouched"
+        );
+        // Deleting the member afterwards keeps its parent edge too.
+        assert_accepted(&db, s.delete_member);
+        assert_eq!(
+            parent_edge_count(&db, t, m),
+            1,
+            "{t}: member parent edge kept"
+        );
+    }
+}
+
+// ── N1: label origin never lowered ──────────────────────────────────────────
+
+const ORIGINS: [&str; 3] = ["UNRESTRICTED_ORIGIN", "LEGACY_UNKNOWN", "LOCAL_ONLY_ORIGIN"];
+
+fn db_with_label(origin: &str) -> NexusDatabase {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        &format!(
+            "INSERT INTO hm_record_label VALUES ('agent_memory','5','a','{origin}','loop_episodic','d',1)"
+        ),
+    );
+    db
+}
+
+#[test]
+fn hm_n1_label_origin_lowering_rejected() {
+    for (hi, from) in ORIGINS.iter().enumerate() {
+        for to in &ORIGINS[..hi] {
+            let db = db_with_label(from);
+            assert_rejected(
+                &db,
+                &format!("UPDATE hm_record_label SET origin='{to}'"),
+                "origin cannot be lowered",
+            );
+            assert_eq!(
+                text(&db, "SELECT origin FROM hm_record_label").as_deref(),
+                Some(*from)
+            );
+        }
+    }
+}
+
+#[test]
+fn hm_n1_label_origin_raise_or_keep_accepted() {
+    for (lo, from) in ORIGINS.iter().enumerate() {
+        for to in &ORIGINS[lo..] {
+            let db = db_with_label(from);
+            assert_accepted(
+                &db,
+                &format!("UPDATE hm_record_label SET origin='{to}', content_sha256='d2'"),
+            );
+            assert_eq!(
+                text(&db, "SELECT origin FROM hm_record_label").as_deref(),
+                Some(*to)
+            );
+        }
+    }
+}
+
+// ── N1: grant triggers (no writer exists; AD-4) ─────────────────────────────
+
+fn db_with_grant(state: &str, seq: &str) -> NexusDatabase {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        &format!(
+            "INSERT INTO hm_grant VALUES ('g1','a','record','agent_memory','1','d','{state}',{seq})"
+        ),
+    );
+    db
+}
+
+#[test]
+fn hm_n1_grant_revoked_to_live_rejected() {
+    let db = db_with_grant("revoked", "3");
+    assert_rejected(
+        &db,
+        "UPDATE hm_grant SET state='live'",
+        "a revoked grant cannot become live",
+    );
+    assert_rejected(
+        &db,
+        "UPDATE hm_grant SET state='live', revoked_at_revocation_seq=NULL",
+        "",
+    );
+    assert_eq!(
+        text(&db, "SELECT state FROM hm_grant").as_deref(),
+        Some("revoked")
+    );
+}
+
+#[test]
+fn hm_n1_grant_live_to_revoked_accepted() {
+    let db = db_with_grant("live", "NULL");
+    assert_accepted(
+        &db,
+        "UPDATE hm_grant SET state='revoked', revoked_at_revocation_seq=1",
+    );
+    assert_eq!(
+        text(
+            &db,
+            "SELECT state || ':' || revoked_at_revocation_seq FROM hm_grant"
+        )
+        .as_deref(),
+        Some("revoked:1")
+    );
+}
+
+#[test]
+fn hm_n1_grant_revoked_seq_change_rejected_once_set() {
+    let db = db_with_grant("revoked", "3");
+    for v in ["4", "2", "NULL"] {
+        assert_rejected(
+            &db,
+            &format!("UPDATE hm_grant SET revoked_at_revocation_seq={v}"),
+            "revoked_at_revocation_seq is fixed once set",
+        );
+    }
+    assert_eq!(
+        count(&db, "SELECT revoked_at_revocation_seq FROM hm_grant"),
+        3
+    );
+}
+
+#[test]
+fn hm_n1_grant_revoked_seq_set_from_null_accepted() {
+    let db = db_with_grant("live", "NULL");
+    assert_accepted(&db, "UPDATE hm_grant SET revoked_at_revocation_seq=7");
+    // Re-writing the same value is not a change.
+    assert_accepted(
+        &db,
+        "UPDATE hm_grant SET revoked_at_revocation_seq=7, state='revoked'",
+    );
+    assert_eq!(
+        count(&db, "SELECT revoked_at_revocation_seq FROM hm_grant"),
+        7
+    );
+}
+
+// ── N1: policy triggers ─────────────────────────────────────────────────────
+
+fn db_with_policy() -> NexusDatabase {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',3,1,'tightened','governed_tighten');
+         INSERT INTO hm_agent_policy VALUES ('a',1,3,2,'tightened');",
+    );
+    db
+}
+
+#[test]
+fn hm_n1_policy_generation_or_sequence_lowering_rejected() {
+    let db = db_with_policy();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',2,1,'tightened','governed_tighten')",
+    );
+    assert_rejected(
+        &db,
+        "UPDATE hm_agent_policy SET policy_generation=2",
+        "generation and revocation sequence never fall",
+    );
+    assert_rejected(
+        &db,
+        "UPDATE hm_agent_policy SET revocation_seq=1",
+        "generation and revocation sequence never fall",
+    );
+    assert_eq!(
+        text(
+            &db,
+            "SELECT policy_generation || ':' || revocation_seq FROM hm_agent_policy"
+        )
+        .as_deref(),
+        Some("3:2")
+    );
+}
+
+#[test]
+fn hm_n1_policy_generation_or_sequence_raise_accepted() {
+    let db = db_with_policy();
+    assert_accepted(&db, "UPDATE hm_agent_policy SET revocation_seq=3");
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',4,1,'tightened','config_tighten');
+         UPDATE hm_agent_policy SET policy_generation=4;",
+    );
+    assert_eq!(
+        text(
+            &db,
+            "SELECT policy_generation || ':' || revocation_seq FROM hm_agent_policy"
+        )
+        .as_deref(),
+        Some("4:3")
+    );
+}
+
+#[test]
+fn hm_n1_policy_change_update_and_delete_rejected() {
+    let db = db_with_policy();
+    assert_rejected(
+        &db,
+        "UPDATE hm_policy_change SET local_only=0",
+        "insert-only",
+    );
+    assert_rejected(
+        &db,
+        "UPDATE hm_policy_change SET cause='owner_loosen'",
+        "insert-only",
+    );
+    assert_rejected(&db, "DELETE FROM hm_policy_change", "insert-only");
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_policy_change"), 1);
+}
+
+#[test]
+fn hm_n1_policy_change_insert_accepted() {
+    let db = db_with_policy();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',4,0,'owner_confirmed','owner_loosen')",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_policy_change"), 2);
+}
+
+#[test]
+fn hm_n1_policy_insert_without_history_rejected() {
+    let db = db_with_schema();
+    let needle = "write its hm_policy_change row first";
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_agent_policy VALUES ('a',1,1,0,'t0_baseline')",
+        needle,
+    );
+    // A history row with a different generation or local_only does not qualify.
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',2,1,'t0_baseline','t0_baseline');
+         INSERT INTO hm_policy_change VALUES ('a',1,0,'t0_baseline','t0_baseline');",
+    );
+    assert_rejected(
+        &db,
+        "INSERT INTO hm_agent_policy VALUES ('a',1,1,0,'t0_baseline')",
+        needle,
+    );
+    // History written after the policy row is too late: the insert already failed.
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_agent_policy"), 0);
+}
+
+#[test]
+fn hm_n1_policy_insert_with_history_first_accepted() {
+    let db = db_with_schema();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',1,1,'t0_baseline','t0_baseline');
+         INSERT INTO hm_agent_policy VALUES ('a',1,1,0,'t0_baseline');",
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_agent_policy"), 1);
+}
+
+#[test]
+fn hm_n1_policy_update_without_history_rejected() {
+    let db = db_with_policy();
+    let needle = "write its hm_policy_change row first";
+    // Loosening without its history row.
+    assert_rejected(
+        &db,
+        "UPDATE hm_agent_policy SET local_only=0, policy_generation=4, basis='owner_confirmed'",
+        needle,
+    );
+    // Generation bump without its history row.
+    assert_rejected(
+        &db,
+        "UPDATE hm_agent_policy SET policy_generation=4",
+        needle,
+    );
+    // A local_only flip that keeps the generation: no row (a,3,0) exists.
+    assert_rejected(&db, "UPDATE hm_agent_policy SET local_only=0", needle);
+    assert_eq!(
+        text(
+            &db,
+            "SELECT local_only || ':' || policy_generation FROM hm_agent_policy"
+        )
+        .as_deref(),
+        Some("1:3")
+    );
+}
+
+#[test]
+fn hm_n1_policy_update_with_history_first_accepted() {
+    let db = db_with_policy();
+    assert_accepted(
+        &db,
+        "INSERT INTO hm_policy_change VALUES ('a',4,0,'owner_confirmed','owner_loosen');
+         UPDATE hm_agent_policy SET local_only=0, policy_generation=4, basis='owner_confirmed';",
+    );
+    // An update that changes neither local_only nor the generation needs no history row.
+    assert_accepted(&db, "UPDATE hm_agent_policy SET revocation_seq=5");
+    assert_eq!(
+        text(
+            &db,
+            "SELECT local_only || ':' || policy_generation || ':' || revocation_seq FROM hm_agent_policy"
+        )
+        .as_deref(),
+        Some("0:4:5")
+    );
+}

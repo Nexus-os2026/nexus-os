@@ -1,4 +1,5 @@
 pub mod coding_run_ledger;
+pub mod hm;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -953,6 +954,15 @@ pub struct NexusDatabase {
 impl std::fmt::Debug for NexusDatabase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NexusDatabase").finish()
+    }
+}
+
+impl NexusDatabase {
+    /// Historical-memory store handle (P3-HM-CONTRACT-02 §11.0). Dormant;
+    /// its only legitimate caller is `nexus_kernel::hm`.
+    #[doc(hidden)]
+    pub fn hm(&self) -> hm::HmStore<'_> {
+        hm::HmStore::new(self)
     }
 }
 
