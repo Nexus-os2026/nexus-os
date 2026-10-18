@@ -315,7 +315,12 @@ fn the_production_executor_routes_governed_actions_only_through_phase_three() {
             db: state.db.clone(),
         },
     )));
-    let executor = crate::phase0_agent_executor(&state, memory).with_real_world(t.world.clone());
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    )
+    .with_real_world(t.world.clone());
     let mut audit = state.audit.clone();
     let agent = uuid::Uuid::new_v4().to_string();
     let fetch = PlannedAction::WebFetch {

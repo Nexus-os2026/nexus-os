@@ -1,6 +1,16 @@
 //! Agent memory manager — episodic, semantic, and procedural memory via persistence.
+//!
+//! P3-HM-CONTRACT-02 §6, §12.3: the `record_*` functions write through the
+//! labelled API in one transaction with the record's label, and
+//! `recall_for_dispatch` recalls route-first, returning verbatim items. The
+//! older string methods (`store_*`, `recall_relevant`) carry no context and
+//! have no production caller.
 
 use crate::errors::AgentError;
+use crate::hm::{
+    DispatchContext, DispatchIssuer, NewMemory, Parent, RecallSpec, RecalledRecord, RecordTable,
+    SourceKind, WriteReceipt,
+};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -160,6 +170,138 @@ impl AgentMemoryManager {
         memories.sort_by_key(|entry| entry.id);
         memories.reverse();
         Ok(memories)
+    }
+}
+
+impl AgentMemoryManager {
+    /// The labelled episodic write (`store_episodic`'s key and value) of
+    /// the unit `ctx` (§6.1, §6.2).
+    pub fn record_episodic(
+        issuer: &DispatchIssuer,
+        ctx: &DispatchContext,
+        kind: SourceKind,
+        event: &str,
+        outcome: &str,
+        parents: &[Parent<'_>],
+    ) -> Result<WriteReceipt, AgentError> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let key = format!("episode:{timestamp}");
+        let value = serde_json::json!({
+            "event": event,
+            "outcome": outcome,
+            "timestamp": timestamp,
+        });
+        Self::record(
+            issuer,
+            ctx,
+            kind,
+            "episodic",
+            &key,
+            &value.to_string(),
+            parents,
+        )
+    }
+
+    /// The labelled semantic write (`store_semantic`'s key and value).
+    pub fn record_semantic(
+        issuer: &DispatchIssuer,
+        ctx: &DispatchContext,
+        kind: SourceKind,
+        fact: &str,
+        parents: &[Parent<'_>],
+    ) -> Result<WriteReceipt, AgentError> {
+        let key = format!("fact:{}", hash_string(fact));
+        let value = serde_json::json!({ "fact": fact });
+        Self::record(
+            issuer,
+            ctx,
+            kind,
+            "semantic",
+            &key,
+            &value.to_string(),
+            parents,
+        )
+    }
+
+    /// The labelled procedural write (`store_procedural`'s key and value).
+    pub fn record_procedural(
+        issuer: &DispatchIssuer,
+        ctx: &DispatchContext,
+        kind: SourceKind,
+        strategy: &str,
+        success_rate: f64,
+        parents: &[Parent<'_>],
+    ) -> Result<WriteReceipt, AgentError> {
+        let key = format!("strategy:{}", hash_string(strategy));
+        let value = serde_json::json!({
+            "strategy": strategy,
+            "success_rate": success_rate,
+        });
+        Self::record(
+            issuer,
+            ctx,
+            kind,
+            "procedural",
+            &key,
+            &value.to_string(),
+            parents,
+        )
+    }
+
+    fn record(
+        issuer: &DispatchIssuer,
+        ctx: &DispatchContext,
+        kind: SourceKind,
+        memory_type: &str,
+        key: &str,
+        value_json: &str,
+        parents: &[Parent<'_>],
+    ) -> Result<WriteReceipt, AgentError> {
+        issuer
+            .write_memory(
+                ctx,
+                &NewMemory {
+                    source_kind: kind,
+                    memory_type,
+                    key,
+                    value_json,
+                    relevance_score: 1.0,
+                },
+                parents,
+            )
+            .map_err(|e| AgentError::SupervisorError(format!("memory store error: {e}")))
+    }
+
+    /// `recall_relevant` route-first for the unit `ctx` (§12.3): `limit * 3`
+    /// eligible candidates by relevance (of `memory_type` when given, in
+    /// the query), ranked by the query's keywords; the best `limit` are
+    /// returned as verbatim items and touched (bookkeeping).
+    pub fn recall_for_dispatch(
+        &self,
+        issuer: &DispatchIssuer,
+        ctx: &mut DispatchContext,
+        query: &str,
+        memory_type: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<RecalledRecord>, AgentError> {
+        let spec = RecallSpec {
+            column_eq: memory_type.map(|mt| ("memory_type", mt)),
+            rank_words: Some(query),
+            ..RecallSpec::table(RecordTable::AgentMemory, limit)
+        };
+        let records = issuer
+            .recall_spec(ctx, &spec)
+            .map_err(|e| AgentError::SupervisorError(format!("memory load error: {e}")))?;
+        for record in &records {
+            if let Ok(id) = record.record_ref().record_id().parse::<i64>() {
+                // Best-effort: update last-accessed timestamp; recall succeeds even if touch fails
+                let _ = self.store.touch_memory(id);
+            }
+        }
+        Ok(records)
     }
 }
 

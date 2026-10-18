@@ -5,16 +5,20 @@ use super::algorithms::{
 };
 use super::evolution::EvolutionTracker;
 use super::memory_manager::AgentMemoryManager;
-use super::planner::CognitivePlanner;
+use super::planner::{CognitivePlanner, PlanningRecall};
 use super::types::{
     AgentGoal, AgentStep, CognitiveEvent, CognitivePhase, CognitiveStatusResponse, CycleResult,
     GoalStatus, LoopConfig, PlannedAction, PlanningContext, StepStatus,
 };
-use crate::actuators::{ActuatorContext, ActuatorRegistry};
+use crate::actuators::{ActuatorContext, ActuatorRegistry, ActuatorScope};
 use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
+use crate::hm::{
+    DerivedItem, DispatchContext, DispatchIssuer, Parent, Principal, PromptBuilder, PromptEnvelope,
+    PromptSource, RecallSpec, RecalledRecord, RecordTable, SourceKind, Unit,
+};
 use crate::supervisor::Supervisor;
 use arc_swap::ArcSwap;
 use nexus_persistence::{NexusDatabase, StateStore};
@@ -97,8 +101,40 @@ impl EventEmitter for CollectingEmitter {
     }
 }
 
+/// The typed result of a succeeded step (P3-HM-CONTRACT-02 §11.3).
+#[derive(Debug)]
+pub enum StepItem {
+    /// Retained records returned verbatim (a `MemoryRecall`, a
+    /// `KnowledgeGraphQuery`): a later prompt includes them, never copies
+    /// their content.
+    Verbatim(Vec<RecalledRecord>),
+    /// A model reply or another product of the unit (an actuator output).
+    Derived(DerivedItem),
+}
+
+/// What an executed step produced.
+#[derive(Debug)]
+pub struct StepOutput {
+    /// The text shown for the step (its `AgentStep::result`). It is never
+    /// the content of a retained record, and no prompt is built from it.
+    pub text: String,
+    pub item: StepItem,
+}
+
+/// The unit a step runs in (§11.3): the issuer, the unit's context, the
+/// plan the step came from, and the typed results of the plan's earlier
+/// succeeded steps (action type and result).
+pub struct StepScope<'a> {
+    pub issuer: &'a DispatchIssuer,
+    pub ctx: &'a mut DispatchContext,
+    pub plan: &'a DerivedItem,
+    pub prior: &'a [(String, &'a StepItem)],
+}
+
 /// Trait for executing planned actions. Separates execution from the loop logic.
 pub trait ActionExecutor: Send + Sync {
+    /// Executes an action outside any unit. An action that needs a unit (a
+    /// model call, a read or write of retained records) is refused here.
     fn execute(
         &self,
         agent_id: &str,
@@ -106,16 +142,78 @@ pub trait ActionExecutor: Send + Sync {
         audit: &mut dyn AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String>;
+
+    /// Executes `action` as a step of the unit in `scope`; the cognitive
+    /// loop calls only this. The default runs [`ActionExecutor::execute`]
+    /// and makes its output a product of the unit (§2.11).
+    fn execute_in(
+        &self,
+        scope: &mut StepScope<'_>,
+        agent_id: &str,
+        action: &PlannedAction,
+        audit: &mut dyn AuditWriter,
+        hitl_approved: bool,
+    ) -> Result<StepOutput, String> {
+        let text = self.execute(agent_id, action, audit, hitl_approved)?;
+        let item = StepItem::Derived(scope.ctx.produce(text.clone()));
+        Ok(StepOutput { text, item })
+    }
 }
 
-/// Trait for handling LLM queries from within the cognitive loop.
+/// The model of `PlannedAction::LlmQuery` steps (§11.4).
 ///
 /// When an agent's plan includes a `PlannedAction::LlmQuery` step (e.g.,
 /// "analyze these file contents", "summarize this data"), the executor
 /// delegates to this handler. Without it, LlmQuery steps return a stub.
 pub trait LlmQueryHandler: Send + Sync {
-    /// Send a prompt to the LLM and return the response text.
-    fn query(&self, prompt: &str) -> Result<String, String>;
+    /// Dispatches the envelope `prompt` builds for `ctx` (again after the
+    /// one rebuild) and returns the reply as a derived item.
+    fn query(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, String>;
+}
+
+/// The refusal of an action that needs a unit, outside one.
+const NEEDS_UNIT: &str = "refused: this action runs only as a step of a unit \
+     (P3-HM-CONTRACT-02 §6.1, §11.4)";
+
+/// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
+/// context come from the plan and are carried with its label; each earlier
+/// step's result is included verbatim or carried as derived.
+pub fn llm_query_envelope(
+    ctx: &DispatchContext,
+    plan: &DerivedItem,
+    prompt: &str,
+    context: &[String],
+    prior: &[(String, &StepItem)],
+) -> PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    if context.is_empty() && prior.is_empty() {
+        b.carry(&plan.derive(prompt));
+        return b.build();
+    }
+    b.text("Context:\n");
+    if !context.is_empty() {
+        b.carry(&plan.derive(context.join("\n")));
+    }
+    for (action_type, item) in prior {
+        b.text(&format!("[{action_type} result]:\n"));
+        match item {
+            StepItem::Verbatim(records) => {
+                for record in records {
+                    b.include(record);
+                }
+            }
+            StepItem::Derived(derived) => {
+                b.carry(derived);
+            }
+        }
+    }
+    b.text("\nTask:\n");
+    b.carry(&plan.derive(prompt));
+    b.build()
 }
 
 /// `ActionExecutor` implementation that routes actions through the governed
@@ -231,204 +329,52 @@ impl RegistryExecutor {
     }
 }
 
-impl ActionExecutor for RegistryExecutor {
-    fn execute(
+/// Whether `action` is routed through the actuator registry.
+fn is_actuator_action(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::FileRead { .. }
+            | PlannedAction::FileWrite { .. }
+            | PlannedAction::ShellCommand { .. }
+            | PlannedAction::DockerCommand { .. }
+            | PlannedAction::WebSearch { .. }
+            | PlannedAction::WebFetch { .. }
+            | PlannedAction::ApiCall { .. }
+            | PlannedAction::CodeExecute { .. }
+            | PlannedAction::ImageGenerate { .. }
+            | PlannedAction::TextToSpeech { .. }
+            | PlannedAction::KnowledgeGraphUpdate { .. }
+            | PlannedAction::KnowledgeGraphQuery { .. }
+            | PlannedAction::BrowserAutomate { .. }
+            | PlannedAction::CaptureScreen { .. }
+            | PlannedAction::CaptureWindow { .. }
+            | PlannedAction::AnalyzeScreen { .. }
+            | PlannedAction::MouseMove { .. }
+            | PlannedAction::MouseClick { .. }
+            | PlannedAction::MouseDoubleClick { .. }
+            | PlannedAction::MouseDrag { .. }
+            | PlannedAction::KeyboardType { .. }
+            | PlannedAction::KeyboardPress { .. }
+            | PlannedAction::KeyboardShortcut { .. }
+            | PlannedAction::ScrollWheel { .. }
+            | PlannedAction::ComputerAction { .. }
+            | PlannedAction::ModifyCognitiveParams { .. }
+            | PlannedAction::SelectLlmProvider { .. }
+            | PlannedAction::SelectAlgorithm { .. }
+            | PlannedAction::DesignAgentEcosystem { .. }
+            | PlannedAction::RunCounterfactual { .. }
+            | PlannedAction::TemporalPlan { .. }
+            | PlannedAction::A2aDelegation { .. }
+    )
+}
+
+impl RegistryExecutor {
+    /// The actuator context of `agent_id`, from the supervisor.
+    fn actuator_context(
         &self,
         agent_id: &str,
-        action: &PlannedAction,
-        audit: &mut dyn AuditWriter,
         hitl_approved: bool,
-    ) -> Result<String, String> {
-        // For actions not handled by actuators (LlmQuery, MemoryStore, etc.),
-        // fall through to the default placeholder behavior.
-        let is_actuator_action = matches!(
-            action,
-            PlannedAction::FileRead { .. }
-                | PlannedAction::FileWrite { .. }
-                | PlannedAction::ShellCommand { .. }
-                | PlannedAction::DockerCommand { .. }
-                | PlannedAction::WebSearch { .. }
-                | PlannedAction::WebFetch { .. }
-                | PlannedAction::ApiCall { .. }
-                | PlannedAction::CodeExecute { .. }
-                | PlannedAction::ImageGenerate { .. }
-                | PlannedAction::TextToSpeech { .. }
-                | PlannedAction::KnowledgeGraphUpdate { .. }
-                | PlannedAction::KnowledgeGraphQuery { .. }
-                | PlannedAction::BrowserAutomate { .. }
-                | PlannedAction::CaptureScreen { .. }
-                | PlannedAction::CaptureWindow { .. }
-                | PlannedAction::AnalyzeScreen { .. }
-                | PlannedAction::MouseMove { .. }
-                | PlannedAction::MouseClick { .. }
-                | PlannedAction::MouseDoubleClick { .. }
-                | PlannedAction::MouseDrag { .. }
-                | PlannedAction::KeyboardType { .. }
-                | PlannedAction::KeyboardPress { .. }
-                | PlannedAction::KeyboardShortcut { .. }
-                | PlannedAction::ScrollWheel { .. }
-                | PlannedAction::ComputerAction { .. }
-                | PlannedAction::ModifyCognitiveParams { .. }
-                | PlannedAction::SelectLlmProvider { .. }
-                | PlannedAction::SelectAlgorithm { .. }
-                | PlannedAction::DesignAgentEcosystem { .. }
-                | PlannedAction::RunCounterfactual { .. }
-                | PlannedAction::TemporalPlan { .. }
-                | PlannedAction::A2aDelegation { .. }
-        );
-
-        if !is_actuator_action {
-            // Handle non-actuator actions that have dedicated handlers.
-            match action {
-                PlannedAction::LlmQuery { prompt, context } => {
-                    if let Some(handler) = &self.llm_handler {
-                        // Build full prompt with context if provided
-                        let full_prompt = if context.is_empty() {
-                            prompt.clone()
-                        } else {
-                            format!("Context:\n{}\n\nTask:\n{}", context.join("\n"), prompt)
-                        };
-
-                        // Audit the LLM query
-                        // Best-effort: audit LLM query event; failure does not block execution
-                        let _ = audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::LlmCall,
-                            json!({
-                                "event_kind": "cognitive.llm_query",
-                                "agent_id": agent_id,
-                                "prompt_len": full_prompt.len(),
-                            }),
-                        );
-
-                        // Silent-failure guard (G1a): an empty LLM response is
-                        // reported as a step failure so the cycle classifier can
-                        // mark the goal Failed rather than "Completed: 1 step, 10
-                        // fuel". Covers both primary plan steps and the planner's
-                        // synthetic two-strike fallback step — they funnel through
-                        // here.
-                        return match handler.query(&full_prompt) {
-                            Ok(output) if output.trim().is_empty() => {
-                                Err("llm_query returned empty response".to_string())
-                            }
-                            other => other,
-                        };
-                    }
-                    // No handler — fall through to stub
-                }
-                PlannedAction::Noop => {
-                    return Ok("ok".to_string());
-                }
-                PlannedAction::MemoryStore {
-                    key,
-                    value,
-                    memory_type,
-                } => {
-                    if let Some(mgr) = &self.memory_manager {
-                        // Best-effort: audit memory store event; failure does not block storage
-                        let _ = audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::StateChange,
-                            json!({
-                                "event_kind": "cognitive.memory_store",
-                                "agent_id": agent_id,
-                                "memory_type": memory_type,
-                                "key": key,
-                            }),
-                        );
-                        return match memory_type.as_str() {
-                            "episodic" => mgr
-                                .store_episodic(agent_id, key, value)
-                                .map(|_| format!("stored episodic memory: {key}"))
-                                .map_err(|e| e.to_string()),
-                            "semantic" => mgr
-                                .store_semantic(agent_id, value)
-                                .map(|_| format!("stored semantic memory: {key}"))
-                                .map_err(|e| e.to_string()),
-                            "procedural" => mgr
-                                .store_procedural(agent_id, value, 0.5)
-                                .map(|_| format!("stored procedural memory: {key}"))
-                                .map_err(|e| e.to_string()),
-                            _ => mgr
-                                .store_episodic(agent_id, key, value)
-                                .map(|_| format!("stored memory ({memory_type}): {key}"))
-                                .map_err(|e| e.to_string()),
-                        };
-                    } else {
-                        return Ok(format!("memory_store: no memory manager (key={key})"));
-                    }
-                }
-                PlannedAction::MemoryRecall { query, memory_type } => {
-                    if let Some(mgr) = &self.memory_manager {
-                        // Best-effort: audit memory recall event; failure does not block recall
-                        let _ = audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::StateChange,
-                            json!({
-                                "event_kind": "cognitive.memory_recall",
-                                "agent_id": agent_id,
-                                "query": query,
-                                "memory_type": memory_type,
-                            }),
-                        );
-                        match mgr.recall_relevant(agent_id, query, 5) {
-                            Ok(memories) => {
-                                let filtered: Vec<_> = if let Some(mt) = memory_type {
-                                    memories
-                                        .into_iter()
-                                        .filter(|m| m.memory_type == *mt)
-                                        .collect()
-                                } else {
-                                    memories
-                                };
-                                if filtered.is_empty() {
-                                    return Ok("no memories found".to_string());
-                                }
-                                let summaries: Vec<String> = filtered
-                                    .iter()
-                                    .map(|m| {
-                                        format!("[{}] {}: {}", m.memory_type, m.key, m.value_json)
-                                    })
-                                    .collect();
-                                return Ok(summaries.join("\n"));
-                            }
-                            Err(e) => return Err(e.to_string()),
-                        }
-                    } else {
-                        return Ok(format!("memory_recall: no memory manager (query={query})"));
-                    }
-                }
-                PlannedAction::SendNotification { title, body, level } => {
-                    // Best-effort: audit notification event; failure does not block delivery
-                    let _ = audit.append_event(
-                        uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                        EventType::UserAction,
-                        json!({
-                            "event_kind": "cognitive.send_notification",
-                            "agent_id": agent_id,
-                            "title": title,
-                            "level": level,
-                        }),
-                    );
-                    if let Some(emitter) = &self.event_emitter {
-                        emitter.emit(CognitiveEvent::AgentNotification {
-                            agent_id: agent_id.to_string(),
-                            title: title.clone(),
-                            body: body.clone(),
-                            level: level.clone(),
-                        });
-                    }
-                    return Ok(format!("notification sent: {title}"));
-                }
-                _ => {}
-            }
-
-            return Ok(format!(
-                "action '{}' not routed through actuators",
-                action.action_type()
-            ));
-        }
-
+    ) -> Result<ActuatorContext, String> {
         let agent_uuid =
             uuid::Uuid::parse_str(agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
         let (agent_name, capabilities, fuel_remaining, autonomy_level, egress_allowlist) = {
@@ -451,8 +397,7 @@ impl ActionExecutor for RegistryExecutor {
                     .unwrap_or_default(),
             )
         };
-
-        let ctx = self.build_context(
+        Ok(self.build_context(
             agent_id,
             &agent_name,
             &capabilities,
@@ -460,12 +405,227 @@ impl ActionExecutor for RegistryExecutor {
             autonomy_level,
             egress_allowlist,
             hitl_approved,
-        );
+        ))
+    }
 
-        self.registry
-            .execute_action(action, &ctx, audit)
-            .map(|r| r.output)
-            .map_err(|e| e.to_string())
+    /// `SendNotification`, `Noop` and the stub of an action no handler
+    /// takes: none reads or writes a retained record or calls a model.
+    fn execute_plain(
+        &self,
+        agent_id: &str,
+        action: &PlannedAction,
+        audit: &mut dyn AuditWriter,
+    ) -> Result<String, String> {
+        match action {
+            PlannedAction::Noop => Ok("ok".to_string()),
+            PlannedAction::SendNotification { title, body, level } => {
+                // Best-effort: audit notification event; failure does not block delivery
+                let _ = audit.append_event(
+                    uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "cognitive.send_notification",
+                        "agent_id": agent_id,
+                        "title": title,
+                        "level": level,
+                    }),
+                );
+                if let Some(emitter) = &self.event_emitter {
+                    emitter.emit(CognitiveEvent::AgentNotification {
+                        agent_id: agent_id.to_string(),
+                        title: title.clone(),
+                        body: body.clone(),
+                        level: level.clone(),
+                    });
+                }
+                Ok(format!("notification sent: {title}"))
+            }
+            _ => Ok(format!(
+                "action '{}' not routed through actuators",
+                action.action_type()
+            )),
+        }
+    }
+}
+
+impl ActionExecutor for RegistryExecutor {
+    fn execute(
+        &self,
+        agent_id: &str,
+        action: &PlannedAction,
+        audit: &mut dyn AuditWriter,
+        hitl_approved: bool,
+    ) -> Result<String, String> {
+        match action {
+            // A model call, or a read or write of retained records, needs a
+            // unit (§6.1, §11.4): never run without one.
+            PlannedAction::LlmQuery { .. } if self.llm_handler.is_some() => {
+                Err(format!("llm_query {NEEDS_UNIT}"))
+            }
+            PlannedAction::MemoryStore { .. } | PlannedAction::MemoryRecall { .. }
+                if self.memory_manager.is_some() =>
+            {
+                Err(format!("{} {NEEDS_UNIT}", action.action_type()))
+            }
+            PlannedAction::MemoryStore { key, .. } => {
+                Ok(format!("memory_store: no memory manager (key={key})"))
+            }
+            PlannedAction::MemoryRecall { query, .. } => {
+                Ok(format!("memory_recall: no memory manager (query={query})"))
+            }
+            _ if is_actuator_action(action) => {
+                let ctx = self.actuator_context(agent_id, hitl_approved)?;
+                self.registry
+                    .execute_action(action, &ctx, audit)
+                    .map(|r| r.output)
+                    .map_err(|e| e.to_string())
+            }
+            _ => self.execute_plain(agent_id, action, audit),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        scope: &mut StepScope<'_>,
+        agent_id: &str,
+        action: &PlannedAction,
+        audit: &mut dyn AuditWriter,
+        hitl_approved: bool,
+    ) -> Result<StepOutput, String> {
+        let plan: &DerivedItem = scope.plan;
+        let prior = scope.prior;
+        match action {
+            PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
+                let handler = self.llm_handler.as_ref().expect("checked");
+                let prompt_len =
+                    llm_query_envelope(scope.ctx, plan, prompt, context, prior).prompt_bytes();
+                // Audit the LLM query
+                // Best-effort: audit LLM query event; failure does not block execution
+                let _ = audit.append_event(
+                    uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                    EventType::LlmCall,
+                    json!({
+                        "event_kind": "cognitive.llm_query",
+                        "agent_id": agent_id,
+                        "prompt_len": prompt_len,
+                    }),
+                );
+                let reply = handler.query(scope.ctx, &mut |c: &mut DispatchContext| {
+                    Some(llm_query_envelope(c, plan, prompt, context, prior))
+                })?;
+                // Silent-failure guard (G1a): an empty LLM response is
+                // reported as a step failure so the cycle classifier can
+                // mark the goal Failed rather than "Completed: 1 step, 10
+                // fuel". Covers both primary plan steps and the planner's
+                // synthetic two-strike fallback step — they funnel through
+                // here.
+                if reply.text().trim().is_empty() {
+                    return Err("llm_query returned empty response".to_string());
+                }
+                Ok(StepOutput {
+                    text: reply.text().to_string(),
+                    item: StepItem::Derived(reply),
+                })
+            }
+            PlannedAction::MemoryStore {
+                key,
+                value,
+                memory_type,
+            } if self.memory_manager.is_some() => {
+                // Best-effort: audit memory store event; failure does not block storage
+                let _ = audit.append_event(
+                    uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                    EventType::StateChange,
+                    json!({
+                        "event_kind": "cognitive.memory_store",
+                        "agent_id": agent_id,
+                        "memory_type": memory_type,
+                        "key": key,
+                    }),
+                );
+                // The model chose what to store: the plan is its parent.
+                let parents = [Parent::Derived(plan)];
+                let kind = SourceKind::MemoryStoreAction;
+                let (issuer, ctx) = (scope.issuer, &*scope.ctx);
+                let text = match memory_type.as_str() {
+                    "episodic" => {
+                        AgentMemoryManager::record_episodic(issuer, ctx, kind, key, value, &parents)
+                            .map(|_| format!("stored episodic memory: {key}"))
+                    }
+                    "semantic" => {
+                        AgentMemoryManager::record_semantic(issuer, ctx, kind, value, &parents)
+                            .map(|_| format!("stored semantic memory: {key}"))
+                    }
+                    "procedural" => AgentMemoryManager::record_procedural(
+                        issuer, ctx, kind, value, 0.5, &parents,
+                    )
+                    .map(|_| format!("stored procedural memory: {key}")),
+                    _ => {
+                        AgentMemoryManager::record_episodic(issuer, ctx, kind, key, value, &parents)
+                            .map(|_| format!("stored memory ({memory_type}): {key}"))
+                    }
+                }
+                .map_err(|e| e.to_string())?;
+                let item = StepItem::Derived(scope.ctx.produce(text.clone()));
+                Ok(StepOutput { text, item })
+            }
+            PlannedAction::MemoryRecall { query, memory_type } if self.memory_manager.is_some() => {
+                let mgr = self.memory_manager.as_ref().expect("checked");
+                // Best-effort: audit memory recall event; failure does not block recall
+                let _ = audit.append_event(
+                    uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                    EventType::StateChange,
+                    json!({
+                        "event_kind": "cognitive.memory_recall",
+                        "agent_id": agent_id,
+                        "query": query,
+                        "memory_type": memory_type,
+                    }),
+                );
+                let records = mgr
+                    .recall_for_dispatch(scope.issuer, scope.ctx, query, memory_type.as_deref(), 5)
+                    .map_err(|e| e.to_string())?;
+                // Content-free: the records reach a later prompt verbatim.
+                let text = if records.is_empty() {
+                    "no memories found".to_string()
+                } else {
+                    format!("recalled {} memories", records.len())
+                };
+                Ok(StepOutput {
+                    text,
+                    item: StepItem::Verbatim(records),
+                })
+            }
+            _ if is_actuator_action(action) => {
+                let ctx = self.actuator_context(agent_id, hitl_approved)?;
+                let mut actuator_scope = ActuatorScope {
+                    issuer: scope.issuer,
+                    ctx: &mut *scope.ctx,
+                    plan,
+                    recalled: Vec::new(),
+                };
+                let result = self
+                    .registry
+                    .execute_action_in(action, &ctx, audit, &mut actuator_scope)
+                    .map_err(|e| e.to_string())?;
+                let recalled = std::mem::take(&mut actuator_scope.recalled);
+                drop(actuator_scope);
+                let item = if matches!(action, PlannedAction::KnowledgeGraphQuery { .. }) {
+                    StepItem::Verbatim(recalled)
+                } else {
+                    StepItem::Derived(scope.ctx.produce(result.output.clone()))
+                };
+                Ok(StepOutput {
+                    text: result.output,
+                    item,
+                })
+            }
+            _ => {
+                let text = self.execute(agent_id, action, audit, hitl_approved)?;
+                let item = StepItem::Derived(scope.ctx.produce(text.clone()));
+                Ok(StepOutput { text, item })
+            }
+        }
     }
 }
 
@@ -489,6 +649,14 @@ struct AgentLoopState {
     /// Timestamp when the goal started (for duration tracking / future metrics).
     #[allow(dead_code)]
     started_at_secs: u64,
+    /// The goal's unit (P3-HM-CONTRACT-02 §11.1): every dispatch, recall
+    /// and write of the goal goes through it.
+    ctx: DispatchContext,
+    /// The reply the current plan was parsed from.
+    plan: Option<DerivedItem>,
+    /// The typed result of each succeeded step, by step id (§11.3), kept
+    /// beside the steps.
+    results: HashMap<String, StepItem>,
 }
 
 /// The cognitive runtime manages agent loops.
@@ -523,6 +691,9 @@ pub struct CognitiveRuntime {
     /// in, when its host injects one (`with_state_database`). Without one the
     /// loop opens the identity home's database for each record, as before.
     state_db: Option<Arc<NexusDatabase>>,
+    /// The process's dispatch issuer (P3-HM-CONTRACT-02 §11.0). Without one
+    /// no goal unit starts, so no agent dispatch happens (mission R6).
+    issuer: Option<Arc<DispatchIssuer>>,
 }
 
 impl CognitiveRuntime {
@@ -553,7 +724,25 @@ impl CognitiveRuntime {
             darwin: Mutex::new(PlanEvolutionEngine::default()),
             status_snapshots: Mutex::new(HashMap::new()),
             state_db: None,
+            issuer: None,
         }
+    }
+
+    /// Mint, recall and write every goal's work through `issuer`
+    /// (P3-HM-CONTRACT-02 §11.0).
+    pub fn with_dispatch_issuer(mut self, issuer: Arc<DispatchIssuer>) -> Self {
+        self.issuer = Some(issuer);
+        self
+    }
+
+    /// The dispatch issuer, or why there is none.
+    fn issuer(&self) -> Result<&Arc<DispatchIssuer>, AgentError> {
+        self.issuer.as_ref().ok_or_else(|| {
+            AgentError::SupervisorError(
+                "no dispatch issuer: the goal's unit cannot start, so nothing is dispatched"
+                    .to_string(),
+            )
+        })
     }
 
     /// Record the loop's L6 cooldowns and algorithm selections in `db`, the
@@ -578,8 +767,33 @@ impl CognitiveRuntime {
         }
     }
 
-    /// Assign a goal to an agent. Initializes the loop state.
+    /// Assign a goal to an agent. Initializes the loop state. The goal's
+    /// unit starts here (observation point O1, §4.6): an agent whose route
+    /// policy cannot be established gets no goal.
     pub fn assign_goal(&self, agent_id: &str, goal: AgentGoal) -> Result<(), AgentError> {
+        let agent_uuid = uuid::Uuid::parse_str(agent_id)
+            .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
+        let goal_uuid = uuid::Uuid::parse_str(&goal.id)
+            .map_err(|e| AgentError::SupervisorError(format!("invalid goal id: {e}")))?;
+        let ctx = self
+            .issuer()?
+            .begin_unit(
+                Principal::Agent(agent_uuid),
+                Unit::Goal { goal_id: goal_uuid },
+            )
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
+        self.assign_goal_in(agent_id, goal, ctx)
+    }
+
+    /// Assign a goal whose unit is `ctx` (a HiveMind sub-task or a team
+    /// member's task, derived from its session's or director's context).
+    /// The context must be this runtime's issuer's, of this agent.
+    pub fn assign_goal_in(
+        &self,
+        agent_id: &str,
+        goal: AgentGoal,
+        ctx: DispatchContext,
+    ) -> Result<(), AgentError> {
         // Verify agent exists in supervisor
         {
             let sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
@@ -588,6 +802,11 @@ impl CognitiveRuntime {
             sup.get_agent(agent_uuid).ok_or_else(|| {
                 AgentError::SupervisorError(format!("agent '{agent_id}' not found in supervisor"))
             })?;
+            if !self.issuer()?.minted(&ctx) || ctx.principal() != Principal::Agent(agent_uuid) {
+                return Err(AgentError::SupervisorError(
+                    "the goal's unit belongs to another issuer or agent".to_string(),
+                ));
+            }
         }
 
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -610,6 +829,9 @@ impl CognitiveRuntime {
             review_each_mode: false,
             strategy_hash: None,
             started_at_secs: now,
+            ctx,
+            plan: None,
+            results: HashMap::new(),
         };
 
         self.shutdown_flags
@@ -642,11 +864,26 @@ impl CognitiveRuntime {
         Ok(())
     }
 
-    fn resolve_cognitive_overrides(
+    /// The newest eligible `memory_type` row of the unit's agent, read
+    /// route-first as a control value (P3-HM-CONTRACT-02 §12.3): it decides
+    /// how the loop runs and never enters a prompt.
+    fn latest_control_json(
         &self,
-        agent_id: &str,
-        memory_mgr: &AgentMemoryManager,
-    ) -> CognitiveOverrides {
+        ctx: &DispatchContext,
+        memory_type: &str,
+    ) -> Option<serde_json::Value> {
+        let issuer = self.issuer().ok()?;
+        let row = issuer
+            .control_records(ctx, &RecallSpec::memory_type(memory_type, 1))
+            // Optional: an unreadable or ineligible row means no override
+            .ok()?
+            .into_iter()
+            .next()?;
+        // Optional: malformed JSON means no override
+        serde_json::from_str::<serde_json::Value>(row.field("value_json")?).ok()
+    }
+
+    fn resolve_cognitive_overrides(&self, ctx: &DispatchContext) -> CognitiveOverrides {
         let mut effective = CognitiveOverrides {
             max_cycles_per_goal: self.config.max_cycles_per_goal,
             fuel_reserve_threshold: self.config.fuel_reserve_threshold,
@@ -654,15 +891,8 @@ impl CognitiveRuntime {
             cycle_delay_ms: self.config.cycle_delay_ms,
             planning_depth: 3,
         };
-        let latest = memory_mgr
-            .load_by_type(agent_id, "cognitive_params", 20)
-            // Optional: missing cognitive params means use defaults
-            .ok()
-            .and_then(|mut rows| rows.drain(..).next());
-        let Some(row) = latest else {
-            return effective;
-        };
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&row.value_json) else {
+        // Optional: missing cognitive params means use defaults
+        let Some(value) = self.latest_control_json(ctx, "cognitive_params") else {
             return effective;
         };
         let Some(map) = value.as_object() else {
@@ -698,18 +928,12 @@ impl CognitiveRuntime {
 
     fn resolve_phase_model(
         &self,
-        agent_id: &str,
+        ctx: &DispatchContext,
         phase: CognitivePhase,
-        memory_mgr: &AgentMemoryManager,
     ) -> Option<PhaseModelSelection> {
         let phase_key = phase.to_string();
-        let latest = memory_mgr
-            .load_by_type(agent_id, "model_mapping", 10)
-            // Optional: no model mapping means no phase-specific model override
-            .ok()
-            .and_then(|mut rows| rows.drain(..).next())?;
-        // Optional: malformed JSON means no model selection
-        let parsed = serde_json::from_str::<serde_json::Value>(&latest.value_json).ok()?;
+        // Optional: no model mapping means no phase-specific model override
+        let parsed = self.latest_control_json(ctx, "model_mapping")?;
         let entry = parsed.get(&phase_key)?;
         let provider = entry.get("provider")?.as_str()?.to_string();
         let model = entry.get("model")?.as_str()?.to_string();
@@ -719,18 +943,9 @@ impl CognitiveRuntime {
         Some(PhaseModelSelection { provider, model })
     }
 
-    fn resolve_selected_algorithm(
-        &self,
-        agent_id: &str,
-        memory_mgr: &AgentMemoryManager,
-    ) -> Option<SelectedAlgorithm> {
-        let latest = memory_mgr
-            .load_by_type(agent_id, "algorithm_selection", 10)
-            // Optional: no algorithm selection means use default planning
-            .ok()
-            .and_then(|mut rows| rows.drain(..).next())?;
-        // Optional: malformed JSON means no algorithm selection
-        let parsed = serde_json::from_str::<serde_json::Value>(&latest.value_json).ok()?;
+    fn resolve_selected_algorithm(&self, ctx: &DispatchContext) -> Option<SelectedAlgorithm> {
+        // Optional: no algorithm selection means use default planning
+        let parsed = self.latest_control_json(ctx, "algorithm_selection")?;
         Some(SelectedAlgorithm {
             algorithm: parsed.get("algorithm")?.as_str()?.to_string(),
             config_json: parsed
@@ -756,10 +971,10 @@ impl CognitiveRuntime {
         &self,
         agent_id: &str,
         phase: CognitivePhase,
-        memory_mgr: &AgentMemoryManager,
+        ctx: &DispatchContext,
         audit: &mut dyn AuditWriter,
     ) {
-        let Some(selection) = self.resolve_phase_model(agent_id, phase, memory_mgr) else {
+        let Some(selection) = self.resolve_phase_model(ctx, phase) else {
             return;
         };
         let provider_name = self
@@ -873,7 +1088,7 @@ impl CognitiveRuntime {
             )
         };
 
-        let overrides = self.resolve_cognitive_overrides(agent_id, memory_mgr);
+        let overrides = self.resolve_cognitive_overrides(&state.ctx);
         if autonomy_level == 6 && state.cycle_count >= L6_COOLDOWN_CYCLES {
             let completed = state.cycle_count;
             state.cycle_count = 0;
@@ -927,7 +1142,7 @@ impl CognitiveRuntime {
         let perceive_start = std::time::Instant::now();
 
         state.phase = CognitivePhase::Perceive;
-        self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+        self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
         self.emit_phase_change(agent_id, state);
 
         // Fuel reserve check
@@ -935,7 +1150,7 @@ impl CognitiveRuntime {
         let reserve = fuel_budget * overrides.fuel_reserve_threshold;
         if fuel_remaining <= reserve {
             state.phase = CognitivePhase::Idle;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
             return Ok(CycleResult {
                 phase: CognitivePhase::Idle,
@@ -950,7 +1165,7 @@ impl CognitiveRuntime {
 
         // ── REASON ──
         state.phase = CognitivePhase::Reason;
-        self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+        self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
         self.emit_phase_change(agent_id, state);
 
         // Check if all steps from the previous plan completed successfully.
@@ -963,7 +1178,7 @@ impl CognitiveRuntime {
         if all_steps_finished && !any_failed {
             // All steps succeeded — goal is complete, skip replanning.
             state.phase = CognitivePhase::Reflect;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
             // Fall through to the goal-complete check at the bottom.
         }
@@ -980,44 +1195,51 @@ impl CognitiveRuntime {
         let plan_start = std::time::Instant::now();
         if needs_plan || needs_replan {
             state.phase = CognitivePhase::Plan;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
 
-            let memories = memory_mgr
-                .recall_relevant(
-                    agent_id,
-                    &state.goal.description,
-                    overrides.planning_depth as usize,
-                )
-                .unwrap_or_default();
-            let memory_strs: Vec<String> = memories.iter().map(|m| m.value_json.clone()).collect();
-
-            // Evolution: select best strategy and include as context
-            let mut previous_outcomes = vec![];
-            if let Some(evo) = evolution_tracker {
-                let goal_type = infer_goal_type(&state.goal.description);
-                if let Ok(Some(best_strategy)) = evo.select_best_strategy(agent_id, &goal_type) {
-                    previous_outcomes.push(format!(
-                        "Previously, the most successful approach for similar goals was: {best_strategy}. \
-                         Consider using or adapting this approach."
-                    ));
-                    state.strategy_hash = Some(best_strategy);
+            // P3-HM-CONTRACT-02 §11.3, §12.3: the planning prompt includes
+            // retained records verbatim, recalled route-first for the unit;
+            // its recall runs again for a rebuilt envelope.
+            let issuer = self.issuer()?.clone();
+            let planning_depth = overrides.planning_depth as usize;
+            let goal_text = state.goal.description.clone();
+            let goal_type = infer_goal_type(&state.goal.description);
+            if evolution_tracker.is_some() {
+                state.strategy_hash = Some(super::evolution::hash_strategy(&goal_text));
+            }
+            let with_strategy = evolution_tracker.is_some();
+            let mut recall = |c: &mut DispatchContext| PlanningRecall {
+                memories: memory_mgr
+                    .recall_for_dispatch(&issuer, c, &goal_text, None, planning_depth)
+                    .unwrap_or_default(),
+                // Evolution: the best strategy for the goal type.
+                best_strategy: if with_strategy {
+                    issuer
+                        .recall_spec(
+                            c,
+                            &RecallSpec {
+                                column_eq: Some(("goal_type", goal_type.as_str())),
+                                ..RecallSpec::table(RecordTable::StrategyScores, 1)
+                            },
+                        )
+                        .ok()
+                        .and_then(|mut found| found.pop())
                 } else {
-                    state.strategy_hash =
-                        Some(super::evolution::hash_strategy(&state.goal.description));
-                }
-            }
-            if let Ok(memories) = memory_mgr.load_by_type(agent_id, "semantic", 25) {
-                if let Some(prompt_memory) = memories
-                    .into_iter()
-                    .find(|memory| memory.value_json.contains("optimized_planning_prompt:"))
-                {
-                    previous_outcomes.push(format!(
-                        "Use this evolved planning prompt guidance: {}",
-                        prompt_memory.value_json
-                    ));
-                }
-            }
+                    None
+                },
+                // §6.6: the evolved prompt is selected by its role.
+                optimized_prompt: issuer
+                    .recall_spec(
+                        c,
+                        &RecallSpec {
+                            source_kind: Some(SourceKind::OptimizedPrompt),
+                            ..RecallSpec::memory_type("semantic", 1)
+                        },
+                    )
+                    .ok()
+                    .and_then(|mut found| found.pop()),
+            };
 
             // P0-002C5A: the process working directory is not an agent
             // workspace, so it is neither disclosed to the planner nor listed.
@@ -1029,30 +1251,32 @@ impl CognitiveRuntime {
                 )),
                 agent_capabilities: capabilities.clone(),
                 available_fuel: fuel_remaining,
-                relevant_memories: memory_strs,
-                previous_outcomes,
                 working_directory: None,
                 directory_listing: None,
                 autonomy_level,
             };
 
-            let mut new_steps = if needs_replan && !state.steps.is_empty() {
-                let idx = state.current_step_index.min(state.steps.len() - 1);
-                let failed_step = &state.steps[idx];
-                let remaining = &state.steps[(idx + 1).min(state.steps.len())..];
-                planner.replan_after_failure(
-                    &state.goal,
-                    failed_step,
-                    "max consecutive failures reached",
-                    remaining,
-                    &context,
-                )?
-            } else {
-                planner.plan_goal(&state.goal, &context)?
+            let plan = match (&state.plan, needs_replan && !state.steps.is_empty()) {
+                (Some(previous_plan), true) => {
+                    let idx = state.current_step_index.min(state.steps.len() - 1);
+                    let failed_step = &state.steps[idx];
+                    let remaining = &state.steps[(idx + 1).min(state.steps.len())..];
+                    planner.replan_after_failure(
+                        &mut state.ctx,
+                        &state.goal,
+                        failed_step,
+                        "max consecutive failures reached",
+                        remaining,
+                        &context,
+                        previous_plan,
+                    )?
+                }
+                _ => planner.plan_goal(&mut state.ctx, &state.goal, &context, &mut recall)?,
             };
+            let mut new_steps = plan.steps;
+            state.plan = Some(plan.reply);
 
-            if let Some(selected_algorithm) = self.resolve_selected_algorithm(agent_id, memory_mgr)
-            {
+            if let Some(selected_algorithm) = self.resolve_selected_algorithm(&state.ctx) {
                 match selected_algorithm.algorithm.as_str() {
                     "evolutionary" => {
                         let mut evo = self.evolution.lock().unwrap_or_else(|p| p.into_inner());
@@ -1071,25 +1295,31 @@ impl CognitiveRuntime {
                         });
                         new_steps = result.plan;
                         // Best-effort: record darwin evolution metrics; informational only
-                        let _ = memory_mgr.store_episodic(
-                            agent_id,
+                        let _ = AgentMemoryManager::record_episodic(
+                            &issuer,
+                            &state.ctx,
+                            SourceKind::LoopEpisodic,
                             "darwin_plan_evolution",
                             &format!(
                                 "Darwin pipeline: {} generations, score {:.2}, improvement {:.2}, defense_rate {:.2}",
                                 result.generations, result.score, result.improvement, result.defense_rate
                             ),
+                            &[],
                         );
                     }
                     "world_model" => {
                         // Best-effort: record world model simulation preview; informational only
-                        let _ = memory_mgr.store_episodic(
-                            agent_id,
+                        let _ = AgentMemoryManager::record_episodic(
+                            &issuer,
+                            &state.ctx,
+                            SourceKind::LoopEpisodic,
                             "world_model_plan_preview",
                             &format!(
                                 "simulated {} candidate steps using {}",
                                 new_steps.len(),
                                 selected_algorithm.config_json
                             ),
+                            &[],
                         );
                     }
                     "swarm" | "adversarial" => {}
@@ -1108,6 +1338,7 @@ impl CognitiveRuntime {
             }
 
             state.steps = new_steps;
+            state.results.clear();
             state.current_step_index = 0;
             state.consecutive_failures = 0;
             // L3+ agents (Act-then-report and above) get pre-approved allowance
@@ -1129,26 +1360,22 @@ impl CognitiveRuntime {
         let total_steps = state.steps.len();
         if state.current_step_index < total_steps {
             state.phase = CognitivePhase::Act;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
 
-            // Collect results from previous succeeded steps for context injection
-            let prior_step_results: Vec<(String, String)> = state.steps[..state.current_step_index]
+            // Earlier succeeded steps whose typed results a later step may
+            // carry (§11.3): action type and step id.
+            let prior_steps: Vec<(String, String)> = state.steps[..state.current_step_index]
                 .iter()
                 .filter(|s| s.status == StepStatus::Succeeded)
-                .filter_map(|s| {
-                    s.result
-                        .as_ref()
-                        .map(|r| (s.action.action_type().to_string(), r.clone()))
-                })
+                .map(|s| (s.action.action_type().to_string(), s.id.clone()))
                 .collect();
 
             let step = &mut state.steps[state.current_step_index];
             step.status = StepStatus::Executing;
             step.attempts += 1;
 
-            if let Some(selected_algorithm) = self.resolve_selected_algorithm(agent_id, memory_mgr)
-            {
+            if let Some(selected_algorithm) = self.resolve_selected_algorithm(&state.ctx) {
                 match selected_algorithm.algorithm.as_str() {
                     "swarm" => {
                         let swarm = self.swarm.lock().unwrap_or_else(|p| p.into_inner());
@@ -1159,11 +1386,16 @@ impl CognitiveRuntime {
                         let simulation =
                             world_model.simulate_action(&state.goal.id, step.action.action_type());
                         // Best-effort: record world model simulation; informational only
-                        let _ = memory_mgr.store_episodic(
-                            agent_id,
-                            "world_model_act_preview",
-                            &simulation.to_string(),
-                        );
+                        if let Ok(issuer) = self.issuer() {
+                            let _ = AgentMemoryManager::record_episodic(
+                                issuer,
+                                &state.ctx,
+                                SourceKind::LoopEpisodic,
+                                "world_model_act_preview",
+                                &simulation.to_string(),
+                                &[],
+                            );
+                        }
                     }
                     _ => {}
                 }
@@ -1282,17 +1514,28 @@ impl CognitiveRuntime {
             // decides every action and no delegation path reaches a transport or
             // actuator around it.
             // Execute the action
-            let mut action_clone = step.action.clone();
-
-            // Inject accumulated results from previous steps into LlmQuery context
-            if let PlannedAction::LlmQuery {
-                ref mut context, ..
-            } = action_clone
-            {
-                for (action_type, result) in &prior_step_results {
-                    context.push(format!("[{} result]: {}", action_type, result));
-                }
-            }
+            let action_clone = step.action.clone();
+            let issuer = self.issuer()?.clone();
+            let Some(plan) = state.plan.as_ref() else {
+                return Err(AgentError::SupervisorError(
+                    "the plan of these steps is unknown".to_string(),
+                ));
+            };
+            let prior: Vec<(String, &StepItem)> = prior_steps
+                .iter()
+                .filter_map(|(action_type, id)| {
+                    state
+                        .results
+                        .get(id)
+                        .map(|item| (action_type.clone(), item))
+                })
+                .collect();
+            let mut scope = StepScope {
+                issuer: &issuer,
+                ctx: &mut state.ctx,
+                plan,
+                prior: &prior,
+            };
 
             eprintln!(
                 "[agent:{}] dispatching to executor: {} (step {}/{})",
@@ -1301,115 +1544,118 @@ impl CognitiveRuntime {
                 state.current_step_index + 1,
                 total_steps
             );
-            let (step_executed, step_fuel, step_error) =
-                match executor.execute(agent_id, &action_clone, audit, requires_hitl) {
-                    Ok(result) => {
-                        eprintln!(
-                            "[agent:{}] actuator result for {}: {} chars — {}",
-                            agent_id,
-                            action_clone.action_type(),
-                            result.len(),
-                            &result[..result.floor_char_boundary(200)]
-                        );
-                        step.status = StepStatus::Succeeded;
-                        // LLM query results get full text (user needs to see
-                        // the reasoning). File reads get truncated preview.
-                        let is_llm = matches!(action_clone, PlannedAction::LlmQuery { .. });
-                        let max_preview = if is_llm { 2000 } else { 500 };
-                        let preview = if result.len() > max_preview {
-                            format!("{}...", &result[..max_preview])
-                        } else {
-                            result.clone()
-                        };
-                        step.result = Some(result);
-                        step.fuel_cost = estimate_fuel_cost(&action_clone);
-                        state.total_fuel_consumed += step.fuel_cost;
-                        state.consecutive_failures = 0;
-                        state.steps_completed += 1;
-                        state.current_step_index += 1;
-                        let fuel = step.fuel_cost;
+            let executed =
+                executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl);
+            drop(prior);
+            let (step_executed, step_fuel, step_error) = match executed {
+                Ok(StepOutput { text: result, item }) => {
+                    eprintln!(
+                        "[agent:{}] actuator result for {}: {} chars — {}",
+                        agent_id,
+                        action_clone.action_type(),
+                        result.len(),
+                        &result[..result.floor_char_boundary(200)]
+                    );
+                    state.results.insert(step.id.clone(), item);
+                    step.status = StepStatus::Succeeded;
+                    // LLM query results get full text (user needs to see
+                    // the reasoning). File reads get truncated preview.
+                    let is_llm = matches!(action_clone, PlannedAction::LlmQuery { .. });
+                    let max_preview = if is_llm { 2000 } else { 500 };
+                    let preview = if result.len() > max_preview {
+                        format!("{}...", &result[..max_preview])
+                    } else {
+                        result.clone()
+                    };
+                    step.result = Some(result);
+                    step.fuel_cost = estimate_fuel_cost(&action_clone);
+                    state.total_fuel_consumed += step.fuel_cost;
+                    state.consecutive_failures = 0;
+                    state.steps_completed += 1;
+                    state.current_step_index += 1;
+                    let fuel = step.fuel_cost;
 
-                        self.emit_step_executed(agent_id, step);
+                    self.emit_step_executed(agent_id, step);
 
-                        // Consume fuel from supervisor
-                        if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
-                            let fuel_units = fuel as u64;
-                            let mut sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(handle) = sup.get_agent(agent_uuid) {
-                                let remaining = handle.remaining_fuel;
-                                if remaining >= fuel_units {
-                                    // Best-effort: deduct fuel from supervisor; step already succeeded
-                                    let _ = sup.record_llm_spend(
-                                        agent_uuid,
-                                        "cognitive",
-                                        0,
-                                        fuel_units as u32,
-                                        fuel_units,
-                                    );
-                                }
+                    // Consume fuel from supervisor
+                    if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
+                        let fuel_units = fuel as u64;
+                        let mut sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                        if let Some(handle) = sup.get_agent(agent_uuid) {
+                            let remaining = handle.remaining_fuel;
+                            if remaining >= fuel_units {
+                                // Best-effort: deduct fuel from supervisor; step already succeeded
+                                let _ = sup.record_llm_spend(
+                                    agent_uuid,
+                                    "cognitive",
+                                    0,
+                                    fuel_units as u32,
+                                    fuel_units,
+                                );
                             }
                         }
-
-                        audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::UserAction,
-                            json!({
-                                "event": "cognitive.step_executed",
-                                "action": action_clone.action_type(),
-                                "status": "succeeded",
-                                "fuel_cost": fuel,
-                                "result_preview": preview,
-                            }),
-                        )?;
-
-                        (true, fuel, None)
                     }
-                    Err(error) => {
-                        eprintln!(
-                            "[agent:{}] executor FAILED for {}: {}",
-                            agent_id,
-                            action_clone.action_type(),
-                            &error[..error.floor_char_boundary(300)]
-                        );
-                        if error.starts_with("human approval required:")
-                            || error.starts_with("Warden blocked action:")
-                        {
-                            state.phase = CognitivePhase::Blocked;
-                            return Ok(CycleResult {
-                                phase: CognitivePhase::Blocked,
-                                steps_executed: 0,
-                                fuel_consumed: 0.0,
-                                should_continue: true,
-                                blocked_reason: Some(error),
-                                success: true,
-                                failure_reason: None,
-                            });
-                        }
 
-                        step.status = StepStatus::Failed;
-                        step.result = Some(error.clone());
-                        state.consecutive_failures += 1;
+                    audit.append_event(
+                        uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                        EventType::UserAction,
+                        json!({
+                            "event": "cognitive.step_executed",
+                            "action": action_clone.action_type(),
+                            "status": "succeeded",
+                            "fuel_cost": fuel,
+                            "result_preview": preview,
+                        }),
+                    )?;
 
-                        self.emit_step_executed(agent_id, step);
-
-                        audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::UserAction,
-                            json!({
-                                "event": "cognitive.step_failed",
-                                "action": action_clone.action_type(),
-                                "error": error,
-                                "attempt": step.attempts,
-                            }),
-                        )?;
-
-                        if step.attempts >= step.max_retries {
-                            state.current_step_index += 1;
-                        }
-
-                        (false, 0.0, Some(error))
+                    (true, fuel, None)
+                }
+                Err(error) => {
+                    eprintln!(
+                        "[agent:{}] executor FAILED for {}: {}",
+                        agent_id,
+                        action_clone.action_type(),
+                        &error[..error.floor_char_boundary(300)]
+                    );
+                    if error.starts_with("human approval required:")
+                        || error.starts_with("Warden blocked action:")
+                    {
+                        state.phase = CognitivePhase::Blocked;
+                        return Ok(CycleResult {
+                            phase: CognitivePhase::Blocked,
+                            steps_executed: 0,
+                            fuel_consumed: 0.0,
+                            should_continue: true,
+                            blocked_reason: Some(error),
+                            success: true,
+                            failure_reason: None,
+                        });
                     }
-                };
+
+                    step.status = StepStatus::Failed;
+                    step.result = Some(error.clone());
+                    state.consecutive_failures += 1;
+
+                    self.emit_step_executed(agent_id, step);
+
+                    audit.append_event(
+                        uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                        EventType::UserAction,
+                        json!({
+                            "event": "cognitive.step_failed",
+                            "action": action_clone.action_type(),
+                            "error": error,
+                            "attempt": step.attempts,
+                        }),
+                    )?;
+
+                    if step.attempts >= step.max_retries {
+                        state.current_step_index += 1;
+                    }
+
+                    (false, 0.0, Some(error))
+                }
+            };
 
             // If more steps remain, return and continue next cycle
             if state.current_step_index < state.steps.len() {
@@ -1431,7 +1677,7 @@ impl CognitiveRuntime {
         // ── REFLECT (every reflection_interval cycles) ──
         if state.cycle_count % overrides.reflection_interval == 0 {
             state.phase = CognitivePhase::Reflect;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
 
             let total = state.steps.len() as f64;
@@ -1442,28 +1688,34 @@ impl CognitiveRuntime {
                 .count() as f64;
             let success_rate = if total > 0.0 { succeeded / total } else { 0.0 };
 
+            let issuer = self.issuer()?.clone();
             if success_rate < 0.5 && total > 0.0 {
                 // Best-effort: record low success rate as procedural learning
-                let _ = memory_mgr.store_procedural(
-                    agent_id,
+                let _ = AgentMemoryManager::record_procedural(
+                    &issuer,
+                    &state.ctx,
+                    SourceKind::LoopEpisodic,
                     &format!(
                         "low success rate ({:.0}%) on goal: {}",
                         success_rate * 100.0,
                         state.goal.description
                     ),
                     success_rate,
+                    &[],
                 );
             }
 
             // Best-effort: record reflection snapshot; non-critical telemetry
-            let _ = memory_mgr.store_episodic(
-                agent_id,
+            let _ = AgentMemoryManager::record_episodic(
+                &issuer,
+                &state.ctx,
+                SourceKind::LoopEpisodic,
                 &format!("reflection at cycle {}", state.cycle_count),
                 &format!("success_rate={:.2}, steps={}", success_rate, total),
+                &[],
             );
 
-            if let Some(selected_algorithm) = self.resolve_selected_algorithm(agent_id, memory_mgr)
-            {
+            if let Some(selected_algorithm) = self.resolve_selected_algorithm(&state.ctx) {
                 if selected_algorithm.algorithm == "adversarial" {
                     let caps = self.agent_capabilities(agent_id);
                     let mut arena = self.arena.lock().unwrap_or_else(|p| p.into_inner());
@@ -1475,8 +1727,10 @@ impl CognitiveRuntime {
                     let (passed, summary, confidence) =
                         arena.challenge(state.goal.description.as_str(), &step_content, &caps);
                     // Best-effort: record adversarial reflection result; informational only
-                    let _ = memory_mgr.store_episodic(
-                        agent_id,
+                    let _ = AgentMemoryManager::record_episodic(
+                        &issuer,
+                        &state.ctx,
+                        SourceKind::LoopEpisodic,
                         "adversarial_reflect",
                         &format!(
                             "{} (confidence: {:.2}, defense_rate: {:.2})",
@@ -1484,6 +1738,7 @@ impl CognitiveRuntime {
                             confidence,
                             arena.defense_rate()
                         ),
+                        &[],
                     );
                     if !passed {
                         eprintln!("Adversarial review failed for agent {agent_id}: {summary}");
@@ -1521,12 +1776,14 @@ impl CognitiveRuntime {
 
             // ── LEARN ──
             state.phase = CognitivePhase::Learn;
-            self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
+            self.record_phase_model_selection(agent_id, state.phase, &state.ctx, audit);
             self.emit_phase_change(agent_id, state);
 
             // Best-effort: record goal outcome as episodic memory for future planning
-            let _ = memory_mgr.store_episodic(
-                agent_id,
+            let _ = AgentMemoryManager::record_episodic(
+                self.issuer()?,
+                &state.ctx,
+                SourceKind::LoopEpisodic,
                 &format!(
                     "goal {}: {}",
                     if success { "completed" } else { "failed" },
@@ -1538,6 +1795,7 @@ impl CognitiveRuntime {
                     state.total_fuel_consumed,
                     success
                 ),
+                &[],
             );
 
             // Best-effort: run memory decay; stale memory cleanup is non-critical
@@ -1734,6 +1992,52 @@ impl CognitiveRuntime {
             .unwrap_or_else(|p| p.into_inner());
         map.get(agent_id)
             .map(|arc_swap| (**arc_swap.load()).clone())
+    }
+
+    /// Runs `f` with the issuer and the unit of `agent_id`'s goal
+    /// `goal_id` (P3-HM-CONTRACT-02 §6.1), under the `loops` guard: `f`
+    /// only writes labelled rows and makes no model call. `None` when that
+    /// goal has no loop, or there is no issuer.
+    pub fn with_goal_context<R>(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+        f: impl FnOnce(&DispatchIssuer, &DispatchContext) -> R,
+    ) -> Option<R> {
+        let issuer = self.issuer.as_ref()?;
+        let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        let state = loops.get(agent_id).filter(|s| s.goal.id == goal_id)?;
+        Some(f(issuer, &state.ctx))
+    }
+
+    /// The evolution context after `agent_id`'s goal `goal_id` (§11.3): the
+    /// goal's own policy snapshot, taint, route class and working set.
+    pub fn derive_post_goal(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+    ) -> Result<DispatchContext, AgentError> {
+        let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        let state = loops
+            .get(agent_id)
+            .filter(|s| s.goal.id == goal_id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("no loop of goal '{goal_id}'")))?;
+        post_goal_context(&state.ctx, goal_id).map_err(AgentError::SupervisorError)
+    }
+
+    /// What a finished goal hands to the session or team that started it
+    /// (§11.3, §14 rule 5): a post-goal copy of its unit (taint and working
+    /// set) and its final output as a derived item of that unit.
+    pub fn goal_outcome(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+    ) -> Option<(DispatchContext, Option<DerivedItem>)> {
+        let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        let state = loops.get(agent_id).filter(|s| s.goal.id == goal_id)?;
+        let mut ctx = post_goal_context(&state.ctx, goal_id).ok()?;
+        let output = compute_goal_output(&state.steps).map(|text| ctx.produce(text));
+        Some((ctx, output))
     }
 
     /// Check if an agent has an active cognitive loop.
@@ -1954,6 +2258,19 @@ impl CognitiveRuntime {
 
 /// Aggregate all succeeded step outputs into a single string for the goal-completed
 /// event. Preserves the LlmQuery-preference path for plans ending with reasoning.
+/// The post-goal context of a goal's unit `ctx` (§2.2, §11.3): an assigned
+/// goal's own unit, or the HiveMind sub-task unit the goal `goal_id` ran
+/// under.
+fn post_goal_context(ctx: &DispatchContext, goal_id: &str) -> Result<DispatchContext, String> {
+    match ctx.unit() {
+        Unit::HiveSubtask { .. } => {
+            let goal = uuid::Uuid::parse_str(goal_id).map_err(|e| e.to_string())?;
+            ctx.derive_post_subtask(goal).map_err(|e| e.to_string())
+        }
+        _ => ctx.derive_post_goal().map_err(|e| e.to_string()),
+    }
+}
+
 fn compute_goal_output(steps: &[AgentStep]) -> Option<String> {
     // Pass 1: if the last succeeded step is an LlmQuery with non-empty result, return it directly.
     if let Some(last) = steps
@@ -2183,22 +2500,53 @@ fn infer_goal_type(description: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::memory_manager::MemoryStore;
-    use super::super::planner::PlannerLlm;
     use super::*;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::{NewMemory, RouteClass};
     use crate::manifest::AgentManifest;
     use crate::supervisor::Supervisor;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, OnceLock};
 
     // ── Test helpers ──
 
-    struct MockLlm {
-        response: String,
+    /// The synthetic store and issuer every runtime of these tests mints its
+    /// goal units with (P3-HM-CONTRACT-02 §11.0). Every agent the tests'
+    /// supervisors start is registered, local-only by default.
+    fn hm() -> &'static TestHm {
+        static HM: OnceLock<TestHm> = OnceLock::new();
+        HM.get_or_init(|| TestHm::new().register_every_agent())
     }
 
-    impl PlannerLlm for MockLlm {
-        fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
-            Ok(self.response.clone())
-        }
+    /// A labelled `memory_type` row of `agent_id`, written in the unit of
+    /// its active goal (TEST FIXTURE for control rows the loop reads).
+    fn seed_control_row(
+        runtime: &CognitiveRuntime,
+        agent_id: &str,
+        memory_type: &str,
+        key: &str,
+        value_json: &str,
+    ) {
+        let goal_id = runtime
+            .get_agent_status(agent_id)
+            .and_then(|status| status.active_goal)
+            .map(|goal| goal.id)
+            .expect("an active goal");
+        runtime
+            .with_goal_context(agent_id, &goal_id, |issuer, ctx| {
+                issuer.write_memory(
+                    ctx,
+                    &NewMemory {
+                        source_kind: SourceKind::CognitiveParam,
+                        memory_type,
+                        key,
+                        value_json,
+                        relevance_score: 1.0,
+                    },
+                    &[],
+                )
+            })
+            .expect("the goal's unit")
+            .expect("labelled write");
     }
 
     struct MockExecutor {
@@ -2259,41 +2607,6 @@ mod tests {
         }
     }
 
-    struct SeededMemoryStore {
-        rows: Vec<super::super::memory_manager::MemoryEntry>,
-    }
-
-    impl MemoryStore for SeededMemoryStore {
-        fn save_memory(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn load_memories(
-            &self,
-            _agent_id: &str,
-            memory_type: Option<&str>,
-            limit: usize,
-        ) -> Result<Vec<super::super::memory_manager::MemoryEntry>, String> {
-            Ok(self
-                .rows
-                .iter()
-                .filter(|row| {
-                    memory_type.is_none() || Some(row.memory_type.as_str()) == memory_type
-                })
-                .take(limit)
-                .cloned()
-                .collect())
-        }
-
-        fn touch_memory(&self, _: i64) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn decay_memories(&self, _: &str, _: f64) -> Result<(), String> {
-            Ok(())
-        }
-    }
-
     fn make_supervisor_with_agent() -> (Arc<Mutex<Supervisor>>, String) {
         let mut sup = Supervisor::new();
         let manifest = AgentManifest {
@@ -2319,19 +2632,15 @@ mod tests {
     }
 
     fn make_planner(response: &str) -> CognitivePlanner {
-        CognitivePlanner::new(Box::new(MockLlm {
-            response: response.to_string(),
-        }))
+        CognitivePlanner::new(Box::new(ScriptedLlm::replying(
+            &hm().issuer,
+            RouteClass::Local,
+            response,
+        )))
     }
 
     fn make_memory_mgr() -> AgentMemoryManager {
         AgentMemoryManager::new(Box::new(MockMemoryStore))
-    }
-
-    fn make_seeded_memory_mgr(
-        rows: Vec<super::super::memory_manager::MemoryEntry>,
-    ) -> AgentMemoryManager {
-        AgentMemoryManager::new(Box::new(SeededMemoryStore { rows }))
     }
 
     fn make_supervisor_with_autonomy(level: u8) -> (Arc<Mutex<Supervisor>>, String) {
@@ -2371,7 +2680,8 @@ mod tests {
             fuel_reserve_threshold: 0.05,
             reflection_interval: 3,
         };
-        let runtime = CognitiveRuntime::new(sup, config, emitter.clone());
+        let runtime = CognitiveRuntime::new(sup, config, emitter.clone())
+            .with_dispatch_issuer(hm().issuer.clone());
         (runtime, emitter)
     }
 
@@ -2398,16 +2708,14 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Records every prompt the planner sends.
-    struct PromptRecorder {
-        prompts: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl PlannerLlm for PromptRecorder {
-        fn plan_query(&self, prompt: &str) -> Result<String, AgentError> {
-            self.prompts.lock().unwrap().push(prompt.to_string());
-            Ok(r#"[{"action": {"type": "LlmQuery", "prompt": "answer", "context": []}, "description": "ask"}]"#.to_string())
-        }
+    /// Records every prompt the planner sends (the admitted prompt, through
+    /// the issuer).
+    fn prompt_recorder() -> ScriptedLlm {
+        ScriptedLlm::replying(
+            &hm().issuer,
+            RouteClass::Local,
+            r#"[{"action": {"type": "LlmQuery", "prompt": "answer", "context": []}, "description": "ask"}]"#,
+        )
     }
 
     #[test]
@@ -2416,10 +2724,9 @@ mod tests {
         let (runtime, _emitter) = make_runtime(sup);
         let goal = AgentGoal::new("summarize the files here".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
-        let prompts = Arc::new(Mutex::new(Vec::new()));
-        let planner = CognitivePlanner::new(Box::new(PromptRecorder {
-            prompts: prompts.clone(),
-        }));
+        let recorder = prompt_recorder();
+        let prompts = recorder.prompts.clone();
+        let planner = CognitivePlanner::new(Box::new(recorder));
         let memory_mgr = make_memory_mgr();
         let executor = MockExecutor::always_ok("done");
         let mut audit = AuditTrail::new();
@@ -2576,7 +2883,8 @@ mod tests {
             ..LoopConfig::default()
         };
         let emitter = Arc::new(CollectingEmitter::new());
-        let runtime = CognitiveRuntime::new(sup, config, emitter);
+        let runtime =
+            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&id.to_string(), goal).unwrap();
@@ -2756,7 +3064,8 @@ mod tests {
             max_cycles_per_goal: 1, // Only 1 cycle allowed
             ..LoopConfig::default()
         };
-        let runtime = CognitiveRuntime::new(sup, config, emitter);
+        let runtime =
+            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3176,7 +3485,8 @@ mod tests {
             reflection_interval: 100, // Don't trigger reflection
             ..LoopConfig::default()
         };
-        let runtime = CognitiveRuntime::new(sup, config, emitter);
+        let runtime =
+            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3214,7 +3524,8 @@ mod tests {
             max_cycles_per_goal: 50,
             ..LoopConfig::default()
         };
-        let runtime = CognitiveRuntime::new(sup, config, emitter.clone());
+        let runtime = CognitiveRuntime::new(sup, config, emitter.clone())
+            .with_dispatch_issuer(hm().issuer.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3417,7 +3728,8 @@ mod tests {
     fn test_l6_cooldown_pause_triggers_at_100_cycles() {
         let (sup, agent_id) = make_supervisor_with_autonomy(6);
         let emitter = Arc::new(CollectingEmitter::new());
-        let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone());
+        let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone())
+            .with_dispatch_issuer(hm().issuer.clone());
         runtime
             .assign_goal(&agent_id, AgentGoal::new("cooldown test".into(), 5))
             .unwrap();
@@ -3452,7 +3764,8 @@ mod tests {
     fn test_l6_cooldown_cannot_be_disabled_by_agent_memory() {
         let (sup, agent_id) = make_supervisor_with_autonomy(6);
         let emitter = Arc::new(CollectingEmitter::new());
-        let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone());
+        let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone())
+            .with_dispatch_issuer(hm().issuer.clone());
         runtime
             .assign_goal(
                 &agent_id,
@@ -3467,23 +3780,21 @@ mod tests {
             .unwrap()
             .cycle_count = 100;
 
-        let seeded = vec![super::super::memory_manager::MemoryEntry {
-            id: 1,
-            agent_id: agent_id.clone(),
-            memory_type: "cognitive_params".to_string(),
-            key: "active".to_string(),
-            value_json: json!({
+        // The agent's memory tries to override the loop (a labelled control
+        // row the loop reads route-first).
+        seed_control_row(
+            &runtime,
+            &agent_id,
+            "cognitive_params",
+            "active",
+            &json!({
                 "max_cycles": "500",
                 "reflection_interval": "1",
                 "planning_depth": "10"
             })
             .to_string(),
-            relevance_score: 1.0,
-            access_count: 0,
-            created_at: "now".to_string(),
-            last_accessed: "now".to_string(),
-        }];
-        let memory_mgr = make_seeded_memory_mgr(seeded);
+        );
+        let memory_mgr = make_memory_mgr();
         let planner = make_planner(r#"[{"action": {"type": "Noop"}, "description": "done"}]"#);
         let executor = MockExecutor::always_ok("ok");
         let mut audit = AuditTrail::new();
@@ -4710,14 +5021,9 @@ mod tests {
 
     /// A handler that returns a caller-configurable response — used to simulate
     /// the empty-LLM path that the planner's two-strike fallback funnels into.
-    struct FixedLlmHandler {
-        response: String,
-    }
-
-    impl LlmQueryHandler for FixedLlmHandler {
-        fn query(&self, _prompt: &str) -> Result<String, String> {
-            Ok(self.response.clone())
-        }
+    #[allow(non_snake_case)]
+    fn FixedLlmHandler(response: &str) -> ScriptedLlm {
+        ScriptedLlm::replying(&hm().issuer, RouteClass::Local, response)
     }
 
     /// G1a-1: the LlmQuery executor branch reclassifies an Ok("") response as
@@ -4733,16 +5039,25 @@ mod tests {
             sup,
             None,
         )
-        .with_llm_handler(Arc::new(FixedLlmHandler {
-            response: "".to_string(),
-        }));
+        .with_llm_handler(Arc::new(FixedLlmHandler("")));
 
         let mut audit = AuditTrail::new();
         let action = PlannedAction::LlmQuery {
             prompt: "anything".to_string(),
             context: vec![],
         };
-        let result = executor.execute(&agent_id, &action, &mut audit, false);
+        // As a step of a unit (§11.4: an LlmQuery runs only in one).
+        let mut unit = hm().goal(uuid::Uuid::parse_str(&agent_id).unwrap());
+        let plan = unit.produce("the plan");
+        let mut scope = StepScope {
+            issuer: &hm().issuer,
+            ctx: &mut unit,
+            plan: &plan,
+            prior: &[],
+        };
+        let result = executor
+            .execute_in(&mut scope, &agent_id, &action, &mut audit, false)
+            .map(|output| output.text);
 
         assert!(
             result.is_err(),
@@ -4862,19 +5177,32 @@ mod tests {
     /// are persisted. With `inject`, both go to the runtime's own database.
     fn state_db_scenario(inject: bool) {
         let db = Arc::new(NexusDatabase::in_memory().unwrap());
+        // The issuer decides over the host's state database when one is
+        // injected; otherwise over its own in-memory one (never the
+        // identity home's).
+        let hm = if inject {
+            TestHm::over(db.clone()).register_every_agent()
+        } else {
+            TestHm::new().register_every_agent()
+        };
         let runtime = |sup| {
             let runtime = CognitiveRuntime::new(
                 sup,
                 LoopConfig::default(),
                 Arc::new(CollectingEmitter::new()),
-            );
+            )
+            .with_dispatch_issuer(hm.issuer.clone());
             if inject {
                 runtime.with_state_database(db.clone())
             } else {
                 runtime
             }
         };
-        let planner = make_planner(r#"[{"action": {"type": "Noop"}, "description": "done"}]"#);
+        let planner = CognitivePlanner::new(Box::new(ScriptedLlm::replying(
+            &hm.issuer,
+            RouteClass::Local,
+            r#"[{"action": {"type": "Noop"}, "description": "done"}]"#,
+        )));
         let executor = MockExecutor::always_ok("ok");
         let mut audit = AuditTrail::new();
 
@@ -4899,25 +5227,15 @@ mod tests {
         planning
             .assign_goal(&l3, AgentGoal::new("selection record".into(), 5))
             .unwrap();
-        let selection = super::super::memory_manager::MemoryEntry {
-            id: 1,
-            agent_id: l3.clone(),
-            memory_type: "algorithm_selection".to_string(),
-            key: "latest".to_string(),
-            value_json: json!({"algorithm": "swarm"}).to_string(),
-            relevance_score: 1.0,
-            access_count: 0,
-            created_at: "now".to_string(),
-            last_accessed: "now".to_string(),
-        };
+        seed_control_row(
+            &planning,
+            &l3,
+            "algorithm_selection",
+            "latest",
+            &json!({"algorithm": "swarm"}).to_string(),
+        );
         planning
-            .run_cycle(
-                &l3,
-                &planner,
-                &make_seeded_memory_mgr(vec![selection]),
-                &executor,
-                &mut audit,
-            )
+            .run_cycle(&l3, &planner, &make_memory_mgr(), &executor, &mut audit)
             .unwrap();
 
         if inject {

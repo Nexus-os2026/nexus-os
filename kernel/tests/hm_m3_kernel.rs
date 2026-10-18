@@ -1116,3 +1116,55 @@ fn hm_m3_n3_a15a_a_write_keeps_the_recall_time_label_of_an_inclusion() {
         "the stored label"
     );
 }
+
+/// N3 (§2.2 `PostGoal`, §11.3): a HiveMind sub-task runs as its
+/// participant's goal under the sub-task's own unit; the evolution context
+/// after that goal keeps the sub-task's taint, policy snapshot and working
+/// set, as a goal's post-goal context keeps the goal's. Any other unit is
+/// refused.
+#[test]
+fn hm_m3_n3_a_subtasks_post_goal_context_keeps_the_subtask_unit() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_A);
+    let session = e
+        .issuer
+        .begin_unit(
+            agent(AGENT_A),
+            Unit::HiveSubtask {
+                session_id: Uuid::new_v4(),
+                subtask_id: 0,
+            },
+        )
+        .unwrap();
+    let goal_id = Uuid::new_v4();
+
+    let clean = session.derive_subtask(&e.issuer, id(AGENT_A), 1).unwrap();
+    assert_eq!(state(&clean), UN);
+    let pg = clean.derive_post_subtask(goal_id).unwrap();
+    assert_eq!(state(&pg), UN);
+    assert!(matches!(pg.unit(), Unit::PostGoal { goal_id: g } if g == goal_id));
+
+    let mut tainted = session.derive_subtask(&e.issuer, id(AGENT_A), 2).unwrap();
+    let restricted = e.issuer.begin_unit(agent(AGENT_D), goal()).unwrap();
+    tainted.join_child(&restricted).unwrap();
+    let pg = tainted.derive_post_subtask(goal_id).unwrap();
+    assert_eq!(state(&pg), LO);
+    assert_eq!(pg.policy(), tainted.policy());
+
+    let team = e
+        .issuer
+        .begin_unit(
+            agent(AGENT_A),
+            Unit::TeamTask {
+                workflow_id: Uuid::new_v4(),
+                task_index: 0,
+            },
+        )
+        .unwrap();
+    for other in [local_unit(&e, AGENT_A), team, pg] {
+        assert_eq!(
+            other.derive_post_subtask(goal_id).unwrap_err(),
+            Unresolved::UnsupportedUnit
+        );
+    }
+}

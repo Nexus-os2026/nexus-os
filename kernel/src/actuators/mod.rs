@@ -46,7 +46,7 @@ pub use shell::GovernedShell;
 pub use tts::TtsActuator;
 pub use types::{
     ActionResult, ActionReviewDecision, ActionReviewEngine, Actuator, ActuatorContext,
-    ActuatorError, SideEffect,
+    ActuatorError, ActuatorScope, SideEffect,
 };
 pub use web::{CurlWebBackend, GovernedWeb, WebSearchBackend, WebSearchResult};
 
@@ -95,7 +95,7 @@ impl ActuatorRegistry {
         registry.register(Box::new(GovernedApiClient));
         registry.register(Box::new(ImageGenActuator));
         registry.register(Box::new(TtsActuator));
-        registry.register(Box::new(KnowledgeGraphActuator::default()));
+        registry.register(Box::new(KnowledgeGraphActuator));
         registry.register(Box::new(BrowserActuator));
         registry.register(Box::new(ScreenCaptureActuator));
         registry.register(Box::new(InputControlActuator));
@@ -130,6 +130,33 @@ impl ActuatorRegistry {
         action: &PlannedAction,
         context: &ActuatorContext,
         audit: &mut dyn AuditWriter,
+    ) -> Result<ActionResult, ActuatorError> {
+        self.execute_governed(action, context, audit, |actuator| {
+            actuator.execute(action, context)
+        })
+    }
+
+    /// [`ActuatorRegistry::execute_action`] for a step of the unit in
+    /// `scope` (P3-HM-CONTRACT-02 §6, §12.3): the same capability, fuel,
+    /// review and audit steps, then [`Actuator::execute_in`].
+    pub fn execute_action_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        audit: &mut dyn AuditWriter,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        self.execute_governed(action, context, audit, |actuator| {
+            actuator.execute_in(action, context, scope)
+        })
+    }
+
+    fn execute_governed(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        audit: &mut dyn AuditWriter,
+        run: impl FnOnce(&dyn Actuator) -> Result<ActionResult, ActuatorError>,
     ) -> Result<ActionResult, ActuatorError> {
         // Find the right actuator by trying each one
         let actuator = self.find_actuator_for(action)?;
@@ -230,7 +257,7 @@ impl ActuatorRegistry {
         }
 
         // 4. Execute
-        let result = actuator.execute(action, context)?;
+        let result = run(actuator)?;
 
         // 5. Audit
         // Best-effort: post-execution audit is secondary; action result is already determined

@@ -34,6 +34,19 @@ pub struct DreamTask {
     pub context: serde_json::Value,
     pub created_at: u64,
     pub estimated_tokens: u64,
+    /// The label and real principal of the chat turn that queued this
+    /// entry (P3-HM-CONTRACT-02 §6.5 `dream_queue`, §11.3). Never
+    /// serialised and never decoded from text: an entry without one is
+    /// `LOCAL_ONLY_ORIGIN`, with no non-local route.
+    #[serde(skip)]
+    pub(crate) label: Option<crate::hm::EntryLabel>,
+}
+
+impl DreamTask {
+    /// The label of the turn that queued this entry, if it has one.
+    pub fn label(&self) -> Option<&crate::hm::EntryLabel> {
+        self.label.as_ref()
+    }
 }
 
 impl Default for DreamTask {
@@ -46,6 +59,7 @@ impl Default for DreamTask {
             context: serde_json::Value::Null,
             created_at: crate::consciousness::state::now_secs(),
             estimated_tokens: 500,
+            label: None,
         }
     }
 }
@@ -60,6 +74,18 @@ pub struct DreamResult {
     pub completed_at: u64,
     pub tokens_used: u64,
     pub outcome: DreamOutcome,
+    /// The label of the dream unit that produced it (§11.3: a dream result
+    /// is a derived item of its entry). Never serialised; none reads as
+    /// `LOCAL_ONLY_ORIGIN`.
+    #[serde(skip)]
+    pub(crate) label: Option<crate::hm::EntryLabel>,
+}
+
+impl DreamResult {
+    /// The label of the dream unit that produced this result, if any.
+    pub fn label(&self) -> Option<&crate::hm::EntryLabel> {
+        self.label.as_ref()
+    }
 }
 
 /// What a dream produced.
@@ -146,9 +172,13 @@ mod tests {
             outcome: DreamOutcome::NoResult {
                 reason: "test".into(),
             },
+            label: None,
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: DreamResult = serde_json::from_str(&json).unwrap();
         assert_eq!(back.task_id, "t1");
+        // The label is never serialised (P3-HM AMENDMENT 2 A2.2).
+        assert!(!json.contains("label"));
+        assert!(back.label().is_none());
     }
 }

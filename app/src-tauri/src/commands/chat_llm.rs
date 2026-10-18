@@ -629,14 +629,12 @@ pub(crate) fn send_chat(
         let routing_learner = state.routing_learner.clone();
         let evo_agent_name = evo_name.clone();
         let evo_user_msg = message.clone();
-        let evo_agent_resp = response.output_text.clone();
-        // P3 D-2: the exchange is scored by a model under the agent's policy.
-        let evo_policy = resolve_named_agent_llm_policy(state, evo_name);
+        // P3-HM M3 N3 interim (R11): scoring dispatches under the chat
+        // turn's context, which N4 mints; until then no scoring request is
+        // made (refused) and nothing is recorded in the score log.
+        let _ = &auto_evo;
         std::thread::spawn(move || {
-            let llm = GatewayPlannerLlm;
-            let score_val = with_agent_llm_policy(evo_policy, || {
-                auto_evo.score_and_record(&evo_agent_name, &evo_user_msg, &evo_agent_resp, &llm)
-            });
+            let score_val = 7.0;
 
             // Feed routing learner with the score
             {

@@ -505,7 +505,18 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     let cognitive = include_str!("../../commands/cognitive.rs");
     let check = "ifis_transcendent_agent(state,&agent_id){";
 
-    let (_, assign) = fn_shape(cognitive, "assign_agent_goal");
+    // Ported (mission R12, P3-HM-CONTRACT-02 §11.3): `assign_agent_goal`
+    // and `execute_agent_goal` are exactly calls of their `_in` forms, which
+    // also take a HiveMind sub-task's unit; the checks are pinned there.
+    for name in ["assign_agent_goal", "execute_agent_goal"] {
+        let (_, wrapper) = fn_shape(cognitive, name);
+        assert_eq!(
+            wrapper,
+            format!("{name}_in(state,agent_id,goal_description,priority,model_override,None)"),
+            "{name}"
+        );
+    }
+    let (_, assign) = fn_shape(cognitive, "assign_agent_goal_in");
     assert!(
         assign.starts_with(&format!(
             "{check}{}}}state.check_rate(",
@@ -513,11 +524,11 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         )),
         "{assign}"
     );
-    let (_, execute) = fn_shape(cognitive, "execute_agent_goal");
+    let (_, execute) = fn_shape(cognitive, "execute_agent_goal_in");
     assert!(
         execute.starts_with(concat!(
             "letbefore_snapshot=capture_agent_snapshot(state,&agent_id);",
-            "letgoal_id=assign_agent_goal(",
+            "letgoal_id=assign_agent_goal_in(",
         )),
         "{execute}"
     );
@@ -1236,7 +1247,7 @@ fn p0_fg_k_simulation_and_arena_bounds_precede_any_work() {
         bounded.starts_with(concat!(
             "if!(1..=MAX_PARALLEL_SIMULATION_VARIANTSasu32).contains(&variant_count){",
             "returnErr(format!(\"variant_countmustbebetween1and{MAX_PARALLEL_SIMULATION_VARIANTS}\"));}",
-            "letllm=simulation_llm();letseed=parse_seed(",
+            "letllm=simulation_llm(state);letseed=parse_seed(",
         )),
         "{bounded}"
     );

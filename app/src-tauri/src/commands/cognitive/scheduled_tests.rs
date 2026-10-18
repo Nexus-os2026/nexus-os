@@ -306,9 +306,20 @@ fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
     let state = AppState::new_in_memory();
     let id = register_stopped(&state, "stopped-subtask", 2);
     let session = state.hive_sessions.admit().unwrap();
-    let refused = super::execute_hivemind_subtask(&state, &session, &id, "summarize the notes");
+    let (admission, session_ctx) = super::hivemind_test_session(&state, std::slice::from_ref(&id));
+    let refused = super::execute_hivemind_subtask(
+        &state,
+        &session,
+        &admission,
+        &session_ctx,
+        1,
+        &id,
+        "summarize the notes",
+    );
+    assert!(refused.context.is_none());
+    let refused = refused.outcome.err();
     assert!(
-        refused.as_ref().is_err_and(|e| e.contains("is stopped")),
+        refused.as_ref().is_some_and(|e| e.contains("is stopped")),
         "{refused:?}"
     );
     assert!(!state.cognitive_runtime.has_active_loop(&id));

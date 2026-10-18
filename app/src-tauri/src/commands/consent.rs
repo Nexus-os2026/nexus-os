@@ -704,14 +704,22 @@ pub(crate) fn hitl_stats(state: &AppState) -> Result<HitlStats, String> {
     })
 }
 
-pub(crate) fn build_simulation_llm() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm> {
+/// The simulation's model (class XS): every call under an explicit
+/// `System("simulation")` context of the process's issuer.
+pub(crate) fn build_simulation_llm(state: &AppState) -> nexus_kernel::simulation::SimulationLlm {
     #[cfg(test)]
-    {
-        Arc::new(TestSimulationPlannerLlm)
-    }
+    let planner: Arc<dyn nexus_kernel::cognitive::PlannerLlm> = match state.hm_issuer() {
+        Ok(issuer) => Arc::new(TestSimulationPlannerLlm {
+            issuer: issuer.clone(),
+        }),
+        Err(_) => Arc::new(crate::commands::cognitive::SimulationRefused),
+    };
 
     #[cfg(not(test))]
-    Arc::new(SimulationPlannerLlm)
+    let planner: Arc<dyn nexus_kernel::cognitive::PlannerLlm> = Arc::new(SimulationPlannerLlm {
+        state: state.clone(),
+    });
+    crate::commands::cognitive::simulation_llm(state, planner)
 }
 
 pub(crate) fn load_persisted_simulation_state(
@@ -806,8 +814,8 @@ pub(crate) fn create_simulation(
     tick_interval_ms: Option<u64>,
 ) -> Result<String, String> {
     let world_id = Uuid::new_v4().to_string();
-    let llm = build_simulation_llm();
-    let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
+    let llm = build_simulation_llm(state);
+    let seed = parse_seed(&seed_text, &llm).map_err(|error| error.to_string())?;
     let tick_interval_ms = tick_interval_ms.unwrap_or(1_000).clamp(500, 5_000);
     let status = if persona_count > 100 {
         "awaiting_approval"
@@ -817,7 +825,7 @@ pub(crate) fn create_simulation(
     let personas = if persona_count > 100 {
         Vec::new()
     } else {
-        generate_personas(&seed.scenario, persona_count as usize, llm.as_ref())
+        generate_personas(&seed.scenario, persona_count as usize, &llm)
             .map_err(|error| error.to_string())?
     };
     let mut world = SimulatedWorld::from_seed(
@@ -826,7 +834,7 @@ pub(crate) fn create_simulation(
         seed.scenario.clone(),
         &seed,
         personas,
-        llm.as_ref(),
+        &llm,
     )
     .map_err(|error| error.to_string())?;
     if persona_count > 100 {
@@ -952,7 +960,7 @@ pub(crate) fn start_simulation_with_observer(
         );
     }
     let persisted = load_persisted_simulation_state(&row)?;
-    let llm = build_simulation_llm();
+    let llm = build_simulation_llm(state);
     let db = state.db.clone();
     let manager = state.simulation_manager.clone();
     let control = SimulationControl::default();
@@ -1119,7 +1127,11 @@ pub(crate) fn chat_with_simulation_persona(
         .map_err(|error| format!("db error: {error}"))?
         .ok_or_else(|| format!("simulation {world_id} not found"))?;
     let persisted = load_persisted_simulation_state(&row)?;
-    let runtime = SimulationRuntime::new(persisted.world, build_simulation_llm(), state.db.clone());
+    let runtime = SimulationRuntime::new(
+        persisted.world,
+        build_simulation_llm(state),
+        state.db.clone(),
+    );
     runtime
         .chat_with_persona(&persona_id, &message)
         .map_err(|error| error.to_string())
@@ -1177,7 +1189,7 @@ pub(crate) fn run_parallel_simulation_reports_with(
     state: &AppState,
     seed_text: String,
     variant_count: u32,
-    simulation_llm: impl FnOnce() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm>,
+    simulation_llm: impl FnOnce(&AppState) -> nexus_kernel::simulation::SimulationLlm,
 ) -> Result<Vec<PredictionReport>, String> {
     // P0-FINAL-GATE (item K): an out-of-range variant count is refused before
     // the model is built, the seed is parsed or any variant is started. The
@@ -1188,8 +1200,8 @@ pub(crate) fn run_parallel_simulation_reports_with(
             "variant_count must be between 1 and {MAX_PARALLEL_SIMULATION_VARIANTS}"
         ));
     }
-    let llm = simulation_llm();
-    let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
+    let llm = simulation_llm(state);
+    let seed = parse_seed(&seed_text, &llm).map_err(|error| error.to_string())?;
     let reports =
         kernel_run_parallel_simulations(&seed, variant_count as usize, llm, state.db.clone())
             .map_err(|error| error.to_string())?;

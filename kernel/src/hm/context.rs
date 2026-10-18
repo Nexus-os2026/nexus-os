@@ -309,7 +309,33 @@ impl DerivedItem {
     pub fn text(&self) -> &str {
         &self.text
     }
+
+    /// Text built from this item (§11.3): a new derived item with this
+    /// item's label. Nothing lowers it.
+    pub fn derive(&self, text: impl Into<String>) -> DerivedItem {
+        DerivedItem {
+            label: self.label,
+            text: text.into(),
+        }
+    }
+
+    /// Text built from several derived items: labelled with the ⊔ of their
+    /// labels (§6.3). `None` when `items` is empty: a derived item needs a
+    /// labelled input (a step product is made by
+    /// [`DispatchContext::produce`]).
+    pub fn combine(items: &[&DerivedItem], text: impl Into<String>) -> Option<DerivedItem> {
+        let first = items.first()?;
+        Some(DerivedItem {
+            label: items.iter().fold(first.label, |l, i| l.join(i.label)),
+            text: text.into(),
+        })
+    }
 }
+
+/// A prompt source (mission R3): from the context as it stands (possibly
+/// rebuilt), a fresh envelope, or `None` when none can be built. A model
+/// adapter calls it once, and once more for the one rebuild of §12.7.
+pub type PromptSource<'a> = dyn FnMut(&mut DispatchContext) -> Option<PromptEnvelope> + 'a;
 
 // ── DispatchContext (§11.1) ─────────────────────────────────────────────────
 
@@ -454,6 +480,82 @@ impl DispatchContext {
         })
     }
 
+    /// A product of this unit's own work that is not a model reply (§2.11):
+    /// an actuator output or another step result. Its label is the unit
+    /// taint ⊔ every label in the working set (each verbatim item's label
+    /// as it entered, and every derived label), so it is never lower than
+    /// anything the unit could have placed in the work that produced it. It
+    /// enters the working set and joins the taint (§2.12).
+    pub fn produce(&mut self, text: impl Into<String>) -> DerivedItem {
+        let label = self
+            .working_set
+            .verbatim
+            .iter()
+            .map(|(_, l)| l.effective())
+            .chain(self.working_set.derived.iter().copied())
+            .fold(self.taint, OriginLabel::join);
+        self.absorb(&[], &[label]);
+        DerivedItem {
+            label,
+            text: text.into(),
+        }
+    }
+
+    /// The label of a product of this unit retained in memory beyond it (a
+    /// dream result, §11.3): the ⊔ of the unit's taint and its route
+    /// restriction (`LOCAL_ONLY_ORIGIN` when the unit is local-only or one
+    /// of its dispatches went to an attested local transport), with the
+    /// unit's principal. `None` for a `System` principal.
+    pub fn product_label(&self) -> Option<EntryLabel> {
+        if matches!(self.principal, Principal::System(_)) {
+            return None;
+        }
+        let route = if self.restrictions.local_only || self.local_transport_used {
+            OriginLabel::LocalOnlyOrigin
+        } else {
+            OriginLabel::UnrestrictedOrigin
+        };
+        Some(EntryLabel {
+            principal: self.principal,
+            label: self.taint.join(route),
+        })
+    }
+
+    /// Carries a retained in-memory entry into this unit (§6.3, §11.3): the
+    /// entry's label joins the taint, and the route class tightens with it.
+    /// An entry with no label (one decoded from text, or never labelled) is
+    /// `LOCAL_ONLY_ORIGIN`. An entry of another principal is refused: its
+    /// content is never placed in this unit's prompts.
+    pub fn admit_entry(&mut self, entry: Option<&EntryLabel>) -> Result<(), super::Unresolved> {
+        let label = match entry {
+            Some(e) if e.principal != self.principal => {
+                return Err(super::Unresolved::UnsupportedPrincipal)
+            }
+            Some(e) => e.label,
+            None => OriginLabel::LocalOnlyOrigin,
+        };
+        let (taint, route_class) = unit_taint_step(self.taint, self.route_class, label);
+        self.taint = taint;
+        self.route_class = route_class;
+        if !self.working_set.derived.contains(&label) {
+            self.working_set.derived.push(label);
+        }
+        Ok(())
+    }
+
+    /// Makes this context local-only (§7.5): a tightening the backend
+    /// observes outside the principal's own policy row (a chat routed by a
+    /// name that a local-only agent or a local-only assignment shares). The
+    /// taint joins `LOCAL_ONLY_ORIGIN` and the route class becomes `local`.
+    /// Nothing is loosened, and nothing can loosen the context again.
+    pub fn tighten_local_only(&mut self) {
+        self.restrictions.local_only = true;
+        let (taint, route_class) =
+            unit_taint_step(self.taint, self.route_class, OriginLabel::LocalOnlyOrigin);
+        self.taint = taint;
+        self.route_class = route_class;
+    }
+
     /// Absorbs an envelope this context owns (mission R1 (ii)), whatever its
     /// admission outcome: every inclusion enters the working set as a
     /// verbatim item with its recall-time label, and every carried item's
@@ -508,7 +610,7 @@ impl DispatchContext {
 /// use nexus_kernel::hm::EntryLabel;
 /// let _ = serde_json::from_str::<EntryLabel>("{}");
 /// ```
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryLabel {
     pub(in crate::hm) principal: Principal,
     pub(in crate::hm) label: OriginLabel,
@@ -521,6 +623,22 @@ impl EntryLabel {
 
     pub fn label(&self) -> OriginLabel {
         self.label
+    }
+
+    /// The label of a product combining several entries of one principal
+    /// (§11.3: a dream prompt combining entries carries the ⊔ of their
+    /// labels). `None` when `entries` is empty or their principals differ:
+    /// the caller then treats the combination as unlabelled
+    /// (`LOCAL_ONLY_ORIGIN`, never non-local).
+    pub fn combine(entries: &[&EntryLabel]) -> Option<EntryLabel> {
+        let first = entries.first()?;
+        if entries.iter().any(|e| e.principal != first.principal) {
+            return None;
+        }
+        Some(EntryLabel {
+            principal: first.principal,
+            label: entries.iter().fold(first.label, |l, e| l.join(e.label)),
+        })
     }
 }
 

@@ -6,7 +6,8 @@
 //! session assigns no further sub-task.
 
 use super::*;
-use nexus_kernel::cognitive::{HivemindCoordinator, HivemindLlm};
+use nexus_kernel::cognitive::HivemindLlm;
+use nexus_kernel::hm::{DerivedItem, DispatchContext, PromptSource};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Barrier;
 
@@ -173,19 +174,29 @@ struct Planner {
 }
 
 impl HivemindLlm for Planner {
-    fn decompose(&self, _: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+    fn decompose(
+        &self,
+        ctx: &mut DispatchContext,
+        _: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, nexus_kernel::errors::AgentError> {
         if let Some((sessions, id)) = &self.cancel {
             sessions.cancel(id);
         }
-        Ok(json!([
-            {"id": "a", "description": "first part", "required_capabilities": ["llm.query"]},
-            {"id": "b", "description": "second part", "required_capabilities": ["llm.query"]},
-            {"id": "c", "description": "third part", "required_capabilities": ["llm.query"]},
-        ])
-        .to_string())
+        Ok(ctx.produce(
+            json!([
+                {"id": "a", "description": "first part", "required_capabilities": ["llm.query"]},
+                {"id": "b", "description": "second part", "required_capabilities": ["llm.query"]},
+                {"id": "c", "description": "third part", "required_capabilities": ["llm.query"]},
+            ])
+            .to_string(),
+        ))
     }
-    fn merge(&self, _: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-        Ok("merged".to_string())
+    fn merge(
+        &self,
+        ctx: &mut DispatchContext,
+        _: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, nexus_kernel::errors::AgentError> {
+        Ok(ctx.produce("merged"))
     }
 }
 
@@ -193,20 +204,17 @@ impl HivemindLlm for Planner {
 /// any agent: no goal, no loop, no task.
 #[test]
 fn a_cancelled_session_assigns_no_further_subtask() {
-    let mut state = AppState::new_in_memory();
+    let state = AppState::new_in_memory();
     let agents = [
         register(&state, "hive-first"),
         register(&state, "hive-second"),
     ];
     let session = admit_hivemind(&state).unwrap();
-    state.hivemind = Arc::new(HivemindCoordinator::new(
-        Box::new(Planner {
-            cancel: Some((state.hive_sessions.clone(), session.id().to_string())),
-        }),
-        Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
-        Arc::new(Mutex::new(AuditTrail::new())),
-    ));
-    let outcome = start_hivemind(&state, &session, "the goal".into(), agents.to_vec()).unwrap();
+    let cancel = Some((state.hive_sessions.clone(), session.id().to_string()));
+    let outcome = start_hivemind_with(&state, &session, "the goal".into(), agents.to_vec(), |_| {
+        Box::new(Planner { cancel })
+    })
+    .unwrap();
     assert_eq!(outcome["status"], "Failed", "{outcome}");
     for agent in &agents {
         assert!(
@@ -216,8 +224,21 @@ fn a_cancelled_session_assigns_no_further_subtask() {
         assert!(!state.cognitive_runtime.has_active_loop(agent));
     }
     // And a sub-task asked of it directly is refused before anything.
-    let refused = execute_hivemind_subtask(&state, &session, &agents[0], "one more");
-    assert_eq!(refused, Err(hive::SESSION_CANCELLED.to_string()));
+    let (admission, session_ctx) = hivemind_test_session(&state, &agents);
+    let refused = execute_hivemind_subtask(
+        &state,
+        &session,
+        &admission,
+        &session_ctx,
+        1,
+        &agents[0],
+        "one more",
+    );
+    assert!(refused.context.is_none());
+    assert_eq!(
+        refused.outcome.err(),
+        Some(hive::SESSION_CANCELLED.to_string())
+    );
     assert!(state
         .db
         .load_tasks_by_agent(&agents[0], 10)

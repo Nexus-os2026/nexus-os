@@ -497,12 +497,22 @@ fn wire_tag(action: &PlannedAction) -> String {
         .to_string()
 }
 
-/// The normalized body of `Phase0AgentExecutor::execute`. Without Phase
-/// Three it is the Phase Zero executor (closure first, then `self.inner`).
-/// With it, the Phase Three classification decides: only inert actions
-/// reach the closure and then `self.inner`, governed actions reach only the
-/// Phase Three bridge, and closed actions keep their Phase Zero refusal.
-const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=&self.governedelse{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}returnself.inner.execute(agent_id,action,audit,hitl_approved);};matchclassify(action){Disposition::Inert=>{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}self.inner.execute(agent_id,action,audit,hitl_approved)}Disposition::Governed(intent)=>bridge.act(agent_id,&intent,warden_reviews(action)),Disposition::Orchestrated{max_steps}=>Ok(orchestration_guidance(max_steps)),Disposition::Closed(_)=>Err(closed(action.action_type(),phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)))}";
+/// The normalized body of `executor_route`, the production executor's one
+/// decision (ported for P3-HM-CONTRACT-02 §11.3, mission R12: it was the
+/// body of `Phase0AgentExecutor::execute`, which now shares it with
+/// `execute_in`). Without Phase Three it is the Phase Zero executor
+/// (closure first, then the inner executor). With it, the Phase Three
+/// classification decides: only inert actions reach the closure and then
+/// the inner executor, governed actions reach only the Phase Three bridge,
+/// and closed actions keep their Phase Zero refusal.
+const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=governedelse{ifletSome(closure)=phase0_agent_action_closure(action){returnExecutorRoute::Decided(Err(closed(action.action_type(),closure)));}returnExecutorRoute::Inner;};matchclassify(action){Disposition::Inert=>{ifletSome(closure)=phase0_agent_action_closure(action){returnExecutorRoute::Decided(Err(closed(action.action_type(),closure)));}ExecutorRoute::Inner}Disposition::Governed(intent)=>{ExecutorRoute::Decided(bridge.act(agent_id,&intent,warden_reviews(action)))}Disposition::Orchestrated{max_steps}=>{ExecutorRoute::Decided(Ok(orchestration_guidance(max_steps)))}Disposition::Closed(_)=>ExecutorRoute::Decided(Err(closed(action.action_type(),phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution))))}";
+
+/// The normalized bodies of `Phase0AgentExecutor::execute` and
+/// `Phase0AgentExecutor::execute_in`: the one decision, then the inner
+/// executor (in the unit, for `execute_in`) or the decided outcome (a
+/// product of the unit, for `execute_in`).
+const EXECUTE_BODY: &str = "matchexecutor_route(self.governed.as_ref(),agent_id,action){ExecutorRoute::Inner=>self.inner.execute(agent_id,action,audit,hitl_approved),ExecutorRoute::Decided(result)=>result}";
+const EXECUTE_IN_BODY: &str = "matchexecutor_route(self.governed.as_ref(),agent_id,action){ExecutorRoute::Inner=>{self.inner.execute_in(scope,agent_id,action,audit,hitl_approved)}ExecutorRoute::Decided(result)=>result.map(|text|{letitem=StepItem::Derived(scope.ctx.produce(text.clone()));StepOutput{text,item}})}";
 
 #[test]
 fn p3e_g1_01_every_planned_action_is_classified_without_a_wildcard() {
@@ -814,7 +824,11 @@ fn p3e_g1_04_the_executor_refuses_before_its_registry_even_when_approved() {
             db: state.db.clone(),
         },
     )));
-    let executor = crate::phase0_agent_executor(&state, memory);
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let mut audit = state.audit.clone();
     let agent = uuid::Uuid::new_v4().to_string();
     let absent_dir = std::env::temp_dir().join(format!("nexus-p3e-g1-{}", uuid::Uuid::new_v4()));
@@ -917,10 +931,53 @@ fn p3e_g1_04_the_executor_refuses_before_its_registry_even_when_approved() {
             options: vec![],
         },
     ];
+    // Ported (mission R12, P3-HM-CONTRACT-02 §11.3, §11.4): permitted
+    // actions run as steps of a unit, as the production loop runs them (a
+    // goal unit of a registered agent); the memory actions read or write
+    // retained records, so outside a unit they are refused, and every other
+    // permitted action still runs there too.
+    let owner = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(
+            nexus_kernel::manifest::parse_manifest(
+                "name = \"p3e-g1-unit\"\nversion = \"1.0.0\"\ncapabilities = [\"llm.query\"]\nfuel_budget = 1000\nautonomy_level = 2\n",
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .to_string();
+    let issuer = state.hm_issuer().unwrap();
+    let mut unit = crate::hm_wiring::test_support::goal_unit(&state, &owner).unwrap();
+    let plan = unit.produce("the plan");
     for action in &permitted {
         assert_eq!(expected_decision(action), Decision::Permitted);
-        let result = executor.execute(&agent, action, &mut audit, false);
+        let mut scope = nexus_kernel::cognitive::StepScope {
+            issuer,
+            ctx: &mut unit,
+            plan: &plan,
+            prior: &[],
+        };
+        let result = executor
+            .execute_in(&mut scope, &owner, action, &mut audit, false)
+            .map(|output| output.text);
         assert!(result.is_ok(), "{}: {result:?}", action.action_type());
+        let outside = executor.execute(&agent, action, &mut audit, false);
+        if matches!(
+            action,
+            PlannedAction::MemoryStore { .. } | PlannedAction::MemoryRecall { .. }
+        ) {
+            assert!(
+                outside
+                    .as_ref()
+                    .is_err_and(|e| e.contains("runs only as a step of a unit")),
+                "{}: {outside:?}",
+                action.action_type()
+            );
+        } else {
+            assert!(outside.is_ok(), "{}: {outside:?}", action.action_type());
+        }
     }
     assert_eq!(
         executor.execute(&agent, &PlannedAction::Noop, &mut audit, false),
@@ -936,14 +993,25 @@ fn p3e_g1_05_the_executor_classifies_before_any_route() {
         .into_iter()
         .filter(|item| item.path.starts_with("Phase0AgentExecutor::"))
         .collect();
+    // Ported (mission R12): the executor has the two `ActionExecutor`
+    // entry points (`execute_in` runs a step of a unit, P3-HM-CONTRACT-02
+    // §11.3), both exactly the one decision `executor_route`.
     assert_eq!(
         methods.len(),
-        1,
-        "Phase0AgentExecutor has exactly one method"
+        2,
+        "Phase0AgentExecutor has exactly two methods"
     );
     assert_eq!(methods[0].path, "Phase0AgentExecutor::execute");
-    assert_eq!(methods[0].trait_name, "ActionExecutor");
-    assert_eq!(compact(methods[0].body_text(cognitive)), EXECUTOR_BODY);
+    assert_eq!(methods[1].path, "Phase0AgentExecutor::execute_in");
+    for method in &methods {
+        assert_eq!(method.trait_name, "ActionExecutor");
+    }
+    assert_eq!(compact(methods[0].body_text(cognitive)), EXECUTE_BODY);
+    assert_eq!(compact(methods[1].body_text(cognitive)), EXECUTE_IN_BODY);
+    assert_eq!(
+        compact(one_fn(cognitive, "executor_route").body_text(cognitive)),
+        EXECUTOR_BODY
+    );
     // The classification it calls is the Phase Three one.
     assert_eq!(
         cognitive
@@ -1446,19 +1514,19 @@ const CONDITIONAL_CLOSED: &[(&str, &str, &str, &str)] = &[
     // gates inert actions with it, and is the refusal of closed actions.
     (
         "commands/cognitive.rs",
-        "Phase0AgentExecutor::execute",
+        "executor_route",
         "action.action_type()",
         "closure",
     ),
     (
         "commands/cognitive.rs",
-        "Phase0AgentExecutor::execute",
+        "executor_route",
         "action.action_type()",
         "closure",
     ),
     (
         "commands/cognitive.rs",
-        "Phase0AgentExecutor::execute",
+        "executor_route",
         "action.action_type()",
         "phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)",
     ),
@@ -1468,9 +1536,11 @@ const CONDITIONAL_CLOSED: &[(&str, &str, &str, &str)] = &[
         "\"assign_agent_goal\"",
         "Closure::ApprovalRequired",
     ),
+    // Ported (mission R12): the assignment that carries a unit
+    // (P3-HM-CONTRACT-02 §11.3) keeps the refusal.
     (
         "commands/cognitive.rs",
-        "assign_agent_goal",
+        "assign_agent_goal_in",
         "\"assign_agent_goal\"",
         "Closure::ApprovalRequired",
     ),
@@ -7031,7 +7101,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             vec![
                 at(cognitive_rs, "await_subtask"),
                 at(cognitive_rs, "execute_hivemind_subtask"),
-                at(cognitive_rs, "spawn_cognitive_loop_with_bridge"),
+                at(cognitive_rs, "spawn_cognitive_loop_in"),
             ],
         ),
         (
@@ -7096,8 +7166,14 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
     // A stopped agent's loop runs no further cycle (its cancel flag may not
     // exist yet when the owner's stop comes), and a HiveMind session gives
     // it no sub-task; a session's own time limit ends only its goal.
-    let driver =
-        compact(one_fn(cognitive, "spawn_cognitive_loop_with_bridge").body_text(cognitive));
+    // Ported (mission R12): the loop's driver is `spawn_cognitive_loop_in`
+    // (a HiveMind sub-task's loop carries the session's admission);
+    // `spawn_cognitive_loop_with_bridge` is exactly a call of it.
+    assert_eq!(
+        compact(one_fn(cognitive, "spawn_cognitive_loop_with_bridge").body_text(cognitive)),
+        "spawn_cognitive_loop_in(bridge,state,agent_id,goal_id,None);"
+    );
+    let driver = compact(one_fn(cognitive, "spawn_cognitive_loop_in").body_text(cognitive));
     assert_in_order(
         &driver,
         &[
@@ -7105,24 +7181,28 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             "\"Goal ended: the agent is stopped.\",false,0.0);return;}",
             "ifcancel_flag.load(Ordering::Relaxed){",
         ],
-        "spawn_cognitive_loop_with_bridge",
+        "spawn_cognitive_loop_in",
     );
     // A cancelled HiveMind session assigns no further sub-task: refused
     // before anything, ended before its loop starts if the cancellation
     // came while its goal was assigned, and ended (only its goal) while it
     // is waited on.
+    // Ported (mission R12): a sub-task's refusal is a refused `SubtaskRun`
+    // (its outcome an error, no unit to join), its goal carries the unit
+    // derived from the session's (P3-HM-CONTRACT-02 §11.3), and its loop
+    // the session's admission.
     let subtask = compact(one_fn(cognitive, "execute_hivemind_subtask").body_text(cognitive));
     assert!(
         subtask.starts_with(
-            "ifsession.cancelled(){returnErr(SESSION_CANCELLED.to_string());}ifagent_stopped(state,agent_id){returnErr("
+            "useSubtaskRun;ifsession.cancelled(){returnSubtaskRun::refused(SESSION_CANCELLED);}ifagent_stopped(state,agent_id){returnSubtaskRun::refused("
         ),
         "{subtask}"
     );
     assert_in_order(
         &subtask,
         &[
-            "letgoal_id=execute_agent_goal(",
-            "ifsession.cancelled(){end_goal_loop(state,agent_id,&goal_id);returnErr(SESSION_CANCELLED.to_string());}spawn_cognitive_loop_with_bridge(",
+            "letgoal_id=matchexecute_agent_goal_in(",
+            "ifsession.cancelled(){end_goal_loop(state,agent_id,&goal_id);returnSubtaskRun::refused(SESSION_CANCELLED);}spawn_cognitive_loop_in(",
             "await_subtask(state,session,agent_id,&goal_id,description,SUBTASK_TIMEOUT)",
         ],
         "execute_hivemind_subtask",
@@ -8741,11 +8821,19 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         waiting.extend(more);
     }
     // Reviewed: the consent decisions and goal assignment (their commands
-    // run off the interface thread), the loop's own cycle and its model
-    // route, the end of a loop (on the stop routines' threads), the review
-    // mode switch, HiveMind sessions, the scheduler's tick and its trigger,
-    // the Phase Three approval (a blocking-pool command), and names that
-    // match those calls (`approve`, `execute`, `execute_goal`).
+    // run off the interface thread), the loop's own cycle, the end of a loop
+    // (on the stop routines' threads), the review mode switch, HiveMind
+    // sessions, the scheduler's tick and its trigger, the Phase Three
+    // approval (a blocking-pool command), and names that match those calls
+    // (`approve`, `execute`, `execute_goal`). Ported (mission R12,
+    // P3-HM-CONTRACT-02 §11.3): the goal's unit lives in its loop, so the
+    // assignment and HiveMind variants that carry a unit
+    // (`assign_agent_goal_in`, `execute_agent_goal_in`,
+    // `start_hivemind_with`) and the loop's own task persistence and
+    // post-goal evolution (`persist_task_completion`,
+    // `run_post_goal_evolution`) read it under the loops' guard, on the
+    // loop's thread; the route no longer does (`resolve_agent_llm_route`),
+    // and `with_agent_llm_route` is gone with the thread-local policy.
     assert_eq!(
         waiting,
         BTreeSet::from(
@@ -8753,6 +8841,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "approve",
                 "approve_consent_request",
                 "assign_agent_goal",
+                "assign_agent_goal_in",
                 "await_subtask",
                 "batch_approve_consents",
                 "batch_deny_consents",
@@ -8761,17 +8850,19 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "end_goal_loop",
                 "execute",
                 "execute_agent_goal",
+                "execute_agent_goal_in",
                 "execute_goal",
                 "execute_hivemind_subtask",
                 "p3_approve",
+                "persist_task_completion",
                 "persist_task_start",
-                "resolve_agent_llm_route",
                 "review_consent_batch",
                 "run_cognitive_cycle",
+                "run_post_goal_evolution",
                 "scheduler_trigger_now",
                 "set_agent_review_mode",
                 "start_hivemind",
-                "with_agent_llm_route",
+                "start_hivemind_with",
             ]
             .map(str::to_string)
         )
@@ -8920,9 +9011,15 @@ fn p3_c9_hivemind_sessions_are_bounded_and_signalled() {
         compact(one_fn(cognitive, "cancel_hivemind").body_text(cognitive))
             .starts_with("ifstate.hive_sessions.cancel(&session_id){")
     );
-    // Every session's sub-tasks go through the session: one executor.
-    assert!(compact(one_fn(cognitive, "start_hivemind").body_text(cognitive)).contains(
-        ".execute_with_executor(&goal,agents,|_task_id,assigned_agent_id,task_desc|{execute_hivemind_subtask(state,session,assigned_agent_id,task_desc)})"
+    // Every session's sub-tasks go through the session: one executor, under
+    // the session's context (P3-HM-CONTRACT-02 §11.3); the decomposition and
+    // merge model is the session's adapter.
+    assert_eq!(
+        compact(one_fn(cognitive, "start_hivemind").body_text(cognitive)),
+        "start_hivemind_with(state,session,goal,agent_ids,|admission|{Box::new(GatewayPlannerLlm::for_session(state,Some(admission)))})"
+    );
+    assert!(compact(one_fn(cognitive, "start_hivemind_with").body_text(cognitive)).contains(
+        ".execute_with_executor_via(llm.as_ref(),&mutsession_ctx,&goal,agents,|session_ctx,_task_id,assigned_agent_id,task_desc|{next_subtask+=1;execute_hivemind_subtask(state,session,&admission,session_ctx,next_subtask,assigned_agent_id,task_desc)})"
     ));
     // The emergency stops and quitting signal the sessions.
     let lib_rs = "app/src-tauri/src/lib.rs";

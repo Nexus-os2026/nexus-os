@@ -233,8 +233,15 @@ fn hm_m2_n7_no_insert_into_hm_grant() {
 
 // ── Guard 3: HmStore / HmTx used only by the hm modules (§11.0, A-S3) ───────
 
+/// The desktop's one historical-memory test module (mission
+/// P3-C11-HM-M3, AMENDMENT 1 A1.9: its tests loosen a policy only through a
+/// TEST FIXTURE writing through the store, never product code). It is test
+/// code only: the desktop declares it once, under `#[cfg(test)]`.
+const DESKTOP_HM_TEST_MODULE: &str = "app/src-tauri/src/hm_m3_tests.rs";
+
 fn hm_store_user_allowed(rel: &str) -> bool {
-    rel == "persistence/src/hm.rs"
+    rel == DESKTOP_HM_TEST_MODULE
+        || rel == "persistence/src/hm.rs"
         || rel == "kernel/src/hm.rs"
         || rel.starts_with("kernel/src/hm/")
         || (rel.starts_with("kernel/tests/hm_") && rel.ends_with(".rs"))
@@ -262,6 +269,13 @@ fn hm_m2_n7_hm_store_is_called_only_from_the_hm_modules() {
         "kernel/src/cognitive/loop_runtime.rs"
     ));
     assert!(!hm_store_user_allowed("app/src-tauri/src/lib.rs"));
+    assert!(!hm_store_user_allowed("app/src-tauri/src/hm_wiring.rs"));
+    assert!(!hm_store_user_allowed("app/src-tauri/src/hm_dispatch.rs"));
+    // Ported (mission P3-C11-HM-M3 R12): the desktop's historical-memory
+    // test module is allowed, and it is test code only.
+    let lib = std::fs::read_to_string(workspace_root().join("app/src-tauri/src/lib.rs")).unwrap();
+    assert_eq!(lib.matches("mod hm_m3_tests").count(), 1);
+    assert!(lib.contains("#[cfg(test)]\nmod hm_m3_tests;"));
     assert!(!hm_store_user_allowed("kernel/src/hmx.rs"));
     assert!(hm_store_user_allowed("kernel/src/hm/write.rs"));
 
@@ -338,10 +352,9 @@ const RAW_OPEN_FILES: [(&str, &str); 6] = [
 ];
 
 /// Non-test files that resolve the identity-home `nexus.db` path.
-const IDENTITY_DB_CALLERS: [&str; 7] = [
+const IDENTITY_DB_CALLERS: [&str; 6] = [
     "kernel/src/identity_home.rs",
     "kernel/src/cognitive/loop_runtime.rs",
-    "kernel/src/actuators/knowledge_graph.rs",
     "agents/social-poster/src/lib.rs",
     "app/src-tauri/src/lib.rs",
     "app/src-tauri/src/commands/swarm.rs",
@@ -351,16 +364,26 @@ const IDENTITY_DB_CALLERS: [&str; 7] = [
 /// The connections to the state database: contract §8 item 4, plus
 /// `knowledge_graph.rs:38` and `agents/social-poster/src/lib.rs:503`,
 /// which A1 found missing from that list.
-const STATE_DB_OPENERS: [&str; 9] = [
+///
+/// Ported (mission P3-C11-HM-M3 R12, R9): the knowledge-graph and
+/// cognitive-parameter actuators no longer open a connection of their own;
+/// they write through the unit's issuer on the shared state database
+/// ([`NO_OWN_CONNECTION`]).
+const STATE_DB_OPENERS: [&str; 7] = [
     "app/src-tauri/src/lib.rs",
     "kernel/src/persistence.rs",
-    "kernel/src/actuators/cognitive_param.rs",
     "kernel/src/actuators/self_evolution.rs",
     "kernel/src/actuators/agent_lifecycle.rs",
     "app/src-tauri/src/commands/swarm.rs",
     "kernel/src/cognitive/loop_runtime.rs",
-    "kernel/src/actuators/knowledge_graph.rs",
     "agents/social-poster/src/lib.rs",
+];
+
+/// Former state-database openers that open no connection at all now
+/// (mission P3-C11-HM-M3 R9): no open of any kind, no identity-home path.
+const NO_OWN_CONNECTION: [&str; 2] = [
+    "kernel/src/actuators/cognitive_param.rs",
+    "kernel/src/actuators/knowledge_graph.rs",
 ];
 
 #[test]
@@ -453,6 +476,13 @@ fn hm_m2_n7_every_identity_home_connection_enables_foreign_keys() {
     for rel in STATE_DB_OPENERS {
         let text = std::fs::read_to_string(root.join(rel)).unwrap();
         assert!(text.contains("NexusDatabase::open("), "{rel}");
+        assert_eq!(raw_opens(&text), 0, "{rel}");
+    }
+    for rel in NO_OWN_CONNECTION {
+        let text = std::fs::read_to_string(root.join(rel)).unwrap();
+        assert!(!text.contains("NexusDatabase::open("), "{rel}");
+        assert!(!text.contains("NexusDatabase::in_memory("), "{rel}");
+        assert!(!text.contains("nexus_db_path"), "{rel}");
         assert_eq!(raw_opens(&text), 0, "{rel}");
     }
 }

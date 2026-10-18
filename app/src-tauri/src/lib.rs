@@ -8,6 +8,7 @@ mod commands;
 // Phase Three: governed real-world control (the one front door to every
 // governed process, network, browser, display, input and connector effect).
 mod governed_real_world;
+mod hm_dispatch;
 mod hm_wiring;
 mod nx_bridge;
 pub mod oracle_runtime;
@@ -176,40 +177,58 @@ pub(crate) const SYSTEM_UUID: Uuid = Uuid::from_bytes([
     0x4e, 0x58, 0x53, 0x59, 0x53, 0x2d, 0x00, 0x01, 0x80, 0x00, 0x4e, 0x45, 0x58, 0x55, 0x53, 0x00,
 ]);
 
-struct GatewayHivemindLlm;
+/// Wires the process's dispatch issuer (P3-HM-CONTRACT-02 §11.0) into a
+/// cognitive runtime; without one, no goal unit starts.
+trait WithOptionalIssuer {
+    fn with_optional_issuer(
+        self,
+        issuer: &std::result::Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
+    ) -> Self;
+}
 
-impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
+impl WithOptionalIssuer for nexus_kernel::cognitive::CognitiveRuntime {
+    fn with_optional_issuer(
+        self,
+        issuer: &std::result::Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
+    ) -> Self {
+        match issuer {
+            Ok(issuer) => self.with_dispatch_issuer(issuer.clone()),
+            Err(_) => self,
+        }
+    }
+}
+
+/// The model of the shared HiveMind coordinator outside a session: it
+/// dispatches nothing. A session runs its decomposition and merge through
+/// its own adapter, which carries the session's admission
+/// (`HivemindCoordinator::execute_with_executor_via`).
+struct NoSessionHivemindLlm;
+
+impl nexus_kernel::cognitive::HivemindLlm for NoSessionHivemindLlm {
     fn decompose(
         &self,
-        prompt: &str,
-    ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+        _ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> std::result::Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "hivemind: refused: no session adapter".to_string(),
+        ))
     }
 
-    fn merge(&self, prompt: &str) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+    fn merge(
+        &self,
+        _ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> std::result::Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "hivemind: refused: no session adapter".to_string(),
+        ))
     }
 }
 
 #[derive(Clone, Debug)]
-struct AgentLlmRoute {
-    model: String,
-}
-
-thread_local! {
-    static ACTIVE_AGENT_LLM_ROUTE: RefCell<Option<AgentLlmRoute>> = const { RefCell::new(None) };
-    /// Cached Flash provider for the current agent's cognitive loop.
-    /// Set by `with_agent_llm_route` when a `flash:*` route is active.
-    static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
-    /// The routing policy of the agent whose work runs on this thread (P3
-    /// D-2). Set by `with_agent_llm_route` and `with_agent_llm_policy`, read
-    /// where the planner dispatches a prompt.
-    static ACTIVE_AGENT_LLM_POLICY: std::cell::Cell<AgentLlmPolicy> = const { std::cell::Cell::new(AgentLlmPolicy::Unrestricted) };
-    /// The least restrictive policy any work on this thread may run under
-    /// (P3 HiveMind): a HiveMind session's policy, set by
-    /// `with_llm_policy_floor`. Every agent policy installed or read on this
-    /// thread is at least this restrictive.
-    static ACTIVE_LLM_POLICY_FLOOR: std::cell::Cell<AgentLlmPolicy> = const { std::cell::Cell::new(AgentLlmPolicy::Unrestricted) };
+pub(crate) struct AgentLlmRoute {
+    pub(crate) model: String,
 }
 
 /// Which providers an agent's prompt may reach (P3 D-2).
@@ -330,62 +349,6 @@ pub(crate) fn resolve_named_agent_llm_policy(state: &AppState, name: &str) -> Ag
     policy
 }
 
-/// Runs `op` with `policy` as this thread's agent routing policy, and
-/// restores the previous policy afterwards, also when `op` unwinds.
-pub(crate) fn with_agent_llm_policy<T>(policy: AgentLlmPolicy, op: impl FnOnce() -> T) -> T {
-    struct Restore(AgentLlmPolicy);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.set(self.0));
-        }
-    }
-    let _restore = Restore(ACTIVE_AGENT_LLM_POLICY.with(|slot| slot.replace(policy)));
-    op()
-}
-
-/// This thread's agent routing policy (P3 D-2), never less restrictive than
-/// the thread's policy floor.
-pub(crate) fn active_agent_llm_policy() -> AgentLlmPolicy {
-    ACTIVE_AGENT_LLM_POLICY
-        .with(|slot| slot.get())
-        .at_least(active_llm_policy_floor())
-}
-
-impl AgentLlmPolicy {
-    /// This policy, made at least as restrictive as `floor`: `Unresolved`
-    /// over `LocalOnly` over `Unrestricted`.
-    pub(crate) fn at_least(self, floor: AgentLlmPolicy) -> AgentLlmPolicy {
-        use AgentLlmPolicy::{LocalOnly, Unresolved, Unrestricted};
-        match (self, floor) {
-            (Unresolved, _) | (_, Unresolved) => Unresolved,
-            (LocalOnly, _) | (_, LocalOnly) => LocalOnly,
-            (Unrestricted, Unrestricted) => Unrestricted,
-        }
-    }
-}
-
-/// Runs `op` with this thread's policy floor raised to `floor` (P3 HiveMind):
-/// every agent policy installed or read on this thread inside `op` is at
-/// least that restrictive. A floor is only ever raised inside `op`, and the
-/// previous floor is restored afterwards, also when `op` unwinds.
-pub(crate) fn with_llm_policy_floor<T>(floor: AgentLlmPolicy, op: impl FnOnce() -> T) -> T {
-    struct Restore(AgentLlmPolicy);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.set(self.0));
-        }
-    }
-    let previous = active_llm_policy_floor();
-    let _restore = Restore(previous);
-    ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.set(floor.at_least(previous)));
-    op()
-}
-
-/// This thread's policy floor (P3 HiveMind).
-pub(crate) fn active_llm_policy_floor() -> AgentLlmPolicy {
-    ACTIVE_LLM_POLICY_FLOOR.with(|slot| slot.get())
-}
-
 /// How strongly agent reasoning prefers an Ollama model, by its name: the
 /// larger and coding models first.
 fn ollama_model_preference(name: &str) -> u8 {
@@ -468,15 +431,22 @@ fn route_from_model_mapping(value: &Value) -> Option<String> {
     })
 }
 
-fn resolve_agent_llm_route(
+/// The model route of the agent unit `ctx` (which provider and model; the
+/// unit's route class alone decides whether it must be local, R4). `local`
+/// is that decision. Read without the `loops` guard: the goal override comes
+/// from the published status snapshot, and the agent's `model_mapping` rows
+/// are read route-first through its context (P3-HM-CONTRACT-02 §12.3: a
+/// row a non-local unit may not disclose never selects its route).
+pub(crate) fn resolve_agent_llm_route(
     state: &AppState,
+    ctx: &nexus_kernel::hm::DispatchContext,
     agent_id: &str,
-    policy: AgentLlmPolicy,
+    local: bool,
 ) -> Option<AgentLlmRoute> {
     // 0. BUG-DROP: per-goal override set by the Chat page model dropdown.
     //    Takes priority over memory mappings and config assignments so the UI
     //    selection is authoritative for the lifetime of the active goal.
-    if let Some(status) = state.cognitive_runtime.get_agent_status(agent_id) {
+    if let Some(status) = state.cognitive_runtime.get_agent_status_fast(agent_id) {
         if let Some(goal) = status.active_goal {
             if let Some(model) = goal.model_override {
                 if !model.trim().is_empty() {
@@ -490,12 +460,21 @@ fn resolve_agent_llm_route(
     let config = load_config().ok()?;
     let _agent_short = &agent_id[..agent_id.len().min(8)];
 
-    // 1. Check agent memory for explicit model mapping (user override)
-    if let Ok(memories) = state.db.load_memories(agent_id, Some("model_mapping"), 10) {
-        for row in memories {
-            if let Ok(parsed) = serde_json::from_str::<Value>(&row.value_json) {
-                if let Some(model) = route_from_model_mapping(&parsed) {
-                    return Some(AgentLlmRoute { model });
+    // 1. Check agent memory for explicit model mapping (user override),
+    //    route-first (§12.3 item 4).
+    if let Ok(issuer) = state.hm_issuer() {
+        let spec = nexus_kernel::hm::RecallSpec {
+            column_eq: Some(("memory_type", "model_mapping")),
+            ..nexus_kernel::hm::RecallSpec::table(nexus_kernel::hm::RecordTable::AgentMemory, 10)
+        };
+        if let Ok(rows) = issuer.control_records(ctx, &spec) {
+            for row in rows {
+                if let Ok(parsed) =
+                    serde_json::from_str::<Value>(row.field("value_json").unwrap_or_default())
+                {
+                    if let Some(model) = route_from_model_mapping(&parsed) {
+                        return Some(AgentLlmRoute { model });
+                    }
                 }
             }
         }
@@ -575,7 +554,7 @@ fn resolve_agent_llm_route(
     // 3. Smart auto-routing: pick the best available model.
     //    Priority: Flash Inference (local GGUF) → Ollama → Cloud providers.
     //    Returns None if nothing is available (GatewayPlannerLlm handles fallback).
-    auto_select_best_model(state, &config, policy)
+    auto_select_best_model(state, &config, local)
 }
 
 /// Smart model selection: pick the best available LLM provider and model.
@@ -589,7 +568,7 @@ fn resolve_agent_llm_route(
 fn auto_select_best_model(
     state: &AppState,
     config: &nexus_kernel::config::NexusConfig,
-    policy: AgentLlmPolicy,
+    local: bool,
 ) -> Option<AgentLlmRoute> {
     // --- Tier 0: Check Flash Inference sessions (best: local, fast, free, smart) ---
     // If a Flash Inference model is loaded, use it — these are larger/smarter models
@@ -612,11 +591,11 @@ fn auto_select_best_model(
     // --- Tier 1 (P0-002C5A): no environment variable selects a model file. ---
 
     // --- Tier 2: Check Ollama for available models ---
-    // P3 D-2 R2: only for an unrestricted agent. This probe asks the
-    // operator's Ollama address with the environment's proxy settings; a
-    // local-only agent's model is chosen by `local_only_target` over the
-    // direct loopback connection, and an unresolved agent dispatches nothing.
-    if policy != AgentLlmPolicy::Unrestricted {
+    // P3 D-2 R2: only for a non-local unit. This probe asks the operator's
+    // Ollama address with the environment's proxy settings; a local unit's
+    // model is chosen by `local_only_target` over the direct loopback
+    // connection.
+    if local {
         return None;
     }
     // Fast TCP probe first — if Ollama isn't running, skip the slow list_models() call
@@ -643,71 +622,6 @@ fn auto_select_best_model(
     }
 
     None
-}
-
-fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
-    // P3 D-2: the agent's own policy governs every prompt dispatched for it
-    // here, whatever the route says.
-    // P3 HiveMind: a session's floor restricts the agent's own policy.
-    let policy = resolve_agent_llm_policy(state, agent_id).at_least(active_llm_policy_floor());
-    let route = resolve_agent_llm_route(state, agent_id, policy);
-
-    // If the route points to Flash, resolve the cached provider now
-    // so GatewayPlannerLlm can use it without needing AppState access.
-    // Handles both "flash:{session_id}" and "flash/{model_name}" formats.
-    let flash_prov = route.as_ref().and_then(|r| {
-        let wants_flash =
-            r.model.starts_with("flash:") || r.model.starts_with("flash/") || r.model == "flash";
-        if !wants_flash {
-            return None;
-        }
-
-        // Try the provider cache first
-        let cache = state
-            .flash_providers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        let cache_keys: Vec<_> = cache.keys().cloned().collect();
-        eprintln!(
-            "[flash-route] route='{}', cache has {} entries: {:?}",
-            r.model,
-            cache.len(),
-            cache_keys
-        );
-
-        // Try exact session ID match for "flash:{id}" routes
-        if let Some(session_id) = r.model.strip_prefix("flash:") {
-            if let Some(prov) = cache.get(session_id) {
-                eprintln!("[flash-route] found provider by session ID '{session_id}'");
-                return Some(prov.clone());
-            }
-        }
-        // For any flash route, use whatever provider is cached
-        if let Some((key, prov)) = cache.iter().next() {
-            eprintln!("[flash-route] using cached provider '{key}'");
-            return Some(prov.clone());
-        }
-        drop(cache);
-
-        eprintln!(
-            "[flash-route] provider cache empty for route '{}' — model not loaded",
-            r.model
-        );
-        None
-    });
-
-    with_agent_llm_policy(policy, || {
-        ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
-            ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
-                let prev_route = route_slot.replace(route);
-                let prev_flash = flash_slot.replace(flash_prov);
-                let output = op();
-                route_slot.replace(prev_route);
-                flash_slot.replace(prev_flash);
-                output
-            })
-        })
-    })
 }
 
 #[derive(Clone)]
@@ -1207,7 +1121,6 @@ pub struct AppState {
     flash_speculative: Arc<Mutex<Option<nexus_flash_infer::SpeculativeEngine>>>,
     /// P3-HM-CONTRACT-02 §11.0: the process's single dispatch issuer, over
     /// `db`. Without it no agent-scoped dispatch happens on any route.
-    #[allow(dead_code)] // N2 interim: the dispatch adapters read it from N3 on.
     hm_issuer: Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
     adversarial_arena:
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
@@ -1462,7 +1375,8 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                 build_provider_registry(),
             )
-            .with_state_database(db.clone()),
+            .with_state_database(db.clone())
+            .with_optional_issuer(&hm_issuer),
         );
         let agent_scheduler = Arc::new(nexus_kernel::cognitive::AgentScheduler::new(
             cognitive_runtime.clone(),
@@ -1577,7 +1491,7 @@ impl AppState {
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(GatewayHivemindLlm),
+                Box::new(NoSessionHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
@@ -1795,7 +1709,6 @@ impl AppState {
 
     /// The process's single dispatch issuer (P3-HM-CONTRACT-02 §11.0), or
     /// why there is none: then no agent-scoped dispatch happens.
-    #[allow(dead_code)] // N2 interim: the dispatch adapters call it from N3 on.
     pub(crate) fn hm_issuer(&self) -> Result<&Arc<nexus_kernel::hm::DispatchIssuer>, String> {
         self.hm_issuer.as_ref().map_err(Clone::clone)
     }
@@ -1955,13 +1868,14 @@ impl AppState {
                     Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                     build_provider_registry(),
                 )
-                .with_state_database(test_db.clone()),
+                .with_state_database(test_db.clone())
+                .with_optional_issuer(&hm_issuer),
             ),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(GatewayHivemindLlm),
+                Box::new(NoSessionHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),

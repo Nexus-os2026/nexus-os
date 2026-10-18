@@ -3,8 +3,8 @@
 //!
 //! The unit tests drive the planner's dispatch boundary with a fake local
 //! runtime and a recording dispatch, so nothing is sent anywhere. The
-//! end-to-end tests run the real route resolution, policy, thread-local
-//! propagation and planner in a child process whose only reachable services
+//! end-to-end tests run the real route resolution, policy, per-unit
+//! dispatch contexts and planner in a child process whose only reachable services
 //! are a fake Ollama runtime on loopback and a recording proxy that every
 //! non-loopback request goes to; a remote-provider invocation is a proxy
 //! connection, and no prompt can leave the machine.
@@ -460,14 +460,15 @@ fn p3_d2_unresolved_policy_dispatches_nothing() {
     }
     assert!(runtime.asked.borrow().is_empty());
 
-    // The planner itself refuses before any provider or Flash session.
-    let result = with_agent_llm_policy(AgentLlmPolicy::Unresolved, || {
-        GatewayPlannerLlm.plan_query(PROMPT)
-    });
-    assert_refused(&result, "planner under an unresolved policy");
+    // The planner itself refuses before any provider or Flash session: an
+    // agent whose policy cannot be established gets no unit to dispatch in
+    // (P3-HM-CONTRACT-02 §4.2; the thread-local policy no longer exists).
+    let state = AppState::new_in_memory();
+    let result =
+        crate::hm_wiring::test_support::plan_text(&state, &Uuid::new_v4().to_string(), PROMPT);
+    assert_refused(&result, "planner for an agent with no established policy");
 
     // An id that is not a registered agent has no policy to establish.
-    let state = AppState::new_in_memory();
     assert_eq!(
         crate::resolve_agent_llm_policy(&state, "not-a-uuid"),
         AgentLlmPolicy::Unresolved
@@ -514,21 +515,68 @@ fn p3_d2_policy_is_local_only_when_any_assignment_for_the_agent_is() {
     );
 }
 
+/// Ported (mission R12; P3-HM-CONTRACT-02 §11.0, R4): the policy is no
+/// longer a thread-local scope to restore; it is carried by each unit's
+/// context. A panic unwinding out of a local-only agent's dispatch leaves
+/// nothing behind: the next unit of an unrestricted agent on the same
+/// thread keeps its cloud route, and the local-only agent's next unit is
+/// local again.
 #[test]
 fn p3_d2_policy_is_restored_after_the_work_even_when_it_unwinds() {
-    assert_eq!(active_agent_llm_policy(), AgentLlmPolicy::Unrestricted);
-    let unwound = std::panic::catch_unwind(|| {
-        with_agent_llm_policy(AgentLlmPolicy::LocalOnly, || {
-            assert_eq!(active_agent_llm_policy(), AgentLlmPolicy::LocalOnly);
-            with_agent_llm_policy(AgentLlmPolicy::Unresolved, || {
-                assert_eq!(active_agent_llm_policy(), AgentLlmPolicy::Unresolved);
-            });
-            assert_eq!(active_agent_llm_policy(), AgentLlmPolicy::LocalOnly);
-            panic!("unwind through the policy scope");
-        })
-    });
-    assert!(unwound.is_err());
-    assert_eq!(active_agent_llm_policy(), AgentLlmPolicy::Unrestricted);
+    let Some(w) = e2e(
+        "p3_d2_policy_is_restored_after_the_work_even_when_it_unwinds",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            use crate::hm_wiring::test_support::{goal_unit, plan_text};
+            let state = AppState::new_in_memory();
+            let local = register_by_supervisor(&state, "p3-d2-local", true);
+            let open = register_by_supervisor(&state, "p3-d2-open", false);
+            let mut config = nexus_kernel::config::load_config().unwrap();
+            config
+                .agent_llm_assignments
+                .get_mut(&open)
+                .unwrap()
+                .provider_id = "anthropic/claude-sonnet-4-6".into();
+            nexus_kernel::config::save_config(&config).unwrap();
+            assert!(goal_unit(&state, &local)
+                .unwrap()
+                .restrictions()
+                .local_only());
+            assert!(!goal_unit(&state, &open)
+                .unwrap()
+                .restrictions()
+                .local_only());
+            let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut ctx = goal_unit(&state, &local).unwrap();
+                let _ = GatewayPlannerLlm::for_loop(&state, None).plan_query(
+                    &mut ctx,
+                    &mut |_: &mut nexus_kernel::hm::DispatchContext| {
+                        panic!("unwind through the unit's dispatch")
+                    },
+                );
+            }));
+            assert!(unwound.is_err());
+            let cloud = plan_text(&state, &open, PROMPT);
+            let local = plan_text(&state, &local, PROMPT);
+            Ok(format!("cloud={cloud:?} local={local:?}"))
+        },
+    ) else {
+        return;
+    };
+    assert!(w.result.starts_with("OK cloud=Err("), "{}", w.result);
+    assert!(
+        w.result.contains(r#"local=Ok("local answer")"#),
+        "{}",
+        w.result
+    );
+    assert!(
+        w.proxy
+            .iter()
+            .any(|line| line.contains("api.anthropic.com")),
+        "the unrestricted unit kept its cloud route: {:?}",
+        w.proxy
+    );
+    assert_eq!(w.generates().len(), 1, "{:?}", w.ollama);
 }
 
 #[test]
@@ -1090,6 +1138,10 @@ autonomy_level = 3
             },
         );
         nexus_kernel::config::save_config(&config).unwrap();
+        if !local_only {
+            // AMENDMENT 1 A1.9: an unrestricted agent is an Owner loosening.
+            crate::hm_wiring::test_support::owner_loosen(&state, &id);
+        }
     }
     if setup.unreadable_config {
         std::fs::write(
@@ -1103,7 +1155,7 @@ autonomy_level = 3
         goal.model_override = Some(model.into());
         state.cognitive_runtime.assign_goal(&id, goal).unwrap();
     }
-    crate::with_agent_llm_route(&state, &id, || GatewayPlannerLlm.plan_query(PROMPT))
+    crate::hm_wiring::test_support::plan_text(&state, &id, PROMPT)
 }
 
 #[test]
@@ -1323,6 +1375,10 @@ autonomy_level = 3
         },
     );
     nexus_kernel::config::save_config(&config).unwrap();
+    if !local_only {
+        // AMENDMENT 1 A1.9: an unrestricted agent is an Owner loosening.
+        crate::hm_wiring::test_support::owner_loosen(state, &id);
+    }
     id
 }
 
@@ -1662,7 +1718,8 @@ fn register_participant(state: &AppState, (name, local_only, model): Participant
 }
 
 /// Runs one HiveMind session through the desktop's own path (admission,
-/// the real coordinator with `GatewayHivemindLlm`, real sub-task loops).
+/// the real coordinator with `GatewayPlannerLlm::for_session`, real
+/// sub-task loops).
 fn hive_session(state: &AppState, agent_ids: Vec<String>) -> Result<String, String> {
     hive_session_on(state, PROMPT, agent_ids)
 }

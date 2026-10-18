@@ -1,5 +1,5 @@
 use super::world::SimulatedWorld;
-use crate::cognitive::PlannerLlm;
+use super::SimulationLlm;
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -53,7 +53,7 @@ fn default_finding_confidence() -> f64 {
 
 pub fn generate_prediction_report(
     world: &SimulatedWorld,
-    llm: &dyn PlannerLlm,
+    llm: &SimulationLlm,
 ) -> Result<PredictionReport, AgentError> {
     let opinion_shifts = aggregate_opinion_shifts(world);
     let coalitions = detect_coalitions(world);
@@ -79,7 +79,7 @@ pub fn generate_prediction_report(
             confidence: (confidence * 0.92).clamp(0.0, 1.0),
         },
     ];
-    let llm_summary = llm.plan_query(&format!(
+    let llm_summary = llm.ask(&format!(
         "Analyze this simulation summary and produce a concise executive summary. Scenario: {}. Prediction: {}. Confidence: {:.2}. Turning points: {:?}.",
         world.description, prediction, confidence, turning_points
     ));

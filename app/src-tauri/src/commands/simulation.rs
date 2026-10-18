@@ -169,9 +169,10 @@ pub(crate) fn get_dream_queue(state: &AppState) -> Result<String, String> {
 }
 
 pub(crate) fn get_morning_briefing(state: &AppState) -> Result<String, String> {
+    let issuer = state.hm_issuer()?;
     let engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
-    let llm = GatewayDreamLlm;
-    let briefing = engine.generate_morning_briefing(&llm);
+    let llm = crate::hm_dispatch::GatewayPlannerLlm::new(state);
+    let briefing = engine.generate_morning_briefing(issuer, &llm);
     serde_json::to_string(&briefing).map_err(|e| format!("serialize error: {e}"))
 }
 
@@ -190,9 +191,13 @@ pub(crate) fn set_dream_config(
 }
 
 pub(crate) fn trigger_dream_now(state: &AppState) -> Result<String, String> {
+    let issuer = state.hm_issuer()?;
     let mut engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
-    let llm = GatewayDreamLlm;
-    let results = engine.enter_dream_state(&llm);
+    // P3-HM-CONTRACT-02 §11.3, §12.1: each entry is dreamed in a dream unit
+    // started from its own label (agent-owned: AR; OwnerDirect: HR;
+    // unlabelled: LOCAL_ONLY), through the issuer.
+    let llm = crate::hm_dispatch::GatewayPlannerLlm::new(state);
+    let results = engine.enter_dream_state(issuer, &llm);
     serde_json::to_string(&results).map_err(|e| format!("serialize error: {e}"))
 }
 
@@ -200,39 +205,6 @@ pub(crate) fn get_dream_history(state: &AppState, limit: u32) -> Result<String, 
     let engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
     let recent = engine.scheduler.recent_dreams(limit);
     serde_json::to_string(&recent).map_err(|e| format!("serialize error: {e}"))
-}
-
-/// LLM adapter that uses the governed gateway for dream state queries.
-pub(crate) struct GatewayDreamLlm;
-
-impl nexus_kernel::dreams::engine::DreamLlm for GatewayDreamLlm {
-    fn query(&self, system: &str, user: &str, max_tokens: u32) -> Result<(String, u64), String> {
-        let config = load_config().map_err(agent_error)?;
-        let provider_config = build_provider_config(&config);
-        let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
-        let model = if config.llm.default_model.trim().is_empty() {
-            "mock-1".to_string()
-        } else {
-            config.llm.default_model.clone()
-        };
-
-        let mut gateway = GovernedLlmGateway::new(provider);
-        gateway.set_skip_output_firewall(true);
-
-        let mut caps = HashSet::new();
-        caps.insert("llm.query".to_string());
-        let mut ctx = AgentRuntimeContext {
-            agent_id: Uuid::new_v4(),
-            capabilities: caps,
-            fuel_remaining: 50_000,
-        };
-
-        let prompt = format!("[System: {system}]\n\n{user}");
-        let response = gateway
-            .query(&mut ctx, &prompt, max_tokens, &model)
-            .map_err(agent_error)?;
-        Ok((response.output_text, response.token_count as u64))
-    }
 }
 
 // ── Temporal Engine commands ─────────────────────────────────────────────

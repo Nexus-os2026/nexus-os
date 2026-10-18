@@ -24,6 +24,8 @@ mod dispatch;
 mod events;
 mod issuer;
 mod recall;
+#[cfg(test)]
+pub(crate) mod testing;
 mod write;
 
 pub use issuer::{
@@ -36,15 +38,16 @@ pub use dispatch::{
     TransportEvidence, TransportFailure,
 };
 pub use events::{backfill_authority_events, BackfillReport, BACKFILL_BOUND};
-pub use recall::{RecallQuery, RecallRefused};
+pub use recall::{ControlRecord, RecallQuery, RecallRefused, RecallSpec};
 pub use write::{
-    NewMemory, Parent, SourceKind, StrategyWrite, TaskWrite, WriteReceipt, WriteRefused,
+    NewMemory, Parent, SourceKind, StrategyWrite, TaskBookkeeping, TaskWrite, WriteReceipt,
+    WriteRefused,
 };
 
 pub use context::{
     unit_start_state, unit_taint_step, DerivedItem, DispatchContext, EntryLabel, PolicySnapshot,
-    Principal, PromptBuilder, PromptEnvelope, RecalledRecord, RecordRef, Restrictions, RouteClass,
-    Unit, WorkingSet,
+    Principal, PromptBuilder, PromptEnvelope, PromptSource, RecalledRecord, RecordRef,
+    Restrictions, RouteClass, Unit, WorkingSet,
 };
 
 use std::collections::BTreeMap;

@@ -9,6 +9,7 @@
 
 use super::dna::AgentGenome;
 use super::operations::mutate_with_prompt;
+use crate::hm::{DerivedItem, DispatchContext, EntryLabel, PromptBuilder, PromptSource};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -16,24 +17,99 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── Traits ──────────────────────────────────────────────────────────────────
 
-/// LLM backend for scoring and prompt mutation.
+/// LLM backend for scoring and prompt mutation (P3-HM-CONTRACT-02 §11.4).
+/// Every call runs under the caller's context; the prompts are built by
+/// [`AutoEvolutionManager`], and replies are derived items.
 pub trait AutoEvolveLlm: Send + Sync {
-    /// Score a response on a 1–10 scale.
-    fn score_response(&self, user_message: &str, agent_response: &str) -> Result<f64, String>;
+    /// Scores a response on a 1–10 scale (the reply holds the number).
+    fn score_response(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, String>;
 
-    /// Generate an improved system prompt given the current prompt and weak responses.
+    /// Generates an improved system prompt from the current prompt and weak
+    /// responses.
     fn mutate_prompt(
         &self,
-        current_prompt: &str,
-        weak_responses: &[(String, String, f64)], // (user_msg, agent_response, score)
-    ) -> Result<String, String>;
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, String>;
 
-    /// Generate a response using a given system prompt and user message (for testing mutations).
+    /// Generates a response under a given system prompt (to test a
+    /// mutation).
     fn generate_with_prompt(
         &self,
-        system_prompt: &str,
-        user_message: &str,
-    ) -> Result<String, String>;
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, String>;
+}
+
+/// The scoring prompt of one exchange.
+fn score_text(user_message: &str, agent_response: &str) -> String {
+    format!(
+        "Rate this AI agent response on a scale of 1-10.\n\
+         User asked: {user_message}\n\
+         Agent responded: {agent_response}\n\n\
+         Score based on: relevance, accuracy, helpfulness, conciseness.\n\
+         Return ONLY a number 1-10, nothing else."
+    )
+}
+
+/// The first number in a scoring reply, else 7.
+fn parse_score(text: &str) -> f64 {
+    text.trim()
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .find(|s| !s.is_empty())
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(7.0)
+}
+
+/// An envelope of backend text.
+fn text_envelope(ctx: &DispatchContext, text: &str) -> crate::hm::PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    b.text(text);
+    b.build()
+}
+
+/// One scored exchange of the score log (§2.1, §6.5 `auto_evolve_score`):
+/// the user message, the agent's reply, the score, and the label and
+/// principal of the chat turn that produced it. The label is never
+/// serialised and never decoded from text (the wire form is the tuple
+/// `(user message, reply, score)`): an entry decoded from text has none and
+/// is treated as `LOCAL_ONLY_ORIGIN`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(into = "(String, String, f64)", from = "(String, String, f64)")]
+pub struct ScoredTask {
+    pub user_message: String,
+    pub agent_response: String,
+    pub score: f64,
+    label: Option<EntryLabel>,
+}
+
+impl ScoredTask {
+    /// The label of the turn that produced the entry; `None` reads as
+    /// `LOCAL_ONLY_ORIGIN`.
+    pub fn label(&self) -> Option<&EntryLabel> {
+        self.label.as_ref()
+    }
+}
+
+impl From<ScoredTask> for (String, String, f64) {
+    fn from(task: ScoredTask) -> Self {
+        (task.user_message, task.agent_response, task.score)
+    }
+}
+
+impl From<(String, String, f64)> for ScoredTask {
+    fn from((user_message, agent_response, score): (String, String, f64)) -> Self {
+        Self {
+            user_message,
+            agent_response,
+            score,
+            label: None,
+        }
+    }
 }
 
 // ── Performance Tracker ─────────────────────────────────────────────────────
@@ -51,8 +127,9 @@ pub struct AgentPerformanceTracker {
     pub total_evolutions: u32,
     pub successful_evolutions: u32,
     pub evolution_enabled: bool,
-    /// Recent task data for evolution analysis: (user_msg, agent_response, score).
-    pub recent_tasks: Vec<(String, String, f64)>,
+    /// Recent task data for evolution analysis: (user_msg, agent_response,
+    /// score), each with its turn's label (never serialised).
+    pub recent_tasks: Vec<ScoredTask>,
 }
 
 impl AgentPerformanceTracker {
@@ -72,8 +149,15 @@ impl AgentPerformanceTracker {
         }
     }
 
-    /// Record a score and the associated task data.
-    pub fn record_score(&mut self, score: f64, user_msg: &str, agent_response: &str) {
+    /// Record a score and the associated task data, with the label of the
+    /// turn that produced it (`None` reads as `LOCAL_ONLY_ORIGIN`).
+    pub fn record_score(
+        &mut self,
+        score: f64,
+        user_msg: &str,
+        agent_response: &str,
+        label: Option<EntryLabel>,
+    ) {
         self.recent_scores.push(score);
         if self.recent_scores.len() > 20 {
             self.recent_scores.remove(0);
@@ -83,8 +167,12 @@ impl AgentPerformanceTracker {
         self.total_tasks += 1;
 
         // Keep last 10 task entries for evolution analysis
-        self.recent_tasks
-            .push((user_msg.to_string(), agent_response.to_string(), score));
+        self.recent_tasks.push(ScoredTask {
+            user_message: user_msg.to_string(),
+            agent_response: agent_response.to_string(),
+            score,
+            label,
+        });
         if self.recent_tasks.len() > 10 {
             self.recent_tasks.remove(0);
         }
@@ -102,10 +190,10 @@ impl AgentPerformanceTracker {
     }
 
     /// Return the weakest recent tasks (below threshold).
-    pub fn weak_tasks(&self) -> Vec<(String, String, f64)> {
+    pub fn weak_tasks(&self) -> Vec<ScoredTask> {
         self.recent_tasks
             .iter()
-            .filter(|(_, _, score)| *score < self.improvement_threshold)
+            .filter(|task| task.score < self.improvement_threshold)
             .cloned()
             .collect()
     }
@@ -179,24 +267,64 @@ impl AutoEvolutionManager {
             .or_insert_with(|| AgentPerformanceTracker::new(agent_id))
     }
 
-    /// Score a response using the cheap LLM and record it.
+    /// Score a response using the cheap LLM and record it (§11.3: under
+    /// the chat turn's context `ctx`). The entry carries the turn's label
+    /// and principal ([`DispatchContext::entry_label`]).
     pub fn score_and_record(
         &self,
+        ctx: &mut DispatchContext,
         agent_id: &str,
         user_message: &str,
         agent_response: &str,
         llm: &dyn AutoEvolveLlm,
     ) -> f64 {
+        let text = score_text(user_message, agent_response);
         let score = llm
-            .score_response(user_message, agent_response)
+            .score_response(ctx, &mut |c: &mut DispatchContext| {
+                Some(text_envelope(c, &text))
+            })
+            .map(|reply| parse_score(reply.text()))
             .unwrap_or(7.0);
         let clamped = score.clamp(1.0, 10.0);
+        let label = ctx.entry_label();
 
         let mut trackers = self.trackers.lock().unwrap_or_else(|p| p.into_inner());
         let tracker = Self::get_or_create_tracker(&mut trackers, agent_id);
-        tracker.record_score(clamped, user_message, agent_response);
+        tracker.record_score(clamped, user_message, agent_response, label);
 
         clamped
+    }
+
+    /// The weak tasks a unit may use (§11.3): each entry's label joins the
+    /// unit's taint (none: `LOCAL_ONLY_ORIGIN`); an entry of another
+    /// principal is left out.
+    fn admitted(ctx: &mut DispatchContext, tasks: Vec<ScoredTask>) -> Vec<ScoredTask> {
+        tasks
+            .into_iter()
+            .filter(|task| ctx.admit_entry(task.label()).is_ok())
+            .collect()
+    }
+
+    /// The mutation prompt of `current_prompt` and the weak tasks.
+    fn mutation_text(current_prompt: &str, weak_tasks: &[ScoredTask]) -> String {
+        let mut weak_desc = String::new();
+        for (i, task) in weak_tasks.iter().enumerate() {
+            weak_desc.push_str(&format!(
+                "Task {}: User asked: {}\n  Agent said: {}\n  Score: {}/10\n\n",
+                i + 1,
+                task.user_message,
+                task.agent_response,
+                task.score
+            ));
+        }
+        format!(
+            "Here is an AI agent's system prompt:\n{current_prompt}\n\n\
+             It performed poorly on these tasks:\n{weak_desc}\n\
+             Analyze WHY the responses were weak and rewrite the system prompt \
+             to address these specific weaknesses. Keep the core personality \
+             and capabilities, but add targeted instructions to improve.\n\n\
+             Return ONLY the improved system prompt."
+        )
     }
 
     /// Check if an agent should evolve.
@@ -208,10 +336,11 @@ impl AutoEvolutionManager {
             .unwrap_or(false)
     }
 
-    /// Attempt auto-evolution for an agent. Returns the evolution result and
-    /// optionally the mutated genome.
+    /// Attempt auto-evolution for an agent under the unit `ctx`. Returns
+    /// the evolution result and optionally the mutated genome.
     pub fn attempt_evolution(
         &self,
+        ctx: &mut DispatchContext,
         agent_id: &str,
         current_genome: &AgentGenome,
         llm: &dyn AutoEvolveLlm,
@@ -232,6 +361,7 @@ impl AutoEvolutionManager {
             }
         };
 
+        let weak_tasks = Self::admitted(ctx, weak_tasks);
         if weak_tasks.is_empty() {
             let mut trackers = self.trackers.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(t) = trackers.get_mut(agent_id) {
@@ -247,10 +377,13 @@ impl AutoEvolutionManager {
         }
 
         let current_prompt = &current_genome.genes.personality.system_prompt;
-        let old_avg = weak_tasks.iter().map(|(_, _, s)| s).sum::<f64>() / weak_tasks.len() as f64;
+        let old_avg = weak_tasks.iter().map(|t| t.score).sum::<f64>() / weak_tasks.len() as f64;
 
         // Step 1: Generate mutated prompt
-        let mutated_prompt = match llm.mutate_prompt(current_prompt, &weak_tasks) {
+        let mutation = Self::mutation_text(current_prompt, &weak_tasks);
+        let mutated_prompt = match llm.mutate_prompt(ctx, &mut |c: &mut DispatchContext| {
+            Some(text_envelope(c, &mutation))
+        }) {
             Ok(p) => p,
             Err(e) => {
                 let mut trackers = self.trackers.lock().unwrap_or_else(|p| p.into_inner());
@@ -269,11 +402,26 @@ impl AutoEvolutionManager {
 
         // Step 2: Test the mutation by re-running weak tasks with new prompt
         let mut new_scores = Vec::new();
-        for (user_msg, _, _) in &weak_tasks {
-            match llm.generate_with_prompt(&mutated_prompt, user_msg) {
+        for task in &weak_tasks {
+            let user_msg = &task.user_message;
+            let generated = llm.generate_with_prompt(ctx, &mut |c: &mut DispatchContext| {
+                // The mutated prompt is the model's: carried with its label.
+                let mut b = PromptBuilder::new(c);
+                b.text("[System prompt: ");
+                b.carry(&mutated_prompt);
+                b.text(&format!("]\n\nUser: {user_msg}\n\nAssistant:"));
+                Some(b.build())
+            });
+            match generated {
                 Ok(new_response) => {
                     let new_score = llm
-                        .score_response(user_msg, &new_response)
+                        .score_response(ctx, &mut |c: &mut DispatchContext| {
+                            let mut b = PromptBuilder::new(c);
+                            b.text(&score_text(user_msg, ""));
+                            b.carry(&new_response);
+                            Some(b.build())
+                        })
+                        .map(|reply| parse_score(reply.text()))
                         .unwrap_or(5.0)
                         .clamp(1.0, 10.0);
                     new_scores.push(new_score);
@@ -341,9 +489,11 @@ impl AutoEvolutionManager {
         }
     }
 
-    /// Apply a successful evolution to a genome, returning the mutated genome.
+    /// Apply a successful evolution to a genome under the unit `ctx`,
+    /// returning the mutated genome.
     pub fn apply_evolution(
         &self,
+        ctx: &mut DispatchContext,
         genome: &AgentGenome,
         llm: &dyn AutoEvolveLlm,
     ) -> Option<AgentGenome> {
@@ -353,14 +503,20 @@ impl AutoEvolutionManager {
             trackers.get(agent_id)?.weak_tasks()
         };
 
+        let weak_tasks = Self::admitted(ctx, weak_tasks);
         if weak_tasks.is_empty() {
             return None;
         }
 
         let current_prompt = &genome.genes.personality.system_prompt;
+        let mutation = Self::mutation_text(current_prompt, &weak_tasks);
         // Optional: LLM mutation failure means no evolution candidate, return None
-        let mutated_prompt = llm.mutate_prompt(current_prompt, &weak_tasks).ok()?;
-        let mut evolved = mutate_with_prompt(genome, mutated_prompt);
+        let mutated_prompt = llm
+            .mutate_prompt(ctx, &mut |c: &mut DispatchContext| {
+                Some(text_envelope(c, &mutation))
+            })
+            .ok()?;
+        let mut evolved = mutate_with_prompt(genome, mutated_prompt.text().to_string());
 
         // Record fitness from the running average
         let avg = {
@@ -401,9 +557,11 @@ impl AutoEvolutionManager {
         tracker.evolution_cooldown_secs = config.cooldown_seconds;
     }
 
-    /// Force an evolution attempt regardless of cooldown/threshold.
+    /// Force an evolution attempt regardless of cooldown/threshold, under
+    /// the unit `ctx`.
     pub fn force_evolve(
         &self,
+        ctx: &mut DispatchContext,
         agent_id: &str,
         genome: &AgentGenome,
         llm: &dyn AutoEvolveLlm,
@@ -415,7 +573,7 @@ impl AutoEvolutionManager {
                 t.last_evolution_attempt = 0;
             }
         }
-        self.attempt_evolution(agent_id, genome, llm)
+        self.attempt_evolution(ctx, agent_id, genome, llm)
     }
 }
 
@@ -439,21 +597,61 @@ fn epoch_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::{DispatchContext, Principal, RouteClass, Unit};
     use std::collections::HashMap;
+    use std::sync::OnceLock;
 
-    // Mock LLM that returns configurable scores and prompts
+    /// The synthetic store and its issuer shared by these tests, and one
+    /// registered agent whose chat turns and units they use (local-only by
+    /// default).
+    fn hm() -> &'static (TestHm, uuid::Uuid) {
+        static HM: OnceLock<(TestHm, uuid::Uuid)> = OnceLock::new();
+        HM.get_or_init(|| {
+            let hm = TestHm::new();
+            let agent = hm.agent("auto-evolve-agent");
+            (hm, agent)
+        })
+    }
+
+    /// A chat turn of the test agent (the scoring unit, §11.3).
+    fn turn() -> DispatchContext {
+        let (hm, agent) = hm();
+        hm.issuer
+            .begin_unit(
+                Principal::Agent(*agent),
+                Unit::ChatTurn {
+                    turn_id: uuid::Uuid::new_v4(),
+                },
+            )
+            .unwrap()
+    }
+
+    /// A unit of the test agent that evolves it.
+    fn unit() -> DispatchContext {
+        let (hm, agent) = hm();
+        hm.goal(*agent)
+    }
+
+    // Mock LLM that returns configurable scores and prompts, through the
+    // issuer on an attested local transport.
     struct MockAutoEvolveLlm {
-        score: f64,
-        mutated_prompt: String,
-        generated_response: String,
+        score: ScriptedLlm,
+        mutated_prompt: ScriptedLlm,
+        generated_response: ScriptedLlm,
     }
 
     impl MockAutoEvolveLlm {
         fn new(score: f64, mutated_prompt: &str, generated_response: &str) -> Self {
+            let issuer = &hm().0.issuer;
             Self {
-                score,
-                mutated_prompt: mutated_prompt.to_string(),
-                generated_response: generated_response.to_string(),
+                score: ScriptedLlm::replying(issuer, RouteClass::Local, &score.to_string()),
+                mutated_prompt: ScriptedLlm::replying(issuer, RouteClass::Local, mutated_prompt),
+                generated_response: ScriptedLlm::replying(
+                    issuer,
+                    RouteClass::Local,
+                    generated_response,
+                ),
             }
         }
     }
@@ -461,26 +659,30 @@ mod tests {
     impl AutoEvolveLlm for MockAutoEvolveLlm {
         fn score_response(
             &self,
-            _user_message: &str,
-            _agent_response: &str,
-        ) -> Result<f64, String> {
-            Ok(self.score)
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, String> {
+            self.score.ask(ctx, prompt).map_err(|e| e.to_string())
         }
 
         fn mutate_prompt(
             &self,
-            _current_prompt: &str,
-            _weak_responses: &[(String, String, f64)],
-        ) -> Result<String, String> {
-            Ok(self.mutated_prompt.clone())
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, String> {
+            self.mutated_prompt
+                .ask(ctx, prompt)
+                .map_err(|e| e.to_string())
         }
 
         fn generate_with_prompt(
             &self,
-            _system_prompt: &str,
-            _user_message: &str,
-        ) -> Result<String, String> {
-            Ok(self.generated_response.clone())
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, String> {
+            self.generated_response
+                .ask(ctx, prompt)
+                .map_err(|e| e.to_string())
         }
     }
 
@@ -528,9 +730,9 @@ mod tests {
     #[test]
     fn tracker_records_scores_and_computes_average() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
-        tracker.record_score(8.0, "hello", "hi there");
-        tracker.record_score(6.0, "help", "sure thing");
-        tracker.record_score(4.0, "code", "here's code");
+        tracker.record_score(8.0, "hello", "hi there", None);
+        tracker.record_score(6.0, "help", "sure thing", None);
+        tracker.record_score(4.0, "code", "here's code", None);
 
         assert_eq!(tracker.recent_scores.len(), 3);
         assert_eq!(tracker.total_tasks, 3);
@@ -541,7 +743,7 @@ mod tests {
     fn tracker_caps_at_20_scores() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
         for i in 0..25 {
-            tracker.record_score(i as f64 % 10.0, "msg", "resp");
+            tracker.record_score(i as f64 % 10.0, "msg", "resp", None);
         }
         assert_eq!(tracker.recent_scores.len(), 20);
         assert_eq!(tracker.total_tasks, 25);
@@ -550,11 +752,11 @@ mod tests {
     #[test]
     fn should_evolve_requires_minimum_scores() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
-        tracker.record_score(3.0, "msg", "resp");
-        tracker.record_score(3.0, "msg", "resp");
+        tracker.record_score(3.0, "msg", "resp", None);
+        tracker.record_score(3.0, "msg", "resp", None);
         assert!(!tracker.should_evolve(), "need at least 3 scores");
 
-        tracker.record_score(3.0, "msg", "resp");
+        tracker.record_score(3.0, "msg", "resp", None);
         assert!(tracker.should_evolve());
     }
 
@@ -562,7 +764,7 @@ mod tests {
     fn should_evolve_respects_cooldown() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
         for _ in 0..5 {
-            tracker.record_score(3.0, "msg", "resp");
+            tracker.record_score(3.0, "msg", "resp", None);
         }
         assert!(tracker.should_evolve());
 
@@ -575,7 +777,7 @@ mod tests {
     fn should_evolve_respects_threshold() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
         for _ in 0..5 {
-            tracker.record_score(9.0, "msg", "resp");
+            tracker.record_score(9.0, "msg", "resp", None);
         }
         assert!(!tracker.should_evolve(), "above threshold");
     }
@@ -584,7 +786,7 @@ mod tests {
     fn should_evolve_respects_enabled_flag() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
         for _ in 0..5 {
-            tracker.record_score(3.0, "msg", "resp");
+            tracker.record_score(3.0, "msg", "resp", None);
         }
         tracker.evolution_enabled = false;
         assert!(!tracker.should_evolve());
@@ -594,7 +796,7 @@ mod tests {
     fn manager_score_and_record() {
         let manager = AutoEvolutionManager::new();
         let llm = MockAutoEvolveLlm::new(8.5, "", "");
-        let score = manager.score_and_record("agent-1", "hello", "hi there", &llm);
+        let score = manager.score_and_record(&mut turn(), "agent-1", "hello", "hi there", &llm);
         assert!((score - 8.5).abs() < 1e-9);
 
         let tracker = manager.get_tracker("agent-1").unwrap();
@@ -606,11 +808,13 @@ mod tests {
     fn manager_score_clamps_to_range() {
         let manager = AutoEvolutionManager::new();
         let llm = MockAutoEvolveLlm::new(15.0, "", "");
-        let score = manager.score_and_record("agent-1", "msg", "resp", &llm);
+        let score = manager.score_and_record(&mut turn(), "agent-1", "msg", "resp", &llm);
         assert!((score - 10.0).abs() < 1e-9);
 
-        let llm_low = MockAutoEvolveLlm::new(-5.0, "", "");
-        let score2 = manager.score_and_record("agent-1", "msg", "resp", &llm_low);
+        // The score now arrives as model text, whose parser reads digits:
+        // an out-of-range low score is 0.2 (was -5.0 as a number).
+        let llm_low = MockAutoEvolveLlm::new(0.2, "", "");
+        let score2 = manager.score_and_record(&mut turn(), "agent-1", "msg", "resp", &llm_low);
         assert!((score2 - 1.0).abs() < 1e-9);
     }
 
@@ -620,13 +824,19 @@ mod tests {
         // Record low scores to create weak tasks
         let low_llm = MockAutoEvolveLlm::new(3.0, "", "");
         for _ in 0..5 {
-            manager.score_and_record("agent-1", "help me code", "bad response", &low_llm);
+            manager.score_and_record(
+                &mut turn(),
+                "agent-1",
+                "help me code",
+                "bad response",
+                &low_llm,
+            );
         }
 
         // Now attempt evolution with a high-scoring LLM
         let evolve_llm = MockAutoEvolveLlm::new(9.0, "Improved prompt", "Great response");
         let genome = sample_genome("agent-1");
-        let result = manager.attempt_evolution("agent-1", &genome, &evolve_llm);
+        let result = manager.attempt_evolution(&mut unit(), "agent-1", &genome, &evolve_llm);
 
         assert!(result.improved);
         assert!(result.new_score > result.old_score);
@@ -637,13 +847,13 @@ mod tests {
         let manager = AutoEvolutionManager::new();
         let low_llm = MockAutoEvolveLlm::new(3.0, "", "");
         for _ in 0..5 {
-            manager.score_and_record("agent-1", "help", "bad", &low_llm);
+            manager.score_and_record(&mut turn(), "agent-1", "help", "bad", &low_llm);
         }
 
         // Evolution also scores low — no improvement
         let still_low_llm = MockAutoEvolveLlm::new(2.0, "Worse prompt", "Still bad");
         let genome = sample_genome("agent-1");
-        let result = manager.attempt_evolution("agent-1", &genome, &still_low_llm);
+        let result = manager.attempt_evolution(&mut unit(), "agent-1", &genome, &still_low_llm);
 
         assert!(!result.improved);
     }
@@ -653,12 +863,12 @@ mod tests {
         let manager = AutoEvolutionManager::new();
         let low_llm = MockAutoEvolveLlm::new(3.0, "", "");
         for _ in 0..5 {
-            manager.score_and_record("agent-1", "msg", "resp", &low_llm);
+            manager.score_and_record(&mut turn(), "agent-1", "msg", "resp", &low_llm);
         }
 
         let evolve_llm = MockAutoEvolveLlm::new(9.0, "Better", "Better response");
         let genome = sample_genome("agent-1");
-        manager.attempt_evolution("agent-1", &genome, &evolve_llm);
+        manager.attempt_evolution(&mut unit(), "agent-1", &genome, &evolve_llm);
 
         let log = manager.get_evolution_log("agent-1", 10);
         assert_eq!(log.len(), 1);
@@ -688,7 +898,7 @@ mod tests {
         let manager = AutoEvolutionManager::new();
         let low_llm = MockAutoEvolveLlm::new(3.0, "", "");
         for _ in 0..5 {
-            manager.score_and_record("agent-1", "msg", "resp", &low_llm);
+            manager.score_and_record(&mut turn(), "agent-1", "msg", "resp", &low_llm);
         }
 
         // Set recent cooldown
@@ -705,21 +915,21 @@ mod tests {
         // Force should work
         let evolve_llm = MockAutoEvolveLlm::new(9.0, "Better", "Better response");
         let genome = sample_genome("agent-1");
-        let result = manager.force_evolve("agent-1", &genome, &evolve_llm);
+        let result = manager.force_evolve(&mut unit(), "agent-1", &genome, &evolve_llm);
         assert!(result.improved);
     }
 
     #[test]
     fn weak_tasks_filters_below_threshold() {
         let mut tracker = AgentPerformanceTracker::new("test-agent");
-        tracker.record_score(9.0, "good question", "great answer");
-        tracker.record_score(3.0, "bad question", "poor answer");
-        tracker.record_score(5.0, "ok question", "ok answer");
+        tracker.record_score(9.0, "good question", "great answer", None);
+        tracker.record_score(3.0, "bad question", "poor answer", None);
+        tracker.record_score(5.0, "ok question", "ok answer", None);
 
         let weak = tracker.weak_tasks();
         assert_eq!(weak.len(), 2); // scores 3.0 and 5.0 are below 6.0 threshold
-        assert!((weak[0].2 - 3.0).abs() < 1e-9);
-        assert!((weak[1].2 - 5.0).abs() < 1e-9);
+        assert!((weak[0].score - 3.0).abs() < 1e-9);
+        assert!((weak[1].score - 5.0).abs() < 1e-9);
     }
 
     #[test]
@@ -727,12 +937,12 @@ mod tests {
         let manager = AutoEvolutionManager::new();
         let low_llm = MockAutoEvolveLlm::new(3.0, "", "");
         for _ in 0..5 {
-            manager.score_and_record("test-agent", "msg", "resp", &low_llm);
+            manager.score_and_record(&mut turn(), "test-agent", "msg", "resp", &low_llm);
         }
 
         let evolve_llm = MockAutoEvolveLlm::new(9.0, "Evolved prompt", "Better response");
         let genome = sample_genome("test-agent");
-        let evolved = manager.apply_evolution(&genome, &evolve_llm);
+        let evolved = manager.apply_evolution(&mut unit(), &genome, &evolve_llm);
         assert!(evolved.is_some());
         let evolved = evolved.unwrap();
         assert_eq!(evolved.genes.personality.system_prompt, "Evolved prompt");
@@ -744,8 +954,8 @@ mod tests {
         let manager = AutoEvolutionManager::new();
         let llm = MockAutoEvolveLlm::new(7.0, "", "");
 
-        manager.score_and_record("agent-a", "msg1", "resp1", &llm);
-        manager.score_and_record("agent-b", "msg2", "resp2", &llm);
+        manager.score_and_record(&mut turn(), "agent-a", "msg1", "resp1", &llm);
+        manager.score_and_record(&mut turn(), "agent-b", "msg2", "resp2", &llm);
 
         let tracker_a = manager.get_tracker("agent-a").unwrap();
         let tracker_b = manager.get_tracker("agent-b").unwrap();

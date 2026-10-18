@@ -4034,11 +4034,18 @@ fn p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call() {
     use nexus_kernel::cognitive::PlannerLlm;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    struct CountingLlm(Arc<AtomicUsize>);
+    struct CountingLlm(
+        Arc<AtomicUsize>,
+        crate::commands::cognitive::TestSimulationPlannerLlm,
+    );
     impl PlannerLlm for CountingLlm {
-        fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        fn plan_query(
+            &self,
+            ctx: &mut nexus_kernel::hm::DispatchContext,
+            prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+        ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
             self.0.fetch_add(1, Ordering::SeqCst);
-            crate::commands::cognitive::TestSimulationPlannerLlm.plan_query(prompt)
+            self.1.plan_query(ctx, prompt)
         }
     }
 
@@ -4047,9 +4054,15 @@ fn p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call() {
     let queries = Arc::new(AtomicUsize::new(0));
     let model = || {
         let (built, queries) = (built.clone(), queries.clone());
-        move || -> Arc<dyn PlannerLlm> {
+        move |state: &AppState| -> nexus_kernel::simulation::SimulationLlm {
             built.fetch_add(1, Ordering::SeqCst);
-            Arc::new(CountingLlm(queries))
+            let test_model = crate::commands::cognitive::TestSimulationPlannerLlm {
+                issuer: state.hm_issuer().unwrap().clone(),
+            };
+            crate::commands::cognitive::simulation_llm(
+                state,
+                Arc::new(CountingLlm(queries, test_model)),
+            )
         }
     };
     let seed = "Macro outlook with rate pressure.";

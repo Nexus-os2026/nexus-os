@@ -236,6 +236,70 @@ pub(crate) fn start_historical_memory(
     }
 }
 
+/// Test support shared by the desktop's tests (`cfg(test)` only).
+#[cfg(test)]
+pub(crate) mod test_support {
+    use nexus_kernel::errors::AgentError;
+    use nexus_kernel::hm::{DispatchContext, Principal, PromptBuilder, Unit};
+    use uuid::Uuid;
+
+    use crate::AppState;
+
+    /// TEST FIXTURE, not product code (mission AMENDMENT 1 A1.9): an Owner
+    /// loosening (M4 builds the native confirmation), committed through the
+    /// store with its `owner_loosen` history row first (§5.1 trigger). The
+    /// agent's restrictive row is created first if it is missing.
+    pub(crate) fn owner_loosen(state: &AppState, agent_id: &str) {
+        let issuer = state.hm_issuer().expect("dispatch issuer");
+        issuer
+            .resolve_agent_route_policy(Uuid::parse_str(agent_id).expect("agent UUID"))
+            .expect("registered agent");
+        crate::hm_m3_tests::fixture_owner_loosen(&state.db, agent_id);
+    }
+
+    /// A goal unit of `agent_id`, as the runtime starts one (O1); a refusal
+    /// is reported as the desktop reports an unestablished policy.
+    pub(crate) fn goal_unit(
+        state: &AppState,
+        agent_id: &str,
+    ) -> Result<DispatchContext, AgentError> {
+        let refused = |e: String| {
+            AgentError::SupervisorError(format!(
+                "{}: {e}",
+                crate::commands::cognitive::unresolved_policy_error()
+            ))
+        };
+        let issuer = state.hm_issuer().map_err(refused)?;
+        let agent = Uuid::parse_str(agent_id).map_err(|e| refused(e.to_string()))?;
+        issuer
+            .begin_unit(
+                Principal::Agent(agent),
+                Unit::Goal {
+                    goal_id: Uuid::new_v4(),
+                },
+            )
+            .map_err(|e| refused(e.to_string()))
+    }
+
+    /// One planning dispatch of `prompt` (backend text) in a fresh goal unit
+    /// of `agent_id`, through the production adapter of a goal's loop.
+    pub(crate) fn plan_text(
+        state: &AppState,
+        agent_id: &str,
+        prompt: &str,
+    ) -> Result<String, AgentError> {
+        use nexus_kernel::cognitive::PlannerLlm;
+        let mut ctx = goal_unit(state, agent_id)?;
+        crate::hm_dispatch::GatewayPlannerLlm::for_loop(state, None)
+            .plan_query(&mut ctx, &mut |c: &mut DispatchContext| {
+                let mut b = PromptBuilder::new(c);
+                b.text(prompt);
+                Some(b.build())
+            })
+            .map(|reply| reply.text().to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! N2 (mission R6): the start-up sequence on synthetic databases (A-M1),
@@ -243,6 +307,9 @@ mod tests {
     //! built here with `flash-infer`.
 
     use super::*;
+    use crate::hm_m3_tests::{
+        fixture_owner_loosen, label_keys, labels, ledger, ledger_digest, migrations, policies,
+    };
     use nexus_kernel::hm::{
         EvaluatedLabel, OriginLabel, Principal, RecallQuery, RecordTable, RouteClass, Unit,
     };
@@ -274,19 +341,6 @@ mod tests {
             Ok(())
         })
         .unwrap_or_else(|e| panic!("{e} for: {sql}"));
-    }
-
-    fn strings(db: &NexusDatabase, sql: &str) -> Vec<String> {
-        db.with_transaction(|tx| {
-            let mut stmt = tx.prepare(sql)?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            let mut out = Vec::new();
-            for row in rows {
-                out.push(row?);
-            }
-            Ok(out)
-        })
-        .unwrap_or_else(|e| panic!("{e} for: {sql}"))
     }
 
     const IN_SCOPE: [&str; 5] = [
@@ -389,31 +443,6 @@ mod tests {
         Arc::new(reg)
     }
 
-    /// TEST FIXTURE, not product code: an Owner loosening (M4 builds the
-    /// native confirmation) committed with raw SQL on a synthetic database,
-    /// with its history row first (§5.1 trigger).
-    pub(crate) fn fixture_owner_loosen(db: &NexusDatabase, agent_id: &str) {
-        db.with_transaction(|tx| {
-            let (generation, seq): (i64, i64) = tx.query_row(
-                "SELECT policy_generation, revocation_seq FROM hm_agent_policy WHERE agent_id = ?1",
-                [agent_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )?;
-            tx.execute(
-                "INSERT INTO hm_policy_change (agent_id, policy_generation, local_only, basis, cause)
-                 VALUES (?1, ?2, 0, 'owner_confirmed', 'owner_loosen')",
-                rusqlite::params![agent_id, generation + 1],
-            )?;
-            tx.execute(
-                "UPDATE hm_agent_policy SET local_only = 0, policy_generation = ?2,
-                   revocation_seq = ?3, basis = 'owner_confirmed' WHERE agent_id = ?1",
-                rusqlite::params![agent_id, generation + 1, seq],
-            )?;
-            Ok(())
-        })
-        .unwrap();
-    }
-
     /// A-M1 (production start-up): on a synthetic pre-T₀ database file every
     /// row is kept byte for byte, labelled `LEGACY_UNKNOWN` and in the
     /// ledger; the count and digest are stored; the Option A baseline covers
@@ -447,71 +476,44 @@ mod tests {
         assert_eq!(row_hashes(&db), before, "per-row SHA-256 unchanged");
 
         // Every row labelled LEGACY_UNKNOWN, `legacy`, in the ledger, bound.
+        let label_rows = labels(&db);
+        assert_eq!(label_rows.len(), 7);
+        let mut kinds: Vec<String> = label_rows
+            .iter()
+            .map(|l| format!("{}|{}|{}", l.origin, l.source_kind, l.policy_generation))
+            .collect();
+        kinds.sort();
+        kinds.dedup();
+        assert_eq!(kinds, vec!["LEGACY_UNKNOWN|legacy|0"]);
+        let members = ledger(&db);
         assert_eq!(
-            strings(&db, "SELECT COUNT(*) || '' FROM hm_record_label"),
-            vec!["7"]
-        );
-        assert_eq!(
-            strings(
-                &db,
-                "SELECT DISTINCT origin || '|' || source_kind || '|' || policy_generation
-                 FROM hm_record_label"
-            ),
-            vec!["LEGACY_UNKNOWN|legacy|0"]
-        );
-        assert_eq!(
-            strings(
-                &db,
-                "SELECT COUNT(*) || '' FROM hm_record_label l JOIN hm_t0_member m
-                   ON m.record_table = l.record_table AND m.record_id = l.record_id
-                  AND m.t0_content_sha256 = l.content_sha256 AND m.agent_id = l.agent_id"
-            ),
-            vec!["7"]
+            label_rows
+                .iter()
+                .filter(|l| members.iter().any(|m| m.record_table == l.record_table
+                    && m.record_id == l.record_id
+                    && m.t0_content_sha256 == l.content_sha256
+                    && m.agent_id == l.agent_id))
+                .count(),
+            7
         );
         for table in RecordTable::ALL {
-            for id in strings(
-                &db,
-                &format!(
-                    "SELECT record_id FROM hm_t0_member WHERE record_table = '{}'",
-                    table.table_name()
-                ),
-            ) {
+            for member in members
+                .iter()
+                .filter(|m| m.record_table == table.table_name())
+            {
                 assert_eq!(
-                    nexus_kernel::hm::evaluate_label(&db, table, &id).unwrap(),
+                    nexus_kernel::hm::evaluate_label(&db, table, &member.record_id).unwrap(),
                     EvaluatedLabel::Bound(OriginLabel::LegacyUnknown)
                 );
             }
         }
         // Count and digest stored; the digest is the ledger's.
-        let ledger: Vec<nexus_persistence::hm::MemberRow> = db
-            .with_transaction(|tx| {
-                let mut stmt = tx.prepare(
-                    "SELECT record_table, record_id, agent_id, t0_content_sha256 FROM hm_t0_member",
-                )?;
-                let rows = stmt.query_map([], |r| {
-                    Ok(nexus_persistence::hm::MemberRow {
-                        record_table: r.get(0)?,
-                        record_id: r.get(1)?,
-                        agent_id: r.get(2)?,
-                        t0_content_sha256: r.get(3)?,
-                    })
-                })?;
-                let mut v = Vec::new();
-                for row in rows {
-                    v.push(row?);
-                }
-                Ok(v)
-            })
-            .unwrap();
+        assert_eq!(ledger_digest(&members), member_set_sha256);
         assert_eq!(
-            nexus_persistence::hm::member_set_digest(&ledger),
-            member_set_sha256
-        );
-        assert_eq!(
-            strings(
-                &db,
-                "SELECT state || '|' || member_count || '|' || member_set_sha256 FROM hm_migration"
-            ),
+            migrations(&db)
+                .iter()
+                .map(|m| format!("{}|{}|{}", m.state, m.member_count, m.member_set_sha256))
+                .collect::<Vec<_>>(),
             vec![format!("COMPLETE|7|{member_set_sha256}")]
         );
         // Option A over registered ∪ row agents; a non-UUID id has no row.
@@ -521,45 +523,38 @@ mod tests {
             registered.to_string(),
         ];
         expected.sort();
+        let policy_rows = policies(&db);
         assert_eq!(
-            strings(
-                &db,
-                "SELECT agent_id FROM hm_agent_policy ORDER BY agent_id"
-            ),
+            policy_rows
+                .iter()
+                .map(|p| p.agent_id.clone())
+                .collect::<Vec<_>>(),
             expected
         );
-        assert_eq!(
-            strings(
-                &db,
-                "SELECT DISTINCT local_only || '|' || policy_generation || '|' || basis
-                 FROM hm_agent_policy"
-            ),
-            vec!["1|1|t0_baseline"]
-        );
+        let mut baselines: Vec<String> = policy_rows
+            .iter()
+            .map(|p| {
+                format!(
+                    "{}|{}|{}",
+                    p.local_only.unwrap_or(-1),
+                    p.policy_generation.unwrap_or(-1),
+                    p.basis.as_deref().unwrap_or("NULL")
+                )
+            })
+            .collect();
+        baselines.sort();
+        baselines.dedup();
+        assert_eq!(baselines, vec!["1|1|t0_baseline"]);
 
         // A second start (a new handle on the same file) is a no-op.
         drop(db);
         let db = Arc::new(NexusDatabase::open(&path).unwrap());
-        let labels = strings(
-            &db,
-            "SELECT record_table || record_id || origin || content_sha256 FROM hm_record_label
-             ORDER BY 1",
-        );
+        let keys = label_keys(&db);
         let again = start_historical_memory(&db, &empty_registry());
         assert_eq!(again.t0, Ok(T0Outcome::AlreadyComplete));
         assert_eq!(row_hashes(&db), before);
-        assert_eq!(
-            strings(
-                &db,
-                "SELECT record_table || record_id || origin || content_sha256 FROM hm_record_label
-                 ORDER BY 1",
-            ),
-            labels
-        );
-        assert_eq!(
-            strings(&db, "SELECT COUNT(*) || '' FROM hm_t0_member"),
-            vec!["7"]
-        );
+        assert_eq!(label_keys(&db), keys);
+        assert_eq!(ledger(&db).len(), 7);
 
         // A non-local recall of X excludes all of its history.
         let x = Uuid::parse_str(AGENT_X).unwrap();
@@ -706,7 +701,10 @@ fuel_budget = 100
         let state = crate::AppState::new_in_memory();
         assert!(state.hm_issuer().is_ok());
         assert_eq!(
-            strings(&state.db, "SELECT state FROM hm_migration"),
+            migrations(&state.db)
+                .into_iter()
+                .map(|m| m.state)
+                .collect::<Vec<_>>(),
             vec!["COMPLETE"]
         );
     }

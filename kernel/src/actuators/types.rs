@@ -115,6 +115,38 @@ pub trait Actuator: Send + Sync {
         action: &crate::cognitive::types::PlannedAction,
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError>;
+
+    /// Execute the given action as a step of the unit in `scope`
+    /// (P3-HM-CONTRACT-02 §6, §12.3). An actuator that reads or writes an
+    /// in-scope store does it here, through the labelled and route-first
+    /// API; the default runs [`Actuator::execute`].
+    fn execute_in(
+        &self,
+        action: &crate::cognitive::types::PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        let _ = scope;
+        self.execute(action, context)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ActuatorScope — the historical-memory unit of a step
+// ---------------------------------------------------------------------------
+
+/// The unit an actuator step runs in (P3-HM-CONTRACT-02 §6.1, §11.3): the
+/// issuer over the primary state database, the unit's context, and the plan
+/// the step came from. An actuator that reads retained records verbatim
+/// returns them in `recalled`.
+pub struct ActuatorScope<'a> {
+    pub issuer: &'a crate::hm::DispatchIssuer,
+    pub ctx: &'a mut crate::hm::DispatchContext,
+    /// The plan the action came from: content built from the action keeps
+    /// its label (a parent of every write the action makes).
+    pub plan: &'a crate::hm::DerivedItem,
+    /// Records the actuator returned verbatim (a `KnowledgeGraphQuery`).
+    pub recalled: Vec<crate::hm::RecalledRecord>,
 }
 
 // ---------------------------------------------------------------------------

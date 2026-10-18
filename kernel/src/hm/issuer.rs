@@ -224,9 +224,24 @@ impl DispatchIssuer {
         &self.db
     }
 
+    /// The primary state database this issuer decides over (§6.2). A holder
+    /// of the issuer writes rows outside the in-scope stores, and
+    /// bookkeeping, here rather than opening a database of its own; content
+    /// writes to an in-scope store go through the labelled API.
+    pub fn state_database(&self) -> &Arc<NexusDatabase> {
+        &self.db
+    }
+
     /// Whether `ctx` was minted by this issuer.
     pub(in crate::hm) fn issued(&self, ctx: &DispatchContext) -> bool {
         ctx.issuer_id == self.id
+    }
+
+    /// Whether `ctx` was minted by this issuer (or derived from a context
+    /// it minted). A holder of the issuer uses it to refuse a context of
+    /// another issuer before acting on it.
+    pub fn minted(&self, ctx: &DispatchContext) -> bool {
+        self.issued(ctx)
     }
 
     pub(in crate::hm) fn hit(&self, point: ProbePoint) {
@@ -552,6 +567,26 @@ impl DispatchIssuer {
     }
 }
 
+impl DispatchIssuer {
+    /// O1 for a dream unit of a retained entry that has no label (decoded
+    /// from text, or produced before labels existed): an `OwnerDirect`
+    /// context (class HR) whose taint is `LOCAL_ONLY_ORIGIN`, so it is
+    /// never non-local (mission AMENDMENT 2 A2.2).
+    pub fn begin_unlabelled_entry_unit(&self, unit: Unit) -> Result<DispatchContext, Unresolved> {
+        if !matches!(unit, Unit::Dream { .. }) {
+            return Err(Unresolved::UnsupportedUnit);
+        }
+        let mut ctx = self.plain_context(Principal::OwnerDirect, unit)?;
+        let (taint, route_class) =
+            unit_taint_step(ctx.taint, ctx.route_class, OriginLabel::LocalOnlyOrigin);
+        ctx.taint = taint;
+        ctx.route_class = route_class;
+        ctx.restrictions.local_only = true;
+        ctx.class = DispatchClass::OwnerRetained;
+        Ok(ctx)
+    }
+}
+
 // ── Derivations (§11.0, §11.3) ──────────────────────────────────────────────
 
 impl WorkingSet {
@@ -571,6 +606,22 @@ impl DispatchContext {
         let Unit::Goal { goal_id } = self.unit else {
             return Err(Unresolved::UnsupportedUnit);
         };
+        self.post_goal(goal_id)
+    }
+
+    /// The evolution context after a HiveMind sub-task's goal (§2.2
+    /// `PostGoal`, §11.3): a sub-task runs as its participant's goal
+    /// `goal_id` under the sub-task's own unit, whose policy snapshot,
+    /// taint, route class and working set it keeps, as
+    /// [`derive_post_goal`](Self::derive_post_goal) keeps a goal's.
+    pub fn derive_post_subtask(&self, goal_id: Uuid) -> Result<DispatchContext, Unresolved> {
+        let Unit::HiveSubtask { .. } = self.unit else {
+            return Err(Unresolved::UnsupportedUnit);
+        };
+        self.post_goal(goal_id)
+    }
+
+    fn post_goal(&self, goal_id: Uuid) -> Result<DispatchContext, Unresolved> {
         Ok(DispatchContext {
             nonce: random_id()?,
             issuer_id: self.issuer_id,

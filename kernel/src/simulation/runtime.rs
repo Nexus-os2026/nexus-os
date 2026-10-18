@@ -6,9 +6,9 @@ use super::report::{generate_prediction_report, PredictionReport};
 use super::seed::{parse_seed, WorldSeed};
 use super::timeline::{WorldEvent, WorldTick};
 use super::world::{SimulatedWorld, WorldStatus};
+use super::SimulationLlm;
 use crate::cognitive::algorithms::{EvolutionEngine as CognitiveEvolutionEngine, SwarmCoordinator};
 use crate::cognitive::types::{AgentStep, PlannedAction};
-use crate::cognitive::PlannerLlm;
 use crate::errors::AgentError;
 use chrono::Utc;
 use nexus_persistence::NexusDatabase;
@@ -97,7 +97,7 @@ fn default_persona_decision_timeout_ms() -> u64 {
 
 pub struct SimulationRuntime {
     pub world: SimulatedWorld,
-    pub llm: Arc<dyn PlannerLlm>,
+    pub llm: SimulationLlm,
     pub db: Arc<NexusDatabase>,
     pub tick_interval_ms: u64,
     pub max_ticks: u64,
@@ -112,7 +112,7 @@ pub struct SimulationRuntime {
 }
 
 impl SimulationRuntime {
-    pub fn new(world: SimulatedWorld, llm: Arc<dyn PlannerLlm>, db: Arc<NexusDatabase>) -> Self {
+    pub fn new(world: SimulatedWorld, llm: SimulationLlm, db: Arc<NexusDatabase>) -> Self {
         Self {
             world,
             llm,
@@ -225,7 +225,7 @@ impl SimulationRuntime {
         let report_llm = self.llm.clone();
         let (report_tx, report_rx) = mpsc::channel();
         thread::spawn(move || {
-            let result = generate_prediction_report(&report_world, report_llm.as_ref());
+            let result = generate_prediction_report(&report_world, &report_llm);
             // Best-effort: receiver may have timed out; report generation result is lost if channel is closed
             let _ = report_tx.send(result);
         });
@@ -263,7 +263,7 @@ impl SimulationRuntime {
             beliefs = persona.beliefs,
             memories = persona.memories.iter().rev().take(10).collect::<Vec<_>>(),
         );
-        self.llm.plan_query(&prompt)
+        self.llm.ask(&prompt)
     }
 
     fn drain_injections(&self) -> Vec<(String, String)> {
@@ -383,7 +383,7 @@ impl SimulationRuntime {
             let (tx, rx) = mpsc::channel();
             thread::spawn(move || {
                 let nearby_refs: Vec<&Persona> = nearby.iter().collect();
-                let result = persona_decide(&persona, &environment, &nearby_refs, llm.as_ref());
+                let result = persona_decide(&persona, &environment, &nearby_refs, &llm);
                 // Best-effort: receiver may have timed out; fallback action is used if channel is closed
                 let _ = tx.send(result);
             });
@@ -403,7 +403,7 @@ impl SimulationRuntime {
         let batch = personas.to_vec();
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
-            let result = persona_decide_batch(&batch, &environment, &world_personas, llm.as_ref());
+            let result = persona_decide_batch(&batch, &environment, &world_personas, &llm);
             // Best-effort: receiver may have timed out; fallback actions are used if channel is closed
             let _ = tx.send(result);
         });
@@ -434,7 +434,7 @@ pub const MAX_PARALLEL_SIMULATION_VARIANTS: usize = 10;
 pub fn run_parallel_simulations(
     seed: &WorldSeed,
     variant_count: usize,
-    llm: Arc<dyn PlannerLlm>,
+    llm: SimulationLlm,
     db: Arc<NexusDatabase>,
 ) -> Result<Vec<PredictionReport>, AgentError> {
     if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count) {
@@ -453,7 +453,7 @@ pub fn run_parallel_simulations(
             let seed = seed.clone();
             handles.push(
                 scope.spawn(move || -> Result<PredictionReport, AgentError> {
-                    let personas = generate_personas(&seed.scenario, 5, llm.as_ref())?
+                    let personas = generate_personas(&seed.scenario, 5, &llm)?
                         .into_iter()
                         .enumerate()
                         .map(|(index, mut persona)| {
@@ -470,7 +470,7 @@ pub fn run_parallel_simulations(
                         seed.scenario.clone(),
                         &seed,
                         personas,
-                        llm.as_ref(),
+                        &llm,
                     )?;
                     world.environment.global_state.insert(
                         "variant_bias".to_string(),
@@ -527,7 +527,7 @@ pub fn compare_reports(reports: &[PredictionReport]) -> MetaSimulationAnalysis {
 pub fn evolve_simulation(
     seed: &WorldSeed,
     generations: u32,
-    llm: Arc<dyn PlannerLlm>,
+    llm: SimulationLlm,
     db: Arc<NexusDatabase>,
 ) -> Result<OptimalSimConfig, AgentError> {
     let mut optimizer = CognitiveEvolutionEngine::default();
@@ -577,7 +577,7 @@ pub fn evolve_simulation(
     for generation in 0..generations {
         for config in &mut population {
             let _optimized_plan = optimizer.optimize_plan_simple(simulation_config_steps(config));
-            let personas = generate_personas(&seed.scenario, config.persona_count, llm.as_ref())?
+            let personas = generate_personas(&seed.scenario, config.persona_count, &llm)?
                 .into_iter()
                 .enumerate()
                 .map(|(index, mut persona)| {
@@ -594,7 +594,7 @@ pub fn evolve_simulation(
                     seed.scenario.clone(),
                     seed,
                     personas,
-                    llm.as_ref(),
+                    &llm,
                 )?,
                 llm.clone(),
                 db.clone(),
@@ -941,20 +941,20 @@ pub fn create_world_nonblocking(
     world_id: String,
     world_name: String,
     persona_count: usize,
-    llm: Arc<dyn PlannerLlm>,
+    llm: SimulationLlm,
 ) -> mpsc::Receiver<Result<SimulatedWorld, AgentError>> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let result = (|| {
-            let seed = parse_seed(&seed_text, llm.as_ref())?;
-            let personas = generate_personas(&seed.scenario, persona_count, llm.as_ref())?;
+            let seed = parse_seed(&seed_text, &llm)?;
+            let personas = generate_personas(&seed.scenario, persona_count, &llm)?;
             SimulatedWorld::from_seed(
                 world_id,
                 &world_name,
                 seed.scenario.clone(),
                 &seed,
                 personas,
-                llm.as_ref(),
+                &llm,
             )
         })();
         // Best-effort: receiver may have dropped; background world creation result is discarded if unused
@@ -1041,10 +1041,43 @@ fn persist_event(db: &NexusDatabase, world_id: &str, event: &WorldEvent) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulation::{parse_seed, SimulatedWorld, WorldSeed};
+    use crate::hm::testing::{attest, TestHm};
+    use crate::hm::{DerivedItem, DispatchContext, PromptSource, RouteClass};
+    use crate::simulation::{parse_seed, SimulatedWorld, SimulationLlm, WorldSeed};
     use crate::{cognitive::PlannerLlm, errors::AgentError};
     use serde_json::json;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
+
+    /// The synthetic store and issuer of these tests.
+    fn sim_hm() -> &'static TestHm {
+        static HM: OnceLock<TestHm> = OnceLock::new();
+        HM.get_or_init(TestHm::new)
+    }
+
+    /// A simulation model over `planner`: each call under its own explicit
+    /// `System` context (class XS).
+    fn sim(planner: Arc<dyn PlannerLlm>) -> SimulationLlm {
+        SimulationLlm::new(planner, Arc::new(|| Ok(sim_hm().system())))
+    }
+
+    /// Dispatches through the issuer on a non-local test transport,
+    /// answering with `answer`.
+    fn dispatched(
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+        answer: &dyn Fn(&str) -> Result<String, AgentError>,
+    ) -> Result<DerivedItem, AgentError> {
+        sim_hm()
+            .issuer
+            .dispatch(
+                ctx,
+                &mut |c: &mut DispatchContext| {
+                    prompt(c).map(|envelope| (envelope, (), attest(RouteClass::NonLocal)))
+                },
+                &mut |(), text: &str| answer(text).map_err(|e| e.to_string()),
+            )
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))
+    }
 
     #[derive(Default)]
     struct MockPlanner {
@@ -1060,7 +1093,17 @@ mod tests {
     }
 
     impl PlannerLlm for MockPlanner {
-        fn plan_query(&self, prompt: &str) -> Result<String, AgentError> {
+        fn plan_query(
+            &self,
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
+            dispatched(ctx, prompt, &|text| self.answer(text))
+        }
+    }
+
+    impl MockPlanner {
+        fn answer(&self, prompt: &str) -> Result<String, AgentError> {
             if prompt.contains("Analyze this text and extract") {
                 return Ok(json!({
                     "scenario": "A contested climate bill enters parliament",
@@ -1184,13 +1227,8 @@ mod tests {
         }
     }
 
-    fn build_seed_and_world() -> (
-        WorldSeed,
-        SimulatedWorld,
-        Arc<MockPlanner>,
-        Arc<NexusDatabase>,
-    ) {
-        let llm = Arc::new(MockPlanner::with_decisions(&[
+    fn build_seed_and_world() -> (WorldSeed, SimulatedWorld, SimulationLlm, Arc<NexusDatabase>) {
+        let llm = sim(Arc::new(MockPlanner::with_decisions(&[
             r#"{"action":"speak","target":null,"content":"I support the climate bill","reasoning":"Public pressure helps."}"#,
             r#"{"action":"whisper","target":"p-0","content":"We should coordinate support","reasoning":"Private coordination works."}"#,
             r#"{"action":"act","target":null,"content":"organize town hall","reasoning":"Visible action matters."}"#,
@@ -1200,17 +1238,17 @@ mod tests {
             r#"{"action":"speak","target":null,"content":"We should stabilize support","reasoning":"Keep the coalition together."}"#,
             r#"{"action":"observe","target":null,"content":null,"reasoning":"Listening."}"#,
             r#"{"action":"observe","target":null,"content":null,"reasoning":"Listening."}"#,
-        ]));
+        ])));
         let db = Arc::new(NexusDatabase::in_memory().unwrap());
-        let seed = parse_seed("A contested climate bill enters parliament", llm.as_ref()).unwrap();
-        let personas = generate_personas(&seed.scenario, 3, llm.as_ref()).unwrap();
+        let seed = parse_seed("A contested climate bill enters parliament", &llm).unwrap();
+        let personas = generate_personas(&seed.scenario, 3, &llm).unwrap();
         let world = SimulatedWorld::from_seed(
             "world-1",
             "Climate Vote",
             seed.scenario.clone(),
             &seed,
             personas,
-            llm.as_ref(),
+            &llm,
         )
         .unwrap();
         (seed, world, llm, db)
@@ -1218,7 +1256,7 @@ mod tests {
 
     #[test]
     fn test_parse_seed_text_into_entities_and_relationships() {
-        let llm = MockPlanner::default();
+        let llm = sim(Arc::new(MockPlanner::default()));
         let seed = parse_seed("text", &llm).unwrap();
         assert_eq!(seed.entities.len(), 2);
         assert_eq!(seed.relationships[0].relation_type, "debates");
@@ -1227,15 +1265,19 @@ mod tests {
     #[test]
     fn test_world_model_build_from_seed() {
         let llm = MockPlanner::default();
-        let world_model =
-            crate::cognitive::algorithms::WorldModel::build_from_seed("seed", &llm).unwrap();
+        let world_model = crate::cognitive::algorithms::WorldModel::build_from_seed(
+            "seed",
+            &llm,
+            &mut sim_hm().system(),
+        )
+        .unwrap();
         assert_eq!(world_model.entities.len(), 2);
         assert_eq!(world_model.relationships.len(), 1);
     }
 
     #[test]
     fn test_generate_personas_from_seed() {
-        let llm = MockPlanner::default();
+        let llm = sim(Arc::new(MockPlanner::default()));
         let personas = generate_personas("seed", 3, &llm).unwrap();
         assert_eq!(personas.len(), 3);
         assert_eq!(personas[0].role, "activist");
@@ -1244,12 +1286,12 @@ mod tests {
     #[test]
     fn test_persona_decide_returns_speak_action() {
         let (.., llm, _) = build_seed_and_world();
-        let personas = generate_personas("seed", 2, llm.as_ref()).unwrap();
+        let personas = generate_personas("seed", 2, &llm).unwrap();
         let decision = persona_decide(
             &personas[0],
             &super::super::world::WorldEnvironment::default(),
             &[&personas[1]],
-            llm.as_ref(),
+            &llm,
         )
         .unwrap();
         assert!(matches!(decision.action, PersonaAction::Speak { .. }));
@@ -1257,9 +1299,9 @@ mod tests {
 
     #[test]
     fn test_persona_decide_returns_whisper_action() {
-        let llm = MockPlanner::with_decisions(&[
+        let llm = sim(Arc::new(MockPlanner::with_decisions(&[
             r#"{"action":"whisper","target":"p-1","content":"quiet support","reasoning":"Private note"}"#,
-        ]);
+        ])));
         let personas = generate_personas("seed", 2, &llm).unwrap();
         let decision = persona_decide(
             &personas[0],
@@ -1323,20 +1365,20 @@ mod tests {
 
     #[test]
     fn test_convergence_detection_stops_simulation_early() {
-        let llm = Arc::new(MockPlanner::with_decisions(&[
+        let llm = sim(Arc::new(MockPlanner::with_decisions(&[
             r#"{"action":"nothing","target":null,"content":null,"reasoning":"stable"}"#,
             r#"{"action":"nothing","target":null,"content":null,"reasoning":"stable"}"#,
             r#"{"action":"nothing","target":null,"content":null,"reasoning":"stable"}"#,
-        ]));
-        let seed = parse_seed("seed", llm.as_ref()).unwrap();
-        let personas = generate_personas(&seed.scenario, 3, llm.as_ref()).unwrap();
+        ])));
+        let seed = parse_seed("seed", &llm).unwrap();
+        let personas = generate_personas(&seed.scenario, 3, &llm).unwrap();
         let world = SimulatedWorld::from_seed(
             "stable-world",
             "Stable",
             seed.scenario.clone(),
             &seed,
             personas,
-            llm.as_ref(),
+            &llm,
         )
         .unwrap();
         let db = Arc::new(NexusDatabase::in_memory().unwrap());
@@ -1383,9 +1425,13 @@ mod tests {
     }
 
     impl PlannerLlm for CountingPlanner {
-        fn plan_query(&self, prompt: &str) -> Result<String, AgentError> {
+        fn plan_query(
+            &self,
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.inner.plan_query(prompt)
+            self.inner.plan_query(ctx, prompt)
         }
     }
 
@@ -1397,7 +1443,7 @@ mod tests {
             calls: std::sync::atomic::AtomicUsize::new(0),
         });
         for count in [0, MAX_PARALLEL_SIMULATION_VARIANTS + 1, usize::MAX] {
-            let error = run_parallel_simulations(&seed, count, counting.clone(), db.clone())
+            let error = run_parallel_simulations(&seed, count, sim(counting.clone()), db.clone())
                 .expect_err("an out-of-range variant count must be refused");
             assert!(error.to_string().contains("between 1 and 10"), "{error}");
         }

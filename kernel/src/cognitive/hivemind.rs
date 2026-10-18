@@ -7,6 +7,7 @@
 
 use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
+use crate::hm::{DerivedItem, DispatchContext, PromptBuilder, PromptEnvelope, PromptSource};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -145,12 +146,88 @@ impl HivemindEventEmitter for CollectingHivemindEmitter {
     }
 }
 
-/// Trait for LLM calls used by the hivemind coordinator.
+/// The hivemind coordinator's model (P3-HM-CONTRACT-02 §11.3, §11.4): both
+/// calls run under the session's context; replies are derived items.
 pub trait HivemindLlm: Send + Sync {
     /// Decompose a goal into sub-tasks given agent capabilities.
-    fn decompose(&self, prompt: &str) -> Result<String, AgentError>;
+    fn decompose(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError>;
     /// Merge sub-task results into a final answer.
-    fn merge(&self, prompt: &str) -> Result<String, AgentError>;
+    fn merge(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError>;
+}
+
+/// One sub-task run by an executor (§11.3): its result as a derived item,
+/// and the sub-task's context, which the session joins (§14 rule 5).
+#[derive(Debug)]
+pub struct SubtaskRun {
+    pub outcome: Result<DerivedItem, String>,
+    pub context: Option<DispatchContext>,
+}
+
+impl SubtaskRun {
+    /// A run with no context of its own (it was refused before starting).
+    pub fn refused(reason: impl Into<String>) -> Self {
+        Self {
+            outcome: Err(reason.into()),
+            context: None,
+        }
+    }
+}
+
+/// The decomposition prompt: constant text, the participants'
+/// capabilities and the session's goal (the unit's own input).
+fn decompose_envelope(
+    ctx: &DispatchContext,
+    caps_summary: &str,
+    master_goal: &str,
+) -> PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    b.text(&format!(
+        "You are a task decomposition engine. Break this goal into sub-tasks. \
+         Each sub-task needs: id (string), description, required_capabilities (list), \
+         estimated_fuel (number), dependencies (list of other sub-task IDs that must \
+         complete first). Available agent capabilities: {caps_summary}. \
+         Goal: {master_goal}. Respond with a JSON array only."
+    ));
+    b.build()
+}
+
+/// The merge prompt: the goal, then every sub-task result carried with its
+/// label (never as plain text).
+fn merge_envelope(
+    ctx: &DispatchContext,
+    master_goal: &str,
+    results: &[(String, DerivedItem)],
+) -> PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    b.text(&format!(
+        "Combine these sub-task results into a final unified result for the original goal: \
+         \"{master_goal}\". Sub-task results:\n"
+    ));
+    for (id, result) in results {
+        b.text(&format!("- Sub-task {id}: "));
+        b.carry(result);
+    }
+    b.build()
+}
+
+/// Joins a sub-task's context into the session's (§11.3): the session's
+/// taint joins the sub-task's. A context of another issuer ends the
+/// session.
+fn join_subtask(session: &mut DispatchContext, run: &SubtaskRun) -> Result<(), AgentError> {
+    if let Some(child) = &run.context {
+        session
+            .join_child(child)
+            .map_err(|e| AgentError::SupervisorError(format!("hivemind sub-task: {e}")))?;
+    }
+    Ok(())
 }
 
 /// Agent info for capability matching.
@@ -389,8 +466,10 @@ impl HivemindCoordinator {
     }
 
     /// Execute a full hivemind goal: decompose → assign → build DAG → execute → merge.
+    /// `ctx` is the session's context: every model call runs under it.
     pub fn execute_hivemind_goal(
         &self,
+        ctx: &mut DispatchContext,
         master_goal: &str,
         available_agents: Vec<AgentInfo>,
     ) -> Result<HivemindSession, AgentError> {
@@ -412,18 +491,11 @@ impl HivemindCoordinator {
             })
             .collect();
 
-        let decompose_prompt = format!(
-            "You are a task decomposition engine. Break this goal into sub-tasks. \
-             Each sub-task needs: id (string), description, required_capabilities (list), \
-             estimated_fuel (number), dependencies (list of other sub-task IDs that must \
-             complete first). Available agent capabilities: {}. \
-             Goal: {}. Respond with a JSON array only.",
-            serde_json::to_string(&caps_summary).unwrap_or_default(),
-            master_goal
-        );
-
-        let decompose_response = self.llm.decompose(&decompose_prompt)?;
-        let sub_tasks = parse_decomposition(&decompose_response)?;
+        let caps_summary = serde_json::to_string(&caps_summary).unwrap_or_default();
+        let decomposition = self.llm.decompose(ctx, &mut |c: &mut DispatchContext| {
+            Some(decompose_envelope(c, &caps_summary, master_goal))
+        })?;
+        let sub_tasks = parse_decomposition(decomposition.text())?;
         session.sub_tasks = sub_tasks;
         session.total_fuel_consumed += 10.0; // LLM query cost
 
@@ -469,6 +541,7 @@ impl HivemindCoordinator {
         // 4. EXECUTE waves
         let mut failed_count = 0usize;
         let total_count = session.sub_tasks.len();
+        let mut derived_results: Vec<(String, DerivedItem)> = Vec::new();
 
         for (wave_idx, wave) in waves.iter().enumerate() {
             // Filter to only assigned tasks in this wave
@@ -511,6 +584,7 @@ impl HivemindCoordinator {
                     .unwrap_or_default();
 
                 let result = format!("Sub-task '{task_desc}' completed by agent {agent_id}");
+                derived_results.push((task_id.to_string(), decomposition.derive(result.clone())));
                 let fuel_cost = session
                     .sub_tasks
                     .iter()
@@ -564,21 +638,13 @@ impl HivemindCoordinator {
         // 5. MERGE results
         session.status = HivemindStatus::Merging;
 
-        let results_summary: Vec<_> = session
+        let master_goal_text = session.master_goal.clone();
+        let merged = self.llm.merge(ctx, &mut |c: &mut DispatchContext| {
+            Some(merge_envelope(c, &master_goal_text, &derived_results))
+        })?;
+        session
             .results
-            .iter()
-            .map(|(id, result)| format!("- Sub-task {id}: {result}"))
-            .collect();
-
-        let merge_prompt = format!(
-            "Combine these sub-task results into a final unified result for the original goal: \
-             \"{}\". Sub-task results:\n{}",
-            session.master_goal,
-            results_summary.join("\n")
-        );
-
-        let merged = self.llm.merge(&merge_prompt)?;
-        session.results.insert("__merged__".to_string(), merged);
+            .insert("__merged__".to_string(), merged.text().to_string());
         session.total_fuel_consumed += 10.0; // merge LLM cost
 
         session.status = HivemindStatus::Completed;
@@ -606,14 +672,43 @@ impl HivemindCoordinator {
 
     /// Execute a hivemind goal but allow individual sub-task execution to be controlled
     /// via the `executor` callback. This enables testing failure/reassignment scenarios.
+    ///
+    /// `ctx` is the session's context. The executor receives it (to derive
+    /// each sub-task's context), the sub-task id, the agent and the task;
+    /// every sub-task context it returns is joined into the session's
+    /// before the merge (§11.3, §14 rule 5).
     pub fn execute_with_executor<F>(
         &self,
+        ctx: &mut DispatchContext,
+        master_goal: &str,
+        available_agents: Vec<AgentInfo>,
+        executor: F,
+    ) -> Result<HivemindSession, AgentError>
+    where
+        F: FnMut(&DispatchContext, &str, &str, &str) -> SubtaskRun,
+    {
+        self.execute_with_executor_via(
+            self.llm.as_ref(),
+            ctx,
+            master_goal,
+            available_agents,
+            executor,
+        )
+    }
+
+    /// [`HivemindCoordinator::execute_with_executor`] with the session's own
+    /// model `llm` (a session adapter that carries the session's admission)
+    /// instead of the coordinator's.
+    pub fn execute_with_executor_via<F>(
+        &self,
+        llm: &dyn HivemindLlm,
+        ctx: &mut DispatchContext,
         master_goal: &str,
         available_agents: Vec<AgentInfo>,
         mut executor: F,
     ) -> Result<HivemindSession, AgentError>
     where
-        F: FnMut(&str, &str, &str) -> Result<String, String>,
+        F: FnMut(&DispatchContext, &str, &str, &str) -> SubtaskRun,
     {
         let mut session = HivemindSession::new(master_goal.to_string());
 
@@ -633,18 +728,11 @@ impl HivemindCoordinator {
             })
             .collect();
 
-        let decompose_prompt = format!(
-            "You are a task decomposition engine. Break this goal into sub-tasks. \
-             Each sub-task needs: id (string), description, required_capabilities (list), \
-             estimated_fuel (number), dependencies (list of other sub-task IDs that must \
-             complete first). Available agent capabilities: {}. \
-             Goal: {}. Respond with a JSON array only.",
-            serde_json::to_string(&caps_summary).unwrap_or_default(),
-            master_goal
-        );
-
-        let decompose_response = self.llm.decompose(&decompose_prompt)?;
-        let sub_tasks = parse_decomposition(&decompose_response)?;
+        let caps_summary = serde_json::to_string(&caps_summary).unwrap_or_default();
+        let decomposition = llm.decompose(ctx, &mut |c: &mut DispatchContext| {
+            Some(decompose_envelope(c, &caps_summary, master_goal))
+        })?;
+        let sub_tasks = parse_decomposition(decomposition.text())?;
         session.sub_tasks = sub_tasks;
         session.total_fuel_consumed += 10.0;
 
@@ -676,6 +764,7 @@ impl HivemindCoordinator {
         // 4. EXECUTE waves with custom executor
         let mut failed_count = 0usize;
         let total_count = session.sub_tasks.len();
+        let mut derived_results: Vec<(String, DerivedItem)> = Vec::new();
 
         for (wave_idx, wave) in waves.iter().enumerate() {
             let wave_tasks: Vec<String> = wave
@@ -721,7 +810,9 @@ impl HivemindCoordinator {
                     .map(|t| t.description.clone())
                     .unwrap_or_default();
 
-                match executor(task_id, &agent_id, &task_desc) {
+                let run = executor(ctx, task_id, &agent_id, &task_desc);
+                join_subtask(ctx, &run)?;
+                match run.outcome {
                     Ok(result) => {
                         let fuel_cost = session
                             .sub_tasks
@@ -729,7 +820,10 @@ impl HivemindCoordinator {
                             .find(|t| t.id == *task_id)
                             .map(|t| t.estimated_fuel)
                             .unwrap_or(0.0);
-                        session.results.insert(task_id.clone(), result);
+                        session
+                            .results
+                            .insert(task_id.clone(), result.text().to_string());
+                        derived_results.push((task_id.clone(), result));
                         session.total_fuel_consumed += fuel_cost;
                         if let Some(task) = session.sub_tasks.iter_mut().find(|t| t.id == *task_id)
                         {
@@ -770,7 +864,9 @@ impl HivemindCoordinator {
 
                         if let Some(alt) = alternative {
                             session.assignments.insert(task_id.clone(), alt.id.clone());
-                            if let Ok(result) = executor(task_id, &alt.id, &task_desc) {
+                            let retry = executor(ctx, task_id, &alt.id, &task_desc);
+                            join_subtask(ctx, &retry)?;
+                            if let Ok(result) = retry.outcome {
                                 failed_count -= 1; // undo the failure count
                                 let fuel_cost = session
                                     .sub_tasks
@@ -778,7 +874,10 @@ impl HivemindCoordinator {
                                     .find(|t| t.id == *task_id)
                                     .map(|t| t.estimated_fuel)
                                     .unwrap_or(0.0);
-                                session.results.insert(task_id.clone(), result);
+                                session
+                                    .results
+                                    .insert(task_id.clone(), result.text().to_string());
+                                derived_results.push((task_id.clone(), result));
                                 session.total_fuel_consumed += fuel_cost;
                                 if let Some(task) =
                                     session.sub_tasks.iter_mut().find(|t| t.id == *task_id)
@@ -821,21 +920,13 @@ impl HivemindCoordinator {
 
         // 5. MERGE
         session.status = HivemindStatus::Merging;
-        let results_summary: Vec<_> = session
+        let master_goal_text = session.master_goal.clone();
+        let merged = llm.merge(ctx, &mut |c: &mut DispatchContext| {
+            Some(merge_envelope(c, &master_goal_text, &derived_results))
+        })?;
+        session
             .results
-            .iter()
-            .map(|(id, result)| format!("- Sub-task {id}: {result}"))
-            .collect();
-
-        let merge_prompt = format!(
-            "Combine these sub-task results into a final unified result for the original goal: \
-             \"{}\". Sub-task results:\n{}",
-            session.master_goal,
-            results_summary.join("\n")
-        );
-
-        let merged = self.llm.merge(&merge_prompt)?;
-        session.results.insert("__merged__".to_string(), merged);
+            .insert("__merged__".to_string(), merged.text().to_string());
         session.total_fuel_consumed += 10.0;
 
         session.status = HivemindStatus::Completed;
@@ -929,38 +1020,97 @@ fn now_rfc3339() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::{Principal, RouteClass, Unit};
+    use std::sync::OnceLock;
 
-    /// Mock LLM that returns configurable responses.
+    /// The synthetic store and issuer of these tests.
+    fn hm() -> &'static TestHm {
+        static HM: OnceLock<TestHm> = OnceLock::new();
+        HM.get_or_init(TestHm::new)
+    }
+
+    /// A session's context (§11.3): a unit of its (local-only) lead.
+    fn session_ctx() -> DispatchContext {
+        let hm = hm();
+        hm.issuer
+            .begin_unit(
+                Principal::Agent(hm.agent("hivemind-lead")),
+                Unit::HiveSubtask {
+                    session_id: uuid::Uuid::new_v4(),
+                    subtask_id: 0,
+                },
+            )
+            .unwrap()
+    }
+
+    /// A sub-task that completed with `text` (a product of its own unit).
+    fn done(text: &str) -> SubtaskRun {
+        let hm = hm();
+        let mut unit = hm.goal(hm.agent("hivemind-worker"));
+        SubtaskRun {
+            outcome: Ok(unit.produce(text)),
+            context: Some(unit),
+        }
+    }
+
+    /// Mock LLM that returns configurable responses, through the issuer on
+    /// an attested local transport.
     struct MockHivemindLlm {
-        decompose_response: String,
-        merge_response: String,
+        decompose_response: ScriptedLlm,
+        merge_response: ScriptedLlm,
     }
 
     impl MockHivemindLlm {
         fn new(decompose_response: &str, merge_response: &str) -> Self {
+            let issuer = &hm().issuer;
             Self {
-                decompose_response: decompose_response.to_string(),
-                merge_response: merge_response.to_string(),
+                decompose_response: ScriptedLlm::replying(
+                    issuer,
+                    RouteClass::Local,
+                    decompose_response,
+                ),
+                merge_response: ScriptedLlm::replying(issuer, RouteClass::Local, merge_response),
             }
         }
     }
 
     impl HivemindLlm for MockHivemindLlm {
-        fn decompose(&self, _prompt: &str) -> Result<String, AgentError> {
-            Ok(self.decompose_response.clone())
+        fn decompose(
+            &self,
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
+            self.decompose_response
+                .ask(ctx, prompt)
+                .map_err(|e| AgentError::SupervisorError(e.to_string()))
         }
-        fn merge(&self, _prompt: &str) -> Result<String, AgentError> {
-            Ok(self.merge_response.clone())
+        fn merge(
+            &self,
+            ctx: &mut DispatchContext,
+            prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
+            self.merge_response
+                .ask(ctx, prompt)
+                .map_err(|e| AgentError::SupervisorError(e.to_string()))
         }
     }
 
     /// Mock LLM that always fails decomposition.
     struct FailingLlm;
     impl HivemindLlm for FailingLlm {
-        fn decompose(&self, _prompt: &str) -> Result<String, AgentError> {
+        fn decompose(
+            &self,
+            _ctx: &mut DispatchContext,
+            _prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
             Err(AgentError::SupervisorError("LLM unavailable".into()))
         }
-        fn merge(&self, _prompt: &str) -> Result<String, AgentError> {
+        fn merge(
+            &self,
+            _ctx: &mut DispatchContext,
+            _prompt: &mut PromptSource<'_>,
+        ) -> Result<DerivedItem, AgentError> {
             Err(AgentError::SupervisorError("LLM unavailable".into()))
         }
     }
@@ -1152,7 +1302,7 @@ mod tests {
         let agents = make_agents();
 
         let session = coord
-            .execute_hivemind_goal("Research and write report", agents)
+            .execute_hivemind_goal(&mut session_ctx(), "Research and write report", agents)
             .unwrap();
 
         assert_eq!(session.status, HivemindStatus::Completed);
@@ -1186,7 +1336,7 @@ mod tests {
         let agents = make_agents();
 
         let session = coord
-            .execute_hivemind_goal("Test dependency ordering", agents)
+            .execute_hivemind_goal(&mut session_ctx(), "Test dependency ordering", agents)
             .unwrap();
 
         let events = emitter.events.lock().unwrap();
@@ -1220,7 +1370,7 @@ mod tests {
         let agents = make_agents();
 
         let session = coord
-            .execute_hivemind_goal("Share results", agents)
+            .execute_hivemind_goal(&mut session_ctx(), "Share results", agents)
             .unwrap();
 
         // t1's result should be in session.results before t2 runs
@@ -1260,18 +1410,23 @@ mod tests {
 
         let mut attempt = 0;
         let session = coord
-            .execute_with_executor("Reassign test", agents, |_task_id, agent_id, _desc| {
-                attempt += 1;
-                if attempt == 1 {
-                    // First agent fails
-                    assert_eq!(agent_id, "agent-a");
-                    Err("agent-a crashed".into())
-                } else {
-                    // Reassigned to agent-b
-                    assert_eq!(agent_id, "agent-b");
-                    Ok("completed by agent-b".into())
-                }
-            })
+            .execute_with_executor(
+                &mut session_ctx(),
+                "Reassign test",
+                agents,
+                |_session, _task_id, agent_id, _desc| {
+                    attempt += 1;
+                    if attempt == 1 {
+                        // First agent fails
+                        assert_eq!(agent_id, "agent-a");
+                        SubtaskRun::refused("agent-a crashed")
+                    } else {
+                        // Reassigned to agent-b
+                        assert_eq!(agent_id, "agent-b");
+                        done("completed by agent-b")
+                    }
+                },
+            )
             .unwrap();
 
         assert_eq!(session.status, HivemindStatus::Completed);
@@ -1316,7 +1471,7 @@ mod tests {
         }];
 
         let session = coord
-            .execute_hivemind_goal("Majority fail test", agents)
+            .execute_hivemind_goal(&mut session_ctx(), "Majority fail test", agents)
             .unwrap();
 
         assert_eq!(session.status, HivemindStatus::Failed);
@@ -1330,7 +1485,9 @@ mod tests {
         let (coord, _) = make_coordinator(&decomp, "All tasks merged successfully");
         let agents = make_agents();
 
-        let session = coord.execute_hivemind_goal("Merge test", agents).unwrap();
+        let session = coord
+            .execute_hivemind_goal(&mut session_ctx(), "Merge test", agents)
+            .unwrap();
 
         assert_eq!(
             session.results.get("__merged__").unwrap(),
@@ -1346,7 +1503,9 @@ mod tests {
         let (coord, _) = make_coordinator(&decomp, "Done");
         let agents = make_agents();
 
-        let session = coord.execute_hivemind_goal("Persist test", agents).unwrap();
+        let session = coord
+            .execute_hivemind_goal(&mut session_ctx(), "Persist test", agents)
+            .unwrap();
         let session_id = session.id.clone();
 
         let retrieved = coord.get_session(&session_id).unwrap();
@@ -1362,7 +1521,9 @@ mod tests {
         let (coord, _) = make_coordinator(&decomp, "Done");
         let agents = make_agents();
 
-        let session = coord.execute_hivemind_goal("Fuel test", agents).unwrap();
+        let session = coord
+            .execute_hivemind_goal(&mut session_ctx(), "Fuel test", agents)
+            .unwrap();
 
         // Sub-task fuel: 100 + 200 + 50 = 350
         // LLM costs: 10 (decompose) + 10 (merge) = 20
@@ -1378,7 +1539,9 @@ mod tests {
         let (coord, emitter) = make_coordinator(&decomp, "Done");
         let agents = make_agents();
 
-        let _session = coord.execute_hivemind_goal("Events test", agents).unwrap();
+        let _session = coord
+            .execute_hivemind_goal(&mut session_ctx(), "Events test", agents)
+            .unwrap();
 
         let events = emitter.events.lock().unwrap();
 
@@ -1473,7 +1636,7 @@ mod tests {
         let llm = Box::new(FailingLlm);
         let coord = HivemindCoordinator::new(llm, emitter, audit);
 
-        let result = coord.execute_hivemind_goal("Fail", vec![]);
+        let result = coord.execute_hivemind_goal(&mut session_ctx(), "Fail", vec![]);
         assert!(result.is_err());
     }
 
@@ -1486,9 +1649,11 @@ mod tests {
         let agents = make_agents();
 
         let s1 = coord
-            .execute_hivemind_goal("Goal 1", agents.clone())
+            .execute_hivemind_goal(&mut session_ctx(), "Goal 1", agents.clone())
             .unwrap();
-        let s2 = coord.execute_hivemind_goal("Goal 2", agents).unwrap();
+        let s2 = coord
+            .execute_hivemind_goal(&mut session_ctx(), "Goal 2", agents)
+            .unwrap();
 
         let sessions = coord.list_sessions();
         assert_eq!(sessions.len(), 2);

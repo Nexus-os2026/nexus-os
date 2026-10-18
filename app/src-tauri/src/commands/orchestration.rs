@@ -1,9 +1,7 @@
 //! Scheduler, team orchestration, and content pipeline commands.
 
-use crate::{
-    agent_error, resolve_agent_llm_policy, with_agent_llm_policy, AgentLlmPolicy, AppState,
-    BridgeLlmQueryHandler,
-};
+use crate::hm_dispatch::GatewayPlannerLlm;
+use crate::{agent_error, AppState};
 use serde_json::json;
 use std::sync::Arc;
 #[cfg(all(
@@ -136,8 +134,11 @@ pub async fn execute_team_workflow(
 
 /// Runs a team workflow for registered agents (P3 D-2 R2). The director and
 /// every member must be registered agents; one that is not refuses the
-/// workflow (no participant is skipped, no name is assumed). Every model call
-/// of the workflow runs under [`team_llm_policy`].
+/// workflow (no participant is skipped, no name is assumed).
+///
+/// P3-HM-CONTRACT-02 §11.3: the director's context is minted at workflow
+/// start ([`team_director_context`]); every member task runs under its own
+/// derived context and every dispatch is admitted (§12.4).
 pub(crate) fn run_team_workflow(
     state: &AppState,
     director_id: &str,
@@ -179,9 +180,12 @@ pub(crate) fn run_team_workflow(
         }
     };
 
-    let policy = team_llm_policy(state, director_id, member_ids)?;
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| format!("team workflow refused: no dispatch issuer: {e}"))?;
+    let mut director = team_director_context(state, director_id, member_ids)?;
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(TeamPolicyLlm { policy });
+        Arc::new(GatewayPlannerLlm::new(state));
 
     let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
         supervisor,
@@ -190,54 +194,60 @@ pub(crate) fn run_team_workflow(
     );
 
     let result = orchestrator
-        .execute_team_workflow(&config, goal)
+        .execute_team_workflow(issuer, &mut director, &config, goal)
         .map_err(agent_error)?;
 
     serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
 }
 
-/// The routing policy of a team workflow (P3 D-2 R2). Any model call of the
-/// workflow can carry any participant's data: the decomposition carries the
-/// director's goal, a failed task is reassigned to another member, and the
-/// merge carries every member's result. So the whole workflow runs under one
-/// policy, local-only when the director or any member is. A participant
-/// whose policy cannot be established refuses the workflow before any call.
-pub(crate) fn team_llm_policy(
+/// The director's context of a team workflow (P3-HM-CONTRACT-02 §11.3),
+/// minted at workflow start. Every participant's route policy is resolved
+/// first (§4.2, O1): one that cannot be established refuses the workflow
+/// before any model call. A local-only participant makes the whole workflow
+/// local (P3 D-2 R2, kept: any model call can carry a participant's data):
+/// the director's context is tightened, and every member's context derives
+/// from it.
+pub(crate) fn team_director_context(
     state: &AppState,
     director_id: &str,
     member_ids: &[String],
-) -> Result<AgentLlmPolicy, String> {
-    let mut policy = AgentLlmPolicy::Unrestricted;
+) -> Result<nexus_kernel::hm::DispatchContext, String> {
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| format!("team workflow refused: no dispatch issuer: {e}"))?;
+    let mut any_local = false;
     for id in std::iter::once(director_id).chain(member_ids.iter().map(String::as_str)) {
-        match resolve_agent_llm_policy(state, id) {
-            AgentLlmPolicy::Unresolved => {
-                return Err(format!(
-                    "team workflow refused for '{id}': {}",
-                    crate::commands::cognitive::unresolved_policy_error()
-                ))
-            }
-            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
-            AgentLlmPolicy::Unrestricted => {}
-        }
-    }
-    Ok(policy)
-}
-
-/// A team workflow's model calls: the decomposition, each member's task and
-/// the merge, each under the team's policy on the thread that makes it.
-struct TeamPolicyLlm {
-    policy: AgentLlmPolicy,
-}
-
-impl nexus_kernel::cognitive::loop_runtime::LlmQueryHandler for TeamPolicyLlm {
-    fn query(&self, prompt: &str) -> Result<String, String> {
-        with_agent_llm_policy(self.policy, || {
-            nexus_kernel::cognitive::loop_runtime::LlmQueryHandler::query(
-                &BridgeLlmQueryHandler,
-                prompt,
+        let refused = |reason: String| {
+            format!(
+                "team workflow refused for '{id}': {}: {reason}",
+                crate::commands::cognitive::unresolved_policy_error()
             )
-        })
+        };
+        let uuid = Uuid::parse_str(id).map_err(|e| refused(e.to_string()))?;
+        let policy = issuer
+            .resolve_agent_route_policy(uuid)
+            .map_err(|e| refused(e.to_string()))?;
+        any_local |= policy.local_only();
     }
+    let director = Uuid::parse_str(director_id).map_err(|e| format!("invalid director id: {e}"))?;
+    let mut ctx = issuer
+        .begin_unit(
+            nexus_kernel::hm::Principal::Agent(director),
+            nexus_kernel::hm::Unit::TeamTask {
+                workflow_id: Uuid::new_v4(),
+                task_index: 0,
+            },
+        )
+        .map_err(|e| {
+            format!(
+                "team workflow refused for '{director_id}': {}: {e}",
+                crate::commands::cognitive::unresolved_policy_error()
+            )
+        })?;
+    if any_local {
+        ctx.tighten_local_only();
+    }
+    Ok(ctx)
 }
 
 /// Transfer fuel from one agent to another (Director privilege).
@@ -249,7 +259,7 @@ pub async fn transfer_agent_fuel(
     amount: u64,
 ) -> Result<(), String> {
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(BridgeLlmQueryHandler);
+        Arc::new(GatewayPlannerLlm::new(&state));
     let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
         state.supervisor.clone(),
         state.audit.clone(),

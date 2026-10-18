@@ -14,11 +14,76 @@ use nexus_kernel::cognitive::{
     PlannerLlm, PlanningContext,
 };
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::hm::{
+    run_t0_option_a, AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DerivedItem,
+    DispatchContext, DispatchIssuer, Principal, PromptSource, RouteAttestation, TransportEvidence,
+    Unit,
+};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::Supervisor;
+use nexus_persistence::NexusDatabase;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+// ── Historical memory (P3-HM-CONTRACT-02 §11) ──────────────────────────
+// Every goal's unit is minted by a dispatch issuer over a synthetic
+// in-memory state database after T₀; every model call of a goal is
+// admitted by it. Agents are registered and local-only by default
+// (restrictive), so the test model's transport is attested local.
+
+struct AnyAgent;
+
+impl AgentRegistry for AnyAgent {
+    fn is_registered(&self, _agent_id: &uuid::Uuid) -> bool {
+        true
+    }
+
+    fn names(&self, _agent_id: &uuid::Uuid) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+struct NoConfig;
+
+impl ConfigInput for NoConfig {
+    fn read_local_only(
+        &self,
+        _agent_id: &uuid::Uuid,
+        _names: &[String],
+    ) -> Result<ConfigReading, ConfigReadError> {
+        Ok(ConfigReading {
+            local_only: false,
+            content_digest: "test".into(),
+        })
+    }
+}
+
+fn issuer() -> &'static Arc<DispatchIssuer> {
+    static ISSUER: OnceLock<Arc<DispatchIssuer>> = OnceLock::new();
+    ISSUER.get_or_init(|| {
+        let db = Arc::new(NexusDatabase::in_memory().unwrap());
+        run_t0_option_a(&db, &[]).unwrap();
+        Arc::new(DispatchIssuer::new(db, Arc::new(AnyAgent), Arc::new(NoConfig)).unwrap())
+    })
+}
+
+/// A goal unit of a fresh registered agent.
+fn unit() -> DispatchContext {
+    issuer()
+        .begin_unit(
+            Principal::Agent(uuid::Uuid::new_v4()),
+            Unit::Goal {
+                goal_id: uuid::Uuid::new_v4(),
+            },
+        )
+        .unwrap()
+}
+
+/// No retained record for a planning prompt.
+fn no_recall(_: &mut DispatchContext) -> nexus_kernel::cognitive::PlanningRecall {
+    nexus_kernel::cognitive::PlanningRecall::default()
+}
 
 // ── Test helpers ────────────────────────────────────────────────────────
 
@@ -27,8 +92,20 @@ struct MockLlm {
 }
 
 impl PlannerLlm for MockLlm {
-    fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
-        Ok(self.response.clone())
+    fn plan_query(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError> {
+        let local =
+            RouteAttestation::from_transport_evidence(TransportEvidence::VerifiedLoopbackOllama);
+        issuer()
+            .dispatch(
+                ctx,
+                &mut |c: &mut DispatchContext| prompt(c).map(|envelope| (envelope, (), local)),
+                &mut |(), _: &str| Ok(self.response.clone()),
+            )
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))
     }
 }
 
@@ -38,7 +115,11 @@ struct FailingLlm {
 }
 
 impl PlannerLlm for FailingLlm {
-    fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
+    fn plan_query(
+        &self,
+        _ctx: &mut DispatchContext,
+        _prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError> {
         Err(AgentError::SupervisorError(self.error_msg.clone()))
     }
 }
@@ -153,7 +234,8 @@ fn make_runtime(sup: Arc<Mutex<Supervisor>>) -> (CognitiveRuntime, Arc<Collectin
         fuel_reserve_threshold: 0.05,
         reflection_interval: 3,
     };
-    let runtime = CognitiveRuntime::new(sup, config, emitter.clone());
+    let runtime =
+        CognitiveRuntime::new(sup, config, emitter.clone()).with_dispatch_issuer(issuer().clone());
     (runtime, emitter)
 }
 
@@ -163,8 +245,6 @@ fn make_context(caps: Vec<&str>) -> PlanningContext {
         agent_description: Some("Test agent for integration tests".into()),
         agent_capabilities: caps.into_iter().map(|s| s.to_string()).collect(),
         available_fuel: 1000.0,
-        relevant_memories: vec![],
-        previous_outcomes: vec![],
         working_directory: Some("/tmp/nexus-test".into()),
         directory_listing: None,
         autonomy_level: 3,
@@ -472,7 +552,8 @@ fn test_max_cycles_enforced() {
         fuel_reserve_threshold: 0.01,
         reflection_interval: 100,
     };
-    let runtime = CognitiveRuntime::new(sup, config, emitter);
+    let runtime =
+        CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer().clone());
     let goal = AgentGoal::new("many cycles".into(), 5);
     runtime.assign_goal(&agent_id, goal).unwrap();
 
@@ -612,7 +693,10 @@ fn test_planner_produces_valid_steps_from_json() {
     );
     let goal = AgentGoal::new("analyze the codebase".into(), 7);
     let ctx = make_context(vec!["llm.query"]);
-    let steps = planner.plan_goal(&goal, &ctx).unwrap();
+    let steps = planner
+        .plan_goal(&mut unit(), &goal, &ctx, &mut no_recall)
+        .unwrap()
+        .steps;
     assert_eq!(steps.len(), 1);
     assert_eq!(steps[0].action.action_type(), "llm_query");
 }
@@ -623,7 +707,9 @@ fn test_planner_handles_completely_invalid_json() {
     let goal = AgentGoal::new("test".into(), 5);
     let ctx = make_context(vec!["llm.query"]);
     // Should produce a fallback LlmQuery step, not crash
-    let result = planner.plan_goal(&goal, &ctx);
+    let result = planner
+        .plan_goal(&mut unit(), &goal, &ctx, &mut no_recall)
+        .map(|plan| plan.steps);
     assert!(
         result.is_ok(),
         "invalid JSON should produce fallback, not error"
@@ -637,7 +723,9 @@ fn test_planner_handles_empty_array() {
     let planner = make_planner("[]");
     let goal = AgentGoal::new("test".into(), 5);
     let ctx = make_context(vec!["llm.query"]);
-    let result = planner.plan_goal(&goal, &ctx);
+    let result = planner
+        .plan_goal(&mut unit(), &goal, &ctx, &mut no_recall)
+        .map(|plan| plan.steps);
     // Empty plan is valid (though useless)
     assert!(result.is_ok());
 }
@@ -651,7 +739,9 @@ fn test_planner_rejects_unauthorized_actions() {
     // Only fs.read — no process.exec
     let ctx = make_context(vec!["fs.read"]);
 
-    let result = planner.plan_goal(&goal, &ctx);
+    let result = planner
+        .plan_goal(&mut unit(), &goal, &ctx, &mut no_recall)
+        .map(|plan| plan.steps);
     assert!(
         result.is_err(),
         "planner should reject ShellCommand without process.exec capability"
@@ -676,7 +766,9 @@ fn test_planner_always_allows_safe_actions() {
     // No capabilities at all
     let ctx = make_context(vec![]);
 
-    let result = planner.plan_goal(&goal, &ctx);
+    let result = planner
+        .plan_goal(&mut unit(), &goal, &ctx, &mut no_recall)
+        .map(|plan| plan.steps);
     assert!(
         result.is_ok(),
         "MemoryStore, Noop, and HitlRequest should always be allowed"
@@ -842,7 +934,8 @@ fn test_consecutive_failures_trigger_replan() {
         fuel_reserve_threshold: 0.01,
         reflection_interval: 100,
     };
-    let runtime = CognitiveRuntime::new(sup, config, emitter);
+    let runtime =
+        CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer().clone());
     let goal = AgentGoal::new("replan on failure".into(), 5);
     runtime.assign_goal(&agent_id, goal).unwrap();
 

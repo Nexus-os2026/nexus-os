@@ -5,13 +5,55 @@
 //!
 //! These tests guard the data plumbing. They do NOT assert consumption at an
 //! LLM call site — that lives in `app/src-tauri/src/lib.rs::resolve_agent_llm_route`
-//! via thread-local `ACTIVE_AGENT_LLM_ROUTE` and is covered by the Tauri crate.
+//! (read per dispatch from the goal's published status, P3-HM M3) and is
+//! covered by the Tauri crate.
 
 use nexus_kernel::cognitive::loop_runtime::CollectingEmitter;
 use nexus_kernel::cognitive::{AgentGoal, CognitiveRuntime, LoopConfig};
+use nexus_kernel::hm::{
+    run_t0_option_a, AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchIssuer,
+};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::Supervisor;
+use nexus_persistence::NexusDatabase;
 use std::sync::{Arc, Mutex};
+
+/// Every agent is registered (P3-HM-CONTRACT-02 §4.2 step 1).
+struct AnyAgent;
+
+impl AgentRegistry for AnyAgent {
+    fn is_registered(&self, _agent_id: &uuid::Uuid) -> bool {
+        true
+    }
+
+    fn names(&self, _agent_id: &uuid::Uuid) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// A config that tightens nothing.
+struct NoConfig;
+
+impl ConfigInput for NoConfig {
+    fn read_local_only(
+        &self,
+        _agent_id: &uuid::Uuid,
+        _names: &[String],
+    ) -> Result<ConfigReading, ConfigReadError> {
+        Ok(ConfigReading {
+            local_only: false,
+            content_digest: "test".into(),
+        })
+    }
+}
+
+/// The issuer every goal's unit is minted by (§11.0): a synthetic in-memory
+/// state database after T₀.
+fn issuer() -> Arc<DispatchIssuer> {
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    run_t0_option_a(&db, &[]).unwrap();
+    Arc::new(DispatchIssuer::new(db, Arc::new(AnyAgent), Arc::new(NoConfig)).unwrap())
+}
 
 fn make_supervisor_with_agent() -> (Arc<Mutex<Supervisor>>, String) {
     let mut sup = Supervisor::new();
@@ -45,7 +87,7 @@ fn make_runtime(sup: Arc<Mutex<Supervisor>>) -> CognitiveRuntime {
         fuel_reserve_threshold: 0.05,
         reflection_interval: 3,
     };
-    CognitiveRuntime::new(sup, config, emitter)
+    CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer())
 }
 
 #[test]

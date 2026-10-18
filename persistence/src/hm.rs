@@ -602,6 +602,17 @@ pub struct NewTaskRow {
     pub success: bool,
 }
 
+/// Bookkeeping values of one `task_history` row; `None` leaves a column
+/// unchanged.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct TaskBookkeeping<'a> {
+    pub status: Option<&'a str>,
+    pub fuel_consumed: Option<f64>,
+    pub fuel_budget: Option<f64>,
+    pub completed_at: Option<&'a str>,
+    pub success: Option<bool>,
+}
+
 /// One contribution to a `strategy_scores` aggregate.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrategyContribution {
@@ -633,6 +644,24 @@ pub struct RecallRow {
     pub values: Vec<Option<String>>,
     /// Its label row, if one exists.
     pub label: Option<LabelBinding>,
+}
+
+/// The narrowing conditions of a recall walk (mission P3-C11-HM-M3 R8). Each
+/// is applied in the query, before the ORDER BY, so a row they exclude can
+/// never take the place of a row they select. Column names are checked
+/// against the table's §5.2 digest columns; values are bound parameters.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RecallFilter<'a> {
+    /// `column = value` on a digest-covered column other than `agent_id`.
+    pub column_eq: Option<(&'a str, &'a str)>,
+    /// The row's label row has this `source_kind` (§6.6: a role is read
+    /// from the label, never from a substring of the content).
+    pub source_kind: Option<&'a str>,
+    /// `instr(lower(column), needle) > 0` on a digest-covered column other
+    /// than `agent_id`; the needle is given lowercased.
+    pub contains: Option<(&'a str, &'a str)>,
+    /// Newest id first instead of the table's recall order.
+    pub newest_first: bool,
 }
 
 /// One `hm_dispatch_admission` row.
@@ -979,6 +1008,28 @@ impl HmTx<'_> {
             .optional()?)
     }
 
+    /// Every `hm_agent_policy` row, as stored, ordered by `agent_id`.
+    pub fn policy_rows_raw(&self) -> Result<Vec<PolicyRowRaw>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT agent_id, local_only, policy_generation, revocation_seq, basis
+             FROM hm_agent_policy ORDER BY agent_id",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(PolicyRowRaw {
+                agent_id: r.get(0)?,
+                local_only: int_or_none(r.get_ref(1)?),
+                policy_generation: int_or_none(r.get_ref(2)?),
+                revocation_seq: int_or_none(r.get_ref(3)?),
+                basis: text_or_none(r.get_ref(4)?),
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     /// Updates one `hm_agent_policy` row. Returns the number of rows changed.
     pub fn update_policy(&self, p: &PolicyRow) -> Result<usize> {
         Ok(self.tx.execute(
@@ -1243,6 +1294,236 @@ impl HmTx<'_> {
         Ok(self.tx.query_row(&sql, params![agent_id, origin], |r| {
             Ok((r.get(0)?, r.get(1)?))
         })?)
+    }
+
+    /// The SQL conditions and bound values of `filter` for `table`; the
+    /// first placeholder is `?first_param`.
+    fn filter_sql(
+        table: &str,
+        filter: &RecallFilter<'_>,
+        first_param: usize,
+    ) -> Result<(String, Vec<String>)> {
+        let cols = digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let column = |name: &str| -> Result<String> {
+            if name != "agent_id" && cols.contains(&name) {
+                Ok(name.to_string())
+            } else {
+                Err(crate::PersistenceError::NotFound(format!(
+                    "not a recall column of {table}: {name}"
+                )))
+            }
+        };
+        let mut sql = String::new();
+        let mut values = Vec::new();
+        let mut next = first_param;
+        if let Some((name, value)) = filter.column_eq {
+            sql.push_str(&format!(" AND m.{} = ?{next}", column(name)?));
+            values.push(value.to_string());
+            next += 1;
+        }
+        if let Some(kind) = filter.source_kind {
+            sql.push_str(&format!(" AND l.source_kind = ?{next}"));
+            values.push(kind.to_string());
+            next += 1;
+        }
+        if let Some((name, needle)) = filter.contains {
+            sql.push_str(&format!(
+                " AND instr(lower(m.{}), ?{next}) > 0",
+                column(name)?
+            ));
+            values.push(needle.to_string());
+        }
+        Ok((sql, values))
+    }
+
+    /// `recall_walk` with the narrowing conditions of `filter`, all in the
+    /// query before the ORDER BY. With `origin`, only rows whose label row
+    /// has that origin are selected. `visit` returns false to stop.
+    pub fn recall_walk_filtered(
+        &self,
+        table: &str,
+        agent_id: &str,
+        origin: Option<&str>,
+        filter: &RecallFilter<'_>,
+        visit: &mut dyn FnMut(RecallRow) -> bool,
+    ) -> Result<()> {
+        let cols = digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let selected = cols
+            .iter()
+            .map(|c| format!("m.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let origin_sql = if origin.is_some() {
+            " AND l.origin = ?2"
+        } else {
+            ""
+        };
+        let first = if origin.is_some() { 3 } else { 2 };
+        let (filter_sql, filter_values) = Self::filter_sql(table, filter, first)?;
+        let order = if filter.newest_first {
+            "m.id DESC"
+        } else {
+            recall_order(table)
+        };
+        let sql = format!(
+            "SELECT m.id, m.agent_id, {selected},
+                    l.agent_id, l.origin, l.source_kind, l.content_sha256, l.record_id
+             FROM {table} m
+             LEFT JOIN hm_record_label l
+               ON l.record_table = '{table}' AND l.record_id = CAST(m.id AS TEXT)
+             WHERE m.agent_id = ?1{origin_sql}{filter_sql}
+             ORDER BY {order}"
+        );
+        let mut params_list: Vec<&dyn rusqlite::ToSql> = vec![&agent_id];
+        if let Some(o) = &origin {
+            params_list.push(o);
+        }
+        for v in &filter_values {
+            params_list.push(v);
+        }
+        let mut stmt = self.tx.prepare(&sql)?;
+        let mut rows = stmt.query(params_list.as_slice())?;
+        let n = cols.len() + 2;
+        while let Some(r) = rows.next()? {
+            let row = scanned_row(table, cols, r)?;
+            let mut values = Vec::with_capacity(cols.len());
+            for i in 0..cols.len() {
+                values.push(match r.get_ref(i + 2)? {
+                    ValueRef::Text(b) | ValueRef::Blob(b) => {
+                        Some(String::from_utf8_lossy(b).into_owned())
+                    }
+                    _ => None,
+                });
+            }
+            let label = match r.get_ref(n + 4)? {
+                ValueRef::Null => None,
+                _ => Some(LabelBinding {
+                    agent_id: text_or_none(r.get_ref(n)?),
+                    origin: text_or_none(r.get_ref(n + 1)?),
+                    source_kind: text_or_none(r.get_ref(n + 2)?),
+                    content_sha256: text_or_none(r.get_ref(n + 3)?),
+                }),
+            };
+            if !visit(RecallRow { row, values, label }) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// `recall_withheld_counts` over the rows `filter` selects: the number
+    /// whose label row is missing or has an origin other than `origin`,
+    /// and the number with no label row.
+    pub fn recall_withheld_counts_filtered(
+        &self,
+        table: &str,
+        agent_id: &str,
+        origin: &str,
+        filter: &RecallFilter<'_>,
+    ) -> Result<(i64, i64)> {
+        let (filter_sql, filter_values) = Self::filter_sql(table, filter, 3)?;
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(SUM(l.record_id IS NULL), 0)
+             FROM {table} m
+             LEFT JOIN hm_record_label l
+               ON l.record_table = '{table}' AND l.record_id = CAST(m.id AS TEXT)
+             WHERE m.agent_id = ?1 AND (l.record_id IS NULL OR l.origin IS NOT ?2){filter_sql}"
+        );
+        let mut params_list: Vec<&dyn rusqlite::ToSql> = vec![&agent_id, &origin];
+        for v in &filter_values {
+            params_list.push(v);
+        }
+        Ok(self
+            .tx
+            .query_row(&sql, params_list.as_slice(), |r| Ok((r.get(0)?, r.get(1)?)))?)
+    }
+
+    /// Deletes one agent's knowledge-graph rows (entities, then
+    /// relationships). The §5.1 delete triggers fire for each row in this
+    /// transaction. Returns the numbers deleted.
+    pub fn delete_world_model(&self, agent_id: &str) -> Result<(usize, usize)> {
+        let entities = self.tx.execute(
+            "DELETE FROM world_model_entities WHERE agent_id = ?1",
+            params![agent_id],
+        )?;
+        let relationships = self.tx.execute(
+            "DELETE FROM world_model_relationships WHERE agent_id = ?1",
+            params![agent_id],
+        )?;
+        Ok((entities, relationships))
+    }
+
+    /// Inserts one `world_model_entities` row and returns its id.
+    pub fn insert_world_model_entity(
+        &self,
+        agent_id: &str,
+        entity_json: &str,
+        created_at: &str,
+    ) -> Result<i64> {
+        self.tx.execute(
+            "INSERT INTO world_model_entities (agent_id, entity_json, created_at)
+             VALUES (?1, ?2, ?3)",
+            params![agent_id, entity_json, created_at],
+        )?;
+        Ok(self.tx.last_insert_rowid())
+    }
+
+    /// Inserts one `world_model_relationships` row and returns its id.
+    pub fn insert_world_model_relationship(
+        &self,
+        agent_id: &str,
+        relationship_json: &str,
+        created_at: &str,
+    ) -> Result<i64> {
+        self.tx.execute(
+            "INSERT INTO world_model_relationships (agent_id, relationship_json, created_at)
+             VALUES (?1, ?2, ?3)",
+            params![agent_id, relationship_json, created_at],
+        )?;
+        Ok(self.tx.last_insert_rowid())
+    }
+
+    /// Sets the completion columns of one `task_history` row: `status`,
+    /// `result_json` (content), `completed_at` and `success`. `goal`,
+    /// `steps_json` and `started_at` are unchanged. Returns the number of
+    /// rows changed.
+    pub fn update_task_completion(
+        &self,
+        id: &str,
+        status: &str,
+        result_json: Option<&str>,
+        completed_at: &str,
+        success: bool,
+    ) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE task_history
+             SET status = ?2, result_json = ?3, completed_at = ?4, success = ?5
+             WHERE id = ?1",
+            params![id, status, result_json, completed_at, success],
+        )?)
+    }
+
+    /// Sets bookkeeping columns of one `task_history` row (none of them is
+    /// covered by the §5.2 digest): each given value replaces its column.
+    /// Returns the number of rows changed.
+    pub fn update_task_bookkeeping(&self, id: &str, b: &TaskBookkeeping<'_>) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE task_history
+             SET status = COALESCE(?2, status),
+                 fuel_consumed = COALESCE(?3, fuel_consumed),
+                 fuel_budget = COALESCE(?4, fuel_budget),
+                 completed_at = COALESCE(?5, completed_at),
+                 success = COALESCE(?6, success)
+             WHERE id = ?1",
+            params![
+                id,
+                b.status,
+                b.fuel_consumed,
+                b.fuel_budget,
+                b.completed_at,
+                b.success
+            ],
+        )?)
     }
 
     pub fn insert_admission(&self, a: &AdmissionRow) -> Result<()> {

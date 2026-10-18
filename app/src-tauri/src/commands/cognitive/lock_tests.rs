@@ -278,7 +278,11 @@ struct Plan {
 }
 
 impl PlannerLlm for Plan {
-    fn plan_query(&self, _: &str) -> Result<String, AgentError> {
+    fn plan_query(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        _: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, AgentError> {
         if self.access_secret {
             let config = build_provider_config(&NexusConfig::default());
             assert_eq!(
@@ -286,7 +290,7 @@ impl PlannerLlm for Plan {
                 Some("p0-001-fake-secret")
             );
         }
-        Ok(self.response.clone())
+        Ok(ctx.produce(self.response.clone()))
     }
 }
 

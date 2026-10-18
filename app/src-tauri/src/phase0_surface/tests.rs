@@ -556,7 +556,11 @@ fn production_agent_executor_refuses_filesystem_and_process_actions() {
             db: state.db.clone(),
         },
     )));
-    let executor = crate::phase0_agent_executor(&state, memory);
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let mut audit = state.audit.clone();
     let agent = uuid::Uuid::new_v4().to_string();
     let base = std::env::temp_dir().join(format!("nexus-c5a-agent-{}", uuid::Uuid::new_v4()));
@@ -616,8 +620,12 @@ fn p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor() {
 
     struct FixedPlan(String);
     impl PlannerLlm for FixedPlan {
-        fn plan_query(&self, _: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-            Ok(self.0.clone())
+        fn plan_query(
+            &self,
+            ctx: &mut nexus_kernel::hm::DispatchContext,
+            _: &mut nexus_kernel::hm::PromptSource<'_>,
+        ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+            Ok(ctx.produce(self.0.clone()))
         }
     }
 
@@ -643,7 +651,11 @@ autonomy_level = 5
     let memory = std::sync::Arc::new(AgentMemoryManager::new(Box::new(crate::DbMemoryStore {
         db: state.db.clone(),
     })));
-    let executor = crate::phase0_agent_executor(&state, memory.clone());
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory.clone(),
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let run = |action: &serde_json::Value| {
         let plan = serde_json::json!([{"action": action, "description": "step"}]);
         state
@@ -2917,8 +2929,17 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
         .expect("run_cycle_with_evolution");
     let open = run_cycle + runtime[run_cycle..].find('{').unwrap();
     let body = &runtime[open..block_end(&runtime, open)];
-    assert_eq!(body.matches(".execute(").count(), 1, "one dispatch site");
-    assert!(body.contains("executor.execute(agent_id, &action_clone, audit, requires_hitl)"));
+    // Ported (mission R12, P3-HM-CONTRACT-02 §11.3): the cycle runs each
+    // step in its goal's unit (`execute_in`); still one dispatch site.
+    assert_eq!(
+        body.matches(".execute(").count(),
+        0,
+        "no dispatch outside the unit"
+    );
+    assert_eq!(body.matches(".execute_in(").count(), 1, "one dispatch site");
+    assert!(body.contains(
+        "executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl)"
+    ));
     for forbidden in [
         "execute_action(",
         "registry.",

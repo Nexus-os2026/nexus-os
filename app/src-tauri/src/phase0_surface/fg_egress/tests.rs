@@ -605,7 +605,11 @@ fn p0_fg_agent_web_fetch_is_not_egress_authority() {
             db: state.db.clone(),
         },
     )));
-    let executor = crate::phase0_agent_executor(&state, memory);
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let mut audit = state.audit.clone();
     for url in [
         format!("{base}/page"),

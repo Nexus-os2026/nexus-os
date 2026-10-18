@@ -87,6 +87,8 @@ fn a_cleared_agents_loop_runs_no_cycle_and_it_takes_no_subtask() {
     let id = register(&state, "cleared-loop");
     let goal =
         execute_agent_goal(&state, id.clone(), "summarize the notes".into(), 5, None).unwrap();
+    // The session's admission and context, made while the agent is held.
+    let (admission, session_ctx) = hivemind_test_session(&state, std::slice::from_ref(&id));
     state.supervisor.lock().unwrap().clear_all_agents();
     spawn_cognitive_loop_with_bridge(
         BackendEventBridge::default(),
@@ -104,9 +106,19 @@ fn a_cleared_agents_loop_runs_no_cycle_and_it_takes_no_subtask() {
         task.result_json
     );
     let session = state.hive_sessions.admit().unwrap();
-    let refused = execute_hivemind_subtask(&state, &session, &id, "summarize the notes");
+    let refused = execute_hivemind_subtask(
+        &state,
+        &session,
+        &admission,
+        &session_ctx,
+        1,
+        &id,
+        "summarize the notes",
+    );
+    assert!(refused.context.is_none());
+    let refused = refused.outcome.err();
     assert!(
-        refused.as_ref().is_err_and(|e| e.contains("is stopped")),
+        refused.as_ref().is_some_and(|e| e.contains("is stopped")),
         "{refused:?}"
     );
 }

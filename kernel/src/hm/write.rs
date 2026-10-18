@@ -9,6 +9,7 @@
 
 use std::fmt;
 
+pub use nexus_persistence::hm::TaskBookkeeping;
 use nexus_persistence::hm::{HmTx, LabelRow, NewMemoryRow, NewTaskRow, StrategyContribution};
 use nexus_persistence::{PersistenceError, Result as StoreResult};
 use uuid::Uuid;
@@ -541,5 +542,214 @@ impl DispatchIssuer {
                 )?))
             })
             .map_err(|_| WriteRefused::Store)?
+    }
+
+    /// A new `agent_memory` record of the target agent whose content is
+    /// derived from another agent's record (§14 rule 3, `share_learning`):
+    /// labelled with the source's evaluated label ⊔ the target unit's label
+    /// at write, with a derivation edge to the source. Refused when that
+    /// label is not `UNRESTRICTED_ORIGIN` and the target agent is not
+    /// local-only in the store. A grant on the source never counts.
+    pub fn share_to_agent(
+        &self,
+        target: &DispatchContext,
+        memory: &NewMemory<'_>,
+        source: &RecordRef,
+    ) -> Outcome {
+        let agent_id = self.writer_agent(target)?;
+        self.db()
+            .hm()
+            .immediate(|tx| {
+                if !is_migrated(tx)? {
+                    return Ok(Err(WriteRefused::NotMigrated));
+                }
+                if tx
+                    .current_row(source.table.table_name(), &source.record_id)?
+                    .is_none()
+                {
+                    return Ok(Err(WriteRefused::UnknownRecord));
+                }
+                let (label, edges) = write_label(tx, target, &[Parent::Record(source)])?;
+                if label != OriginLabel::UnrestrictedOrigin {
+                    let target_local = tx
+                        .policy_row_raw(&agent_id.to_string())?
+                        .map(|raw| decode_policy(agent_id, &raw).map(|p| p.local_only));
+                    match target_local {
+                        Some(Ok(true)) => {}
+                        Some(Ok(false)) => return Ok(Err(WriteRefused::CrossAgentRestricted)),
+                        _ => return Ok(Err(WriteRefused::TargetPolicyUnresolved)),
+                    }
+                }
+                let id = tx.insert_agent_memory(&NewMemoryRow {
+                    agent_id: agent_id.to_string(),
+                    memory_type: memory.memory_type.to_string(),
+                    key: memory.key.to_string(),
+                    value_json: memory.value_json.to_string(),
+                    relevance_score: memory.relevance_score,
+                    created_at: now(),
+                })?;
+                self.hit(ProbePoint::WriteRecordWritten);
+                let reference = RecordRef {
+                    table: RecordTable::AgentMemory,
+                    record_id: id.to_string(),
+                };
+                Ok(Ok(self.label_new(
+                    tx,
+                    target,
+                    reference,
+                    SourceKind::CrossAgentLearning,
+                    label,
+                    &edges,
+                )?))
+            })
+            .map_err(|_| WriteRefused::Store)?
+    }
+
+    /// The knowledge-graph replace (`knowledge_graph_replace`, §6.5, §6.8):
+    /// in one `BEGIN IMMEDIATE`, the agent's entity and relationship rows
+    /// are deleted (the §5.1 delete triggers fire: labels and edges go, T₀
+    /// members are tombstoned) and the new rows are inserted, each with its
+    /// label and edges. Either all of it commits or none of it.
+    pub fn replace_world_model(
+        &self,
+        ctx: &DispatchContext,
+        entities: &[String],
+        relationships: &[String],
+        parents: &[Parent<'_>],
+    ) -> Result<Vec<WriteReceipt>, WriteRefused> {
+        let agent_id = self.writer_agent(ctx)?;
+        let agent = agent_id.to_string();
+        self.db()
+            .hm()
+            .immediate(|tx| {
+                if !is_migrated(tx)? {
+                    return Ok(Err(WriteRefused::NotMigrated));
+                }
+                // The label is decided before the delete: a parent deleted
+                // by this replace still contributes its label.
+                let (label, edges) = write_label(tx, ctx, parents)?;
+                tx.delete_world_model(&agent)?;
+                let created_at = now();
+                let mut receipts = Vec::with_capacity(entities.len() + relationships.len());
+                let rows = entities
+                    .iter()
+                    .map(|e| (RecordTable::WorldModelEntities, e))
+                    .chain(
+                        relationships
+                            .iter()
+                            .map(|r| (RecordTable::WorldModelRelationships, r)),
+                    );
+                for (table, json) in rows {
+                    let id = match table {
+                        RecordTable::WorldModelEntities => {
+                            tx.insert_world_model_entity(&agent, json, &created_at)?
+                        }
+                        _ => tx.insert_world_model_relationship(&agent, json, &created_at)?,
+                    };
+                    self.hit(ProbePoint::WriteRecordWritten);
+                    let reference = RecordRef {
+                        table,
+                        record_id: id.to_string(),
+                    };
+                    receipts.push(self.label_new(
+                        tx,
+                        ctx,
+                        reference,
+                        SourceKind::KnowledgeGraphReplace,
+                        label,
+                        &edges,
+                    )?);
+                }
+                Ok(Ok(receipts))
+            })
+            .map_err(|_| WriteRefused::Store)?
+    }
+
+    /// The completion of a task (`goal_record`, §6.7): `status`,
+    /// `result_json`, `completed_at` and `success` as a content update, in
+    /// one transaction with the label update. `goal` and `steps_json` are
+    /// unchanged. The task row must exist and belong to the context's agent.
+    pub fn complete_task(
+        &self,
+        ctx: &DispatchContext,
+        task_id: Uuid,
+        status: &str,
+        result_json: Option<&str>,
+        success: bool,
+        parents: &[Parent<'_>],
+    ) -> Outcome {
+        let agent_id = self.writer_agent(ctx)?;
+        let id = task_id.to_string();
+        self.db()
+            .hm()
+            .immediate(|tx| {
+                if !is_migrated(tx)? {
+                    return Ok(Err(WriteRefused::NotMigrated));
+                }
+                let reference = RecordRef {
+                    table: RecordTable::TaskHistory,
+                    record_id: id.clone(),
+                };
+                let Some(row) = tx.current_row("task_history", &id)? else {
+                    return Ok(Err(WriteRefused::UnknownRecord));
+                };
+                if row.agent_id != agent_id.to_string() {
+                    return Ok(Err(WriteRefused::WrongAgent));
+                }
+                let (label, edges) = write_label(tx, ctx, parents)?;
+                let before = evaluate_in(tx, reference.table, &id, Some(&row))
+                    .map_err(abort)?
+                    .effective();
+                tx.update_task_completion(&id, status, result_json, &now(), success)?;
+                self.hit(ProbePoint::WriteRecordWritten);
+                Ok(Ok(self.label_update(
+                    tx,
+                    ctx,
+                    reference,
+                    before,
+                    SourceKind::GoalRecord,
+                    label,
+                    &edges,
+                )?))
+            })
+            .map_err(|_| WriteRefused::Store)?
+    }
+
+    /// Bookkeeping of a task row (§6.7): status, fuel, completion time and
+    /// success, none of them covered by the §5.2 digest. It changes no
+    /// label and needs no context.
+    pub fn task_bookkeeping(
+        &self,
+        task_id: &str,
+        b: &TaskBookkeeping<'_>,
+    ) -> Result<(), WriteRefused> {
+        self.db()
+            .hm()
+            .immediate(|tx| tx.update_task_bookkeeping(task_id, b))
+            .map(|_| ())
+            .map_err(|_| WriteRefused::Store)
+    }
+
+    /// [`DispatchIssuer::share_to_agent`] whose source is the
+    /// `strategy_scores` aggregate of `(source_agent, strategy_hash)`,
+    /// resolved inside the transaction (`share_learning`, §14 rule 3).
+    pub fn share_strategy_to_agent(
+        &self,
+        target: &DispatchContext,
+        source_agent: Uuid,
+        strategy_hash: &str,
+        memory: &NewMemory<'_>,
+    ) -> Outcome {
+        let source_id = self
+            .db()
+            .hm()
+            .read(|tx| tx.strategy_id(&source_agent.to_string(), strategy_hash))
+            .map_err(|_| WriteRefused::Store)?
+            .ok_or(WriteRefused::UnknownRecord)?;
+        let source = RecordRef {
+            table: RecordTable::StrategyScores,
+            record_id: source_id.to_string(),
+        };
+        self.share_to_agent(target, memory, &source)
     }
 }

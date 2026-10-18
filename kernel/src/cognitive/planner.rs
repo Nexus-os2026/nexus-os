@@ -1,16 +1,54 @@
 //! Cognitive planner — translates goals into executable step sequences via LLM.
+//!
+//! P3-HM-CONTRACT-02 §11.3, §11.4: every planning dispatch takes the unit's
+//! `DispatchContext` and a prompt source the model adapter can call again
+//! for the one rebuild (§12.7). Retained records enter a planning prompt
+//! only as verbatim items (`PromptBuilder::include`), recalled route-first
+//! for the unit by the caller's recall source; the reply is a derived item.
 
 use super::types::{AgentGoal, AgentStep, PlannedAction, PlanningContext};
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
+use crate::hm::{
+    DerivedItem, DispatchContext, PromptBuilder, PromptEnvelope, PromptSource, RecalledRecord,
+};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
 
-/// Trait abstraction for the LLM call so the planner is testable with mocks.
+/// The planner's model (§11.4). A path without a context does not compile.
 pub trait PlannerLlm: Send + Sync {
-    /// Send a prompt and return the LLM response text.
-    fn plan_query(&self, prompt: &str) -> Result<String, AgentError>;
+    /// Dispatches the envelope `prompt` builds for `ctx` (again after the
+    /// one rebuild) and returns the reply as a derived item.
+    fn plan_query(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError>;
+}
+
+/// The retained records a planning prompt includes (§12.3 item 4), each a
+/// verbatim item recalled route-first for the unit.
+#[derive(Debug, Default)]
+pub struct PlanningRecall {
+    /// RELEVANT MEMORIES.
+    pub memories: Vec<RecalledRecord>,
+    /// PREVIOUS OUTCOMES: the best strategy for the goal type.
+    pub best_strategy: Option<RecalledRecord>,
+    /// PREVIOUS OUTCOMES: the evolved planning prompt (`optimized_prompt`).
+    pub optimized_prompt: Option<RecalledRecord>,
+}
+
+/// The recall of one planning envelope. It is called for each envelope,
+/// so a rebuild recalls afresh under the rebuilt context (§12.7).
+pub type PlanRecallSource<'a> = dyn FnMut(&mut DispatchContext) -> PlanningRecall + 'a;
+
+/// A plan and the model reply it was parsed from. Every step is derived
+/// from `reply`: text built from a step keeps its label.
+#[derive(Debug)]
+pub struct Plan {
+    pub steps: Vec<AgentStep>,
+    pub reply: DerivedItem,
 }
 
 /// Generates executable step plans from high-level goals.
@@ -23,57 +61,74 @@ impl CognitivePlanner {
         Self { llm }
     }
 
-    /// Plan steps for a goal given the agent's context.
+    /// Plan steps for a goal of the unit `ctx` given the agent's context.
+    /// `recall` supplies the retained records of each planning envelope.
     pub fn plan_goal(
         &self,
+        ctx: &mut DispatchContext,
         goal: &AgentGoal,
         context: &PlanningContext,
-    ) -> Result<Vec<AgentStep>, AgentError> {
-        let prompt = self.build_planning_prompt(goal, context);
+        recall: &mut PlanRecallSource<'_>,
+    ) -> Result<Plan, AgentError> {
+        let (head, tail) = self.planning_text(goal, context);
+        let retry = self.build_invalid_json_retry_prompt(goal, context);
         self.query_plan_with_retry(
-            &prompt,
-            &self.build_invalid_json_retry_prompt(goal, context),
+            ctx,
+            &mut |c: &mut DispatchContext| {
+                let records = recall(c);
+                Some(planning_envelope(c, &head, &tail, &records))
+            },
+            &mut |c: &mut DispatchContext| Some(text_envelope(c, &retry)),
             &goal.description,
             &goal.id,
             &context.agent_capabilities,
         )
     }
 
-    /// Re-plan after a step failure, incorporating the error context.
+    /// Re-plan after a step failure, incorporating the error context. The
+    /// failed and remaining steps come from `previous_plan`, so the text
+    /// naming them is carried with its label.
+    #[allow(clippy::too_many_arguments)]
     pub fn replan_after_failure(
         &self,
+        ctx: &mut DispatchContext,
         goal: &AgentGoal,
         failed_step: &AgentStep,
         error: &str,
         remaining_steps: &[AgentStep],
         context: &PlanningContext,
-    ) -> Result<Vec<AgentStep>, AgentError> {
-        let prompt = self.build_replan_prompt(goal, failed_step, error, remaining_steps, context);
+        previous_plan: &DerivedItem,
+    ) -> Result<Plan, AgentError> {
+        let (head, plan_part, tail) =
+            self.build_replan_prompt(goal, failed_step, error, remaining_steps, context);
+        let from_plan = previous_plan.derive(plan_part);
+        let retry = self.build_invalid_json_retry_prompt(goal, context);
         self.query_plan_with_retry(
-            &prompt,
-            &self.build_invalid_json_retry_prompt(goal, context),
+            ctx,
+            &mut |c: &mut DispatchContext| {
+                let mut b = PromptBuilder::new(c);
+                b.text(&head);
+                b.carry(&from_plan);
+                b.text(&tail);
+                Some(b.build())
+            },
+            &mut |c: &mut DispatchContext| Some(text_envelope(c, &retry)),
             &goal.description,
             &goal.id,
             &context.agent_capabilities,
         )
     }
 
-    fn build_planning_prompt(&self, goal: &AgentGoal, context: &PlanningContext) -> String {
+    /// The planning prompt's backend text: everything before RELEVANT
+    /// MEMORIES and everything after PREVIOUS OUTCOMES. It carries no
+    /// retained record: the goal is the unit's own input, the rest is the
+    /// agent's manifest and constant instructions.
+    fn planning_text(&self, goal: &AgentGoal, context: &PlanningContext) -> (String, String) {
         let agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent");
         let agent_description = context.agent_description.as_deref().unwrap_or(
             "No additional role description was provided. Infer the role from the goal and capabilities.",
         );
         let capabilities_str = context.agent_capabilities.join(", ");
-        let memories_str = if context.relevant_memories.is_empty() {
-            "None".to_string()
-        } else {
-            context.relevant_memories.join("\n- ")
-        };
-        let outcomes_str = if context.previous_outcomes.is_empty() {
-            "None".to_string()
-        } else {
-            context.previous_outcomes.join("\n- ")
-        };
 
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
         // G8: splice in the real top-level cwd contents so the planner can
@@ -98,7 +153,7 @@ impl CognitivePlanner {
                 .to_string(),
         };
 
-        let prompt = format!(
+        let head = format!(
             r#"CRITICAL: Output ONLY a JSON array. Do NOT think out loud. Do NOT use <think> tags. Do NOT explain. Start your response with `[` and end with `]`.
 
 You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
@@ -116,13 +171,17 @@ AGENT CAPABILITIES: [{capabilities}]
 AVAILABLE FUEL: {fuel}
 AUTONOMY LEVEL: L{autonomy}
 
-RELEVANT MEMORIES:
-- {memories}
-
-PREVIOUS OUTCOMES:
-- {outcomes}
-
-ALLOWED ACTIONS (you MUST only use these):
+"#,
+            agent_name = agent_name,
+            agent_description = agent_description,
+            goal_desc = goal.description,
+            priority = goal.priority,
+            capabilities = capabilities_str,
+            fuel = context.available_fuel,
+            autonomy = context.autonomy_level,
+        );
+        let tail = format!(
+            r#"ALLOWED ACTIONS (you MUST only use these):
 {allowed_actions}
 
 {free_apis}
@@ -168,15 +227,6 @@ For each action type, use ONLY these fields:
 - Noop: type
 Do NOT include duplicate fields.
 Do NOT include any text outside the JSON array."#,
-            agent_name = agent_name,
-            agent_description = agent_description,
-            goal_desc = goal.description,
-            priority = goal.priority,
-            capabilities = capabilities_str,
-            fuel = context.available_fuel,
-            autonomy = context.autonomy_level,
-            memories = memories_str,
-            outcomes = outcomes_str,
             allowed_actions = allowed_actions,
             free_apis = if has_capability(
                 context.agent_capabilities.iter().map(String::as_str),
@@ -192,20 +242,22 @@ Do NOT include any text outside the JSON array."#,
             action_types = self.allowed_action_types(&context.agent_capabilities),
         );
         // G8b diagnostic — TEMPORARY, remove after C3 verified
-        let cwd_present = prompt.contains("Current working directory contents");
-        let cwd_idx = prompt
+        let cwd_present = head.contains("Current working directory contents");
+        let cwd_idx = head
             .find("Current working directory contents")
             .map(|i| i.to_string())
             .unwrap_or_else(|| "NOT FOUND".to_string());
         eprintln!(
-            "[g8-diag] build_planning_prompt assembled: total_len={}, cwd_block_present={}, cwd_block_position={}",
-            prompt.len(),
+            "[g8-diag] build_planning_prompt assembled: text_len={}, cwd_block_present={}, cwd_block_position={}",
+            head.len() + tail.len(),
             cwd_present,
             cwd_idx
         );
-        prompt
+        (head, tail)
     }
 
+    /// The replan prompt as (text before, text from the previous plan,
+    /// text after): the failed and remaining steps come from the plan.
     fn build_replan_prompt(
         &self,
         goal: &AgentGoal,
@@ -213,7 +265,7 @@ Do NOT include any text outside the JSON array."#,
         error: &str,
         remaining_steps: &[AgentStep],
         context: &PlanningContext,
-    ) -> String {
+    ) -> (String, String, String) {
         let agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent");
         let agent_description = context.agent_description.as_deref().unwrap_or(
             "No additional role description was provided. Infer the role from the goal and capabilities.",
@@ -230,7 +282,7 @@ Do NOT include any text outside the JSON array."#,
 
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
 
-        format!(
+        let head = format!(
             r#"You are the planning subsystem for Nexus OS. A step in your plan failed. Create an adapted plan.
 
 AGENT NAME: {agent_name}
@@ -238,12 +290,26 @@ AGENT DESCRIPTION:
 {agent_description}
 
 GOAL: {goal_desc}
-FAILED STEP: {failed_action} (attempt {attempt}/{max})
+"#,
+            agent_name = agent_name,
+            agent_description = agent_description,
+            goal_desc = goal.description,
+        );
+        let from_plan = format!(
+            r#"FAILED STEP: {failed_action} (attempt {attempt}/{max})
 ERROR: {error}
 
 REMAINING ORIGINAL STEPS:
 {remaining}
-
+"#,
+            failed_action = failed_step.action.action_type(),
+            attempt = failed_step.attempts,
+            max = failed_step.max_retries,
+            error = error,
+            remaining = remaining_str,
+        );
+        let tail = format!(
+            r#"
 AGENT CAPABILITIES: [{capabilities}]
 AVAILABLE FUEL: {fuel}
 
@@ -254,18 +320,11 @@ Create an adapted JSON plan that works around the failure.
 Respond with ONLY a valid JSON array of step objects.
 Do NOT include duplicate fields.
 Do NOT include any text outside the JSON array."#,
-            agent_name = agent_name,
-            agent_description = agent_description,
-            goal_desc = goal.description,
-            failed_action = failed_step.action.action_type(),
-            attempt = failed_step.attempts,
-            max = failed_step.max_retries,
-            error = error,
-            remaining = remaining_str,
             capabilities = context.agent_capabilities.join(", "),
             fuel = context.available_fuel,
             allowed_actions = allowed_actions,
-        )
+        );
+        (head, from_plan, tail)
     }
 
     fn build_invalid_json_retry_prompt(
@@ -397,20 +456,22 @@ Each item must be:
 
     fn query_plan_with_retry(
         &self,
-        primary_prompt: &str,
-        retry_prompt: &str,
+        ctx: &mut DispatchContext,
+        primary: &mut PromptSource<'_>,
+        retry: &mut PromptSource<'_>,
         goal_description: &str,
         goal_id: &str,
         capabilities: &[String],
-    ) -> Result<Vec<AgentStep>, AgentError> {
-        let first_response = self.llm.plan_query(primary_prompt)?;
+    ) -> Result<Plan, AgentError> {
+        let first = self.llm.plan_query(ctx, primary)?;
+        let first_response = first.text();
         eprintln!(
             "[planner:{}] raw LLM response ({} chars): {}",
             goal_id,
             first_response.len(),
             &first_response[..first_response.floor_char_boundary(500)]
         );
-        match self.parse_plan_response(&first_response, goal_id, capabilities) {
+        match self.parse_plan_response(first_response, goal_id, capabilities) {
             Ok(steps) => {
                 eprintln!(
                     "[planner:{}] parsed {} steps: {}",
@@ -422,7 +483,10 @@ Each item must be:
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                Ok(steps)
+                Ok(Plan {
+                    steps,
+                    reply: first,
+                })
             }
             Err(first_error) => {
                 eprintln!(
@@ -432,14 +496,15 @@ Each item must be:
                 if !is_retriable_parse_error(&first_error) {
                     return Err(first_error);
                 }
-                let retry_response = self.llm.plan_query(retry_prompt)?;
+                let second = self.llm.plan_query(ctx, retry)?;
+                let retry_response = second.text();
                 eprintln!(
                     "[planner:{}] retry raw LLM response ({} chars): {}",
                     goal_id,
                     retry_response.len(),
                     &retry_response[..retry_response.floor_char_boundary(500)]
                 );
-                match self.parse_plan_response(&retry_response, goal_id, capabilities) {
+                match self.parse_plan_response(retry_response, goal_id, capabilities) {
                     Ok(steps) => {
                         eprintln!(
                             "[planner:{}] retry parsed {} steps: {}",
@@ -451,20 +516,30 @@ Each item must be:
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         );
-                        Ok(steps)
+                        Ok(Plan {
+                            steps,
+                            reply: second,
+                        })
                     }
                     Err(second_error) => {
                         eprintln!(
                             "[planner:{}] parse FAILED (attempt 2): {} — falling back to direct LLM query",
                             goal_id, second_error
                         );
-                        Ok(vec![self.llm_query_fallback_step(
+                        let step = self.llm_query_fallback_step(
                             goal_id,
                             goal_description,
                             format!(
                                 "Planner returned invalid JSON twice. First error: {first_error}. Second error: {second_error}"
                             ),
-                        )])
+                        );
+                        // The fallback plan is derived from both replies.
+                        let reply = DerivedItem::combine(&[&first, &second], String::new())
+                            .unwrap_or(second);
+                        Ok(Plan {
+                            steps: vec![step],
+                            reply,
+                        })
                     }
                 }
             }
@@ -539,6 +614,49 @@ Each item must be:
             },
         )
     }
+}
+
+/// The planning envelope: the backend text, with each recalled record
+/// included verbatim (§11.2). No retained content enters as text.
+fn planning_envelope(
+    ctx: &DispatchContext,
+    head: &str,
+    tail: &str,
+    recall: &PlanningRecall,
+) -> PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    b.text(head);
+    b.text("RELEVANT MEMORIES:\n");
+    if recall.memories.is_empty() {
+        b.text("- None\n");
+    }
+    for memory in &recall.memories {
+        b.text("- ");
+        b.include(memory);
+    }
+    b.text("\nPREVIOUS OUTCOMES:\n");
+    if recall.best_strategy.is_none() && recall.optimized_prompt.is_none() {
+        b.text("- None\n");
+    }
+    if let Some(strategy) = &recall.best_strategy {
+        b.text("- Previously, the most successful approach for similar goals was:\n");
+        b.include(strategy);
+        b.text("  Consider using or adapting this approach.\n");
+    }
+    if let Some(guidance) = &recall.optimized_prompt {
+        b.text("- Use this evolved planning prompt guidance:\n");
+        b.include(guidance);
+    }
+    b.text("\n");
+    b.text(tail);
+    b.build()
+}
+
+/// An envelope of backend text only.
+fn text_envelope(ctx: &DispatchContext, text: &str) -> PromptEnvelope {
+    let mut b = PromptBuilder::new(ctx);
+    b.text(text);
+    b.build()
 }
 
 /// Raw step from LLM JSON response.
@@ -832,32 +950,58 @@ fn is_retriable_parse_error(error: &AgentError) -> bool {
 mod tests {
     use super::super::types::StepStatus;
     use super::*;
-    use std::sync::Mutex;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::RouteClass;
+    use std::sync::OnceLock;
 
-    struct MockLlm {
-        response: String,
+    /// The synthetic store and issuer of these tests.
+    fn hm() -> &'static TestHm {
+        static HM: OnceLock<TestHm> = OnceLock::new();
+        HM.get_or_init(TestHm::new)
     }
 
-    impl PlannerLlm for MockLlm {
-        fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
-            Ok(self.response.clone())
-        }
+    /// A goal unit of a registered (local-only) agent.
+    fn unit() -> DispatchContext {
+        let hm = hm();
+        hm.goal(hm.agent("planner-test-agent"))
     }
 
-    struct SequenceMockLlm {
-        responses: Mutex<Vec<String>>,
+    /// No retained record for these prompts.
+    fn no_recall(_: &mut DispatchContext) -> PlanningRecall {
+        PlanningRecall::default()
     }
 
-    impl PlannerLlm for SequenceMockLlm {
-        fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
-            let mut responses = self.responses.lock().unwrap();
-            if responses.is_empty() {
-                return Err(AgentError::SupervisorError(
-                    "no more mock planner responses".to_string(),
-                ));
-            }
-            Ok(responses.remove(0))
-        }
+    /// The model, replying `response` through the issuer on an attested
+    /// local transport.
+    #[allow(non_snake_case)]
+    fn MockLlm(response: &str) -> ScriptedLlm {
+        ScriptedLlm::replying(&hm().issuer, RouteClass::Local, response)
+    }
+
+    /// The model, replying each of `responses` in order.
+    fn sequence(responses: &[&str]) -> ScriptedLlm {
+        responses.iter().fold(
+            ScriptedLlm::new(&hm().issuer, RouteClass::Local),
+            |llm, r| llm.then(r),
+        )
+    }
+
+    /// `plan_goal` in a fresh unit with no recalled record.
+    fn plan(
+        planner: &CognitivePlanner,
+        goal: &AgentGoal,
+        ctx: &PlanningContext,
+    ) -> Result<Vec<AgentStep>, AgentError> {
+        planner
+            .plan_goal(&mut unit(), goal, ctx, &mut no_recall)
+            .map(|plan| plan.steps)
+    }
+
+    /// The planning prompt's backend text (its records are included by
+    /// the envelope, none here).
+    fn prompt_text(planner: &CognitivePlanner, goal: &AgentGoal, ctx: &PlanningContext) -> String {
+        let (head, tail) = planner.planning_text(goal, ctx);
+        format!("{head}{tail}")
     }
 
     fn make_context(caps: Vec<&str>) -> PlanningContext {
@@ -869,8 +1013,6 @@ mod tests {
             ),
             agent_capabilities: caps.into_iter().map(|s| s.to_string()).collect(),
             available_fuel: 1000.0,
-            relevant_memories: vec![],
-            previous_outcomes: vec![],
             working_directory: None,
             directory_listing: None,
             autonomy_level: 2,
@@ -879,11 +1021,9 @@ mod tests {
 
     #[test]
     fn p0_002c5a_planning_prompt_without_workspace_invents_no_directory() {
-        let planner = CognitivePlanner::new(Box::new(MockLlm {
-            response: "[]".to_string(),
-        }));
+        let planner = CognitivePlanner::new(Box::new(MockLlm("[]")));
         let goal = AgentGoal::new("list the files".into(), 5);
-        let prompt = planner.build_planning_prompt(&goal, &make_context(vec!["llm.query"]));
+        let prompt = prompt_text(&planner, &goal, &make_context(vec!["llm.query"]));
         assert!(prompt.contains("WORKSPACE DIRECTORY: none"), "{prompt}");
         assert!(!prompt.contains("/home/user"));
         assert!(!prompt.contains("Current working directory contents"));
@@ -891,17 +1031,16 @@ mod tests {
 
     #[test]
     fn test_plan_goal_basic() {
-        let llm = MockLlm {
-            response: r#"[
+        let llm = MockLlm(
+            r#"[
                 {"action": {"type": "LlmQuery", "prompt": "analyze code", "context": []}, "description": "analyze"},
                 {"action": {"type": "MemoryStore", "key": "result", "value": "done", "memory_type": "episodic"}, "description": "store"}
-            ]"#
-            .to_string(),
-        };
+            ]"#,
+        );
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test goal".into(), 5);
         let ctx = make_context(vec!["llm.query"]);
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].action.action_type(), "llm_query");
         assert_eq!(steps[1].action.action_type(), "memory_store");
@@ -910,17 +1049,16 @@ mod tests {
 
     #[test]
     fn test_plan_rejects_unauthorized_action() {
-        let llm = MockLlm {
-            response: r#"[
+        let llm = MockLlm(
+            r#"[
                 {"action": {"type": "FileWrite", "path": "/tmp/x", "content": "hack"}, "description": "write"}
-            ]"#
-            .to_string(),
-        };
+            ]"#,
+        );
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         // Only has fs.read, not fs.write
         let ctx = make_context(vec!["fs.read"]);
-        let result = planner.plan_goal(&goal, &ctx);
+        let result = plan(&planner, &goal, &ctx);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("fs.write"));
@@ -928,31 +1066,29 @@ mod tests {
 
     #[test]
     fn test_plan_allows_always_allowed_actions() {
-        let llm = MockLlm {
-            response: r#"[
+        let llm = MockLlm(
+            r#"[
                 {"action": {"type": "MemoryStore", "key": "k", "value": "v", "memory_type": "episodic"}, "description": "store"},
                 {"action": {"type": "MemoryRecall", "query": "q", "memory_type": null}, "description": "recall"},
                 {"action": {"type": "HitlRequest", "question": "ok?", "options": ["yes"]}, "description": "ask"},
                 {"action": {"type": "Noop"}, "description": "wait"}
-            ]"#
-            .to_string(),
-        };
+            ]"#,
+        );
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         // No capabilities at all
         let ctx = make_context(vec![]);
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 4);
     }
 
     #[test]
     fn test_replan_after_failure() {
-        let llm = MockLlm {
-            response: r#"[
+        let llm = MockLlm(
+            r#"[
                 {"action": {"type": "LlmQuery", "prompt": "retry with different approach", "context": ["error context"]}, "description": "retry"}
-            ]"#
-            .to_string(),
-        };
+            ]"#,
+        );
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         let failed = AgentStep {
@@ -969,9 +1105,20 @@ mod tests {
             max_retries: 2,
         };
         let ctx = make_context(vec!["llm.query"]);
+        let mut unit = unit();
+        let previous_plan = unit.produce("the previous plan");
         let steps = planner
-            .replan_after_failure(&goal, &failed, "timeout", &[], &ctx)
-            .unwrap();
+            .replan_after_failure(
+                &mut unit,
+                &goal,
+                &failed,
+                "timeout",
+                &[],
+                &ctx,
+                &previous_plan,
+            )
+            .unwrap()
+            .steps;
         assert_eq!(steps.len(), 1);
     }
 
@@ -984,13 +1131,11 @@ mod tests {
 ```
 
 Done."#;
-        let llm = MockLlm {
-            response: text.to_string(),
-        };
+        let llm = MockLlm(text);
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         let ctx = make_context(vec![]);
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
     }
 
@@ -1034,26 +1179,22 @@ Your previous response had invalid JSON."#;
 
     #[test]
     fn test_invalid_json_returns_llm_query_fallback() {
-        let llm = MockLlm {
-            response: "not json at all".to_string(),
-        };
+        let llm = MockLlm("not json at all");
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         let ctx = make_context(vec![]);
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].action.action_type(), "llm_query");
     }
 
     #[test]
     fn test_build_planning_prompt_contains_goal() {
-        let llm = MockLlm {
-            response: "[]".to_string(),
-        };
+        let llm = MockLlm("[]");
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("build a widget".into(), 7);
         let ctx = make_context(vec!["llm.query", "fs.read"]);
-        let prompt = planner.build_planning_prompt(&goal, &ctx);
+        let prompt = prompt_text(&planner, &goal, &ctx);
         assert!(prompt.contains("build a widget"));
         assert!(prompt.contains("llm.query, fs.read"));
         assert!(prompt.contains("LlmQuery"));
@@ -1066,17 +1207,16 @@ Your previous response had invalid JSON."#;
 
     #[test]
     fn test_duplicate_fields_are_tolerated_via_value_parsing() {
-        let llm = MockLlm {
-            response: r#"[
+        let llm = MockLlm(
+            r#"[
                 {"action": {"type": "ShellCommand", "command": "ls", "args": ["-l"], "args": ["-la"]}, "description": "inspect"}
-            ]"#
-            .to_string(),
-        };
+            ]"#,
+        );
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("inspect workspace".into(), 5);
         let ctx = make_context(vec!["process.exec"]);
 
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
         match &steps[0].action {
             PlannedAction::ShellCommand { command, args } => {
@@ -1089,35 +1229,27 @@ Your previous response had invalid JSON."#;
 
     #[test]
     fn test_invalid_json_retries_and_recovers() {
-        let llm = SequenceMockLlm {
-            responses: Mutex::new(vec![
-                "```json\n[{\"action\": {\"type\": \"Noop\"}, \"description\": \"wait\",}]\n```"
-                    .to_string(),
-                r#"[{"action": {"type": "Noop"}, "description": "wait"}]"#.to_string(),
-            ]),
-        };
+        let llm = sequence(&[
+            "```json\n[{\"action\": {\"type\": \"Noop\"}, \"description\": \"wait\",}]\n```",
+            r#"[{"action": {"type": "Noop"}, "description": "wait"}]"#,
+        ]);
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("recover from invalid json".into(), 5);
         let ctx = make_context(vec![]);
 
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].action.action_type(), "noop");
     }
 
     #[test]
     fn test_double_invalid_json_returns_llm_query_step() {
-        let llm = SequenceMockLlm {
-            responses: Mutex::new(vec![
-                "not valid json".to_string(),
-                "still not valid json".to_string(),
-            ]),
-        };
+        let llm = sequence(&["not valid json", "still not valid json"]);
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("gracefully degrade".into(), 5);
         let ctx = make_context(vec![]);
 
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].action.action_type(), "llm_query");
         // Fallback step should NOT pre-populate result (that caused hallucination).
@@ -1238,13 +1370,11 @@ Your previous response had invalid JSON."#;
             '\n'
         );
 
-        let llm = MockLlm {
-            response: response.clone(),
-        };
+        let llm = MockLlm(&response.clone());
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("list files".into(), 5);
         let ctx = make_context(vec!["process.exec", "llm.query"]);
-        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        let steps = plan(&planner, &goal, &ctx).unwrap();
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].action.action_type(), "shell_command");
         assert_eq!(steps[1].action.action_type(), "llm_query");
@@ -1254,9 +1384,7 @@ Your previous response had invalid JSON."#;
 
     #[test]
     fn test_fallback_step_uses_original_goal() {
-        let llm = MockLlm {
-            response: "[]".to_string(),
-        };
+        let llm = MockLlm("[]");
         let planner = CognitivePlanner::new(Box::new(llm));
         let step = planner.llm_query_fallback_step(
             "goal-1",
@@ -1314,13 +1442,11 @@ Your previous response had invalid JSON."#;
 
     #[test]
     fn test_planning_prompt_starts_with_critical_no_think() {
-        let llm = MockLlm {
-            response: "[]".to_string(),
-        };
+        let llm = MockLlm("[]");
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test goal".into(), 5);
         let ctx = make_context(vec!["llm.query"]);
-        let prompt = planner.build_planning_prompt(&goal, &ctx);
+        let prompt = prompt_text(&planner, &goal, &ctx);
         assert!(
             prompt.starts_with("CRITICAL: Output ONLY a JSON array. Do NOT think out loud."),
             "planning prompt must start with CRITICAL no-think prefix, got: {}",

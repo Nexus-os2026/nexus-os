@@ -7,20 +7,57 @@ use super::report::MorningBriefing;
 use super::scheduler::DreamScheduler;
 use super::types::{DreamOutcome, DreamResult, DreamTask, DreamType};
 use crate::consciousness::state::now_secs;
+use crate::hm::{DerivedItem, DispatchContext, DispatchIssuer, PromptBuilder, PromptSource, Unit};
 use serde_json::json;
 
-/// Trait for LLM calls during dream state (injectable for testing).
+/// The dream model (P3-HM-CONTRACT-02 §11.3, §11.4): every call runs under
+/// the dream unit's context (started from the entry's label); the reply is
+/// a derived item, with the tokens it used.
 pub trait DreamLlm: Send + Sync {
-    /// Query the LLM with a prompt. Returns the response text and token count.
-    fn query(&self, system: &str, user: &str, max_tokens: u32) -> Result<(String, u64), String>;
+    fn query(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+        max_tokens: u32,
+    ) -> Result<(DerivedItem, u64), String>;
 }
 
-/// A no-op LLM for unit tests.
-pub struct MockDreamLlm;
-impl DreamLlm for MockDreamLlm {
-    fn query(&self, _system: &str, user: &str, _max_tokens: u32) -> Result<(String, u64), String> {
-        Ok((format!("Mock dream response for: {user}"), 50))
+/// One dream call: the system instruction and the user text as backend
+/// text of the dream unit, whose taint already carries the entry's label.
+fn dream_query(
+    llm: &dyn DreamLlm,
+    ctx: &mut DispatchContext,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+) -> Result<(String, u64), String> {
+    let (reply, tokens) = llm.query(
+        ctx,
+        &mut |c: &mut DispatchContext| {
+            let mut b = PromptBuilder::new(c);
+            b.text(&format!("[System: {system}]\n\n{user}"));
+            Some(b.build())
+        },
+        max_tokens,
+    )?;
+    Ok((reply.text().to_string(), tokens))
+}
+
+/// The dream unit of one queued entry (O1, §11.3, §12.1): an agent-owned
+/// entry is a dream unit of that agent (AR); an `OwnerDirect` entry is HR;
+/// an entry without a label is `LOCAL_ONLY_ORIGIN` and never non-local.
+pub(crate) fn dream_unit(
+    issuer: &DispatchIssuer,
+    label: Option<&crate::hm::EntryLabel>,
+) -> Result<DispatchContext, String> {
+    let unit = Unit::Dream {
+        entry_id: uuid::Uuid::new_v4(),
+    };
+    match label {
+        Some(label) => issuer.begin_entry_unit(label, unit),
+        None => issuer.begin_unlabelled_entry_unit(unit),
     }
+    .map_err(|e| e.to_string())
 }
 
 /// The core dream engine that processes the dream queue.
@@ -34,8 +71,13 @@ impl DreamEngine {
     }
 
     /// Main dream loop — processes priority queue within budget.
-    /// Returns all completed dream results.
-    pub fn enter_dream_state(&mut self, llm: &dyn DreamLlm) -> Vec<DreamResult> {
+    /// Returns all completed dream results. Each entry is dreamed in its own
+    /// dream unit, minted by `issuer` from the entry's label.
+    pub fn enter_dream_state(
+        &mut self,
+        issuer: &DispatchIssuer,
+        llm: &dyn DreamLlm,
+    ) -> Vec<DreamResult> {
         let mut results = Vec::new();
 
         self.scheduler.sort_queue();
@@ -57,15 +99,24 @@ impl DreamEngine {
 
             let remaining_tokens = self.scheduler.dream_budget_tokens - tokens_used;
 
-            let result = match task.task_type {
-                DreamType::Replay => self.dream_replay(llm, task, remaining_tokens),
-                DreamType::Experiment => self.dream_experiment(llm, task, remaining_tokens),
-                DreamType::Consolidate => self.dream_consolidate(llm, task, remaining_tokens),
-                DreamType::Explore => self.dream_explore(llm, task, remaining_tokens),
-                DreamType::Precompute => self.dream_precompute(llm, task, remaining_tokens),
-                DreamType::Create => self.dream_create(llm, task, remaining_tokens),
-                DreamType::Optimize => self.dream_optimize(llm, task, remaining_tokens),
-            };
+            let result = dream_unit(issuer, task.label()).and_then(|mut ctx| {
+                let ctx = &mut ctx;
+                match task.task_type {
+                    DreamType::Replay => self.dream_replay(llm, ctx, task, remaining_tokens),
+                    DreamType::Experiment => {
+                        self.dream_experiment(llm, ctx, task, remaining_tokens)
+                    }
+                    DreamType::Consolidate => {
+                        self.dream_consolidate(llm, ctx, task, remaining_tokens)
+                    }
+                    DreamType::Explore => self.dream_explore(llm, ctx, task, remaining_tokens),
+                    DreamType::Precompute => {
+                        self.dream_precompute(llm, ctx, task, remaining_tokens)
+                    }
+                    DreamType::Create => self.dream_create(llm, ctx, task, remaining_tokens),
+                    DreamType::Optimize => self.dream_optimize(llm, ctx, task, remaining_tokens),
+                }
+            });
 
             match result {
                 Ok(r) => {
@@ -84,6 +135,7 @@ impl DreamEngine {
                         completed_at: now_secs(),
                         tokens_used: 0,
                         outcome: DreamOutcome::NoResult { reason: e },
+                        label: task.label().cloned(),
                     };
                     calls_made += 1;
                     self.scheduler.record_result(fail_result.clone());
@@ -96,8 +148,12 @@ impl DreamEngine {
     }
 
     /// Generate a morning briefing from the last dream session.
-    pub fn generate_morning_briefing(&self, llm: &dyn DreamLlm) -> MorningBriefing {
-        MorningBriefing::generate(&self.scheduler, llm)
+    pub fn generate_morning_briefing(
+        &self,
+        issuer: &DispatchIssuer,
+        llm: &dyn DreamLlm,
+    ) -> MorningBriefing {
+        MorningBriefing::generate(&self.scheduler, issuer, llm)
     }
 
     // ── Individual dream implementations ────────────────────────────
@@ -105,6 +161,7 @@ impl DreamEngine {
     fn dream_replay(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -128,7 +185,7 @@ impl DreamEngine {
             "Original task: {original_task}\nOriginal response: {original_response}\n\nReplay and improve."
         );
 
-        let (response, tokens) = llm.query(system, &user, 600)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 600)?;
         let (before, after) = parse_scores(&response);
 
         Ok(DreamResult {
@@ -144,12 +201,14 @@ impl DreamEngine {
                 after_score: after,
                 artifact: None,
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_experiment(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -174,7 +233,7 @@ impl DreamEngine {
             "Task: {failed_task}\nPrevious failures: {failures}\n\nExperiment with new approaches."
         );
 
-        let (response, tokens) = llm.query(system, &user, 800)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 800)?;
         let best_score = parse_best_score(&response);
 
         Ok(DreamResult {
@@ -190,12 +249,14 @@ impl DreamEngine {
                 after_score: best_score,
                 artifact: None,
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_consolidate(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -212,7 +273,7 @@ impl DreamEngine {
                        added to the agent's system prompt. Format: LESSON:\n<lesson text>";
         let user = format!("Session summary:\n{session_summary}");
 
-        let (response, tokens) = llm.query(system, &user, 600)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 600)?;
         let lesson = extract_after_marker(&response, "LESSON:");
 
         Ok(DreamResult {
@@ -227,12 +288,14 @@ impl DreamEngine {
                 relevance: 0.8,
                 shared_with: vec![task.source_agent.clone()],
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_explore(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -248,7 +311,7 @@ impl DreamEngine {
                        and relevance to software engineering. Be concise but thorough.";
         let user = format!("Research topic: {topic}");
 
-        let (response, tokens) = llm.query(system, &user, 600)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 600)?;
 
         Ok(DreamResult {
             task_id: task.id.clone(),
@@ -262,12 +325,14 @@ impl DreamEngine {
                 relevance: 0.5,
                 shared_with: vec![],
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_precompute(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -284,7 +349,7 @@ impl DreamEngine {
                        Format: PREDICTION: <predicted request>\nCONFIDENCE: <0.0-1.0>\nRESPONSE:\n<response>";
         let user = format!("Conversation so far:\n{conversation_context}");
 
-        let (response, tokens) = llm.query(system, &user, 800)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 800)?;
         let prediction = extract_after_marker(&response, "PREDICTION:");
         let confidence = parse_confidence(&response);
         let prepared = extract_after_marker(&response, "RESPONSE:");
@@ -301,12 +366,14 @@ impl DreamEngine {
                 prepared_response: prepared,
                 confidence,
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_create(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -329,7 +396,7 @@ impl DreamEngine {
                        REASON: <why this agent is needed>";
         let user = format!("Gap: {gap_description}\nMissing capabilities: {missing_caps}");
 
-        let (response, tokens) = llm.query(system, &user, 600)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 600)?;
         let name = extract_after_marker(&response, "NAME:");
         let reason = extract_after_marker(&response, "REASON:");
         let test_score = parse_test_score(&response);
@@ -346,12 +413,14 @@ impl DreamEngine {
                 reason,
                 test_score,
             },
+            label: ctx.product_label(),
         })
     }
 
     fn dream_optimize(
         &self,
         llm: &dyn DreamLlm,
+        ctx: &mut DispatchContext,
         task: &DreamTask,
         _remaining_budget: u64,
     ) -> Result<DreamResult, String> {
@@ -368,7 +437,7 @@ impl DreamEngine {
                        Format: ORIGINAL_SCORE: N\nIMPROVED_SCORE: N\nIMPROVEMENTS:\n<list>";
         let user = format!("Work product to optimize:\n{work_product}");
 
-        let (response, tokens) = llm.query(system, &user, 600)?;
+        let (response, tokens) = dream_query(llm, ctx, system, &user, 600)?;
         let (before, after) = parse_scores(&response);
 
         Ok(DreamResult {
@@ -384,6 +453,7 @@ impl DreamEngine {
                 after_score: after,
                 artifact: None,
             },
+            label: ctx.product_label(),
         })
     }
 }
@@ -453,6 +523,24 @@ fn extract_after_marker(text: &str, marker: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::RouteClass;
+    use std::sync::OnceLock;
+
+    /// The synthetic store and issuer of these tests.
+    fn dream_hm() -> &'static TestHm {
+        static HM: OnceLock<TestHm> = OnceLock::new();
+        HM.get_or_init(TestHm::new)
+    }
+
+    /// The former `MockDreamLlm`, through the issuer: 50 tokens a call, on an
+    /// attested local transport (an unlabelled entry's dream unit is
+    /// local-only).
+    fn mock_dream_llm() -> ScriptedLlm {
+        ScriptedLlm::answering(&dream_hm().issuer, RouteClass::Local, |prompt| {
+            format!("Mock dream response for: {prompt}")
+        })
+    }
 
     #[test]
     fn parse_scores_works() {
@@ -505,7 +593,7 @@ mod tests {
         });
 
         let mut engine = DreamEngine::new(scheduler);
-        let results = engine.enter_dream_state(&MockDreamLlm);
+        let results = engine.enter_dream_state(&dream_hm().issuer, &mock_dream_llm());
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].dream_type, DreamType::Replay);
@@ -531,7 +619,7 @@ mod tests {
         }
 
         let mut engine = DreamEngine::new(scheduler);
-        let results = engine.enter_dream_state(&MockDreamLlm);
+        let results = engine.enter_dream_state(&dream_hm().issuer, &mock_dream_llm());
 
         assert_eq!(results.len(), 2); // budget limits to 2
         assert_eq!(engine.scheduler.queue_len(), 3); // 3 remaining
@@ -540,7 +628,7 @@ mod tests {
     #[test]
     fn dream_engine_respects_token_budget() {
         let mut scheduler = DreamScheduler::new();
-        scheduler.dream_budget_tokens = 90; // MockDreamLlm returns 50 tokens per call
+        scheduler.dream_budget_tokens = 90; // the mock dream model returns 50 tokens per call
 
         for i in 0..5 {
             scheduler.enqueue(DreamTask {
@@ -554,7 +642,7 @@ mod tests {
         }
 
         let mut engine = DreamEngine::new(scheduler);
-        let results = engine.enter_dream_state(&MockDreamLlm);
+        let results = engine.enter_dream_state(&dream_hm().issuer, &mock_dream_llm());
 
         // 50 tokens first call (50 < 90 → proceed), 50 second call (100 >= 90 → stop)
         assert_eq!(results.len(), 2);
@@ -602,7 +690,7 @@ mod tests {
                 ..DreamTask::default()
             });
             let mut engine = DreamEngine::new(scheduler);
-            let results = engine.enter_dream_state(&MockDreamLlm);
+            let results = engine.enter_dream_state(&dream_hm().issuer, &mock_dream_llm());
             assert_eq!(results.len(), 1, "Failed for {dtype:?}");
             assert_eq!(results[0].dream_type, dtype);
         }

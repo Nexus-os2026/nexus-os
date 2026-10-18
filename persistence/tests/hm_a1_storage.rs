@@ -1534,13 +1534,29 @@ fn has_word(text: &str, word: &str) -> bool {
     false
 }
 
+/// The desktop's one historical-memory test module (mission
+/// P3-C11-HM-M3, AMENDMENT 1 A1.9: its tests loosen a policy only through a
+/// TEST FIXTURE writing through the store, never product code). It is test
+/// code only: the desktop declares it once, under `#[cfg(test)]`.
+const DESKTOP_HM_TEST_MODULE: &str = "app/src-tauri/src/hm_m3_tests.rs";
+
+/// The desktop declares [`DESKTOP_HM_TEST_MODULE`] once, as a test module.
+fn assert_desktop_hm_test_module_is_test_only() {
+    let lib = std::fs::read_to_string(workspace_root().join("app/src-tauri/src/lib.rs")).unwrap();
+    assert_eq!(lib.matches("mod hm_m3_tests").count(), 1);
+    assert!(lib.contains("#[cfg(test)]\nmod hm_m3_tests;"));
+}
+
 #[test]
 fn hm_n5_hm_tables_are_named_only_in_the_hm_modules() {
+    // Ported (mission P3-C11-HM-M3 R12): besides the hm modules, only the
+    // desktop's test-only historical-memory module names an hm_* table.
+    assert_desktop_hm_test_module_is_test_only();
     let files = source_files(&["rs", "sql", "ts", "tsx", "js", "py", "json", "toml"]);
     let mut hits = Vec::new();
     for f in &files {
         let rel = relative(f);
-        if hm_module_path(&rel) {
+        if hm_module_path(&rel) || rel == DESKTOP_HM_TEST_MODULE {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(f) else {

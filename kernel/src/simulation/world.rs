@@ -1,8 +1,8 @@
 use super::persona::Persona;
 use super::seed::WorldSeed;
 use super::timeline::Timeline;
+use super::SimulationLlm;
 use crate::cognitive::algorithms::WorldModel;
-use crate::cognitive::PlannerLlm;
 use crate::errors::AgentError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -72,9 +72,11 @@ impl SimulatedWorld {
         description: impl Into<String>,
         seed: &WorldSeed,
         personas: Vec<Persona>,
-        llm: &dyn PlannerLlm,
+        llm: &SimulationLlm,
     ) -> Result<Self, AgentError> {
-        let knowledge_graph = WorldModel::build_from_seed(&seed.scenario, llm)?;
+        // Class XS (§12.2): an explicit System context, never a default.
+        let mut ctx = llm.context()?;
+        let knowledge_graph = WorldModel::build_from_seed(&seed.scenario, llm.planner(), &mut ctx)?;
         let mut global_state = HashMap::new();
         global_state.insert("scenario".to_string(), seed.scenario.clone());
         for variable in &seed.variables {
