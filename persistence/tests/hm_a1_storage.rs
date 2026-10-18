@@ -1310,3 +1310,321 @@ fn hm_n2_current_row_matches_scan_and_requires_canonical_ids() {
     assert_eq!(cur.3, None);
     assert!(db.hm().immediate(|tx| tx.scan_table("agents")).is_err());
 }
+
+// ── N5: guards (persistence-scope parts of A-S1) ────────────────────────────
+
+use std::path::{Path, PathBuf};
+
+const IN_SCOPE_TABLES: [&str; 5] = [
+    "agent_memory",
+    "task_history",
+    "strategy_scores",
+    "world_model_entities",
+    "world_model_relationships",
+];
+
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .to_path_buf()
+}
+
+/// Every source file under the workspace with one of `exts`, skipping build
+/// output, dependencies and VCS metadata.
+fn source_files(exts: &[&str]) -> Vec<PathBuf> {
+    fn walk(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                if matches!(name.as_str(), "target" | "node_modules" | ".git" | "dist")
+                    || name.starts_with("target")
+                {
+                    continue;
+                }
+                walk(&path, exts, out);
+            } else if ft.is_file()
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| exts.contains(&e))
+            {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&workspace_root(), exts, &mut out);
+    out.sort();
+    out
+}
+
+fn relative(path: &Path) -> String {
+    path.strip_prefix(workspace_root())
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+/// Lowercase with every whitespace run collapsed to one space.
+fn squash(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// The token after each `replace into` (covers `insert or replace into`).
+fn replace_targets(squashed: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = squashed;
+    while let Some(i) = rest.find("replace into ") {
+        let after = &rest[i + "replace into ".len()..];
+        let token: String = after
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '(')
+            .collect();
+        out.push(
+            token
+                .trim_matches(|c| c == '"' || c == '`' || c == '[' || c == ']')
+                .to_string(),
+        );
+        rest = after;
+    }
+    out
+}
+
+#[test]
+fn hm_n5_no_replace_write_to_an_in_scope_table() {
+    let files = source_files(&["rs", "sql"]);
+    assert!(files.len() > 100, "workspace scan found too few files");
+    let mut hits = Vec::new();
+    for f in &files {
+        // This file plants REPLACE strings for the scanner's negative control.
+        if relative(f) == "persistence/tests/hm_a1_storage.rs" {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        let squashed = squash(&text);
+        for target in replace_targets(&squashed) {
+            let bare = target.strip_prefix("main.").unwrap_or(&target);
+            if IN_SCOPE_TABLES.contains(&bare) || bare.starts_with('{') || bare.is_empty() {
+                hits.push(format!("{}: REPLACE INTO {target}", relative(f)));
+            }
+        }
+        // A REPLACE conflict clause in a column or table definition.
+        if squashed.contains("on conflict replace") {
+            for t in IN_SCOPE_TABLES {
+                if squashed.contains(&format!("create table if not exists {t} "))
+                    || squashed.contains(&format!("create table {t} "))
+                {
+                    hits.push(format!("{}: ON CONFLICT REPLACE near {t}", relative(f)));
+                }
+            }
+        }
+    }
+    assert!(hits.is_empty(), "REPLACE on an in-scope table: {hits:#?}");
+}
+
+#[test]
+fn hm_n5_replace_guard_detects_a_planted_replace() {
+    // Negative control for the scanner itself.
+    let planted =
+        squash("conn.execute(\"INSERT  OR\n REPLACE INTO agent_memory (id) VALUES (1)\")");
+    assert_eq!(replace_targets(&planted), vec!["agent_memory".to_string()]);
+    let planted = squash("format!(\"REPLACE INTO {table} VALUES (?1)\")");
+    assert_eq!(replace_targets(&planted), vec!["{table}".to_string()]);
+}
+
+#[test]
+fn hm_n5_every_nexus_database_constructor_enables_foreign_keys() {
+    // Runtime: both constructors.
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_eq!(count(&db, "PRAGMA foreign_keys"), 1, "in_memory");
+    let dir = std::env::temp_dir().join(format!(
+        "hm-a1-n5-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let path = dir.join("state.db");
+    {
+        let db = NexusDatabase::open(&path).unwrap();
+        assert_eq!(count(&db, "PRAGMA foreign_keys"), 1, "open (new file)");
+    }
+    {
+        let db = NexusDatabase::open(&path).unwrap();
+        assert_eq!(count(&db, "PRAGMA foreign_keys"), 1, "open (existing file)");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // Source: every place lib.rs builds a NexusDatabase connection is in a
+    // function that sets foreign_keys=ON before constructing it.
+    let src = std::fs::read_to_string(workspace_root().join("persistence/src/lib.rs")).unwrap();
+    let mut constructions = 0;
+    let mut start = 0;
+    while let Some(i) = src[start..].find("conn: Mutex::new(conn)") {
+        let at = start + i;
+        let fn_start = src[..at].rfind("\n    pub fn ").expect("enclosing fn");
+        let body = &src[fn_start..at];
+        let name: String = body["\n    pub fn ".len()..]
+            .chars()
+            .take_while(|c| *c != '(')
+            .collect();
+        assert!(
+            body.contains("PRAGMA foreign_keys=ON"),
+            "NexusDatabase::{name} does not enable foreign keys"
+        );
+        constructions += 1;
+        start = at + 1;
+    }
+    assert_eq!(
+        constructions, 2,
+        "open and in_memory are the only constructors"
+    );
+    let opens = src.matches("Connection::open").count();
+    assert_eq!(
+        opens, 2,
+        "every Connection::open in lib.rs is a checked constructor"
+    );
+}
+
+/// The ten §5.1 table names.
+const HM_TABLE_NAMES: [&str; 10] = [
+    "hm_migration",
+    "hm_t0_member",
+    "hm_t0_tombstone",
+    "hm_agent_policy",
+    "hm_policy_change",
+    "hm_record_label",
+    "hm_derivation",
+    "hm_grant",
+    "hm_dispatch_admission",
+    "hm_event",
+];
+
+fn hm_module_path(rel: &str) -> bool {
+    rel == "persistence/src/hm.rs"
+        || rel.starts_with("persistence/src/hm/")
+        || rel == "kernel/src/hm.rs"
+        || rel.starts_with("kernel/src/hm/")
+        || (rel.starts_with("persistence/tests/hm_") && rel.ends_with(".rs"))
+        || (rel.starts_with("kernel/tests/hm_") && rel.ends_with(".rs"))
+}
+
+/// Whole-word occurrences of `word` (identifier characters as boundaries).
+fn has_word(text: &str, word: &str) -> bool {
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut start = 0;
+    while let Some(i) = text[start..].find(word) {
+        let at = start + i;
+        let before = text[..at].chars().next_back();
+        let after = text[at + word.len()..].chars().next();
+        if !before.is_some_and(ident) && !after.is_some_and(ident) {
+            return true;
+        }
+        start = at + word.len();
+    }
+    false
+}
+
+#[test]
+fn hm_n5_hm_tables_are_named_only_in_the_hm_modules() {
+    let files = source_files(&["rs", "sql", "ts", "tsx", "js", "py", "json", "toml"]);
+    let mut hits = Vec::new();
+    for f in &files {
+        let rel = relative(f);
+        if hm_module_path(&rel) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        for t in HM_TABLE_NAMES {
+            if has_word(&text, t) {
+                hits.push(format!("{rel}: {t}"));
+            }
+        }
+    }
+    assert!(
+        hits.is_empty(),
+        "hm_* table named outside the hm modules: {hits:#?}"
+    );
+    // The only lib.rs reference is the accessor, which names no table.
+    let lib = std::fs::read_to_string(workspace_root().join("persistence/src/lib.rs")).unwrap();
+    assert!(lib.contains("pub fn hm(&self) -> hm::HmStore<'_>"));
+}
+
+#[test]
+fn hm_n5_table_name_scanner_detects_a_planted_name() {
+    assert!(has_word("INSERT INTO hm_grant VALUES (1)", "hm_grant"));
+    assert!(has_word("\"hm_event\"", "hm_event"));
+    assert!(!has_word("SELECT * FROM xhm_grant", "hm_grant"));
+    assert!(!has_word("hm_grants_total", "hm_grant"));
+    assert!(!hm_module_path("persistence/src/lib.rs"));
+    assert!(hm_module_path("kernel/tests/hm_a1_ledger.rs"));
+}
+
+#[test]
+fn hm_n5_clear_all_agents_does_not_reset_sqlite_sequence() {
+    use nexus_persistence::StateStore;
+    let db = db_with_schema();
+    for i in 0..3 {
+        db.save_memory("a", "episodic", &format!("SYNTH-k{i}"), "\"v\"")
+            .unwrap();
+    }
+    let max_before = count(&db, "SELECT MAX(id) FROM agent_memory");
+    let seq_before = count(
+        &db,
+        "SELECT seq FROM sqlite_sequence WHERE name = 'agent_memory'",
+    );
+    assert_eq!(seq_before, max_before);
+    // Mark one row as a T0 member so the delete trigger tombstones it.
+    assert_accepted(
+        &db,
+        &format!("INSERT INTO hm_t0_member VALUES ('agent_memory', '{max_before}', 'a', 'd')"),
+    );
+    db.clear_all_agents().unwrap();
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM agent_memory"), 0);
+    assert_eq!(
+        count(
+            &db,
+            "SELECT seq FROM sqlite_sequence WHERE name = 'agent_memory'"
+        ),
+        seq_before,
+        "sqlite_sequence must survive clear_all_agents"
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_tombstone"), 1);
+    db.save_memory("a", "episodic", "SYNTH-after", "\"v\"")
+        .unwrap();
+    assert!(
+        count(&db, "SELECT MAX(id) FROM agent_memory") > max_before,
+        "ids are never reused after clear_all_agents"
+    );
+
+    // Source: clear_all_agents and the rest of the persistence crate never
+    // write sqlite_sequence.
+    let src = std::fs::read_to_string(workspace_root().join("persistence/src/lib.rs")).unwrap();
+    let start = src
+        .find("fn clear_all_agents(&self) -> Result<usize> {\n        let conn")
+        .expect("clear_all_agents");
+    let end = start + src[start..].find("\n    }\n").unwrap();
+    assert!(!src[start..end].contains("sqlite_sequence"));
+    for f in source_files(&["rs"]) {
+        let rel = relative(&f);
+        if !rel.starts_with("persistence/src/") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&f).unwrap();
+        assert!(
+            !text.contains("sqlite_sequence"),
+            "{rel} names sqlite_sequence"
+        );
+    }
+}
