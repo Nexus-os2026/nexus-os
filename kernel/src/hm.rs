@@ -301,6 +301,22 @@ fn evaluate_migrated(
     evaluate_in(tx, table, record_id, current.as_ref())
 }
 
+/// The number of `agent_id`'s records of `table` written with `kind`
+/// (§6.6: a reader that selects records by role selects them by
+/// `source_kind`, never by a substring of their key or content).
+/// Content-free: a count.
+pub fn count_records_of_kind(
+    db: &NexusDatabase,
+    table: RecordTable,
+    agent_id: &str,
+    kind: SourceKind,
+) -> Result<u64, HmError> {
+    let n = db
+        .hm()
+        .read(|tx| tx.count_labels_of_kind(table.table_name(), agent_id, kind.name()))?;
+    Ok(u64::try_from(n).unwrap_or(0))
+}
+
 /// Whether a record identity is in the T₀ membership ledger. Membership is
 /// read from `hm_t0_member` only, never from a timestamp or id watermark
 /// (§2.9, §9.5).

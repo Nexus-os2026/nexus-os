@@ -2815,7 +2815,7 @@ pub(crate) fn get_self_evolution_metrics(
     let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
     let metrics = state
         .evolution_tracker
-        .get_evolution_metrics(&agent_id, &memory_mgr)
+        .get_evolution_metrics(&agent_id, &memory_mgr, &state.db)
         .map_err(|e| e.to_string())?;
     serde_json::to_value(&metrics).map_err(|e| e.to_string())
 }

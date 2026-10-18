@@ -179,6 +179,22 @@ pub trait LlmQueryHandler: Send + Sync {
 const NEEDS_UNIT: &str = "refused: this action runs only as a step of a unit \
      (P3-HM-CONTRACT-02 §6.1, §11.4)";
 
+/// The refusal of the two model-calling actuators (image generation, text to
+/// speech): their prompt is model-chosen text, which may carry content
+/// derived from retained records, and they have no §12.4 admission, so the
+/// executor never reaches them (P3-HM-CONTRACT-02 errata E-M3-1, class AR
+/// CLOSED). Reopening them needs a mission that admits them through §12.4.
+const MODEL_ACTUATOR_CLOSED: &str = "refused: this actuator calls a remote model without \
+     a dispatch admission (P3-HM-CONTRACT-02 §12.4, errata E-M3-1)";
+
+/// Whether `action` runs one of the closed model-calling actuators.
+fn is_closed_model_actuator(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::ImageGenerate { .. } | PlannedAction::TextToSpeech { .. }
+    )
+}
+
 /// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
 /// context come from the plan and are carried with its label; each earlier
 /// step's result is included verbatim or carried as derived.
@@ -457,6 +473,9 @@ impl ActionExecutor for RegistryExecutor {
         hitl_approved: bool,
     ) -> Result<String, String> {
         match action {
+            _ if is_closed_model_actuator(action) => {
+                Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
+            }
             // A model call, or a read or write of retained records, needs a
             // unit (§6.1, §11.4): never run without one.
             PlannedAction::LlmQuery { .. } if self.llm_handler.is_some() => {
@@ -495,6 +514,9 @@ impl ActionExecutor for RegistryExecutor {
         let plan: &DerivedItem = scope.plan;
         let prior = scope.prior;
         match action {
+            _ if is_closed_model_actuator(action) => {
+                Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
+            }
             PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
                 let handler = self.llm_handler.as_ref().expect("checked");
                 let prompt_len =
@@ -5068,6 +5090,120 @@ mod tests {
             err.contains("empty response"),
             "error must mention empty response; got: {err}"
         );
+    }
+
+    /// P3-HM-CONTRACT-02 errata E-M3-1 (class AR CLOSED, G4): the kernel
+    /// executor refuses image generation and text to speech, outside a unit
+    /// and as a step of one, and never reaches their actuators. Planted
+    /// control: the same counting actuators are reachable through the
+    /// registry itself, so only the executor's refusal stops the action.
+    #[test]
+    fn hm_m3_n5_g4_registry_executor_refuses_image_generation_and_speech() {
+        use crate::actuators::{ActionResult, Actuator, ActuatorError};
+        use std::sync::atomic::AtomicUsize;
+        struct Counting(&'static str, Arc<AtomicUsize>);
+        impl Actuator for Counting {
+            fn name(&self) -> &str {
+                self.0
+            }
+            fn required_capabilities(&self) -> Vec<String> {
+                Vec::new()
+            }
+            fn execute(
+                &self,
+                _action: &PlannedAction,
+                _context: &ActuatorContext,
+            ) -> Result<ActionResult, ActuatorError> {
+                self.1.fetch_add(1, Ordering::SeqCst);
+                Ok(ActionResult {
+                    success: true,
+                    output: "reached".to_string(),
+                    fuel_cost: 0.0,
+                    side_effects: Vec::new(),
+                })
+            }
+        }
+        let mut sup = Supervisor::new();
+        let id = sup
+            .start_agent(AgentManifest {
+                name: "g4-agent".into(),
+                version: "1.0.0".into(),
+                capabilities: vec!["image.generate".into(), "tts.generate".into()],
+                fuel_budget: 10000,
+                autonomy_level: Some(3),
+                consent_policy_path: None,
+                requester_id: None,
+                schedule: None,
+                default_goal: None,
+                llm_model: None,
+                fuel_period_id: None,
+                monthly_fuel_cap: None,
+                allowed_endpoints: None,
+                domain_tags: vec![],
+                filesystem_permissions: vec![],
+            })
+            .unwrap();
+        let agent_id = id.to_string();
+        let reached = Arc::new(AtomicUsize::new(0));
+        let mut executor = RegistryExecutor::new(
+            std::env::temp_dir(),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            Arc::new(Mutex::new(sup)),
+            None,
+        );
+        for name in ["image_gen_actuator", "tts_actuator"] {
+            executor
+                .registry
+                .register(Box::new(Counting(name, reached.clone())));
+        }
+        let actions = [
+            PlannedAction::ImageGenerate {
+                prompt: "derived text".to_string(),
+                output_path: "out.png".to_string(),
+                provider: Some("dalle".to_string()),
+                model: None,
+                size: None,
+            },
+            PlannedAction::TextToSpeech {
+                text: "derived text".to_string(),
+                output_path: "out.wav".to_string(),
+                provider: Some("openai".to_string()),
+                voice: None,
+                model: None,
+            },
+        ];
+        let mut audit = AuditTrail::new();
+        // Planted control: the registry reaches both counting actuators.
+        let ctx = executor.actuator_context(&agent_id, false).unwrap();
+        for action in &actions {
+            let out = executor
+                .registry
+                .execute_action(action, &ctx, &mut audit)
+                .unwrap();
+            assert_eq!(out.output, "reached");
+        }
+        assert_eq!(reached.swap(0, Ordering::SeqCst), 2);
+        // The executor refuses both, outside a unit and in one.
+        for action in &actions {
+            let err = executor
+                .execute(&agent_id, action, &mut audit, true)
+                .unwrap_err();
+            assert!(err.contains(MODEL_ACTUATOR_CLOSED), "{err}");
+            let mut unit = hm().goal(id);
+            let plan = unit.produce("the plan");
+            let mut scope = StepScope {
+                issuer: &hm().issuer,
+                ctx: &mut unit,
+                plan: &plan,
+                prior: &[],
+            };
+            let err = executor
+                .execute_in(&mut scope, &agent_id, action, &mut audit, true)
+                .map(|o| o.text)
+                .unwrap_err();
+            assert!(err.contains(MODEL_ACTUATOR_CLOSED), "{err}");
+        }
+        assert_eq!(reached.load(Ordering::SeqCst), 0, "a closed actuator ran");
     }
 
     /// G1a-2: even if every step records StepStatus::Succeeded, when all step

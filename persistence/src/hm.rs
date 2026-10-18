@@ -942,6 +942,22 @@ impl HmTx<'_> {
             .optional()?)
     }
 
+    /// The number of label rows of `agent_id`'s records of `table` with
+    /// `source_kind` (content-free).
+    pub fn count_labels_of_kind(
+        &self,
+        table: &str,
+        agent_id: &str,
+        source_kind: &str,
+    ) -> Result<i64> {
+        Ok(self.tx.query_row(
+            "SELECT COUNT(*) FROM hm_record_label
+             WHERE record_table = ?1 AND agent_id = ?2 AND source_kind = ?3",
+            params![table, agent_id, source_kind],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Every label row, ordered by `(record_table, record_id)`.
     pub fn label_rows(&self) -> Result<Vec<LabelRow>> {
         let mut stmt = self.tx.prepare(

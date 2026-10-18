@@ -374,6 +374,7 @@ impl EvolutionTracker {
         &self,
         agent_id: &str,
         memory_mgr: &AgentMemoryManager,
+        records: &nexus_persistence::NexusDatabase,
     ) -> Result<EvolutionMetrics, AgentError> {
         let all_strategies = self
             .store
@@ -422,11 +423,15 @@ impl EvolutionTracker {
             .unwrap_or_default();
         let memories_count = memories.len() as u64;
 
-        // Count cross-agent learnings
-        let cross_agent_learnings_received = memories
-            .iter()
-            .filter(|m| m.value_json.contains("cross_agent_learning"))
-            .count() as u64;
+        // Count cross-agent learnings, by their role (§6.6: `source_kind`,
+        // never a substring of the content).
+        let cross_agent_learnings_received = crate::hm::count_records_of_kind(
+            records,
+            RecordTable::AgentMemory,
+            agent_id,
+            SourceKind::CrossAgentLearning,
+        )
+        .unwrap_or(0);
 
         // Trend data: use strategy scores as data points
         let success_rate_trend: Vec<(String, f64)> = sorted
@@ -1109,7 +1114,7 @@ mod tests {
 
         let metrics = f
             .tracker
-            .get_evolution_metrics(&f.agent("agent1"), &f.memory)
+            .get_evolution_metrics(&f.agent("agent1"), &f.memory, &f.hm.db)
             .unwrap();
         assert_eq!(metrics.total_tasks_completed, 8);
         assert!((metrics.overall_success_rate - 5.0 / 8.0).abs() < 0.01);
@@ -1137,7 +1142,7 @@ mod tests {
 
         let metrics = f
             .tracker
-            .get_evolution_metrics(&f.agent("agent1"), &f.memory)
+            .get_evolution_metrics(&f.agent("agent1"), &f.memory, &f.hm.db)
             .unwrap();
         assert_eq!(metrics.success_rate_trend.len(), 5);
         assert_eq!(metrics.fuel_efficiency_trend.len(), 5);
@@ -1161,7 +1166,7 @@ mod tests {
 
         let metrics = f
             .tracker
-            .get_evolution_metrics(&f.agent("agent1"), &f.memory)
+            .get_evolution_metrics(&f.agent("agent1"), &f.memory, &f.hm.db)
             .unwrap();
         // Best score > worst score so improvement should be positive
         assert!(metrics.improvement_percentage > 0.0);
@@ -1230,7 +1235,7 @@ mod tests {
         // Metrics should show accumulated data
         let metrics = f
             .tracker
-            .get_evolution_metrics(&f.agent("agent1"), &f.memory)
+            .get_evolution_metrics(&f.agent("agent1"), &f.memory, &f.hm.db)
             .unwrap();
         assert_eq!(metrics.total_tasks_completed, 3);
     }
@@ -1276,6 +1281,55 @@ mod tests {
             .collect();
         assert!(!b_memories.is_empty());
         assert!(b_memories[0].1.contains("cross_agent_learning"));
+    }
+
+    /// §6.6: the evolution metrics count cross-agent learnings by their
+    /// role (`source_kind`), never by a substring of their content.
+    #[test]
+    fn hm_m3_n5_cross_agent_learnings_are_counted_by_source_kind() {
+        let f = make_tracker_and_memory();
+        for _ in 0..10 {
+            f.record(
+                "agent_a",
+                "t",
+                "great_strat",
+                "coding",
+                true,
+                1.0,
+                1.0,
+                100.0,
+                50.0,
+            )
+            .unwrap();
+        }
+        // A memory of agent B whose content names the role, written as an
+        // ordinary loop memory: not a learning.
+        AgentMemoryManager::record_semantic(
+            &f.hm.issuer,
+            &f.ctx("agent_b"),
+            SourceKind::LoopEpisodic,
+            "cross_agent_learning lookalike",
+            &[],
+        )
+        .unwrap();
+        let received = || {
+            f.tracker
+                .get_evolution_metrics(&f.agent("agent_b"), &f.memory, &f.hm.db)
+                .unwrap()
+                .cross_agent_learnings_received
+        };
+        assert_eq!(received(), 0);
+        let shareable = f
+            .tracker
+            .discover_shareable_strategies(&[f.agent("agent_a").as_str()], 0.4)
+            .unwrap();
+        assert!(!shareable.is_empty());
+        for (from_agent, strat, score) in &shareable {
+            f.tracker
+                .share_learning(&f.hm.issuer, &f.ctx("agent_b"), from_agent, strat, *score)
+                .unwrap();
+        }
+        assert_eq!(received(), shareable.len() as u64);
     }
 
     #[test]
