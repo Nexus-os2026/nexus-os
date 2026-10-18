@@ -63,12 +63,32 @@ pub enum Principal {
 /// The unit of work a context belongs to (§2.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unit {
-    Goal { goal_id: Uuid },
-    HiveSubtask { session_id: Uuid, subtask_id: u32 },
-    TeamTask { workflow_id: Uuid, task_index: u32 },
-    ChatTurn { turn_id: Uuid },
-    PostGoal { goal_id: Uuid },
-    Dream { entry_id: Uuid },
+    Goal {
+        goal_id: Uuid,
+    },
+    HiveSubtask {
+        session_id: Uuid,
+        subtask_id: u32,
+    },
+    TeamTask {
+        workflow_id: Uuid,
+        task_index: u32,
+    },
+    ChatTurn {
+        turn_id: Uuid,
+    },
+    PostGoal {
+        goal_id: Uuid,
+    },
+    Dream {
+        entry_id: Uuid,
+    },
+    /// One backend request of a non-agent principal (`OwnerDirect` or
+    /// `System`): a human-direct exchange, a fixed system prompt or an
+    /// excluded-store operation (§12.1 HD, HB, SY, XS).
+    Request {
+        request_id: Uuid,
+    },
 }
 
 impl Unit {
@@ -81,6 +101,7 @@ impl Unit {
             Unit::ChatTurn { .. } => "chat_turn",
             Unit::PostGoal { .. } => "post_goal",
             Unit::Dream { .. } => "dream",
+            Unit::Request { .. } => "request",
         }
     }
 }
@@ -295,9 +316,23 @@ impl DerivedItem {
 /// The sealed dispatch context (§11.1), minted only by `DispatchIssuer`.
 /// Child contexts come only from methods on an existing context.
 ///
+/// Every field is listed, so only their privacy stops the literal:
 /// ```compile_fail
-/// use nexus_kernel::hm::{DispatchContext, OriginLabel};
-/// let _ = DispatchContext { taint: OriginLabel::UnrestrictedOrigin };
+/// use nexus_kernel::hm::DispatchContext;
+/// let _ = DispatchContext {
+///     nonce: todo!(),
+///     issuer_id: todo!(),
+///     principal: todo!(),
+///     unit: todo!(),
+///     policy: todo!(),
+///     floor_local_only: todo!(),
+///     route_class: todo!(),
+///     taint: todo!(),
+///     working_set: todo!(),
+///     restrictions: todo!(),
+///     class: todo!(),
+///     local_transport_used: todo!(),
+/// };
 /// ```
 /// ```compile_fail
 /// use nexus_kernel::hm::DispatchContext;
@@ -333,6 +368,23 @@ pub struct DispatchContext {
     pub(in crate::hm) taint: OriginLabel,
     pub(in crate::hm) working_set: WorkingSet,
     pub(in crate::hm) restrictions: Restrictions,
+    /// How this context dispatches (§12.1).
+    pub(in crate::hm) class: DispatchClass,
+    /// A dispatch of this context was sent on an attested local transport:
+    /// the route restriction of the entries it produces (§11.3).
+    pub(in crate::hm) local_transport_used: bool,
+}
+
+/// How a context dispatches (§12.1, mission R2): an agent's (AR, AC: §12.4
+/// and §12.6 in full), an Owner's retained entry (HR: §12.4 steps 2, 4 and
+/// 5, with no agent), or a plain non-agent request (HD, HB, SY, XS: no
+/// admission row, no inclusion, unrestricted carried items on a non-local
+/// route).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::hm) enum DispatchClass {
+    Agent,
+    OwnerRetained,
+    Plain,
 }
 
 impl DispatchContext {
@@ -379,6 +431,97 @@ impl DispatchContext {
     pub fn owns(&self, envelope: &PromptEnvelope) -> bool {
         envelope.ctx_nonce == self.nonce && envelope.issuer_id == self.issuer_id
     }
+
+    /// The label of a retained in-memory entry this chat turn produces
+    /// (§6.5, §11.3): the ⊔ of the turn's taint and its route restriction
+    /// (`LOCAL_ONLY_ORIGIN` when the turn is local-only or one of its
+    /// dispatches went to an attested local transport), with the turn's
+    /// principal. `None` outside a chat turn, or for a `System` principal.
+    pub fn entry_label(&self) -> Option<EntryLabel> {
+        if !matches!(self.unit, Unit::ChatTurn { .. })
+            || matches!(self.principal, Principal::System(_))
+        {
+            return None;
+        }
+        let route = if self.restrictions.local_only || self.local_transport_used {
+            OriginLabel::LocalOnlyOrigin
+        } else {
+            OriginLabel::UnrestrictedOrigin
+        };
+        Some(EntryLabel {
+            principal: self.principal,
+            label: self.taint.join(route),
+        })
+    }
+
+    /// Absorbs an envelope this context owns (mission R1 (ii)), whatever its
+    /// admission outcome: every inclusion enters the working set as a
+    /// verbatim item with its recall-time label, and every carried item's
+    /// label enters the working set and joins the taint (§6.3). Nothing is
+    /// lowered.
+    pub(in crate::hm) fn absorb(
+        &mut self,
+        inclusions: &[(RecordRef, EvaluatedLabel)],
+        carried: &[OriginLabel],
+    ) {
+        for item in inclusions {
+            if !self.working_set.verbatim.contains(item) {
+                self.working_set.verbatim.push(item.clone());
+            }
+        }
+        for l in carried {
+            if !self.working_set.derived.contains(l) {
+                self.working_set.derived.push(*l);
+            }
+            let (taint, route_class) = unit_taint_step(self.taint, self.route_class, *l);
+            self.taint = taint;
+            self.route_class = route_class;
+        }
+    }
+}
+
+// ── Retained in-memory entries (§2.1, §6.5, §11.3) ──────────────────────────
+
+/// The label and principal of a retained in-memory entry (a dream-queue or
+/// auto-evolution entry). It is set only from the chat turn that produced
+/// the entry ([`DispatchContext::entry_label`]) and is never decoded from
+/// text. A dream unit of the entry starts from it
+/// (`DispatchIssuer::begin_entry_unit`).
+///
+/// ```compile_fail
+/// use nexus_kernel::hm::{EntryLabel, OriginLabel, Principal};
+/// let _ = EntryLabel { principal: Principal::OwnerDirect, label: OriginLabel::UnrestrictedOrigin };
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::EntryLabel;
+/// let _: EntryLabel = Default::default();
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::EntryLabel;
+/// let _ = "x".parse::<EntryLabel>();
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::EntryLabel;
+/// let _ = EntryLabel::from("x");
+/// ```
+/// ```compile_fail
+/// use nexus_kernel::hm::EntryLabel;
+/// let _ = serde_json::from_str::<EntryLabel>("{}");
+/// ```
+#[derive(Debug, PartialEq, Eq)]
+pub struct EntryLabel {
+    pub(in crate::hm) principal: Principal,
+    pub(in crate::hm) label: OriginLabel,
+}
+
+impl EntryLabel {
+    pub fn principal(&self) -> Principal {
+        self.principal
+    }
+
+    pub fn label(&self) -> OriginLabel {
+        self.label
+    }
 }
 
 // ── RecalledRecord and PromptEnvelope (§11.2) ───────────────────────────────
@@ -387,9 +530,16 @@ impl DispatchContext {
 /// item. Its content is private; `PromptBuilder::include` is the only way to
 /// place it in a prompt.
 ///
+/// Every field is listed, so only their privacy stops the literal:
 /// ```compile_fail
-/// use nexus_kernel::hm::{EvaluatedLabel, RecalledRecord};
-/// let _ = RecalledRecord { label: EvaluatedLabel::Unbound, content: String::new() };
+/// use nexus_kernel::hm::RecalledRecord;
+/// let _ = RecalledRecord {
+///     reference: todo!(),
+///     agent_id: todo!(),
+///     label: todo!(),
+///     source_kind: todo!(),
+///     content: todo!(),
+/// };
 /// ```
 /// ```compile_fail
 /// use nexus_kernel::hm::RecalledRecord;
@@ -521,9 +671,17 @@ impl<'c> PromptBuilder<'c> {
 /// Under AD-4 it has no grant dependencies. Its bytes are released only by
 /// an admission (§12.4).
 ///
+/// Every field is listed, so only their privacy stops the literal:
 /// ```compile_fail
-/// use nexus_kernel::hm::{OriginLabel, PromptEnvelope};
-/// let _ = PromptEnvelope { raw_label: OriginLabel::UnrestrictedOrigin, text: String::new() };
+/// use nexus_kernel::hm::PromptEnvelope;
+/// let _ = PromptEnvelope {
+///     ctx_nonce: todo!(),
+///     issuer_id: todo!(),
+///     inclusions: todo!(),
+///     carried: todo!(),
+///     raw_label: todo!(),
+///     text: todo!(),
+/// };
 /// ```
 /// ```compile_fail
 /// use nexus_kernel::hm::PromptEnvelope;

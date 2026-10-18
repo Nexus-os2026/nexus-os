@@ -168,15 +168,17 @@ pub(in crate::hm) fn evaluate_ref(tx: &HmTx<'_>, r: &RecordRef) -> StoreResult<O
         .effective())
 }
 
-/// The write label (§6.3) and the record parents with their labels.
+/// The write label (§6.3) and the record parents with their labels. A
+/// verbatim item of the working set contributes the label evaluated when it
+/// entered ⊔ the label evaluated now (mission R1 (i)).
 fn write_label(
     tx: &HmTx<'_>,
     ctx: &DispatchContext,
     parents: &[Parent<'_>],
 ) -> StoreResult<(OriginLabel, Vec<(RecordRef, OriginLabel)>)> {
     let mut label = ctx.taint;
-    for (r, _) in &ctx.working_set.verbatim {
-        label = label.join(evaluate_ref(tx, r)?);
+    for (r, at_entry) in &ctx.working_set.verbatim {
+        label = label.join(at_entry.effective()).join(evaluate_ref(tx, r)?);
     }
     let mut edges: Vec<(RecordRef, OriginLabel)> = Vec::new();
     for p in parents {

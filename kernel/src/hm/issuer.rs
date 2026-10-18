@@ -15,10 +15,10 @@ use nexus_persistence::NexusDatabase;
 use uuid::Uuid;
 
 use super::context::{
-    unit_start_state, unit_taint_step, DispatchContext, PolicySnapshot, Principal, Restrictions,
-    Unit, WorkingSet,
+    unit_start_state, unit_taint_step, DispatchClass, DispatchContext, EntryLabel, PolicySnapshot,
+    Principal, Restrictions, RouteClass, Unit, WorkingSet,
 };
-use super::{events, migrated};
+use super::{events, migrated, OriginLabel};
 
 /// `restrictions.max_records` of every context (§11.1).
 pub const MAX_RECORDS: usize = 64;
@@ -79,7 +79,8 @@ pub enum Unresolved {
     ConfigUnreadable,
     /// §4.2 step 4: a malformed policy row.
     MalformedPolicy,
-    /// Only `Agent` principals are issued contexts by this module.
+    /// The principal cannot have this unit: an agent-only unit of a
+    /// non-agent principal, or a `System` entry.
     UnsupportedPrincipal,
     /// A unit that can only be derived (`PostGoal`), or a derivation from
     /// the wrong kind of unit.
@@ -400,17 +401,39 @@ impl DispatchIssuer {
         }
     }
 
-    /// O1 (§4.6): mints the context of a new unit. The starting taint and
-    /// route class follow the policy as committed (§6.3, §7.5).
+    /// O1 (§4.6): mints the context of a new unit.
+    ///
+    /// - `Agent`: the agent's §4.2 policy as committed decides the starting
+    ///   taint and route class (§6.3, §7.5). A chat turn carries no
+    ///   retained data (class AC).
+    /// - `OwnerDirect` (a chat turn or a request) and `System` (a request):
+    ///   no §4.2, no retained data, starting `UNRESTRICTED_ORIGIN` and
+    ///   `non_local` (classes HD, HB, SY, XS, mission R2). An agent-only
+    ///   unit (a goal, a HiveMind sub-task, a team task) is refused.
+    ///
+    /// A post-goal unit is only derived; a dream unit starts from its entry
+    /// (`begin_entry_unit`).
     pub fn begin_unit(
         &self,
         principal: Principal,
         unit: Unit,
     ) -> Result<DispatchContext, Unresolved> {
+        if matches!(unit, Unit::PostGoal { .. } | Unit::Dream { .. }) {
+            return Err(Unresolved::UnsupportedUnit);
+        }
         let Principal::Agent(agent_id) = principal else {
-            return Err(Unresolved::UnsupportedPrincipal);
+            let allowed = match principal {
+                Principal::OwnerDirect => {
+                    matches!(unit, Unit::ChatTurn { .. } | Unit::Request { .. })
+                }
+                _ => matches!(unit, Unit::Request { .. }),
+            };
+            if !allowed {
+                return Err(Unresolved::UnsupportedPrincipal);
+            }
+            return self.plain_context(principal, unit);
         };
-        if matches!(unit, Unit::PostGoal { .. }) {
+        if matches!(unit, Unit::Request { .. }) {
             return Err(Unresolved::UnsupportedUnit);
         }
         let policy = self.resolve_agent_route_policy(agent_id)?;
@@ -433,7 +456,99 @@ impl DispatchIssuer {
                 retained_data_permitted: !matches!(unit, Unit::ChatTurn { .. }),
                 max_records: MAX_RECORDS,
             },
+            class: DispatchClass::Agent,
+            local_transport_used: false,
         })
+    }
+
+    /// A non-agent context: no policy, no retained data, starting
+    /// unrestricted and non-local.
+    fn plain_context(
+        &self,
+        principal: Principal,
+        unit: Unit,
+    ) -> Result<DispatchContext, Unresolved> {
+        Ok(DispatchContext {
+            nonce: random_id()?,
+            issuer_id: self.id,
+            principal,
+            unit,
+            policy: PolicySnapshot {
+                agent_id: Uuid::nil(),
+                local_only: false,
+                policy_generation: 0,
+                revocation_seq: 0,
+            },
+            floor_local_only: false,
+            route_class: RouteClass::NonLocal,
+            taint: OriginLabel::UnrestrictedOrigin,
+            working_set: WorkingSet {
+                verbatim: Vec::new(),
+                derived: Vec::new(),
+            },
+            restrictions: Restrictions {
+                local_only: false,
+                retained_data_permitted: false,
+                max_records: MAX_RECORDS,
+            },
+            class: DispatchClass::Plain,
+            local_transport_used: false,
+        })
+    }
+
+    /// O1 for a dream unit of a retained entry (§11.3, §12.1).
+    ///
+    /// - An agent-owned entry: a dream unit of that agent (class AR): its
+    ///   §4.2 policy as committed, and the entry's label joined into the
+    ///   starting taint.
+    /// - An `OwnerDirect` entry (class HR): no agent policy; the taint is
+    ///   the entry's label, and the unit is non-local only when that label
+    ///   is `UNRESTRICTED_ORIGIN`. It carries no recalled record.
+    pub fn begin_entry_unit(
+        &self,
+        entry: &EntryLabel,
+        unit: Unit,
+    ) -> Result<DispatchContext, Unresolved> {
+        if !matches!(unit, Unit::Dream { .. }) {
+            return Err(Unresolved::UnsupportedUnit);
+        }
+        match entry.principal {
+            Principal::Agent(agent_id) => {
+                let policy = self.resolve_agent_route_policy(agent_id)?;
+                let (start, route) = unit_start_state(policy.local_only, false);
+                let (taint, route_class) = unit_taint_step(start, route, entry.label);
+                Ok(DispatchContext {
+                    nonce: random_id()?,
+                    issuer_id: self.id,
+                    principal: entry.principal,
+                    unit,
+                    policy,
+                    floor_local_only: false,
+                    route_class,
+                    taint,
+                    working_set: WorkingSet {
+                        verbatim: Vec::new(),
+                        derived: Vec::new(),
+                    },
+                    restrictions: Restrictions {
+                        local_only: policy.local_only,
+                        retained_data_permitted: true,
+                        max_records: MAX_RECORDS,
+                    },
+                    class: DispatchClass::Agent,
+                    local_transport_used: false,
+                })
+            }
+            Principal::OwnerDirect => {
+                let mut ctx = self.plain_context(Principal::OwnerDirect, unit)?;
+                let (taint, route_class) = unit_taint_step(ctx.taint, ctx.route_class, entry.label);
+                ctx.taint = taint;
+                ctx.route_class = route_class;
+                ctx.class = DispatchClass::OwnerRetained;
+                Ok(ctx)
+            }
+            Principal::System(_) => Err(Unresolved::UnsupportedPrincipal),
+        }
     }
 }
 
@@ -467,6 +582,8 @@ impl DispatchContext {
             taint: self.taint,
             working_set: self.working_set.duplicate(),
             restrictions: self.restrictions,
+            class: self.class,
+            local_transport_used: self.local_transport_used,
         })
     }
 
@@ -541,6 +658,8 @@ impl DispatchContext {
                 retained_data_permitted: self.restrictions.retained_data_permitted,
                 max_records: self.restrictions.max_records,
             },
+            class: DispatchClass::Agent,
+            local_transport_used: false,
         })
     }
 

@@ -32,8 +32,8 @@ pub use issuer::{
 };
 
 pub use dispatch::{
-    Admission, BuildDispatch, Refused, ReplyRefused, RouteAttestation, TransportEvidence,
-    TransportFailure,
+    Admission, BuildDispatch, DispatchError, Refused, ReplyRefused, RouteAttestation,
+    TransportEvidence, TransportFailure,
 };
 pub use events::{backfill_authority_events, BackfillReport, BACKFILL_BOUND};
 pub use recall::{RecallQuery, RecallRefused};
@@ -42,9 +42,9 @@ pub use write::{
 };
 
 pub use context::{
-    unit_start_state, unit_taint_step, DerivedItem, DispatchContext, PolicySnapshot, Principal,
-    PromptBuilder, PromptEnvelope, RecalledRecord, RecordRef, Restrictions, RouteClass, Unit,
-    WorkingSet,
+    unit_start_state, unit_taint_step, DerivedItem, DispatchContext, EntryLabel, PolicySnapshot,
+    Principal, PromptBuilder, PromptEnvelope, RecalledRecord, RecordRef, Restrictions, RouteClass,
+    Unit, WorkingSet,
 };
 
 use std::collections::BTreeMap;

@@ -19,7 +19,8 @@ use nexus_persistence::Result as StoreResult;
 use uuid::Uuid;
 
 use super::context::{
-    unit_taint_step, DerivedItem, DispatchContext, Principal, PromptEnvelope, RouteClass,
+    unit_taint_step, DerivedItem, DispatchClass, DispatchContext, Principal, PromptEnvelope,
+    RouteClass,
 };
 use super::events;
 use super::issuer::{decode_policy, random_id, DispatchIssuer, ProbePoint, Unresolved};
@@ -184,22 +185,25 @@ enum Attempt {
     Refused(Refused),
 }
 
-/// The envelope's inclusions and carried items re-evaluated in the
-/// transaction: `(raw label, eligible for a non-local route)`.
+/// The envelope's inclusions and carried items evaluated in the
+/// transaction: `(raw label, eligible for a non-local route)`. The label of
+/// an inclusion is the label evaluated at recall ⊔ the label evaluated now
+/// (mission R1 (i)); the raw label is the envelope's own raw label ⊔ this
+/// evaluation, so it is never lower than the envelope says.
 fn evaluate_envelope(
     tx: &HmTx<'_>,
     ctx: &DispatchContext,
     env: &PromptEnvelope,
 ) -> StoreResult<(OriginLabel, bool)> {
     let unrestricted = OriginLabel::UnrestrictedOrigin;
-    let mut raw = ctx.taint;
+    let mut raw = env.raw_label.join(ctx.taint);
     let mut eligible = ctx.taint == unrestricted;
     for l in &env.carried {
         raw = raw.join(*l);
         eligible &= *l == unrestricted;
     }
-    for (r, _) in &env.inclusions {
-        let l = evaluate_ref(tx, r)?;
+    for (r, at_recall) in &env.inclusions {
+        let l = at_recall.effective().join(evaluate_ref(tx, r)?);
         raw = raw.join(l);
         eligible &= l == unrestricted;
     }
@@ -229,6 +233,39 @@ impl fmt::Display for ReplyRefused {
 
 impl std::error::Error for ReplyRefused {}
 
+/// Why a dispatch produced no used reply.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DispatchError {
+    /// Refused before transmission: nothing was sent (§12.4, §16).
+    Refused(Refused),
+    /// Sent, but the reply is not used (§12.6); the disclosure stands.
+    Reply(ReplyRefused),
+    /// The transport failed after admission, with its message; recorded as
+    /// possibly disclosed.
+    Transport(String),
+}
+
+impl fmt::Display for DispatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DispatchError::Refused(r) => write!(f, "{r}"),
+            DispatchError::Reply(r) => write!(f, "{r}"),
+            DispatchError::Transport(e) => write!(f, "transport failed: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for DispatchError {}
+
+/// What a non-agent dispatch decided before transmission.
+struct NonAgentAdmitted<T> {
+    raw_label: OriginLabel,
+    route_class: RouteClass,
+    admission_id: Option<String>,
+    text: String,
+    transport: T,
+}
+
 /// The dispatch builder: from the (possibly rebuilt) context, a fresh
 /// envelope and the attestation of the transport selected for it, or
 /// `None` when none can be built.
@@ -239,12 +276,19 @@ impl DispatchIssuer {
     /// §12.4 with the §12.7 rebuild bound. `build` is called once, and once
     /// more after a rebuild when the generation moved. A refusal is audited
     /// (`memory.dispatch_refused`, observational).
+    ///
+    /// Called only by [`DispatchIssuer::dispatch`] and the hm tests (guard
+    /// A-S3).
+    #[doc(hidden)]
     pub fn admit(
         &self,
         ctx: &mut DispatchContext,
         build: &mut BuildDispatch<'_>,
     ) -> Result<Admission, Refused> {
-        let result = self.admit_bounded(ctx, build);
+        // The unit's route class when the refusal was decided, before the
+        // envelope was absorbed.
+        let mut decision_route = ctx.route_class;
+        let result = self.admit_bounded(ctx, build, &mut decision_route);
         if let Err(r) = &result {
             events::observational(
                 self.db(),
@@ -256,17 +300,257 @@ impl DispatchIssuer {
                 .as_deref(),
                 serde_json::json!({
                     "reason": r.reason(),
-                    "route_class": ctx.route_class.class_name(),
+                    "route_class": decision_route.class_name(),
                 }),
             );
         }
         result
     }
 
+    /// The single dispatch entry (mission R2): admission, transmission and
+    /// reply acceptance of one model request, by the context's class
+    /// (§12.1):
+    /// - an agent's context (AR, AC): §12.4 and §12.6 in full;
+    /// - an Owner's retained entry (HR): §12.4 steps 2, 4 and 5 with no
+    ///   agent: an admission row whose `agent_id` is NULL;
+    /// - a plain non-agent request (HD, HB, SY, XS): no admission row; any
+    ///   inclusion is refused; on a non-local route the taint and every
+    ///   carried item must be `UNRESTRICTED_ORIGIN`.
+    ///
+    /// `build` returns, for the (possibly rebuilt) context, the envelope,
+    /// the handle of the transport chosen for it and that transport's
+    /// attestation; it is called once, and once more after a rebuild.
+    /// `send` receives the handle and the admitted prompt bytes, with no
+    /// transaction or lock held. The reply leaves only as a `DerivedItem`.
+    #[allow(clippy::type_complexity)]
+    pub fn dispatch<T>(
+        &self,
+        ctx: &mut DispatchContext,
+        build: &mut dyn FnMut(
+            &mut DispatchContext,
+        ) -> Option<(PromptEnvelope, T, RouteAttestation)>,
+        send: &mut dyn FnMut(T, &str) -> Result<String, String>,
+    ) -> Result<DerivedItem, DispatchError> {
+        if !self.issued(ctx) {
+            return Err(DispatchError::Refused(Refused::WrongIssuer));
+        }
+        if ctx.class != DispatchClass::Agent {
+            return self.dispatch_non_agent(ctx, build, send);
+        }
+        let mut handle: Option<T> = None;
+        let admission = {
+            let mut admit_build = |c: &mut DispatchContext| {
+                let (env, transport, attestation) = build(c)?;
+                handle = Some(transport);
+                Some((env, attestation))
+            };
+            self.admit(ctx, &mut admit_build)
+                .map_err(DispatchError::Refused)?
+        };
+        let Some(transport) = handle else {
+            return Err(DispatchError::Refused(Refused::NoTransport));
+        };
+        if admission.route_class == RouteClass::Local {
+            ctx.local_transport_used = true;
+        }
+        // Transmission: the admission transaction has committed; no lock or
+        // transaction of this module is held.
+        let reply = send(transport, &admission.text);
+        match reply {
+            Ok(text) => self
+                .accept_reply(ctx, admission, Ok(text))
+                .map_err(DispatchError::Reply),
+            Err(e) => {
+                let _ = self.accept_reply(ctx, admission, Err(TransportFailure));
+                Err(DispatchError::Transport(e))
+            }
+        }
+    }
+
+    /// HR and plain dispatch (mission R2).
+    #[allow(clippy::type_complexity)]
+    fn dispatch_non_agent<T>(
+        &self,
+        ctx: &mut DispatchContext,
+        build: &mut dyn FnMut(
+            &mut DispatchContext,
+        ) -> Option<(PromptEnvelope, T, RouteAttestation)>,
+        send: &mut dyn FnMut(T, &str) -> Result<String, String>,
+    ) -> Result<DerivedItem, DispatchError> {
+        let admitted = match self.admit_non_agent(ctx, build) {
+            Ok(a) => a,
+            Err(r) => {
+                events::observational(
+                    self.db(),
+                    "memory.dispatch_refused",
+                    None,
+                    serde_json::json!({
+                        "reason": r.reason(),
+                        "route_class": ctx.route_class.class_name(),
+                    }),
+                );
+                return Err(DispatchError::Refused(r));
+            }
+        };
+        if admitted.route_class == RouteClass::Local {
+            ctx.local_transport_used = true;
+        }
+        let reply = send(admitted.transport, &admitted.text);
+        let outcome = |s: &Self, outcome: &str, kind: Option<&str>| {
+            if let Some(id) = &admitted.admission_id {
+                s.record_owner_outcome(id, admitted.route_class, outcome, kind);
+            }
+        };
+        match reply {
+            Ok(text) => {
+                outcome(self, "reply_used", None);
+                let (taint, route) =
+                    unit_taint_step(ctx.taint, ctx.route_class, admitted.raw_label);
+                ctx.taint = taint;
+                ctx.route_class = route;
+                if !ctx.working_set.derived.contains(&admitted.raw_label) {
+                    ctx.working_set.derived.push(admitted.raw_label);
+                }
+                Ok(DerivedItem {
+                    label: admitted.raw_label,
+                    text,
+                })
+            }
+            Err(e) => {
+                outcome(self, "transport_failed", Some("memory.transport_failed"));
+                Err(DispatchError::Transport(e))
+            }
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn admit_non_agent<T>(
+        &self,
+        ctx: &mut DispatchContext,
+        build: &mut dyn FnMut(
+            &mut DispatchContext,
+        ) -> Option<(PromptEnvelope, T, RouteAttestation)>,
+    ) -> Result<NonAgentAdmitted<T>, Refused> {
+        let (env, transport, attestation) = build(ctx).ok_or(Refused::NoTransport)?;
+        if !ctx.owns(&env) {
+            return Err(Refused::EnvelopeMismatch);
+        }
+        let (inclusions, carried) = (env.inclusions.clone(), env.carried.clone());
+        let decided = self.decide_non_agent(ctx, &env, attestation);
+        ctx.absorb(&inclusions, &carried);
+        let (raw_label, admission_id) = decided?;
+        Ok(NonAgentAdmitted {
+            raw_label,
+            route_class: attestation.class,
+            admission_id,
+            text: env.text,
+            transport,
+        })
+    }
+
+    /// The non-agent decision: no inclusion; a non-local transport needs a
+    /// non-local unit with unrestricted taint and carried items (§2.13 rules
+    /// 1, 2). An HR admission is then recorded with no agent (§12.4 step 5).
+    fn decide_non_agent(
+        &self,
+        ctx: &DispatchContext,
+        env: &PromptEnvelope,
+        attestation: RouteAttestation,
+    ) -> Result<(OriginLabel, Option<String>), Refused> {
+        if !env.inclusions.is_empty() {
+            return Err(Refused::RetainedDataNotPermitted);
+        }
+        let unrestricted = OriginLabel::UnrestrictedOrigin;
+        let non_local = attestation.class == RouteClass::NonLocal;
+        // Step 2: the attested class fits the unit.
+        if non_local && ctx.route_class != RouteClass::NonLocal {
+            return Err(Refused::RouteMismatch);
+        }
+        // Step 4: eligibility of a non-local dispatch.
+        let raw_label = env
+            .carried
+            .iter()
+            .fold(env.raw_label.join(ctx.taint), |l, c| l.join(*c));
+        let eligible = ctx.taint == unrestricted && env.carried.iter().all(|c| *c == unrestricted);
+        if non_local && !eligible {
+            return Err(Refused::Ineligible);
+        }
+        if ctx.class != DispatchClass::OwnerRetained {
+            return Ok((raw_label, None));
+        }
+        // Step 5: the HR admission row and its event, agent NULL.
+        let admission_id = hex::encode(random_id().map_err(Refused::Unresolved)?);
+        let decided = self.db().hm().immediate(|tx| {
+            if !is_migrated(tx)? {
+                return Ok(Err(Refused::NotMigrated));
+            }
+            tx.insert_admission(&AdmissionRow {
+                admission_id: admission_id.clone(),
+                agent_id: None,
+                unit_kind: ctx.unit.kind_name().to_string(),
+                route_class: attestation.class.class_name().to_string(),
+                policy_generation: 0,
+                revocation_seq: 0,
+                record_count: 0,
+                grant_dep_count: 0,
+                raw_label: raw_label.class_name().to_string(),
+                outcome: "admitted".to_string(),
+            })?;
+            self.hit(ProbePoint::AdmissionRowWritten);
+            tx.insert_event(
+                &format!("admission:{admission_id}"),
+                "memory.dispatch_admitted",
+                None,
+                &serde_json::json!({
+                    "route_class": attestation.class.class_name(),
+                    "record_count": 0,
+                    "grant_dep_count": 0,
+                    "raw_label": raw_label.class_name(),
+                    "policy_generation": 0,
+                    "revocation_seq": 0,
+                })
+                .to_string(),
+            )?;
+            Ok(Ok(()))
+        });
+        match decided {
+            Ok(Ok(())) => Ok((raw_label, Some(admission_id))),
+            Ok(Err(r)) => Err(r),
+            Err(_) => Err(Refused::AdmissionNotRecorded),
+        }
+    }
+
+    /// The outcome of an HR admission, after the decision. Best effort.
+    fn record_owner_outcome(
+        &self,
+        admission_id: &str,
+        route_class: RouteClass,
+        outcome: &str,
+        event_kind: Option<&str>,
+    ) {
+        let _ = self.db().hm().immediate(|tx| {
+            tx.update_admission_outcome(admission_id, outcome)?;
+            if let Some(kind) = event_kind {
+                tx.insert_event(
+                    &format!("admission:{admission_id}:outcome"),
+                    kind,
+                    None,
+                    &serde_json::json!({
+                        "outcome": outcome,
+                        "route_class": route_class.class_name(),
+                    })
+                    .to_string(),
+                )?;
+            }
+            Ok(())
+        });
+    }
+
     fn admit_bounded(
         &self,
         ctx: &mut DispatchContext,
         build: &mut BuildDispatch<'_>,
+        decision_route: &mut RouteClass,
     ) -> Result<Admission, Refused> {
         if !self.issued(ctx) {
             return Err(Refused::WrongIssuer);
@@ -275,10 +559,24 @@ impl DispatchIssuer {
             return Err(Refused::NotAnAgent);
         };
         for rebuilt in [false, true] {
-            let (env, attestation) = build(ctx).ok_or(Refused::NoTransport)?;
-            match self.admit_once(ctx, agent_id, env, attestation) {
+            let built = build(ctx);
+            *decision_route = ctx.route_class;
+            let (env, attestation) = built.ok_or(Refused::NoTransport)?;
+            // Mission R1 (ii): an envelope this context owns enters its
+            // working set whatever the outcome, after the decision.
+            let owned = ctx
+                .owns(&env)
+                .then(|| (env.inclusions.clone(), env.carried.clone()));
+            let attempt = self.admit_once(ctx, agent_id, env, attestation);
+            if let Some((inclusions, carried)) = owned {
+                ctx.absorb(&inclusions, &carried);
+            }
+            match attempt {
                 Ok(admission) => return Ok(admission),
-                Err(Attempt::GenerationMoved) if !rebuilt => self.rebuild(ctx)?,
+                Err(Attempt::GenerationMoved) if !rebuilt => {
+                    *decision_route = ctx.route_class;
+                    self.rebuild(ctx)?
+                }
                 Err(Attempt::GenerationMoved) => return Err(Refused::GenerationUnstable),
                 Err(Attempt::Refused(r)) => return Err(r),
             }
@@ -405,6 +703,10 @@ impl DispatchIssuer {
     /// item labelled with the admission's `raw_label` and enters the
     /// working set. The outcome is written after the decision; a failure to
     /// write it changes nothing.
+    ///
+    /// Called only by [`DispatchIssuer::dispatch`] and the hm tests (guard
+    /// A-S3).
+    #[doc(hidden)]
     pub fn accept_reply(
         &self,
         ctx: &mut DispatchContext,
