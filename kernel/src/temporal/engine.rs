@@ -1,10 +1,9 @@
 //! Temporal Engine — fork reality, simulate parallel futures, commit the best one.
 
-use crate::consciousness::ConsciousnessState;
 use crate::manifest::AgentManifest;
 use crate::temporal::types::{
-    EvalStrategy, ForkStatus, TemporalConfig, TemporalDecision, TemporalError, TimelineFork,
-    TimelineStep,
+    DriveProjection, EvalStrategy, ForkStatus, TemporalConfig, TemporalDecision, TemporalError,
+    TimelineFork, TimelineStep,
 };
 use serde_json::Value;
 use std::time::Instant;
@@ -48,16 +47,17 @@ impl TemporalEngine {
     // Fork count calculation
     // -----------------------------------------------------------------------
 
-    /// Decide how many forks to create based on the agent's consciousness state.
+    /// Decide how many forks to create from the agent's drives (its
+    /// text-free projection, P3-HM-CONTRACT-02 §11.3).
     ///
     /// - High urgency → fewer forks (fast decision).
     /// - Low confidence → more forks (explore options).
     /// - Default → 3 forks.
-    pub fn calculate_fork_count(&self, consciousness: &ConsciousnessState) -> u32 {
+    pub fn calculate_fork_count(&self, drive: &DriveProjection) -> u32 {
         let base = self.config.max_parallel_forks;
-        if consciousness.urgency > 0.8 {
+        if drive.urgency > 0.8 {
             2_u32.min(base)
-        } else if consciousness.confidence < 0.3 {
+        } else if drive.confidence < 0.3 {
             base
         } else {
             3_u32.min(base)
@@ -78,7 +78,7 @@ impl TemporalEngine {
         &mut self,
         request: &str,
         agent: &AgentManifest,
-        consciousness: &ConsciousnessState,
+        drive: &DriveProjection,
         mut llm_query: F,
     ) -> Result<TemporalDecision, TemporalError>
     where
@@ -90,7 +90,7 @@ impl TemporalEngine {
         // any config).
         self.config.validate()?;
         let start = Instant::now();
-        let fork_count = self.calculate_fork_count(consciousness);
+        let fork_count = self.calculate_fork_count(drive);
 
         if fork_count == 0 {
             return Err(TemporalError::InvalidForkCount(0));
@@ -445,7 +445,7 @@ mod tests {
         let engine = TemporalEngine::default();
         let mut c = ConsciousnessState::new("a");
         c.urgency = 0.9;
-        assert_eq!(engine.calculate_fork_count(&c), 2);
+        assert_eq!(engine.calculate_fork_count(&DriveProjection::of(&c)), 2);
     }
 
     #[test]
@@ -454,7 +454,7 @@ mod tests {
         let mut c = ConsciousnessState::new("a");
         c.confidence = 0.2;
         c.urgency = 0.3;
-        assert_eq!(engine.calculate_fork_count(&c), 5);
+        assert_eq!(engine.calculate_fork_count(&DriveProjection::of(&c)), 5);
     }
 
     #[test]
@@ -462,7 +462,7 @@ mod tests {
         let engine = TemporalEngine::default();
         let c = ConsciousnessState::new("a");
         // default confidence=0.5, urgency=0.0
-        assert_eq!(engine.calculate_fork_count(&c), 3);
+        assert_eq!(engine.calculate_fork_count(&DriveProjection::of(&c)), 3);
     }
 
     #[test]
@@ -494,7 +494,12 @@ mod tests {
         };
 
         let decision = engine
-            .fork_and_evaluate("design schema", &agent, &cons, mock_llm)
+            .fork_and_evaluate(
+                "design schema",
+                &agent,
+                &DriveProjection::of(&cons),
+                mock_llm,
+            )
             .unwrap();
         assert_eq!(decision.forks.len(), 2);
         assert!(decision.selected_fork.is_some());
@@ -516,7 +521,8 @@ mod tests {
             Ok(("[]".into(), 100)) // 100 tokens > budget of 10
         };
 
-        let result = engine.fork_and_evaluate("task", &agent, &cons, mock_llm);
+        let result =
+            engine.fork_and_evaluate("task", &agent, &DriveProjection::of(&cons), mock_llm);
         assert!(matches!(result, Err(TemporalError::BudgetExhausted { .. })));
     }
 
@@ -592,8 +598,12 @@ mod tests {
             updated.update_config(config.clone());
             for engine in [&mut engine, &mut updated] {
                 let mut calls = 0;
-                let result =
-                    engine.fork_and_evaluate("task", &agent, &cons, counting_llm(&mut calls));
+                let result = engine.fork_and_evaluate(
+                    "task",
+                    &agent,
+                    &DriveProjection::of(&cons),
+                    counting_llm(&mut calls),
+                );
                 assert_eq!(
                     result.unwrap_err().to_string(),
                     expected.to_string(),
@@ -618,7 +628,12 @@ mod tests {
         });
         let mut calls = 0;
         let decision = engine
-            .fork_and_evaluate("task", &agent, &cons, counting_llm(&mut calls))
+            .fork_and_evaluate(
+                "task",
+                &agent,
+                &DriveProjection::of(&cons),
+                counting_llm(&mut calls),
+            )
             .unwrap();
         assert!(calls > 0);
         assert_eq!(decision.forks.len(), 1);
@@ -657,7 +672,7 @@ mod tests {
         };
 
         let decision = engine
-            .fork_and_evaluate("task", &agent, &cons, mock_llm)
+            .fork_and_evaluate("task", &agent, &DriveProjection::of(&cons), mock_llm)
             .unwrap();
         assert!(decision.selected_fork.is_none()); // UserChoice: not auto-selected
 

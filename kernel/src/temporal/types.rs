@@ -5,6 +5,38 @@ use std::fmt;
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
+// Drive projection
+// ---------------------------------------------------------------------------
+
+/// What the temporal engine may know of an agent's state (P3-HM-CONTRACT-02
+/// §11.3, §12.1 class HB): its drives, and no text. `ConsciousnessState`
+/// holds text (its current task is a chat message); only this projection
+/// reaches the engine.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DriveProjection {
+    pub urgency: f64,
+    pub confidence: f64,
+}
+
+impl DriveProjection {
+    /// The projection of `state`: its urgency and confidence only.
+    pub fn of(state: &crate::consciousness::ConsciousnessState) -> Self {
+        Self {
+            urgency: state.urgency,
+            confidence: state.confidence,
+        }
+    }
+}
+
+impl Default for DriveProjection {
+    /// The projection of a fresh state: the request of a caller that names
+    /// no registered agent.
+    fn default() -> Self {
+        Self::of(&crate::consciousness::ConsciousnessState::new(""))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Error
 // ---------------------------------------------------------------------------
 

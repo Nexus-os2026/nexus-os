@@ -139,6 +139,21 @@ fn dispatch(
     (result, calls.into_inner())
 }
 
+/// The route policy of `agent_id` as the issuer resolves it (§4.2; ported
+/// from the removed `resolve_agent_llm_policy`, mission R12): an id that is
+/// not a registered agent, or a policy that cannot be established, is
+/// `Unresolved`.
+fn issuer_policy(state: &AppState, agent_id: &str) -> AgentLlmPolicy {
+    let Ok(agent) = Uuid::parse_str(agent_id) else {
+        return AgentLlmPolicy::Unresolved;
+    };
+    match state.hm_issuer().unwrap().resolve_agent_route_policy(agent) {
+        Ok(policy) if policy.local_only() => AgentLlmPolicy::LocalOnly,
+        Ok(_) => AgentLlmPolicy::Unrestricted,
+        Err(_) => AgentLlmPolicy::Unresolved,
+    }
+}
+
 fn loopback() -> Result<String, String> {
     Ok(LOOPBACK.to_string())
 }
@@ -470,11 +485,11 @@ fn p3_d2_unresolved_policy_dispatches_nothing() {
 
     // An id that is not a registered agent has no policy to establish.
     assert_eq!(
-        crate::resolve_agent_llm_policy(&state, "not-a-uuid"),
+        issuer_policy(&state, "not-a-uuid"),
         AgentLlmPolicy::Unresolved
     );
     assert_eq!(
-        crate::resolve_agent_llm_policy(&state, &Uuid::new_v4().to_string()),
+        issuer_policy(&state, &Uuid::new_v4().to_string()),
         AgentLlmPolicy::Unresolved
     );
 }
@@ -2190,7 +2205,7 @@ fn configured_route_session() -> Result<String, AgentError> {
     };
     let open_tasks = state.db.load_tasks_by_agent(&open, 100).unwrap().len();
     // Whether the owner's change took effect.
-    let other_policy = crate::resolve_agent_llm_policy(&state, &other);
+    let other_policy = issuer_policy(&state, &other);
     Ok(format!(
         "status={status} open_tasks={open_tasks} other_policy={other_policy:?}"
     ))

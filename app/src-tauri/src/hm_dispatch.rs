@@ -23,17 +23,23 @@
 //!   (its goal override, model mapping or assignment), as the cognitive
 //!   cycle always did; the work around agents (a team, a HiveMind session's
 //!   decomposition and merge, evolution, dreams) asks for the default.
+//! - Chat turns (AC, HD), the temporal fork (HB), the fixed connection test
+//!   (SY) and the excluded subsystems (XS: RAG, builder) dispatch their
+//!   human-supplied or constant text through [`dispatch_text`] under an
+//!   explicit context; a subsystem that calls a provider itself gets an
+//!   [`IssuedProvider`] (A2.4 I1).
 
 use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 use nexus_connectors_llm::attest::{attest_route, verify_local_ollama, VerifiedLocalOllama};
-use nexus_connectors_llm::providers::{FlashProvider, LlmProvider};
+use nexus_connectors_llm::providers::{EmbeddingResponse, FlashProvider, LlmProvider, LlmResponse};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hm::{
-    DerivedItem, DispatchContext, DispatchError, Principal, PromptSource, RouteAttestation,
-    RouteClass,
+    DerivedItem, DispatchContext, DispatchError, DispatchIssuer, Principal, PromptBuilder,
+    PromptSource, RouteAttestation, RouteClass, Unit,
 };
+use uuid::Uuid;
 
 use crate::commands::cognitive::{
     local_only_target, planner_provider, strip_think_tags, HivemindAdmission, LocalOllamaRuntime,
@@ -481,5 +487,273 @@ impl nexus_kernel::dreams::engine::DreamLlm for GatewayPlannerLlm {
             self.options(max_tokens, ReplyText::Raw),
         )
         .map_err(|e| e.to_string())
+    }
+}
+
+// ── Non-agent units and chat turns (§12.1 AC, HD, HB, SY, XS) ───────────────
+
+/// The issuer of `state`; without one nothing is dispatched (R6).
+fn issuer_of(state: &AppState) -> Result<&Arc<DispatchIssuer>, String> {
+    state
+        .hm_issuer()
+        .map_err(|e| format!("no dispatch issuer: {e}"))
+}
+
+/// A request unit of a non-agent principal: `OwnerDirect` (HD, HB with no
+/// registered agent) or `System(component)` (SY, XS). It carries no
+/// retained data and admits no inclusion.
+pub(crate) fn request_unit(
+    state: &AppState,
+    principal: Principal,
+) -> Result<DispatchContext, String> {
+    issuer_of(state)?
+        .begin_unit(
+            principal,
+            Unit::Request {
+                request_id: Uuid::new_v4(),
+            },
+        )
+        .map_err(|e| {
+            format!(
+                "{}: {e}",
+                crate::commands::cognitive::unresolved_policy_error()
+            )
+        })
+}
+
+/// The unit of a chat turn (§2.2 `ChatTurn`; §12.1 AC and HD).
+///
+/// - With no agent: an `OwnerDirect` turn (HD).
+/// - Routed to an agent by name (AC): the name selects the registered agents
+///   of that name ([`crate::agents_named`]); none refuses the turn. The
+///   principal is the least of their real ids (never the ephemeral chat
+///   id). The turn is local-only when any of them is (each by its own §4.2
+///   policy) or an assignment under the name is: never less restrictive
+///   than the D-2 R2 name rule. A policy that cannot be established, or a
+///   configuration that cannot be read, refuses the turn.
+pub(crate) fn chat_turn(
+    state: &AppState,
+    agent_name: Option<&str>,
+) -> Result<DispatchContext, String> {
+    let issuer = issuer_of(state)?;
+    let turn = Unit::ChatTurn {
+        turn_id: Uuid::new_v4(),
+    };
+    let refused = |e: String| {
+        format!(
+            "{}: {e}",
+            crate::commands::cognitive::unresolved_policy_error()
+        )
+    };
+    let Some(name) = agent_name else {
+        return issuer
+            .begin_unit(Principal::OwnerDirect, turn)
+            .map_err(|e| refused(e.to_string()));
+    };
+    let ids = crate::agents_named(state, name);
+    let Some(principal) = ids.first().copied() else {
+        return Err(refused(format!("'{name}' names no registered agent")));
+    };
+    let mut ctx = issuer
+        .begin_unit(Principal::Agent(principal), turn)
+        .map_err(|e| refused(e.to_string()))?;
+    let mut local_only = false;
+    for id in &ids[1..] {
+        local_only |= issuer
+            .resolve_agent_route_policy(*id)
+            .map_err(|e| refused(e.to_string()))?
+            .local_only();
+    }
+    let config = nexus_kernel::config::load_config().map_err(|e| refused(e.to_string()))?;
+    let keys = [name.to_string(), crate::normalize_agent_config_key(name)];
+    local_only |= crate::agent_llm_policy_in(&config, &keys) == AgentLlmPolicy::LocalOnly;
+    if local_only {
+        ctx.tighten_local_only();
+    }
+    Ok(ctx)
+}
+
+/// The model of a chat turn (AC, HD) or of a human request (HB): the model
+/// the human chose (`model_id`), or the configured default. A local-only
+/// unit gets only the verified loopback runtime, its L1 proof made here, for
+/// this dispatch (A1.6); any other provider is attested non-local.
+pub(crate) fn human_provider(
+    ctx: &DispatchContext,
+    model_id: Option<&str>,
+) -> Result<(Box<dyn LlmProvider>, String, RouteAttestation), String> {
+    let ollama_base = crate::commands::chat_llm::authorized_ollama_base_url();
+    if unit_is_local(ctx) {
+        let runtime = ProvingRuntime::default();
+        local_only_target(model_id, ollama_base, &runtime)?;
+        let proof = runtime
+            .proof
+            .into_inner()
+            .ok_or_else(|| "local-only: the local runtime was not verified".to_string())?;
+        let attestation = attest_route(&proof);
+        let model = proof.model().to_string();
+        return Ok((Box::new(proof), model, attestation));
+    }
+    let config = nexus_kernel::config::load_config().map_err(|e| e.to_string())?;
+    let provider_config = crate::build_provider_config(&config);
+    let (provider, model) = match model_id {
+        Some(full_model) => crate::provider_from_prefixed_model(full_model, &provider_config)?,
+        None => {
+            let provider = crate::select_provider(&provider_config).map_err(|e| e.to_string())?;
+            let model = if config.llm.default_model.trim().is_empty() {
+                "mock-1".to_string()
+            } else {
+                config.llm.default_model.clone()
+            };
+            (provider, model)
+        }
+    };
+    let attestation = attest_route(&provider);
+    Ok((provider, model, attestation))
+}
+
+/// The transport selection of [`dispatch_text`]: the transport chosen for
+/// the (possibly rebuilt) context, with the `attest_route` attestation of
+/// the provider it chose.
+pub(crate) type SelectTransport<'a, T> =
+    dyn FnMut(&DispatchContext) -> Result<(T, RouteAttestation), String> + 'a;
+
+/// One dispatch, through the issuer, of a unit whose prompt is
+/// human-supplied or constant text (AC, HD, HB, SY, XS): no inclusion and
+/// no carried item. `select` chooses the transport for the (possibly
+/// rebuilt) context and returns it with the `attest_route` attestation of
+/// the provider it chose; `send` transmits the admitted prompt, with no lock
+/// or transaction held. The reply leaves only as an accepted derived item.
+pub(crate) fn dispatch_text<T>(
+    state: &AppState,
+    ctx: &mut DispatchContext,
+    text: &str,
+    select: &mut SelectTransport<'_, T>,
+    send: &mut dyn FnMut(T, &str) -> Result<String, String>,
+) -> Result<DerivedItem, String> {
+    let issuer = issuer_of(state)?;
+    let selection_error: RefCell<Option<String>> = RefCell::new(None);
+    let result = issuer.dispatch(
+        ctx,
+        &mut |c: &mut DispatchContext| match select(c) {
+            Ok((transport, attestation)) => {
+                let mut b = PromptBuilder::new(c);
+                b.text(text);
+                Some((b.build(), transport, attestation))
+            }
+            Err(reason) => {
+                *selection_error.borrow_mut() = Some(reason);
+                None
+            }
+        },
+        send,
+    );
+    match result {
+        Ok(reply) => Ok(reply),
+        Err(DispatchError::Refused(nexus_kernel::hm::Refused::NoTransport))
+            if selection_error.borrow().is_some() =>
+        {
+            Err(selection_error.into_inner().unwrap_or_default())
+        }
+        Err(DispatchError::Transport(e)) => Err(e),
+        Err(e) => Err(format!("local-only: {e} (P3-HM-CONTRACT-02 §12.4)")),
+    }
+}
+
+/// A provider handed to a subsystem that calls it itself (XS: RAG, builder;
+/// P3-HM-CONTRACT-02 §12.1, §12.8; A2.4 I1). Every query and embedding it
+/// makes is one dispatch, through the issuer, of a fresh
+/// `System(component)` request (Plain class, no inclusion), on the wrapped
+/// provider, attested by `attest_route` on it.
+pub(crate) struct IssuedProvider {
+    state: AppState,
+    component: &'static str,
+    inner: Box<dyn LlmProvider>,
+}
+
+impl IssuedProvider {
+    pub(crate) fn new(
+        state: &AppState,
+        component: &'static str,
+        inner: Box<dyn LlmProvider>,
+    ) -> Self {
+        Self {
+            state: state.clone(),
+            component,
+            inner,
+        }
+    }
+
+    /// One dispatch of `text` under a fresh request unit; `send` returns the
+    /// reply text and keeps whatever else the caller needs.
+    fn issued(
+        &self,
+        text: &str,
+        send: &mut dyn FnMut(&dyn LlmProvider, &str) -> Result<String, String>,
+    ) -> Result<String, AgentError> {
+        let fail = |e: String| AgentError::SupervisorError(format!("{}: {e}", self.component));
+        let mut ctx = request_unit(&self.state, Principal::System(self.component)).map_err(fail)?;
+        let inner = self.inner.as_ref();
+        dispatch_text(
+            &self.state,
+            &mut ctx,
+            text,
+            &mut |_| Ok(((), attest_route(&self.inner))),
+            &mut |(), admitted| send(inner, admitted),
+        )
+        .map(|reply| reply.text().to_string())
+        .map_err(fail)
+    }
+}
+
+impl LlmProvider for IssuedProvider {
+    fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        let response: RefCell<Option<LlmResponse>> = RefCell::new(None);
+        let text = self.issued(prompt, &mut |inner, admitted| {
+            let reply = inner
+                .query(admitted, max_tokens, model)
+                .map_err(|e| e.to_string())?;
+            let text = reply.output_text.clone();
+            *response.borrow_mut() = Some(reply);
+            Ok(text)
+        })?;
+        let mut response = response
+            .into_inner()
+            .ok_or_else(|| AgentError::SupervisorError("no reply".to_string()))?;
+        response.output_text = text;
+        Ok(response)
+    }
+
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    fn cost_per_token(&self) -> f64 {
+        self.inner.cost_per_token()
+    }
+
+    fn is_paid(&self) -> bool {
+        self.inner.is_paid()
+    }
+
+    fn estimate_input_tokens(&self, prompt: &str) -> u32 {
+        self.inner.estimate_input_tokens(prompt)
+    }
+
+    fn endpoint_url(&self) -> String {
+        self.inner.endpoint_url()
+    }
+
+    /// The texts are the admitted prompt (as a JSON array, sent as given);
+    /// the embeddings come back through the accepted reply.
+    fn embed(&self, texts: &[&str], model: &str) -> Result<EmbeddingResponse, AgentError> {
+        let prompt =
+            serde_json::to_string(texts).map_err(|e| AgentError::SupervisorError(e.to_string()))?;
+        let reply = self.issued(&prompt, &mut |inner, admitted| {
+            let texts: Vec<String> = serde_json::from_str(admitted).map_err(|e| e.to_string())?;
+            let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+            let response = inner.embed(&refs, model).map_err(|e| e.to_string())?;
+            serde_json::to_string(&response).map_err(|e| e.to_string())
+        })?;
+        serde_json::from_str(&reply).map_err(|e| AgentError::SupervisorError(e.to_string()))
     }
 }

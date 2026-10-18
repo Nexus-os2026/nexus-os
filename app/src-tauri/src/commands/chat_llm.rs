@@ -403,12 +403,12 @@ pub(crate) fn send_chat(
         (None, String::new())
     };
 
-    // P3 D-2: a chat routed to an agent follows that agent's routing policy.
-    let chat_policy = effective_agent_name
-        .as_deref()
-        .map_or(AgentLlmPolicy::Unrestricted, |name| {
-            resolve_named_agent_llm_policy(state, name)
-        });
+    // P3-HM-CONTRACT-02 §11.3, §12.1 (AC, HD; AMENDMENT 1 A1.8): the chat
+    // turn's unit. Routed to an agent by name, its principal is a real
+    // registered agent and its policy the D-2 R2 name rule's; with no agent,
+    // an `OwnerDirect` turn. Every model call of the turn dispatches through
+    // the issuer under it.
+    let mut turn = crate::hm_dispatch::chat_turn(state, effective_agent_name.as_deref())?;
 
     // ── Pipeline Step 3: ComplexProject → generate plan, set awaiting_approval ──
     if auto_route && complexity == ComplexityLevel::ComplexProject && agent_name.is_none() {
@@ -430,44 +430,9 @@ pub(crate) fn send_chat(
              '**Ready to build? Type YES to start, or tell me what you\\'d like to change.**'"
         );
 
-        let config = load_config().map_err(agent_error)?;
-        let provider_config = build_provider_config(&config);
-        let local = local_only_provider(
-            chat_policy,
-            model_id.as_deref(),
-            authorized_ollama_base_url(),
-            &OllamaLocalRuntime,
-        )?;
-        let (provider, model_name) = if let Some(local) = local {
-            local
-        } else if let Some(ref full_model) = model_id {
-            provider_from_prefixed_model(full_model, &provider_config)?
-        } else {
-            let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
-            let m = if config.llm.default_model.trim().is_empty() {
-                "mock-1".to_string()
-            } else {
-                config.llm.default_model.clone()
-            };
-            (provider, m)
-        };
-
-        let mut gateway = GovernedLlmGateway::new(provider);
-        gateway.set_skip_output_firewall(true);
-        let mut capabilities = HashSet::new();
-        capabilities.insert("llm.query".to_string());
-        let plan_agent_id = Uuid::new_v4();
-        let mut context = AgentRuntimeContext {
-            agent_id: plan_agent_id,
-            capabilities,
-            fuel_remaining: 50_000,
-        };
-
-        let response = gateway
-            .query(&mut context, &plan_prompt, 4096, &model_name)
-            .map_err(agent_error)?;
-
-        let plan_text = response.output_text.clone();
+        let (reply, response) =
+            chat_dispatch(state, &mut turn, model_id.as_deref(), &plan_prompt, 4096)?;
+        let plan_text = reply.text().to_string();
 
         // Set conversation state to awaiting approval
         {
@@ -479,57 +444,22 @@ pub(crate) fn send_chat(
             conv_state.awaiting_approval = true;
         }
 
-        let oracle = gateway.oracle_events().last();
         let header =
             "\u{1f680} **This looks like a project!** Let me put together a plan for you.\n\n---\n\n";
         return Ok(ChatResponse {
             text: format!("{header}{plan_text}"),
             model: response.model_name,
             token_count: response.token_count,
-            cost: oracle.map(|value| value.cost).unwrap_or(0.0),
-            latency_ms: oracle.map(|value| value.latency_ms).unwrap_or(0),
+            cost: response.cost,
+            latency_ms: response.latency_ms,
         });
     }
 
     // ── Pipeline Step 4: Normal chat flow (with agent system prompt if routed) ──
-    let config = load_config().map_err(agent_error)?;
-    let provider_config = build_provider_config(&config);
-
-    // Determine provider and model from prefixed string (e.g. "anthropic/claude-sonnet-4-20250514")
-    let local = local_only_provider(
-        chat_policy,
-        model_id.as_deref(),
-        authorized_ollama_base_url(),
-        &OllamaLocalRuntime,
-    )?;
-    let (provider, model_name) = if let Some(local) = local {
-        local
-    } else if let Some(ref full_model) = model_id {
-        provider_from_prefixed_model(full_model, &provider_config)?
-    } else {
-        let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
-        let m = if config.llm.default_model.trim().is_empty() {
-            "mock-1".to_string()
-        } else {
-            config.llm.default_model.clone()
-        };
-        (provider, m)
-    };
-
-    let mut gateway = GovernedLlmGateway::new(provider);
-    // User-facing chat: the human asked the question and is reading the
-    // response on their own screen — skip the output exfiltration filter.
-    gateway.set_skip_output_firewall(true);
-
-    let mut capabilities = HashSet::new();
-    capabilities.insert("llm.query".to_string());
+    // The ephemeral id of this chat's consciousness state and gateway
+    // accounting: never a principal or an entry owner (R5).
     let agent_id = Uuid::new_v4();
     let agent_id_str = agent_id.to_string();
-    let mut context = AgentRuntimeContext {
-        agent_id,
-        capabilities,
-        fuel_remaining: 50_000,
-    };
 
     // ── Consciousness: pre-flight modification ──
     let consciousness_mod = {
@@ -554,22 +484,22 @@ pub(crate) fn send_chat(
         parts.join("\n\n")
     };
 
-    let response = gateway
-        .query(
-            &mut context,
-            effective_prompt.as_str(),
-            max_tokens,
-            &model_name,
-        )
-        .map_err(|e| {
-            // ── Consciousness: record failure ──
-            let mut engine = state
-                .consciousness
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            engine.on_agent_task_failure(&agent_id_str, &e.to_string());
-            agent_error(e)
-        })?;
+    let (reply, response) = chat_dispatch(
+        state,
+        &mut turn,
+        model_id.as_deref(),
+        effective_prompt.as_str(),
+        max_tokens,
+    )
+    .inspect_err(|e| {
+        // ── Consciousness: record failure ──
+        let mut engine = state
+            .consciousness
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        engine.on_agent_task_failure(&agent_id_str, e);
+    })?;
+    let response_text = reply.text().to_string();
 
     // ── Consciousness: record success + tokens ──
     {
@@ -581,20 +511,18 @@ pub(crate) fn send_chat(
         engine.on_agent_tokens(&agent_id_str, response.token_count as u64);
     }
 
-    let oracle = gateway.oracle_events().last();
-
     let payload = json!({
         "event": "send_chat",
         "model": response.model_name,
         "provider": model_id.as_deref().and_then(|m| m.split_once('/')).map(|(p, _)| p).unwrap_or("auto"),
         "token_count": response.token_count,
-        "cost": oracle.map(|value| value.cost).unwrap_or(0.0),
-        "latency_ms": oracle.map(|value| value.latency_ms).unwrap_or(0),
+        "cost": response.cost,
+        "latency_ms": response.latency_ms,
         "consciousness": consciousness_mod.reason,
         "complexity": format!("{complexity:?}"),
         "routed_agent": effective_agent_name.as_deref().unwrap_or("none"),
     });
-    state.log_event(context.agent_id, EventType::LlmCall, payload);
+    state.log_event(agent_id, EventType::LlmCall, payload);
 
     // ── Dream Forge: auto-queue dream tasks from this interaction ──
     {
@@ -607,16 +535,18 @@ pub(crate) fn send_chat(
         };
         let interaction = nexus_kernel::dreams::auto_queue::ChatInteraction {
             user_message: message.clone(),
-            agent_response: response.output_text.clone(),
+            agent_response: response_text.clone(),
             was_error: false,
             error_message: None,
             topic_detected: None,
             token_count: response.token_count as u64,
         };
+        // P3-HM-CONTRACT-02 §6.5 `dream_queue`, §11.3: each entry is owned by
+        // the turn's real principal and carries the turn's label.
         let mut d_engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
         nexus_kernel::dreams::queue_dreams_from_interaction(
             &mut d_engine.scheduler,
-            &agent_id_str,
+            &turn,
             &consciousness_snapshot,
             &interaction,
         );
@@ -629,12 +559,21 @@ pub(crate) fn send_chat(
         let routing_learner = state.routing_learner.clone();
         let evo_agent_name = evo_name.clone();
         let evo_user_msg = message.clone();
-        // P3-HM M3 N3 interim (R11): scoring dispatches under the chat
-        // turn's context, which N4 mints; until then no scoring request is
-        // made (refused) and nothing is recorded in the score log.
-        let _ = &auto_evo;
+        let evo_agent_resp = response_text.clone();
+        // P3-HM-CONTRACT-02 §11.3: the exchange is scored under the chat
+        // turn's context, moved into the thread; the score-log entry carries
+        // the turn's label and real principal (§6.5 `auto_evolve_score`).
+        let evo_state = state.clone();
+        let mut evo_turn = turn;
         std::thread::spawn(move || {
-            let score_val = 7.0;
+            let llm = GatewayPlannerLlm::new(&evo_state);
+            let score_val = auto_evo.score_and_record(
+                &mut evo_turn,
+                &evo_agent_name,
+                &evo_user_msg,
+                &evo_agent_resp,
+                &llm,
+            );
 
             // Feed routing learner with the score
             {
@@ -683,7 +622,7 @@ pub(crate) fn send_chat(
             text.push_str(hint);
             text.push_str("\n\n");
         }
-        text.push_str(&response.output_text);
+        text.push_str(&response_text);
         text
     };
 
@@ -691,9 +630,70 @@ pub(crate) fn send_chat(
         text: final_text,
         model: response.model_name,
         token_count: response.token_count,
-        cost: oracle.map(|value| value.cost).unwrap_or(0.0),
-        latency_ms: oracle.map(|value| value.latency_ms).unwrap_or(0),
+        cost: response.cost,
+        latency_ms: response.latency_ms,
     })
+}
+
+/// What a chat dispatch's transport reported besides the reply.
+struct ChatTransportMeta {
+    model_name: String,
+    token_count: u32,
+    cost: f64,
+    latency_ms: u64,
+}
+
+/// One model call of a chat turn (§12.1 AC, HD; AMENDMENT 1 A1.8): the
+/// human's text, dispatched through the issuer under the turn's unit, on
+/// the model the human chose (or the default; a local-only turn only on the
+/// verified loopback runtime), sent through the governed gateway.
+fn chat_dispatch(
+    state: &AppState,
+    turn: &mut nexus_kernel::hm::DispatchContext,
+    model_id: Option<&str>,
+    prompt: &str,
+    max_tokens: u32,
+) -> Result<(nexus_kernel::hm::DerivedItem, ChatTransportMeta), String> {
+    let meta: std::cell::RefCell<Option<ChatTransportMeta>> = std::cell::RefCell::new(None);
+    let reply = crate::hm_dispatch::dispatch_text(
+        state,
+        turn,
+        prompt,
+        &mut |ctx| {
+            let (provider, model, attestation) = crate::hm_dispatch::human_provider(ctx, model_id)?;
+            Ok(((provider, model), attestation))
+        },
+        &mut |(provider, model_name): (Box<dyn LlmProvider>, String), admitted: &str| {
+            let mut gateway = GovernedLlmGateway::new(provider);
+            // User-facing chat: the human asked the question and is reading
+            // the response on their own screen — skip the output exfiltration
+            // filter.
+            gateway.set_skip_output_firewall(true);
+            let mut capabilities = HashSet::new();
+            capabilities.insert("llm.query".to_string());
+            // Gateway accounting only; never a principal.
+            let mut context = AgentRuntimeContext {
+                agent_id: Uuid::new_v4(),
+                capabilities,
+                fuel_remaining: 50_000,
+            };
+            let response = gateway
+                .query(&mut context, admitted, max_tokens, &model_name)
+                .map_err(agent_error)?;
+            let oracle = gateway.oracle_events().last();
+            *meta.borrow_mut() = Some(ChatTransportMeta {
+                model_name: response.model_name.clone(),
+                token_count: response.token_count,
+                cost: oracle.map(|value| value.cost).unwrap_or(0.0),
+                latency_ms: oracle.map(|value| value.latency_ms).unwrap_or(0),
+            });
+            Ok(response.output_text)
+        },
+    )?;
+    let meta = meta
+        .into_inner()
+        .ok_or_else(|| "chat: the transport reported no reply".to_string())?;
+    Ok((reply, meta))
 }
 
 // ── Auto-Evolution Tauri API ──────────────────────────────────────────────
@@ -3693,12 +3693,29 @@ where
         }
     }
 
+    // P3-HM-CONTRACT-02 §12.1 (HD): the Owner's chat turn; the governed
+    // messages (frontend-supplied history and the human's turn) are the
+    // admitted prompt, sent as admitted.
+    let mut turn = crate::hm_dispatch::chat_turn(state, None)?;
+    let admitted_messages = serde_json::to_string(&governed_messages).map_err(|e| e.to_string())?;
     let started = std::time::Instant::now();
-    let result = provider
-        .chat_stream(&governed_messages, &model, |token| {
-            on_token(token);
-        })
-        .map_err(|e| e.to_string())?;
+    let result = crate::hm_dispatch::dispatch_text(
+        state,
+        &mut turn,
+        &admitted_messages,
+        &mut |_| Ok(((), nexus_connectors_llm::attest::attest_route(&provider))),
+        &mut |(), admitted| {
+            let messages: Vec<serde_json::Value> =
+                serde_json::from_str(admitted).map_err(|e| e.to_string())?;
+            provider
+                .chat_stream(&messages, &model, |token| {
+                    on_token(token);
+                })
+                .map_err(|e| e.to_string())
+        },
+    )?
+    .text()
+    .to_string();
     let latency_ms = started.elapsed().as_millis() as u64;
 
     // Post-flight audit
@@ -4167,7 +4184,14 @@ pub(crate) fn get_provider_usage_stats(
 }
 
 /// Test connection to a specific provider by sending a simple prompt.
-pub(crate) fn test_llm_connection(provider_name: String) -> Result<TestConnectionResult, String> {
+/// The fixed prompt of the connection test (§12.1 class SY: a constant, no
+/// record).
+pub(crate) const CONNECTION_TEST_PROMPT: &str = "Reply with exactly: ok";
+
+pub(crate) fn test_llm_connection(
+    state: &AppState,
+    provider_name: String,
+) -> Result<TestConnectionResult, String> {
     let config = load_config().map_err(agent_error)?;
     let prov_config = build_provider_config(&config);
 
@@ -4186,17 +4210,35 @@ pub(crate) fn test_llm_connection(provider_name: String) -> Result<TestConnectio
         _ => config.llm.default_model.clone(),
     };
 
+    // P3-HM-CONTRACT-02 §12.1 (SY): a `System` request through the issuer.
+    let mut unit = crate::hm_dispatch::request_unit(
+        state,
+        nexus_kernel::hm::Principal::System("llm_connection_test"),
+    )?;
+    let model_used: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let start = std::time::Instant::now();
-    let result = provider.query("Reply with exactly: ok", 10, &test_model);
+    let result = crate::hm_dispatch::dispatch_text(
+        state,
+        &mut unit,
+        CONNECTION_TEST_PROMPT,
+        &mut |_| Ok(((), nexus_connectors_llm::attest::attest_route(&provider))),
+        &mut |(), admitted| {
+            let response = provider
+                .query(admitted, 10, &test_model)
+                .map_err(|e| e.to_string())?;
+            *model_used.borrow_mut() = Some(response.model_name);
+            Ok(response.output_text)
+        },
+    );
     let latency = start.elapsed().as_millis() as u64;
 
     match result {
-        Ok(response) => Ok(TestConnectionResult {
+        Ok(_) => Ok(TestConnectionResult {
             provider: provider_name,
             success: true,
             latency_ms: latency,
             error: None,
-            model_used: Some(response.model_name),
+            model_used: model_used.into_inner(),
         }),
         Err(e) => Ok(TestConnectionResult {
             provider: provider_name,

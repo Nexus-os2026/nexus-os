@@ -235,18 +235,21 @@ pub(crate) struct AgentLlmRoute {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AgentLlmPolicy {
     /// No agent's work, or an agent whose configuration allows any provider.
-    #[default]
     Unrestricted,
     /// The agent's configuration is local-only: a verified local model only.
     LocalOnly,
     /// An agent's work whose policy could not be established: nothing is
-    /// dispatched.
+    /// dispatched. The default (A-C1): no policy is ever assumed. Units carry
+    /// their policy in their context (P3-HM-CONTRACT-02 §11.1); this enum only
+    /// feeds the D-2 provider selection, whose tests pass this value.
+    #[default]
+    #[cfg_attr(not(test), allow(dead_code))]
     Unresolved,
 }
 
 /// The policy the configuration sets for an agent known by `keys`:
 /// local-only when the assignment under any of them is.
-fn agent_llm_policy_in(
+pub(crate) fn agent_llm_policy_in(
     config: &nexus_kernel::config::NexusConfig,
     keys: &[String],
 ) -> AgentLlmPolicy {
@@ -263,55 +266,11 @@ fn agent_llm_policy_in(
     }
 }
 
-/// The policy of the registered agent `agent_id` (P3 D-2), from the
-/// assignments under its id and its registered names. An id that is not a
-/// registered agent, or a configuration that cannot be read, leaves the
-/// policy `Unresolved`.
-pub(crate) fn resolve_agent_llm_policy(state: &AppState, agent_id: &str) -> AgentLlmPolicy {
-    let Ok(uuid) = Uuid::parse_str(agent_id) else {
-        return AgentLlmPolicy::Unresolved;
-    };
-    let mut names = Vec::new();
-    if let Some(entry) = state
-        .meta
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .get(&uuid)
-    {
-        names.push(entry.name.clone());
-    }
-    if let Some(handle) = state
-        .supervisor
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .get_agent(uuid)
-    {
-        names.push(handle.manifest.name.clone());
-    }
-    if names.is_empty() {
-        return AgentLlmPolicy::Unresolved;
-    }
-    let mut keys = vec![agent_id.to_string(), normalize_agent_config_key(agent_id)];
-    for name in names {
-        keys.push(normalize_agent_config_key(&name));
-        keys.push(name);
-    }
-    match load_config() {
-        Ok(config) => agent_llm_policy_in(&config, &keys),
-        Err(_) => AgentLlmPolicy::Unresolved,
-    }
-}
-
-/// The policy of the agent a chat is routed to, known only by `name` (P3
-/// D-2 R2). The name is not an identity: it only selects the registered
-/// agents of that name (after normalization), in the supervisor or in the
-/// desktop's metadata. Each one's policy comes from its own identity
-/// ([`resolve_agent_llm_policy`]), and assignments under the name itself
-/// also apply; the chat is local-only when any of them is. A name no
-/// registered agent has, an agent whose policy cannot be established, or a
-/// configuration that cannot be read leaves the policy `Unresolved`, so the
-/// agent-scoped chat dispatches nothing.
-pub(crate) fn resolve_named_agent_llm_policy(state: &AppState, name: &str) -> AgentLlmPolicy {
+/// The registered agents a chat routed by `name` reaches (P3 D-2 R2). The
+/// name is not an identity: it only selects the registered agents of that
+/// name (after normalization), in the supervisor or in the desktop's
+/// metadata, in id order.
+pub(crate) fn agents_named(state: &AppState, name: &str) -> Vec<Uuid> {
     let normalized = normalize_agent_config_key(name);
     let mut ids: Vec<Uuid> = state
         .meta
@@ -332,21 +291,8 @@ pub(crate) fn resolve_named_agent_llm_policy(state: &AppState, name: &str) -> Ag
             }
         }
     }
-    if ids.is_empty() {
-        return AgentLlmPolicy::Unresolved;
-    }
-    let mut policy = match load_config() {
-        Ok(config) => agent_llm_policy_in(&config, &[name.to_string(), normalized]),
-        Err(_) => return AgentLlmPolicy::Unresolved,
-    };
-    for id in ids {
-        match resolve_agent_llm_policy(state, &id.to_string()) {
-            AgentLlmPolicy::Unresolved => return AgentLlmPolicy::Unresolved,
-            AgentLlmPolicy::LocalOnly => policy = AgentLlmPolicy::LocalOnly,
-            AgentLlmPolicy::Unrestricted => {}
-        }
-    }
-    policy
+    ids.sort();
+    ids
 }
 
 /// How strongly agent reasoning prefers an Ollama model, by its name: the
@@ -700,6 +646,10 @@ fn load_fuel_report_from_row(
         })
 }
 
+/// The refusal of a context-free write to an in-scope store (R7).
+pub(crate) const UNLABELLED_WRITE_REFUSED: &str =
+    "refused: a write to an in-scope store needs the unit's context (P3-HM-CONTRACT-02 §6.1)";
+
 /// Bridges `NexusDatabase` (persistence) to the kernel `StrategyStore` trait.
 struct DbStrategyStore {
     db: Arc<NexusDatabase>,
@@ -715,9 +665,11 @@ impl nexus_kernel::cognitive::StrategyStore for DbStrategyStore {
         fuel: f64,
         duration: f64,
     ) -> std::result::Result<(), String> {
-        self.db
-            .upsert_strategy_score(agent_id, strategy_hash, goal_type, success, fuel, duration)
-            .map_err(|e| e.to_string())
+        // P3-HM-CONTRACT-02 §6.1, §6.5 `strategy_score` (R7): an in-scope
+        // write goes only through the labelled API, under the unit's
+        // context; this context-free write is refused.
+        let _ = (agent_id, strategy_hash, goal_type, success, fuel, duration);
+        Err(UNLABELLED_WRITE_REFUSED.to_string())
     }
 
     fn load_top_strategies(
@@ -783,8 +735,11 @@ impl nexus_kernel::cognitive::MemoryStore for DbMemoryStore {
         key: &str,
         value_json: &str,
     ) -> std::result::Result<(), String> {
-        StateStore::save_memory(&*self.db, agent_id, memory_type, key, value_json)
-            .map_err(|e| e.to_string())
+        // P3-HM-CONTRACT-02 §6.1, §6.5 `db_memory_store` (R7): an in-scope
+        // write goes only through the labelled API, under the unit's
+        // context; this context-free write is refused.
+        let _ = (agent_id, memory_type, key, value_json);
+        Err(UNLABELLED_WRITE_REFUSED.to_string())
     }
 
     fn load_memories(
@@ -2765,11 +2720,13 @@ pub mod runtime {
 
     #[tauri::command]
     async fn test_llm_connection(
+        state: tauri::State<'_, AppState>,
         provider_name: String,
     ) -> Result<super::TestConnectionResult, String> {
+        let state = state.inner().clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let result = super::test_llm_connection(provider_name);
+            let result = super::test_llm_connection(&state, provider_name);
             let _ = tx.send(result);
         });
         rx.recv().unwrap_or(Err(
@@ -4672,6 +4629,7 @@ pub mod runtime {
 
     #[tauri::command]
     fn builder_backend_generate(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         description: String,
     ) -> Result<serde_json::Value, String> {
@@ -4715,6 +4673,13 @@ pub mod runtime {
                 }
             });
 
+        // P3-HM-CONTRACT-02 §12.1 (XS), A2.4 I1: every model call of the
+        // builder is a `System("builder")` dispatch through the issuer.
+        let rls_provider = rls_provider.map(|inner| {
+            Box::new(crate::hm_dispatch::IssuedProvider::new(
+                &state, "builder", inner,
+            )) as Box<dyn nexus_connectors_llm::providers::LlmProvider>
+        });
         let result = web_builder_agent::backend::generate_backend(&schema, rls_provider.as_deref())
             .map_err(|e| format!("backend generation failed: {e}"))?;
 
@@ -4748,6 +4713,7 @@ pub mod runtime {
 
     #[tauri::command]
     fn builder_backend_generate_v2(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         provider: String,
         description: String,
@@ -4803,6 +4769,13 @@ pub mod runtime {
                 }
             });
 
+        // P3-HM-CONTRACT-02 §12.1 (XS), A2.4 I1: every model call of the
+        // builder is a `System("builder")` dispatch through the issuer.
+        let rls_provider = rls_provider.map(|inner| {
+            Box::new(crate::hm_dispatch::IssuedProvider::new(
+                &state, "builder", inner,
+            )) as Box<dyn nexus_connectors_llm::providers::LlmProvider>
+        });
         let result = web_builder_agent::backend::generate_backend_v2(
             &schema,
             &provider,
