@@ -13,9 +13,17 @@
 //!
 //! The authority core (§4.2, §6, §11, §12.3–§12.7, §15) lives in the
 //! submodules: the sealed `DispatchContext` and the unit-taint algebra
-//! (`context`).
+//! (`context`); the `DispatchIssuer`, §4.2 resolution and the context
+//! derivations (`issuer`); content-free events (`events`).
 
 mod context;
+mod events;
+mod issuer;
+
+pub use issuer::{
+    AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchIssuer, ProbePoint,
+    Unresolved, MAX_RECORDS,
+};
 
 pub use context::{
     unit_start_state, unit_taint_step, DerivedItem, DispatchContext, PolicySnapshot, Principal,

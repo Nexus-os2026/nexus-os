@@ -541,6 +541,32 @@ pub struct PolicyRow {
     pub basis: String,
 }
 
+/// One `hm_agent_policy` row as stored. A field is `None` when its value
+/// does not have the declared storage class; the kernel decides what a
+/// malformed row means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyRowRaw {
+    pub agent_id: String,
+    pub local_only: Option<i64>,
+    pub policy_generation: Option<i64>,
+    pub revocation_seq: Option<i64>,
+    pub basis: Option<String>,
+}
+
+fn int_or_none(v: ValueRef<'_>) -> Option<i64> {
+    match v {
+        ValueRef::Integer(i) => Some(i),
+        _ => None,
+    }
+}
+
+fn text_or_none(v: ValueRef<'_>) -> Option<String> {
+    match v {
+        ValueRef::Text(t) => Some(String::from_utf8_lossy(t).into_owned()),
+        _ => None,
+    }
+}
+
 /// One `hm_policy_change` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyChangeRow {
@@ -607,6 +633,17 @@ impl<'a> HmStore<'a> {
     pub fn immediate<R>(&self, f: impl FnOnce(&HmTx<'_>) -> Result<R>) -> Result<R> {
         let mut conn = self.db.conn.lock().unwrap_or_else(|p| p.into_inner());
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let out = f(&HmTx { tx: &tx })?;
+        tx.commit()?;
+        Ok(out)
+    }
+
+    /// Runs `f` inside one DEFERRED transaction: a read transaction whose
+    /// snapshot starts at its first read. It takes no write lock until a
+    /// write; the kernel uses it only to read.
+    pub fn read<R>(&self, f: impl FnOnce(&HmTx<'_>) -> Result<R>) -> Result<R> {
+        let mut conn = self.db.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Deferred)?;
         let out = f(&HmTx { tx: &tx })?;
         tx.commit()?;
         Ok(out)
@@ -817,6 +854,43 @@ impl HmTx<'_> {
             ],
         )?;
         Ok(())
+    }
+
+    /// The `hm_agent_policy` row of one agent, as stored.
+    pub fn policy_row_raw(&self, agent_id: &str) -> Result<Option<PolicyRowRaw>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT agent_id, local_only, policy_generation, revocation_seq, basis
+                 FROM hm_agent_policy WHERE agent_id = ?1",
+                params![agent_id],
+                |r| {
+                    Ok(PolicyRowRaw {
+                        agent_id: r.get(0)?,
+                        local_only: int_or_none(r.get_ref(1)?),
+                        policy_generation: int_or_none(r.get_ref(2)?),
+                        revocation_seq: int_or_none(r.get_ref(3)?),
+                        basis: text_or_none(r.get_ref(4)?),
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Updates one `hm_agent_policy` row. Returns the number of rows changed.
+    pub fn update_policy(&self, p: &PolicyRow) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE hm_agent_policy
+             SET local_only = ?2, policy_generation = ?3, revocation_seq = ?4, basis = ?5
+             WHERE agent_id = ?1",
+            params![
+                p.agent_id,
+                p.local_only,
+                p.policy_generation,
+                p.revocation_seq,
+                p.basis
+            ],
+        )?)
     }
 
     pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {
