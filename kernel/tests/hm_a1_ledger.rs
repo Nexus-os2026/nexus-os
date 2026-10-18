@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -1072,5 +1072,521 @@ fn hm_n3_origin_order_join_and_effective_label() {
     assert_eq!(
         [UnrestrictedOrigin, LegacyUnknown, LocalOnlyOrigin].map(OriginLabel::class_name),
         ["UNRESTRICTED_ORIGIN", "LEGACY_UNKNOWN", "LOCAL_ONLY_ORIGIN"]
+    );
+}
+
+// ── N4: A-M4 (§18.2a), AD-4 form ────────────────────────────────────────────
+//
+// AD-4 is unsigned: steps 3, 4 and 9b (grants) are removed, and "bulk grants
+// inert" is read as "no bulk scope is evaluated"; the L1–L4 result and the
+// events are asserted instead. The scenario runs once with foreign_keys ON
+// and once OFF; the two summaries must be identical.
+
+const AM4_PREFIX: &str = "HM-A1-AM4 ";
+const T1: &str = "22222222-0000-4000-8000-000000000001";
+
+/// Opens the synthetic database with the requested foreign-key mode and
+/// checks that the mode took effect.
+fn open_mode(path: &Path, fk_on: bool) -> NexusDatabase {
+    let db = open(path);
+    if !fk_on {
+        db.execute_raw("PRAGMA foreign_keys=OFF").unwrap();
+    }
+    assert_eq!(count(&db, "PRAGMA foreign_keys"), i64::from(fk_on));
+    db
+}
+
+/// A-M4 fixture: X owns m1 m2 m3 (agent_memory 1-3), t1 (task_history),
+/// k1 k2 (world_model_entities 1-2), k3 (world_model_relationships 1);
+/// Y owns y1 (agent_memory 4); Z owns z1 (agent_memory 5).
+fn seed_am4(db: &NexusDatabase) {
+    must(
+        db,
+        &format!(
+            "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, relevance_score, access_count, created_at, last_accessed, expires_at) VALUES
+               (1, '{AGENT_X}', 'episodic', 'SYNTH-m1', '\"SYNTH-m1\"', 1.0, 0, '2026-01-01T00:00:01Z', '2026-01-01T00:00:01Z', NULL),
+               (2, '{AGENT_X}', 'episodic', 'SYNTH-m2', '\"SYNTH-m2\"', 1.0, 0, '2026-01-01T00:00:02Z', '2026-01-01T00:00:02Z', NULL),
+               (3, '{AGENT_X}', 'semantic', 'SYNTH-m3', '\"SYNTH-m3\"', 0.5, 3, '2026-01-01T00:00:03Z', '2026-01-02T00:00:00Z', NULL),
+               (4, '{AGENT_Y}', 'episodic', 'SYNTH-y1', '\"SYNTH-y1\"', 1.0, 0, '2026-01-01T00:00:04Z', '2026-01-01T00:00:04Z', NULL),
+               (5, '{AGENT_Z}', 'episodic', 'SYNTH-z1', '\"SYNTH-z1\"', 1.0, 0, '2026-01-01T00:00:05Z', '2026-01-01T00:00:05Z', NULL);
+             INSERT INTO task_history (id, agent_id, goal, status, steps_json, result_json, fuel_consumed, started_at, completed_at, success) VALUES
+               ('{T1}', '{AGENT_X}', 'SYNTH-t1', 'running', '[\"SYNTH-step\"]', NULL, 0.0, '2026-01-01T00:00:06Z', NULL, 0);
+             INSERT INTO world_model_entities (id, agent_id, entity_json, created_at) VALUES
+               (1, '{AGENT_X}', '{{\"SYNTH\":\"k1\"}}', '2026-01-01T00:00:07Z'),
+               (2, '{AGENT_X}', '{{\"SYNTH\":\"k2\"}}', '2026-01-01T00:00:08Z');
+             INSERT INTO world_model_relationships (id, agent_id, relationship_json, created_at) VALUES
+               (1, '{AGENT_X}', '{{\"SYNTH\":\"k3\"}}', '2026-01-01T00:00:09Z');"
+        ),
+    );
+}
+
+/// Fixture names → identities.
+const AM4_ROWS: [(&str, &str, &str); 9] = [
+    ("m1", "agent_memory", "1"),
+    ("m2", "agent_memory", "2"),
+    ("m3", "agent_memory", "3"),
+    ("y1", "agent_memory", "4"),
+    ("z1", "agent_memory", "5"),
+    ("t1", "task_history", T1),
+    ("k1", "world_model_entities", "1"),
+    ("k2", "world_model_entities", "2"),
+    ("k3", "world_model_relationships", "1"),
+];
+
+fn am4_key(name: &str) -> String {
+    let (_, t, id) = AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+    format!("{t}:{id}")
+}
+
+fn table_of(name: &str) -> RecordTable {
+    RecordTable::ALL
+        .into_iter()
+        .find(|t| t.table_name() == name)
+        .unwrap()
+}
+
+fn state_name(s: &MemberState) -> String {
+    format!("{s:?}")
+}
+
+/// Member states keyed `table:id`, as text (for summaries).
+fn states(r: &LedgerReport) -> BTreeMap<String, String> {
+    r.members
+        .iter()
+        .map(|m| {
+            (
+                format!("{}:{}", m.table.table_name(), m.record_id),
+                state_name(&m.state),
+            )
+        })
+        .collect()
+}
+
+fn event_kinds(db: &NexusDatabase) -> Vec<String> {
+    events(db).into_iter().map(|e| e.1).collect()
+}
+
+fn emit(v: serde_json::Value) {
+    println!("{AM4_PREFIX}{v}");
+    std::io::stdout().flush().unwrap();
+}
+
+/// Runs one A-M4 child phase and returns its result line.
+fn run_am4_child(entry: &str, path: &Path, fk_on: bool) -> serde_json::Value {
+    let mut child = spawn_child(
+        entry,
+        &[
+            ("HM_A1_AM4_DB", path.display().to_string()),
+            ("HM_A1_AM4_FK", if fk_on { "on" } else { "off" }.to_string()),
+        ],
+    );
+    let rx = line_channel(&mut child);
+    let line = wait_line(&rx, AM4_PREFIX);
+    let status = child.wait().unwrap();
+    assert!(status.success(), "{entry} (fk_on={fk_on}) failed: {status}");
+    serde_json::from_str(line.strip_prefix(AM4_PREFIX).unwrap()).unwrap()
+}
+
+fn child_env() -> Option<(PathBuf, bool)> {
+    let path = std::env::var("HM_A1_AM4_DB").ok()?;
+    let fk_on = std::env::var("HM_A1_AM4_FK").unwrap() == "on";
+    Some((PathBuf::from(path), fk_on))
+}
+
+/// Child entry, A-M4 steps 1, 2, 5 and 6.
+#[test]
+#[ignore = "child process entry for A-M4; run by the parent test"]
+fn hm_child_am4_phase1() {
+    let Some((path, fk_on)) = child_env() else {
+        return;
+    };
+    let db = open_mode(&path, fk_on);
+    seed_am4(&db);
+
+    // Step 1: per-row SHA-256 of all fixture rows, then T0.
+    let hashes = row_hashes(&db);
+    assert_eq!(hashes.len(), 9);
+    let expected = sorted(t_expected_members(&db));
+    run_t0_option_a(&db, &agents()).unwrap();
+
+    // Step 2: exactly the nine members, their digests, count and set digest.
+    let got = ledger(&db);
+    assert_eq!(got, expected);
+    let keys: BTreeSet<String> = got.iter().map(|m| format!("{}:{}", m.0, m.1)).collect();
+    let want: BTreeSet<String> = AM4_ROWS
+        .iter()
+        .map(|r| format!("{}:{}", r.1, r.2))
+        .collect();
+    assert_eq!(keys, want);
+    assert_eq!(count(&db, "SELECT member_count FROM hm_migration"), 9);
+    let digest = strings(&db, "SELECT member_set_sha256 FROM hm_migration").remove(0);
+    assert_eq!(digest, t_member_set(&expected), "independently computed");
+
+    // Steps 3-4 (grants) removed under AD-4.
+
+    // Step 5a: a direct single-row DELETE of m2.
+    must(&db, "DELETE FROM agent_memory WHERE id = 2");
+    // Step 5b: the production delete of Z's memories (z1).
+    db.delete_memories_by_agent(AGENT_Z).unwrap();
+    // Step 6: the production knowledge-graph replace for X: k1 k2 k3 out, k4 k5 in.
+    db.replace_world_model_state(
+        AGENT_X,
+        &["{\"SYNTH\":\"k4\"}".to_string()],
+        &["{\"SYNTH\":\"k5\"}".to_string()],
+    )
+    .unwrap();
+    let k4 = count(&db, "SELECT MAX(id) FROM world_model_entities");
+    let k5 = count(&db, "SELECT MAX(id) FROM world_model_relationships");
+
+    emit(serde_json::json!({
+        "hashes": hashes,
+        "member_set_sha256": digest,
+        "ledger": got.iter().map(|m| [m.0.clone(), m.1.clone(), m.2.clone(), m.3.clone()]).collect::<Vec<_>>(),
+        "k4": k4,
+        "k5": k5,
+    }));
+}
+
+/// Child entry, A-M4 steps 7 (restart), 8 and 9.
+#[test]
+#[ignore = "child process entry for A-M4; run by the parent test"]
+fn hm_child_am4_phase2() {
+    let Some((path, fk_on)) = child_env() else {
+        return;
+    };
+    let db = open_mode(&path, fk_on);
+    let k4 = count(&db, "SELECT MAX(id) FROM world_model_entities").to_string();
+    let k5 = count(&db, "SELECT MAX(id) FROM world_model_relationships").to_string();
+
+    // Step 8: deleted members are gone, unlabelled and tombstoned.
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        let present = db
+            .hm()
+            .immediate(|tx| tx.current_row(t, id))
+            .unwrap()
+            .is_some();
+        assert!(!present, "{name} must be absent");
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_record_label WHERE record_table = '{t}' AND record_id = '{id}'")),
+            0,
+            "{name} must have no label row"
+        );
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_t0_tombstone WHERE record_table = '{t}' AND record_id = '{id}'")),
+            1,
+            "{name} must have a tombstone"
+        );
+        assert_eq!(
+            evaluate_label(&db, table_of(t), id).unwrap(),
+            EvaluatedLabel::Unbound
+        );
+    }
+    // No production read returns them.
+    let x_keys: Vec<String> = db
+        .load_memories(AGENT_X, None, 100)
+        .unwrap()
+        .into_iter()
+        .map(|m| m.key)
+        .collect();
+    assert_eq!(
+        x_keys.iter().cloned().collect::<BTreeSet<_>>(),
+        BTreeSet::from(["SYNTH-m1".to_string(), "SYNTH-m3".to_string()])
+    );
+    assert!(db.load_memories(AGENT_Z, None, 100).unwrap().is_empty());
+    let ents: Vec<String> = db
+        .load_world_model_entities(AGENT_X)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.entity_json)
+        .collect();
+    assert_eq!(ents, vec!["{\"SYNTH\":\"k4\"}".to_string()]);
+    let rels: Vec<String> = db
+        .load_world_model_relationships(AGENT_X)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.relationship_json)
+        .collect();
+    assert_eq!(rels, vec!["{\"SYNTH\":\"k5\"}".to_string()]);
+    // k4 and k5 are not members and have no label (UNBOUND).
+    for (t, id) in [
+        (RecordTable::WorldModelEntities, k4.as_str()),
+        (RecordTable::WorldModelRelationships, k5.as_str()),
+    ] {
+        assert!(
+            !is_t0_member(&db, t, id).unwrap(),
+            "{t:?}:{id} is not a member"
+        );
+        assert_eq!(evaluate_label(&db, t, id).unwrap(), EvaluatedLabel::Unbound);
+    }
+
+    // Step 9: L1-L4 pass on the ledger; count and digest unchanged.
+    let r = report(&db);
+    assert!(r.checks.all_pass(), "step 9: {:?}", r.checks);
+    assert!(!r.mismatch_event_written);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 9);
+    for name in ["m1", "m3", "t1", "y1"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert_eq!(
+            state_of(&r, table_of(t), id),
+            Some(present_unchanged()),
+            "{name} stays a present, unchanged member"
+        );
+    }
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert_eq!(
+            state_of(&r, table_of(t), id),
+            Some(MemberState::Deleted),
+            "{name}"
+        );
+    }
+    assert!(
+        !r.inconsistency_event_written,
+        "deletion is not an inconsistency"
+    );
+    assert_events_content_free(&db);
+
+    emit(serde_json::json!({
+        "hashes": row_hashes(&db),
+        "member_count": count(&db, "SELECT member_count FROM hm_migration"),
+        "member_set_sha256": strings(&db, "SELECT member_set_sha256 FROM hm_migration").remove(0),
+        "failed_checks": r.checks.failed(),
+        "states": states(&r),
+        "events": event_kinds(&db),
+        "tombstones": strings(&db, "SELECT record_table || ':' || record_id FROM hm_t0_tombstone ORDER BY 1"),
+    }));
+}
+
+/// Copies the closed synthetic database (and any WAL/SHM side files).
+fn copy_db(src: &Path, dir: &Path, name: &str) -> PathBuf {
+    let dst = dir.join(name);
+    std::fs::copy(src, &dst).unwrap();
+    for ext in ["-wal", "-shm"] {
+        let side = PathBuf::from(format!("{}{ext}", src.display()));
+        if side.exists() {
+            std::fs::copy(&side, format!("{}{ext}", dst.display())).unwrap();
+        }
+    }
+    dst
+}
+
+/// Recreates `hm_t0_member` (and its triggers, byte-exact) with the rows
+/// selected by `select_rows` from the old table, bypassing the ledger
+/// triggers. Foreign keys are off while the table is rebuilt.
+fn rebuild_ledger(path: &Path, select_rows: &str) {
+    let db = open(path);
+    db.execute_raw("PRAGMA foreign_keys=OFF").unwrap();
+    let table_sql = strings(
+        &db,
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'hm_t0_member'",
+    )
+    .remove(0);
+    let trigger_sql = strings(
+        &db,
+        "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'hm_t0_member' ORDER BY name",
+    );
+    assert_eq!(trigger_sql.len(), 3);
+    must(
+        &db,
+        &format!(
+            "CREATE TABLE fixture_ledger_copy AS SELECT * FROM hm_t0_member;
+             DROP TABLE hm_t0_member;
+             {table_sql};
+             INSERT INTO hm_t0_member (record_table, record_id, agent_id, t0_content_sha256)
+               {select_rows};
+             DROP TABLE fixture_ledger_copy;"
+        ),
+    );
+    for t in trigger_sql {
+        must(&db, &t);
+    }
+}
+
+/// Opens a corrupted copy in the requested mode and verifies it.
+fn verify_copy(path: &Path, fk_on: bool) -> (NexusDatabase, LedgerReport) {
+    let db = open_mode(path, fk_on);
+    let r = report(&db);
+    (db, r)
+}
+
+fn assert_detected(name: &str, db: &NexusDatabase, r: &LedgerReport, failed: &[&str]) {
+    assert_eq!(r.checks.failed(), failed.to_vec(), "{name}: {:?}", r.checks);
+    assert!(r.mismatch_event_written, "{name}: mismatch event");
+    assert_eq!(event_count(db, "memory.member_set_mismatch"), 1, "{name}");
+    assert_events_content_free(db);
+}
+
+fn run_am4(fk_on: bool) -> serde_json::Value {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+
+    let p1 = run_am4_child("hm_child_am4_phase1", &path, fk_on);
+    let p2 = run_am4_child("hm_child_am4_phase2", &path, fk_on);
+
+    // Step 8: surviving fixture rows unchanged.
+    for name in ["m1", "m3", "t1", "y1"] {
+        let k = am4_key(name);
+        assert_eq!(p2["hashes"][&k], p1["hashes"][&k], "{name} per-row SHA-256");
+        assert!(p2["hashes"][&k].is_string());
+    }
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        assert!(p2["hashes"][&am4_key(name)].is_null(), "{name} absent");
+    }
+    // Step 9: count and digest unchanged.
+    assert_eq!(p2["member_count"], 9);
+    assert_eq!(p2["member_set_sha256"], p1["member_set_sha256"]);
+    assert_eq!(p2["failed_checks"], serde_json::json!([]));
+
+    let mut out = serde_json::Map::new();
+    out.insert("phase1_ledger".into(), p1["ledger"].clone());
+    out.insert("phase1_digest".into(), p1["member_set_sha256"].clone());
+    out.insert("k4_k5".into(), serde_json::json!([p1["k4"], p1["k5"]]));
+    out.insert("phase2_states".into(), p2["states"].clone());
+    out.insert("phase2_events".into(), p2["events"].clone());
+    out.insert("phase2_tombstones".into(), p2["tombstones"].clone());
+    out.insert("phase2_digest".into(), p2["member_set_sha256"].clone());
+
+    let m1 = ("agent_memory", "1");
+    let m3 = ("agent_memory", "3");
+    let t1 = ("task_history", T1);
+
+    // N-L1: one ledger digest altered (table rebuilt, triggers restored).
+    let c = copy_db(&path, dir.path(), "nl1.db");
+    rebuild_ledger(
+        &c,
+        "SELECT record_table, record_id, agent_id,
+                CASE WHEN record_table = 'agent_memory' AND record_id = '1'
+                     THEN 'forged' ELSE t0_content_sha256 END
+         FROM fixture_ledger_copy",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected("N-L1", &db, &r, &["L2"]);
+    out.insert("N-L1".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // N-L2: one ledger entry (m1) omitted.
+    let c = copy_db(&path, dir.path(), "nl2.db");
+    rebuild_ledger(
+        &c,
+        "SELECT record_table, record_id, agent_id, t0_content_sha256 FROM fixture_ledger_copy
+         WHERE NOT (record_table = 'agent_memory' AND record_id = '1')",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected("N-L2", &db, &r, &["L1", "L2"]);
+    assert!(
+        !is_t0_member(&db, RecordTable::AgentMemory, m1.1).unwrap(),
+        "N-L2: m1 is no member"
+    );
+    assert_eq!(state_of(&r, RecordTable::AgentMemory, m1.1), None);
+    out.insert("N-L2".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // N-L3: a tombstone for a non-member identity (foreign keys off to insert it).
+    let c = copy_db(&path, dir.path(), "nl3.db");
+    {
+        let db = open(&c);
+        db.execute_raw("PRAGMA foreign_keys=OFF").unwrap();
+        must(
+            &db,
+            "INSERT INTO hm_t0_tombstone VALUES ('agent_memory', '999')",
+        );
+    }
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected("N-L3", &db, &r, &["L3"]);
+    out.insert("N-L3".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // N-L4: the ledger immutability trigger dropped.
+    let c = copy_db(&path, dir.path(), "nl4.db");
+    must(&open(&c), "DROP TRIGGER hm_t0_member_no_update");
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected("N-L4", &db, &r, &["L4"]);
+    out.insert("N-L4".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // N-L5: m3 deleted with its delete trigger dropped.
+    let c = copy_db(&path, dir.path(), "nl5.db");
+    must(
+        &open(&c),
+        "DROP TRIGGER hm_del_agent_memory; DELETE FROM agent_memory WHERE id = 3;",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected("N-L5", &db, &r, &["L4"]);
+    assert_eq!(
+        state_of(&r, RecordTable::AgentMemory, m3.1),
+        Some(MemberState::MissingUntombstoned)
+    );
+    out.insert("N-L5".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // N-L5 variant: only the row removed out of band, triggers intact.
+    let c = copy_db(&path, dir.path(), "nl5v.db");
+    {
+        let db = open(&c);
+        must(
+            &db,
+            "DROP TRIGGER hm_del_agent_memory; DELETE FROM agent_memory WHERE id = 3;",
+        );
+        must(&db, TRG_DEL_AGENT_MEMORY);
+    }
+    let (db, r) = verify_copy(&c, fk_on);
+    assert!(r.checks.all_pass(), "N-L5 variant: {:?}", r.checks);
+    assert!(!r.mismatch_event_written);
+    assert_eq!(
+        state_of(&r, RecordTable::AgentMemory, m3.1),
+        Some(MemberState::MissingUntombstoned)
+    );
+    assert!(r.inconsistency_event_written, "N-L5 variant: audited");
+    assert_eq!(event_count(&db, "memory.member_record_inconsistent"), 1);
+    assert_eq!(
+        evaluate_label(&db, RecordTable::AgentMemory, m3.1).unwrap(),
+        EvaluatedLabel::Unbound
+    );
+    for (t, id) in [m1, t1] {
+        assert_eq!(
+            state_of(&r, table_of(t), id),
+            Some(present_unchanged()),
+            "{t}:{id} still covered"
+        );
+    }
+    assert_events_content_free(&db);
+    out.insert("N-L5v".into(), serde_json::json!({"failed": r.checks.failed(), "states": states(&r), "events": event_kinds(&db)}));
+    drop(db);
+
+    // Step 10 (on the original): complete t1 post-T0; it leaves the unchanged
+    // set and its ledger row stays.
+    let db = open_mode(&path, fk_on);
+    let ledger_before = ledger(&db);
+    db.update_task_status(T1, "completed", Some("\"SYNTH-final\""), 1.0, true)
+        .unwrap();
+    let r = report(&db);
+    assert!(r.checks.all_pass(), "step 10: {:?}", r.checks);
+    assert_eq!(
+        state_of(&r, RecordTable::TaskHistory, T1),
+        Some(MemberState::Present {
+            label: EvaluatedLabel::Unbound,
+            unchanged_since_t0: false
+        })
+    );
+    assert_eq!(ledger(&db), ledger_before);
+    for (t, id) in [m1, m3] {
+        assert_eq!(state_of(&r, table_of(t), id), Some(present_unchanged()));
+    }
+    out.insert(
+        "step10".into(),
+        serde_json::json!({"failed": r.checks.failed(), "states": states(&r)}),
+    );
+
+    serde_json::Value::Object(out)
+}
+
+#[test]
+fn hm_n4_a_m4_membership_survives_deletion_fk_on_and_off_identical() {
+    let on = run_am4(true);
+    let off = run_am4(false);
+    assert_eq!(
+        on, off,
+        "foreign_keys ON and OFF must give identical results"
     );
 }
