@@ -519,6 +519,69 @@ fn scanned_row(
     })
 }
 
+/// One `hm_record_label` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelRow {
+    pub record_table: String,
+    pub record_id: String,
+    pub agent_id: String,
+    pub origin: String,
+    pub source_kind: String,
+    pub content_sha256: String,
+    pub policy_generation: i64,
+}
+
+/// One `hm_agent_policy` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyRow {
+    pub agent_id: String,
+    pub local_only: i64,
+    pub policy_generation: i64,
+    pub revocation_seq: i64,
+    pub basis: String,
+}
+
+/// One `hm_policy_change` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyChangeRow {
+    pub agent_id: String,
+    pub policy_generation: i64,
+    pub local_only: i64,
+    pub basis: String,
+    pub cause: String,
+}
+
+/// One `hm_migration` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationRow {
+    pub contract_version: String,
+    pub state: String,
+    pub t0_wallclock: String,
+    pub member_count: i64,
+    pub member_set_sha256: String,
+}
+
+fn member_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<MemberRow> {
+    Ok(MemberRow {
+        record_table: r.get(0)?,
+        record_id: r.get(1)?,
+        agent_id: r.get(2)?,
+        t0_content_sha256: r.get(3)?,
+    })
+}
+
+fn label_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LabelRow> {
+    Ok(LabelRow {
+        record_table: r.get(0)?,
+        record_id: r.get(1)?,
+        agent_id: r.get(2)?,
+        origin: r.get(3)?,
+        source_kind: r.get(4)?,
+        content_sha256: r.get(5)?,
+        policy_generation: r.get(6)?,
+    })
+}
+
 fn not_in_scope(table: &str) -> crate::PersistenceError {
     crate::PersistenceError::NotFound(format!("not an in-scope table: {table}"))
 }
@@ -615,6 +678,199 @@ impl HmTx<'_> {
             }
         };
         Ok(row)
+    }
+
+    pub fn insert_member(&self, m: &MemberRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_t0_member (record_table, record_id, agent_id, t0_content_sha256)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![m.record_table, m.record_id, m.agent_id, m.t0_content_sha256],
+        )?;
+        Ok(())
+    }
+
+    /// Every ledger row, ordered by `(record_table, record_id)`.
+    pub fn ledger_rows(&self) -> Result<Vec<MemberRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT record_table, record_id, agent_id, t0_content_sha256
+             FROM hm_t0_member ORDER BY record_table, record_id",
+        )?;
+        let rows = stmt.query_map([], member_from_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn ledger_count(&self) -> Result<i64> {
+        Ok(self
+            .tx
+            .query_row("SELECT COUNT(*) FROM hm_t0_member", [], |r| r.get(0))?)
+    }
+
+    pub fn ledger_member(&self, table: &str, record_id: &str) -> Result<Option<MemberRow>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT record_table, record_id, agent_id, t0_content_sha256
+                 FROM hm_t0_member WHERE record_table = ?1 AND record_id = ?2",
+                params![table, record_id],
+                member_from_row,
+            )
+            .optional()?)
+    }
+
+    pub fn is_tombstoned(&self, table: &str, record_id: &str) -> Result<bool> {
+        let n: i64 = self.tx.query_row(
+            "SELECT COUNT(*) FROM hm_t0_tombstone WHERE record_table = ?1 AND record_id = ?2",
+            params![table, record_id],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Tombstones that name no ledger row (counted by query; independent of
+    /// the foreign-key pragma).
+    pub fn orphan_tombstone_count(&self) -> Result<i64> {
+        Ok(self.tx.query_row(
+            "SELECT COUNT(*) FROM hm_t0_tombstone t
+             WHERE NOT EXISTS (SELECT 1 FROM hm_t0_member m
+                               WHERE m.record_table = t.record_table
+                                 AND m.record_id = t.record_id)",
+            [],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn insert_label(&self, l: &LabelRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_record_label
+               (record_table, record_id, agent_id, origin, source_kind, content_sha256, policy_generation)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                l.record_table,
+                l.record_id,
+                l.agent_id,
+                l.origin,
+                l.source_kind,
+                l.content_sha256,
+                l.policy_generation
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn label_row(&self, table: &str, record_id: &str) -> Result<Option<LabelRow>> {
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT record_table, record_id, agent_id, origin, source_kind, content_sha256,
+                        policy_generation
+                 FROM hm_record_label WHERE record_table = ?1 AND record_id = ?2",
+                params![table, record_id],
+                label_from_row,
+            )
+            .optional()?)
+    }
+
+    /// Every label row, ordered by `(record_table, record_id)`.
+    pub fn label_rows(&self) -> Result<Vec<LabelRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT record_table, record_id, agent_id, origin, source_kind, content_sha256,
+                    policy_generation
+             FROM hm_record_label ORDER BY record_table, record_id",
+        )?;
+        let rows = stmt.query_map([], label_from_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn insert_policy_change(&self, c: &PolicyChangeRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_policy_change (agent_id, policy_generation, local_only, basis, cause)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                c.agent_id,
+                c.policy_generation,
+                c.local_only,
+                c.basis,
+                c.cause
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_policy(&self, p: &PolicyRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_agent_policy (agent_id, local_only, policy_generation, revocation_seq, basis)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                p.agent_id,
+                p.local_only,
+                p.policy_generation,
+                p.revocation_seq,
+                p.basis
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_migration
+               (k, contract_version, state, t0_wallclock, member_count, member_set_sha256)
+             VALUES ('hm', ?1, ?2, ?3, ?4, ?5)",
+            params![
+                m.contract_version,
+                m.state,
+                m.t0_wallclock,
+                m.member_count,
+                m.member_set_sha256
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// The `hm_migration` rows (at most one under its primary key).
+    pub fn migration_rows(&self) -> Result<Vec<MigrationRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT contract_version, state, t0_wallclock, member_count, member_set_sha256
+             FROM hm_migration",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(MigrationRow {
+                contract_version: r.get(0)?,
+                state: r.get(1)?,
+                t0_wallclock: r.get(2)?,
+                member_count: r.get(3)?,
+                member_set_sha256: r.get(4)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// Inserts one `hm_event` row. A duplicate subject is rejected by
+    /// `UNIQUE(subject)`.
+    pub fn insert_event(
+        &self,
+        subject: &str,
+        kind: &str,
+        agent_id: Option<&str>,
+        fields_json: &str,
+    ) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO hm_event (subject, kind, agent_id, fields) VALUES (?1, ?2, ?3, ?4)",
+            params![subject, kind, agent_id, fields_json],
+        )?;
+        Ok(())
     }
 
     /// The stored `sqlite_master.sql` of a trigger, if one of that name exists.

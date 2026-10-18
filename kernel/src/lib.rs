@@ -45,6 +45,7 @@ pub mod governed_http;
 pub mod governed_path;
 pub mod hardware;
 pub mod hardware_security;
+pub mod hm;
 pub mod identity;
 pub mod identity_home;
 pub mod immune;
