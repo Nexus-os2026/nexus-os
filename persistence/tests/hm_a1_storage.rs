@@ -962,3 +962,351 @@ fn hm_n1_policy_update_with_history_first_accepted() {
         Some("0:4:5")
     );
 }
+
+// ── N2: §5.2 content digest ─────────────────────────────────────────────────
+
+use nexus_persistence::hm::{content_digest, member_set_digest, MemberRow};
+use sha2::{Digest, Sha256};
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn scan(db: &NexusDatabase, table: &str) -> Vec<nexus_persistence::hm::ScannedRow> {
+    db.hm()
+        .immediate(|tx| tx.scan_table(table))
+        .expect("scan table")
+}
+
+fn only_digest(db: &NexusDatabase, table: &str) -> String {
+    let rows = scan(db, table);
+    assert_eq!(rows.len(), 1, "{table}: one fixture row");
+    rows[0].content_sha256.clone()
+}
+
+/// agent_memory: tag, then agent_id, memory_type, key, value_json, created_at.
+#[test]
+fn hm_n2_agent_memory_digest_matches_hand_built_bytes() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, relevance_score, access_count, created_at, last_accessed, expires_at)
+           VALUES (3, 'ag', 'episodic', 'k', '\"v\"', 0.5, 4, '2026-01-01', 'LA', 'EX')",
+    );
+    let mut b: Vec<u8> = Vec::new();
+    b.extend_from_slice(b"nexus-hm-v1/agent_memory");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"ag");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 8]);
+    b.extend_from_slice(b"episodic");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    b.extend_from_slice(b"k");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 3]);
+    b.extend_from_slice(b"\"v\"");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 10]);
+    b.extend_from_slice(b"2026-01-01");
+    assert_eq!(only_digest(&db, "agent_memory"), sha256_hex(&b));
+    assert_eq!(scan(&db, "agent_memory")[0].record_id, "3");
+    assert_eq!(scan(&db, "agent_memory")[0].agent_id, "ag");
+}
+
+/// task_history: tag, then id, agent_id, goal, steps_json, result_json (NULL), started_at.
+#[test]
+fn hm_n2_task_history_digest_matches_hand_built_bytes_with_null_marker() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO task_history (id, agent_id, goal, status, steps_json, result_json, fuel_consumed, started_at, completed_at, success)
+           VALUES ('u-1', 'ag', 'gl', 'running', '[]', NULL, 1.5, 'S', NULL, 0)",
+    );
+    let mut b: Vec<u8> = Vec::new();
+    b.extend_from_slice(b"nexus-hm-v1/task_history");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 3]);
+    b.extend_from_slice(b"u-1");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"ag");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"gl");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"[]");
+    b.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]); // NULL result_json
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    b.extend_from_slice(b"S");
+    assert_eq!(only_digest(&db, "task_history"), sha256_hex(&b));
+    assert_eq!(scan(&db, "task_history")[0].record_id, "u-1");
+
+    // NULL and the empty string are different values.
+    let null_digest = only_digest(&db, "task_history");
+    assert_accepted(&db, "UPDATE task_history SET result_json = ''");
+    let mut e: Vec<u8> = b[..b.len() - 17].to_vec();
+    e.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]); // '' has length 0
+    e.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    e.extend_from_slice(b"S");
+    assert_eq!(only_digest(&db, "task_history"), sha256_hex(&e));
+    assert_ne!(only_digest(&db, "task_history"), null_digest);
+}
+
+/// strategy_scores: tag, then agent_id, strategy_hash, goal_type.
+#[test]
+fn hm_n2_strategy_scores_digest_matches_hand_built_bytes() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO strategy_scores (id, agent_id, strategy_hash, goal_type, uses, successes, total_fuel, total_duration_secs, composite_score, updated_at)
+           VALUES (9, 'ag', 'hh', 'gt', 1, 1, 2.0, 3.0, 0.7, 'U')",
+    );
+    let mut b: Vec<u8> = Vec::new();
+    b.extend_from_slice(b"nexus-hm-v1/strategy_scores");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"ag");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"hh");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"gt");
+    assert_eq!(only_digest(&db, "strategy_scores"), sha256_hex(&b));
+}
+
+/// world_model_entities: tag, then agent_id, entity_json, created_at.
+#[test]
+fn hm_n2_world_model_entities_digest_matches_hand_built_bytes() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO world_model_entities (id, agent_id, entity_json, created_at) VALUES (4, 'ag', '{}', 'C')",
+    );
+    let mut b: Vec<u8> = Vec::new();
+    b.extend_from_slice(b"nexus-hm-v1/world_model_entities");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"ag");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"{}");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    b.extend_from_slice(b"C");
+    assert_eq!(only_digest(&db, "world_model_entities"), sha256_hex(&b));
+}
+
+/// world_model_relationships: tag, then agent_id, relationship_json, created_at.
+#[test]
+fn hm_n2_world_model_relationships_digest_matches_hand_built_bytes() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO world_model_relationships (id, agent_id, relationship_json, created_at) VALUES (4, 'ag', '[1]', 'C')",
+    );
+    let mut b: Vec<u8> = Vec::new();
+    b.extend_from_slice(b"nexus-hm-v1/world_model_relationships");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 2]);
+    b.extend_from_slice(b"ag");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 3]);
+    b.extend_from_slice(b"[1]");
+    b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    b.extend_from_slice(b"C");
+    assert_eq!(
+        only_digest(&db, "world_model_relationships"),
+        sha256_hex(&b)
+    );
+}
+
+#[test]
+fn hm_n2_domain_tag_and_length_prefix_separate_values() {
+    // Same bytes, different table tag.
+    let v: [Option<&[u8]>; 3] = [Some(b"ag"), Some(b"{}"), Some(b"C")];
+    assert_ne!(
+        content_digest("world_model_entities", &v),
+        content_digest("world_model_relationships", &v)
+    );
+    // Moving a byte across a field boundary changes the digest.
+    assert_ne!(
+        content_digest("strategy_scores", &[Some(b"ab"), Some(b"c"), Some(b"")]),
+        content_digest("strategy_scores", &[Some(b"a"), Some(b"bc"), Some(b"")])
+    );
+    // NULL is the 0xFF..FF length alone; it differs from the empty string.
+    let mut b: Vec<u8> = b"nexus-hm-v1/strategy_scores".to_vec();
+    b.extend_from_slice(&[0xFF; 8]);
+    assert_eq!(content_digest("strategy_scores", &[None]), sha256_hex(&b));
+    assert_ne!(
+        content_digest("strategy_scores", &[None]),
+        content_digest("strategy_scores", &[Some(b"")])
+    );
+}
+
+/// Updating an excluded (bookkeeping) column leaves the digest unchanged;
+/// updating a covered column changes it.
+#[test]
+fn hm_n2_excluded_columns_do_not_change_the_digest() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, relevance_score, access_count, created_at, last_accessed, expires_at)
+           VALUES (1, 'ag', 'episodic', 'k', 'v', 0.5, 0, 'C', 'L', NULL);
+         INSERT INTO task_history (id, agent_id, goal, status, steps_json, result_json, fuel_consumed, fuel_budget, estimated_time_secs, actual_time_secs, quality_score, started_at, completed_at, success)
+           VALUES ('u', 'ag', 'g', 'running', '[]', 'r', 0.0, NULL, NULL, NULL, NULL, 'S', NULL, 0);
+         INSERT INTO strategy_scores (id, agent_id, strategy_hash, goal_type, uses, successes, total_fuel, total_duration_secs, composite_score, updated_at)
+           VALUES (1, 'ag', 'h', 'gt', 1, 0, 0.0, 0.0, 0.0, 'U');
+         INSERT INTO world_model_entities (id, agent_id, entity_json, created_at) VALUES (1, 'ag', '{}', 'C');
+         INSERT INTO world_model_relationships (id, agent_id, relationship_json, created_at) VALUES (1, 'ag', '{}', 'C');",
+    );
+    let excluded: [(&str, &[&str]); 3] = [
+        (
+            "agent_memory",
+            &[
+                "relevance_score = 0.1",
+                "access_count = 99",
+                "last_accessed = 'L2'",
+                "expires_at = 'E2'",
+            ],
+        ),
+        (
+            "task_history",
+            &[
+                "status = 'done'",
+                "fuel_consumed = 5.0",
+                "fuel_budget = 6.0",
+                "estimated_time_secs = 7.0",
+                "actual_time_secs = 8.0",
+                "quality_score = 0.9",
+                "completed_at = 'D'",
+                "success = 1",
+            ],
+        ),
+        (
+            "strategy_scores",
+            &[
+                "uses = 2",
+                "successes = 1",
+                "total_fuel = 3.0",
+                "total_duration_secs = 4.0",
+                "composite_score = 0.5",
+                "updated_at = 'U2'",
+            ],
+        ),
+    ];
+    for (table, sets) in excluded {
+        let before = only_digest(&db, table);
+        for set in sets {
+            assert_accepted(&db, &format!("UPDATE {table} SET {set}"));
+            assert_eq!(
+                only_digest(&db, table),
+                before,
+                "{table}: {set} must not change the digest"
+            );
+        }
+    }
+    let covered: [(&str, &[&str]); 5] = [
+        (
+            "agent_memory",
+            &[
+                "agent_id = 'b'",
+                "memory_type = 'semantic'",
+                "key = 'k2'",
+                "value_json = 'v2'",
+                "created_at = 'C2'",
+            ],
+        ),
+        (
+            "task_history",
+            &[
+                "agent_id = 'b'",
+                "goal = 'g2'",
+                "steps_json = '[1]'",
+                "result_json = 'r2'",
+                "started_at = 'S2'",
+            ],
+        ),
+        (
+            "strategy_scores",
+            &[
+                "agent_id = 'b'",
+                "strategy_hash = 'h2'",
+                "goal_type = 'gt2'",
+            ],
+        ),
+        (
+            "world_model_entities",
+            &["agent_id = 'b'", "entity_json = '{1}'", "created_at = 'C2'"],
+        ),
+        (
+            "world_model_relationships",
+            &[
+                "agent_id = 'b'",
+                "relationship_json = '{1}'",
+                "created_at = 'C2'",
+            ],
+        ),
+    ];
+    for (table, sets) in covered {
+        for set in sets {
+            let before = only_digest(&db, table);
+            assert_accepted(&db, &format!("UPDATE {table} SET {set}"));
+            assert_ne!(
+                only_digest(&db, table),
+                before,
+                "{table}: {set} must change the digest"
+            );
+        }
+    }
+    // task_history.id is covered too: the same content under another id differs.
+    let before = only_digest(&db, "task_history");
+    assert_accepted(&db, "UPDATE task_history SET id = 'u2'");
+    assert_ne!(only_digest(&db, "task_history"), before);
+}
+
+#[test]
+fn hm_n2_member_set_digest_matches_hand_built_bytes_in_sorted_order() {
+    let row = |t: &str, id: &str, a: &str, d: &str| MemberRow {
+        record_table: t.to_string(),
+        record_id: id.to_string(),
+        agent_id: a.to_string(),
+        t0_content_sha256: d.to_string(),
+    };
+    // Given out of order; "10" sorts before "9" (byte order of TEXT ids).
+    let rows = vec![
+        row("task_history", "u", "a", "d3"),
+        row("agent_memory", "9", "a", "d2"),
+        row("agent_memory", "10", "b", "d1"),
+    ];
+    let mut b: Vec<u8> = b"nexus-hm-v1/t0-members".to_vec();
+    for (t, id, a, d) in [
+        ("agent_memory", "10", "b", "d1"),
+        ("agent_memory", "9", "a", "d2"),
+        ("task_history", "u", "a", "d3"),
+    ] {
+        for f in [t, id, a, d] {
+            b.extend_from_slice(&(f.len() as u64).to_be_bytes());
+            b.extend_from_slice(f.as_bytes());
+        }
+    }
+    assert_eq!(member_set_digest(&rows), sha256_hex(&b));
+    assert_eq!(
+        member_set_digest(&[]),
+        sha256_hex(b"nexus-hm-v1/t0-members"),
+        "empty ledger digest is the tag alone"
+    );
+}
+
+#[test]
+fn hm_n2_current_row_matches_scan_and_requires_canonical_ids() {
+    let db = NexusDatabase::in_memory().unwrap();
+    assert_accepted(
+        &db,
+        "INSERT INTO agent_memory (id, agent_id, memory_type, key, value_json, created_at, last_accessed)
+           VALUES (12, 'ag', 'episodic', 'k', 'v', 'C', 'L')",
+    );
+    let scanned = scan(&db, "agent_memory");
+    let cur = db
+        .hm()
+        .immediate(|tx| {
+            Ok((
+                tx.current_row("agent_memory", "12")?,
+                tx.current_row("agent_memory", "012")?,
+                tx.current_row("agent_memory", "12abc")?,
+                tx.current_row("agent_memory", "13")?,
+            ))
+        })
+        .unwrap();
+    assert_eq!(cur.0.as_ref(), scanned.first());
+    assert_eq!(cur.1, None);
+    assert_eq!(cur.2, None);
+    assert_eq!(cur.3, None);
+    assert!(db.hm().immediate(|tx| tx.scan_table("agents")).is_err());
+}

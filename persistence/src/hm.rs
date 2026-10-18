@@ -5,7 +5,9 @@
 //! returns row data and decides nothing; every authority decision (T₀,
 //! ledger checks, member states, evaluated labels) belongs to the kernel.
 
+use rusqlite::types::ValueRef;
 use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
+use sha2::{Digest, Sha256};
 
 use crate::{NexusDatabase, Result};
 
@@ -387,6 +389,140 @@ pub const L4_TRIGGERS: [(&str, &str); 11] = [
     ),
 ];
 
+// ── §5.2 content digest ─────────────────────────────────────────────────────
+
+/// Length written for a NULL value: 0xFFFFFFFFFFFFFFFF (§5.2).
+pub const NULL_LENGTH_MARKER: u64 = u64::MAX;
+
+/// Row digests start with this tag followed by the table name (§5.2).
+pub const ROW_DIGEST_TAG_PREFIX: &str = "nexus-hm-v1/";
+
+/// The member-set digest starts with this tag (§9.5).
+pub const MEMBER_SET_DIGEST_TAG: &str = "nexus-hm-v1/t0-members";
+
+/// The columns the §5.2 digest covers for each in-scope table, in order.
+/// Every other column is mutable bookkeeping and is excluded.
+pub fn digest_columns(table: &str) -> Option<&'static [&'static str]> {
+    match table {
+        "agent_memory" => Some(&["agent_id", "memory_type", "key", "value_json", "created_at"]),
+        "task_history" => Some(&[
+            "id",
+            "agent_id",
+            "goal",
+            "steps_json",
+            "result_json",
+            "started_at",
+        ]),
+        "strategy_scores" => Some(&["agent_id", "strategy_hash", "goal_type"]),
+        "world_model_entities" => Some(&["agent_id", "entity_json", "created_at"]),
+        "world_model_relationships" => Some(&["agent_id", "relationship_json", "created_at"]),
+        _ => None,
+    }
+}
+
+/// Appends one value: 8-byte big-endian length, then the bytes; NULL is the
+/// length marker alone.
+fn put_field(h: &mut Sha256, value: Option<&[u8]>) {
+    match value {
+        Some(bytes) => {
+            h.update((bytes.len() as u64).to_be_bytes());
+            h.update(bytes);
+        }
+        None => h.update(NULL_LENGTH_MARKER.to_be_bytes()),
+    }
+}
+
+/// §5.2 digest of one row: SHA-256 over `"nexus-hm-v1/" + table`, then each
+/// covered column value length-prefixed. Lowercase hex.
+pub fn content_digest(table: &str, values: &[Option<&[u8]>]) -> String {
+    let mut h = Sha256::new();
+    h.update(ROW_DIGEST_TAG_PREFIX.as_bytes());
+    h.update(table.as_bytes());
+    for value in values {
+        put_field(&mut h, *value);
+    }
+    hex::encode(h.finalize())
+}
+
+/// One `hm_t0_member` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberRow {
+    pub record_table: String,
+    pub record_id: String,
+    pub agent_id: String,
+    pub t0_content_sha256: String,
+}
+
+/// §9.5 member-set digest: SHA-256 over `"nexus-hm-v1/t0-members"`, then
+/// every row sorted by `(record_table, record_id)` (byte order), each row as
+/// its four fields length-prefixed as in §5.2. Lowercase hex.
+pub fn member_set_digest(rows: &[MemberRow]) -> String {
+    let mut sorted: Vec<&MemberRow> = rows.iter().collect();
+    sorted.sort_by(|a, b| {
+        (a.record_table.as_bytes(), a.record_id.as_bytes())
+            .cmp(&(b.record_table.as_bytes(), b.record_id.as_bytes()))
+    });
+    let mut h = Sha256::new();
+    h.update(MEMBER_SET_DIGEST_TAG.as_bytes());
+    for r in sorted {
+        put_field(&mut h, Some(r.record_table.as_bytes()));
+        put_field(&mut h, Some(r.record_id.as_bytes()));
+        put_field(&mut h, Some(r.agent_id.as_bytes()));
+        put_field(&mut h, Some(r.t0_content_sha256.as_bytes()));
+    }
+    hex::encode(h.finalize())
+}
+
+/// One in-scope row as the digest sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScannedRow {
+    /// Decimal id, or the `task_history` goal UUID as stored.
+    pub record_id: String,
+    pub agent_id: String,
+    pub content_sha256: String,
+}
+
+fn invalid_type(idx: usize, name: &str, v: ValueRef<'_>) -> rusqlite::Error {
+    rusqlite::Error::InvalidColumnType(idx, name.to_string(), v.data_type())
+}
+
+/// Reads `id, agent_id, <digest columns>` into a `ScannedRow`.
+/// The id is an INTEGER (rendered in decimal) or TEXT; `agent_id` is TEXT.
+/// Digest columns are TEXT-affinity: a TEXT or BLOB value contributes its
+/// bytes, NULL the marker; any other storage class is an error.
+fn scanned_row(
+    table: &str,
+    cols: &[&str],
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ScannedRow> {
+    let record_id = match row.get_ref(0)? {
+        ValueRef::Integer(i) => i.to_string(),
+        ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
+        v => return Err(invalid_type(0, "id", v)),
+    };
+    let agent_id = match row.get_ref(1)? {
+        ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
+        v => return Err(invalid_type(1, "agent_id", v)),
+    };
+    let mut values: Vec<Option<&[u8]>> = Vec::with_capacity(cols.len());
+    for (i, name) in cols.iter().enumerate() {
+        values.push(match row.get_ref(i + 2)? {
+            ValueRef::Null => None,
+            ValueRef::Text(b) | ValueRef::Blob(b) => Some(b),
+            v => return Err(invalid_type(i + 2, name, v)),
+        });
+    }
+    Ok(ScannedRow {
+        record_id,
+        agent_id,
+        content_sha256: content_digest(table, &values),
+    })
+}
+
+fn not_in_scope(table: &str) -> crate::PersistenceError {
+    crate::PersistenceError::NotFound(format!("not an in-scope table: {table}"))
+}
+
 // ── Store handle ────────────────────────────────────────────────────────────
 
 /// Row-level access to the historical-memory tables. Obtained only through
@@ -440,6 +576,45 @@ impl HmTx<'_> {
             self.tx.execute_batch(ddl)?;
         }
         Ok(())
+    }
+
+    /// Every row of one in-scope table, ordered by id, with its §5.2 digest.
+    pub fn scan_table(&self, table: &str) -> Result<Vec<ScannedRow>> {
+        let cols = digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let sql = format!(
+            "SELECT id, agent_id, {} FROM {table} ORDER BY id",
+            cols.join(", ")
+        );
+        let mut stmt = self.tx.prepare(&sql)?;
+        let rows = stmt.query_map([], |r| scanned_row(table, cols, r))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// The current row with this identity, if present. An integer-keyed
+    /// table matches only a canonical decimal `record_id`.
+    pub fn current_row(&self, table: &str, record_id: &str) -> Result<Option<ScannedRow>> {
+        let cols = digest_columns(table).ok_or_else(|| not_in_scope(table))?;
+        let sql = format!(
+            "SELECT id, agent_id, {} FROM {table} WHERE id = ?1",
+            cols.join(", ")
+        );
+        let mut stmt = self.tx.prepare(&sql)?;
+        let row = if table == "task_history" {
+            stmt.query_row(params![record_id], |r| scanned_row(table, cols, r))
+                .optional()?
+        } else {
+            match record_id.parse::<i64>() {
+                Ok(n) if n.to_string() == record_id => stmt
+                    .query_row(params![n], |r| scanned_row(table, cols, r))
+                    .optional()?,
+                _ => None,
+            }
+        };
+        Ok(row)
     }
 
     /// The stored `sqlite_master.sql` of a trigger, if one of that name exists.
