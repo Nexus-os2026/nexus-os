@@ -363,9 +363,11 @@ impl DispatchIssuer {
         }
     }
 
+    /// The event of a committed policy change. If it cannot be written the
+    /// change stands, and the back-fill reconciler is run (§15.3).
     fn policy_event(&self, p: PolicySnapshot, kind: &str) {
         let agent = p.agent_id.to_string();
-        events::after_commit(
+        let written = events::after_commit(
             &self.db,
             &events::policy_subject(&agent, p.policy_generation),
             kind,
@@ -375,6 +377,9 @@ impl DispatchIssuer {
                 "local_only": i64::from(p.local_only),
             }),
         );
+        if !written {
+            let _ = events::backfill_authority_events(&self.db);
+        }
     }
 
     /// §4.2 step 5, third case: no change; audited at most once per

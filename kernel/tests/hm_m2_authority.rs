@@ -15,13 +15,13 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use nexus_kernel::hm::{
-    evaluate_label, run_t0_option_a, unit_start_state, unit_taint_step, verify_at_start,
-    AgentRegistry, ConfigInput, ConfigReadError, ConfigReading, DispatchContext, DispatchIssuer,
-    EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent, PolicySnapshot, Principal,
-    ProbePoint, PromptBuilder, PromptEnvelope, RecallQuery, RecallRefused, RecalledRecord,
-    RecordTable, Refused, ReplyRefused, RouteAttestation, RouteClass, SourceKind, StartStatus,
-    StrategyWrite, TaskWrite, TransportEvidence, TransportFailure, Unit, Unresolved, WriteRefused,
-    MAX_RECORDS,
+    backfill_authority_events, evaluate_label, run_t0_option_a, unit_start_state, unit_taint_step,
+    verify_at_start, AgentRegistry, BackfillReport, ConfigInput, ConfigReadError, ConfigReading,
+    DispatchContext, DispatchIssuer, EvaluatedLabel, MemberState, NewMemory, OriginLabel, Parent,
+    PolicySnapshot, Principal, ProbePoint, PromptBuilder, PromptEnvelope, RecallQuery,
+    RecallRefused, RecalledRecord, RecordTable, Refused, ReplyRefused, RouteAttestation,
+    RouteClass, SourceKind, StartStatus, StrategyWrite, TaskWrite, TransportEvidence,
+    TransportFailure, Unit, Unresolved, WriteRefused, MAX_RECORDS,
 };
 use nexus_persistence::hm::{PolicyChangeRow, PolicyRow};
 use nexus_persistence::NexusDatabase;
@@ -2958,4 +2958,473 @@ fn hm_m2_n5_a_p3_out_of_band_config_edit() {
         1,
         "once per (agent, digest) across O1, O2 and O3"
     );
+}
+
+// ── N6: events and back-fill (§5.3, §15.1, §15.3) ───────────────────────────
+
+fn subject_count(db: &NexusDatabase, subject: &str) -> i64 {
+    count(
+        db,
+        &format!("SELECT COUNT(*) FROM hm_event WHERE subject = '{subject}'"),
+    )
+}
+
+/// TEST FIXTURE: makes every insert of one event kind fail.
+fn plant_event_failure(db: &NexusDatabase, name: &str, kind: &str) {
+    must(
+        db,
+        &format!(
+            "CREATE TRIGGER {name} BEFORE INSERT ON hm_event WHEN NEW.kind = '{kind}'
+             BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;"
+        ),
+    );
+}
+
+#[test]
+#[ignore = "child process entry for A-G7; run by the parent test"]
+fn hm_m2_child_tighten_kill_point() {
+    let Ok(path) = std::env::var("HM_M2_G7_DB") else {
+        return;
+    };
+    let db = Arc::new(open(Path::new(&path)));
+    let reg = Arc::new(TestRegistry::default());
+    reg.add(id(AGENT_B));
+    let cfg = Arc::new(TestConfig::default());
+    cfg.set(id(AGENT_B), true);
+    let issuer = DispatchIssuer::new(db, reg, cfg).unwrap();
+    issuer.install_probe(block_at(format!("{:?}", ProbePoint::PolicyTightened)));
+    let _ = issuer.begin_unit(agent(AGENT_B), goal());
+    println!("HM-M2-UNEXPECTED-RETURN");
+    std::process::exit(4);
+}
+
+#[test]
+fn hm_m2_n6_a_g7_killed_after_tightening_commit_change_stands_event_backfilled_once() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let mut child = spawn_child(
+        "hm_m2_child_tighten_kill_point",
+        &[("HM_M2_G7_DB", e.path.display().to_string())],
+    );
+    let rx = line_channel(&mut child);
+    assert_eq!(wait_line(&rx, READY), format!("{READY}PolicyTightened"));
+    child.kill().expect("kill child");
+    assert!(!child.wait().unwrap().success());
+
+    // Restart: a new process on the same database.
+    let db = Arc::new(open(&e.path));
+    assert_eq!(
+        policy_of(&db, AGENT_B),
+        "1|3|0|tightened",
+        "the change stands"
+    );
+    assert_eq!(
+        history_of(&db, AGENT_B).last().unwrap(),
+        "3|1|tightened|config_tighten"
+    );
+    let subject = format!("policy:{AGENT_B}:3");
+    assert_eq!(subject_count(&db, &subject), 0, "killed before its event");
+
+    let report = backfill_authority_events(&db).unwrap();
+    assert_eq!(
+        report,
+        BackfillReport {
+            policy_events: 2,
+            tombstone_events: 0,
+            complete: true
+        }
+    );
+    assert_eq!(
+        events_of(&db, "memory.policy_tightened_by_config"),
+        vec![(
+            subject.clone(),
+            Some(AGENT_B.to_string()),
+            r#"{"local_only":1,"policy_generation":3}"#.to_string()
+        )]
+    );
+    // The fixture loosening is described too; t0_baseline rows never are
+    // (their event is migration:t0, A9).
+    assert_eq!(
+        events_of(&db, "memory.policy_loosened"),
+        vec![(
+            format!("policy:{AGENT_B}:2"),
+            Some(AGENT_B.to_string()),
+            r#"{"local_only":0,"policy_generation":2}"#.to_string()
+        )]
+    );
+    for a in [AGENT_A, AGENT_B, AGENT_C, AGENT_D] {
+        assert_eq!(subject_count(&db, &format!("policy:{a}:1")), 0);
+    }
+    // Exactly once.
+    assert_eq!(
+        backfill_authority_events(&db).unwrap(),
+        BackfillReport {
+            policy_events: 0,
+            tombstone_events: 0,
+            complete: true
+        }
+    );
+    assert_eq!(subject_count(&db, &subject), 1);
+    // The restarted process sees the tightening.
+    let issuer =
+        DispatchIssuer::new(db.clone(), e.reg.clone(), Arc::new(TestConfig::default())).unwrap();
+    assert_eq!(
+        state(&issuer.begin_unit(agent(AGENT_B), goal()).unwrap()),
+        LO
+    );
+}
+
+#[test]
+fn hm_m2_n6_a_g7_failing_audit_never_undoes_a_tightening_or_a_restrictive_row() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    plant_event_failure(
+        &e.db,
+        "synthetic_fail_tighten",
+        "memory.policy_tightened_by_config",
+    );
+    plant_event_failure(&e.db, "synthetic_fail_created", "memory.policy_row_created");
+
+    e.cfg.set(id(AGENT_B), true);
+    let b = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(state(&b), LO);
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    assert_eq!(subject_count(&e.db, &format!("policy:{AGENT_B}:3")), 0);
+
+    let new_agent = e.issuer.begin_unit(agent(AGENT_E), goal()).unwrap();
+    assert_eq!(state(&new_agent), LO);
+    assert_eq!(policy_of(&e.db, AGENT_E), "1|1|0|default_restrictive");
+    assert_eq!(subject_count(&e.db, &format!("policy:{AGENT_E}:1")), 0);
+    // Later observations keep the stored restriction.
+    e.cfg.set(id(AGENT_B), false);
+    assert!(e
+        .issuer
+        .resolve_agent_route_policy(id(AGENT_B))
+        .unwrap()
+        .local_only());
+
+    // Once audit works again, back-fill describes every change once.
+    must(
+        &e.db,
+        "DROP TRIGGER synthetic_fail_tighten; DROP TRIGGER synthetic_fail_created;",
+    );
+    let report = backfill_authority_events(&e.db).unwrap();
+    assert_eq!(report.policy_events, 3);
+    for s in [
+        format!("policy:{AGENT_B}:2"),
+        format!("policy:{AGENT_B}:3"),
+        format!("policy:{AGENT_E}:1"),
+    ] {
+        assert_eq!(subject_count(&e.db, &s), 1, "{s}");
+    }
+}
+
+#[test]
+fn hm_m2_n6_tombstone_events_backfilled_once() {
+    let seed = seed_legacy_memories(AGENT_B, &[("SYNTH-t-1", 0.5), ("SYNTH-t-2", 0.5)])
+        + &format!(
+            "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at)
+               VALUES ('{PRE_T0_TASK_B}', '{AGENT_B}', 'SYNTH-goal', 'running', '[]', '2026-01-01T00:00:00Z');"
+        );
+    let e = env_seeded(
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D],
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E],
+        &seed,
+    );
+    let ids = strings(
+        &e.db,
+        "SELECT CAST(id AS TEXT) FROM agent_memory WHERE key LIKE 'SYNTH-t-%' ORDER BY id",
+    );
+    let members = count(&e.db, "SELECT COUNT(*) FROM hm_t0_member");
+    // Any delete path fires the §5.1 trigger; here a direct DELETE.
+    must(
+        &e.db,
+        &format!("DELETE FROM agent_memory WHERE id = {}", ids[0]),
+    );
+    let r = backfill_authority_events(&e.db).unwrap();
+    assert_eq!(r.tombstone_events, 1);
+    let first = format!("tombstone:agent_memory:{}", ids[0]);
+    assert_eq!(
+        events_of(&e.db, "memory.t0_member_deleted"),
+        vec![(
+            first.clone(),
+            Some(AGENT_B.to_string()),
+            r#"{"record_count":1}"#.to_string()
+        )]
+    );
+    assert_eq!(
+        backfill_authority_events(&e.db).unwrap().tombstone_events,
+        0
+    );
+    assert_eq!(subject_count(&e.db, &first), 1);
+
+    must(
+        &e.db,
+        &format!("DELETE FROM task_history WHERE id = '{PRE_T0_TASK_B}'"),
+    );
+    assert_eq!(
+        backfill_authority_events(&e.db).unwrap().tombstone_events,
+        1
+    );
+    assert_eq!(
+        subject_count(&e.db, &format!("tombstone:task_history:{PRE_T0_TASK_B}")),
+        1
+    );
+    // A post-T₀ row has no tombstone and no event when deleted.
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let w = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let r = e
+        .issuer
+        .write_memory(&w, &mem_r("SYNTH-post", 0.5), &[])
+        .unwrap();
+    must(
+        &e.db,
+        &format!(
+            "DELETE FROM agent_memory WHERE id = {}",
+            r.record_ref().record_id()
+        ),
+    );
+    assert_eq!(
+        backfill_authority_events(&e.db).unwrap().tombstone_events,
+        0
+    );
+    assert_eq!(events_of(&e.db, "memory.t0_member_deleted").len(), 2);
+    // The ledger is untouched by deletion and by back-fill.
+    assert_eq!(count(&e.db, "SELECT COUNT(*) FROM hm_t0_member"), members);
+    let StartStatus::Verified(report) = verify_at_start(&e.db).unwrap() else {
+        panic!("migrated")
+    };
+    assert!(report.checks.all_pass());
+}
+
+/// The §15.1 field allowlist per event kind.
+fn allowed_fields(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "memory.policy_row_created"
+        | "memory.policy_tightened"
+        | "memory.policy_tightened_by_config"
+        | "memory.policy_loosened" => &["local_only", "policy_generation"],
+        "memory.policy_loosening_not_authorised" => &["policy_generation"],
+        "memory.recall_filtered" => &["route_class", "eligible_count", "withheld_count"],
+        "memory.unlabelled_record_observed" => &["route_class", "unbound_count"],
+        "memory.dispatch_admitted" => &[
+            "route_class",
+            "record_count",
+            "grant_dep_count",
+            "raw_label",
+            "policy_generation",
+            "revocation_seq",
+        ],
+        "memory.dispatch_refused" => &["reason", "route_class"],
+        "memory.reply_discarded" | "memory.transport_failed" => &["outcome", "route_class"],
+        "memory.t0_member_deleted" => &["record_count"],
+        "memory.migration_t0" => &["rows", "member_count", "member_set_sha256"],
+        "memory.member_set_mismatch" => &["failed_checks"],
+        "memory.member_record_inconsistent" => &["missing_untombstoned", "reappeared"],
+        other => panic!("unknown event kind {other}"),
+    }
+}
+
+fn is_hex(s: &str, len: usize) -> bool {
+    s.len() == len && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The subject form of each kind (§5.3).
+fn subject_fits(kind: &str, subject: &str) -> bool {
+    let authority = |prefix: &str| subject.starts_with(prefix);
+    match kind {
+        "memory.policy_row_created"
+        | "memory.policy_tightened"
+        | "memory.policy_tightened_by_config"
+        | "memory.policy_loosened" => {
+            let parts: Vec<&str> = subject.split(':').collect();
+            parts.len() == 3
+                && parts[0] == "policy"
+                && Uuid::parse_str(parts[1]).is_ok()
+                && parts[2].parse::<i64>().is_ok_and(|g| g >= 1)
+        }
+        "memory.dispatch_admitted" => subject
+            .strip_prefix("admission:")
+            .is_some_and(|id| is_hex(id, 32)),
+        "memory.reply_discarded" | "memory.transport_failed" => subject
+            .strip_prefix("admission:")
+            .and_then(|r| r.strip_suffix(":outcome"))
+            .is_some_and(|id| is_hex(id, 32)),
+        "memory.t0_member_deleted" => authority("tombstone:"),
+        "memory.migration_t0" => subject == "migration:t0",
+        _ => subject
+            .strip_prefix(&format!("obs:{kind}:"))
+            .is_some_and(|id| is_hex(id, 32)),
+    }
+}
+
+/// A field value is a count, a generation, or a class name.
+fn value_fits(key: &str, v: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    let class = |allowed: &[&str]| v.as_str().is_some_and(|s| allowed.contains(&s));
+    match key {
+        "route_class" => class(&["local", "non_local"]),
+        "raw_label" => class(&["UNRESTRICTED_ORIGIN", "LEGACY_UNKNOWN", "LOCAL_ONLY_ORIGIN"]),
+        "outcome" => class(&[
+            "admitted",
+            "reply_used",
+            "reply_discarded",
+            "transport_failed",
+        ]),
+        "reason" => v
+            .as_str()
+            .is_some_and(|s| s.chars().all(|c| c.is_ascii_lowercase() || c == '_')),
+        "local_only" => matches!(v.as_i64(), Some(0 | 1)),
+        "failed_checks" => v.as_array().is_some_and(|a| {
+            a.iter()
+                .all(|x| matches!(x.as_str(), Some("L1" | "L2" | "L3" | "L4")))
+        }),
+        "rows" => v
+            .as_object()
+            .is_some_and(|o| o.values().all(|n| n.as_u64().is_some())),
+        "member_set_sha256" => v.as_str().is_some_and(|s| is_hex(s, 64)),
+        _ => matches!(v, Value::Number(n) if n.as_u64().is_some()),
+    }
+}
+
+#[test]
+fn hm_m2_n6_every_event_field_in_the_allowlist_and_content_free() {
+    let seed = seed_legacy_memories(AGENT_B, &[("SYNTH-legacy-1", 0.5), ("SYNTH-legacy-2", 0.4)])
+        + &format!(
+            "INSERT INTO task_history (id, agent_id, goal, status, steps_json, started_at)
+               VALUES ('{PRE_T0_TASK_B}', '{AGENT_B}', 'SYNTH-goal-text', 'running', '[\"SYNTH-step\"]', '2026-01-01T00:00:00Z');"
+        );
+    let e = env_seeded(
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D],
+        &[AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E],
+        &seed,
+    );
+    // Every kind this module writes, plus the T₀ and verification kinds.
+    e.issuer.begin_unit(agent(AGENT_A), goal()).unwrap(); // loosening not authorised
+    e.issuer.begin_unit(agent(AGENT_E), goal()).unwrap(); // row created
+    fixture_owner_loosen(&e.db, AGENT_B); // loosened (back-filled)
+    let w = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    for k in ["SYNTH-open-1", "SYNTH-open-2"] {
+        e.issuer.write_memory(&w, &mem_r(k, 0.9), &[]).unwrap();
+    }
+    insert_unlabelled(&e.db, AGENT_B, "SYNTH-unlabelled", 0.95);
+    let mut ctx = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 10, follow))
+        .unwrap(); // recall_filtered, unlabelled observed, admitted
+    e.issuer
+        .accept_reply(&mut ctx, a, Ok("SYNTH-reply".into()))
+        .unwrap();
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 0, follow))
+        .unwrap();
+    e.issuer
+        .accept_reply(&mut ctx, a, Err(TransportFailure))
+        .unwrap_err(); // transport failed
+    let a = e
+        .issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 0, follow))
+        .unwrap();
+    e.cfg.set(id(AGENT_B), true);
+    e.issuer
+        .accept_reply(&mut ctx, a, Ok("SYNTH-late".into()))
+        .unwrap_err(); // tightened by config, reply discarded
+    e.issuer
+        .admit(&mut ctx, &mut *build_with(&e.issuer, 0, non_local))
+        .unwrap_err(); // dispatch refused
+    must(
+        &e.db,
+        &format!("DELETE FROM task_history WHERE id = '{PRE_T0_TASK_B}'"),
+    );
+    backfill_authority_events(&e.db).unwrap(); // t0 member deleted, loosened
+                                               // Verification events: a member removed out of band with its delete
+                                               // trigger dropped (L4 fails; missing-untombstoned).
+    must(
+        &e.db,
+        "DROP TRIGGER hm_del_agent_memory;
+         DELETE FROM agent_memory WHERE key = 'SYNTH-legacy-2';",
+    );
+    verify_at_start(&e.db).unwrap();
+
+    let all = strings(&e.db, "SELECT kind FROM hm_event ORDER BY n");
+    let kinds: std::collections::BTreeSet<&str> = all.iter().map(|s| s.as_str()).collect();
+    for k in [
+        "memory.migration_t0",
+        "memory.policy_row_created",
+        "memory.policy_tightened_by_config",
+        "memory.policy_loosened",
+        "memory.policy_loosening_not_authorised",
+        "memory.recall_filtered",
+        "memory.unlabelled_record_observed",
+        "memory.dispatch_admitted",
+        "memory.dispatch_refused",
+        "memory.reply_discarded",
+        "memory.transport_failed",
+        "memory.t0_member_deleted",
+        "memory.member_set_mismatch",
+        "memory.member_record_inconsistent",
+    ] {
+        assert!(kinds.contains(k), "scenario produced no {k}");
+    }
+
+    // Strings that must never appear in a field: agent ids, admission ids,
+    // task ids, record keys and content markers, config digests, subjects.
+    let mut forbidden: Vec<String> = [AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E, PRE_T0_TASK_B]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    forbidden.extend(strings(
+        &e.db,
+        "SELECT admission_id FROM hm_dispatch_admission",
+    ));
+    forbidden.extend(["SYNTH".to_string(), "cfg-digest".to_string()]);
+    let subjects = strings(&e.db, "SELECT subject FROM hm_event");
+    forbidden.extend(subjects.iter().cloned());
+
+    let rows: Vec<(String, String, Option<String>, String)> =
+        e.db.with_transaction(|tx| {
+            let mut stmt =
+                tx.prepare("SELECT subject, kind, agent_id, fields FROM hm_event ORDER BY n")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+            let mut v = Vec::new();
+            for row in rows {
+                v.push(row?);
+            }
+            Ok(v)
+        })
+        .unwrap();
+    for (subject, kind, agent_id, fields) in &rows {
+        assert!(subject_fits(kind, subject), "{kind}: subject {subject}");
+        if let Some(a) = agent_id {
+            assert!(Uuid::parse_str(a).is_ok(), "{kind}: agent column is a UUID");
+        }
+        let v: serde_json::Value = serde_json::from_str(fields).unwrap();
+        let obj = v
+            .as_object()
+            .unwrap_or_else(|| panic!("{kind}: fields object"));
+        let allowed = allowed_fields(kind);
+        for (key, value) in obj {
+            assert!(
+                allowed.contains(&key.as_str()),
+                "{kind}: field {key} not allowed"
+            );
+            assert!(value_fits(key, value), "{kind}: {key} = {value}");
+        }
+        for needle in &forbidden {
+            assert!(
+                !fields.contains(needle.as_str()),
+                "{kind}: field leaks {needle}"
+            );
+        }
+    }
+    // Negative controls for the checks themselves.
+    assert!(!subject_fits(
+        "memory.dispatch_admitted",
+        "admission:not-hex"
+    ));
+    assert!(!value_fits("route_class", &serde_json::json!("SYNTH-key")));
+    assert!(!value_fits("withheld_count", &serde_json::json!("7")));
+    assert!(!allowed_fields("memory.recall_filtered").contains(&"key"));
 }

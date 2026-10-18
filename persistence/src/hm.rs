@@ -650,6 +650,14 @@ pub struct AdmissionRow {
     pub outcome: String,
 }
 
+/// One `hm_t0_tombstone` row with the agent its ledger row names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TombstoneRow {
+    pub record_table: String,
+    pub record_id: String,
+    pub agent_id: Option<String>,
+}
+
 /// The order of a recall over each in-scope table: most relevant first,
 /// newest id breaking ties.
 fn recall_order(table: &str) -> &'static str {
@@ -1267,6 +1275,67 @@ impl HmTx<'_> {
              WHERE admission_id = ?1 AND outcome = 'admitted'",
             params![admission_id, outcome],
         )?)
+    }
+
+    /// `hm_policy_change` rows with a cause other than `except_cause` that
+    /// have no event with subject `policy:<agent_id>:<policy_generation>`,
+    /// at most `limit`, ordered by `(agent_id, policy_generation)`.
+    pub fn policy_changes_without_event(
+        &self,
+        except_cause: &str,
+        limit: i64,
+    ) -> Result<Vec<PolicyChangeRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT c.agent_id, c.policy_generation, c.local_only, c.basis, c.cause
+             FROM hm_policy_change c
+             WHERE c.cause <> ?1
+               AND NOT EXISTS (SELECT 1 FROM hm_event e
+                               WHERE e.subject = 'policy:' || c.agent_id || ':' || c.policy_generation)
+             ORDER BY c.agent_id, c.policy_generation
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![except_cause, limit], |r| {
+            Ok(PolicyChangeRow {
+                agent_id: r.get(0)?,
+                policy_generation: r.get(1)?,
+                local_only: r.get(2)?,
+                basis: r.get(3)?,
+                cause: r.get(4)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// `hm_t0_tombstone` rows that have no event with subject
+    /// `tombstone:<record_table>:<record_id>`, at most `limit`, ordered by
+    /// `(record_table, record_id)`.
+    pub fn tombstones_without_event(&self, limit: i64) -> Result<Vec<TombstoneRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT t.record_table, t.record_id, m.agent_id
+             FROM hm_t0_tombstone t
+             LEFT JOIN hm_t0_member m
+               ON m.record_table = t.record_table AND m.record_id = t.record_id
+             WHERE NOT EXISTS (SELECT 1 FROM hm_event e
+                               WHERE e.subject = 'tombstone:' || t.record_table || ':' || t.record_id)
+             ORDER BY t.record_table, t.record_id
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |r| {
+            Ok(TombstoneRow {
+                record_table: r.get(0)?,
+                record_id: r.get(1)?,
+                agent_id: r.get(2)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
 
     pub fn insert_migration(&self, m: &MigrationRow) -> Result<()> {

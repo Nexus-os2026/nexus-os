@@ -16,7 +16,8 @@
 //! (`context`); the `DispatchIssuer`, §4.2 resolution and the context
 //! derivations (`issuer`); labelled writes (`write`); route-first recall
 //! (`recall`); the §12.4 admission point and §12.6 reply acceptance
-//! (`dispatch`); content-free events (`events`).
+//! (`dispatch`); content-free events and the back-fill reconciler
+//! (`events`).
 
 mod context;
 mod dispatch;
@@ -34,6 +35,7 @@ pub use dispatch::{
     Admission, BuildDispatch, Refused, ReplyRefused, RouteAttestation, TransportEvidence,
     TransportFailure,
 };
+pub use events::{backfill_authority_events, BackfillReport, BACKFILL_BOUND};
 pub use recall::{RecallQuery, RecallRefused};
 pub use write::{
     NewMemory, Parent, SourceKind, StrategyWrite, TaskWrite, WriteReceipt, WriteRefused,
