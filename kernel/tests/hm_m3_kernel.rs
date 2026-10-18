@@ -1022,3 +1022,97 @@ fn hm_m3_n1_entry_labels_and_dream_units_of_every_principal() {
         Unresolved::UnsupportedUnit
     );
 }
+
+// ── N3 (AMENDMENT 1, A1.5): mutant-killing tests ───────────────────────────
+
+/// A1.5 (a): the write side keeps the recall-time label of an inclusion.
+///
+/// A local context of B recalls B's memory m while m is UNBOUND (its content
+/// altered by an unlabelled writer). A non-local unit of B (loosened by the
+/// test fixture) includes that recalled record in a prompt attested local;
+/// the admission is dropped without a reply. Raw SQL then restores m, so it
+/// binds `UNRESTRICTED_ORIGIN` again. The unit's next write, with no
+/// parents, is `LOCAL_ONLY_ORIGIN`: the inclusion's label at entry
+/// (UNBOUND) joins the label evaluated at write time (§6.3; mission R1 (i)).
+#[test]
+fn hm_m3_n3_a15a_a_write_keeps_the_recall_time_label_of_an_inclusion() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let writer = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let m = e
+        .issuer
+        .write_memory(&writer, &mem_r("SYNTH-m", 0.9), &[])
+        .unwrap();
+    assert_eq!(m.label(), OriginLabel::UnrestrictedOrigin);
+    let m_id = m.record_ref().record_id().to_string();
+
+    // An unlabelled writer alters m: it is UNBOUND.
+    must(
+        &e.db,
+        &format!("UPDATE agent_memory SET value_json = '\"SYNTH-altered\"' WHERE id = {m_id}"),
+    );
+    assert_eq!(
+        evaluate_label(&e.db, RecordTable::AgentMemory, &m_id).unwrap(),
+        EvaluatedLabel::Unbound
+    );
+
+    // A local context of B recalls m while it is UNBOUND.
+    let mut local = local_unit(&e, AGENT_B);
+    let mut recs = e.issuer.recall(&mut local, memories(10)).unwrap();
+    assert_eq!(recs.len(), 1);
+    let rec = recs.remove(0);
+    assert_eq!(key_of(&e.db, &rec), "SYNTH-m");
+    assert_eq!(rec.label(), EvaluatedLabel::Unbound);
+
+    // A non-local unit of B includes it in a prompt attested local:
+    // admitted. The admission is dropped without a reply, so the unit's
+    // taint does not move.
+    let mut b = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(state(&b), UN);
+    let included = [&rec];
+    let admission = e
+        .issuer
+        .admit(&mut b, &mut including(&included, RouteClass::Local))
+        .unwrap();
+    assert_eq!(admission.route_class(), RouteClass::Local);
+    drop(admission);
+    assert_eq!(state(&b), UN, "no reply was accepted");
+    assert!(
+        b.working_set()
+            .verbatim()
+            .any(|(r, l)| r == rec.record_ref() && l == EvaluatedLabel::Unbound),
+        "the inclusion entered the working set with its recall-time label"
+    );
+
+    // Raw SQL restores m: it binds UNRESTRICTED_ORIGIN again.
+    must(
+        &e.db,
+        &format!("UPDATE agent_memory SET value_json = '\"SYNTH\"' WHERE id = {m_id}"),
+    );
+    assert_eq!(
+        evaluate_label(&e.db, RecordTable::AgentMemory, &m_id).unwrap(),
+        EvaluatedLabel::Bound(OriginLabel::UnrestrictedOrigin),
+        "m binds again"
+    );
+
+    // The unit writes a memory with no parents: LOCAL_ONLY_ORIGIN.
+    let after = e
+        .issuer
+        .write_memory(&b, &mem_r("SYNTH-b-after-inclusion", 0.1), &[])
+        .unwrap();
+    assert_eq!(
+        after.label(),
+        OriginLabel::LocalOnlyOrigin,
+        "the write of a unit whose prompt included a record UNBOUND at recall"
+    );
+    assert_eq!(
+        evaluate_label(
+            &e.db,
+            RecordTable::AgentMemory,
+            after.record_ref().record_id()
+        )
+        .unwrap(),
+        EvaluatedLabel::Bound(OriginLabel::LocalOnlyOrigin),
+        "the stored label"
+    );
+}

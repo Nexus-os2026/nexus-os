@@ -784,4 +784,49 @@ fuel_budget = 100
                 .to_path_buf()
         );
     }
+
+    /// AMENDMENT 1, A1.5 (b): the model directory is a component-wise path
+    /// prefix, never a string prefix. With in-process inference compiled in,
+    /// a model file under a sibling directory whose name starts with the
+    /// model directory's name (`<root>/models-other/x.gguf` beside
+    /// `<root>/models`) is non-local.
+    #[test]
+    fn hm_m3_n3_a15b_flash_model_in_a_sibling_prefix_directory_is_non_local() {
+        use nexus_connectors_llm::attest::attest_route_in;
+        let root = TempDir::new();
+        let models = root.0.join("models");
+        let sibling = root.0.join("models-other");
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::create_dir_all(&sibling).unwrap();
+        let inside = models.join("x.gguf");
+        std::fs::write(&inside, b"SYNTH").unwrap();
+        let beside = sibling.join("x.gguf");
+        std::fs::write(&beside, b"SYNTH").unwrap();
+
+        // Control: in-process inference is compiled in, so a regular model
+        // file inside the model directory is local.
+        assert_eq!(
+            attest_route_in(&flash_at(&inside), Some(&models)).class(),
+            RouteClass::Local
+        );
+        // The sibling's canonical path starts with the model directory's
+        // canonical path as a string, but not component-wise.
+        let (dir, model) = (
+            std::fs::canonicalize(&models).unwrap(),
+            std::fs::canonicalize(&beside).unwrap(),
+        );
+        assert!(model
+            .to_string_lossy()
+            .starts_with(dir.to_string_lossy().as_ref()));
+        assert!(!model.starts_with(&dir));
+        assert_eq!(
+            attest_route_in(&flash_at(&beside), Some(&models)).class(),
+            RouteClass::NonLocal
+        );
+        let shared = Arc::new(flash_at(&beside));
+        assert_eq!(
+            attest_route_in(&shared, Some(&models)).class(),
+            RouteClass::NonLocal
+        );
+    }
 }
