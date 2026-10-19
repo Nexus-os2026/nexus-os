@@ -4327,10 +4327,13 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
     );
     // (A post's destination reads run through the pipeline before it is
     // proposed, and again inside its own effect, under its guard.)
+    // P3-C11-M5 N2: the evidence store's SQLite `Connection::execute` is the
+    // one other spelling, in that one file.
     let executed: Vec<(&str, String)> = references(P3_CRATE, "execute");
     assert!(
         executed.iter().all(|(file, function)| {
-            (file.ends_with("control.rs") && function == "Control::execute")
+            *file == "crates/nexus-governed-control/src/evidence_store.rs"
+                || (file.ends_with("control.rs") && function == "Control::execute")
                 || (file.ends_with("governed.rs")
                     && matches!(
                         function.as_str(),
@@ -8289,6 +8292,9 @@ fn p3_g6_18_the_production_dependency_surface_is_pinned() {
             "nexus-kernel",
             "png",
             "reqwest",
+            // P3-C11-M5 N2 (EL-1): the evidence store, src/evidence_store.rs
+            // only (`p3_el1_n2_the_evidence_store_is_the_one_sqlite_file`).
+            "rusqlite",
             "serde",
             "serde_json",
             "sha2",
@@ -9509,4 +9515,43 @@ fn p3_c11_d2a1_the_ledger_protocol_core_is_confined() {
             "an item more visible than pub(super), at {at}"
         );
     }
+}
+
+/// P3-C11-M5 N2 (contract EL-1 §2): the evidence store is the one production
+/// file of the governed-control crate that names `rusqlite`, and it holds no
+/// `unsafe`, no `load_extension` and no ambient location (`temp_dir`,
+/// `current_exe`). The checks are proven on planted controls first.
+#[test]
+fn p3_el1_n2_the_evidence_store_is_the_one_sqlite_file() {
+    const STORE: &str = "crates/nexus-governed-control/src/evidence_store.rs";
+    // Production text (comments and test-only items left out), literals
+    // masked, as every scan here reads it.
+    let names_sqlite = |text: &str| words(&masked(&production_text(text)), "rusqlite").len();
+    let forbidden = |text: &str| -> Vec<&'static str> {
+        let m = masked(&production_text(text));
+        ["unsafe", "load_extension", "temp_dir", "current_exe"]
+            .into_iter()
+            .filter(|word| !words(&m, word).is_empty())
+            .collect()
+    };
+    // Planted controls: each is found in code, none in a comment or in a
+    // test-only item.
+    assert_eq!(names_sqlite("use rusqlite::Connection;"), 1);
+    assert_eq!(names_sqlite("// rusqlite in a comment\nfn f() {}"), 0);
+    assert_eq!(
+        forbidden(
+            "fn f() { unsafe { g() }; c.load_extension(p); std::env::temp_dir(); \
+             std::env::current_exe(); }"
+        ),
+        ["unsafe", "load_extension", "temp_dir", "current_exe"]
+    );
+    assert!(forbidden("// unsafe load_extension temp_dir current_exe\nfn f() {}").is_empty());
+    assert!(forbidden("#[cfg(test)]\nfn t() { std::env::temp_dir(); }\nfn f() {}").is_empty());
+    let naming: Vec<&str> = p3_sources()
+        .into_iter()
+        .filter(|(_, text)| names_sqlite(text) > 0)
+        .map(|(file, _)| file)
+        .collect();
+    assert_eq!(naming, ["evidence_store.rs"]);
+    assert!(forbidden(production_source(STORE)).is_empty(), "{STORE}");
 }

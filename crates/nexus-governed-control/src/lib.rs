@@ -105,6 +105,10 @@ pub mod connector;
 pub mod control;
 pub mod display;
 pub mod egress;
+// Wired into the production sink in N3 of P3-C11-M5; until then only its
+// tests reach it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub mod evidence_store;
 pub mod executable;
 pub mod governed;
 pub mod ingress;

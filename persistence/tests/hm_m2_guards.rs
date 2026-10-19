@@ -333,7 +333,7 @@ fn raw_opens(text: &str) -> usize {
 
 /// Non-test files that open their own SQLite file directly, with the file
 /// each one opens. None of them is the identity-home `nexus.db`.
-const RAW_OPEN_FILES: [(&str, &str); 6] = [
+const RAW_OPEN_FILES: [(&str, &str); 7] = [
     (
         "persistence/src/lib.rs",
         "NexusDatabase::open / in_memory (foreign keys on)",
@@ -349,6 +349,10 @@ const RAW_OPEN_FILES: [(&str, &str); 6] = [
     ),
     ("metering/src/store.rs", "metering.db"),
     ("marketplace/src/sqlite_registry.rs", "marketplace.db"),
+    (
+        "crates/nexus-governed-control/src/evidence_store.rs",
+        "<state>/p3-evidence/evidence.sqlite3",
+    ),
 ];
 
 /// Non-test files that resolve the identity-home `nexus.db` path.
