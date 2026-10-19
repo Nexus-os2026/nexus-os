@@ -43,6 +43,12 @@ impl ControlConfirmer for Yes {
         self.1.fetch_add(1, Ordering::SeqCst);
         self.0
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 /// A private runtime root under the system temporary directory, removed

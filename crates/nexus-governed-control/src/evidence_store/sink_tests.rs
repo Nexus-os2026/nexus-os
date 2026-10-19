@@ -32,6 +32,12 @@ impl ControlConfirmer for Yes {
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         true
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 /// What the fake effect does to the store while it runs (between its start
@@ -401,7 +407,10 @@ fn el1_n3_projections_are_written_only_after_the_store_commits() {
     let seq = evidence
         .record(&record(EvidencePhase::RunOpened))
         .expect("a failing projection changes nothing");
-    assert_eq!(seq, 2, "the owed record first, then this one");
+    assert_eq!(
+        seq, 3,
+        "the session's opening, the owed record, then this one"
+    );
     let copied: Vec<EvidencePhase> = copy.records().iter().map(|r| r.phase).collect();
     assert_eq!(
         copied,

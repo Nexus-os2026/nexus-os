@@ -17,7 +17,7 @@ pub(crate) mod scripted;
 #[cfg(test)]
 mod tests;
 
-use self::approval::{ControlConfirmer, ResumeConfirmation};
+use self::approval::{AcknowledgementConfirmation, ControlConfirmer, ResumeConfirmation};
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
 use self::evidence::{EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
@@ -235,6 +235,45 @@ impl Authority {
         self.record_end(&self.display_record(phase, detail))
     }
 
+    /// Whether the evidence store requires the owner's acknowledgement of
+    /// unsettled actions before anything is admitted (EL-1 §7).
+    pub fn recovery_required(&self) -> bool {
+        self.evidence
+            .primary()
+            .is_some_and(|primary| primary.health().recovery_required)
+    }
+
+    /// While recovery is required (EL-1 §7): the owner's acknowledgement,
+    /// only through the native confirmation, of exactly the statements read
+    /// before the dialog. Declined, failed or absent, nothing changes. It
+    /// grants nothing, clears no stop and changes no outcome.
+    fn acknowledge_recovery(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        let Some(primary) = self.evidence.primary() else {
+            return Ok(());
+        };
+        let Some(recovery) = primary.recovery() else {
+            return Ok(());
+        };
+        let request = AcknowledgementConfirmation {
+            unsettled: recovery.unsettled,
+            unclean_sessions: recovery.unclean_sessions,
+            covers_through: recovery.covers_through,
+        };
+        if !confirmer.confirm_acknowledgement(&request) {
+            return Err(AuthorityError::Declined);
+        }
+        primary
+            .acknowledge(request.covers_through)
+            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+        // A statement newer than what was shown still holds it.
+        if primary.health().recovery_required {
+            return Err(AuthorityError::Unavailable(
+                "a newer unsettled action needs acknowledgement",
+            ));
+        }
+        Ok(())
+    }
+
     fn display_record(
         &self,
         phase: EvidencePhase,
@@ -393,6 +432,9 @@ impl Authority {
     /// stop. A Resumed record is therefore not proof that the stop was
     /// lifted.
     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        // Recovery first: only after the owner's acknowledgement is the
+        // resume itself asked (EL-1 §7).
+        self.acknowledge_recovery(confirmer)?;
         let Some(stop) = self.runs.stop_to_lift().map_err(refused)? else {
             // Nothing is stopped: nothing to resume.
             return Ok(());

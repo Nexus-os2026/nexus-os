@@ -143,11 +143,73 @@ impl GrantConfirmation {
 
 /// The backend's native confirmation. `true` only if the owner confirmed.
 /// Everything that raises authority asks through it: a grant, an R2
-/// approval, and lifting an emergency stop.
+/// approval, and lifting an emergency stop; and the owner's acknowledgement
+/// of actions whose outcome was not recorded (which grants nothing).
 pub trait ControlConfirmer {
     fn confirm_action(&self, request: &ActionConfirmation) -> bool;
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool;
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool;
+    fn confirm_acknowledgement(&self, request: &AcknowledgementConfirmation) -> bool;
+}
+
+/// What the owner is shown before acknowledging unsettled actions (EL-1
+/// §7): built by the backend from the evidence store; it grants nothing.
+/// `covers_through` is the highest statement shown: the acknowledgement
+/// covers exactly what was shown, never a statement written after.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcknowledgementConfirmation {
+    /// Each unsettled commitment's short id.
+    pub unsettled: Vec<String>,
+    /// Each unclean session's short id.
+    pub unclean_sessions: Vec<String>,
+    pub covers_through: u64,
+}
+
+/// What an acknowledgement says it is, verbatim (EL-1 §7).
+pub const ACKNOWLEDGEMENT_MEANING: [&str; 2] = [
+    "These actions may or may not have happened.",
+    "Acknowledging records that you were shown this; it grants nothing and changes no outcome.",
+];
+
+impl AcknowledgementConfirmation {
+    pub fn title(&self) -> &'static str {
+        "Acknowledge actions whose outcome was not recorded?"
+    }
+
+    /// The counts and what they cover in the header; each unsettled
+    /// commitment and unclean session, then what acknowledging means, in
+    /// the details.
+    pub fn text(&self) -> ConfirmationText {
+        let mut details: Vec<String> = self
+            .unsettled
+            .iter()
+            .map(|id| format!("Unsettled action: {id}"))
+            .collect();
+        details.extend(
+            self.unclean_sessions
+                .iter()
+                .map(|id| format!("Unclean session: {id}")),
+        );
+        details.extend(ACKNOWLEDGEMENT_MEANING.iter().map(|line| line.to_string()));
+        ConfirmationText {
+            header: vec![
+                (
+                    "Unsettled actions",
+                    format!(
+                        "{} (outcome not recorded; the effect may have occurred)",
+                        self.unsettled.len()
+                    ),
+                ),
+                ("Unclean sessions", self.unclean_sessions.len().to_string()),
+                ("Covers records", format!("through {}", self.covers_through)),
+            ],
+            details: fitted_lines(&details),
+        }
+    }
+
+    pub fn message(&self) -> String {
+        self.text().plain()
+    }
 }
 
 /// What the owner is asked before an emergency stop is lifted: which stop,

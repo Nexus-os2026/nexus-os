@@ -35,6 +35,18 @@
 //!   and never waits for the owner: written, owed (kept, bounded, with its
 //!   original content), or uncertain (latched).
 //!
+//! - Sessions (§7): each qualification appends `session_opened`; a clean
+//!   shutdown appends `session_closed`. Before anything is admitted, once,
+//!   over the whole verified chain, every commitment that started and has no
+//!   end and no `unsettled` statement gets one ("outcome not recorded; the
+//!   effect may have occurred"), and every earlier session opened and never
+//!   closed gets an `unclean_session` statement. Recovery is required while
+//!   an `unsettled` statement is newer than what the owner acknowledged:
+//!   until then every gating record is refused. The acknowledgement covers
+//!   exactly the statements the owner was shown, grants nothing and
+//!   changes no outcome; it is the one record written for an action while
+//!   recovery is required.
+//!
 //! The tag is a SHA-256 chain over each row's fields, not a MAC: a writer
 //! running as the same OS user is outside the threat model (EL-1 §9), and
 //! tail truncation by such a writer is not detected (no external anchor).
@@ -44,7 +56,7 @@ use crate::authority::evidence::{
 };
 use rusqlite::{params, Connection, ErrorCode, OpenFlags};
 use sha2::{Digest as _, Sha256};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -212,6 +224,96 @@ pub(crate) struct Row {
 /// stops recorded beside them. One more latches the store.
 pub(crate) const OWED_CAPACITY: usize = 2 * crate::authority::commitment::CAPACITY;
 
+/// The text of every `unsettled` statement (EL-1 §7).
+pub(crate) const UNSETTLED_TEXT: &str = "outcome not recorded; the effect may have occurred";
+
+/// What the store knows of its sessions and statements (EL-1 §7), read from
+/// the verified chain and kept as rows are appended.
+#[derive(Default)]
+struct Known {
+    /// Commitments with a `started` row: its sequence number.
+    started: BTreeMap<String, u64>,
+    /// Commitments with a `finished` row (the one end of a started one).
+    finished: BTreeSet<String>,
+    /// `unsettled` statements: commitment → statement sequence number.
+    unsettled: BTreeMap<String, u64>,
+    /// Sessions opened, with the sequence number of `session_opened`.
+    opened: Vec<(String, u64)>,
+    closed: BTreeSet<String>,
+    /// `unclean_session` statements: session → statement sequence number.
+    unclean: BTreeMap<String, u64>,
+    /// The highest `covers_through` acknowledged.
+    acknowledged: u64,
+}
+
+impl Known {
+    /// Take one verified row into account.
+    fn take(&mut self, row: &Row) {
+        let json = || serde_json::from_str::<serde_json::Value>(&row.body).ok();
+        match (row.phase.as_str(), row.commitment.as_ref()) {
+            ("started", Some(commitment)) => {
+                self.started.insert(commitment.clone(), row.seq);
+            }
+            ("finished", Some(commitment)) => {
+                self.finished.insert(commitment.clone());
+            }
+            ("unsettled", Some(commitment)) => {
+                self.unsettled.insert(commitment.clone(), row.seq);
+            }
+            ("session_opened", None) => {
+                if let Some(session) =
+                    json().and_then(|v| v["session"].as_str().map(str::to_string))
+                {
+                    self.opened.push((session, row.seq));
+                }
+            }
+            ("session_closed", None) => {
+                if let Some(session) =
+                    json().and_then(|v| v["session"].as_str().map(str::to_string))
+                {
+                    self.closed.insert(session);
+                }
+            }
+            ("unclean_session", None) => {
+                if let Some(session) =
+                    json().and_then(|v| v["session"].as_str().map(str::to_string))
+                {
+                    self.unclean.insert(session, row.seq);
+                }
+            }
+            ("acknowledged", None) => {
+                if let Some(through) = json().and_then(|v| v["covers_through"].as_u64()) {
+                    self.acknowledged = self.acknowledged.max(through);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Recovery is required while an `unsettled` statement is newer than
+    /// the highest acknowledgement (an `unclean_session` alone does not
+    /// hold it).
+    fn recovery_required(&self) -> bool {
+        self.unsettled.values().any(|seq| *seq > self.acknowledged)
+    }
+}
+
+/// A statement's body (canonical JSON).
+fn statement(kind: &str, mut fields: serde_json::Value) -> String {
+    fields["event_kind"] = serde_json::Value::from("p3.evidence.statement");
+    fields["statement"] = serde_json::Value::from(kind);
+    fields.to_string()
+}
+
+/// What the owner is shown before acknowledging (EL-1 §7): the statements
+/// not yet acknowledged, and the highest of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Recovery {
+    pub(crate) unsettled: Vec<String>,
+    pub(crate) unclean_sessions: Vec<String>,
+    pub(crate) covers_through: u64,
+}
+
 /// A record owed: its original content, written late.
 struct Owed {
     record: EvidenceRecord,
@@ -253,6 +355,8 @@ struct Inner {
     last_seq: u64,
     last_tag: String,
     latched: bool,
+    /// Sessions and statements (EL-1 §7).
+    known: Known,
     /// End records not yet written, in order.
     owed: VecDeque<Owed>,
     #[cfg(test)]
@@ -602,20 +706,30 @@ impl EvidenceStore {
         )
         .ok_or(Unqualified::Chain)?;
         let (last_seq, last_tag) = verify_chain(&store, &rows).ok_or(Unqualified::Chain)?;
+        let mut known = Known::default();
+        for row in &rows {
+            known.take(row);
+        }
+        let mut inner = Inner {
+            conn,
+            store,
+            session: random_hex()?,
+            last_seq,
+            last_tag,
+            latched: false,
+            known,
+            owed: VecDeque::new(),
+            #[cfg(test)]
+            fault: None,
+            #[cfg(test)]
+            refusing: false,
+        };
+        // Only now, the whole chain verified: this session, then the
+        // reconciliation, before anything is admitted.
+        inner.open_session()?;
+        inner.reconcile()?;
         Ok(Self {
-            inner: Mutex::new(Inner {
-                conn,
-                store,
-                session: random_hex()?,
-                last_seq,
-                last_tag,
-                latched: false,
-                owed: VecDeque::new(),
-                #[cfg(test)]
-                fault: None,
-                #[cfg(test)]
-                refusing: false,
-            }),
+            inner: Mutex::new(inner),
         })
     }
 
@@ -654,7 +768,8 @@ impl EvidenceStore {
     ) -> (Result<u64, EvidenceUnavailable>, Vec<EvidenceRecord>) {
         let mut inner = self.inner();
         let mut written = Vec::new();
-        if inner.latched || !inner.pay_owed(&mut written) {
+        // Nothing new is admitted while recovery is required (EL-1 §7).
+        if inner.latched || inner.known.recovery_required() || !inner.pay_owed(&mut written) {
             return (Err(EvidenceUnavailable), written);
         }
         let owed = Owed::of(record);
@@ -697,9 +812,83 @@ impl EvidenceStore {
         EvidenceHealth {
             latched: inner.latched,
             owed: inner.owed.len(),
-            recovery_required: false,
-            unsettled: 0,
-            unclean_sessions: 0,
+            recovery_required: inner.known.recovery_required(),
+            unsettled: inner.known.unsettled.len(),
+            unclean_sessions: inner.known.unclean.len(),
+        }
+    }
+
+    /// What the owner must acknowledge, if recovery is required: read before
+    /// the dialog (EL-1 §7).
+    pub(crate) fn recovery(&self) -> Option<Recovery> {
+        let inner = self.inner();
+        let known = &inner.known;
+        if inner.latched || !known.recovery_required() {
+            return None;
+        }
+        let short = |id: &str| id.chars().take(12).collect::<String>();
+        let unsettled: Vec<(u64, String)> = known
+            .unsettled
+            .iter()
+            .filter(|(_, seq)| **seq > known.acknowledged)
+            .map(|(commitment, seq)| (*seq, short(commitment)))
+            .collect();
+        let unclean: Vec<(u64, String)> = known
+            .unclean
+            .iter()
+            .filter(|(_, seq)| **seq > known.acknowledged)
+            .map(|(session, seq)| (*seq, short(session)))
+            .collect();
+        let covers_through = unsettled
+            .iter()
+            .chain(unclean.iter())
+            .map(|(seq, _)| *seq)
+            .max()?;
+        let mut unsettled = unsettled;
+        let mut unclean = unclean;
+        unsettled.sort();
+        unclean.sort();
+        Some(Recovery {
+            unsettled: unsettled.into_iter().map(|(_, id)| id).collect(),
+            unclean_sessions: unclean.into_iter().map(|(_, id)| id).collect(),
+            covers_through,
+        })
+    }
+
+    /// The owner's acknowledgement of everything through `covers_through`
+    /// (the statements shown): written after every owed record; the one
+    /// record written for an action while recovery is required. It grants
+    /// nothing and changes no outcome.
+    pub(crate) fn acknowledge(&self, covers_through: u64) -> Result<u64, EvidenceUnavailable> {
+        let mut inner = self.inner();
+        let mut written = Vec::new();
+        if inner.latched || !inner.pay_owed(&mut written) {
+            return Err(EvidenceUnavailable);
+        }
+        let body = statement(
+            "acknowledged",
+            serde_json::json!({ "covers_through": covers_through }),
+        );
+        match inner.append("acknowledged", None, &body) {
+            Append::Committed { seq } => Ok(seq),
+            _ => Err(EvidenceUnavailable),
+        }
+    }
+
+    /// A clean shutdown's `session_closed` (an end record: it never fails).
+    pub(crate) fn close_session(&self) -> EndStatus {
+        let mut inner = self.inner();
+        let session = inner.session.clone();
+        let body = statement("session_closed", serde_json::json!({ "session": session }));
+        if inner.latched || !inner.pay_owed(&mut Vec::new()) {
+            return EndStatus::Owed;
+        }
+        match inner.append("session_closed", None, &body) {
+            Append::Committed { seq } | Append::AlreadyPresent { seq } => {
+                EndStatus::Recorded { seq }
+            }
+            Append::NotCommitted => EndStatus::Owed,
+            _ => EndStatus::Uncertain,
         }
     }
 }
@@ -743,6 +932,23 @@ impl PrimaryEvidence {
 
     pub fn health(&self) -> EvidenceHealth {
         self.store.health()
+    }
+
+    /// A clean shutdown: this session's `session_closed` (EL-1 §7).
+    pub fn close_session(&self) -> EndStatus {
+        self.store.close_session()
+    }
+
+    /// What the owner must acknowledge, if recovery is required (the
+    /// snapshot, read before the dialog).
+    pub(crate) fn recovery(&self) -> Option<Recovery> {
+        self.store.recovery()
+    }
+
+    /// Only after the owner's native confirmation of exactly `recovery`
+    /// (`Authority::resume`).
+    pub(crate) fn acknowledge(&self, covers_through: u64) -> Result<u64, EvidenceUnavailable> {
+        self.store.acknowledge(covers_through)
     }
 
     /// Copy what the store wrote, in order, outside its lock.
@@ -961,9 +1167,88 @@ impl Inner {
             self.latch();
             return Append::Uncertain;
         }
+        self.known.take(&Row {
+            seq,
+            session: self.session.clone(),
+            stored_ms,
+            phase: phase.to_string(),
+            commitment: commitment.map(str::to_string),
+            body: body.to_string(),
+            prev: self.last_tag.clone(),
+            tag: tag.clone(),
+        });
         self.last_seq = seq;
         self.last_tag = tag;
         Append::Committed { seq }
+    }
+
+    /// This process's `session_opened` (§7).
+    fn open_session(&mut self) -> Result<(), Unqualified> {
+        let body = statement(
+            "session_opened",
+            serde_json::json!({ "session": self.session }),
+        );
+        self.statement("session_opened", None, &body)
+    }
+
+    /// The one reconciliation (§7), over the whole verified chain, before
+    /// anything is admitted: an `unsettled` statement for every commitment
+    /// that started and has no end and none yet; an `unclean_session`
+    /// statement for every earlier session opened and never closed, and none
+    /// yet. A second start appends nothing new.
+    fn reconcile(&mut self) -> Result<(), Unqualified> {
+        let unsettled: Vec<(String, u64)> = self
+            .known
+            .started
+            .iter()
+            .filter(|(commitment, _)| {
+                !self.known.finished.contains(*commitment)
+                    && !self.known.unsettled.contains_key(*commitment)
+            })
+            .map(|(commitment, seq)| (commitment.clone(), *seq))
+            .collect();
+        for (commitment, started) in unsettled {
+            let body = statement(
+                "unsettled",
+                serde_json::json!({
+                    "commitment": commitment,
+                    "started_seq": started,
+                    "text": UNSETTLED_TEXT,
+                }),
+            );
+            self.statement("unsettled", Some(&commitment), &body)?;
+        }
+        let unclean: Vec<String> = self
+            .known
+            .opened
+            .iter()
+            .map(|(session, _)| session.clone())
+            .filter(|session| {
+                *session != self.session
+                    && !self.known.closed.contains(session)
+                    && !self.known.unclean.contains_key(session)
+            })
+            .collect();
+        for session in unclean {
+            let body = statement("unclean_session", serde_json::json!({ "session": session }));
+            self.statement("unclean_session", None, &body)?;
+        }
+        Ok(())
+    }
+
+    /// A statement the qualification needs: written, or the store is not
+    /// qualified.
+    fn statement(
+        &mut self,
+        kind: &str,
+        commitment: Option<&str>,
+        body: &str,
+    ) -> Result<(), Unqualified> {
+        match self.append(kind, commitment, body) {
+            Append::Committed { .. } => Ok(()),
+            Append::NotCommitted => Err(Unqualified::Sqlite),
+            _ => Err(Unqualified::Latched),
+        }
     }
 
     fn commit(&mut self) -> Result<(), ()> {
@@ -1107,3 +1392,7 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "evidence_store/sink_tests.rs"]
 mod sink_tests;
+
+#[cfg(test)]
+#[path = "evidence_store/recovery_tests.rs"]
+mod recovery_tests;

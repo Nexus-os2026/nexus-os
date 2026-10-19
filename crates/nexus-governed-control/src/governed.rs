@@ -150,7 +150,7 @@ impl GovernedControl {
         let control = Arc::new(Control::new(Authority::new(evidence, clock)));
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
-        Ok(Self {
+        let governed = Self {
             connectors: Connectors::production(egress.clone(), broker),
             tools: Tools::production(root.clone()),
             display: AgentDisplay::new(root.clone()),
@@ -159,7 +159,14 @@ impl GovernedControl {
             egress,
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
-        })
+        };
+        // An action may have happened unrecorded (EL-1 §7): governed control
+        // starts emergency-stopped, through the stop itself, and resumes only
+        // after the owner's acknowledgement.
+        if governed.authority().recovery_required() {
+            governed.stop_for(Some("recovery_required"));
+        }
+        Ok(governed)
     }
 
     /// End whatever can no longer start (expired, stale, its run or a grant
@@ -538,6 +545,12 @@ impl ControlConfirmer for NeverAsk {
         false
     }
     fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
         false
     }
 }

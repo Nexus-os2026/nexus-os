@@ -11,7 +11,8 @@
 
 use crate::AppState;
 use nexus_governed_control::authority::approval::{
-    ActionConfirmation, ConfirmationText, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
+    AcknowledgementConfirmation, ActionConfirmation, ConfirmationText, ControlConfirmer,
+    GrantConfirmation, ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
@@ -312,6 +313,9 @@ impl RealWorld {
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
         self.control.stop_display();
+        // A clean shutdown: the next start finds this session closed
+        // (EL-1 §7). An end record: never fails, may be owed.
+        self.evidence.close_session();
     }
 
     pub(crate) fn cancel_run(&self, run: &str) -> Result<(), String> {
@@ -804,6 +808,10 @@ impl ControlConfirmer for ControlDialogs {
 
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
         self.confirm(request.title(), request.text(), "Resume")
+    }
+
+    fn confirm_acknowledgement(&self, request: &AcknowledgementConfirmation) -> bool {
+        self.confirm(request.title(), request.text(), "Acknowledge")
     }
 }
 

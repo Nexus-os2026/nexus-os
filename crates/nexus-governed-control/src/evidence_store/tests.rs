@@ -27,6 +27,17 @@ impl Scratch {
         let mut bytes = [0u8; 8];
         getrandom::getrandom(&mut bytes).unwrap();
         let dir = std::env::temp_dir().join(format!("nexus-p3-evidence-{}", hex::encode(bytes)));
+        // Private from its creation (AM2.1 of the mission): never left to
+        // the umask, so a runtime root below it is accepted.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .mode(0o700)
+                .create(&dir)
+                .expect("a scratch directory");
+        }
+        #[cfg(not(unix))]
         std::fs::create_dir(&dir).expect("a scratch directory");
         Scratch { dir }
     }
@@ -84,6 +95,27 @@ fn tamper(path: &Path, trigger: &str, sql: &str) {
 
 const BODY: &str = r#"{"event_kind":"p3.action.evidence","phase":"finished"}"#;
 
+/// The store's own statements (EL-1 §7): every open writes its
+/// `session_opened` first (and reconciles).
+const STATEMENTS: [&str; 5] = [
+    "session_opened",
+    "session_closed",
+    "unsettled",
+    "unclean_session",
+    "acknowledged",
+];
+
+/// The rows that are not the store's own statements.
+fn appended(rows: &[Row]) -> Vec<&Row> {
+    rows.iter()
+        .filter(|row| !STATEMENTS.contains(&row.phase.as_str()))
+        .collect()
+}
+
+fn phases_of(rows: &[Row]) -> Vec<&str> {
+    rows.iter().map(|row| row.phase.as_str()).collect()
+}
+
 /// §2: every setting, read back on the store's own connection.
 #[test]
 fn el1_n2_the_settings_are_read_back() {
@@ -139,27 +171,37 @@ fn el1_n2_the_linked_sqlite_is_pinned() {
 fn el1_n2_a_reopened_store_keeps_its_records() {
     let scratch = Scratch::new();
     let path = scratch.store();
+    // Each open's `session_opened` is its first row (EL-1 §7).
     let (rows, id) = {
         let store = open(&path);
         assert_eq!(
             store.append("run_opened", None, "{\"a\":1}"),
-            Append::Committed { seq: 1 }
-        );
-        assert_eq!(
-            store.append("prepared", Some("cmt-a"), "{\"a\":2}"),
             Append::Committed { seq: 2 }
         );
         assert_eq!(
-            store.append("approved", Some("cmt-a"), "{\"a\":3}"),
+            store.append("prepared", Some("cmt-a"), "{\"a\":2}"),
             Append::Committed { seq: 3 }
+        );
+        assert_eq!(
+            store.append("approved", Some("cmt-a"), "{\"a\":3}"),
+            Append::Committed { seq: 4 }
         );
         (store.rows(), store.store_id())
     };
-    assert_eq!(rows.len(), 3);
+    assert_eq!(
+        phases_of(&rows),
+        ["session_opened", "run_opened", "prepared", "approved"]
+    );
     assert_eq!(rows[0].prev, GENESIS);
     assert_eq!(rows[1].prev, rows[0].tag);
     let store = open(&path);
-    assert_eq!(store.rows(), rows);
+    let again = store.rows();
+    assert_eq!(again[..4], rows[..], "every record is kept");
+    // The first session was never closed.
+    assert_eq!(
+        phases_of(&again[4..]),
+        ["session_opened", "unclean_session"]
+    );
     assert_eq!(store.store_id(), id);
     assert_ne!(
         store.session(),
@@ -168,9 +210,9 @@ fn el1_n2_a_reopened_store_keeps_its_records() {
     );
     assert_eq!(
         store.append("approved", Some("cmt-a"), "{\"a\":4}"),
-        Append::Committed { seq: 4 }
+        Append::Committed { seq: 7 }
     );
-    assert_eq!(store.rows()[3].prev, rows[2].tag);
+    assert_eq!(store.rows()[6].prev, again[5].tag);
 }
 
 fn three_rows(path: &Path) {
@@ -364,7 +406,7 @@ fn el1_n2_create_new_never_truncates() {
     );
     assert_eq!(std::fs::metadata(&path).unwrap().len(), size);
     let store = open(&path);
-    assert_eq!(store.rows().len(), 3);
+    assert_eq!(appended(&store.rows()).len(), 3);
 }
 
 /// §5: a once-only record written again with the same body is already
@@ -376,23 +418,23 @@ fn el1_n2_committed_already_present_and_conflict() {
     let store = open(&scratch.store());
     assert_eq!(
         store.append("finished", Some("cmt-1"), BODY),
-        Append::Committed { seq: 1 }
-    );
-    assert_eq!(
-        store.append("finished", Some("cmt-1"), BODY),
-        Append::AlreadyPresent { seq: 1 }
-    );
-    assert_eq!(
-        store.append("finished", Some("cmt-2"), BODY),
         Append::Committed { seq: 2 }
     );
     assert_eq!(
-        store.append("approved", Some("cmt-1"), BODY),
+        store.append("finished", Some("cmt-1"), BODY),
+        Append::AlreadyPresent { seq: 2 }
+    );
+    assert_eq!(
+        store.append("finished", Some("cmt-2"), BODY),
         Append::Committed { seq: 3 }
     );
     assert_eq!(
         store.append("approved", Some("cmt-1"), BODY),
         Append::Committed { seq: 4 }
+    );
+    assert_eq!(
+        store.append("approved", Some("cmt-1"), BODY),
+        Append::Committed { seq: 5 }
     );
     assert!(!store.is_latched());
     assert_eq!(
@@ -401,7 +443,7 @@ fn el1_n2_committed_already_present_and_conflict() {
     );
     assert!(store.is_latched());
     assert_eq!(store.append("run_opened", None, BODY), Append::Latched);
-    assert_eq!(store.rows().len(), 4);
+    assert_eq!(store.rows().len(), 5, "session_opened and four records");
 }
 
 /// §5: a failed tag check of the row a once-only append decides on latches
@@ -412,7 +454,7 @@ fn el1_n2_a_row_whose_tag_fails_latches_the_store() {
     let store = open(&scratch.store());
     assert_eq!(
         store.append("finished", Some("cmt-1"), BODY),
-        Append::Committed { seq: 1 }
+        Append::Committed { seq: 2 }
     );
     {
         let inner = store.inner();
@@ -420,7 +462,7 @@ fn el1_n2_a_row_whose_tag_fails_latches_the_store() {
             .conn
             .execute_batch(&format!(
                 "DROP TRIGGER record_no_update; \
-                 UPDATE record SET stored_ms = stored_ms + 1 WHERE seq = 1; {};",
+                 UPDATE record SET stored_ms = stored_ms + 1 WHERE seq = 2; {};",
                 trigger_sql("record_no_update")
             ))
             .unwrap();
@@ -441,19 +483,19 @@ fn el1_n2_a_full_database_is_not_committed() {
     let store = open(&scratch.store());
     assert_eq!(
         store.append("run_opened", None, BODY),
-        Append::Committed { seq: 1 }
+        Append::Committed { seq: 2 }
     );
     store.set_max_page_count(store.page_count());
     let big = format!("{{\"pad\":\"{}\"}}", "x".repeat(64 * 1024));
     assert_eq!(store.append("run_opened", None, &big), Append::NotCommitted);
     assert!(!store.is_latched());
-    assert_eq!(store.rows().len(), 1);
+    assert_eq!(store.rows().len(), 2);
     store.set_max_page_count(1 << 30);
     assert_eq!(
         store.append("run_opened", None, &big),
-        Append::Committed { seq: 2 }
+        Append::Committed { seq: 3 }
     );
-    assert_eq!(store.rows()[1].prev, store.rows()[0].tag);
+    assert_eq!(store.rows()[2].prev, store.rows()[1].tag);
 }
 
 /// §5: a COMMIT that fails latches the store (Uncertain), whether or not the
@@ -468,7 +510,7 @@ fn el1_n2_a_failed_commit_is_uncertain_and_latches() {
             let store = open(&path);
             assert_eq!(
                 store.append("run_opened", None, BODY),
-                Append::Committed { seq: 1 }
+                Append::Committed { seq: 2 }
             );
             store.plant_fault(fault);
             assert_eq!(
@@ -480,7 +522,16 @@ fn el1_n2_a_failed_commit_is_uncertain_and_latches() {
         }
         let store = open(&path);
         let rows = store.rows();
-        assert_eq!(rows.len(), if kept { 2 } else { 1 }, "{fault:?}");
+        assert_eq!(appended(&rows).len(), if kept { 2 } else { 1 }, "{fault:?}");
+        // A start that reached the file has no end: it is unsettled (§7).
+        assert_eq!(
+            phases_of(&rows)
+                .iter()
+                .filter(|p| **p == "unsettled")
+                .count(),
+            usize::from(kept),
+            "{fault:?}"
+        );
     }
 }
 

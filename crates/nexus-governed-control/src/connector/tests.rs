@@ -726,6 +726,12 @@ impl crate::authority::approval::ControlConfirmer for Shown {
     fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
         false
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 fn chat(h: &Harness, api: &Arc<Api>) -> Connectors {

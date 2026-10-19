@@ -50,6 +50,12 @@ impl ControlConfirmer for Confirmer {
     fn confirm_resume(&self, _request: &ResumeConfirmation) -> bool {
         self.approve.load(Ordering::SeqCst)
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 struct Fixture {
@@ -589,6 +595,12 @@ fn an_approval_requested_then_invalidated_during_the_dialog_is_refused() {
         }
         fn confirm_resume(&self, _request: &ResumeConfirmation) -> bool {
             true
+        }
+        fn confirm_acknowledgement(
+            &self,
+            _: &crate::authority::approval::AcknowledgementConfirmation,
+        ) -> bool {
+            false
         }
     }
     let f = fixture();
@@ -2079,6 +2091,12 @@ impl ControlConfirmer for ResumeDialog {
             during();
         }
         self.answer
+    }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
     }
 }
 

@@ -32,6 +32,12 @@ impl ControlConfirmer for Owner {
         self.1.fetch_add(1, Ordering::SeqCst);
         self.0
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 struct Isolated {
@@ -1815,4 +1821,279 @@ fn p3_el1_n3_a_result_carries_its_evidence() {
         t.world.approve(&denied, &owner).unwrap_err(),
         "governed control: refused: not_pending"
     );
+}
+
+// ── P3-C11-M5 N4: sessions, Recovery required, the acknowledgement (EL-1 §7) ─
+
+/// The owner's scripted answers to an acknowledgement and to a resume, and
+/// what was shown.
+struct Recovering {
+    acknowledge: bool,
+    resume: bool,
+    acknowledgements:
+        Mutex<Vec<nexus_governed_control::authority::approval::AcknowledgementConfirmation>>,
+    resumes: AtomicU32,
+}
+
+impl Recovering {
+    fn answering(acknowledge: bool, resume: bool) -> Self {
+        Self {
+            acknowledge,
+            resume,
+            acknowledgements: Mutex::new(Vec::new()),
+            resumes: AtomicU32::new(0),
+        }
+    }
+}
+
+impl ControlConfirmer for Recovering {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        self.resumes.fetch_add(1, Ordering::SeqCst);
+        self.resume
+    }
+    fn confirm_acknowledgement(
+        &self,
+        request: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        self.acknowledgements.lock().unwrap().push(request.clone());
+        self.acknowledge
+    }
+}
+
+const RECOVERY_CHILD: &str = "NEXUS_P3_EL1_RECOVERY_CHILD";
+
+/// The child of `p3_el1_n4_a_crash_mid_effect_is_acknowledged_through_p3_resume`:
+/// over the root it is given, an agent's governed request to an upstream
+/// that accepts and never answers starts (its start record committed); it
+/// reports `READY` and waits to be killed. Without its task it does nothing.
+#[test]
+#[ignore = "run by p3_el1_n4_a_crash_mid_effect_is_acknowledged_through_p3_resume"]
+fn p3_el1_n4_recovery_child() {
+    let Ok(root) = std::env::var(RECOVERY_CHILD) else {
+        return;
+    };
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(std::path::Path::new(&root), audit, db);
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["GET".into()],
+                allow_private: true,
+            },
+            60,
+            &Owner(true, AtomicU32::new(0)),
+        )
+        .unwrap();
+    let acting = world.clone();
+    std::thread::spawn(move || {
+        let bridge = AgentBridge::with_warden(acting, || false);
+        let get = Intent::Request(nexus_governed_control::egress::EgressIntent {
+            method: "GET".into(),
+            url: format!("{origin}/never"),
+            headers: vec![],
+            body: None,
+        });
+        bridge.act(&uuid::Uuid::new_v4().to_string(), &get, true)
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let executing = loop {
+        let found = world.status()["commitments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["state"] == "executing")
+            .map(|c| c["id"].as_str().unwrap().to_string());
+        if let Some(id) = found {
+            break id;
+        }
+        assert!(std::time::Instant::now() < deadline, "nothing executed");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    {
+        use std::io::Write as _;
+        let mut out = std::io::stdout().lock();
+        writeln!(out, "READY {executing}").unwrap();
+        out.flush().unwrap();
+    }
+    for _ in 0..1200 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    drop(server);
+}
+
+/// Run the recovery child over `root`, kill it (SIGKILL, through its own
+/// handle) once its effect has started, and reap it; the commitment.
+fn crash_mid_effect(root: &std::path::Path) -> String {
+    use std::io::BufRead as _;
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "governed_real_world::tests::p3_el1_n4_recovery_child",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(RECOVERY_CHILD, root)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            if let Some(at) = line.find("READY ") {
+                let _ = tx.send(line[at + "READY ".len()..].trim().to_string());
+                break;
+            }
+        }
+    });
+    let started = rx
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the child's effect started");
+    child.kill().unwrap();
+    let status = child.wait().unwrap();
+    let _ = reader.join();
+    assert!(!status.success(), "the child was killed");
+    started
+}
+
+/// The store's rows as (seq, phase, commitment, body), read through a
+/// read-only connection once nothing holds the file.
+fn store_rows(root: &std::path::Path) -> Vec<(i64, String, Option<String>, String)> {
+    let conn = rusqlite::Connection::open_with_flags(
+        super::evidence_path(root),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let mut statement = conn
+        .prepare("SELECT seq, phase, commitment, body FROM record ORDER BY seq")
+        .unwrap();
+    statement
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+/// EL-1 §7 through the desktop (mutants 10, 13, 14): a process killed while
+/// an effect runs leaves one unsettled action; at the next start governed
+/// control is emergency-stopped with recovery required. `p3_resume`
+/// (`RealWorld::resume`) asks the owner's acknowledgement first: declined,
+/// nothing changes and the resume is not asked; confirmed, the store writes
+/// `acknowledged{covers_through: N}` (N the highest statement shown) and
+/// only then is the existing resume confirmation asked, which lifts the
+/// stop.
+#[test]
+fn p3_el1_n4_a_crash_mid_effect_is_acknowledged_through_p3_resume() {
+    let root = private_home();
+    let started = crash_mid_effect(&root);
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(&root, audit, db);
+    let status = world.status();
+    assert_eq!(status["status"]["emergency_stopped"], true);
+    assert_eq!(status["evidence"]["recovery_required"], true);
+    assert_eq!(status["evidence"]["unsettled"], 1);
+    assert_eq!(status["evidence"]["unclean_sessions"], 1);
+    // Nothing new is admitted.
+    let owner = Owner(true, AtomicU32::new(0));
+    assert!(world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into()
+            },
+            60,
+            &owner
+        )
+        .is_err());
+    // Declined: nothing changes, the resume is never asked.
+    let no = Recovering::answering(false, true);
+    assert!(world.resume(&no).is_err());
+    assert_eq!(no.resumes.load(Ordering::SeqCst), 0);
+    assert_eq!(world.status()["evidence"]["recovery_required"], true);
+    assert_eq!(world.status()["status"]["emergency_stopped"], true);
+    // Confirmed: acknowledged, then the existing resume.
+    let yes = Recovering::answering(true, true);
+    world.resume(&yes).expect("acknowledged and resumed");
+    let shown = yes.acknowledgements.lock().unwrap().clone();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(
+        shown[0].unsettled,
+        [started.chars().take(12).collect::<String>()]
+    );
+    assert_eq!(yes.resumes.load(Ordering::SeqCst), 1);
+    assert_eq!(world.status()["evidence"]["recovery_required"], false);
+    assert_eq!(world.status()["status"]["emergency_stopped"], false);
+    world.shutdown();
+    drop(world);
+    let rows = store_rows(&root);
+    let unsettled: Vec<_> = rows.iter().filter(|r| r.1 == "unsettled").collect();
+    assert_eq!(unsettled.len(), 1);
+    assert_eq!(unsettled[0].2.as_deref(), Some(started.as_str()));
+    let shown_through = rows
+        .iter()
+        .filter(|r| r.1 == "unsettled" || r.1 == "unclean_session")
+        .map(|r| r.0)
+        .max()
+        .unwrap();
+    assert_eq!(
+        shown[0].covers_through,
+        u64::try_from(shown_through).unwrap()
+    );
+    let acknowledged: Vec<serde_json::Value> = rows
+        .iter()
+        .filter(|r| r.1 == "acknowledged")
+        .map(|r| serde_json::from_str(&r.3).unwrap())
+        .collect();
+    assert_eq!(acknowledged.len(), 1);
+    assert_eq!(acknowledged[0]["covers_through"], shown_through);
+    // The start stopped governed control through the stop, saying why; the
+    // clean shutdown closed its session.
+    assert!(rows
+        .iter()
+        .any(|r| r.1 == "emergency_stop" && r.3.contains("\"reason\":\"recovery_required\"")));
+    assert_eq!(rows.last().unwrap().1, "session_closed");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// EL-1 §7: a clean shutdown writes `session_closed`; the next start reports
+/// no unclean session and requires no recovery.
+#[test]
+fn p3_el1_n4_a_clean_shutdown_leaves_no_unclean_session() {
+    let root = private_home();
+    for _ in 0..2 {
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let db = Arc::new(NexusDatabase::in_memory().unwrap());
+        let world = RealWorld::for_tests(&root, audit, db);
+        assert_eq!(world.status()["evidence"]["unclean_sessions"], 0);
+        assert_eq!(world.status()["evidence"]["recovery_required"], false);
+        assert_eq!(world.status()["status"]["emergency_stopped"], false);
+        world.shutdown();
+    }
+    let phases: Vec<String> = store_rows(&root).into_iter().map(|r| r.1).collect();
+    assert_eq!(
+        phases,
+        [
+            "session_opened",
+            "session_closed",
+            "session_opened",
+            "session_closed"
+        ]
+    );
+    std::fs::remove_dir_all(&root).unwrap();
 }

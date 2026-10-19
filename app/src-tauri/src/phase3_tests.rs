@@ -4090,7 +4090,13 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         ]
     );
     let governed = production_source("crates/nexus-governed-control/src/governed.rs");
-    for method in ["confirm_action", "confirm_grant", "confirm_resume"] {
+    // P3-C11-M5 N4 (EL-1 §7): and the acknowledgement of unsettled actions.
+    for method in [
+        "confirm_action",
+        "confirm_grant",
+        "confirm_resume",
+        "confirm_acknowledgement",
+    ] {
         let never = one_fn(governed, &format!("NeverAsk::{method}"));
         assert_eq!(
             compact(never.body_text(governed)),
@@ -4107,6 +4113,7 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         ("confirm_action", "Allow"),
         ("confirm_grant", "Grant"),
         ("confirm_resume", "Resume"),
+        ("confirm_acknowledgement", "Acknowledge"),
     ] {
         let dialog = one_fn(front, &format!("ControlDialogs::{method}"));
         assert_eq!(
@@ -4610,6 +4617,8 @@ fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
 /// The paths of the governed-control crate the desktop names (see
 /// `p3_g6_06`).
 const DESKTOP_P3_ITEMS: &[&str] = &[
+    // P3-C11-M5 N4 (EL-1 §7): the native acknowledgement's text.
+    "nexus_governed_control::authority::approval::AcknowledgementConfirmation",
     "nexus_governed_control::authority::approval::ActionConfirmation",
     "nexus_governed_control::authority::approval::ConfirmationText",
     "nexus_governed_control::authority::approval::ControlConfirmer",
@@ -7530,7 +7539,8 @@ const STOP_ROUTINES: [(&str, &str, &str); 23] = [
     (
         "app/src-tauri/src/governed_real_world.rs",
         "RealWorld::shutdown",
-        "letauthority=self.control.authority();self.control.shut_down();letexecuting=||{self.control.is_starting_display()||authority.runs().views().iter().any(|run|{authority.commitments().views_of_run(run.id).iter().any(|view|view.state==CommitmentState::Executing)})};letdeadline=Instant::now()+SHUTDOWN_WAIT;whileexecuting()&&Instant::now()<deadline{sleep(Duration::from_millis(25));}self.control.stop_display();",
+        // Re-pinned (P3-C11-M5 N4, EL-1 §7): the clean shutdown closes its session.
+        "letauthority=self.control.authority();self.control.shut_down();letexecuting=||{self.control.is_starting_display()||authority.runs().views().iter().any(|run|{authority.commitments().views_of_run(run.id).iter().any(|view|view.state==CommitmentState::Executing)})};letdeadline=Instant::now()+SHUTDOWN_WAIT;whileexecuting()&&Instant::now()<deadline{sleep(Duration::from_millis(25));}self.control.stop_display();self.evidence.close_session();",
     ),
     (
         "app/src-tauri/src/governed_real_world.rs",

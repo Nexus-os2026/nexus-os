@@ -30,6 +30,12 @@ impl ControlConfirmer for Yes {
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         self.0
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 /// The fake world the effect acts on.

@@ -30,6 +30,12 @@ impl ControlConfirmer for Owner {
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         true
     }
+    fn confirm_acknowledgement(
+        &self,
+        _: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
 }
 
 #[test]
