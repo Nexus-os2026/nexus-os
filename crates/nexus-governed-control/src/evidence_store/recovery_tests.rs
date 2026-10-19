@@ -583,3 +583,67 @@ fn el1_m6_c3_records_paid_by_the_acknowledgement_are_projected() {
     let seq_of = |phase: &str| rows.iter().find(|r| r.phase == phase).unwrap().seq;
     assert!(seq_of("run_cancelled") < seq_of("acknowledged"));
 }
+
+// ── P3-C11-M6: corrections to EL-1 (C-4, C-7) ──────────────────────────────
+
+/// EL-1 §7 as amended by C-4 (P3-C11-M6): an acknowledgement beyond the
+/// highest committed sequence number is refused, and nothing is written (not
+/// even an owed record); one within it is written.
+#[test]
+fn el1_m6_c4_an_acknowledgement_beyond_the_store_is_refused() {
+    let (_scratch, path) = unsettled_store();
+    let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+    evidence.store().refuse_inserts(true);
+    assert_eq!(
+        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        EndStatus::Owed
+    );
+    evidence.store().refuse_inserts(false);
+    let rows = evidence.store().rows();
+    let last = rows.last().unwrap().seq;
+    assert!(evidence.acknowledge(last + 1).is_err());
+    assert_eq!(evidence.store().rows(), rows, "nothing is written");
+    assert_eq!(evidence.health().owed, 1);
+    assert!(evidence.health().recovery_required);
+    let seq = evidence.acknowledge(last).expect("within the store");
+    assert_eq!(evidence.health().owed, 0);
+    assert!(!evidence.health().recovery_required);
+    assert_eq!(evidence.store().rows().last().unwrap().seq, seq);
+}
+
+/// EL-1 §8 as amended by C-7 (P3-C11-M6): the status's `unsettled` counts
+/// only the statements no acknowledgement covers: after one, it is 0,
+/// recovery is not required and the unclean sessions are unchanged; a
+/// restart after it does not start stopped.
+#[test]
+fn el1_m6_c7_after_an_acknowledgement_nothing_is_unsettled() {
+    let (scratch, path) = unsettled_store();
+    let (evidence, authority) = authority_over(&path);
+    let before = evidence.health();
+    assert_eq!(
+        (
+            before.unsettled,
+            before.unclean_sessions,
+            before.recovery_required
+        ),
+        (1, 1, true)
+    );
+    authority.resume(&owner(true, true)).unwrap();
+    let after = evidence.health();
+    assert_eq!(after.unsettled, 0, "an acknowledged statement is settled");
+    assert!(!after.recovery_required);
+    assert_eq!(after.unclean_sessions, before.unclean_sessions);
+    drop(authority);
+    drop(evidence);
+    let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+    assert_eq!(evidence.health().unsettled, 0);
+    assert!(!evidence.health().recovery_required);
+    let governed = crate::governed::GovernedControl::with_secrets(
+        &scratch.path("runtime"),
+        crate::broker::Vault::Disabled.source(),
+        evidence.clone(),
+        Arc::new(ManualClock::default()),
+    )
+    .unwrap();
+    assert!(!governed.status().emergency_stopped);
+}

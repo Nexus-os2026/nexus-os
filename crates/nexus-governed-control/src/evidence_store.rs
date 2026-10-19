@@ -154,7 +154,8 @@ pub enum Unqualified {
     Schema,
     /// The identity row is missing or not exact.
     Identity,
-    /// A row's sequence, link or tag does not verify.
+    /// A row's sequence, link or tag does not verify, or an
+    /// acknowledgement covers its own row or a later one.
     Chain,
     /// SQLite failed otherwise.
     Sqlite,
@@ -299,6 +300,15 @@ impl Known {
     /// hold it).
     fn recovery_required(&self) -> bool {
         self.unsettled.values().any(|seq| *seq > self.acknowledged)
+    }
+
+    /// The `unsettled` statements no acknowledgement covers (EL-1 §8 as
+    /// amended by C-7).
+    fn unacknowledged(&self) -> usize {
+        self.unsettled
+            .values()
+            .filter(|seq| **seq > self.acknowledged)
+            .count()
     }
 }
 
@@ -725,6 +735,9 @@ impl EvidenceStore {
         )
         .ok_or(Unqualified::Chain)?;
         let (last_seq, last_tag) = verify_chain(&store, &rows).ok_or(Unqualified::Chain)?;
+        if !acknowledgements_precede(&rows) {
+            return Err(Unqualified::Chain);
+        }
         let mut known = Known::default();
         for row in &rows {
             known.take(row);
@@ -835,7 +848,7 @@ impl EvidenceStore {
             latched: inner.latched,
             owed: inner.owed.len(),
             recovery_required: inner.known.recovery_required(),
-            unsettled: inner.known.unsettled.len(),
+            unsettled: inner.known.unacknowledged(),
             unclean_sessions: inner.known.unclean.len(),
         }
     }
@@ -888,7 +901,9 @@ impl EvidenceStore {
     ) -> (Result<u64, EvidenceUnavailable>, Vec<EvidenceRecord>) {
         let mut inner = self.inner();
         let mut written = Vec::new();
-        if inner.latched || !inner.pay_owed(&mut written) {
+        // Nothing beyond the highest committed row can have been shown: such
+        // an acknowledgement is refused before anything is written (C-4).
+        if inner.latched || covers_through > inner.last_seq || !inner.pay_owed(&mut written) {
             return (Err(EvidenceUnavailable), written);
         }
         let body = statement(
@@ -935,7 +950,7 @@ pub struct EvidenceHealth {
     pub owed: usize,
     /// An unsettled commitment has not been acknowledged (§7).
     pub recovery_required: bool,
-    /// Unsettled statements in the store.
+    /// Unsettled statements no acknowledgement covers.
     pub unsettled: usize,
     /// Unclean-session statements in the store.
     pub unclean_sessions: usize,
@@ -1099,6 +1114,20 @@ fn verify_chain(store: &str, rows: &[Row]) -> Option<(u64, String)> {
     Some((last_seq, last_tag))
 }
 
+/// Every `acknowledged` row covers only rows before it: its
+/// `covers_through` is below its own sequence number (EL-1 §7 as amended by
+/// C-4).
+fn acknowledgements_precede(rows: &[Row]) -> bool {
+    rows.iter()
+        .filter(|row| row.phase == "acknowledged" && row.commitment.is_none())
+        .all(|row| {
+            serde_json::from_str::<serde_json::Value>(&row.body)
+                .ok()
+                .and_then(|body| body["covers_through"].as_u64())
+                .is_none_or(|through| through < row.seq)
+        })
+}
+
 impl Inner {
     fn latch(&mut self) {
         self.latched = true;
@@ -1203,6 +1232,15 @@ impl Inner {
                     return Append::Uncertain;
                 }
                 return self.already(phase, commitment, body);
+            }
+            // Another constraint (the primary key: the store's view of the
+            // chain has diverged from the file): rolled back, and latched
+            // (C-8). A full database and every other failure before COMMIT
+            // stay not committed.
+            Err(error) if is_constraint_violation(&error) => {
+                rolled_back(&self.conn);
+                self.latch();
+                return Append::Uncertain;
             }
             _ => {
                 if rolled_back(&self.conn) {
@@ -1348,6 +1386,10 @@ fn is_unique_violation(error: &rusqlite::Error) -> bool {
     )
 }
 
+fn is_constraint_violation(error: &rusqlite::Error) -> bool {
+    error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation)
+}
+
 #[cfg(test)]
 impl EvidenceStore {
     pub(crate) fn plant_fault(&self, fault: Fault) {
@@ -1367,6 +1409,14 @@ impl EvidenceStore {
     /// Only the next insert fails before COMMIT; the one after succeeds.
     pub(crate) fn refuse_next_insert(&self) {
         self.inner().refuse_next = true;
+    }
+
+    /// The store's view of the chain diverges from the file (C-8 of
+    /// P3-C11-M6): its last sequence number goes back by one, so its next
+    /// insert collides with the row the file already holds.
+    pub(crate) fn rewind_last_seq(&self) {
+        let mut inner = self.inner();
+        inner.last_seq -= 1;
     }
 
     /// Hold the store's mutex (a slow store) until the guard is dropped.

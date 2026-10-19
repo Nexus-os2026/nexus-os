@@ -715,3 +715,72 @@ fn el1_n2_a_killed_process_keeps_every_committed_row() {
         assert!(row.body.starts_with(&format!("{{\"n\":{n},")), "{seq}");
     }
 }
+
+// ── P3-C11-M6: corrections to EL-1 (C-4, C-8) ──────────────────────────────
+
+/// EL-1 §7 as amended by C-4 (P3-C11-M6): at qualification an
+/// `acknowledged` row covers only rows before it. A fixture-written row with
+/// a correct tag and chain (inserted behind the store's back, its tag made
+/// by `tag_of`) whose `covers_through` is its own sequence number or later
+/// leaves the store unqualified; one below it qualifies.
+#[test]
+fn el1_m6_c4_an_acknowledgement_that_covers_itself_is_unqualified() {
+    for (offset, qualifies) in [(-1i64, true), (0, false), (1, false)] {
+        let scratch = Scratch::new();
+        let path = scratch.store();
+        let (store, last) = {
+            let store = open(&path);
+            (store.store_id(), store.rows().pop().unwrap())
+        };
+        let seq = last.seq + 1;
+        let covers_through = i64::try_from(seq).unwrap() + offset;
+        let body = statement(
+            "acknowledged",
+            serde_json::json!({ "covers_through": covers_through }),
+        );
+        let session = "0123456789abcdef0123456789abcdef";
+        let tag = tag_of(
+            &store,
+            &last.tag,
+            seq,
+            session,
+            7,
+            "acknowledged",
+            None,
+            &body,
+        );
+        tamper(
+            &path,
+            "record_no_update",
+            &format!(
+                "INSERT INTO record (seq, session, stored_ms, phase, commitment, body, prev, tag) \
+                 VALUES ({seq}, '{session}', 7, 'acknowledged', NULL, '{body}', '{}', '{tag}')",
+                last.tag
+            ),
+        );
+        if qualifies {
+            assert!(EvidenceStore::open(&path).is_ok(), "{offset}");
+        } else {
+            assert_eq!(refused(&path), Unqualified::Chain, "{offset}");
+        }
+    }
+}
+
+/// EL-1 §5 as amended by C-8 (P3-C11-M6): a constraint failure other than
+/// the once-only index's (here the primary key: the store's view of the
+/// chain has diverged from the file) latches the store, uncertain; nothing
+/// more is appended.
+#[test]
+fn el1_m6_c8_a_primary_key_collision_latches_the_store_as_uncertain() {
+    let scratch = Scratch::new();
+    let store = open(&scratch.store());
+    assert_eq!(
+        store.append("run_opened", None, BODY),
+        Append::Committed { seq: 2 }
+    );
+    store.rewind_last_seq();
+    assert_eq!(store.append("run_opened", None, BODY), Append::Uncertain);
+    assert!(store.is_latched());
+    assert_eq!(store.append("run_opened", None, BODY), Append::Latched);
+    assert_eq!(store.rows().len(), 2);
+}
