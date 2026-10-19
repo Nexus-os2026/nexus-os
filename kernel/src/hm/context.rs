@@ -403,13 +403,15 @@ pub struct DispatchContext {
 
 /// How a context dispatches (§12.1, mission R2): an agent's (AR, AC: §12.4
 /// and §12.6 in full), an Owner's retained entry (HR: §12.4 steps 2, 4 and
-/// 5, with no agent), or a plain non-agent request (HD, HB, SY, XS: no
-/// admission row, no inclusion, unrestricted carried items on a non-local
-/// route).
+/// 5, with no agent), an Owner's request shaped by backend state with no
+/// registered agent (HB, mission P3-C11-HM-M4 C-3: as HR, an admission row
+/// with no agent), or a plain non-agent request (HD, SY, XS: no admission
+/// row, no inclusion, unrestricted carried items on a non-local route).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::hm) enum DispatchClass {
     Agent,
     OwnerRetained,
+    OwnerBackendShaped,
     Plain,
 }
 

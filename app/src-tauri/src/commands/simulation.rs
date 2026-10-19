@@ -325,10 +325,15 @@ fn temporal_unit(
             }
         }
     }
-    Ok((
-        crate::hm_dispatch::request_unit(state, Principal::OwnerDirect)?,
-        nexus_kernel::temporal::DriveProjection::default(),
-    ))
+    // HB with no registered agent (mission P3-C11-HM-M4 C-3): the issuer's
+    // own unit start sets the class, whose dispatches write admission rows.
+    let unit = issuer.begin_backend_shaped_request().map_err(|e| {
+        format!(
+            "{}: {e}",
+            crate::commands::cognitive::unresolved_policy_error()
+        )
+    })?;
+    Ok((unit, nexus_kernel::temporal::DriveProjection::default()))
 }
 
 /// One model call of a human request (HB, HD): `prompt` (the caller's

@@ -234,8 +234,9 @@ fn make_runtime(sup: Arc<Mutex<Supervisor>>) -> (CognitiveRuntime, Arc<Collectin
         fuel_reserve_threshold: 0.05,
         reflection_interval: 3,
     };
-    let runtime =
-        CognitiveRuntime::new(sup, config, emitter.clone()).with_dispatch_issuer(issuer().clone());
+    let runtime = CognitiveRuntime::new(sup, config, emitter.clone())
+        .with_dispatch_issuer(issuer().clone())
+        .with_state_database(issuer().state_database().clone());
     (runtime, emitter)
 }
 
@@ -552,8 +553,9 @@ fn test_max_cycles_enforced() {
         fuel_reserve_threshold: 0.01,
         reflection_interval: 100,
     };
-    let runtime =
-        CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer().clone());
+    let runtime = CognitiveRuntime::new(sup, config, emitter)
+        .with_dispatch_issuer(issuer().clone())
+        .with_state_database(issuer().state_database().clone());
     let goal = AgentGoal::new("many cycles".into(), 5);
     runtime.assign_goal(&agent_id, goal).unwrap();
 
@@ -934,8 +936,9 @@ fn test_consecutive_failures_trigger_replan() {
         fuel_reserve_threshold: 0.01,
         reflection_interval: 100,
     };
-    let runtime =
-        CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer().clone());
+    let runtime = CognitiveRuntime::new(sup, config, emitter)
+        .with_dispatch_issuer(issuer().clone())
+        .with_state_database(issuer().state_database().clone());
     let goal = AgentGoal::new("replan on failure".into(), 5);
     runtime.assign_goal(&agent_id, goal).unwrap();
 

@@ -423,8 +423,10 @@ impl DispatchIssuer {
     ///   retained data (class AC).
     /// - `OwnerDirect` (a chat turn or a request) and `System` (a request):
     ///   no §4.2, no retained data, starting `UNRESTRICTED_ORIGIN` and
-    ///   `non_local` (classes HD, HB, SY, XS, mission R2). An agent-only
-    ///   unit (a goal, a HiveMind sub-task, a team task) is refused.
+    ///   `non_local` (classes HD, SY, XS, mission R2; an HB request with no
+    ///   registered agent starts at `begin_backend_shaped_request`). An
+    ///   agent-only unit (a goal, a HiveMind sub-task, a team task) is
+    ///   refused.
     ///
     /// A post-goal unit is only derived; a dream unit starts from its entry
     /// (`begin_entry_unit`).
@@ -583,6 +585,24 @@ impl DispatchIssuer {
         ctx.route_class = route_class;
         ctx.restrictions.local_only = true;
         ctx.class = DispatchClass::OwnerRetained;
+        Ok(ctx)
+    }
+
+    /// O1 for a human request that backend state shapes and that names no
+    /// registered agent (class HB, §12.1: the temporal fork of a caller id
+    /// that is no agent): an `OwnerDirect` request unit, unrestricted and
+    /// non-local, carrying no retained data, whose every dispatch writes an
+    /// admission row with no agent (§12.4 steps 1 and 5; mission
+    /// P3-C11-HM-M4 C-3). The class is set here, never chosen from a caller
+    /// string.
+    pub fn begin_backend_shaped_request(&self) -> Result<DispatchContext, Unresolved> {
+        let mut ctx = self.plain_context(
+            Principal::OwnerDirect,
+            Unit::Request {
+                request_id: Uuid::from_bytes(random_id()?),
+            },
+        )?;
+        ctx.class = DispatchClass::OwnerBackendShaped;
         Ok(ctx)
     }
 }

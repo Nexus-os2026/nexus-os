@@ -1343,11 +1343,12 @@ const ERRATA_E_M3_1: [(&str, &str, &str, &str); 15] = [
 
 /// Class LATENT: `(file, site, closed set)`. The closed set is the site's
 /// item and every item of the same file that reaches it (a type stands for
-/// its definition and impl blocks; a lower-case name is a free function).
+/// its definition and impl blocks; a lower-case name is a free function; a
+/// `Type::method` is that method alone).
 /// The proof (`latent_references`): no production reference to any item of
 /// the set outside the set's own items, so none outside the defining file;
 /// a reference appearing later fails A-S4.
-const LATENT: [(&str, &str, &[&str]); 10] = [
+const LATENT: [(&str, &str, &[&str]); 11] = [
     (
         "adaptation/src/adapter.rs",
         "LlmStrategyAdvisor::recommend_focus",
@@ -1403,6 +1404,22 @@ const LATENT: [(&str, &str, &[&str]); 10] = [
         "ContentComposer::compose",
         &["ContentComposer", "compose"],
     ),
+    // Mission P3-C11-HM-M4 C-4: no production caller; it returns a genome
+    // whose system prompt is an unlabelled copy of a model reply (its model
+    // call is the `AutoEvolveLlm::mutate_prompt` trait call, §11.4).
+    (
+        "kernel/src/genome/auto_evolve.rs",
+        "AutoEvolutionManager::apply_evolution",
+        &["AutoEvolutionManager::apply_evolution"],
+    ),
+];
+
+/// The §11.4 model-trait calls through which a LATENT method that is no
+/// model-call site of [`CALLS`] reaches a model (mission P3-C11-HM-M4 C-4).
+const MODEL_TRAIT_CALLS: [&str; 3] = [
+    ".mutate_prompt(",
+    ".score_response(",
+    ".generate_with_prompt(",
 ];
 
 /// Exact-site scanner exceptions: `(file, fn, shape, reason)`. Each matches
@@ -1556,7 +1573,10 @@ fn path_before(code: &str, at: usize) -> Vec<String> {
 /// the defining crate (its library name, or `crate`/`self`/`super` or a bare
 /// module path inside that crate, or a bare module path in a file that
 /// names the library), by such a `use`, or by a bare call after such a glob
-/// import of the module.
+/// import of the module. A method `Type::method` is referenced by any
+/// method call `.method` or path `::method` outside its own body, in any
+/// file (a method call is not resolved to its receiver's type, so a method
+/// of the same name anywhere counts too).
 fn latent_references(
     files: &[ProdFile],
     file: &str,
@@ -1597,6 +1617,19 @@ fn latent_references(
             .map(|u| (u, f.code[u..].find(';').map_or(f.code.len(), |e| u + e)))
             .collect();
         for name in items {
+            if let Some((_, method)) = name.split_once("::") {
+                let own = (f.rel == file).then(|| fn_span(defining, name));
+                for at in words(&f.code, method) {
+                    let before = f.code[..at].trim_end();
+                    if (before.ends_with('.') || before.ends_with("::"))
+                        && !own.is_some_and(|(a, z)| a <= at && at < z)
+                    {
+                        let line = f.code[..at].matches('\n').count() + 1;
+                        out.push((f.rel.clone(), line, name.to_string()));
+                    }
+                }
+                continue;
+            }
             let is_type = name.starts_with(|c: char| c.is_ascii_uppercase());
             for at in words(&f.code, name) {
                 let before = f.code[..at].trim_end();
@@ -1758,8 +1791,17 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
             found.is_empty(),
             "LATENT {file} {site}: referenced at {found:?}"
         );
+        // A model-call site, or a method reaching a model through a §11.4
+        // model trait.
+        let reaches_model = site.contains("::") && items.len() == 1 && items[0] == site && {
+            let def = self::file(&files, file);
+            let (a, z) = fn_span(def, site);
+            MODEL_TRAIT_CALLS
+                .iter()
+                .any(|call| def.code[a..z].contains(call))
+        };
         assert!(
-            inventory.keys().any(|(f, g, _)| f == file && g == site),
+            inventory.keys().any(|(f, g, _)| f == file && g == site) || reaches_model,
             "LATENT {file} {site}: no such model-call site"
         );
     }
@@ -1822,6 +1864,64 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         for action in ["ImageGenerate", "TextToSpeech"] {
             assert!(!code.contains(action), "{rel}: {action}");
         }
+    }
+}
+
+/// Mission P3-C11-HM-M4 C-4 planted controls: a production caller of the
+/// latent `AutoEvolutionManager::apply_evolution`, by a method call (also
+/// split across lines) or by a path, is a reference that fails A-S4; the
+/// method's own definition, another type's definition of a method of that
+/// name, and a mention in a comment or a string are none.
+#[test]
+fn hm_m4_n1_c4_latent_apply_evolution_planted_controls() {
+    let (file_rel, site, items) = LATENT
+        .iter()
+        .find(|e| e.1 == "AutoEvolutionManager::apply_evolution")
+        .copied()
+        .expect("C-4: apply_evolution is in the LATENT set");
+    let mut files = production_files();
+    assert!(
+        latent_references(&files, file_rel, items).is_empty(),
+        "precondition: no production caller in the workspace"
+    );
+    let planted = |text: &str| ProdFile {
+        rel: "app/src-tauri/src/planted_c4.rs".into(),
+        code: mask(text, false),
+        text: mask(text, true),
+    };
+    let callers = [
+        "fn planted(m: &AutoEvolutionManager) { let _ = m.apply_evolution(&mut c, &g, &l); }",
+        "fn planted(m: &AutoEvolutionManager) { let _ = m\n    .apply_evolution(&mut c, &g, &l); }",
+        "fn planted(m: &AutoEvolutionManager) { let _ = AutoEvolutionManager::apply_evolution(m, &mut c, &g, &l); }",
+        "fn planted(m: &Arc<AutoEvolutionManager>) { m.as_ref().apply_evolution(&mut c, &g, &l); }",
+    ];
+    for caller in callers {
+        files.push(planted(caller));
+        let found = latent_references(&files, file_rel, items);
+        files.pop();
+        assert_eq!(
+            found
+                .iter()
+                .map(|(f, _, i)| (f.as_str(), i.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("app/src-tauri/src/planted_c4.rs", site)],
+            "C-4: a planted production caller was not found: {caller}"
+        );
+    }
+    let not_callers = [
+        "impl Other { fn apply_evolution(&self) {} }",
+        "// m.apply_evolution(&mut c, &g, &l);\nfn x() {}",
+        "fn x() { let s = \"m.apply_evolution(a, b, c)\"; }",
+        "fn apply_evolution_report() { record_apply_evolution(); }",
+    ];
+    for text in not_callers {
+        files.push(planted(text));
+        let found = latent_references(&files, file_rel, items);
+        files.pop();
+        assert!(
+            found.is_empty(),
+            "C-4: not a caller, but found: {text}: {found:?}"
+        );
     }
 }
 

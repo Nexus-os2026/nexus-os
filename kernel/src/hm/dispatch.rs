@@ -311,9 +311,10 @@ impl DispatchIssuer {
     /// reply acceptance of one model request, by the context's class
     /// (§12.1):
     /// - an agent's context (AR, AC): §12.4 and §12.6 in full;
-    /// - an Owner's retained entry (HR): §12.4 steps 2, 4 and 5 with no
-    ///   agent: an admission row whose `agent_id` is NULL;
-    /// - a plain non-agent request (HD, HB, SY, XS): no admission row; any
+    /// - an Owner's retained entry (HR) or an Owner's request shaped by
+    ///   backend state with no registered agent (HB): §12.4 steps 2, 4 and 5
+    ///   with no agent: an admission row whose `agent_id` is NULL;
+    /// - a plain non-agent request (HD, SY, XS): no admission row; any
     ///   inclusion is refused; on a non-local route the taint and every
     ///   carried item must be `UNRESTRICTED_ORIGIN`.
     ///
@@ -367,7 +368,7 @@ impl DispatchIssuer {
         }
     }
 
-    /// HR and plain dispatch (mission R2).
+    /// HR, HB and plain dispatch (mission R2; P3-C11-HM-M4 C-3).
     #[allow(clippy::type_complexity)]
     fn dispatch_non_agent<T>(
         &self,
@@ -450,7 +451,8 @@ impl DispatchIssuer {
 
     /// The non-agent decision: no inclusion; a non-local transport needs a
     /// non-local unit with unrestricted taint and carried items (§2.13 rules
-    /// 1, 2). An HR admission is then recorded with no agent (§12.4 step 5).
+    /// 1, 2). An HR or HB admission is then recorded with no agent (§12.4
+    /// step 5).
     fn decide_non_agent(
         &self,
         ctx: &DispatchContext,
@@ -475,10 +477,13 @@ impl DispatchIssuer {
         if non_local && !eligible {
             return Err(Refused::Ineligible);
         }
-        if ctx.class != DispatchClass::OwnerRetained {
+        if !matches!(
+            ctx.class,
+            DispatchClass::OwnerRetained | DispatchClass::OwnerBackendShaped
+        ) {
             return Ok((raw_label, None));
         }
-        // Step 5: the HR admission row and its event, agent NULL.
+        // Step 5: the HR or HB admission row and its event, agent NULL.
         let admission_id = hex::encode(random_id().map_err(Refused::Unresolved)?);
         let decided = self.db().hm().immediate(|tx| {
             if !is_migrated(tx)? {
@@ -520,7 +525,8 @@ impl DispatchIssuer {
         }
     }
 
-    /// The outcome of an HR admission, after the decision. Best effort.
+    /// The outcome of an HR or HB admission, after the decision. Best
+    /// effort.
     fn record_owner_outcome(
         &self,
         admission_id: &str,

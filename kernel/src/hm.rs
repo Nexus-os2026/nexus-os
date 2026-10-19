@@ -24,6 +24,8 @@ mod dispatch;
 mod events;
 mod issuer;
 #[cfg(test)]
+mod m4_tests;
+#[cfg(test)]
 mod n6_tests;
 mod recall;
 #[cfg(test)]

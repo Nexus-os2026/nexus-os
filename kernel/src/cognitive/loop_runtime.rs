@@ -2703,7 +2703,8 @@ mod tests {
             reflection_interval: 3,
         };
         let runtime = CognitiveRuntime::new(sup, config, emitter.clone())
-            .with_dispatch_issuer(hm().issuer.clone());
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
         (runtime, emitter)
     }
 
@@ -2905,8 +2906,9 @@ mod tests {
             ..LoopConfig::default()
         };
         let emitter = Arc::new(CollectingEmitter::new());
-        let runtime =
-            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
+        let runtime = CognitiveRuntime::new(sup, config, emitter)
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&id.to_string(), goal).unwrap();
@@ -3086,8 +3088,9 @@ mod tests {
             max_cycles_per_goal: 1, // Only 1 cycle allowed
             ..LoopConfig::default()
         };
-        let runtime =
-            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
+        let runtime = CognitiveRuntime::new(sup, config, emitter)
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3507,8 +3510,9 @@ mod tests {
             reflection_interval: 100, // Don't trigger reflection
             ..LoopConfig::default()
         };
-        let runtime =
-            CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(hm().issuer.clone());
+        let runtime = CognitiveRuntime::new(sup, config, emitter)
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3547,7 +3551,8 @@ mod tests {
             ..LoopConfig::default()
         };
         let runtime = CognitiveRuntime::new(sup, config, emitter.clone())
-            .with_dispatch_issuer(hm().issuer.clone());
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
 
         let goal = AgentGoal::new("test".into(), 5);
         runtime.assign_goal(&agent_id, goal).unwrap();
@@ -3751,7 +3756,8 @@ mod tests {
         let (sup, agent_id) = make_supervisor_with_autonomy(6);
         let emitter = Arc::new(CollectingEmitter::new());
         let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone())
-            .with_dispatch_issuer(hm().issuer.clone());
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
         runtime
             .assign_goal(&agent_id, AgentGoal::new("cooldown test".into(), 5))
             .unwrap();
@@ -3787,7 +3793,8 @@ mod tests {
         let (sup, agent_id) = make_supervisor_with_autonomy(6);
         let emitter = Arc::new(CollectingEmitter::new());
         let runtime = CognitiveRuntime::new(sup, LoopConfig::default(), emitter.clone())
-            .with_dispatch_issuer(hm().issuer.clone());
+            .with_dispatch_issuer(hm().issuer.clone())
+            .with_state_database(hm().db.clone());
         runtime
             .assign_goal(
                 &agent_id,

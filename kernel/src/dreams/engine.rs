@@ -46,6 +46,13 @@ fn dream_query(
 /// The dream unit of one queued entry (O1, §11.3, §12.1): an agent-owned
 /// entry is a dream unit of that agent (AR); an `OwnerDirect` entry is HR;
 /// an entry without a label is `LOCAL_ONLY_ORIGIN` and never non-local.
+///
+/// Every dream unit is then made local-only (mission P3-C11-HM-M4 C-2,
+/// F-N6-2): an entry holds the human's raw chat text, which a non-local
+/// chat once sent through the gateway's redaction and a dream would now
+/// re-send unredacted. Dreams (and the morning briefing) dispatch only on
+/// an attested local transport, or are refused. Tightening is always
+/// permitted (§7.5).
 pub(crate) fn dream_unit(
     issuer: &DispatchIssuer,
     label: Option<&crate::hm::EntryLabel>,
@@ -53,11 +60,13 @@ pub(crate) fn dream_unit(
     let unit = Unit::Dream {
         entry_id: uuid::Uuid::new_v4(),
     };
-    match label {
+    let mut ctx = match label {
         Some(label) => issuer.begin_entry_unit(label, unit),
         None => issuer.begin_unlabelled_entry_unit(unit),
     }
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    ctx.tighten_local_only();
+    Ok(ctx)
 }
 
 /// The core dream engine that processes the dream queue.
@@ -694,6 +703,94 @@ mod tests {
             assert_eq!(results.len(), 1, "Failed for {dtype:?}");
             assert_eq!(results[0].dream_type, dtype);
         }
+    }
+
+    /// P3-C11-HM-M4 N1 C-2 (F-N6-2): every dream unit is local-only. An
+    /// `OwnerDirect` entry whose chat turn went to a non-local transport
+    /// (label `UNRESTRICTED_ORIGIN`) dreams on an attested local transport
+    /// when one exists; with only a non-local transport the dream is refused
+    /// and no request is made.
+    #[test]
+    fn hm_m4_n1_c2_every_dream_unit_is_local_only() {
+        use crate::hm::{OriginLabel, Principal, Unit};
+        const MARKER: &str = "P3-HM-M4-SYNTH-DREAM-C2-7e19";
+        let hm = TestHm::new();
+        let mut turn = hm
+            .issuer
+            .begin_unit(
+                Principal::OwnerDirect,
+                Unit::ChatTurn {
+                    turn_id: uuid::Uuid::new_v4(),
+                },
+            )
+            .unwrap();
+        let chat = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "a cloud reply");
+        chat.ask(&mut turn, &mut |c: &mut DispatchContext| {
+            let mut b = PromptBuilder::new(c);
+            b.text("a synthetic chat turn");
+            Some(b.build())
+        })
+        .expect("precondition: the Owner's turn goes to a non-local transport");
+        let label = turn.entry_label().expect("a chat turn's entry label");
+        assert_eq!(
+            (label.principal(), label.label()),
+            (Principal::OwnerDirect, OriginLabel::UnrestrictedOrigin),
+            "precondition: an OwnerDirect entry labelled UNRESTRICTED_ORIGIN"
+        );
+        let queued = || {
+            let mut scheduler = DreamScheduler::new();
+            scheduler.enqueue(DreamTask {
+                id: "c2".into(),
+                task_type: DreamType::Replay,
+                priority: 0.6,
+                source_agent: "owner".into(),
+                context: serde_json::json!({"task": MARKER, "original_response": "r"}),
+                label: Some(label.clone()),
+                ..DreamTask::default()
+            });
+            scheduler
+        };
+
+        // An attested local transport exists: the dream runs there.
+        let local = ScriptedLlm::replying(
+            &hm.issuer,
+            RouteClass::Local,
+            "ORIGINAL_SCORE: 4\nIMPROVED_SCORE: 7",
+        );
+        let mut engine = DreamEngine::new(queued());
+        let results = engine.enter_dream_state(&hm.issuer, &local);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(results[0].outcome, DreamOutcome::Improvement { .. }),
+            "C-2: the dream did not run on the local transport: {:?}",
+            results[0].outcome
+        );
+        assert!(local.sent().iter().any(|p| p.contains(MARKER)));
+        assert_eq!(
+            results[0].label().map(|l| l.label()),
+            Some(OriginLabel::LocalOnlyOrigin)
+        );
+
+        // Only a non-local transport: refused, and nothing is sent.
+        let remote = ScriptedLlm::replying(
+            &hm.issuer,
+            RouteClass::NonLocal,
+            "ORIGINAL_SCORE: 4\nIMPROVED_SCORE: 7",
+        );
+        let mut engine = DreamEngine::new(queued());
+        let results = engine.enter_dream_state(&hm.issuer, &remote);
+        assert!(
+            remote.sent().is_empty(),
+            "C-2: PROHIBITED NON-LOCAL DREAM DISPATCH: {} request(s): {:?}",
+            remote.sent().len(),
+            remote.sent()
+        );
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(results[0].outcome, DreamOutcome::NoResult { .. }),
+            "C-2: the dream was not refused: {:?}",
+            results[0].outcome
+        );
     }
 
     #[test]

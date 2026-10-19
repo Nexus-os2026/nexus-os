@@ -87,7 +87,10 @@ fn make_runtime(sup: Arc<Mutex<Supervisor>>) -> CognitiveRuntime {
         fuel_reserve_threshold: 0.05,
         reflection_interval: 3,
     };
-    CognitiveRuntime::new(sup, config, emitter).with_dispatch_issuer(issuer())
+    let issuer = issuer();
+    CognitiveRuntime::new(sup, config, emitter)
+        .with_state_database(issuer.state_database().clone())
+        .with_dispatch_issuer(issuer)
 }
 
 #[test]

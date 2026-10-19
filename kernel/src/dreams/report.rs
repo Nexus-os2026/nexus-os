@@ -257,6 +257,54 @@ mod tests {
         assert!(briefing.summary.contains("No dreams"));
     }
 
+    /// P3-C11-HM-M4 N1 C-5: a morning briefing over the dream results of two
+    /// principals is never non-local. With only a non-local transport it is
+    /// refused (the briefing keeps its fallback text) and no request is made.
+    #[test]
+    fn hm_m4_n1_c5_a_briefing_over_two_principals_is_refused_without_a_local_transport() {
+        use crate::hm::{OriginLabel, Principal, Unit};
+        let hm = TestHm::new();
+        let agent = hm.open_agent("c5-briefing-agent");
+        let label_of = |principal| {
+            hm.issuer
+                .begin_unit(
+                    principal,
+                    Unit::ChatTurn {
+                        turn_id: uuid::Uuid::new_v4(),
+                    },
+                )
+                .unwrap()
+                .entry_label()
+                .unwrap()
+        };
+        let owner = label_of(Principal::OwnerDirect);
+        let agent = label_of(Principal::Agent(agent));
+        assert_eq!(
+            (owner.label(), agent.label()),
+            (
+                OriginLabel::UnrestrictedOrigin,
+                OriginLabel::UnrestrictedOrigin
+            ),
+            "precondition: each entry alone would be unrestricted"
+        );
+        let mut scheduler = make_scheduler_with_dreams();
+        scheduler.completed_dreams[0].label = Some(owner.clone());
+        scheduler.completed_dreams[1].label = Some(agent);
+        scheduler.completed_dreams[2].label = Some(owner);
+        let remote = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "a cloud briefing");
+        let briefing = MorningBriefing::generate(&scheduler, &hm.issuer, &remote);
+        assert!(
+            remote.sent().is_empty(),
+            "C-5: PROHIBITED NON-LOCAL BRIEFING DISPATCH: {:?}",
+            remote.sent()
+        );
+        assert!(
+            briefing.summary.starts_with("Good morning. Overnight"),
+            "C-5: the briefing was not refused: {}",
+            briefing.summary
+        );
+    }
+
     #[test]
     fn bullet_points_format() {
         let improvements = vec![DreamResult {

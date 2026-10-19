@@ -3714,6 +3714,157 @@ fn p3_hm_a_t1h_temporal_fork_follows_the_registered_caller() {
     );
 }
 
+/// P3-C11-HM-M4 N1 C-3 (P3-HM-CONTRACT-02 §12.4 steps 1 and 5; §5.1: the
+/// admission row's agent is NULL for an OwnerDirect admission). A temporal
+/// fork whose caller names no registered agent is an `OwnerDirect` request
+/// of class HB: each of its dispatches writes one admission row (agent
+/// NULL, the request's unit kind, outcome updated as for HR) and its
+/// `memory.dispatch_admitted` event. HD, SY and XS requests write none.
+#[test]
+fn p3_hm_m4_c3_an_owner_direct_temporal_fork_records_each_admission() {
+    let name = "p3_hm_m4_c3_an_owner_direct_temporal_fork_records_each_admission";
+    let marker = "P3-HM-M4-SYNTH-C3-2b6f";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        route_unrestricted_work_through_the_proxy();
+        // A human request with no model takes the selected provider: here
+        // the plain Ollama provider on the configured route, whose requests
+        // the recording proxy reads and answers (a cloud provider's TLS
+        // request would hide its content and get no answer).
+        std::env::set_var("LLM_PROVIDER", "ollama");
+        let fork = crate::commands::simulation::temporal_fork(
+            &state,
+            format!("Plan the synthetic task {marker}"),
+            "not-a-registered-agent".to_string(),
+            Some(2),
+        );
+        let rows: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| {
+                format!(
+                    "{}|{}|{}|{}",
+                    a.agent_id.as_deref().unwrap_or("NULL"),
+                    a.unit_kind,
+                    a.route_class,
+                    a.outcome
+                )
+            })
+            .collect();
+        let fork_events = crate::hm_m3_tests::event_kinds(&state.db)
+            .into_iter()
+            .filter(|(kind, agent)| kind == "memory.dispatch_admitted" && agent.is_none())
+            .count();
+        eprintln!("HM-M4-C3 PHASE-BOUNDARY");
+        // HD: an Owner's chat turn with no agent, and an Owner's request.
+        let hd_turn = hm_turn(
+            &state,
+            crate::hm_dispatch::chat_turn(&state, None).map_err(AgentError::SupervisorError)?,
+            "An HD chat turn",
+            None,
+        )
+        .is_ok();
+        let hd_request = hm_turn(
+            &state,
+            crate::hm_dispatch::request_unit(&state, nexus_kernel::hm::Principal::OwnerDirect)
+                .map_err(AgentError::SupervisorError)?,
+            "An HD request",
+            None,
+        )
+        .is_ok();
+        // SY: the fixed connection test.
+        let sy = crate::commands::chat_llm::test_llm_connection(&state, "ollama".to_string())
+            .map(|r| r.success)
+            .unwrap_or(false);
+        // XS: a provider handed to an excluded subsystem.
+        let xs = {
+            let config = nexus_kernel::config::load_config().unwrap();
+            let (provider, model) = crate::provider_from_prefixed_model(
+                "ollama/qwen3:8b",
+                &crate::build_provider_config(&config),
+            )
+            .map_err(AgentError::SupervisorError)?;
+            crate::hm_dispatch::IssuedProvider::new(&state, "p3-hm-m4-xs", provider)
+                .query("An XS request", 64, &model)
+                .is_ok()
+        };
+        let after = crate::hm_m3_tests::admissions(&state.db).len();
+        Ok(format!(
+            "fork_ok={} rows={} fork_events={fork_events} hd_turn={hd_turn} hd_request={hd_request} sy={sy} xs={xs} after={after}",
+            fork.is_ok(),
+            rows.join(";")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let rows = hm_field(&w.result, "rows=");
+    let rows: Vec<&str> = rows.split(';').filter(|r| !r.is_empty()).collect();
+    let fork_requests = w.proxy.iter().filter(|l| l.contains(marker)).count();
+    assert!(
+        fork_requests >= 1,
+        "C-3: precondition: the fork's request did not take the configured route: {:?}",
+        w.proxy
+    );
+    assert!(
+        !rows.is_empty(),
+        "C-3: an OwnerDirect temporal fork (HB) wrote no admission row: {}",
+        w.result
+    );
+    assert!(
+        rows.iter()
+            .all(|r| *r == "NULL|request|non_local|reply_used"),
+        "C-3: an HB admission row is not (agent NULL, request, non_local, reply_used): {rows:?}"
+    );
+    // Every proxied request other than the four HD, SY and XS prompts is a
+    // dispatch of the fork: each has exactly one admission row.
+    let others = [
+        "An HD chat turn",
+        "An HD request",
+        "Reply with exactly: ok",
+        "An XS request",
+    ];
+    let fork_dispatches = w
+        .proxy
+        .iter()
+        .filter(|l| {
+            l.contains("/api/generate")
+                && !others
+                    .iter()
+                    .any(|o| l.contains(&format!("\"prompt\":\"{o}\"")))
+        })
+        .count();
+    assert_eq!(
+        rows.len(),
+        fork_dispatches,
+        "C-3: the fork's {fork_dispatches} dispatches do not have one admission row each: {rows:?}"
+    );
+    assert_eq!(
+        hm_field(&w.result, "fork_events="),
+        rows.len().to_string(),
+        "C-3: an HB admission has no memory.dispatch_admitted event: {}",
+        w.result
+    );
+    for (key, what) in [
+        ("hd_turn=", "HD chat turn"),
+        ("hd_request=", "HD request"),
+        ("sy=", "SY request"),
+        ("xs=", "XS request"),
+    ] {
+        assert_eq!(
+            hm_field(&w.result, key),
+            "true",
+            "C-3: precondition: the {what} did not complete: {}",
+            w.result
+        );
+    }
+    assert_eq!(
+        hm_field(&w.result, "after="),
+        rows.len().to_string(),
+        "C-3: an HD, SY or XS request wrote an admission row: {}",
+        w.result
+    );
+}
+
 /// A-C1 (production; mutant 8). Work whose policy cannot be established
 /// dispatches nothing (the default policy is `Unresolved`), and a local-only
 /// unit's dispatch takes the attested local transport and completes there.

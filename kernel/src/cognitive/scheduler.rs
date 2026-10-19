@@ -330,11 +330,12 @@ mod tests {
         use crate::supervisor::Supervisor;
 
         let sup = Arc::new(Mutex::new(Supervisor::new()));
-        let rt = Arc::new(CognitiveRuntime::new(
-            sup,
-            LoopConfig::default(),
-            Arc::new(NoOpEmitter),
-        ));
+        let rt = Arc::new(
+            CognitiveRuntime::new(sup, LoopConfig::default(), Arc::new(NoOpEmitter))
+                .with_state_database(Arc::new(
+                    nexus_persistence::NexusDatabase::in_memory().unwrap(),
+                )),
+        );
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
         AgentScheduler::new(rt, audit)
     }
