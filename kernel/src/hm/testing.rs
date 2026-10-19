@@ -484,6 +484,18 @@ pub(crate) fn label_source(db: &NexusDatabase, table: &str, record_id: &str) -> 
         .unwrap_or_else(|| "unlabelled".to_string())
 }
 
+/// The origins of the labels of `agent_id`'s rows of `table` (read through
+/// the store, never by naming its tables).
+pub(crate) fn label_origins(db: &NexusDatabase, table: &str, agent_id: &str) -> Vec<String> {
+    db.hm()
+        .read(|tx| tx.label_rows())
+        .unwrap()
+        .into_iter()
+        .filter(|label| label.record_table == table && label.agent_id == agent_id)
+        .map(|label| label.origin)
+        .collect()
+}
+
 pub(crate) fn rows(db: &NexusDatabase, sql: &str) -> Vec<Vec<String>> {
     db.with_transaction(|tx| {
         let mut stmt = tx.prepare(sql)?;

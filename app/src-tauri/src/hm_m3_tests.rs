@@ -9,7 +9,7 @@
 //! tests), and a source guard pins that both constructors call it.
 
 use nexus_persistence::hm::{
-    LabelRow, MemberRow, MigrationRow, PolicyChangeRow, PolicyRow, PolicyRowRaw,
+    AdmissionRow, LabelRow, MemberRow, MigrationRow, PolicyChangeRow, PolicyRow, PolicyRowRaw,
 };
 use nexus_persistence::NexusDatabase;
 
@@ -49,6 +49,16 @@ pub(crate) fn fixture_owner_loosen(db: &NexusDatabase, agent_id: &str) {
 /// The stored label rows.
 pub(crate) fn labels(db: &NexusDatabase) -> Vec<LabelRow> {
     db.hm().read(|tx| tx.label_rows()).unwrap()
+}
+
+/// The admission rows, in order.
+pub(crate) fn admissions(db: &NexusDatabase) -> Vec<AdmissionRow> {
+    db.hm().read(|tx| tx.admission_rows()).unwrap()
+}
+
+/// The `(kind, agent_id)` of every authority event, in order.
+pub(crate) fn event_kinds(db: &NexusDatabase) -> Vec<(String, Option<String>)> {
+    db.hm().read(|tx| tx.event_kinds()).unwrap()
 }
 
 /// The T₀ ledger.

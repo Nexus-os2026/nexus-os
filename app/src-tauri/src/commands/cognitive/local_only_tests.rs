@@ -711,6 +711,12 @@ struct FakeOllama {
     proxy_answers: bool,
     /// P3 HiveMind INFOFLOW: a policy-tightening event at the proxy.
     tighten: Option<Tighten>,
+    /// P3-C11-HM-M3 N6: the configuration made unreadable at the proxy
+    /// when it receives the `nth` matching request (its `name` unused).
+    break_config: Option<Tighten>,
+    /// P3-C11-HM-M3 N6 (A1.6): after this many generations the runtime
+    /// reports every model as remote.
+    remote_after_generates: Option<usize>,
 }
 
 impl FakeOllama {
@@ -721,6 +727,8 @@ impl FakeOllama {
             generate_status: 200,
             proxy_answers: false,
             tighten: None,
+            break_config: None,
+            remote_after_generates: None,
         }
     }
 }
@@ -809,6 +817,7 @@ fn read_rest(reader: &mut BufReader<&TcpStream>) -> Option<String> {
 }
 
 fn serve_ollama(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<String>) {
+    let mut generated = 0usize;
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
@@ -822,7 +831,24 @@ fn serve_ollama(listener: TcpListener, serves: FakeOllama, log: mpsc::Sender<Str
             return;
         }
         let _ = log.send(format!("{method} {path} {body}"));
+        if path == "/api/show"
+            && serves
+                .remote_after_generates
+                .is_some_and(|n| generated >= n)
+        {
+            let model = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string))
+                .unwrap_or_default();
+            let remote =
+                serde_json::json!({"remote_host": "https://ollama.com:443", "remote_model": model});
+            respond(&mut stream, 200, &remote);
+            continue;
+        }
         let (status, reply) = runtime_reply(&serves, &path, &body);
+        if path == "/api/generate" {
+            generated += 1;
+        }
         respond(&mut stream, status, &reply);
     }
 }
@@ -849,6 +875,11 @@ fn runtime_reply(serves: &FakeOllama, path: &str, body: &str) -> (u16, serde_jso
         "/api/show" => (
             200,
             serde_json::json!({"modelfile": "FROM local", "details": {}}),
+        ),
+        // P3-C11-HM-M3 N6: the plan of a goal naming one of the N6 goals.
+        "/api/generate" if serves.generate_status == 200 && hm_plan_for(body).is_some() => (
+            200,
+            serde_json::json!({"response": hm_plan_for(body), "eval_count": 2}),
         ),
         // P3 HiveMind: a member loop's plan, one model step.
         "/api/generate"
@@ -910,6 +941,7 @@ fn serve_proxy(
     log: mpsc::Sender<String>,
 ) {
     let mut matched = 0usize;
+    let mut broke = 0usize;
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
@@ -940,6 +972,14 @@ fn serve_proxy(
                 matched += 1;
                 if matched == tighten.nth {
                     make_local_only(&config, tighten.name);
+                }
+            }
+        }
+        if let Some(breaks) = serves.break_config {
+            if (breaks.matches)(&body) {
+                broke += 1;
+                if broke == breaks.nth {
+                    std::fs::write(&config, "local_only = [").unwrap();
                 }
             }
         }
@@ -2332,5 +2372,1965 @@ fn p3_hive_e2e_tightened_before_the_merge_does_not_merge() {
             .contains("routing policy changed during the session"),
         "{}",
         w.result
+    );
+}
+
+// ── P3-C11-HM-M3 N6: production acceptance tests (P3-HM-CONTRACT-02 §18.2) ──
+//
+// The historical-flow probes N1..N11 and HF-1/HF-2 (retained pre-repair
+// receipts: contract §18.1, `raw/H10`, `raw/H11`, `raw/H31`, `raw/H41`;
+// definitions `diffs/H00`, `diffs/H30`, `diffs/H40`) ported to the
+// production paths: the real goal loop, the desktop's adapters, the loopback
+// runtime and the recording proxy (every non-local route). A loosening is
+// the Owner's (AMENDMENT 1 A1.9: the TEST FIXTURE `owner_loosen`); the
+// configuration only tightens (AD-3). Each asserts its preconditions first,
+// so a failure of the final assertion is the defect itself.
+
+const HM: &str = "P3-HM-SYNTH-RESTRICTED-5d1e";
+const HIST: &str = "HIST-SYNTH-LEGACY-91c2";
+const HM_KG: &str = "P3-HM-SYNTH-KG-3c7a";
+
+/// `HM_RECALL_GOAL`: a MemoryRecall step, then a model step whose context
+/// carries the recall's records.
+const HM_RECALL_GOAL: &str = "P3-HM-RECALL-GOAL";
+const HM_RECALL_PLAN: &str = r#"[{"action": {"type": "MemoryRecall", "query": "synthetic", "memory_type": null}, "description": "Recall"}, {"action": {"type": "LlmQuery", "prompt": "P3 HiveMind synthetic step", "context": []}, "description": "Answer"}]"#;
+/// `HM_KG_WRITE_GOAL`: a knowledge-graph update naming `HM_KG`.
+const HM_KG_WRITE_GOAL: &str = "P3-HM-KG-WRITE-GOAL";
+const HM_KG_WRITE_PLAN: &str = r#"[{"action": {"type": "KnowledgeGraphUpdate", "entities": ["synthetic entity P3-HM-SYNTH-KG-3c7a"], "relationships": ["synthetic relation P3-HM-SYNTH-KG-3c7a"]}, "description": "Store"}, {"action": {"type": "LlmQuery", "prompt": "P3 HiveMind synthetic step", "context": []}, "description": "Answer"}]"#;
+/// `HM_KG_READ_GOAL`: a knowledge-graph query, then a model step whose
+/// prompt carries the query's records.
+const HM_KG_READ_GOAL: &str = "P3-HM-KG-READ-GOAL";
+const HM_KG_READ_PLAN: &str = r#"[{"action": {"type": "KnowledgeGraphQuery", "query": "synthetic"}, "description": "Query"}, {"action": {"type": "LlmQuery", "prompt": "P3 HiveMind synthetic step", "context": []}, "description": "Answer"}]"#;
+/// `HM_PAUSE_GOAL`: step one, an approval the loop waits for, step two.
+const HM_PAUSE_GOAL: &str = "P3-HM-PAUSE-GOAL";
+const HM_PAUSE_PLAN: &str = r#"[{"action": {"type": "LlmQuery", "prompt": "P3 HM step one", "context": []}, "description": "One"}, {"action": {"type": "HitlRequest", "question": "Continue?", "options": ["yes", "no"]}, "description": "Pause"}, {"action": {"type": "LlmQuery", "prompt": "P3 HM step two", "context": []}, "description": "Two"}]"#;
+
+/// The plan the fake runtime answers for a planning prompt naming one of
+/// the N6 goals.
+fn hm_plan_for(body: &str) -> Option<&'static str> {
+    if !body.contains("Output ONLY a JSON array") {
+        return None;
+    }
+    [
+        (HM_RECALL_GOAL, HM_RECALL_PLAN),
+        (HM_KG_WRITE_GOAL, HM_KG_WRITE_PLAN),
+        (HM_KG_READ_GOAL, HM_KG_READ_PLAN),
+        (HM_PAUSE_GOAL, HM_PAUSE_PLAN),
+    ]
+    .into_iter()
+    .find(|(goal, _)| body.contains(&format!("GOAL: {goal}")))
+    .map(|(_, plan)| plan)
+}
+
+/// A row with no provenance (the probes' seed): the goal-completion shape
+/// the loop writes. Written raw, with no label, it is UNBOUND (§6.4).
+fn hm_seed(state: &AppState, agent: &str, extra: &str) {
+    state
+        .db
+        .save_memory(
+            agent,
+            "episodic",
+            "episode:1700000000",
+            &format!(
+                "{{\"event\":\"goal completed: Summarize the synthetic note {HM}\",\"outcome\":\"steps=1\"{extra}}}"
+            ),
+        )
+        .unwrap();
+}
+
+/// HF-1/HF-2's seed: an unclassified row (no label: UNBOUND).
+fn hm_seed_legacy(state: &AppState, agent: &str) {
+    state
+        .db
+        .save_memory(
+            agent,
+            "episodic",
+            &format!("goal completed: Summarize the synthetic note {HIST}"),
+            &format!("{{\"note\":\"synthetic legacy content {HIST}\"}}"),
+        )
+        .unwrap();
+}
+
+/// The Owner loosens `agent` (TEST FIXTURE, A1.9): the store's loosening
+/// with its history row, and the configuration's mirror no longer naming
+/// the agent local-only (a configuration that does is a tightening, §4.2,
+/// and wins).
+fn hm_loosen(state: &AppState, agent: &str) {
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    if let Some(assignment) = config.agent_llm_assignments.get_mut(agent) {
+        assignment.local_only = false;
+    }
+    nexus_kernel::config::save_config(&config).unwrap();
+    crate::hm_wiring::test_support::owner_loosen(state, agent);
+}
+
+fn hm_rows_with(state: &AppState, agent: &str, marker: &str) -> usize {
+    state
+        .db
+        .load_memories(agent, None, 1000)
+        .unwrap()
+        .iter()
+        .filter(|m| m.key.contains(marker) || m.value_json.contains(marker))
+        .count()
+}
+
+fn hm_await_row(state: &AppState, agent: &str, marker: &str) -> usize {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let n = hm_rows_with(state, agent, marker);
+        if n > 0 || std::time::Instant::now() >= deadline {
+            return n;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn hm_route() -> FakeOllama {
+    let mut serves = FakeOllama::serving(&["qwen3:8b"]);
+    serves.proxy_answers = true;
+    serves
+}
+
+/// The raw network witness, kept whole in the receipt.
+fn hm_dump(name: &str, w: &Witness) {
+    for line in &w.proxy {
+        eprintln!("HMWITNESS {name} proxy {line}");
+    }
+    for line in &w.ollama {
+        eprintln!("HMWITNESS {name} loopback {line}");
+    }
+    eprintln!("HMWITNESS {name} result {}", w.result);
+}
+
+/// The rule: the witness did see non-local planning (so the test is not
+/// vacuous), and none of it carried a prohibited marker.
+fn hm_assert_no_prohibited_dispatch(w: &Witness, markers: &[&str], context: &str) {
+    assert!(
+        w.proxied(is_plan) >= 1,
+        "{context}: precondition: the witness saw no non-local planning: {:?}",
+        w.proxy
+    );
+    for marker in markers {
+        let carried: Vec<&String> = w.proxy.iter().filter(|l| l.contains(marker)).collect();
+        assert!(
+            carried.is_empty(),
+            "{context}: PROHIBITED CLOUD DISPATCH: {} non-local request(s) carried {marker}: {carried:?}",
+            carried.len()
+        );
+    }
+}
+
+/// A supervisor-registered agent at `autonomy` with `capabilities`, its
+/// assignment keyed by its UUID; an unrestricted one is an Owner loosening.
+fn hm_register(
+    state: &AppState,
+    name: &str,
+    local_only: bool,
+    autonomy: u8,
+    capabilities: &[&str],
+) -> String {
+    // Built in code, not parsed: `knowledge.graph` is not a registered
+    // manifest capability (a parsed manifest naming it is refused).
+    let manifest = nexus_kernel::manifest::AgentManifest {
+        name: name.to_string(),
+        version: "1.0.0".into(),
+        capabilities: capabilities.iter().map(|c| c.to_string()).collect(),
+        fuel_budget: 10_000,
+        autonomy_level: Some(autonomy),
+        consent_policy_path: None,
+        requester_id: None,
+        schedule: None,
+        default_goal: None,
+        llm_model: None,
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
+        allowed_endpoints: None,
+        domain_tags: vec![],
+        filesystem_permissions: vec![],
+    };
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    config.agent_llm_assignments.insert(
+        id.clone(),
+        nexus_kernel::config::AgentLlmAssignment {
+            provider_id: String::new(),
+            local_only,
+            budget_dollars: 0,
+            budget_tokens: 0,
+        },
+    );
+    nexus_kernel::config::save_config(&config).unwrap();
+    if !local_only {
+        hm_loosen(state, &id);
+    }
+    id
+}
+
+/// An agent's own goal whose loop waits for an approval between its steps:
+/// `between` runs while it waits, then the approval is given and the goal
+/// is waited for (within 30 s).
+fn run_paused_goal(
+    state: &AppState,
+    agent_id: &str,
+    goal: &str,
+    between: impl FnOnce(),
+) -> Result<String, String> {
+    let goal_id = execute_agent_goal(state, agent_id.to_string(), goal.to_string(), 5, None)?;
+    spawn_cognitive_loop_with_bridge(
+        BackendEventBridge::default(),
+        state.clone(),
+        agent_id.to_string(),
+        goal_id.clone(),
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let consent = loop {
+        let pending = state.db.load_pending_consent().unwrap();
+        if let Some(row) = pending
+            .into_iter()
+            .find(|r| r.agent_id == agent_id && r.operation_type == "cognitive.hitl_approval")
+        {
+            break row.id;
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("the loop never waited for an approval".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    between();
+    crate::commands::consent::approve_consent_request(state, consent)?;
+    while std::time::Instant::now() < deadline {
+        let tasks = state.db.load_tasks_by_agent(agent_id, 100).unwrap();
+        if let Some(task) = tasks.into_iter().find(|task| task.id == goal_id) {
+            if task.completed_at.is_some() {
+                let result = task.result_json.unwrap_or_default();
+                return if task.success {
+                    Ok(result)
+                } else {
+                    Err(result)
+                };
+            }
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("the goal did not complete within 30 s".to_string())
+}
+
+/// The origins of `agent`'s label rows of `table` with `source_kind`.
+fn hm_origins(state: &AppState, agent: &str, table: &str, source_kind: &str) -> Vec<String> {
+    crate::hm_m3_tests::labels(&state.db)
+        .into_iter()
+        .filter(|l| l.agent_id == agent && l.record_table == table && l.source_kind == source_kind)
+        .map(|l| l.origin)
+        .collect()
+}
+
+fn hm_field(result: &str, key: &str) -> String {
+    result
+        .split(' ')
+        .find_map(|f| f.strip_prefix(key))
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// A-N1 (N1; HM-3, HM-4). A row of unknown provenance, for an agent that
+/// is unrestricted now, is not placed in its non-local planning prompt.
+#[test]
+fn p3_hm_a_n1_unknown_provenance_is_not_cloud_eligible() {
+    let name = "p3_hm_a_n1_unknown_provenance_is_not_cloud_eligible";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let open = register_participant(&state, ("p3-hm-open", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &open, "");
+        let later = run_own_goal(&state, &open, "Summarize the synthetic note again");
+        let observed = crate::hm_m3_tests::event_kinds(&state.db)
+            .iter()
+            .filter(|(kind, _)| kind == "memory.unlabelled_record_observed")
+            .count();
+        Ok(format!("observed={observed} later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N1");
+    assert!(
+        !w.result.contains("observed=0 "),
+        "A-N1: the unbound row's reader emitted no memory.unlabelled_record_observed: {}",
+        w.result
+    );
+}
+
+/// A-HF1 (HF-1 inverted). An unclassified row already stored for an agent
+/// that is now unrestricted is not recalled into its next planning prompt
+/// on the configured (non-local) route.
+#[test]
+fn p3_hm_a_hf1_legacy_row_does_not_reach_cloud_planning() {
+    let name = "p3_hm_a_hf1_legacy_row_does_not_reach_cloud_planning";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let open = register_participant(&state, ("p3-hist-open", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed_legacy(&state, &open);
+        let later = run_own_goal(&state, &open, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    hm_assert_no_prohibited_dispatch(&w, &[HIST], "A-HF1");
+}
+
+/// A-N2 (N2; HM-5). A row stored while the agent was local-only stays
+/// restricted after the Owner loosens the agent.
+#[test]
+fn p3_hm_a_n2_local_only_record_stays_restricted_after_loosening() {
+    let name = "p3_hm_a_n2_local_only_record_stays_restricted_after_loosening";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &agent, "");
+        let while_local = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        eprintln!("HM-A-N2 PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let after = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("while_local={while_local:?} after={after:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.ollama.iter().any(|r| r.contains(HM)),
+        "A-N2: precondition: the local-only phase did not plan on loopback: {:?}",
+        w.ollama
+    );
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N2");
+}
+
+/// A-N3 (N3; HM-5, HM-9). Work done under local-only (the loop's own
+/// labelled goal rows) is not recalled into a later goal's non-local
+/// planning after loosening.
+#[test]
+fn p3_hm_a_n3_restricted_work_is_not_recalled_into_a_later_cloud_goal() {
+    let name = "p3_hm_a_n3_restricted_work_is_not_recalled_into_a_later_cloud_goal";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        let first = run_own_goal(
+            &state,
+            &agent,
+            &format!("Summarize the synthetic note {HM}"),
+        );
+        let stored = hm_rows_with(&state, &agent, HM);
+        let origins = hm_origins(&state, &agent, "agent_memory", "loop_episodic");
+        eprintln!("HM-A-N3 PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, "List the synthetic note points");
+        Ok(format!(
+            "first={first:?} stored_restricted_rows={stored} origins={} later={later:?}",
+            origins.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        !w.result.contains("stored_restricted_rows=0 "),
+        "A-N3: precondition: the local-only goal stored nothing: {}",
+        w.result
+    );
+    let origins = hm_field(&w.result, "origins=");
+    assert!(
+        !origins.is_empty() && origins.split(',').all(|o| o == "LOCAL_ONLY_ORIGIN"),
+        "A-N3: the local-only goal's rows are not LOCAL_ONLY: {}",
+        w.result
+    );
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N3");
+}
+
+/// A-N4a (N4a; HM-9). Every cloud credential is configured and the Owner
+/// names a non-local route in the agent's own assignment: the restricted
+/// row is still not sent there.
+#[test]
+fn p3_hm_a_n4a_configured_cloud_route_receives_no_restricted_memory() {
+    let name = "p3_hm_a_n4a_configured_cloud_route_receives_no_restricted_memory";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        hm_seed(&state, &agent, "");
+        let mut config = nexus_kernel::config::load_config().unwrap();
+        let a = config.agent_llm_assignments.get_mut(&agent).unwrap();
+        a.local_only = false;
+        a.provider_id = "ollama/qwen3:8b".to_string();
+        nexus_kernel::config::save_config(&config).unwrap();
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N4a");
+}
+
+/// A-N5 (N5; HM-8, §14 rule 3). Cross-agent learning from a local-only
+/// source carries nothing derived from the source's restricted work to an
+/// unrestricted agent's non-local planning: the copy is refused (its label
+/// is not UNRESTRICTED and the target is not local-only).
+#[test]
+fn p3_hm_a_n5_cross_agent_transfer_from_a_local_only_source_stays_off_the_cloud() {
+    let name = "p3_hm_a_n5_cross_agent_transfer_from_a_local_only_source_stays_off_the_cloud";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let source = hm_register(&state, "p3-hm-source", true, 4, &["llm.query"]);
+        let target = register_participant(&state, ("p3-hm-target", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        // The source's own local-only goal: post-goal evolution records its
+        // strategy (labelled LOCAL_ONLY) the way the loop records it.
+        let goal = format!("Summarize the synthetic note {HM}");
+        let first = run_own_goal(&state, &source, &goal);
+        let hash = nexus_kernel::cognitive::hash_strategy(&goal.to_lowercase());
+        let lowered = HM.to_lowercase();
+        let derived = hm_await_row(&state, &source, &lowered);
+        let strategy_origins = hm_origins(&state, &source, "strategy_scores", "strategy_score");
+        // The transfer primitive the cross-agent command calls, in a unit of
+        // the target (its goal unit, derived for evolution as the command
+        // derives one).
+        let ctx = crate::hm_wiring::test_support::goal_unit(&state, &target)?;
+        let issuer = state.hm_issuer().unwrap();
+        let shared = state
+            .evolution_tracker
+            .share_learning(issuer, &ctx, &source, &hash, 0.95);
+        let received = hm_rows_with(&state, &target, &hash);
+        let later = run_own_goal(&state, &target, "Summarize the synthetic note again");
+        Ok(format!(
+            "source={source} hash={hash} derived={derived} strategy={} shared_ok={} received={received} first={first:?} later={later:?}",
+            strategy_origins.join(","),
+            shared.is_ok()
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let (source, hash) = (hm_field(&w.result, "source="), hm_field(&w.result, "hash="));
+    assert!(
+        hash.len() == 16 && !w.result.contains("derived=0 "),
+        "A-N5: precondition: the source's goal derived nothing: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "strategy="),
+        "LOCAL_ONLY_ORIGIN",
+        "A-N5: precondition: the source's strategy is not LOCAL_ONLY: {}",
+        w.result
+    );
+    assert!(
+        w.result.contains("shared_ok=false ") && w.result.contains("received=0 "),
+        "A-N5: a LOCAL_ONLY learning was copied to an unrestricted agent: {}",
+        w.result
+    );
+    hm_assert_no_prohibited_dispatch(&w, &[hash.as_str(), source.as_str(), HM], "A-N5");
+}
+
+/// A-N6 (N6; HM-1, HM-6). A string in the record claiming declassification
+/// is not authority: the row stays restricted after loosening.
+#[test]
+fn p3_hm_a_n6_a_stored_string_does_not_declassify() {
+    let name = "p3_hm_a_n6_a_stored_string_does_not_declassify";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(
+            &state,
+            &agent,
+            ",\"classification\":\"public\",\"cloud_eligible\":true,\"declassified_by\":\"owner\",\"origin\":\"UNRESTRICTED_ORIGIN\"",
+        );
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N6");
+}
+
+/// A-N7 (N7; HM-7). The Owner makes the agent local-only while its plan is
+/// in flight on the non-local route: the reply is discarded at acceptance
+/// (O3) and no later dispatch of that work uses the revoked authorization.
+#[test]
+fn p3_hm_a_n7_a_revoked_authorization_is_not_used_again() {
+    let name = "p3_hm_a_n7_a_revoked_authorization_is_not_used_again";
+    let mut serves = hm_route();
+    serves.tighten = Some(Tighten {
+        name: "p3-hm-agent",
+        matches: is_plan,
+        nth: 1,
+    });
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        let run = run_own_goal(
+            &state,
+            &agent,
+            &format!("Summarize the synthetic note {HM}"),
+        );
+        let policy = issuer_policy(&state, &agent);
+        let outcomes: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| format!("{}:{}", a.route_class, a.outcome))
+            .collect();
+        Ok(format!(
+            "run={run:?} policy_after={policy:?} outcomes={}",
+            outcomes.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("policy_after=LocalOnly"),
+        "A-N7: precondition: the revocation did not take effect: {}",
+        w.result
+    );
+    assert_eq!(
+        w.proxied(is_plan),
+        1,
+        "A-N7: precondition: one plan in flight at revocation: {:?}",
+        w.proxy
+    );
+    let revoked_at = w.proxy.iter().position(|l| is_plan(l)).unwrap();
+    let after: Vec<&String> = w.proxy[revoked_at + 1..].iter().collect();
+    assert!(
+        after.is_empty(),
+        "A-N7: PROHIBITED CLOUD DISPATCH under a revoked authorization: {after:?}"
+    );
+    assert!(
+        hm_field(&w.result, "outcomes=").starts_with("non_local:reply_discarded"),
+        "A-N7: the in-flight non-local reply was not discarded: {}",
+        w.result
+    );
+}
+
+/// A-N8 (N8; HM-11; stays PASS). No readable policy: nothing is dispatched
+/// anywhere, and the restricted row reaches no model.
+#[test]
+fn p3_hm_a_n8_no_readable_policy_dispatches_nothing() {
+    let name = "p3_hm_a_n8_no_readable_policy_dispatches_nothing";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &agent, "");
+        std::fs::write(
+            std::env::var("NEXUS_CONFIG_PATH").unwrap(),
+            "local_only = [",
+        )
+        .unwrap();
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.proxy.is_empty(),
+        "A-N8: PROHIBITED CLOUD DISPATCH without a readable policy: {:?}",
+        w.proxy
+    );
+    assert!(
+        !w.ollama.iter().any(|r| r.contains(HM)),
+        "A-N8: the restricted row reached a model: {:?}",
+        w.ollama
+    );
+}
+
+/// A-N9a (N9a; HM-11; stays PASS). A local-only agent with no available
+/// local model: no cloud fallback carries anything.
+#[test]
+fn p3_hm_a_n9a_no_local_model_is_not_a_cloud_fallback() {
+    let name = "p3_hm_a_n9a_no_local_model_is_not_a_cloud_fallback";
+    let mut serves = FakeOllama::serving(&[]);
+    serves.proxy_answers = true;
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &agent, "");
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.proxy.is_empty(),
+        "A-N9a: PROHIBITED CLOUD DISPATCH as a fallback: {:?}",
+        w.proxy
+    );
+    assert!(w.generates().is_empty(), "A-N9a: {:?}", w.ollama);
+}
+
+/// A-N9b (N9b; HM-5, HM-11). After loosening, the agent's local model is
+/// unavailable: its local-only-era row does not go to the non-local route
+/// in place of the local one.
+#[test]
+fn p3_hm_a_n9b_no_local_model_does_not_release_restricted_memory() {
+    let name = "p3_hm_a_n9b_no_local_model_does_not_release_restricted_memory";
+    let mut serves = FakeOllama::serving(&[]);
+    serves.proxy_answers = true;
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &agent, "");
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    hm_assert_no_prohibited_dispatch(&w, &[HM], "A-N9b");
+}
+
+/// A-HF2 (HF-2 inverted). A row present while the agent is local-only
+/// reaches only the loopback runtime; after the Owner loosens the agent the
+/// next planning prompt on the configured route does not carry it.
+#[test]
+fn p3_hm_a_hf2_loosening_does_not_expose_rows_stored_while_local() {
+    let name = "p3_hm_a_hf2_loosening_does_not_expose_rows_stored_while_local";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hist-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed_legacy(&state, &agent);
+        let while_local = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        eprintln!("HM-A-HF2 PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let after = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!(
+            "while_local={while_local:?} after_loosening={after:?}"
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.ollama.iter().any(|r| r.contains(HIST)),
+        "A-HF2: precondition: the local-only phase did not plan on the loopback runtime: {:?}",
+        w.ollama
+    );
+    hm_assert_no_prohibited_dispatch(&w, &[HIST], "A-HF2");
+}
+
+/// A-N10 (N10; HM-8, derived data). The desktop's post-goal evolution
+/// derives a procedural row from a local-only goal (`strategy:<hash>
+/// goal_type:<lowercased goal>`); it is labelled from its parents. After
+/// loosening, a later goal's non-local planning does not carry it.
+#[test]
+fn p3_hm_a_n10_derived_record_inherits_local_only_restriction() {
+    let name = "p3_hm_a_n10_derived_record_inherits_local_only_restriction";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = hm_register(&state, "p3-hm-agent", true, 4, &["llm.query"]);
+        route_unrestricted_work_through_the_proxy();
+        let first = run_own_goal(
+            &state,
+            &agent,
+            &format!("Summarize the synthetic note {HM}"),
+        );
+        let lowered = HM.to_lowercase();
+        let derived = hm_await_row(&state, &agent, &lowered);
+        let hash = state
+            .db
+            .load_memories(&agent, None, 1000)
+            .unwrap()
+            .iter()
+            .filter(|m| m.value_json.contains(&lowered))
+            .find_map(|m| {
+                m.value_json
+                    .split("strategy:")
+                    .nth(1)
+                    .and_then(|rest| rest.split(' ').next())
+                    .map(str::to_string)
+            })
+            .unwrap_or_default();
+        let procedural = hm_origins(&state, &agent, "agent_memory", "evolution_procedural");
+        eprintln!("HM-A-N10 PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(
+            &state,
+            &agent,
+            "Review strategy: goal_type: composite: entries",
+        );
+        // Phase 2 (mutant 3): the same goal again, now in an unrestricted
+        // unit. Its post-goal evolution writes a new procedural row derived
+        // from the LOCAL_ONLY strategy aggregate (its parent): the row is
+        // LOCAL_ONLY by that parent alone, and a later non-local goal does
+        // not carry it.
+        let ids = || -> std::collections::BTreeMap<String, String> {
+            crate::hm_m3_tests::labels(&state.db)
+                .into_iter()
+                .filter(|l| {
+                    l.agent_id == agent
+                        && l.record_table == "agent_memory"
+                        && l.source_kind == "evolution_procedural"
+                })
+                .map(|l| (l.record_id, l.origin))
+                .collect()
+        };
+        let before = ids();
+        let again = run_own_goal(
+            &state,
+            &agent,
+            &format!("Summarize the synthetic note {HM}"),
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut after = ids();
+        while after.len() <= before.len() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+            after = ids();
+        }
+        // The rows the re-run goal added (not the in-between goal's own,
+        // which derive from its own unrestricted strategy).
+        let again_rows: Vec<String> = after
+            .into_iter()
+            .filter(|(id, _)| !before.contains_key(id))
+            .map(|(_, origin)| origin)
+            .collect();
+        eprintln!("HM-A-N10 PHASE-2-BOUNDARY");
+        let third = run_own_goal(
+            &state,
+            &agent,
+            "Review strategy: goal_type: composite: entries",
+        );
+        Ok(format!(
+            "hash={hash} derived_rows={derived} procedural={} again_rows={} first={first:?} later={later:?} again={again:?} third={third:?}",
+            procedural.join(","),
+            again_rows.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let hash = hm_field(&w.result, "hash=");
+    assert!(
+        !w.result.contains("derived_rows=0 ") && hash.len() == 16,
+        "A-N10: precondition: evolution derived no row from the local-only goal: {}",
+        w.result
+    );
+    assert!(
+        w.ollama.iter().any(|r| r.contains(HM)),
+        "A-N10: precondition: the local-only phase did not plan on loopback: {:?}",
+        w.ollama
+    );
+    let procedural = hm_field(&w.result, "procedural=");
+    assert!(
+        !procedural.is_empty() && procedural.split(',').all(|o| o == "LOCAL_ONLY_ORIGIN"),
+        "A-N10: the derived procedural row is not LOCAL_ONLY: {}",
+        w.result
+    );
+    let again = hm_field(&w.result, "again_rows=");
+    assert!(
+        !again.is_empty() && again.split(',').all(|o| o == "LOCAL_ONLY_ORIGIN"),
+        "A-N10: the procedural row derived from the LOCAL_ONLY aggregate in an unrestricted unit is not LOCAL_ONLY: {}",
+        w.result
+    );
+    let lowered = HM.to_lowercase();
+    hm_assert_no_prohibited_dispatch(&w, &[lowered.as_str(), hash.as_str()], "A-N10");
+}
+
+/// A-N11 (N11; HM-9, the MemoryRecall read site). A local-only-era row is
+/// not placed, through a MemoryRecall step's records, in a later non-local
+/// model step. The final assertion looks only at non-plan requests.
+#[test]
+fn p3_hm_a_n11_memory_recall_output_does_not_reach_a_non_local_step() {
+    let name = "p3_hm_a_n11_memory_recall_output_does_not_reach_a_non_local_step";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        hm_seed(&state, &agent, "");
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, &format!("{HM_RECALL_GOAL} review the note"));
+        Ok(format!("later={later:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let steps: Vec<&String> = w.proxy.iter().filter(|l| !is_plan(l)).collect();
+    assert!(
+        w.proxied(is_plan) >= 1
+            && steps
+                .iter()
+                .any(|l| l.contains("P3 HiveMind synthetic step")),
+        "A-N11: precondition: no non-local model step after the MemoryRecall step: {:?}",
+        w.proxy
+    );
+    let carried: Vec<&&String> = steps.iter().filter(|l| l.contains(HM)).collect();
+    assert!(
+        carried.is_empty(),
+        "A-N11: PROHIBITED CLOUD DISPATCH: {} non-local step(s) carried {HM} via MemoryRecall: {carried:?}",
+        carried.len()
+    );
+}
+
+fn is_step_two(body: &str) -> bool {
+    body.contains("P3 HM step two") && !is_plan(body)
+}
+
+/// A-N12 (new; FAIL before). The Owner loosens the agent between step one
+/// and step two of one goal: step two stays on the local route (the goal's
+/// unit started local-only; a loosening applies only to units that start
+/// after it), and what the goal writes after the loosening is LOCAL_ONLY.
+#[test]
+fn p3_hm_a_n12_loosening_mid_goal_keeps_step_two_local() {
+    let name = "p3_hm_a_n12_loosening_mid_goal_keeps_step_two_local";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = hm_register(&state, "p3-hm-agent", true, 2, &["llm.query"]);
+        route_unrestricted_work_through_the_proxy();
+        let run = run_paused_goal(&state, &agent, &format!("{HM_PAUSE_GOAL} {HM}"), || {
+            eprintln!("HM-A-N12 LOOSENED BETWEEN THE STEPS");
+            hm_loosen(&state, &agent);
+        });
+        let policy = issuer_policy(&state, &agent);
+        let episodic = hm_origins(&state, &agent, "agent_memory", "loop_episodic");
+        Ok(format!(
+            "policy_after={policy:?} episodic={} run={run:?}",
+            episodic.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("policy_after=Unrestricted"),
+        "A-N12: precondition: the loosening did not take effect: {}",
+        w.result
+    );
+    assert!(
+        w.ollama.iter().any(|r| r.contains("P3 HM step one")),
+        "A-N12: precondition: step one did not run on the loopback runtime: {:?}",
+        w.ollama
+    );
+    assert!(
+        w.proxied(is_step_two) == 0,
+        "A-N12: step two left the machine after the mid-goal loosening: {:?}",
+        w.proxy
+    );
+    assert!(
+        w.ollama.iter().any(|r| is_step_two(r)),
+        "A-N12: step two did not run on the local route: {:?}",
+        w.ollama
+    );
+    assert!(w.proxy.is_empty(), "A-N12: {:?}", w.proxy);
+    let episodic = hm_field(&w.result, "episodic=");
+    assert!(
+        !episodic.is_empty() && episodic.split(',').all(|o| o == "LOCAL_ONLY_ORIGIN"),
+        "A-N12: a write of the goal after the loosening is not LOCAL_ONLY: {}",
+        w.result
+    );
+}
+
+/// A-K1 (new; FAIL before). Knowledge-graph rows written while the agent is
+/// local-only are absent, after the Owner loosens it, from what a
+/// KnowledgeGraphQuery step hands a later non-local model step.
+#[test]
+fn p3_hm_a_k1_local_only_graph_rows_stay_out_of_a_later_non_local_step() {
+    let name = "p3_hm_a_k1_local_only_graph_rows_stay_out_of_a_later_non_local_step";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = hm_register(
+            &state,
+            "p3-hm-agent",
+            true,
+            3,
+            &["llm.query", "knowledge.graph"],
+        );
+        route_unrestricted_work_through_the_proxy();
+        let wrote = run_own_goal(&state, &agent, HM_KG_WRITE_GOAL);
+        let graph = crate::hm_m3_tests::labels(&state.db)
+            .into_iter()
+            .filter(|l| l.agent_id == agent && l.record_table.starts_with("world_model_"))
+            .map(|l| l.origin)
+            .collect::<Vec<_>>();
+        eprintln!("HM-A-K1 PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let read = run_own_goal(&state, &agent, HM_KG_READ_GOAL);
+        Ok(format!(
+            "graph={} wrote={wrote:?} read={read:?}",
+            graph.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let graph = hm_field(&w.result, "graph=");
+    assert!(
+        graph.split(',').count() == 2 && graph.split(',').all(|o| o == "LOCAL_ONLY_ORIGIN"),
+        "A-K1: precondition: the local-only goal stored no LOCAL_ONLY graph rows: {}",
+        w.result
+    );
+    let steps: Vec<&String> = w.proxy.iter().filter(|l| !is_plan(l)).collect();
+    assert!(
+        w.proxied(is_plan) >= 1
+            && steps
+                .iter()
+                .any(|l| l.contains("P3 HiveMind synthetic step")),
+        "A-K1: precondition: no non-local model step after the graph query: {:?}",
+        w.proxy
+    );
+    let carried: Vec<&String> = w.proxy.iter().filter(|l| l.contains(HM_KG)).collect();
+    assert!(
+        carried.is_empty(),
+        "A-K1: PROHIBITED CLOUD DISPATCH: {} non-local request(s) carried a LOCAL_ONLY graph row: {carried:?}",
+        carried.len()
+    );
+}
+
+/// A-C2 (production): a record whose content was altered after it was
+/// labelled (digest mismatch) is UNBOUND: it is not placed in a non-local
+/// planning prompt, and its reader emits memory.unlabelled_record_observed.
+#[test]
+fn p3_hm_a_c2_altered_record_is_unbound_and_not_eligible() {
+    let name = "p3_hm_a_c2_altered_record_is_unbound_and_not_eligible";
+    let marker = "P3-HM-SYNTH-ALTERED-9e41";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-open", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        // An unrestricted agent's own goal writes UNRESTRICTED rows.
+        let first = run_own_goal(&state, &agent, "Summarize the synthetic note");
+        let origins = hm_origins(&state, &agent, "agent_memory", "loop_episodic");
+        // Out of band, the content of each changes (its digest no longer
+        // matches its label).
+        state
+            .db
+            .with_transaction(|tx| {
+                let altered = format!("altered {marker}");
+                tx.execute(
+                    "UPDATE agent_memory SET value_json = json_set(value_json, '$.event', ?2)
+                     WHERE agent_id = ?1",
+                    [agent.as_str(), altered.as_str()],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        let observed = crate::hm_m3_tests::event_kinds(&state.db)
+            .iter()
+            .filter(|(kind, _)| kind == "memory.unlabelled_record_observed")
+            .count();
+        Ok(format!(
+            "origins={} observed={observed} first={first:?} later={later:?}",
+            origins.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let origins = hm_field(&w.result, "origins=");
+    assert!(
+        !origins.is_empty() && origins.split(',').all(|o| o == "UNRESTRICTED_ORIGIN"),
+        "A-C2: precondition: the unrestricted goal's rows are not UNRESTRICTED: {}",
+        w.result
+    );
+    hm_assert_no_prohibited_dispatch(&w, &[marker], "A-C2");
+    assert!(
+        !w.result.contains("observed=0 "),
+        "A-C2: no memory.unlabelled_record_observed for the altered rows: {}",
+        w.result
+    );
+}
+
+const HM_DREAM: &str = "P3-HM-SYNTH-DREAM-41b0";
+
+/// A-D3 (production). A chat routed to a local-only agent queues a dream
+/// entry owned by that agent and labelled LOCAL_ONLY; its dream dispatch is
+/// never non-local.
+#[test]
+fn p3_hm_a_d3_dream_from_a_local_only_chat_stays_local() {
+    let name = "p3_hm_a_d3_dream_from_a_local_only_chat_stays_local";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-dreamer", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        let message = format!("Recall the synthetic note {HM_DREAM}");
+        let turn = hm_turn(
+            &state,
+            crate::hm_dispatch::chat_turn(&state, Some("p3-hm-dreamer"))
+                .map_err(AgentError::SupervisorError)?,
+            &message,
+            None,
+        )
+        .map_err(AgentError::SupervisorError)?;
+        let entries = hm_queue_only(&state, &turn, &message);
+        let dreamt = crate::commands::simulation::trigger_dream_now(&state);
+        Ok(format!("agent={agent} entries={entries} dreamt={dreamt:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let agent = hm_field(&w.result, "agent=");
+    let entries = hm_field(&w.result, "entries=");
+    assert!(
+        !entries.is_empty()
+            && entries
+                .split(';')
+                .all(|e| e == format!("{agent}|{agent}|LOCAL_ONLY_ORIGIN")),
+        "A-D3: precondition: the turn queued no LOCAL_ONLY entry owned by the agent: {}",
+        w.result
+    );
+    assert!(
+        w.ollama.iter().filter(|r| r.contains(HM_DREAM)).count() >= 2,
+        "A-D3: precondition: the turn and its dream did not run on the loopback runtime: {:?}",
+        w.ollama
+    );
+    // Nothing of this scenario may leave the machine: the chat is routed to
+    // a local-only agent, and its dream entry is that agent's (a TLS request
+    // hides its content, so any non-local request counts).
+    assert!(
+        w.proxy.is_empty(),
+        "A-D3: PROHIBITED CLOUD DISPATCH of a LOCAL_ONLY dream entry: {:?}",
+        w.proxy
+    );
+}
+
+/// A-D4 (production). An OwnerDirect chat whose turn went to the attested
+/// local transport queues an OwnerDirect entry labelled LOCAL_ONLY, and its
+/// dream dispatch is never non-local; an agent-owned entry carries the real
+/// agent id (never the chat's ephemeral id).
+#[test]
+fn p3_hm_a_d4_owner_direct_local_turn_dream_never_leaves_and_agent_entries_carry_the_agent() {
+    let name =
+        "p3_hm_a_d4_owner_direct_local_turn_dream_never_leaves_and_agent_entries_carry_the_agent";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-open", false, ""));
+        // The OwnerDirect turn's model is the loopback runtime, attested
+        // local (no agent is named).
+        let mut config = nexus_kernel::config::load_config().unwrap();
+        config.llm.default_model = "ollama/qwen3:8b".to_string();
+        nexus_kernel::config::save_config(&config).unwrap();
+        let owner = {
+            let mut turn =
+                crate::hm_dispatch::chat_turn(&state, None).map_err(AgentError::SupervisorError)?;
+            // The OwnerDirect turn is made local-only through the context's
+            // own (monotone) tightening, so its transport is the attested
+            // loopback runtime.
+            turn.tighten_local_only();
+            let message = format!("Recall the synthetic note {HM_DREAM}");
+            let turn =
+                hm_turn(&state, turn, &message, None).map_err(AgentError::SupervisorError)?;
+            let entries = hm_queue_only(&state, &turn, &message);
+            let dreamt = crate::commands::simulation::trigger_dream_now(&state);
+            format!("{entries} dreamt={dreamt:?}")
+        };
+        let agent_entries = {
+            let turn = crate::hm_dispatch::chat_turn(&state, Some("p3-hm-open"))
+                .map_err(AgentError::SupervisorError)?;
+            let turn = hm_turn(&state, turn, "An agent turn", Some("ollama/qwen3:8b"))
+                .map_err(AgentError::SupervisorError)?;
+            hm_queue_only(&state, &turn, "An agent turn")
+        };
+        Ok(format!(
+            "agent={agent} owner={owner} agent_entries={agent_entries}"
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let owner = hm_field(&w.result, "owner=");
+    assert!(
+        owner.starts_with("owner|OwnerDirect|LOCAL_ONLY_ORIGIN"),
+        "A-D4: precondition: the OwnerDirect local turn queued no LOCAL_ONLY OwnerDirect entry: {}",
+        w.result
+    );
+    let carried: Vec<&String> = w.proxy.iter().filter(|l| l.contains(HM_DREAM)).collect();
+    assert!(
+        carried.is_empty(),
+        "A-D4: PROHIBITED CLOUD DISPATCH of an OwnerDirect LOCAL_ONLY dream: {carried:?}"
+    );
+    assert!(
+        w.ollama.iter().filter(|r| r.contains(HM_DREAM)).count() >= 2,
+        "A-D4: precondition: the turn and its dream did not run locally: {:?}",
+        w.ollama
+    );
+    let agent = hm_field(&w.result, "agent=");
+    let agent_entries = hm_field(&w.result, "agent_entries=");
+    assert!(
+        !agent_entries.is_empty()
+            && agent_entries
+                .split(';')
+                .all(|e| e.starts_with(&format!("{agent}|{agent}|"))),
+        "A-D4: an agent-owned entry does not carry the real agent id: {}",
+        w.result
+    );
+}
+
+/// One chat turn through the production turn path: `message` dispatched
+/// through the issuer on the transport the turn's context selects (its
+/// entry label is set by that dispatch, A1.8). Returns the turn.
+fn hm_turn(
+    state: &AppState,
+    mut turn: nexus_kernel::hm::DispatchContext,
+    message: &str,
+    model: Option<&str>,
+) -> Result<nexus_kernel::hm::DispatchContext, String> {
+    use nexus_connectors_llm::providers::LlmProvider;
+    crate::hm_dispatch::dispatch_text(
+        state,
+        &mut turn,
+        message,
+        &mut |ctx| {
+            let (provider, model, attestation) = crate::hm_dispatch::human_provider(ctx, model)?;
+            Ok(((provider, model), attestation))
+        },
+        &mut |(provider, model): (Box<dyn LlmProvider>, String), admitted: &str| {
+            provider
+                .query(admitted, 256, &model)
+                .map(|r| r.output_text)
+                .map_err(|e| e.to_string())
+        },
+    )?;
+    Ok(turn)
+}
+
+/// The production dream queueing of `turn` after a failed interaction (a
+/// Replay dream), and the queued entries: `source|principal|origin;...`.
+fn hm_queue_only(
+    state: &AppState,
+    turn: &nexus_kernel::hm::DispatchContext,
+    message: &str,
+) -> String {
+    let mut consciousness = nexus_kernel::consciousness::ConsciousnessState::new("synthetic");
+    consciousness.frustration = 0.0;
+    let interaction = nexus_kernel::dreams::auto_queue::ChatInteraction {
+        user_message: message.to_string(),
+        agent_response: String::new(),
+        was_error: true,
+        error_message: Some("synthetic failure".to_string()),
+        topic_detected: None,
+        token_count: 1,
+    };
+    let mut engine = state.dream_engine.lock().unwrap();
+    engine.scheduler.priority_queue.clear();
+    nexus_kernel::dreams::queue_dreams_from_interaction(
+        &mut engine.scheduler,
+        turn,
+        &consciousness,
+        &interaction,
+    );
+    engine
+        .scheduler
+        .priority_queue
+        .iter()
+        .map(|t| {
+            let (principal, origin) =
+                t.label()
+                    .map_or(("none".to_string(), "none".to_string()), |l| {
+                        (
+                            match l.principal() {
+                                nexus_kernel::hm::Principal::Agent(id) => id.to_string(),
+                                other => format!("{other:?}"),
+                            },
+                            l.label().class_name().to_string(),
+                        )
+                    });
+            format!("{}|{principal}|{origin}", t.source_agent)
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// A-T1 (production). A team whose director is unrestricted and one member
+/// local-only: no member dispatch is non-local, every member dispatch was
+/// admitted (one admission row per member task), and the director's merge
+/// (whose taint joins the members') is local.
+#[test]
+fn p3_hm_a_t1_team_member_local_only_director_unrestricted() {
+    let name = "p3_hm_a_t1_team_member_local_only_director_unrestricted";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let director = register_by_supervisor(&state, "p3-d2r2-director", false);
+        let members = vec![
+            register_by_supervisor(&state, "p3-d2r2-member-a", true),
+            register_by_supervisor(&state, "p3-d2r2-member-b", false),
+        ];
+        route_unrestricted_work_through_the_proxy();
+        let result =
+            crate::commands::orchestration::run_team_workflow(&state, &director, PROMPT, &members);
+        let admitted: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| {
+                format!(
+                    "{}:{}:{}:{}",
+                    a.agent_id.unwrap_or_default(),
+                    a.unit_kind,
+                    a.route_class,
+                    a.outcome
+                )
+            })
+            .collect();
+        Ok(format!(
+            "director={director} members={} admitted={} result={result:?}",
+            members.join(","),
+            admitted.join(";")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let member_tasks: Vec<&String> = w
+        .ollama
+        .iter()
+        .filter(|r| r.contains("Execute this task assigned by the Director"))
+        .collect();
+    assert_eq!(
+        member_tasks.len(),
+        2,
+        "A-T1: precondition: both member tasks ran locally: {:?}",
+        w.ollama
+    );
+    let proxied_member = w
+        .proxy
+        .iter()
+        .filter(|l| l.contains("Execute this task assigned by the Director"))
+        .count();
+    assert_eq!(
+        proxied_member, 0,
+        "A-T1: a member dispatch left the machine: {:?}",
+        w.proxy
+    );
+    let merges_proxied = w
+        .proxy
+        .iter()
+        .filter(|l| l.contains("Combine these sub-task results"))
+        .count();
+    assert_eq!(
+        merges_proxied, 0,
+        "A-T1: the merge left the machine: {:?}",
+        w.proxy
+    );
+    // Every member dispatch was admitted: one local admission row of a
+    // member for each member task the witness saw (the director's rows are
+    // its decomposition and its merge).
+    let admitted = hm_field(&w.result, "admitted=");
+    let director = hm_field(&w.result, "director=");
+    let members: Vec<String> = hm_field(&w.result, "members=")
+        .split(',')
+        .map(str::to_string)
+        .collect();
+    let member_rows: Vec<&str> = admitted
+        .split(';')
+        .filter(|row| members.iter().any(|m| row.starts_with(&format!("{m}:"))))
+        .collect();
+    assert_eq!(
+        member_rows.len(),
+        member_tasks.len(),
+        "A-T1: a member dispatch was not admitted in the issuer: {admitted}"
+    );
+    assert!(
+        member_rows.iter().all(|r| r.contains(":team_task:local:")),
+        "A-T1: a member admission is not local: {admitted}"
+    );
+    let director_rows: Vec<&str> = admitted
+        .split(';')
+        .filter(|row| row.starts_with(&format!("{director}:")))
+        .collect();
+    assert!(
+        !director_rows.is_empty() && director_rows.iter().all(|r| r.contains(":local:")),
+        "A-T1: the director's dispatches (decomposition, merge) are not local: {admitted}"
+    );
+}
+
+/// A-T1h (production). `temporal_fork` with a caller id naming a
+/// local-only agent sends no non-local request; with an unknown id the
+/// request is OwnerDirect with the default projection. The projection type
+/// has no text field: it is exactly two `f64` drives.
+#[test]
+fn p3_hm_a_t1h_temporal_fork_follows_the_registered_caller() {
+    assert_eq!(
+        std::mem::size_of::<nexus_kernel::temporal::DriveProjection>(),
+        2 * std::mem::size_of::<f64>(),
+        "A-T1h: the drive projection gained a field"
+    );
+    let name = "p3_hm_a_t1h_temporal_fork_follows_the_registered_caller";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        let local = crate::commands::simulation::temporal_fork(
+            &state,
+            format!("Plan the synthetic note {HM}"),
+            agent.clone(),
+            Some(2),
+        );
+        eprintln!("HM-A-T1H PHASE-BOUNDARY");
+        let unknown = crate::commands::simulation::temporal_fork(
+            &state,
+            "Plan an unrelated task".to_string(),
+            "not-a-registered-agent".to_string(),
+            Some(2),
+        );
+        Ok(format!(
+            "local={} unknown={}",
+            local.is_ok(),
+            unknown.is_ok()
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let carried: Vec<&String> = w.proxy.iter().filter(|l| l.contains(HM)).collect();
+    assert!(
+        carried.is_empty(),
+        "A-T1h: a temporal fork of a local-only caller left the machine: {carried:?}"
+    );
+    assert!(
+        w.ollama.iter().any(|r| r.contains(HM)),
+        "A-T1h: precondition: the local-only caller's fork did not run locally: {:?}",
+        w.ollama
+    );
+    // A local-only caller cannot leave the machine, so every request the
+    // proxy saw is the unknown caller's: an id that names no registered
+    // agent is no principal (an unregistered agent unit is refused), so its
+    // request is OwnerDirect, admitted on the configured (non-local) route.
+    assert!(
+        !w.proxy.is_empty(),
+        "A-T1h: the unknown caller's OwnerDirect request did not take the configured route: {:?}",
+        w.proxy
+    );
+}
+
+/// A-C1 (production; mutant 8). Work whose policy cannot be established
+/// dispatches nothing (the default policy is `Unresolved`), and a local-only
+/// unit's dispatch takes the attested local transport and completes there.
+#[test]
+fn p3_hm_a_c1_unresolved_default_and_local_unit_dispatch_locally() {
+    assert_eq!(AgentLlmPolicy::default(), AgentLlmPolicy::Unresolved);
+    let name = "p3_hm_a_c1_unresolved_default_and_local_unit_dispatch_locally";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        let unregistered = crate::hm_wiring::test_support::plan_text(
+            &state,
+            &Uuid::new_v4().to_string(),
+            "P3 HM unresolved",
+        );
+        let local = crate::hm_wiring::test_support::plan_text(&state, &agent, "P3 HM local unit");
+        Ok(format!(
+            "unregistered_ok={} local={local:?}",
+            unregistered.is_ok()
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("unregistered_ok=false "),
+        "A-C1: an unestablished policy dispatched: {}",
+        w.result
+    );
+    assert!(
+        !w.ollama.iter().any(|r| r.contains("P3 HM unresolved"))
+            && !w.proxy.iter().any(|l| l.contains("P3 HM unresolved")),
+        "A-C1: an unestablished policy reached a model"
+    );
+    assert!(
+        w.result.contains("local=Ok(") && w.ollama.iter().any(|r| r.contains("P3 HM local unit")),
+        "A-C1: the local-only unit did not dispatch on the attested local transport: {} {:?}",
+        w.result,
+        w.ollama
+    );
+    assert!(w.proxy.is_empty(), "A-C1: {:?}", w.proxy);
+}
+
+// ── N6: the dispatch generation checks, Flash and the L1 proof through the
+// production adapters (§18.2 A-P1, A-P2, A-P3, A-F1, A-F3; A1.6), with the
+// loopback runtime and the recording proxy as the injected transports ──
+
+/// One planning dispatch of backend `text` in the existing unit `ctx`,
+/// through the production adapter of a goal's loop.
+fn hm_plan_in(
+    state: &AppState,
+    ctx: &mut nexus_kernel::hm::DispatchContext,
+    text: &str,
+) -> Result<String, AgentError> {
+    crate::hm_dispatch::GatewayPlannerLlm::for_loop(state, None)
+        .plan_query(ctx, &mut |c: &mut nexus_kernel::hm::DispatchContext| {
+            let mut b = nexus_kernel::hm::PromptBuilder::new(c);
+            b.text(text);
+            Some(b.build())
+        })
+        .map(|reply| reply.text().to_string())
+}
+
+/// `(local_only, policy_generation)` of `agent`'s stored policy row.
+fn hm_policy(state: &AppState, agent: &str) -> (i64, i64) {
+    crate::hm_m3_tests::policies(&state.db)
+        .into_iter()
+        .find(|p| p.agent_id == agent)
+        .map(|p| {
+            (
+                p.local_only.unwrap_or(-1),
+                p.policy_generation.unwrap_or(-1),
+            )
+        })
+        .unwrap_or((-1, -1))
+}
+
+/// The configuration names `agent` local-only (an out-of-band edit).
+fn hm_config_local_only(agent: &str, local_only: bool) {
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    config
+        .agent_llm_assignments
+        .get_mut(agent)
+        .unwrap()
+        .local_only = local_only;
+    nexus_kernel::config::save_config(&config).unwrap();
+}
+
+/// A-P1 (i of three) and A-P3 (ii). The configuration tightens the agent
+/// after its unit started (O1), before its dispatch: at the dispatch's
+/// observation point (O2) the tightening is committed with a generation
+/// bump, the dispatch is rebuilt local-only, and nothing is sent to a
+/// non-local transport.
+#[test]
+fn p3_hm_a_p1_tightened_before_admission_sends_nothing_non_local() {
+    let name = "p3_hm_a_p1_tightened_before_admission_sends_nothing_non_local";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let before = hm_policy(&state, &agent);
+        hm_config_local_only(&agent, true);
+        let reply = hm_plan_in(&state, &mut ctx, "P3 HM A-P1 before");
+        let after = hm_policy(&state, &agent);
+        Ok(format!(
+            "before={}:{} after={}:{} reply={reply:?}",
+            before.0, before.1, after.0, after.1
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    // The first build selected a non-local transport (its selection may
+    // probe the configured runtime's model list); no request was sent on
+    // it: no proxied request is a dispatch or carries the prompt.
+    let sent: Vec<&String> = w
+        .proxy
+        .iter()
+        .filter(|l| l.starts_with("POST ") || l.contains("P3 HM A-P1 before"))
+        .collect();
+    assert!(
+        sent.is_empty(),
+        "A-P1: a non-local request was sent for a dispatch tightened before admission: {sent:?}"
+    );
+    assert!(
+        w.result.contains("reply=Ok(")
+            && w.generates()
+                .iter()
+                .any(|r| r.contains("P3 HM A-P1 before")),
+        "A-P1: the tightened dispatch was not rebuilt on the local transport: {} {:?}",
+        w.result,
+        w.ollama
+    );
+    let before = hm_field(&w.result, "before=");
+    let after = hm_field(&w.result, "after=");
+    let parse = |s: &str| -> (i64, i64) {
+        let (a, b) = s.split_once(':').unwrap();
+        (a.parse().unwrap(), b.parse().unwrap())
+    };
+    let (before, after) = (parse(&before), parse(&after));
+    assert_eq!(before.0, 0, "A-P3 (ii): precondition: {}", w.result);
+    assert!(
+        after.0 == 1 && after.1 > before.1,
+        "A-P3 (ii): the tightening was not committed with a generation bump: {}",
+        w.result
+    );
+}
+
+fn is_p1_after(body: &str) -> bool {
+    body.contains("P3 HM A-P1 after")
+}
+
+/// A-P1 (ii of three) and A-P3 (i, iii). The configuration tightens the
+/// agent after its non-local dispatch was admitted, before the reply: the
+/// admitted request was sent (no interruption is claimed), and the reply is
+/// discarded at acceptance (O3), recorded `reply_discarded`, with
+/// `memory.reply_discarded` emitted.
+#[test]
+fn p3_hm_a_p1_tightened_after_admission_discards_the_reply() {
+    let name = "p3_hm_a_p1_tightened_after_admission_discards_the_reply";
+    let mut serves = hm_route();
+    serves.tighten = Some(Tighten {
+        name: "p3-hm-agent",
+        matches: is_p1_after,
+        nth: 1,
+    });
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let reply = hm_plan_in(&state, &mut ctx, "P3 HM A-P1 after");
+        let outcomes: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| format!("{}:{}", a.route_class, a.outcome))
+            .collect();
+        let discarded = crate::hm_m3_tests::event_kinds(&state.db)
+            .iter()
+            .filter(|(kind, _)| kind == "memory.reply_discarded")
+            .count();
+        Ok(format!(
+            "outcomes={} discarded_events={discarded} reply_ok={}",
+            outcomes.join(","),
+            reply.is_ok()
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert_eq!(
+        w.proxied(is_p1_after),
+        1,
+        "A-P3 (i): the admitted request was not sent: {:?}",
+        w.proxy
+    );
+    assert!(
+        w.result.contains("reply_ok=false"),
+        "A-P1: a reply arriving after the tightening was used: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "outcomes="),
+        "non_local:reply_discarded",
+        "A-P1: the discarded reply was not recorded: {}",
+        w.result
+    );
+    assert!(
+        !w.result.contains("discarded_events=0 "),
+        "A-P1: no memory.reply_discarded: {}",
+        w.result
+    );
+}
+
+/// A-P1 (iii of three). The policy generation moves at admission, and
+/// again at the one rebuild: the dispatch is refused `generation_unstable`
+/// and nothing is sent anywhere.
+#[test]
+fn p3_hm_a_p1_generation_moved_twice_is_unstable_and_sends_nothing() {
+    let name = "p3_hm_a_p1_generation_moved_twice_is_unstable_and_sends_nothing";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let mut built = 0;
+        let reply = crate::hm_dispatch::GatewayPlannerLlm::for_loop(&state, None).plan_query(
+            &mut ctx,
+            &mut |c: &mut nexus_kernel::hm::DispatchContext| {
+                // Each build of the prompt sees the generation moved since
+                // the unit's context was fixed (an Owner change, TEST
+                // FIXTURE).
+                built += 1;
+                crate::hm_m3_tests::fixture_owner_loosen(&state.db, &agent);
+                let mut b = nexus_kernel::hm::PromptBuilder::new(c);
+                b.text("P3 HM A-P1 unstable");
+                Some(b.build())
+            },
+        );
+        Ok(format!(
+            "built={built} reply={:?}",
+            reply.map(|r| r.text().to_string())
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("built=2 ") && w.result.contains("generation_unstable"),
+        "A-P1: the twice-moved generation was not refused after one rebuild: {}",
+        w.result
+    );
+    assert!(
+        !w.proxy.iter().any(|l| l.contains("P3 HM A-P1 unstable"))
+            && !w.ollama.iter().any(|r| r.contains("P3 HM A-P1 unstable")),
+        "A-P1: an unstable dispatch was sent: {:?} {:?}",
+        w.proxy,
+        w.ollama
+    );
+}
+
+fn is_p3_o3(body: &str) -> bool {
+    body.contains("P3 HM A-P3 o3")
+}
+
+/// A-P3 (iv). An unreadable configuration at the dispatch's observation
+/// point (O2) refuses it before anything is sent; one that becomes
+/// unreadable while a non-local reply is in flight discards the reply at
+/// acceptance (O3).
+#[test]
+fn p3_hm_a_p3_unreadable_config_refuses_at_o2_and_discards_at_o3() {
+    let name = "p3_hm_a_p3_unreadable_config_refuses_at_o2_and_discards_at_o3";
+    let mut serves = hm_route();
+    serves.break_config = Some(Tighten {
+        name: "",
+        matches: is_p3_o3,
+        nth: 1,
+    });
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        let path = std::env::var("NEXUS_CONFIG_PATH").unwrap();
+        let readable = std::fs::read_to_string(&path).unwrap();
+        // O2: unreadable before the dispatch.
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        std::fs::write(&path, "local_only = [").unwrap();
+        let o2 = hm_plan_in(&state, &mut ctx, "P3 HM A-P3 o2");
+        std::fs::write(&path, &readable).unwrap();
+        eprintln!("HM-A-P3 PHASE-BOUNDARY");
+        // O3: unreadable while the reply is in flight (the proxy breaks it).
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let o3 = hm_plan_in(&state, &mut ctx, "P3 HM A-P3 o3");
+        let outcomes: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| format!("{}:{}", a.route_class, a.outcome))
+            .collect();
+        Ok(format!(
+            "o2_ok={} o3_ok={} outcomes={}",
+            o2.is_ok(),
+            o3.is_ok(),
+            outcomes.join(",")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("o2_ok=false")
+            && !w.proxy.iter().any(|l| l.contains("P3 HM A-P3 o2"))
+            && !w.ollama.iter().any(|r| r.contains("P3 HM A-P3 o2")),
+        "A-P3 (iv): an unreadable configuration at O2 did not refuse before sending: {} {:?}",
+        w.result,
+        w.proxy
+    );
+    assert_eq!(
+        w.proxied(is_p3_o3),
+        1,
+        "A-P3 (iv): precondition: the O3 dispatch was not sent: {:?}",
+        w.proxy
+    );
+    assert!(
+        w.result.contains("o3_ok=false")
+            && hm_field(&w.result, "outcomes=") == "non_local:reply_discarded",
+        "A-P3 (iv): an unreadable configuration at O3 did not discard the reply: {}",
+        w.result
+    );
+}
+
+/// A-P3 (v; mutant 9). A configuration edit to `local_only = false` never
+/// loosens, at any observation point: the agent stays local-only, its
+/// generation does not move, and its dispatch stays local.
+#[test]
+fn p3_hm_a_p3_a_config_loosening_never_loosens() {
+    let name = "p3_hm_a_p3_a_config_loosening_never_loosens";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        let _ = issuer_policy(&state, &agent);
+        let before = hm_policy(&state, &agent);
+        hm_config_local_only(&agent, false);
+        let mut ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let reply = hm_plan_in(&state, &mut ctx, "P3 HM A-P3 v");
+        let policy = issuer_policy(&state, &agent);
+        let after = hm_policy(&state, &agent);
+        Ok(format!(
+            "policy={policy:?} before={before:?} after={after:?} reply={reply:?}"
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("policy=LocalOnly "),
+        "A-P3 (v): a configuration edit loosened the agent: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "before="),
+        hm_field(&w.result, "after="),
+        "A-P3 (v): the configuration edit changed the stored policy: {}",
+        w.result
+    );
+    assert!(
+        w.proxy.is_empty() && w.generates().iter().any(|r| r.contains("P3 HM A-P3 v")),
+        "A-P3 (v): the dispatch left the local route: {:?}",
+        w.proxy
+    );
+}
+
+/// A Flash provider of the backend-owned cache over `model` (with
+/// in-process inference compiled in; not loaded).
+fn hm_flash(state: &AppState, model: &std::path::Path) {
+    let model = model.to_string_lossy().into_owned();
+    let provider = nexus_connectors_llm::providers::FlashProvider::new(
+        model.clone(),
+        nexus_flash_infer::LoadConfig {
+            model_path: model,
+            ..Default::default()
+        },
+        nexus_flash_infer::GenerationConfig::fast(),
+    );
+    state
+        .flash_providers
+        .lock()
+        .unwrap()
+        .insert("p3-hm-flash-session".to_string(), Arc::new(provider));
+}
+
+/// The agent's assignment names a Flash route.
+fn hm_flash_route(agent: &str) {
+    let mut config = nexus_kernel::config::load_config().unwrap();
+    config
+        .agent_llm_assignments
+        .get_mut(agent)
+        .unwrap()
+        .provider_id = "flash/synthetic".to_string();
+    nexus_kernel::config::save_config(&config).unwrap();
+}
+
+/// A-P2. A local-only agent's route selects the cached Flash provider,
+/// whose (L2) attestation is incomplete (its model is not in the model
+/// directory): the transport's attested class (non-local) differs from the
+/// unit's (local), and the dispatch is refused; nothing is sent.
+#[test]
+fn p3_hm_a_p2_flash_override_without_l2_is_refused_for_a_local_unit() {
+    let name = "p3_hm_a_p2_flash_override_without_l2_is_refused_for_a_local_unit";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        let dir = std::env::temp_dir().join(format!("p3-hm-a-p2-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("synthetic.gguf");
+        std::fs::write(&model, b"SYNTH").unwrap();
+        hm_flash(&state, &model);
+        hm_flash_route(&agent);
+        let reply = crate::hm_wiring::test_support::plan_text(&state, &agent, "P3 HM A-P2");
+        let admissions = crate::hm_m3_tests::admissions(&state.db).len();
+        std::fs::remove_dir_all(&dir).unwrap();
+        Ok(format!("admissions={admissions} reply={reply:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("reply=Err(") && w.result.contains("route_mismatch"),
+        "A-P2: a non-local Flash transport was accepted for a local unit: {}",
+        w.result
+    );
+    assert!(
+        w.result.contains("admissions=0 "),
+        "A-P2: a refused dispatch was admitted: {}",
+        w.result
+    );
+    assert!(
+        w.proxy.is_empty() && w.generates().is_empty(),
+        "A-P2: another transport was used: {:?} {:?}",
+        w.proxy,
+        w.ollama
+    );
+}
+
+/// A-F3 (A1.7). A local-only agent's Flash route with no model loaded is
+/// an error, and no other provider is called.
+#[test]
+fn p3_hm_a_f3_flash_route_without_a_loaded_model_errors_and_calls_nothing() {
+    let name = "p3_hm_a_f3_flash_route_without_a_loaded_model_errors_and_calls_nothing";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        hm_flash_route(&agent);
+        let reply = crate::hm_wiring::test_support::plan_text(&state, &agent, "P3 HM A-F3");
+        Ok(format!("reply={reply:?}"))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("reply=Err(") && w.result.contains("no model is loaded"),
+        "A-F3: {}",
+        w.result
+    );
+    assert!(
+        w.proxy.is_empty() && w.generates().is_empty(),
+        "A-F3: another provider was called: {:?} {:?}",
+        w.proxy,
+        w.ollama
+    );
+}
+
+/// A-F1 (local-first preserved; no real model). A local-only agent whose
+/// route is an (L2)-attested Flash provider (its model a regular file in
+/// the identity home's model directory) has its planning admitted on the
+/// local route with its history included; the dispatch goes to Flash and
+/// to no other provider. (The synthetic model cannot be loaded, so the
+/// transport fails after admission: `transport_failed`.)
+#[test]
+fn p3_hm_a_f1_attested_flash_admits_a_local_only_agent_with_its_history() {
+    let name = "p3_hm_a_f1_attested_flash_admits_a_local_only_agent_with_its_history";
+    let Some(w) = e2e(name, hm_route(), || {
+        // A test-owned identity home for this child process.
+        let home = std::env::temp_dir().join(format!("p3-hm-a-f1-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        std::env::set_var("HOME", &home);
+        let models = nexus_connectors_llm::attest::flash_model_dir_for_home(&home).unwrap();
+        std::fs::create_dir_all(&models).unwrap();
+        let model = models.join("synthetic.gguf");
+        std::fs::write(&model, b"SYNTH").unwrap();
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        hm_flash(&state, &model);
+        hm_flash_route(&agent);
+        hm_seed(&state, &agent, "");
+        let run = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        let admitted: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| format!("{}:{}:{}", a.route_class, a.record_count, a.outcome))
+            .collect();
+        std::fs::remove_dir_all(&home).unwrap();
+        Ok(format!("admitted={} run={run:?}", admitted.join(",")))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let admitted = hm_field(&w.result, "admitted=");
+    let first = admitted.split(',').next().unwrap_or_default();
+    let parts: Vec<&str> = first.split(':').collect();
+    assert!(
+        parts.len() == 3
+            && parts[0] == "local"
+            && parts[1].parse::<i64>().unwrap_or(0) >= 1
+            && parts[2] == "transport_failed",
+        "A-F1: the planning was not admitted on the attested local Flash with its history: {}",
+        w.result
+    );
+    assert!(
+        w.proxy.is_empty() && w.generates().is_empty(),
+        "A-F1: another provider was called: {:?} {:?}",
+        w.proxy,
+        w.ollama
+    );
+}
+
+/// A1.6 (mutant 16). The (L1) proof is made for each dispatch: after the
+/// loopback runtime starts reporting the model as remote, the next dispatch
+/// of a local-only agent is refused, and nothing more is sent to it.
+#[test]
+fn p3_hm_a1_6_the_l1_proof_is_made_for_each_dispatch() {
+    let name = "p3_hm_a1_6_the_l1_proof_is_made_for_each_dispatch";
+    let mut serves = FakeOllama::serving(&["qwen3:8b"]);
+    serves.remote_after_generates = Some(1);
+    let Some(w) = e2e(name, serves, || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        let one = crate::hm_wiring::test_support::plan_text(&state, &agent, "P3 HM L1 one");
+        let two = crate::hm_wiring::test_support::plan_text(&state, &agent, "P3 HM L1 two");
+        Ok(format!("one_ok={} two_ok={}", one.is_ok(), two.is_ok()))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert!(
+        w.result.contains("one_ok=true")
+            && w.generates()
+                .iter()
+                .filter(|r| r.contains("P3 HM L1 one"))
+                .count()
+                == 1,
+        "A1.6: precondition: the first dispatch did not run on the verified runtime: {} {:?}",
+        w.result,
+        w.ollama
+    );
+    assert!(
+        w.result.contains("two_ok=false")
+            && !w.generates().iter().any(|r| r.contains("P3 HM L1 two")),
+        "A1.6: a dispatch used a proof made before the runtime turned remote: {} {:?}",
+        w.result,
+        w.ollama
+    );
+    assert!(w.proxy.is_empty(), "A1.6: {:?}", w.proxy);
+}
+
+/// §12.3 item 4, the `model_mapping` read site. A model mapping the agent
+/// stored while local-only (LOCAL_ONLY) never selects a non-local route for
+/// a later non-local unit: after the Owner loosens it, its planning takes
+/// the configured route, never the mapped cloud model.
+#[test]
+fn p3_hm_s12_3_local_only_model_mapping_never_selects_a_non_local_route() {
+    let name = "p3_hm_s12_3_local_only_model_mapping_never_selects_a_non_local_route";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-agent", true, ""));
+        route_unrestricted_work_through_the_proxy();
+        // The desktop executor closes SelectLlmProvider (L6), so the row is
+        // written in a unit of the local-only agent through the labelled
+        // writer the L6 actuators use (§6.5 `model_mapping`).
+        let ctx = crate::hm_wiring::test_support::goal_unit(&state, &agent)?;
+        let mapped = state.hm_issuer().unwrap().write_memory(
+            &ctx,
+            &nexus_kernel::hm::NewMemory {
+                source_kind: nexus_kernel::hm::SourceKind::ModelMapping,
+                memory_type: "model_mapping",
+                key: "model_mapping:planning",
+                value_json: r#"{"provider":"groq","model":"llama-3.3-70b-versatile"}"#,
+                relevance_score: 1.0,
+            },
+            &[],
+        );
+        let mapping = hm_origins(&state, &agent, "agent_memory", "model_mapping");
+        eprintln!("HM-MAPPING PHASE-BOUNDARY");
+        hm_loosen(&state, &agent);
+        let later = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        Ok(format!(
+            "mapping={} mapped={} later={later:?}",
+            mapping.join(","),
+            mapped.is_ok()
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    assert_eq!(
+        hm_field(&w.result, "mapping="),
+        "LOCAL_ONLY_ORIGIN",
+        "model_mapping: precondition: the local-only goal stored no LOCAL_ONLY mapping: {}",
+        w.result
+    );
+    assert!(
+        w.proxied(is_plan) >= 1,
+        "model_mapping: precondition: the later goal did not plan on the configured route: {:?}",
+        w.proxy
+    );
+    let mapped: Vec<&String> = w.proxy.iter().filter(|l| l.contains("groq")).collect();
+    assert!(
+        mapped.is_empty(),
+        "model_mapping: a LOCAL_ONLY mapping selected a non-local route: {mapped:?}"
     );
 }

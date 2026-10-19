@@ -1379,6 +1379,99 @@ mod tests {
         assert!(session.results.contains_key("t3"));
     }
 
+    /// P3-HM-CONTRACT-02 §18.2 A-H1 (production coordinator; mutant 13). A
+    /// session of unrestricted participants on a non-local transport: one
+    /// sub-task's context was tightened during the sub-task (its taint is
+    /// LOCAL_ONLY) and it failed, so it carries no result into the merge.
+    /// The session joins its taint, so the merge, though it carries only
+    /// unrestricted results, is refused non-local; nothing more is sent.
+    #[test]
+    fn hm_m3_n6_a_h1_the_merge_joins_a_subtask_taint() {
+        let hm = TestHm::new();
+        let lead = hm.open_agent("a-h1-lead");
+        let workers = [
+            hm.open_agent("a-h1-worker-a"),
+            hm.open_agent("a-h1-worker-b"),
+        ];
+        let decomposition = serde_json::to_string(&serde_json::json!([
+            {"id": "t1", "description": "Tightened", "required_capabilities": ["cap.a"],
+             "estimated_fuel": 1.0, "dependencies": []},
+            {"id": "t2", "description": "Open", "required_capabilities": ["cap.b"],
+             "estimated_fuel": 1.0, "dependencies": []},
+            {"id": "t3", "description": "Open too", "required_capabilities": ["cap.b"],
+             "estimated_fuel": 1.0, "dependencies": []}
+        ]))
+        .unwrap();
+        let llm = ScriptedLlm::new(&hm.issuer, RouteClass::NonLocal)
+            .then(&decomposition)
+            .then("merged");
+        let sent = llm.prompts.clone();
+        let coord = HivemindCoordinator::new(
+            Box::new(llm),
+            Arc::new(CollectingHivemindEmitter::new()),
+            Arc::new(Mutex::new(AuditTrail::new())),
+        );
+        let mut session = hm
+            .issuer
+            .begin_unit(
+                Principal::Agent(lead),
+                Unit::HiveSubtask {
+                    session_id: uuid::Uuid::new_v4(),
+                    subtask_id: 0,
+                },
+            )
+            .unwrap();
+        assert_eq!(session.route_class(), RouteClass::NonLocal);
+        let agents = vec![
+            AgentInfo {
+                id: "agent-a".into(),
+                capabilities: vec!["cap.a".into()],
+                available_fuel: 100.0,
+            },
+            AgentInfo {
+                id: "agent-b".into(),
+                capabilities: vec!["cap.b".into()],
+                available_fuel: 100.0,
+            },
+        ];
+        let mut n = 0u32;
+        let result = coord.execute_with_executor(
+            &mut session,
+            "A-H1 session",
+            agents,
+            |session_ctx, task_id, _agent, _desc| {
+                n += 1;
+                let worker = if task_id == "t1" {
+                    workers[0]
+                } else {
+                    workers[1]
+                };
+                let mut child = session_ctx.derive_subtask(&hm.issuer, worker, n).unwrap();
+                if task_id == "t1" {
+                    // The participant was tightened during its sub-task.
+                    child.tighten_local_only();
+                    SubtaskRun {
+                        outcome: Err("refused after a tightening".into()),
+                        context: Some(child),
+                    }
+                } else {
+                    SubtaskRun {
+                        outcome: Ok(child.produce(format!("{task_id} done"))),
+                        context: Some(child),
+                    }
+                }
+            },
+        );
+        let sent = sent.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1, "only the decomposition is sent: {sent:?}");
+        assert!(sent[0].contains("task decomposition engine"));
+        assert!(
+            result.is_err(),
+            "the merge of a session whose sub-task taint is LOCAL_ONLY was admitted non-local"
+        );
+        assert_eq!(session.taint(), crate::hm::OriginLabel::LocalOnlyOrigin);
+    }
+
     // ── Test 10: Reassignment when first agent fails ──
 
     #[test]

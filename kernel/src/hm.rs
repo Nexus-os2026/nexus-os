@@ -23,6 +23,8 @@ mod context;
 mod dispatch;
 mod events;
 mod issuer;
+#[cfg(test)]
+mod n6_tests;
 mod recall;
 #[cfg(test)]
 pub(crate) mod testing;

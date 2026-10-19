@@ -1564,6 +1564,34 @@ impl HmTx<'_> {
         Ok(())
     }
 
+    /// Every admission row, in insertion order (content-free).
+    pub fn admission_rows(&self) -> Result<Vec<AdmissionRow>> {
+        let mut stmt = self.tx.prepare(
+            "SELECT admission_id, agent_id, unit_kind, route_class, policy_generation,
+                    revocation_seq, record_count, grant_dep_count, raw_label, outcome
+             FROM hm_dispatch_admission ORDER BY rowid",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(AdmissionRow {
+                admission_id: r.get(0)?,
+                agent_id: r.get(1)?,
+                unit_kind: r.get(2)?,
+                route_class: r.get(3)?,
+                policy_generation: r.get(4)?,
+                revocation_seq: r.get(5)?,
+                record_count: r.get(6)?,
+                grant_dep_count: r.get(7)?,
+                raw_label: r.get(8)?,
+                outcome: r.get(9)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     /// Sets the outcome of an admission still recorded as `admitted`.
     /// Returns the number of rows changed.
     pub fn update_admission_outcome(&self, admission_id: &str, outcome: &str) -> Result<usize> {
@@ -1687,6 +1715,20 @@ impl HmTx<'_> {
             params![subject, kind, agent_id, fields_json],
         )?;
         Ok(())
+    }
+
+    /// The `(kind, agent_id)` of every `hm_event` row, in order
+    /// (content-free).
+    pub fn event_kinds(&self) -> Result<Vec<(String, Option<String>)>> {
+        let mut stmt = self
+            .tx
+            .prepare("SELECT kind, agent_id FROM hm_event ORDER BY n")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
 
     /// The stored `sqlite_master.sql` of a trigger, if one of that name exists.

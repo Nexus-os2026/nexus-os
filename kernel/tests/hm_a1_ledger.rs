@@ -1590,3 +1590,545 @@ fn hm_n4_a_m4_membership_survives_deletion_fk_on_and_off_identical() {
         "foreign_keys ON and OFF must give identical results"
     );
 }
+
+// ── P3-C11-HM-M3 N6: A-M4 through the production writers (§18.2a, AD-4) ────
+//
+// N4's fixture and checks, with the production paths M3 built: step 5b is the
+// production delete of Z's memories; step 6 is X's KnowledgeGraphUpdate
+// through the production actuator (the labelled replace of
+// `DispatchIssuer::replace_world_model`, one `BEGIN IMMEDIATE`), first with a
+// fault injected inside its transaction (nothing of it commits: the old graph
+// rows, their labels and the ledger stand; mutant 15), then for real; k4 and
+// k5 are labelled by the replacing unit. Step 10 (A-D2) is the production
+// completion of t1 (`complete_task`). N-L1..N-L5 run on the resulting
+// database, foreign keys on and off.
+
+/// X, Y and Z are registered agents.
+struct M4Registry;
+
+impl nexus_kernel::hm::AgentRegistry for M4Registry {
+    fn is_registered(&self, agent_id: &Uuid) -> bool {
+        [AGENT_X, AGENT_Y, AGENT_Z]
+            .iter()
+            .any(|a| uuid(a) == *agent_id)
+    }
+
+    fn names(&self, _agent_id: &Uuid) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// A configuration that names no agent local-only: each agent keeps its
+/// stored policy (restrictive when first resolved).
+struct M4Config;
+
+impl nexus_kernel::hm::ConfigInput for M4Config {
+    fn read_local_only(
+        &self,
+        _agent_id: &Uuid,
+        _names: &[String],
+    ) -> Result<nexus_kernel::hm::ConfigReading, nexus_kernel::hm::ConfigReadError> {
+        Ok(nexus_kernel::hm::ConfigReading {
+            local_only: false,
+            content_digest: "synthetic".into(),
+        })
+    }
+}
+
+/// No authority or observational event carries record content (§15.1):
+/// no synthetic marker in any subject or field. (The production issuer's
+/// agent-bound events name their agent, unlike N4's ledger-only events.)
+fn assert_events_carry_no_content(db: &NexusDatabase) {
+    for (subject, kind, _agent_id, fields) in events(db) {
+        assert!(
+            !fields.contains("SYNTH"),
+            "{kind} fields leak content: {fields}"
+        );
+        assert!(!subject.contains("SYNTH"), "{kind} subject leaks content");
+    }
+}
+
+/// N4's `assert_detected` with the content check of the production events.
+fn assert_detected_n6(name: &str, db: &NexusDatabase, r: &LedgerReport, failed: &[&str]) {
+    assert_eq!(r.checks.failed(), failed.to_vec(), "{name}: {:?}", r.checks);
+    assert!(r.mismatch_event_written, "{name}: mismatch event");
+    assert_eq!(event_count(db, "memory.member_set_mismatch"), 1, "{name}");
+    assert_events_carry_no_content(db);
+}
+
+type M4Issuer = std::sync::Arc<nexus_kernel::hm::DispatchIssuer>;
+
+fn m4_issuer(db: NexusDatabase) -> (std::sync::Arc<NexusDatabase>, M4Issuer) {
+    let db = std::sync::Arc::new(db);
+    let issuer = std::sync::Arc::new(
+        nexus_kernel::hm::DispatchIssuer::new(
+            db.clone(),
+            std::sync::Arc::new(M4Registry),
+            std::sync::Arc::new(M4Config),
+        )
+        .unwrap(),
+    );
+    (db, issuer)
+}
+
+fn m4_unit(issuer: &M4Issuer) -> nexus_kernel::hm::DispatchContext {
+    issuer
+        .begin_unit(
+            nexus_kernel::hm::Principal::Agent(uuid(AGENT_X)),
+            nexus_kernel::hm::Unit::Goal {
+                goal_id: Uuid::new_v4(),
+            },
+        )
+        .unwrap()
+}
+
+/// One knowledge-graph action of X through the production actuator in
+/// `unit`; returns the result and the records it returned verbatim.
+fn m4_graph(
+    issuer: &M4Issuer,
+    unit: &mut nexus_kernel::hm::DispatchContext,
+    action: nexus_kernel::cognitive::PlannedAction,
+) -> (
+    Result<nexus_kernel::actuators::ActionResult, nexus_kernel::actuators::ActuatorError>,
+    Vec<nexus_kernel::hm::RecalledRecord>,
+) {
+    use nexus_kernel::actuators::Actuator;
+    let plan = unit.produce("SYNTH plan");
+    let context = nexus_kernel::actuators::ActuatorContext {
+        agent_id: AGENT_X.into(),
+        agent_name: "x".into(),
+        working_dir: std::env::temp_dir(),
+        autonomy_level: nexus_kernel::autonomy::AutonomyLevel::L3,
+        capabilities: ["knowledge.graph".to_string()].into_iter().collect(),
+        fuel_remaining: 1000.0,
+        egress_allowlist: vec![],
+        action_review_engine: None,
+        hitl_approved: false,
+    };
+    let mut scope = nexus_kernel::actuators::ActuatorScope {
+        issuer,
+        ctx: unit,
+        plan: &plan,
+        recalled: Vec::new(),
+    };
+    let result =
+        nexus_kernel::actuators::KnowledgeGraphActuator.execute_in(&action, &context, &mut scope);
+    (result, std::mem::take(&mut scope.recalled))
+}
+
+fn m4_update(entities: &[&str], relationships: &[&str]) -> nexus_kernel::cognitive::PlannedAction {
+    nexus_kernel::cognitive::PlannedAction::KnowledgeGraphUpdate {
+        entities: entities.iter().map(|s| s.to_string()).collect(),
+        relationships: relationships.iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+/// Child entry, the N6 A-M4 steps 1, 2, 5 and 6.
+#[test]
+#[ignore = "child process entry for the N6 A-M4; run by the parent test"]
+fn hm_m3_n6_child_am4_phase1() {
+    let Some((path, fk_on)) = child_env() else {
+        return;
+    };
+    let db = open_mode(&path, fk_on);
+    seed_am4(&db);
+
+    // Steps 1-2 as N4.
+    let hashes = row_hashes(&db);
+    assert_eq!(hashes.len(), 9);
+    let expected = sorted(t_expected_members(&db));
+    run_t0_option_a(&db, &agents()).unwrap();
+    let got = ledger(&db);
+    assert_eq!(got, expected);
+    assert_eq!(count(&db, "SELECT member_count FROM hm_migration"), 9);
+    let digest = strings(&db, "SELECT member_set_sha256 FROM hm_migration").remove(0);
+    assert_eq!(digest, t_member_set(&expected), "independently computed");
+
+    // Step 5a: a direct single-row DELETE of m2.
+    must(&db, "DELETE FROM agent_memory WHERE id = 2");
+    // Step 5b: the production delete of Z's memories (z1).
+    db.delete_memories_by_agent(AGENT_Z).unwrap();
+
+    let (db, issuer) = m4_issuer(db);
+    // Step 6, with a fault inside the replace's transaction (after its
+    // delete and its first insert): nothing of it commits.
+    let mut unit = m4_unit(&issuer);
+    issuer.install_probe(Box::new(|p| {
+        if p == nexus_kernel::hm::ProbePoint::WriteRecordWritten {
+            panic!("SYNTH fault inside the replace transaction");
+        }
+    }));
+    let faulted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        m4_graph(
+            &issuer,
+            &mut unit,
+            m4_update(&["{\"SYNTH\":\"kx\"}"], &["{\"SYNTH\":\"ky\"}"]),
+        )
+        .0
+    }));
+    issuer.install_probe(Box::new(|_| {}));
+    assert!(faulted.is_err(), "the fault was not injected");
+    for name in ["k1", "k2", "k3"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert!(
+            db.hm()
+                .immediate(|tx| tx.current_row(t, id))
+                .unwrap()
+                .is_some(),
+            "step 6 fault: {name} was deleted by a replace that did not commit"
+        );
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_record_label WHERE record_table = '{t}' AND record_id = '{id}'")),
+            1,
+            "step 6 fault: {name} lost its label"
+        );
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_t0_tombstone WHERE record_table = '{t}' AND record_id = '{id}'")),
+            0,
+            "step 6 fault: {name} was tombstoned"
+        );
+    }
+    assert_eq!(
+        count(
+            &db,
+            "SELECT COUNT(*) FROM world_model_entities WHERE entity_json LIKE '%kx%'"
+        ),
+        0
+    );
+    assert!(report(&db).checks.all_pass());
+
+    // Step 6: the production replace for X: k1 k2 k3 out, k4 k5 in.
+    let mut unit = m4_unit(&issuer);
+    let (replaced, _) = m4_graph(
+        &issuer,
+        &mut unit,
+        m4_update(&["{\"SYNTH\":\"k4\"}"], &["{\"SYNTH\":\"k5\"}"]),
+    );
+    replaced.unwrap();
+    let k4 = count(&db, "SELECT MAX(id) FROM world_model_entities");
+    let k5 = count(&db, "SELECT MAX(id) FROM world_model_relationships");
+
+    emit(serde_json::json!({
+        "hashes": hashes,
+        "member_set_sha256": digest,
+        "ledger": got.iter().map(|m| [m.0.clone(), m.1.clone(), m.2.clone(), m.3.clone()]).collect::<Vec<_>>(),
+        "k4": k4,
+        "k5": k5,
+    }));
+}
+
+/// Child entry, the N6 A-M4 steps 7 (restart), 8, 9 and 10.
+#[test]
+#[ignore = "child process entry for the N6 A-M4; run by the parent test"]
+fn hm_m3_n6_child_am4_phase2() {
+    let Some((path, fk_on)) = child_env() else {
+        return;
+    };
+    let db = open_mode(&path, fk_on);
+    let k4 = count(&db, "SELECT MAX(id) FROM world_model_entities").to_string();
+    let k5 = count(&db, "SELECT MAX(id) FROM world_model_relationships").to_string();
+    // Step 8: deleted members are gone, unlabelled and tombstoned.
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert!(
+            db.hm()
+                .immediate(|tx| tx.current_row(t, id))
+                .unwrap()
+                .is_none(),
+            "{name} must be absent"
+        );
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_record_label WHERE record_table = '{t}' AND record_id = '{id}'")),
+            0,
+            "{name} must have no label row"
+        );
+        assert_eq!(
+            count(&db, &format!("SELECT COUNT(*) FROM hm_t0_tombstone WHERE record_table = '{t}' AND record_id = '{id}'")),
+            1,
+            "{name} must have a tombstone"
+        );
+        assert_eq!(
+            evaluate_label(&db, table_of(t), id).unwrap(),
+            EvaluatedLabel::Unbound
+        );
+    }
+    // k4 and k5 are not members and carry the label of the unit that
+    // replaced the graph (X's, local-only: its default restrictive policy).
+    for (t, id) in [
+        (RecordTable::WorldModelEntities, k4.as_str()),
+        (RecordTable::WorldModelRelationships, k5.as_str()),
+    ] {
+        assert!(
+            !is_t0_member(&db, t, id).unwrap(),
+            "{t:?}:{id} is not a member"
+        );
+        assert_eq!(
+            evaluate_label(&db, t, id).unwrap(),
+            EvaluatedLabel::Bound(OriginLabel::LocalOnlyOrigin)
+        );
+        assert_eq!(
+            strings(&db, &format!("SELECT source_kind FROM hm_record_label WHERE record_table = '{}' AND record_id = '{id}'", t.table_name())),
+            vec!["knowledge_graph_replace".to_string()]
+        );
+    }
+    // Step 9: L1-L4 pass on the ledger; count and digest unchanged.
+    let r = report(&db);
+    assert!(r.checks.all_pass(), "step 9: {:?}", r.checks);
+    assert!(!r.mismatch_event_written);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM hm_t0_member"), 9);
+    for name in ["m1", "m3", "t1", "y1"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert_eq!(
+            state_of(&r, table_of(t), id),
+            Some(present_unchanged()),
+            "{name} stays a present, unchanged member"
+        );
+    }
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        let (_, t, id) = *AM4_ROWS.iter().find(|r| r.0 == name).unwrap();
+        assert_eq!(
+            state_of(&r, table_of(t), id),
+            Some(MemberState::Deleted),
+            "{name}"
+        );
+    }
+    assert!(!r.inconsistency_event_written);
+    let hashes = row_hashes(&db);
+    let summary_states = states(&r);
+    let member_count = count(&db, "SELECT member_count FROM hm_migration");
+    let member_set = strings(&db, "SELECT member_set_sha256 FROM hm_migration").remove(0);
+    let tombstones = strings(
+        &db,
+        "SELECT record_table || ':' || record_id FROM hm_t0_tombstone ORDER BY 1",
+    );
+
+    // Step 8, production reads: X's KnowledgeGraphQuery returns k4 and k5
+    // only; X's memory recall returns m1 and m3 only.
+    let (db, issuer) = m4_issuer(db);
+    let mut unit = m4_unit(&issuer);
+    let (queried, recalled) = m4_graph(
+        &issuer,
+        &mut unit,
+        nexus_kernel::cognitive::PlannedAction::KnowledgeGraphQuery {
+            query: "SYNTH".into(),
+        },
+    );
+    queried.unwrap();
+    let mut graph: Vec<String> = recalled
+        .iter()
+        .map(|r| {
+            format!(
+                "{}:{}",
+                r.record_ref().table().table_name(),
+                r.record_ref().record_id()
+            )
+        })
+        .collect();
+    graph.sort();
+    let mut want = vec![
+        format!("world_model_entities:{k4}"),
+        format!("world_model_relationships:{k5}"),
+    ];
+    want.sort();
+    assert_eq!(graph, want, "step 8: X's knowledge-graph query");
+    let memories = issuer
+        .recall_spec(
+            &mut unit,
+            &nexus_kernel::hm::RecallSpec::table(RecordTable::AgentMemory, 100),
+        )
+        .unwrap();
+    let mut ids: Vec<String> = memories
+        .iter()
+        .map(|r| r.record_ref().record_id().to_string())
+        .collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        vec!["1".to_string(), "3".to_string()],
+        "step 8: X's recall"
+    );
+
+    // Step 10 (A-D2): the production completion of t1 after T0 changes its
+    // content; its ledger row is unchanged and it leaves the unchanged set.
+    let ledger_before = ledger(&db);
+    let unit = m4_unit(&issuer);
+    issuer
+        .complete_task(
+            &unit,
+            uuid(T1),
+            "completed",
+            Some("\"SYNTH-final\""),
+            true,
+            &[],
+        )
+        .unwrap();
+    let r = report(&db);
+    assert!(r.checks.all_pass(), "step 10: {:?}", r.checks);
+    assert_eq!(
+        state_of(&r, RecordTable::TaskHistory, T1),
+        Some(MemberState::Present {
+            label: EvaluatedLabel::Bound(OriginLabel::LocalOnlyOrigin),
+            unchanged_since_t0: false
+        }),
+        "step 10: t1 is no longer an unchanged member"
+    );
+    assert_eq!(ledger(&db), ledger_before, "step 10: the ledger row stays");
+    assert_events_carry_no_content(&db);
+    emit(serde_json::json!({
+        "hashes": hashes,
+        "member_count": member_count,
+        "member_set_sha256": member_set,
+        "failed_checks": Vec::<String>::new(),
+        "states": summary_states,
+        "step10": states(&r),
+        "events": event_kinds(&db),
+        "tombstones": tombstones,
+    }));
+}
+
+fn run_am4_production(fk_on: bool) -> serde_json::Value {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let p1 = run_am4_child("hm_m3_n6_child_am4_phase1", &path, fk_on);
+    let p2 = run_am4_child("hm_m3_n6_child_am4_phase2", &path, fk_on);
+
+    // Step 8: surviving fixture rows unchanged (before step 10).
+    for name in ["m1", "m3", "t1", "y1"] {
+        let k = am4_key(name);
+        assert_eq!(p2["hashes"][&k], p1["hashes"][&k], "{name} per-row SHA-256");
+        assert!(p2["hashes"][&k].is_string());
+    }
+    for name in ["m2", "z1", "k1", "k2", "k3"] {
+        assert!(p2["hashes"][&am4_key(name)].is_null(), "{name} absent");
+    }
+    // Step 9: count and digest unchanged.
+    assert_eq!(p2["member_count"], 9);
+    assert_eq!(p2["member_set_sha256"], p1["member_set_sha256"]);
+
+    let mut out = serde_json::Map::new();
+    out.insert("phase1_ledger".into(), p1["ledger"].clone());
+    out.insert("phase2_states".into(), p2["states"].clone());
+    out.insert("step10_states".into(), p2["step10"].clone());
+    out.insert("phase2_events".into(), p2["events"].clone());
+    out.insert("phase2_tombstones".into(), p2["tombstones"].clone());
+
+    let m3 = ("agent_memory", "3");
+    // The negative controls on the resulting database (t1 completed).
+    // N-L1: one ledger digest altered (table rebuilt, triggers restored).
+    let c = copy_db(&path, dir.path(), "nl1.db");
+    rebuild_ledger(
+        &c,
+        "SELECT record_table, record_id, agent_id,
+                CASE WHEN record_table = 'agent_memory' AND record_id = '1'
+                     THEN 'forged' ELSE t0_content_sha256 END
+         FROM fixture_ledger_copy",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected_n6("N-L1", &db, &r, &["L2"]);
+    out.insert(
+        "N-L1".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    // N-L2: one ledger entry (m1) omitted.
+    let c = copy_db(&path, dir.path(), "nl2.db");
+    rebuild_ledger(
+        &c,
+        "SELECT record_table, record_id, agent_id, t0_content_sha256 FROM fixture_ledger_copy
+         WHERE NOT (record_table = 'agent_memory' AND record_id = '1')",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected_n6("N-L2", &db, &r, &["L1", "L2"]);
+    assert!(!is_t0_member(&db, RecordTable::AgentMemory, "1").unwrap());
+    out.insert(
+        "N-L2".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    // N-L3: a tombstone for a non-member identity.
+    let c = copy_db(&path, dir.path(), "nl3.db");
+    {
+        let db = open(&c);
+        db.execute_raw("PRAGMA foreign_keys=OFF").unwrap();
+        must(
+            &db,
+            "INSERT INTO hm_t0_tombstone VALUES ('agent_memory', '999')",
+        );
+    }
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected_n6("N-L3", &db, &r, &["L3"]);
+    out.insert(
+        "N-L3".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    // N-L4: the ledger immutability trigger dropped.
+    let c = copy_db(&path, dir.path(), "nl4.db");
+    must(&open(&c), "DROP TRIGGER hm_t0_member_no_update");
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected_n6("N-L4", &db, &r, &["L4"]);
+    out.insert(
+        "N-L4".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    // N-L5: m3 deleted with its delete trigger dropped.
+    let c = copy_db(&path, dir.path(), "nl5.db");
+    must(
+        &open(&c),
+        "DROP TRIGGER hm_del_agent_memory; DELETE FROM agent_memory WHERE id = 3;",
+    );
+    let (db, r) = verify_copy(&c, fk_on);
+    assert_detected_n6("N-L5", &db, &r, &["L4"]);
+    assert_eq!(
+        state_of(&r, RecordTable::AgentMemory, m3.1),
+        Some(MemberState::MissingUntombstoned)
+    );
+    out.insert(
+        "N-L5".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    // N-L5 variant: only the row removed out of band, triggers intact.
+    let c = copy_db(&path, dir.path(), "nl5v.db");
+    {
+        let db = open(&c);
+        must(
+            &db,
+            "DROP TRIGGER hm_del_agent_memory; DELETE FROM agent_memory WHERE id = 3;",
+        );
+        must(&db, TRG_DEL_AGENT_MEMORY);
+    }
+    let (db, r) = verify_copy(&c, fk_on);
+    assert!(r.checks.all_pass(), "N-L5 variant: {:?}", r.checks);
+    assert_eq!(
+        state_of(&r, RecordTable::AgentMemory, m3.1),
+        Some(MemberState::MissingUntombstoned)
+    );
+    assert!(r.inconsistency_event_written, "N-L5 variant: audited");
+    assert_eq!(
+        state_of(&r, RecordTable::AgentMemory, "1"),
+        Some(present_unchanged()),
+        "N-L5 variant: m1 still an unchanged member"
+    );
+    assert_events_carry_no_content(&db);
+    out.insert(
+        "N-L5v".into(),
+        serde_json::json!({"failed": r.checks.failed(), "events": event_kinds(&db)}),
+    );
+    drop(db);
+    serde_json::Value::Object(out)
+}
+
+/// A-M4 (§18.2a, AD-4 form) through the production writers (P3-C11-HM-M3
+/// N6): the knowledge-graph replace of the production actuator commits all
+/// of itself or none of itself, labels what it inserts, and leaves the
+/// ledger, the surviving rows and the tombstones as N4 requires; the
+/// production completion of t1 takes it out of the unchanged set (A-D2).
+/// Foreign keys on and off give identical summaries.
+#[test]
+fn hm_m3_n6_a_m4_production_writers_membership_survives_deletion_fk_on_and_off_identical() {
+    let on = run_am4_production(true);
+    let off = run_am4_production(false);
+    assert_eq!(on, off, "foreign_keys ON and OFF differ");
+}

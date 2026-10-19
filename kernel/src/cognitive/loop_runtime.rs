@@ -5206,6 +5206,120 @@ mod tests {
         assert_eq!(reached.load(Ordering::SeqCst), 0, "a closed actuator ran");
     }
 
+    /// P3-HM-CONTRACT-02 §12.3 item 4, the PREVIOUS OUTCOMES read site
+    /// (strategy selection and the evolved planning prompt; mutants 1b,
+    /// 1b'). A strategy aggregate and an evolved prompt stored while the
+    /// agent was local-only (LOCAL_ONLY) reach its planning prompt on the
+    /// local route (control), and not on a non-local route after the Owner
+    /// loosens it.
+    #[test]
+    fn hm_m3_n6_previous_outcomes_read_is_route_first() {
+        use super::super::evolution::{StrategyScore, StrategyStore};
+        use crate::hm::{SourceKind, StrategyWrite};
+        struct NoStore;
+        impl StrategyStore for NoStore {
+            fn upsert_strategy_score(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: bool,
+                _: f64,
+                _: f64,
+            ) -> Result<(), String> {
+                Ok(())
+            }
+            fn load_top_strategies(
+                &self,
+                _: &str,
+                _: &str,
+                _: usize,
+            ) -> Result<Vec<StrategyScore>, String> {
+                Ok(Vec::new())
+            }
+            fn load_strategy_history(
+                &self,
+                _: &str,
+                _: usize,
+            ) -> Result<Vec<StrategyScore>, String> {
+                Ok(Vec::new())
+            }
+        }
+        const STRATEGY: &str = "p3hmstrategy5d1e";
+        const EVOLVED: &str = "P3-HM-SYNTH-EVOLVED-77aa";
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let id = uuid::Uuid::parse_str(&agent_id).unwrap();
+        // Stored in a unit of the agent while it is local-only.
+        let unit = hm().goal(id);
+        hm().issuer
+            .upsert_strategy(
+                &unit,
+                &StrategyWrite {
+                    strategy_hash: STRATEGY,
+                    goal_type: "general",
+                    success: true,
+                    fuel: 1.0,
+                    duration_secs: 1.0,
+                },
+                &[],
+            )
+            .unwrap();
+        hm().issuer
+            .write_memory(
+                &unit,
+                &NewMemory {
+                    source_kind: SourceKind::OptimizedPrompt,
+                    memory_type: "semantic",
+                    key: "optimized_planning_prompt",
+                    value_json: &format!("\"{EVOLVED}\""),
+                    relevance_score: 1.0,
+                },
+                &[],
+            )
+            .unwrap();
+        let tracker = super::super::evolution::EvolutionTracker::new(Box::new(NoStore));
+        let plan = r#"[{"action": {"type": "Noop"}, "description": "x"}]"#;
+        let plan_once = |route: RouteClass| -> Vec<String> {
+            let (runtime, _) = make_runtime(sup.clone());
+            runtime
+                .assign_goal(
+                    &agent_id,
+                    AgentGoal::new("plan the general thing".into(), 5),
+                )
+                .unwrap();
+            let llm = ScriptedLlm::replying(&hm().issuer, route, plan);
+            let sent = llm.prompts.clone();
+            let planner = CognitivePlanner::new(Box::new(llm));
+            let mut audit = AuditTrail::new();
+            let _ = runtime.run_cycle_with_evolution(
+                &agent_id,
+                &planner,
+                &make_memory_mgr(),
+                &MockExecutor::always_ok("done"),
+                &mut audit,
+                Some(&tracker),
+            );
+            let sent = sent.lock().unwrap().clone();
+            sent
+        };
+        // Control: the local-only agent's planning (local route) carries both.
+        let local = plan_once(RouteClass::Local);
+        assert!(
+            !local.is_empty() && local[0].contains(STRATEGY) && local[0].contains(EVOLVED),
+            "control: the local planning prompt does not carry the stored rows: {local:?}"
+        );
+        // After the Owner loosens it, a non-local planning prompt carries
+        // neither.
+        hm().loosen(id);
+        let remote = plan_once(RouteClass::NonLocal);
+        assert!(!remote.is_empty(), "no non-local planning dispatch");
+        assert!(
+            !remote[0].contains(STRATEGY) && !remote[0].contains(EVOLVED),
+            "a LOCAL_ONLY strategy or evolved prompt reached a non-local planning prompt: {}",
+            remote[0]
+        );
+    }
+
     /// G1a-2: even if every step records StepStatus::Succeeded, when all step
     /// outputs are empty the cycle must be marked as failed so the surface
     /// layer stops reporting success.

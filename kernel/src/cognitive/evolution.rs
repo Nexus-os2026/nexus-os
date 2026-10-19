@@ -1332,6 +1332,79 @@ mod tests {
         assert_eq!(received(), shareable.len() as u64);
     }
 
+    /// The origin of the label of `agent`'s strategy row (one row per
+    /// strategy here).
+    fn strategy_origin(f: &Fixture, agent: &str) -> String {
+        crate::hm::testing::label_origins(&f.hm.db, "strategy_scores", agent).join(",")
+    }
+
+    /// P3-HM-CONTRACT-02 §18.2 A-D1 (production writer; mutant 2). The
+    /// strategy upsert of a unit that started local-only stays LOCAL_ONLY
+    /// when the Owner loosens the agent before the write (the unit taint
+    /// never falls); and across a tightening, then a loosening, the
+    /// aggregate never becomes less restrictive than any of its
+    /// contributions.
+    #[test]
+    fn hm_m3_n6_a_d1_strategy_upsert_keeps_local_only_across_policy_changes() {
+        let f = make_tracker_and_memory();
+        // (1) A unit that started local-only; the Owner loosens mid-unit.
+        let a = f.agent("d1-local");
+        let a_id = uuid::Uuid::parse_str(&a).unwrap();
+        let ctx = f.ctx("d1-local");
+        f.hm.loosen(a_id);
+        f.tracker
+            .record_outcome(
+                &f.hm.issuer,
+                &ctx,
+                "t1",
+                "strat_d1",
+                "coding",
+                true,
+                10.0,
+                5.0,
+                100.0,
+                50.0,
+            )
+            .unwrap();
+        assert_eq!(strategy_origin(&f, &a), "LOCAL_ONLY_ORIGIN");
+
+        // (2) An unrestricted agent's strategy, then a tightening, then a
+        // loosening: UNRESTRICTED, LOCAL_ONLY, still LOCAL_ONLY.
+        let b = f.agent("d1-open");
+        let b_id = uuid::Uuid::parse_str(&b).unwrap();
+        f.hm.loosen(b_id);
+        let record = |ctx: &DispatchContext| {
+            f.tracker
+                .record_outcome(
+                    &f.hm.issuer,
+                    ctx,
+                    "t",
+                    "strat_d1b",
+                    "coding",
+                    true,
+                    10.0,
+                    5.0,
+                    100.0,
+                    50.0,
+                )
+                .unwrap()
+        };
+        record(&f.ctx("d1-open"));
+        assert_eq!(strategy_origin(&f, &b), "UNRESTRICTED_ORIGIN");
+        // The configuration tightens the agent; the next unit observes it.
+        f.hm.config.set(b_id, true);
+        record(&f.ctx("d1-open"));
+        assert_eq!(strategy_origin(&f, &b), "LOCAL_ONLY_ORIGIN");
+        // The Owner loosens it again; a later unrestricted contribution does
+        // not lower the aggregate.
+        f.hm.config.set(b_id, false);
+        f.hm.loosen(b_id);
+        let open = f.ctx("d1-open");
+        assert!(!open.restrictions().local_only());
+        record(&open);
+        assert_eq!(strategy_origin(&f, &b), "LOCAL_ONLY_ORIGIN");
+    }
+
     #[test]
     fn test_get_agent_strategies() {
         let f = make_tracker_and_memory();
