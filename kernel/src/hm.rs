@@ -27,6 +27,7 @@ mod issuer;
 mod m4_tests;
 #[cfg(test)]
 mod n6_tests;
+mod policy;
 mod recall;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -42,6 +43,10 @@ pub use dispatch::{
     TransportEvidence, TransportFailure,
 };
 pub use events::{backfill_authority_events, BackfillReport, BACKFILL_BOUND};
+pub use policy::{
+    Loosened, LooseningRefused, LooseningRequest, OwnerConfirmation, RoutePolicyConfirmer,
+    TightenFailed, Tightened, LOOSENING_CONSEQUENCE,
+};
 pub use recall::{ControlRecord, RecallQuery, RecallRefused, RecallSpec};
 pub use write::{
     NewMemory, Parent, SourceKind, StrategyWrite, TaskBookkeeping, TaskWrite, WriteReceipt,

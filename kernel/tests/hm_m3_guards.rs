@@ -1925,6 +1925,85 @@ fn hm_m4_n1_c4_latent_apply_evolution_planted_controls() {
     }
 }
 
+/// The production implementations of the kernel trait `name`: `(file, type)`.
+fn trait_impls_of(files: &[ProdFile], name: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for f in files {
+        for at in words(&f.code, name) {
+            let rest = f.code[at + name.len()..].trim_start();
+            let Some(ty) = rest.strip_prefix("for") else {
+                continue;
+            };
+            let before = f.code[..at].trim_end();
+            if !(before.ends_with("impl") || before.ends_with("::")) {
+                continue;
+            }
+            let ty: String = ty
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            out.push((f.rel.clone(), ty));
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Mission P3-C11-HM-M4 N2 (§2.10, §4.4): the one production
+/// `RoutePolicyConfirmer` is the desktop's native dialog; it shows the
+/// kernel's request %-escaped and returns the dialog's answer, and never on
+/// the GUI event loop thread. Any other implementation (a test confirmer
+/// outside `cfg(test)`) fails here. Planted control first.
+#[test]
+fn hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog() {
+    let planted = "struct T;\nimpl nexus_kernel::hm::RoutePolicyConfirmer for T {\n fn confirm_loosening(&self, _: &R) -> bool { true }\n}\n#[cfg(test)]\nmod tests { impl RoutePolicyConfirmer for U { } }\n";
+    let code = mask(planted, false);
+    let mut bytes = code.into_bytes();
+    let (ranges, _) = source::cfg_test_items(&mask(planted, false), &mask(planted, true));
+    for (a, z) in ranges {
+        for b in bytes.iter_mut().take(z).skip(a) {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    }
+    let planted_file = ProdFile {
+        rel: "app/src-tauri/src/planted.rs".into(),
+        code: String::from_utf8(bytes).unwrap(),
+        text: mask(planted, true),
+    };
+    assert_eq!(
+        trait_impls_of(std::slice::from_ref(&planted_file), "RoutePolicyConfirmer"),
+        vec![("app/src-tauri/src/planted.rs".to_string(), "T".to_string())]
+    );
+
+    let files = production_files();
+    assert_eq!(
+        trait_impls_of(&files, "RoutePolicyConfirmer"),
+        vec![(
+            "app/src-tauri/src/hm_policy.rs".to_string(),
+            "NativeRoutePolicyDialog".to_string()
+        )]
+    );
+    let policy = file(&files, "app/src-tauri/src/hm_policy.rs");
+    let (a, z) = fn_span(policy, "NativeRoutePolicyDialog::confirm_loosening");
+    let body = squash(&policy.text[a..z]);
+    assert!(
+        body.contains("if std::thread::current().name() == some(\"main\") { return false; }"),
+        "{body}"
+    );
+    assert!(
+        body.ends_with(".message(dialog_text(&request.message())) .title(request.title()) .kind(messagedialogkind::warning) .buttons(messagedialogbuttons::okcancelcustom( \"allow non-local providers\".to_string(), \"cancel\".to_string(), )) .blocking_show() }"),
+        "{body}"
+    );
+    let (a, z) = fn_span(policy, "dialog_text");
+    assert_eq!(
+        squash(&policy.text[a..z]),
+        "{ message.replace('%', \"%%\") }"
+    );
+}
+
 // ── A-S6 extended (E-M3-1): XS crates reach no HM content ───────────────────
 
 /// The XS crates of E-M3-1, and the modules they hand data to, scanned

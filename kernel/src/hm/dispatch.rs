@@ -629,6 +629,8 @@ impl DispatchIssuer {
             hex::encode(random_id().map_err(|u| Attempt::Refused(Refused::Unresolved(u)))?);
         let agent = agent_id.to_string();
         let non_local = attestation.class == RouteClass::NonLocal;
+        // §15.3: a latched agent is local-only for the life of the process.
+        let latched = self.is_latched(agent_id);
 
         let decided = self.db().hm().immediate(|tx| {
             if !is_migrated(tx)? {
@@ -649,7 +651,9 @@ impl DispatchIssuer {
             }
             // Route class: a non-local transport needs a non-local unit of
             // an agent that is not local-only. A local one always fits.
-            if non_local && (ctx.route_class != RouteClass::NonLocal || policy.local_only) {
+            if non_local
+                && (ctx.route_class != RouteClass::NonLocal || policy.local_only || latched)
+            {
                 return Ok(Err(Attempt::Refused(Refused::RouteMismatch)));
             }
             // Eligibility, re-evaluated here; no grant dependencies (AD-4).
@@ -749,6 +753,8 @@ impl DispatchIssuer {
             }
         }
         let agent = admission.agent_id.to_string();
+        // §15.3: a latched agent is local-only for the life of the process.
+        let latched = self.is_latched(admission.agent_id);
         let still_admissible = o3.is_ok()
             && self
                 .db()
@@ -761,7 +767,8 @@ impl DispatchIssuer {
                         {
                             Some(Ok(p)) => {
                                 p.policy_generation == admission.policy_generation
-                                    && (admission.route_class == RouteClass::Local || !p.local_only)
+                                    && (admission.route_class == RouteClass::Local
+                                        || !(p.local_only || latched))
                             }
                             _ => false,
                         },

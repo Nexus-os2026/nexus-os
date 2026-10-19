@@ -4113,23 +4113,31 @@ pub(crate) fn get_llm_recommendations() -> Result<LlmRecommendations, String> {
     })
 }
 
-/// Set the LLM provider assignment for a specific agent.
+/// Set the LLM provider assignment for a specific agent. The provider and
+/// budgets are saved; `local_only` is governed (P3-HM-CONTRACT-02 §4.4;
+/// mission P3-C11-HM-M4 N2, `crate::hm_policy`): `true` commits a tighten
+/// in the store first, `false` is a loosening request that only the Owner's
+/// native confirmation (`confirmer`) can grant. The webview argument alone
+/// loosens nothing.
 pub(crate) fn set_agent_llm_provider(
+    state: &AppState,
+    confirmer: Option<&dyn nexus_kernel::hm::RoutePolicyConfirmer>,
     agent_id: String,
     provider_id: String,
     local_only: bool,
     budget_dollars: u32,
     budget_tokens: u64,
 ) -> Result<(), String> {
-    let mut config = load_config().map_err(agent_error)?;
-    let assignment = nexus_kernel::config::AgentLlmAssignment {
+    crate::hm_policy::set_agent_llm_provider(
+        state,
+        confirmer,
+        &crate::hm_policy::LiveConfigFile,
+        agent_id,
         provider_id,
         local_only,
         budget_dollars,
         budget_tokens,
-    };
-    config.agent_llm_assignments.insert(agent_id, assignment);
-    save_nexus_config(&config).map_err(agent_error)
+    )
 }
 
 /// Get provider usage stats (from audit trail oracle events).

@@ -4485,3 +4485,549 @@ fn p3_hm_s12_3_local_only_model_mapping_never_selects_a_non_local_route() {
         "model_mapping: a LOCAL_ONLY mapping selected a non-local route: {mapped:?}"
     );
 }
+
+// ── P3-C11-HM-M4 N2: the governed policy change (§4.3–§4.6, §15.3, §16) ─────
+
+/// `local_only|policy_generation|basis` of `agent`'s policy row, read
+/// through the store without an observation point.
+fn m4_policy(state: &AppState, agent: &str) -> String {
+    crate::hm_m3_tests::policies(&state.db)
+        .into_iter()
+        .find(|p| p.agent_id == agent)
+        .map(|p| {
+            format!(
+                "{}|{}|{}",
+                p.local_only.unwrap_or(-1),
+                p.policy_generation.unwrap_or(-1),
+                p.basis.unwrap_or_default()
+            )
+        })
+        .unwrap_or_else(|| "none".to_string())
+}
+
+/// How many authority events of `kind` describe `agent`.
+fn m4_events(state: &AppState, agent: &str, kind: &str) -> usize {
+    crate::hm_m3_tests::event_kinds(&state.db)
+        .into_iter()
+        .filter(|(k, a)| k == kind && a.as_deref() == Some(agent))
+        .count()
+}
+
+/// `provider|local_only|budget_dollars|budget_tokens` of the assignment
+/// under `key` in the scenario's configuration.
+fn m4_assignment(key: &str) -> String {
+    nexus_kernel::config::load_config()
+        .unwrap()
+        .agent_llm_assignments
+        .get(key)
+        .map(|a| {
+            format!(
+                "{}|{}|{}|{}",
+                a.provider_id, a.local_only, a.budget_dollars, a.budget_tokens
+            )
+        })
+        .unwrap_or_else(|| "none".to_string())
+}
+
+/// The policy row of a registered agent, created restrictive by its first
+/// resolution.
+fn m4_resolve(state: &AppState, agent: &str) {
+    state
+        .hm_issuer()
+        .unwrap()
+        .resolve_agent_route_policy(Uuid::parse_str(agent).unwrap())
+        .unwrap();
+}
+
+/// N2 (§4.4, §4.5 row 1, §7.1): a webview `local_only = true` is a governed
+/// tighten: the store commits it first (local-only, generation + 1, basis
+/// `tightened`, its `memory.policy_tightened` event), then the config mirror
+/// is written; the provider and budgets are saved as before.
+#[test]
+fn p3_hm_m4_n2_a_webview_tightening_commits_in_the_store_first() {
+    let name = "p3_hm_m4_n2_a_webview_tightening_commits_in_the_store_first";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let agent = register_by_supervisor(&state, "p3-hm-m4-open", false);
+        let before = m4_policy(&state, &agent);
+        let set = crate::commands::chat_llm::set_agent_llm_provider(
+            &state,
+            None,
+            agent.clone(),
+            "anthropic".to_string(),
+            true,
+            3,
+            4,
+        );
+        // Read at once: no observation point runs in between.
+        let after = m4_policy(&state, &agent);
+        Ok(format!(
+            "before={before} set_ok={} after={after} tightened={} assignment={}",
+            set.is_ok(),
+            m4_events(&state, &agent, "memory.policy_tightened"),
+            m4_assignment(&agent)
+        ))
+    }) else {
+        return;
+    };
+    assert_eq!(
+        hm_field(&w.result, "before="),
+        "0|2|owner_confirmed",
+        "N2: precondition: the agent is unrestricted: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "after="),
+        "1|3|tightened",
+        "N2: the webview tightening was not committed in the store first: {}",
+        w.result
+    );
+    assert_eq!(hm_field(&w.result, "tightened="), "1", "{}", w.result);
+    assert_eq!(hm_field(&w.result, "set_ok="), "true", "{}", w.result);
+    assert_eq!(
+        hm_field(&w.result, "assignment="),
+        "anthropic|true|3|4",
+        "{}",
+        w.result
+    );
+}
+
+/// N2 (§4.4, §16 "Webview local_only:false", "No native confirmer"): a
+/// webview `local_only = false` without a native confirmation loosens
+/// nothing: it is refused and reported, no store row changes, and the
+/// config keeps `local_only = true` (the provider and budgets are saved).
+#[test]
+fn p3_hm_m4_n2_a_webview_loosening_without_confirmation_loosens_nothing() {
+    let name = "p3_hm_m4_n2_a_webview_loosening_without_confirmation_loosens_nothing";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let agent = register_by_supervisor(&state, "p3-hm-m4-local", true);
+        m4_resolve(&state, &agent);
+        let before = m4_policy(&state, &agent);
+        let set = crate::commands::chat_llm::set_agent_llm_provider(
+            &state,
+            None,
+            agent.clone(),
+            "anthropic".to_string(),
+            false,
+            3,
+            4,
+        );
+        Ok(format!(
+            "before={before} set_ok={} after={} loosened={} assignment={}",
+            set.is_ok(),
+            m4_policy(&state, &agent),
+            m4_events(&state, &agent, "memory.policy_loosened"),
+            m4_assignment(&agent)
+        ))
+    }) else {
+        return;
+    };
+    assert_eq!(
+        hm_field(&w.result, "before="),
+        "1|1|default_restrictive",
+        "{}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "set_ok="),
+        "false",
+        "N2: an unconfirmed loosening was not refused: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "after="),
+        hm_field(&w.result, "before="),
+        "N2: a store row changed: {}",
+        w.result
+    );
+    assert_eq!(hm_field(&w.result, "loosened="), "0", "{}", w.result);
+    assert_eq!(
+        hm_field(&w.result, "assignment="),
+        "anthropic|true|3|4",
+        "N2: the webview argument loosened the config mirror: {}",
+        w.result
+    );
+}
+
+/// N2: a loosening request whose key names two registered agents is
+/// refused and reported; neither agent changes, and the config keeps the
+/// key local-only.
+#[test]
+fn p3_hm_m4_n2_a_loosening_key_matching_two_agents_is_refused() {
+    let name = "p3_hm_m4_n2_a_loosening_key_matching_two_agents_is_refused";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let first = register_by_supervisor(&state, "p3-hm-m4-shared", true);
+        let second = register_by_supervisor(&state, "p3-hm-m4-shared", true);
+        m4_resolve(&state, &first);
+        m4_resolve(&state, &second);
+        let set = crate::commands::chat_llm::set_agent_llm_provider(
+            &state,
+            None,
+            "p3-hm-m4-shared".to_string(),
+            "anthropic".to_string(),
+            false,
+            0,
+            0,
+        );
+        Ok(format!(
+            "set_ok={} first={} second={} assignment={}",
+            set.is_ok(),
+            m4_policy(&state, &first),
+            m4_policy(&state, &second),
+            m4_assignment("p3-hm-m4-shared")
+        ))
+    }) else {
+        return;
+    };
+    assert_eq!(
+        hm_field(&w.result, "set_ok="),
+        "false",
+        "N2: a key naming two agents was not refused: {}",
+        w.result
+    );
+    for key in ["first=", "second="] {
+        assert_eq!(
+            hm_field(&w.result, key),
+            "1|1|default_restrictive",
+            "{}",
+            w.result
+        );
+    }
+    assert_eq!(
+        hm_field(&w.result, "assignment="),
+        "anthropic|true|0|0",
+        "N2: the refused loosening loosened the config mirror: {}",
+        w.result
+    );
+}
+
+/// N2 (the other production writer of `local_only`: the interface's
+/// whole-configuration save): a key flipped to `true` is a governed tighten
+/// (store first); a key flipped to `false` without a native confirmation is
+/// refused and reported, and the config keeps it local-only; the rest of
+/// the save is written.
+#[test]
+fn p3_hm_m4_n2_an_interface_config_save_tightens_store_first_and_never_loosens_unconfirmed() {
+    let name =
+        "p3_hm_m4_n2_an_interface_config_save_tightens_store_first_and_never_loosens_unconfirmed";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let open = register_by_supervisor(&state, "p3-hm-m4-open", false);
+        let local = register_by_supervisor(&state, "p3-hm-m4-local", true);
+        m4_resolve(&state, &local);
+        let mut config = nexus_kernel::config::load_config().unwrap();
+        config
+            .agent_llm_assignments
+            .get_mut(&open)
+            .unwrap()
+            .local_only = true;
+        let entry = config.agent_llm_assignments.get_mut(&local).unwrap();
+        entry.local_only = false;
+        entry.provider_id = "anthropic".to_string();
+        // The production path of the interface's save (the IPC command's
+        // body), with no native confirmer.
+        let saved =
+            crate::hm_policy::save_config(&state, None, &crate::hm_policy::LiveConfigFile, config);
+        Ok(format!(
+            "saved_ok={} open={} tightened={} open_assignment={} local={} local_assignment={}",
+            saved.is_ok(),
+            m4_policy(&state, &open),
+            m4_events(&state, &open, "memory.policy_tightened"),
+            m4_assignment(&open),
+            m4_policy(&state, &local),
+            m4_assignment(&local)
+        ))
+    }) else {
+        return;
+    };
+    assert_eq!(
+        hm_field(&w.result, "open_assignment="),
+        "|true|0|0",
+        "N2: precondition: the save was not written: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "open="),
+        "1|3|tightened",
+        "N2: the interface save's tightening was not committed in the store first: {}",
+        w.result
+    );
+    assert_eq!(hm_field(&w.result, "tightened="), "1", "{}", w.result);
+    assert_eq!(
+        hm_field(&w.result, "local="),
+        "1|1|default_restrictive",
+        "{}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "local_assignment="),
+        "anthropic|true|0|0",
+        "N2: the interface save loosened the config mirror without confirmation: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "saved_ok="),
+        "false",
+        "N2: the refused loosening was not reported: {}",
+        w.result
+    );
+}
+
+/// The test confirmer (`cfg(test)` only): answers `yes` and records every
+/// request it is shown (title, then message).
+struct M4TestConfirmer {
+    yes: bool,
+    shown: std::sync::Mutex<Vec<(String, String)>>,
+}
+
+impl M4TestConfirmer {
+    fn answering(yes: bool) -> Self {
+        Self {
+            yes,
+            shown: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    fn shown(&self) -> Vec<(String, String)> {
+        self.shown.lock().unwrap().clone()
+    }
+}
+
+impl nexus_kernel::hm::RoutePolicyConfirmer for M4TestConfirmer {
+    fn confirm_loosening(&self, request: &nexus_kernel::hm::LooseningRequest) -> bool {
+        self.shown
+            .lock()
+            .unwrap()
+            .push((request.title().to_string(), request.message()));
+        self.yes
+    }
+}
+
+/// The exact dialog text of a loosening of the agent `name` (§4.4).
+fn m4_dialog_text(name: &str, agent: &str) -> String {
+    format!(
+        "Agent: {name} ({})\nScope: this agent's route policy, from local-only to unrestricted, \
+for its new work only.\nNew work by this agent may be sent to non-local providers. Records \
+made while it was local-only are not released.",
+        &agent[..8]
+    )
+}
+
+/// N2 (§4.4, §4.5 row 2, §7.1; mutant 1): a loosening through the production
+/// path with the test confirmer. The Owner is shown the exact dialog (the
+/// registered name, the UUID prefix, the scope and the §4.4 consequence)
+/// once; on a yes the config mirror is written, then the store commits the
+/// loosening with its history row and event. Declined or with no confirmer,
+/// nothing changes and the config keeps `local_only = true`.
+#[test]
+fn p3_hm_m4_n2_a_native_confirmation_loosens_through_the_production_path() {
+    let name = "p3_hm_m4_n2_a_native_confirmation_loosens_through_the_production_path";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let agent = register_by_supervisor(&state, "p3-hm-m4-agent", true);
+        // Its desktop name (the registered name the dialog shows first)
+        // carries a `%`, which the Linux dialog prints only escaped.
+        state.meta.lock().unwrap().insert(
+            Uuid::parse_str(&agent).unwrap(),
+            crate::AgentMeta {
+                name: "p3-hm-m4 50% agent".to_string(),
+                last_action: String::new(),
+            },
+        );
+        m4_resolve(&state, &agent);
+        let set = |confirmer: Option<&dyn nexus_kernel::hm::RoutePolicyConfirmer>| {
+            crate::commands::chat_llm::set_agent_llm_provider(
+                &state,
+                confirmer,
+                agent.clone(),
+                "anthropic".to_string(),
+                false,
+                3,
+                4,
+            )
+        };
+        let declining = M4TestConfirmer::answering(false);
+        let declined = set(Some(&declining));
+        let after_decline = format!("{}/{}", m4_policy(&state, &agent), m4_assignment(&agent));
+        let confirming = M4TestConfirmer::answering(true);
+        let confirmed = set(Some(&confirming));
+        // A later observation point keeps it unrestricted: the mirror
+        // removed every local-only assignment of the agent.
+        m4_resolve(&state, &agent);
+        let shown = confirming.shown();
+        let expected = (
+            "Allow non-local providers for this agent?".to_string(),
+            m4_dialog_text("p3-hm-m4 50% agent", &agent),
+        );
+        let escaped = crate::hm_policy::dialog_text(&shown[0].1);
+        Ok(format!(
+            "declined_ok={} declined_asked={} after_decline={after_decline} confirmed_ok={} \
+             confirmed_asked={} dialog_exact={} escaped={} after={} loosened={} assignment={}",
+            declined.is_ok(),
+            declining.shown().len(),
+            confirmed.is_ok(),
+            shown.len(),
+            shown[0] == expected,
+            escaped.contains("p3-hm-m4 50%% agent") && !escaped.contains("50% "),
+            m4_policy(&state, &agent),
+            m4_events(&state, &agent, "memory.policy_loosened"),
+            m4_assignment(&agent)
+        ))
+    }) else {
+        return;
+    };
+    let field = |k: &str| hm_field(&w.result, k);
+    assert_eq!(field("declined_ok="), "false", "{}", w.result);
+    assert_eq!(field("declined_asked="), "1", "{}", w.result);
+    assert_eq!(
+        field("after_decline="),
+        "1|1|default_restrictive/anthropic|true|3|4",
+        "N2: a declined loosening changed something: {}",
+        w.result
+    );
+    assert_eq!(field("confirmed_ok="), "true", "{}", w.result);
+    assert_eq!(field("confirmed_asked="), "1", "{}", w.result);
+    assert_eq!(
+        field("dialog_exact="),
+        "true",
+        "N2: dialog text: {}",
+        w.result
+    );
+    assert_eq!(
+        field("escaped="),
+        "true",
+        "N2: Linux %-escaping: {}",
+        w.result
+    );
+    assert_eq!(
+        field("after="),
+        "0|2|owner_confirmed",
+        "N2: the confirmed loosening was not committed: {}",
+        w.result
+    );
+    assert_eq!(field("loosened="), "1", "{}", w.result);
+    assert_eq!(field("assignment="), "anthropic|false|3|4", "{}", w.result);
+}
+
+/// A config file whose every write fails (its reads are the live file's).
+struct M4FailingSave;
+
+impl crate::hm_policy::ConfigFile for M4FailingSave {
+    fn load(&self) -> Result<nexus_kernel::config::NexusConfig, String> {
+        nexus_kernel::config::load_config().map_err(|e| e.to_string())
+    }
+
+    fn save(&self, _: &nexus_kernel::config::NexusConfig) -> Result<(), String> {
+        Err("synthetic config write failure".to_string())
+    }
+}
+
+/// N2 (§4.5): a config mirror write that fails is reported and never
+/// changes the store decision: a confirmed loosening still commits, a
+/// governed tighten still stands, and the call reports the failure.
+#[test]
+fn p3_hm_m4_n2_a_failed_config_mirror_is_reported_and_never_changes_the_store_decision() {
+    let name =
+        "p3_hm_m4_n2_a_failed_config_mirror_is_reported_and_never_changes_the_store_decision";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let local = register_by_supervisor(&state, "p3-hm-m4-local", true);
+        let open = register_by_supervisor(&state, "p3-hm-m4-open", false);
+        m4_resolve(&state, &local);
+        let confirming = M4TestConfirmer::answering(true);
+        let loosen = crate::hm_policy::set_agent_llm_provider(
+            &state,
+            Some(&confirming),
+            &M4FailingSave,
+            local.clone(),
+            "anthropic".to_string(),
+            false,
+            0,
+            0,
+        );
+        let local_after = m4_policy(&state, &local);
+        let tighten = crate::hm_policy::set_agent_llm_provider(
+            &state,
+            None,
+            &M4FailingSave,
+            open.clone(),
+            "anthropic".to_string(),
+            true,
+            0,
+            0,
+        );
+        Ok(format!(
+            "loosen_err={} local_after={local_after} tighten_err={} open_after={}",
+            loosen.err().unwrap_or_default().replace(' ', "_"),
+            tighten.err().unwrap_or_default().replace(' ', "_"),
+            m4_policy(&state, &open)
+        ))
+    }) else {
+        return;
+    };
+    let field = |k: &str| hm_field(&w.result, k);
+    assert!(
+        field("loosen_err=").contains("config_mirror_was_not_written"),
+        "N2: the failed mirror of a loosening was not reported: {}",
+        w.result
+    );
+    assert_eq!(
+        field("local_after="),
+        "0|2|owner_confirmed",
+        "N2: the failed mirror changed the loosening's store decision: {}",
+        w.result
+    );
+    assert!(
+        field("tighten_err=").contains("config_mirror_was_not_written"),
+        "N2: the failed mirror of a tighten was not reported: {}",
+        w.result
+    );
+    assert_eq!(
+        field("open_after="),
+        "1|3|tightened",
+        "N2: the failed mirror changed the tighten's store decision: {}",
+        w.result
+    );
+}
+
+/// N2: the interface's whole-configuration save loosens a key only through
+/// the native confirmation: confirmed, the store commits the loosening and
+/// the save writes `false`.
+#[test]
+fn p3_hm_m4_n2_an_interface_config_save_loosens_only_on_native_confirmation() {
+    let name = "p3_hm_m4_n2_an_interface_config_save_loosens_only_on_native_confirmation";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let local = register_by_supervisor(&state, "p3-hm-m4-local", true);
+        m4_resolve(&state, &local);
+        let mut config = nexus_kernel::config::load_config().unwrap();
+        config
+            .agent_llm_assignments
+            .get_mut(&local)
+            .unwrap()
+            .local_only = false;
+        let confirming = M4TestConfirmer::answering(true);
+        let saved = crate::hm_policy::save_config(
+            &state,
+            Some(&confirming),
+            &crate::hm_policy::LiveConfigFile,
+            config,
+        );
+        Ok(format!(
+            "saved_ok={} asked={} local={} assignment={}",
+            saved.is_ok(),
+            confirming.shown().len(),
+            m4_policy(&state, &local),
+            m4_assignment(&local)
+        ))
+    }) else {
+        return;
+    };
+    let field = |k: &str| hm_field(&w.result, k);
+    assert_eq!(field("saved_ok="), "true", "{}", w.result);
+    assert_eq!(field("asked="), "1", "{}", w.result);
+    assert_eq!(field("local="), "0|2|owner_confirmed", "{}", w.result);
+    assert_eq!(field("assignment="), "|false|0|0", "{}", w.result);
+}

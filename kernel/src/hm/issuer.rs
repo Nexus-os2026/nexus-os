@@ -137,6 +137,9 @@ pub enum ProbePoint {
     /// Inside the admission transaction: the admission row is written; its
     /// event and COMMIT follow.
     AdmissionRowWritten,
+    /// A governed tighten committed; its event not yet written (mission
+    /// P3-C11-HM-M4 N2).
+    GovernedTightenCommitted,
 }
 
 type Probe = Box<dyn FnMut(ProbePoint) + Send>;
@@ -195,6 +198,10 @@ pub struct DispatchIssuer {
     /// loosening. The production issuer is a process singleton, so this is
     /// "at most once per process" (§4.2 step 5).
     loosening_audited: Mutex<HashSet<(Uuid, String)>>,
+    /// Agents whose governed tighten could not commit: held local-only for
+    /// the life of the process at every resolution and at O1, O2 and O3
+    /// (§15.3; mission P3-C11-HM-M4 N2).
+    latched: Mutex<HashSet<Uuid>>,
     probe: Mutex<Option<Probe>>,
 }
 
@@ -210,6 +217,7 @@ impl DispatchIssuer {
             registry,
             config,
             loosening_audited: Mutex::new(HashSet::new()),
+            latched: Mutex::new(HashSet::new()),
             probe: Mutex::new(None),
         })
     }
@@ -242,6 +250,39 @@ impl DispatchIssuer {
     /// another issuer before acting on it.
     pub fn minted(&self, ctx: &DispatchContext) -> bool {
         self.issued(ctx)
+    }
+
+    /// The identity of this issuer (it binds the contexts and proofs it
+    /// mints).
+    pub(in crate::hm) fn issuer_identity(&self) -> [u8; 16] {
+        self.id
+    }
+
+    /// Whether `agent_id` is a registered agent (§4.2 step 1).
+    pub(in crate::hm) fn registry_has(&self, agent_id: &Uuid) -> bool {
+        self.registry.is_registered(agent_id)
+    }
+
+    /// The registered names of `agent_id`.
+    pub(in crate::hm) fn registry_names(&self, agent_id: &Uuid) -> Vec<String> {
+        self.registry.names(agent_id)
+    }
+
+    /// Holds `agent_id` local-only for the life of the process (§15.3).
+    pub(in crate::hm) fn latch(&self, agent_id: Uuid) {
+        self.latched
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(agent_id);
+    }
+
+    /// Whether a failed governed tighten holds `agent_id` local-only for
+    /// the life of the process (§15.3).
+    pub fn is_latched(&self, agent_id: Uuid) -> bool {
+        self.latched
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains(&agent_id)
     }
 
     pub(in crate::hm) fn hit(&self, point: ProbePoint) {
@@ -291,12 +332,17 @@ impl DispatchIssuer {
             .transpose()?;
 
         // Step 5: write only if needed.
-        let committed = match current {
+        let mut committed = match current {
             Some(p) if p.local_only || !cfg.local_only => p,
             _ => self.apply_step5(agent_id, cfg.local_only)?,
         };
         if !cfg.local_only && committed.local_only {
             self.audit_loosening_refused(committed, &cfg.content_digest);
+        }
+        // §15.3: an agent whose governed tighten could not commit is
+        // local-only for the life of the process, whatever the store says.
+        if self.is_latched(agent_id) {
+            committed.local_only = true;
         }
 
         // Step 6.

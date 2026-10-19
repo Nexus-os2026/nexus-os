@@ -9,6 +9,9 @@ mod commands;
 // governed process, network, browser, display, input and connector effect).
 mod governed_real_world;
 mod hm_dispatch;
+// P3-C11-HM-M4 N2: the governed route-policy changes (tighten store first;
+// loosen only through the Owner's native confirmation).
+mod hm_policy;
 mod hm_wiring;
 mod nx_bridge;
 pub mod oracle_runtime;
@@ -2418,10 +2421,47 @@ pub mod runtime {
         super::get_config()
     }
 
+    /// The interface's whole-configuration save. A `local_only` change it
+    /// carries is governed first (P3-C11-HM-M4 N2): the Owner's native
+    /// confirmation may be shown, so the work runs on the blocking pool,
+    /// never on the GUI event loop thread.
     #[tauri::command]
-    fn save_config(state: tauri::State<'_, AppState>, config: NexusConfig) -> Result<(), String> {
+    async fn save_config(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        config: NexusConfig,
+    ) -> Result<(), String> {
         state.check_rate(nexus_kernel::rate_limit::RateCategory::AdminOperation)?;
-        super::save_config(state.inner(), config)
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let confirmer = route_policy_confirmer(app);
+            crate::hm_policy::save_config(
+                &state,
+                confirmer.as_deref(),
+                &crate::hm_policy::LiveConfigFile,
+                config,
+            )
+        })
+        .await
+        .map_err(|_| "save_config: the operation did not complete".to_string())?
+    }
+
+    /// The Owner's native confirmation of a route-policy loosening
+    /// (P3-HM-CONTRACT-02 §2.10, §4.4): the desktop's native dialogs on
+    /// Linux. Elsewhere (Windows and macOS are on hold, OD-PLAT-1) there is
+    /// none, so a loosening is refused.
+    fn route_policy_confirmer(
+        app: tauri::AppHandle,
+    ) -> Option<Box<dyn nexus_kernel::hm::RoutePolicyConfirmer>> {
+        #[cfg(target_os = "linux")]
+        {
+            Some(Box::new(crate::hm_policy::NativeRoutePolicyDialog(app)))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = app;
+            None
+        }
     }
 
     #[tauri::command]
@@ -2694,21 +2734,35 @@ pub mod runtime {
         super::get_llm_recommendations()
     }
 
+    /// The provider and budgets are saved; `local_only` is governed
+    /// (P3-C11-HM-M4 N2). The Owner's native confirmation may be shown, so
+    /// the work runs on the blocking pool, never on the GUI event loop
+    /// thread.
     #[tauri::command]
-    fn set_agent_llm_provider(
+    async fn set_agent_llm_provider(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
         agent_id: String,
         provider_id: String,
         local_only: bool,
         budget_dollars: u32,
         budget_tokens: u64,
     ) -> Result<(), String> {
-        super::set_agent_llm_provider(
-            agent_id,
-            provider_id,
-            local_only,
-            budget_dollars,
-            budget_tokens,
-        )
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let confirmer = route_policy_confirmer(app);
+            super::set_agent_llm_provider(
+                &state,
+                confirmer.as_deref(),
+                agent_id,
+                provider_id,
+                local_only,
+                budget_dollars,
+                budget_tokens,
+            )
+        })
+        .await
+        .map_err(|_| "set_agent_llm_provider: the operation did not complete".to_string())?
     }
 
     #[tauri::command]

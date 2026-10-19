@@ -3428,3 +3428,440 @@ fn hm_m2_n6_every_event_field_in_the_allowlist_and_content_free() {
     assert!(!value_fits("withheld_count", &serde_json::json!("7")));
     assert!(!allowed_fields("memory.recall_filtered").contains(&"key"));
 }
+
+// ── P3-C11-HM-M4 N2: governed tighten and Owner loosening (§4.4, §4.5, §15.3) ─
+
+use nexus_kernel::hm::{LooseningRefused, TightenFailed, LOOSENING_CONSEQUENCE};
+
+/// The test confirmer: answers `yes`, records every request it is shown,
+/// and runs `on_ask` while the Owner is being asked.
+struct M4Confirmer {
+    yes: bool,
+    shown: Mutex<Vec<String>>,
+    on_ask: Option<Box<dyn Fn() + Send + Sync>>,
+}
+
+impl M4Confirmer {
+    fn answering(yes: bool) -> Self {
+        Self {
+            yes,
+            shown: Mutex::new(Vec::new()),
+            on_ask: None,
+        }
+    }
+
+    fn shown(&self) -> Vec<String> {
+        self.shown.lock().unwrap().clone()
+    }
+}
+
+impl nexus_kernel::hm::RoutePolicyConfirmer for M4Confirmer {
+    fn confirm_loosening(&self, request: &nexus_kernel::hm::LooseningRequest) -> bool {
+        self.shown
+            .lock()
+            .unwrap()
+            .push(format!("{}\n{}", request.title(), request.message()));
+        if let Some(on_ask) = &self.on_ask {
+            on_ask();
+        }
+        self.yes
+    }
+}
+
+/// TEST FIXTURE: makes every governed tighten's history insert fail, so
+/// its transaction cannot commit.
+fn plant_tighten_commit_failure(db: &NexusDatabase) {
+    must(
+        db,
+        "CREATE TRIGGER synthetic_fail_governed_tighten BEFORE INSERT ON hm_policy_change
+         WHEN NEW.cause = 'governed_tighten'
+         BEGIN SELECT RAISE(ABORT, 'synthetic commit failure'); END;",
+    );
+}
+
+/// N2 (§4.5 row 1, §7.1): a governed tighten commits in the store first
+/// (local-only, generation + 1, basis `tightened`, its `governed_tighten`
+/// history row), then its `memory.policy_tightened` event. An agent already
+/// local-only is unchanged; a registered agent with no row gets its
+/// restrictive row; an unregistered id has nothing to tighten.
+#[test]
+fn hm_m4_n2_a_governed_tighten_commits_in_the_store_first_then_its_event() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    let t = e.issuer.governed_tighten(id(AGENT_B)).unwrap();
+    assert!(t.changed && t.event_recorded);
+    assert!(t.policy.local_only());
+    assert_eq!(t.policy.policy_generation(), 3);
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    assert_eq!(
+        history_of(&e.db, AGENT_B),
+        vec![
+            "1|1|t0_baseline|t0_baseline",
+            "2|0|owner_confirmed|owner_loosen",
+            "3|1|tightened|governed_tighten",
+        ]
+    );
+    assert_eq!(
+        events_of(&e.db, "memory.policy_tightened"),
+        vec![(
+            format!("policy:{AGENT_B}:3"),
+            Some(AGENT_B.to_string()),
+            r#"{"local_only":1,"policy_generation":3}"#.to_string()
+        )]
+    );
+    let again = e.issuer.governed_tighten(id(AGENT_B)).unwrap();
+    assert!(!again.changed);
+    assert_eq!(history_of(&e.db, AGENT_B).len(), 3);
+    let created = e.issuer.governed_tighten(id(AGENT_E)).unwrap();
+    assert!(created.changed && created.policy.local_only());
+    assert_eq!(policy_of(&e.db, AGENT_E), "1|1|0|default_restrictive");
+    let stranger = "0f000000-0000-4000-8000-00000000000f";
+    assert_eq!(
+        e.issuer.governed_tighten(id(stranger)),
+        Err(TightenFailed::UnregisteredAgent)
+    );
+    assert_eq!(policy_of(&e.db, stranger), "");
+    assert!(!e.issuer.is_latched(id(stranger)));
+}
+
+#[test]
+#[ignore = "child process entry for A-G7 (governed tighten); run by the parent test"]
+fn hm_m4_child_governed_tighten_kill_point() {
+    let Ok(path) = std::env::var("HM_M4_G7_DB") else {
+        return;
+    };
+    let db = Arc::new(open(Path::new(&path)));
+    let reg = Arc::new(TestRegistry::default());
+    reg.add(id(AGENT_B));
+    let issuer = DispatchIssuer::new(db, reg, Arc::new(TestConfig::default())).unwrap();
+    issuer.install_probe(block_at(format!(
+        "{:?}",
+        ProbePoint::GovernedTightenCommitted
+    )));
+    let _ = issuer.governed_tighten(id(AGENT_B));
+    println!("HM-M4-UNEXPECTED-RETURN");
+    std::process::exit(4);
+}
+
+/// A-G7, governed-tighten half (§5.3, §15.3; mutant 3): the process killed
+/// after a governed tighten commit and before its event; on restart the
+/// change stands and the event is back-filled exactly once.
+#[test]
+fn hm_m4_n2_a_g7_killed_after_a_governed_tighten_commit_change_stands_event_backfilled_once() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    // The fixture loosening is described first, so only the tighten is
+    // missing below.
+    backfill_authority_events(&e.db).unwrap();
+    let mut child = spawn_child(
+        "hm_m4_child_governed_tighten_kill_point",
+        &[("HM_M4_G7_DB", e.path.display().to_string())],
+    );
+    let rx = line_channel(&mut child);
+    assert_eq!(
+        wait_line(&rx, READY),
+        format!("{READY}GovernedTightenCommitted")
+    );
+    child.kill().expect("kill child");
+    assert!(!child.wait().unwrap().success());
+
+    // Restart: a new process on the same database.
+    let db = Arc::new(open(&e.path));
+    assert_eq!(
+        policy_of(&db, AGENT_B),
+        "1|3|0|tightened",
+        "the change stands"
+    );
+    assert_eq!(
+        history_of(&db, AGENT_B).last().unwrap(),
+        "3|1|tightened|governed_tighten"
+    );
+    let subject = format!("policy:{AGENT_B}:3");
+    assert_eq!(subject_count(&db, &subject), 0, "killed before its event");
+    assert_eq!(
+        backfill_authority_events(&db).unwrap(),
+        BackfillReport {
+            policy_events: 1,
+            tombstone_events: 0,
+            complete: true
+        }
+    );
+    assert_eq!(
+        events_of(&db, "memory.policy_tightened"),
+        vec![(
+            subject.clone(),
+            Some(AGENT_B.to_string()),
+            r#"{"local_only":1,"policy_generation":3}"#.to_string()
+        )]
+    );
+    assert_eq!(
+        backfill_authority_events(&db).unwrap().policy_events,
+        0,
+        "exactly once"
+    );
+    assert_eq!(subject_count(&db, &subject), 1);
+    let issuer =
+        DispatchIssuer::new(db.clone(), e.reg.clone(), Arc::new(TestConfig::default())).unwrap();
+    assert_eq!(
+        state(&issuer.begin_unit(agent(AGENT_B), goal()).unwrap()),
+        LO
+    );
+}
+
+/// N2 (§15.3; mutant 3): a governed tighten whose event cannot be written
+/// stands; the failure is reported (`event_recorded = false`) and the event
+/// is back-filled once audit works again.
+#[test]
+fn hm_m4_n2_a_governed_tighten_stands_when_its_event_cannot_be_written() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    plant_event_failure(
+        &e.db,
+        "synthetic_fail_governed_tighten_event",
+        "memory.policy_tightened",
+    );
+    let t = e.issuer.governed_tighten(id(AGENT_B)).unwrap();
+    assert!(t.changed && !t.event_recorded);
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    let subject = format!("policy:{AGENT_B}:3");
+    assert_eq!(subject_count(&e.db, &subject), 0);
+    assert!(!e.issuer.is_latched(id(AGENT_B)), "committed: no latch");
+    assert!(e
+        .issuer
+        .resolve_agent_route_policy(id(AGENT_B))
+        .unwrap()
+        .local_only());
+    must(&e.db, "DROP TRIGGER synthetic_fail_governed_tighten_event;");
+    backfill_authority_events(&e.db).unwrap();
+    assert_eq!(subject_count(&e.db, &subject), 1);
+}
+
+/// N2 (§4.4, §4.5 row 2, §7.1, §16 "No native confirmer"; mutant 1): an
+/// Owner loosening happens only on the confirmer's yes. No confirmer or a
+/// refusal changes nothing and writes no mirror. On a yes the request shown
+/// is the exact §4.4 dialog, the config mirror runs before the store
+/// commit, and the store commits the `owner_loosen` history row, the policy
+/// and the `memory.policy_loosened` event together. An unrestricted agent
+/// is not asked again.
+#[test]
+fn hm_m4_n2_an_owner_loosening_needs_the_native_confirmation() {
+    let e = env();
+    let mut mirrored = 0;
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), None, &mut || {
+                mirrored += 1;
+                Ok(())
+            })
+            .unwrap_err(),
+        LooseningRefused::NoConfirmer
+    );
+    let no = M4Confirmer::answering(false);
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), Some(&no), &mut || {
+                mirrored += 1;
+                Ok(())
+            })
+            .unwrap_err(),
+        LooseningRefused::Declined
+    );
+    assert_eq!(no.shown().len(), 1);
+    assert_eq!(mirrored, 0, "no mirror without a confirmation");
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|1|0|t0_baseline");
+    assert_eq!(history_of(&e.db, AGENT_B).len(), 1);
+    assert!(events_of(&e.db, "memory.policy_loosened").is_empty());
+
+    let yes = M4Confirmer::answering(true);
+    let db = e.db.clone();
+    let loosened = e
+        .issuer
+        .request_loosening(id(AGENT_B), Some(&yes), &mut || {
+            assert_eq!(
+                policy_of(&db, AGENT_B),
+                "1|1|0|t0_baseline",
+                "the config mirror runs before the store commit"
+            );
+            Ok(())
+        })
+        .unwrap();
+    assert!(loosened.changed);
+    assert_eq!(loosened.mirror, Ok(()));
+    assert!(!loosened.policy.local_only());
+    assert_eq!(policy_of(&e.db, AGENT_B), "0|2|0|owner_confirmed");
+    assert_eq!(
+        history_of(&e.db, AGENT_B).last().unwrap(),
+        "2|0|owner_confirmed|owner_loosen"
+    );
+    assert_eq!(
+        events_of(&e.db, "memory.policy_loosened"),
+        vec![(
+            format!("policy:{AGENT_B}:2"),
+            Some(AGENT_B.to_string()),
+            r#"{"local_only":0,"policy_generation":2}"#.to_string()
+        )]
+    );
+    assert_eq!(
+        yes.shown(),
+        vec![format!(
+            "Allow non-local providers for this agent?\nAgent: synthetic-{AGENT_B} (0b000000)\n\
+             Scope: this agent's route policy, from local-only to unrestricted, for its new work \
+             only.\n{LOOSENING_CONSEQUENCE}"
+        )]
+    );
+    assert_eq!(
+        LOOSENING_CONSEQUENCE,
+        "New work by this agent may be sent to non-local providers. Records made while it was \
+         local-only are not released."
+    );
+    let again = e
+        .issuer
+        .request_loosening(id(AGENT_B), Some(&yes), &mut || Ok(()))
+        .unwrap();
+    assert!(!again.changed);
+    assert_eq!(yes.shown().len(), 1, "an unrestricted agent is not asked");
+    // An unregistered id is unresolved: nothing is asked.
+    let stranger = M4Confirmer::answering(true);
+    assert!(matches!(
+        e.issuer.request_loosening(
+            id("0f000000-0000-4000-8000-00000000000f"),
+            Some(&stranger),
+            &mut || Ok(())
+        ),
+        Err(LooseningRefused::Unresolved(Unresolved::UnregisteredAgent))
+    ));
+    assert!(stranger.shown().is_empty());
+}
+
+/// A-G7 loosening half (§15.3; mutant 2): a loosening whose event cannot be
+/// written does not commit: the agent stays local-only (the mirror had run,
+/// as §4.5 orders, and §4.2 never lets the config loosen).
+#[test]
+fn hm_m4_n2_a_loosening_whose_event_cannot_be_written_stays_local_only() {
+    let e = env();
+    plant_event_failure(
+        &e.db,
+        "synthetic_fail_loosened_event",
+        "memory.policy_loosened",
+    );
+    let yes = M4Confirmer::answering(true);
+    let mut mirrored = 0;
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), Some(&yes), &mut || {
+                mirrored += 1;
+                Ok(())
+            })
+            .unwrap_err(),
+        LooseningRefused::NotCommitted
+    );
+    assert_eq!(mirrored, 1);
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|1|0|t0_baseline");
+    assert_eq!(history_of(&e.db, AGENT_B).len(), 1);
+    assert!(e
+        .issuer
+        .resolve_agent_route_policy(id(AGENT_B))
+        .unwrap()
+        .local_only());
+}
+
+/// N2 (§4.5): a config mirror that fails is reported and never changes the
+/// store decision.
+#[test]
+fn hm_m4_n2_a_failed_config_mirror_never_changes_the_loosening_decision() {
+    let e = env();
+    let yes = M4Confirmer::answering(true);
+    let loosened = e
+        .issuer
+        .request_loosening(id(AGENT_B), Some(&yes), &mut || {
+            Err("synthetic mirror failure".to_string())
+        })
+        .unwrap();
+    assert_eq!(loosened.mirror, Err("synthetic mirror failure".to_string()));
+    assert_eq!(policy_of(&e.db, AGENT_B), "0|2|0|owner_confirmed");
+}
+
+/// N2 (§8 item 5): the commit re-reads current state; a policy that changed
+/// while the Owner was asked refuses the loosening.
+#[test]
+fn hm_m4_n2_a_policy_change_while_the_owner_is_asked_refuses_the_loosening() {
+    let e = env();
+    let db = e.db.clone();
+    let mut asking = M4Confirmer::answering(true);
+    asking.on_ask = Some(Box::new(move || {
+        fixture_owner_loosen(&db, AGENT_B);
+    }));
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), Some(&asking), &mut || Ok(()))
+            .unwrap_err(),
+        LooseningRefused::PolicyChanged
+    );
+    assert_eq!(
+        history_of(&e.db, AGENT_B).len(),
+        2,
+        "no owner_loosen row added"
+    );
+}
+
+/// N2 (§15.3; mutant 4): a governed tighten that cannot commit is reported,
+/// never claimed; the issuer then holds the agent local-only for the life
+/// of the process: every resolution and O1 (a new unit is local), O2 (a
+/// unit begun before refuses a non-local dispatch), O3 (the reply of a
+/// dispatch admitted before is discarded); a loosening is refused.
+#[test]
+fn hm_m4_n2_a_tighten_that_cannot_commit_is_reported_and_latched_for_the_process() {
+    let e = env_open_b();
+    let mut before = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    assert_eq!(state(&before), UN);
+    let mut in_flight = e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap();
+    let admitted = e
+        .issuer
+        .admit(&mut in_flight, &mut *build_with(&e.issuer, 0, follow))
+        .unwrap();
+    assert_eq!(admitted.route_class(), RouteClass::NonLocal);
+
+    plant_tighten_commit_failure(&e.db);
+    assert_eq!(
+        e.issuer.governed_tighten(id(AGENT_B)),
+        Err(TightenFailed::NotCommitted)
+    );
+    assert!(e.issuer.is_latched(id(AGENT_B)));
+    assert_eq!(
+        policy_of(&e.db, AGENT_B),
+        "0|2|0|owner_confirmed",
+        "nothing committed"
+    );
+    assert!(e
+        .issuer
+        .resolve_agent_route_policy(id(AGENT_B))
+        .unwrap()
+        .local_only());
+    assert_eq!(
+        state(&e.issuer.begin_unit(agent(AGENT_B), goal()).unwrap()),
+        LO,
+        "O1"
+    );
+    assert_eq!(
+        e.issuer
+            .admit(&mut before, &mut *build_with(&e.issuer, 0, non_local))
+            .unwrap_err(),
+        Refused::RouteMismatch,
+        "O2"
+    );
+    assert_eq!(
+        e.issuer
+            .accept_reply(&mut in_flight, admitted, Ok("SYNTH-late".into()))
+            .unwrap_err(),
+        ReplyRefused::Discarded,
+        "O3"
+    );
+    let yes = M4Confirmer::answering(true);
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), Some(&yes), &mut || Ok(()))
+            .unwrap_err(),
+        LooseningRefused::Latched
+    );
+    assert!(yes.shown().is_empty());
+}
