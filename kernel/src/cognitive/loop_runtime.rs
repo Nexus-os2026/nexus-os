@@ -131,8 +131,45 @@ pub struct StepScope<'a> {
     pub prior: &'a [(String, &'a StepItem)],
 }
 
+/// The kind of one cycle step (P3-HM-CONTRACT-02 §13.2): a model call runs
+/// with no runtime lock, an internal step under the agent's reservation, an
+/// external step under the global `external_action_turn`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepKind {
+    /// A planner call or an `LlmQuery`.
+    Model,
+    /// An inert action on Nexus state (its writes are labelled transactions).
+    Internal,
+    /// A real-world effect (Phase Three governed actions): committed,
+    /// authorised and executed once, globally serialised.
+    External,
+}
+
+/// The step kind of `action` for an executor that has no classification of
+/// its own: an `LlmQuery` is a model step; `Noop`, the memory actions and
+/// the knowledge-graph actions are internal; everything else is treated as
+/// external, so it stays globally serialised (the desktop's production
+/// executor classifies with the Phase Three classification instead).
+pub fn default_step_kind(action: &PlannedAction) -> StepKind {
+    match action {
+        PlannedAction::LlmQuery { .. } => StepKind::Model,
+        PlannedAction::Noop
+        | PlannedAction::MemoryStore { .. }
+        | PlannedAction::MemoryRecall { .. }
+        | PlannedAction::KnowledgeGraphUpdate { .. }
+        | PlannedAction::KnowledgeGraphQuery { .. } => StepKind::Internal,
+        _ => StepKind::External,
+    }
+}
+
 /// Trait for executing planned actions. Separates execution from the loop logic.
 pub trait ActionExecutor: Send + Sync {
+    /// The kind of step `action` is for this executor (§13.2): it decides
+    /// which lock, if any, the cycle holds around the step.
+    fn step_kind(&self, action: &PlannedAction) -> StepKind {
+        default_step_kind(action)
+    }
+
     /// Executes an action outside any unit. An action that needs a unit (a
     /// model call, a read or write of retained records) is refused here.
     fn execute(
@@ -783,6 +820,11 @@ pub struct CognitiveRuntime {
     /// The process's dispatch issuer (P3-HM-CONTRACT-02 §11.0). Without one
     /// no goal unit starts, so no agent dispatch happens (mission R6).
     issuer: Option<Arc<DispatchIssuer>>,
+    /// Held only around an external step, never around a model call: it
+    /// keeps every agent's external steps globally serialised, as `loops`
+    /// did before (§13.2 LK-E). It is still held across a Phase Three
+    /// native-approval wait (§13.3: existing serialisation, not a fix).
+    external_action_turn: Mutex<()>,
     /// The next goal assignment's epoch.
     next_epoch: std::sync::atomic::AtomicU64,
 }
@@ -816,6 +858,7 @@ impl CognitiveRuntime {
             status_snapshots: Mutex::new(HashMap::new()),
             state_db: None,
             issuer: None,
+            external_action_turn: Mutex::new(()),
             next_epoch: std::sync::atomic::AtomicU64::new(1),
         }
     }
@@ -1716,7 +1759,7 @@ impl CognitiveRuntime {
                 ));
             }
             let step_index = state.current_step_index;
-            let model = matches!(action_clone, PlannedAction::LlmQuery { .. });
+            let kind = executor.step_kind(&action_clone);
 
             eprintln!(
                 "[agent:{}] dispatching to executor: {} (step {}/{})",
@@ -1725,9 +1768,11 @@ impl CognitiveRuntime {
                 step_index + 1,
                 total_steps
             );
-            // §13.2 LK-1: reserve the step and its fuel and take the unit.
+            // §13.2 LK-1: reserve the step and its fuel and take the unit;
+            // release `loops`.
             let (token, mut flight) = Self::reserve(state, estimate_fuel_cost(&action_clone));
-            let mut run = |flight: &mut InFlight| {
+            drop(loops);
+            let executed = {
                 let prior: Vec<(String, &StepItem)> = prior_steps
                     .iter()
                     .filter_map(|(action_type, id)| {
@@ -1743,20 +1788,18 @@ impl CognitiveRuntime {
                     plan: flight.plan.as_ref().expect("checked above"),
                     prior: &prior,
                 };
+                // LK-2 / LK-E: a model or internal step runs under the
+                // reservation only; an external step under the global turn,
+                // never a model call.
+                let _turn = (kind == StepKind::External).then(|| {
+                    self.external_action_turn
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                });
                 executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl)
             };
-            let executed = if model {
-                // LK-2: an `LlmQuery`'s model call runs with no runtime lock
-                // held; §12.4 admits it.
-                drop(loops);
-                let executed = run(&mut flight);
-                loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
-                executed
-            } else {
-                // Every other step still runs under `loops`.
-                run(&mut flight)
-            };
             // LK-3: re-check and transition.
+            loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
             state = match Self::recheck(&mut loops, agent_id, &token, flight) {
                 Some(state) => state,
                 None => {
@@ -5878,8 +5921,11 @@ mod tests {
         const BOUND: Duration = Duration::from_secs(5);
         /// How long a gated call waits to be released.
         const HELD: Duration = Duration::from_secs(60);
+        /// The window an overlap check leaves for a wrong overlap to happen.
+        const WINDOW: Duration = Duration::from_millis(500);
 
         const NOOP_PLAN: &str = r#"[{"action": {"type": "Noop"}, "description": "done"}]"#;
+        const FETCH_PLAN: &str = r#"[{"action": {"type": "WebFetch", "url": "https://example.invalid/lk"}, "description": "fetch"}]"#;
 
         /// One supervisor with `n` registered agents (local-only by default).
         fn agents(n: usize) -> (Arc<Mutex<Supervisor>>, Vec<String>) {
@@ -6164,6 +6210,60 @@ mod tests {
             assert!(a_result.is_ok(), "{a_result:?}");
         }
 
+        /// An executor whose external step (a web fetch) announces it entered
+        /// and waits to be released; it counts every external step and the
+        /// most that ran at once.
+        struct GatedExternal {
+            entered: Mutex<Option<mpsc::Sender<()>>>,
+            release: Mutex<Option<mpsc::Receiver<()>>>,
+            calls: AtomicUsize,
+            active: AtomicUsize,
+            most: AtomicUsize,
+        }
+
+        impl GatedExternal {
+            fn new() -> (Self, mpsc::Receiver<()>, mpsc::Sender<()>) {
+                let (entered_tx, entered_rx) = mpsc::channel();
+                let (release_tx, release_rx) = mpsc::channel();
+                (
+                    Self {
+                        entered: Mutex::new(Some(entered_tx)),
+                        release: Mutex::new(Some(release_rx)),
+                        calls: AtomicUsize::new(0),
+                        active: AtomicUsize::new(0),
+                        most: AtomicUsize::new(0),
+                    },
+                    entered_rx,
+                    release_tx,
+                )
+            }
+        }
+
+        impl ActionExecutor for GatedExternal {
+            fn execute(
+                &self,
+                _agent_id: &str,
+                action: &PlannedAction,
+                _audit: &mut dyn AuditWriter,
+                _hitl_approved: bool,
+            ) -> Result<String, String> {
+                if !matches!(action, PlannedAction::WebFetch { .. }) {
+                    return Ok("ok".to_string());
+                }
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                let now = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+                self.most.fetch_max(now, Ordering::SeqCst);
+                if let Some(entered) = self.entered.lock().unwrap().take() {
+                    let _ = entered.send(());
+                    if let Some(release) = self.release.lock().unwrap().take() {
+                        let _ = release.recv_timeout(HELD);
+                    }
+                }
+                self.active.fetch_sub(1, Ordering::SeqCst);
+                Ok("fetched".to_string())
+            }
+        }
+
         /// A-L6, model-call half (§13.2 LK-2): two agents' planner calls may
         /// overlap: each waits (within a bound) for the other to be inside
         /// its call too.
@@ -6226,6 +6326,56 @@ mod tests {
                 met.load(Ordering::SeqCst),
                 2,
                 "A-L6: two agents' model calls could not overlap"
+            );
+        }
+
+        /// A-L6, external half (§13.2 LK-E; mutant 13): two agents' external
+        /// steps never overlap (`external_action_turn` keeps today's global
+        /// order): while one is inside its external step, the other's waits.
+        #[test]
+        fn hm_m4_n5_a_l6_two_agents_external_steps_never_overlap() {
+            let (sup, ids) = agents(2);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            for id in &ids {
+                runtime
+                    .assign_goal(id, AgentGoal::new("A-L6 external".into(), 5))
+                    .unwrap();
+            }
+            let (executor, entered, release) = GatedExternal::new();
+            let executor = Arc::new(executor);
+            let spawn = |id: &String| {
+                let (runner, id, exec) = (runtime.clone(), id.clone(), executor.clone());
+                std::thread::spawn(move || {
+                    let mut audit = AuditTrail::new();
+                    runner.run_cycle(
+                        &id,
+                        &make_planner(FETCH_PLAN),
+                        &make_memory_mgr(),
+                        exec.as_ref(),
+                        &mut audit,
+                    )
+                })
+            };
+            let first = spawn(&ids[0]);
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: the first external step runs");
+            let second = spawn(&ids[1]);
+            // The window in which a wrong overlap would show.
+            std::thread::sleep(WINDOW);
+            release.send(()).unwrap();
+            assert!(first.join().unwrap().is_ok());
+            assert!(second.join().unwrap().is_ok());
+            assert_eq!(
+                executor.calls.load(Ordering::SeqCst),
+                2,
+                "precondition: both ran"
+            );
+            assert_eq!(
+                executor.most.load(Ordering::SeqCst),
+                1,
+                "A-L6: two agents' external steps overlapped"
             );
         }
     }

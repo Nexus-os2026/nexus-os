@@ -514,6 +514,13 @@ const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=governede
 const EXECUTE_BODY: &str = "matchexecutor_route(self.governed.as_ref(),agent_id,action){ExecutorRoute::Inner=>self.inner.execute(agent_id,action,audit,hitl_approved),ExecutorRoute::Decided(result)=>result}";
 const EXECUTE_IN_BODY: &str = "matchexecutor_route(self.governed.as_ref(),agent_id,action){ExecutorRoute::Inner=>{self.inner.execute_in(scope,agent_id,action,audit,hitl_approved)}ExecutorRoute::Decided(result)=>result.map(|text|{letitem=StepItem::Derived(scope.ctx.produce(text.clone()));StepOutput{text,item}})}";
 
+/// The normalized body of `Phase0AgentExecutor::step_kind` (P3-HM-CONTRACT-02
+/// §13.2; mission P3-C11-HM-M4 N5): the step kinds from the same Phase Three
+/// classification. Only a governed action reaching the Phase Three bridge is
+/// an external step; an `LlmQuery` is a model step; everything else is
+/// internal.
+const STEP_KIND_BODY: &str = "use{classify,Disposition};useStepKind;ifmatches!(action,PlannedAction::LlmQuery{..}){returnStepKind::Model;}match(classify(action),&self.governed){(Disposition::Governed(_),Some(_))=>StepKind::External,_=>StepKind::Internal}";
+
 #[test]
 fn p3e_g1_01_every_planned_action_is_classified_without_a_wildcard() {
     let declared = enum_variants(
@@ -995,29 +1002,35 @@ fn p3e_g1_05_the_executor_classifies_before_any_route() {
         .collect();
     // Ported (mission R12): the executor has the two `ActionExecutor`
     // entry points (`execute_in` runs a step of a unit, P3-HM-CONTRACT-02
-    // §11.3), both exactly the one decision `executor_route`.
+    // §11.3), both exactly the one decision `executor_route`. Ported again
+    // (P3-C11-HM-M4 N5, R12): and `step_kind` (§13.2), exactly the step
+    // kinds of the same classification.
     assert_eq!(
         methods.len(),
-        2,
-        "Phase0AgentExecutor has exactly two methods"
+        3,
+        "Phase0AgentExecutor has exactly three methods"
     );
     assert_eq!(methods[0].path, "Phase0AgentExecutor::execute");
     assert_eq!(methods[1].path, "Phase0AgentExecutor::execute_in");
+    assert_eq!(methods[2].path, "Phase0AgentExecutor::step_kind");
     for method in &methods {
         assert_eq!(method.trait_name, "ActionExecutor");
     }
     assert_eq!(compact(methods[0].body_text(cognitive)), EXECUTE_BODY);
     assert_eq!(compact(methods[1].body_text(cognitive)), EXECUTE_IN_BODY);
+    assert_eq!(compact(methods[2].body_text(cognitive)), STEP_KIND_BODY);
     assert_eq!(
         compact(one_fn(cognitive, "executor_route").body_text(cognitive)),
         EXECUTOR_BODY
     );
-    // The classification it calls is the Phase Three one.
+    // The classification it calls is the Phase Three one. Ported (P3-C11-HM-M4
+    // N5, R12): named by `executor_route` and by `step_kind`, both pinned
+    // above.
     assert_eq!(
         cognitive
             .matches("use nexus_governed_control::planned::{classify, Disposition};")
             .count(),
-        1
+        2
     );
 
     // Its only state is the inner executor and the Phase Three bridge, and
@@ -1042,6 +1055,83 @@ fn p3e_g1_05_the_executor_classifies_before_any_route() {
         }
     }
     assert_eq!(blocks, [(path, "ActionExecutor".to_string())]);
+}
+
+/// P3-HM-CONTRACT-02 §13.2 (mission P3-C11-HM-M4 N5): the production
+/// executor's step kinds, for every planned action. With the Phase Three
+/// bridge exactly the governed actions it acts on are external steps (held
+/// under `external_action_turn`); `ComputerAction`, an orchestration answer,
+/// and a governed variant its content keeps closed are not. `LlmQuery` is
+/// the only model step. Without the bridge nothing is external: every
+/// governed action is refused by its Phase Zero closure.
+#[cfg(target_os = "linux")]
+#[test]
+fn p3e_g1_05_m4_the_executor_step_kinds_follow_its_classification() {
+    use nexus_kernel::cognitive::loop_runtime::{ActionExecutor, StepKind};
+
+    let state = crate::AppState::new_in_memory();
+    let executor = || {
+        crate::phase0_agent_executor(
+            &state,
+            std::sync::Arc::new(nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(
+                crate::DbMemoryStore {
+                    db: state.db.clone(),
+                },
+            ))),
+            crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+        )
+    };
+    let root = std::env::temp_dir().join(format!("nexus-p3e-step-kinds-{}", uuid::Uuid::new_v4()));
+    let world = crate::governed_real_world::RealWorld::for_tests(
+        &root,
+        std::sync::Arc::new(std::sync::Mutex::new(nexus_kernel::audit::AuditTrail::new())),
+        std::sync::Arc::new(nexus_persistence::NexusDatabase::in_memory().unwrap()),
+    );
+    let without = executor();
+    let with = executor().with_real_world(world);
+    // Local speech (the fixture's is closed by its file output).
+    let speech = PlannedAction::TextToSpeech {
+        text: "hello".into(),
+        output_path: String::new(),
+        provider: None,
+        voice: None,
+        model: None,
+    };
+    let mut external = Vec::new();
+    for action in every_action().into_iter().chain([speech]) {
+        let tag = wire_tag(&action);
+        let governed = matches!(expected_disposition(&action), Disposition::Governed(_))
+            && !closed_by_content(&action)
+            && tag != "ComputerAction";
+        let expected = |bridge: bool| {
+            if tag == "LlmQuery" {
+                StepKind::Model
+            } else if bridge && governed {
+                StepKind::External
+            } else {
+                StepKind::Internal
+            }
+        };
+        assert_eq!(
+            with.step_kind(&action),
+            expected(true),
+            "{tag}, Phase Three"
+        );
+        assert_eq!(
+            without.step_kind(&action),
+            expected(false),
+            "{tag}, Phase Zero"
+        );
+        if with.step_kind(&action) == StepKind::External {
+            external.push(tag);
+        }
+    }
+    assert!(
+        external.iter().any(|tag| tag == "TextToSpeech"),
+        "{external:?}"
+    );
+    assert!(external.iter().any(|tag| tag == "WebFetch"), "{external:?}");
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -4413,7 +4503,16 @@ fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
         BTreeSet::from([P3_FRONT_DOOR, "app/src-tauri/src/commands/cognitive.rs"])
     );
     let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
-    assert_eq!(cognitive.matches("nexus_governed_control").count(), 1);
+    // Ported (P3-C11-HM-M4 N5, R12): the one classification `use`, in
+    // `executor_route` and in `Phase0AgentExecutor::step_kind`, whose bodies
+    // p3e_g1_05 pins.
+    assert_eq!(
+        cognitive
+            .matches("use nexus_governed_control::planned::{classify, Disposition};")
+            .count(),
+        2
+    );
+    assert_eq!(cognitive.matches("nexus_governed_control").count(), 2);
     // The commands and their parameters, exactly.
     let front = production_source(P3_FRONT_DOOR);
     let mut commands: Vec<(String, String)> = fn_items(front)

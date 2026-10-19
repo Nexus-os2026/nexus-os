@@ -1828,6 +1828,31 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
             }),
         }
     }
+
+    /// P3-HM-CONTRACT-02 §13.2: the step kind of `action`, from the same
+    /// classification `executor_route` decides by. An `LlmQuery` is a model
+    /// step. A governed action reaching the Phase Three pipeline (committed,
+    /// authorised and executed once there) is external, so external steps
+    /// stay globally serialised. Everything else is internal: an inert
+    /// action (the Phase Zero closure's permitted list, run by the inner
+    /// executor on Nexus state), an orchestration answer, or a refusal.
+    fn step_kind(
+        &self,
+        action: &nexus_kernel::cognitive::PlannedAction,
+    ) -> nexus_kernel::cognitive::loop_runtime::StepKind {
+        use nexus_governed_control::planned::{classify, Disposition};
+        use nexus_kernel::cognitive::loop_runtime::StepKind;
+        if matches!(
+            action,
+            nexus_kernel::cognitive::PlannedAction::LlmQuery { .. }
+        ) {
+            return StepKind::Model;
+        }
+        match (classify(action), &self.governed) {
+            (Disposition::Governed(_), Some(_)) => StepKind::External,
+            _ => StepKind::Internal,
+        }
+    }
 }
 
 /// Where the production executor sends an action.
