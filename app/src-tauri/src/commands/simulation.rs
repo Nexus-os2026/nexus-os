@@ -170,9 +170,16 @@ pub(crate) fn get_dream_queue(state: &AppState) -> Result<String, String> {
 
 pub(crate) fn get_morning_briefing(state: &AppState) -> Result<String, String> {
     let issuer = state.hm_issuer()?;
-    let engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
+    // P3-HM-CONTRACT-02 §13.2: the scheduler's state is copied under the
+    // engine's lock; the briefing's model call runs with the lock released.
+    let scheduler = state
+        .dream_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .scheduler
+        .clone();
     let llm = crate::hm_dispatch::GatewayPlannerLlm::new(state);
-    let briefing = engine.generate_morning_briefing(issuer, &llm);
+    let briefing = nexus_kernel::dreams::MorningBriefing::generate(&scheduler, issuer, &llm);
     serde_json::to_string(&briefing).map_err(|e| format!("serialize error: {e}"))
 }
 
@@ -192,12 +199,25 @@ pub(crate) fn set_dream_config(
 
 pub(crate) fn trigger_dream_now(state: &AppState) -> Result<String, String> {
     let issuer = state.hm_issuer()?;
-    let mut engine = state.dream_engine.lock().unwrap_or_else(|p| p.into_inner());
     // P3-HM-CONTRACT-02 §11.3, §12.1: each entry is dreamed in a dream unit
     // started from its own label (agent-owned: AR; OwnerDirect: HR;
-    // unlabelled: LOCAL_ONLY), through the issuer.
+    // unlabelled: LOCAL_ONLY; every dream unit is local-only), through the
+    // issuer. §13.2: the entries are taken under the engine's lock, each
+    // dream runs with it released, and its result is recorded under it again
+    // (or dropped when its entry was cleared meanwhile).
+    let session = state
+        .dream_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .begin_dream_session();
     let llm = crate::hm_dispatch::GatewayPlannerLlm::new(state);
-    let results = engine.enter_dream_state(issuer, &llm);
+    let results = session.run(issuer, &llm, |result| {
+        state
+            .dream_engine
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .record_dream(result)
+    });
     serde_json::to_string(&results).map_err(|e| format!("serialize error: {e}"))
 }
 

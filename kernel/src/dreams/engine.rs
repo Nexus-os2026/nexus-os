@@ -74,6 +74,46 @@ pub struct DreamEngine {
     pub scheduler: DreamScheduler,
 }
 
+/// One dream session's entries and budgets, taken from the engine under its
+/// lock (P3-HM-CONTRACT-02 §13.2 dream LK-1); its dreams then run with the
+/// lock released.
+#[derive(Debug, Clone)]
+pub struct DreamSession {
+    pub tasks: Vec<DreamTask>,
+    pub budget_tokens: u64,
+    pub budget_calls: u32,
+}
+
+impl DreamSession {
+    /// LK-2 and LK-3 of a session: each entry within the budgets is dreamed
+    /// with no engine borrowed (no lock held across its model call), then
+    /// handed to `record` (which re-locks and records the result, or drops it
+    /// when the entry was cleared meanwhile). Returns the results recorded.
+    pub fn run(
+        self,
+        issuer: &DispatchIssuer,
+        llm: &dyn DreamLlm,
+        mut record: impl FnMut(DreamResult) -> bool,
+    ) -> Vec<DreamResult> {
+        let mut results = Vec::new();
+        let mut tokens_used: u64 = 0;
+        // Every entry dreamed uses one call, a failed one included.
+        for (calls_made, task) in (0_u32..).zip(self.tasks.iter()) {
+            // Budget check — strict enforcement
+            if tokens_used >= self.budget_tokens || calls_made >= self.budget_calls {
+                break;
+            }
+            let result =
+                DreamEngine::dream_entry(issuer, llm, task, self.budget_tokens - tokens_used);
+            tokens_used += result.tokens_used;
+            if record(result.clone()) {
+                results.push(result);
+            }
+        }
+        results
+    }
+}
+
 impl DreamEngine {
     pub fn new(scheduler: DreamScheduler) -> Self {
         Self { scheduler }
@@ -81,79 +121,78 @@ impl DreamEngine {
 
     /// Main dream loop — processes priority queue within budget.
     /// Returns all completed dream results. Each entry is dreamed in its own
-    /// dream unit, minted by `issuer` from the entry's label.
+    /// dream unit, minted by `issuer` from the entry's label. A caller that
+    /// holds the engine behind a lock uses [`begin_dream_session`],
+    /// [`DreamSession::run`] and [`record_dream`] instead, so no lock is held
+    /// across a dream's model call (§13.2).
+    ///
+    /// [`begin_dream_session`]: Self::begin_dream_session
+    /// [`record_dream`]: Self::record_dream
     pub fn enter_dream_state(
         &mut self,
         issuer: &DispatchIssuer,
         llm: &dyn DreamLlm,
     ) -> Vec<DreamResult> {
-        let mut results = Vec::new();
+        let session = self.begin_dream_session();
+        session.run(issuer, llm, |result| self.record_dream(result))
+    }
 
+    /// §13.2 dream LK-1: the session's entries, in priority order, and the
+    /// budgets, taken under the engine's lock.
+    pub fn begin_dream_session(&mut self) -> DreamSession {
         self.scheduler.sort_queue();
         self.scheduler.last_dream_at = Some(now_secs());
-
-        let mut tokens_used: u64 = 0;
-        let mut calls_made: u32 = 0;
-
-        // Snapshot task IDs to process (avoid borrow issues).
-        let task_snapshot: Vec<DreamTask> = self.scheduler.priority_queue.clone();
-
-        for task in &task_snapshot {
-            // Budget check — strict enforcement
-            if tokens_used >= self.scheduler.dream_budget_tokens
-                || calls_made >= self.scheduler.dream_budget_api_calls
-            {
-                break;
-            }
-
-            let remaining_tokens = self.scheduler.dream_budget_tokens - tokens_used;
-
-            let result = dream_unit(issuer, task.label()).and_then(|mut ctx| {
-                let ctx = &mut ctx;
-                match task.task_type {
-                    DreamType::Replay => self.dream_replay(llm, ctx, task, remaining_tokens),
-                    DreamType::Experiment => {
-                        self.dream_experiment(llm, ctx, task, remaining_tokens)
-                    }
-                    DreamType::Consolidate => {
-                        self.dream_consolidate(llm, ctx, task, remaining_tokens)
-                    }
-                    DreamType::Explore => self.dream_explore(llm, ctx, task, remaining_tokens),
-                    DreamType::Precompute => {
-                        self.dream_precompute(llm, ctx, task, remaining_tokens)
-                    }
-                    DreamType::Create => self.dream_create(llm, ctx, task, remaining_tokens),
-                    DreamType::Optimize => self.dream_optimize(llm, ctx, task, remaining_tokens),
-                }
-            });
-
-            match result {
-                Ok(r) => {
-                    tokens_used += r.tokens_used;
-                    calls_made += 1;
-                    self.scheduler.record_result(r.clone());
-                    results.push(r);
-                }
-                Err(e) => {
-                    // Record failure as NoResult, still consume a call slot.
-                    let fail_result = DreamResult {
-                        task_id: task.id.clone(),
-                        dream_type: task.task_type.clone(),
-                        agent_id: task.source_agent.clone(),
-                        started_at: now_secs(),
-                        completed_at: now_secs(),
-                        tokens_used: 0,
-                        outcome: DreamOutcome::NoResult { reason: e },
-                        label: task.label().cloned(),
-                    };
-                    calls_made += 1;
-                    self.scheduler.record_result(fail_result.clone());
-                    results.push(fail_result);
-                }
-            }
+        DreamSession {
+            tasks: self.scheduler.priority_queue.clone(),
+            budget_tokens: self.scheduler.dream_budget_tokens,
+            budget_calls: self.scheduler.dream_budget_api_calls,
         }
+    }
 
-        results
+    /// §13.2 dream LK-3: records `result`, or drops it when its entry was
+    /// cleared while it was dreamed. Returns whether it was recorded.
+    pub fn record_dream(&mut self, result: DreamResult) -> bool {
+        let queued = self
+            .scheduler
+            .priority_queue
+            .iter()
+            .any(|t| t.id == result.task_id);
+        if queued {
+            self.scheduler.record_result(result);
+        }
+        queued
+    }
+
+    /// §13.2 dream LK-2: one entry's dream in its own dream unit, with no
+    /// engine borrowed. A failure is a `NoResult` (it still uses a call).
+    pub fn dream_entry(
+        issuer: &DispatchIssuer,
+        llm: &dyn DreamLlm,
+        task: &DreamTask,
+        remaining_tokens: u64,
+    ) -> DreamResult {
+        let result = dream_unit(issuer, task.label()).and_then(|mut ctx| {
+            let ctx = &mut ctx;
+            match task.task_type {
+                DreamType::Replay => Self::dream_replay(llm, ctx, task, remaining_tokens),
+                DreamType::Experiment => Self::dream_experiment(llm, ctx, task, remaining_tokens),
+                DreamType::Consolidate => Self::dream_consolidate(llm, ctx, task, remaining_tokens),
+                DreamType::Explore => Self::dream_explore(llm, ctx, task, remaining_tokens),
+                DreamType::Precompute => Self::dream_precompute(llm, ctx, task, remaining_tokens),
+                DreamType::Create => Self::dream_create(llm, ctx, task, remaining_tokens),
+                DreamType::Optimize => Self::dream_optimize(llm, ctx, task, remaining_tokens),
+            }
+        });
+        result.unwrap_or_else(|e| DreamResult {
+            task_id: task.id.clone(),
+            dream_type: task.task_type.clone(),
+            agent_id: task.source_agent.clone(),
+            started_at: now_secs(),
+            completed_at: now_secs(),
+            tokens_used: 0,
+            outcome: DreamOutcome::NoResult { reason: e },
+            label: task.label().cloned(),
+        })
     }
 
     /// Generate a morning briefing from the last dream session.
@@ -168,7 +207,6 @@ impl DreamEngine {
     // ── Individual dream implementations ────────────────────────────
 
     fn dream_replay(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -215,7 +253,6 @@ impl DreamEngine {
     }
 
     fn dream_experiment(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -263,7 +300,6 @@ impl DreamEngine {
     }
 
     fn dream_consolidate(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -302,7 +338,6 @@ impl DreamEngine {
     }
 
     fn dream_explore(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -339,7 +374,6 @@ impl DreamEngine {
     }
 
     fn dream_precompute(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -380,7 +414,6 @@ impl DreamEngine {
     }
 
     fn dream_create(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,
@@ -427,7 +460,6 @@ impl DreamEngine {
     }
 
     fn dream_optimize(
-        &self,
         llm: &dyn DreamLlm,
         ctx: &mut DispatchContext,
         task: &DreamTask,

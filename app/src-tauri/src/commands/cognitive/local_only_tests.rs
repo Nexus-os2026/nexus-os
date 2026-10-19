@@ -5321,3 +5321,110 @@ fn p3_hm_m4_n4_a_s5_every_ar_ac_request_carries_an_admission_id() {
         w.result
     );
 }
+
+// ── P3-C11-HM-M4 N5: the dream engine's lock (§13.2 dream LK, A-L4) ─────────
+
+/// A loopback Ollama runtime inside the child scenario whose generations
+/// announce they arrived and wait to be released (the barrier of A-L4).
+/// Returns its base URL, the arrival channel and the release sender.
+fn m5_gated_runtime() -> (String, mpsc::Receiver<()>, mpsc::Sender<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (arrived_tx, arrived_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let serves = FakeOllama::serving(&["qwen3:8b"]);
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+            let Some((head, body)) = read_request(&stream) else {
+                continue;
+            };
+            let path = head.split(' ').nth(1).unwrap_or_default().to_string();
+            if path == "/api/generate" {
+                let _ = arrived_tx.send(());
+                let _ = release_rx.recv_timeout(Duration::from_secs(60));
+            }
+            let (status, reply) = runtime_reply(&serves, &path, &body);
+            respond(&mut stream, status, &reply);
+        }
+    });
+    (base, arrived_rx, release_tx)
+}
+
+/// A-L4 (§13.2 dream LK; mutant 14): while a dream's model call (and the
+/// morning briefing's) is on the wire, the dream engine's lock is
+/// acquirable; the dream's result is recorded afterwards.
+#[test]
+fn p3_hm_m4_n5_a_l4_the_dream_engine_is_not_held_across_a_dream_dispatch() {
+    let name = "p3_hm_m4_n5_a_l4_the_dream_engine_is_not_held_across_a_dream_dispatch";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let (base, arrived, release) = m5_gated_runtime();
+        std::env::set_var("OLLAMA_URL", &base);
+        // One dream entry, queued by the production queueing (an Owner's
+        // chat turn's Replay dream).
+        let turn =
+            crate::hm_dispatch::chat_turn(&state, None).map_err(AgentError::SupervisorError)?;
+        hm_queue_only(&state, &turn, "A synthetic turn");
+        let acquirable_during = |what: &str, call: Box<dyn FnOnce() -> bool + Send>| {
+            let worker = std::thread::spawn(call);
+            let arrived_ok = arrived.recv_timeout(Duration::from_secs(10)).is_ok();
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            let free = loop {
+                if state.dream_engine.try_lock().is_ok() {
+                    break true;
+                }
+                if std::time::Instant::now() >= deadline {
+                    break false;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            };
+            let _ = release.send(());
+            let returned = worker.join().unwrap();
+            format!("{what}_arrived={arrived_ok} {what}_free={free} {what}_ok={returned}")
+        };
+        let dreamer = state.clone();
+        let dream = acquirable_during(
+            "dream",
+            Box::new(move || crate::commands::simulation::trigger_dream_now(&dreamer).is_ok()),
+        );
+        let recorded = state
+            .dream_engine
+            .lock()
+            .unwrap()
+            .scheduler
+            .completed_dreams
+            .len();
+        let briefer = state.clone();
+        let briefing = acquirable_during(
+            "briefing",
+            Box::new(move || crate::commands::simulation::get_morning_briefing(&briefer).is_ok()),
+        );
+        Ok(format!("{dream} recorded={recorded} {briefing}"))
+    }) else {
+        return;
+    };
+    let field = |k: &str| hm_field(&w.result, k);
+    for what in ["dream", "briefing"] {
+        assert_eq!(
+            field(&format!("{what}_arrived=")),
+            "true",
+            "precondition: the {what}'s model call reached the runtime: {}",
+            w.result
+        );
+        assert_eq!(
+            field(&format!("{what}_free=")),
+            "true",
+            "A-L4: the dream engine was held across the {what}'s dispatch: {}",
+            w.result
+        );
+        assert_eq!(field(&format!("{what}_ok=")), "true", "{}", w.result);
+    }
+    assert_eq!(
+        field("recorded="),
+        "1",
+        "A-L4: the dream's result was not recorded: {}",
+        w.result
+    );
+}
