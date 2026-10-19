@@ -784,3 +784,154 @@ fn el1_m6_c8_a_primary_key_collision_latches_the_store_as_uncertain() {
     assert_eq!(store.append("run_opened", None, BODY), Append::Latched);
     assert_eq!(store.rows().len(), 2);
 }
+
+// ── P3-C11-M6 C-9: the store and its qualification (M-A1..M-A4, M-A9, M-A10) ─
+
+/// The chain of a closed store, read through a raw connection: its store id
+/// and its rows (fixtures only).
+fn raw_chain(path: &Path) -> (String, Vec<Row>) {
+    let conn = raw(path);
+    let store = identity(&conn).expect("the identity row");
+    let rows = read_rows(
+        &conn,
+        &format!("SELECT {ROW_COLUMNS} FROM record ORDER BY seq"),
+        &[],
+    )
+    .expect("the rows");
+    (store, rows)
+}
+
+/// §4 (C-9 M-A1): the tag covers the phase: a row whose phase is changed
+/// behind the store's back (its tag kept) leaves the store unqualified.
+#[test]
+fn el1_m6_ma1_a_row_whose_phase_changed_is_unqualified() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    three_rows(&path);
+    tamper(
+        &path,
+        "record_no_update",
+        "UPDATE record SET phase = 'approved' WHERE seq = 3",
+    );
+    assert_eq!(refused(&path), Unqualified::Chain);
+}
+
+/// §4 (C-9 M-A2): the tag covers the commitment: a row whose commitment is
+/// changed (its tag kept) leaves the store unqualified.
+#[test]
+fn el1_m6_ma2_a_row_whose_commitment_changed_is_unqualified() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    three_rows(&path);
+    tamper(
+        &path,
+        "record_no_update",
+        "UPDATE record SET commitment = 'cmt-other' WHERE seq = 3",
+    );
+    assert_eq!(refused(&path), Unqualified::Chain);
+}
+
+/// §3, §4 (C-9 M-A3): the tag covers the store id: with the identity row's
+/// id changed to another well-formed id, the identity check passes and the
+/// chain check fails.
+#[test]
+fn el1_m6_ma3_another_well_formed_store_id_fails_the_chain_not_the_identity() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    three_rows(&path);
+    let (store, _) = raw_chain(&path);
+    let other: String = store
+        .chars()
+        .map(|c| if c == '0' { '1' } else { '0' })
+        .collect();
+    assert!(is_lower_hex(&other, 32) && other != store);
+    tamper(
+        &path,
+        "identity_no_update",
+        &format!("UPDATE identity SET store = '{other}'"),
+    );
+    assert_eq!(identity(&raw(&path)), Ok(other));
+    assert_eq!(refused(&path), Unqualified::Chain);
+}
+
+/// §4 (C-9 M-A4): each row's `prev` is checked: a middle row whose body is
+/// rewritten and whose own tag is recomputed with `tag_of` verifies alone,
+/// but the next row's link does not.
+#[test]
+fn el1_m6_ma4_a_rewritten_middle_row_with_its_own_tag_breaks_the_link() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    three_rows(&path);
+    let (store, rows) = raw_chain(&path);
+    let middle = &rows[2];
+    assert!(middle.seq < rows.last().unwrap().seq);
+    let body = "{\"n\":9}";
+    let tag = tag_of(
+        &store,
+        &middle.prev,
+        middle.seq,
+        &middle.session,
+        middle.stored_ms,
+        &middle.phase,
+        middle.commitment.as_deref(),
+        body,
+    );
+    tamper(
+        &path,
+        "record_no_update",
+        &format!(
+            "UPDATE record SET body = '{body}', tag = '{tag}' WHERE seq = {}",
+            middle.seq
+        ),
+    );
+    let (_, after) = raw_chain(&path);
+    assert!(
+        after[2].verifies(&store),
+        "the rewritten row verifies alone"
+    );
+    assert_eq!(refused(&path), Unqualified::Chain);
+}
+
+/// §1 (C-9 M-A9): an existing store directory is made private: one left
+/// 0755 is 0700 after the store opens.
+#[cfg(unix)]
+#[test]
+fn el1_m6_ma9_an_existing_store_directory_is_made_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    let dir = path.parent().unwrap();
+    std::fs::create_dir(dir).unwrap();
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mode = || std::fs::metadata(dir).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(), 0o755);
+    drop(open(&path));
+    assert_eq!(mode(), 0o700);
+}
+
+/// §1 (C-9 M-A10): the header's WAL bytes are checked: an existing
+/// rollback-journal SQLite file that carries this format's application id is
+/// refused as not a store, and its bytes are unchanged.
+#[test]
+fn el1_m6_ma10_a_rollback_journal_file_with_the_application_id_is_not_a_store() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(&format!(
+            "PRAGMA application_id = {APPLICATION_ID}; CREATE TABLE notes (x TEXT); \
+             INSERT INTO notes VALUES ('kept');"
+        ))
+        .unwrap();
+    }
+    let before = std::fs::read(&path).unwrap();
+    assert_eq!(&before[..16], b"SQLite format 3\0");
+    assert_eq!((before[18], before[19]), (1, 1), "a rollback journal file");
+    assert_eq!(
+        i32::from_be_bytes([before[68], before[69], before[70], before[71]]),
+        APPLICATION_ID
+    );
+    assert_eq!(refused(&path), Unqualified::NotAStore);
+    assert_eq!(std::fs::read(&path).unwrap(), before, "the file changed");
+}

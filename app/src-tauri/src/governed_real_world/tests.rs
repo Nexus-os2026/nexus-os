@@ -2157,3 +2157,97 @@ fn p3_el1_m6_c7_after_the_acknowledgement_the_status_shows_nothing_unsettled() {
     drop(world);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+// ── P3-C11-M6 C-9: what the desktop shows (M-B3, M-B4, M-B5) ──────────────
+
+/// EL-1 §8 (C-9 M-B3): a result whose end record is owed is shown as
+/// `"end": {"status": "owed"}`, never as recorded.
+#[test]
+fn p3_el1_m6_mb3_an_owed_end_is_shown_owed() {
+    use nexus_governed_control::authority::evidence::{EndStatus, ExecutionEvidence};
+    let output = nexus_governed_control::control::EffectOutput {
+        text: Some("done".into()),
+        evidence: Some(ExecutionEvidence {
+            start: 7,
+            end: EndStatus::Owed,
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        super::output_json(&output)["evidence"]["end"],
+        json!({ "status": "owed" })
+    );
+}
+
+/// EL-1 §8 (C-9 M-B4): the start shown with a result is its commitment's
+/// `started` row in the store.
+#[test]
+fn p3_el1_m6_mb4_the_start_shown_is_the_started_row() {
+    let root = private_home();
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(&root, audit, db);
+    let owner = Owner(true, AtomicU32::new(0));
+    world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let id = world
+        .submit(CommandEnvelope {
+            text: Some("hash abc".into()),
+            ..Default::default()
+        })
+        .unwrap()["commitment"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let output = world.approve(&id, &owner).unwrap();
+    world.shutdown();
+    drop(world);
+    let rows = store_rows(&root);
+    let started = rows
+        .iter()
+        .find(|r| r.1 == "started" && r.2.as_deref() == Some(id.as_str()))
+        .expect("the started row")
+        .0;
+    assert!(started > 1);
+    assert_eq!(output["evidence"]["start"]["seq"], started);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// EL-1 §8 (C-9 M-B5): the status says `"store": "latched"` for a latched
+/// store (no desktop test can latch a real one: the status's evidence
+/// object is a function of the store's health alone, and the status is
+/// built from it).
+#[test]
+fn p3_el1_m6_mb5_a_latched_store_is_shown_latched() {
+    use nexus_governed_control::evidence_store::EvidenceHealth;
+    let health = |latched| EvidenceHealth {
+        latched,
+        owed: 2,
+        recovery_required: false,
+        unsettled: 1,
+        unclean_sessions: 3,
+    };
+    assert_eq!(
+        super::evidence_status(health(true)),
+        json!({
+            "store": "latched",
+            "owed": 2,
+            "recovery_required": false,
+            "unsettled": 1,
+            "unclean_sessions": 3,
+        })
+    );
+    assert_eq!(super::evidence_status(health(false))["store"], "qualified");
+    let t = isolated();
+    assert_eq!(
+        t.world.status()["evidence"],
+        super::evidence_status(t.world.evidence.health())
+    );
+}

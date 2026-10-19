@@ -820,3 +820,126 @@ fn el1_m6_c6_resume_on_a_latched_store_asks_nothing() {
     assert!(f.control.authority().runs().is_stopped());
     assert_eq!(f.rows(), rows);
 }
+
+// ── P3-C11-M6 C-9: results, and transitions that have taken effect ─────────
+
+/// A fake effect that fails, the store refusing every insert from the
+/// moment it runs: its start record is written, its end record is owed.
+struct FailsWhileFull(Arc<PrimaryEvidence>);
+
+impl PendingEffect for FailsWhileFull {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        Ok(target())
+    }
+
+    fn parameters(&self) -> Digest {
+        parameters()
+    }
+
+    fn execute(
+        self: Box<Self>,
+        _guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        self.0.store().refuse_inserts(true);
+        Err((FailureClass::Actuator, "it failed".into()))
+    }
+}
+
+/// Run one failing effect whose end record is owed; its error, and the
+/// sequence number of its start record.
+fn failed_with_its_end_owed(f: &Fixture) -> (AuthorityError, u64) {
+    let id = f
+        .control
+        .propose(
+            &f.agent,
+            f.run,
+            preparation(f.grant, Box::new(FailsWhileFull(f.evidence.clone()))),
+        )
+        .unwrap()
+        .id;
+    f.control.authorize(id, &f.agent, f.run, &Yes).unwrap();
+    let error = f.control.execute(id, &f.agent, f.run).unwrap_err();
+    let start = rows_of(&f.rows(), "started", &id.to_string())[0].seq;
+    (error, start)
+}
+
+/// EL-1 §8 (C-9 M-B1): an effect that started and failed is `Ended`, and its
+/// evidence carries what became of its end record: owed here.
+#[test]
+fn el1_m6_mb1_a_failed_effect_whose_end_is_owed_reports_it_owed() {
+    let f = fixture();
+    let (error, start) = failed_with_its_end_owed(&f);
+    let AuthorityError::Ended { cause, evidence } = error else {
+        panic!("not ended: {error:?}");
+    };
+    assert_eq!(*cause, AuthorityError::Unavailable("the effect failed"));
+    assert_eq!(
+        evidence,
+        ExecutionEvidence {
+            start,
+            end: EndStatus::Owed
+        }
+    );
+    assert_eq!(f.evidence.health().owed, 1);
+}
+
+/// EL-1 §8 (C-9 M-B2): an `Ended` error reads as its cause, then its
+/// evidence in parentheses.
+#[test]
+fn el1_m6_mb2_an_ended_error_reads_as_its_cause_then_its_evidence() {
+    let f = fixture();
+    let (error, start) = failed_with_its_end_owed(&f);
+    let AuthorityError::Ended { cause, evidence } = &error else {
+        panic!("not ended: {error:?}");
+    };
+    assert_eq!(error.to_string(), format!("{cause} ({evidence})"));
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "governed control: unavailable: the effect failed \
+             (evidence: start recorded {start}, end owed)"
+        )
+    );
+}
+
+/// EL-1 §6 (C-9 M-B7): a run's cancellation has taken effect: with the
+/// store refusing every insert it returns Ok, the run is cancelled, and its
+/// `run_cancelled` record is owed.
+#[test]
+fn el1_m6_mb7_a_cancellation_with_a_refusing_store_takes_effect_and_is_owed() {
+    let f = fixture();
+    f.evidence.store().refuse_inserts(true);
+    assert_eq!(f.control.authority().cancel_run(f.run), Ok(()));
+    assert!(f.control.authority().runs().view(f.run).unwrap().cancelled);
+    let owed: Vec<serde_json::Value> = f
+        .evidence
+        .store()
+        .owed_bodies()
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(owed.len(), 1);
+    assert_eq!(owed[0]["phase"], "run_cancelled");
+}
+
+/// EL-1 §6 (C-9 M-B8): a grant's revocation has taken effect: with the
+/// store refusing every insert it returns Ok, the grant is revoked (the
+/// generation moved), and its `grant_revoked` record is owed.
+#[test]
+fn el1_m6_mb8_a_revocation_with_a_refusing_store_takes_effect_and_is_owed() {
+    let f = fixture();
+    let generation = f.control.authority().policy_generation();
+    f.evidence.store().refuse_inserts(true);
+    assert_eq!(f.control.authority().grants().revoke(f.grant), Ok(()));
+    assert!(f.control.authority().grants().live(f.grant).is_none());
+    assert!(f.control.authority().policy_generation() > generation);
+    let owed: Vec<serde_json::Value> = f
+        .evidence
+        .store()
+        .owed_bodies()
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(owed.len(), 1);
+    assert_eq!(owed[0]["phase"], "grant_revoked");
+}

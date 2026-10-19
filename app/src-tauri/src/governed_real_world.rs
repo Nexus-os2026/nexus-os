@@ -23,7 +23,7 @@ use nexus_governed_control::authority::ids::{AgentId, CommitmentId, GrantId, Run
 use nexus_governed_control::authority::run::RunOrigin;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::control::EffectOutput;
-use nexus_governed_control::evidence_store::PrimaryEvidence;
+use nexus_governed_control::evidence_store::{EvidenceHealth, PrimaryEvidence};
 use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
 use nexus_governed_control::ingress::{understand, Attachments, CommandEnvelope, Understood};
 use nexus_kernel::audit::{AuditTrail, EventType};
@@ -374,16 +374,9 @@ impl RealWorld {
                 })
             })
             .collect();
-        let health = self.evidence.health();
         json!({
             "status": self.control.status(),
-            "evidence": {
-                "store": if health.latched { "latched" } else { "qualified" },
-                "owed": health.owed,
-                "recovery_required": health.recovery_required,
-                "unsettled": health.unsettled,
-                "unclean_sessions": health.unclean_sessions,
-            },
+            "evidence": evidence_status(self.evidence.health()),
             "commitments": commitments,
             "grants": grants,
             "runs": runs.iter().rev().take(32).map(|run| json!({
@@ -428,6 +421,18 @@ impl RealWorld {
     pub(crate) fn display_stop(&self) {
         self.control.stop_display();
     }
+}
+
+/// What the interface shows about the evidence store (EL-1 §8): a function
+/// of its health alone.
+fn evidence_status(health: EvidenceHealth) -> Value {
+    json!({
+        "store": if health.latched { "latched" } else { "qualified" },
+        "owed": health.owed,
+        "recovery_required": health.recovery_required,
+        "unsettled": health.unsettled,
+        "unclean_sessions": health.unclean_sessions,
+    })
 }
 
 fn view_json(view: &CommitmentView) -> Value {

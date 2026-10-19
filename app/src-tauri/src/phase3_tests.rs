@@ -4654,6 +4654,9 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::broker::Vault",
     "nexus_governed_control::broker::Vault::Kernel",
     "nexus_governed_control::control::EffectOutput",
+    // P3-C11-M6 C-9 (M-B5): the status's evidence object is a function of
+    // the store's health.
+    "nexus_governed_control::evidence_store::EvidenceHealth",
     "nexus_governed_control::evidence_store::PrimaryEvidence",
     "nexus_governed_control::evidence_store::PrimaryEvidence::open",
     "nexus_governed_control::governed::AgentOutcome",
@@ -9601,6 +9604,10 @@ const RECORDING: [&str; 7] = [
 /// recording function, and a gating `record(..)` call left as a statement
 /// of its own (its result unused). An end record's status may stand alone
 /// (`self.record_end(..);`): the store keeps what it could not write.
+/// P3-C11-M6 C-10: also a record's result bound to an underscore name
+/// (`let _name =`, `let _: T =`), and one whose `.is_ok()`, `.is_err()`,
+/// `.unwrap_or(..)`, `.unwrap_or_default()` or `.unwrap_or_else(..)` is a
+/// statement of its own.
 fn record_discards(text: &str) -> Vec<String> {
     let code = compact(&String::from_utf8_lossy(&masked(&production_text(text))));
     let b = code.as_bytes();
@@ -9650,6 +9657,60 @@ fn record_discards(text: &str) -> Vec<String> {
             found.push(code[at..end].to_string());
         }
     }
+    // P3-C11-M6 C-10: `let _name =` and `let _: T =` (`let _ =` is above).
+    for (at, _) in code.match_indices("let_") {
+        let next = b.get(at + "let_".len()).copied();
+        if (at > 0 && is_ident_byte(b[at - 1])) || next == Some(b'=') {
+            continue;
+        }
+        if !next.is_some_and(|c| c == b':' || is_ident_byte(c)) {
+            continue;
+        }
+        let (start, end) = statement(at);
+        if calls(&code[at..end]) {
+            found.push(code[start..end].to_string());
+        }
+    }
+    // P3-C11-M6 C-10: a statement-position `.is_ok()`, `.is_err()`,
+    // `.unwrap_or(..)`, `.unwrap_or_default()` or `.unwrap_or_else(..)` on
+    // a record's result.
+    for method in [
+        ".is_ok(",
+        ".is_err(",
+        ".unwrap_or(",
+        ".unwrap_or_default(",
+        ".unwrap_or_else(",
+    ] {
+        for (at, _) in code.match_indices(method) {
+            let (start, end) = statement(at);
+            let mut depth = 0i32;
+            let mut close = at + method.len() - 1;
+            while close < end {
+                match b[close] {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                close += 1;
+            }
+            let head = &code[start..at];
+            if close + 1 == end
+                && end < b.len()
+                && b[end] == b';'
+                && calls(head)
+                && !head.starts_with("let")
+                && !head.starts_with("return")
+                && !head.contains('=')
+            {
+                found.push(code[start..end].to_string());
+            }
+        }
+    }
     for (at, _) in code.match_indices(".record(") {
         let (start, end) = statement(at);
         // The call's closing parenthesis ends the statement.
@@ -9696,6 +9757,17 @@ fn p3_el1_n3_no_record_result_is_discarded() {
         "fn f() { drop(self.record(&r)); }",
         "fn f() { self.evidence.record(&r); }",
         "fn f() { let _ = guard.finish(outcome); }",
+        // P3-C11-M6 C-10: an underscore name, and a statement-position
+        // test or default of a record's result.
+        "fn f() { let _seq = self.record(&r); }",
+        "fn f() { let _status = self.record_end(&r); }",
+        "fn f() { let _: Result<u64, EvidenceUnavailable> = self.evidence.record(&r); }",
+        "fn f() { let _done: Option<EndStatus> = self.flush(deferred); }",
+        "fn f() { self.record(&r).is_ok(); }",
+        "fn f() { self.evidence.record(&r).is_err(); }",
+        "fn f() { self.evidence.record(&r).unwrap_or(0); }",
+        "fn f() { self.evidence.record(&r).unwrap_or_default(); }",
+        "fn f() { self.evidence.record(&r).unwrap_or_else(|_| 0); }",
     ] {
         assert_eq!(record_discards(planted).len(), 1, "not found: {planted}");
     }
@@ -9707,6 +9779,13 @@ fn p3_el1_n3_no_record_result_is_discarded() {
         "fn f() { if self.record(&r).is_err() { self.runs.cancel(run); } }",
         "// let _ = self.record(&r);\nfn f() {}",
         "#[cfg(test)]\nfn t() { let _ = self.record(&r); }\nfn f() {}",
+        // P3-C11-M6 C-10: a used result, and an underscore name or a test
+        // of something that is not a record's result.
+        "fn f() { let seq = self.record(&r).unwrap_or(0); g(seq) }",
+        "fn f() -> bool { self.record(&r).is_ok() }",
+        "fn f() { let _reserved = Reserved { registry: self, id, token }; }",
+        "fn f() { sender.send(x).is_ok(); }",
+        "fn f() { let outlet_x = self.record(&r)?; g(outlet_x) }",
     ] {
         assert!(record_discards(kept).is_empty(), "flagged: {kept}");
     }
@@ -9785,4 +9864,38 @@ fn p3_el1_n3_the_evidence_store_is_the_one_production_sink() {
     assert!(governed.contains(
         "pubfnnew(root:&Path,vault:Vault,evidence:Arc<PrimaryEvidence>,clock:Arc<dynClock>)->Result<Self,AuthorityError>{"
     ));
+}
+
+/// P3-C11-M6 C-10 (EL-1 §1): the front door reaches the state directory the
+/// kernel resolves by its exact path. The setup-body pin of
+/// `p3_el1_n3_the_evidence_store_is_the_one_production_sink` compares
+/// `compact` text, which drops module paths; this pins the path itself:
+/// `nexus_state_dir` is named once in the front door's production text, as
+/// `nexus_kernel::identity_home::nexus_state_dir()` at the start of
+/// `RealWorld::setup`, and nothing there renames `nexus_kernel` or
+/// `identity_home` (no `use` item brings a `nexus_state_dir` in: the front
+/// door has none, and names it inline).
+#[test]
+fn p3_el1_m6_the_front_door_names_the_state_directory_by_its_exact_path() {
+    let front = production_source(P3_FRONT_DOOR);
+    let code = without_whitespace(&String::from_utf8_lossy(&masked(front)));
+    assert_eq!(code.matches("nexus_state_dir").count(), 1, "named once");
+    assert_eq!(
+        code.matches("nexus_kernel::identity_home::nexus_state_dir()")
+            .count(),
+        1
+    );
+    for renaming in [
+        "asnexus_kernel",
+        "asidentity_home",
+        "asnexus_state_dir",
+        "modnexus_kernel",
+        "modidentity_home",
+    ] {
+        assert!(!code.contains(renaming), "{renaming}");
+    }
+    assert!(
+        without_whitespace(one_fn(front, "RealWorld::setup").body_text(front))
+            .starts_with("letstate=nexus_kernel::identity_home::nexus_state_dir().map_err(")
+    );
 }

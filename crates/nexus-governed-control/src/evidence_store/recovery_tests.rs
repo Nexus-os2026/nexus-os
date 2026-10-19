@@ -647,3 +647,219 @@ fn el1_m6_c7_after_an_acknowledgement_nothing_is_unsettled() {
     .unwrap();
     assert!(!governed.status().emergency_stopped);
 }
+
+// ── P3-C11-M6 C-9: reconciliation, the close and the acknowledgement ────────
+
+/// An effect that completes at once.
+struct Done;
+
+impl PendingEffect for Done {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        Ok(Digest::of("fake.target", &[b"here"]))
+    }
+    fn parameters(&self) -> Digest {
+        Digest::of("fake.params", &[b"p"])
+    }
+    fn execute(
+        self: Box<Self>,
+        _guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        Ok(EffectOutput::default())
+    }
+}
+
+/// One effect, proposed, authorized and executed to its end through a
+/// control over `evidence`; its commitment.
+fn one_finished_effect(evidence: &Arc<PrimaryEvidence>) -> String {
+    let owner = owner(true, true);
+    let control = Control::new(Authority::new(
+        evidence.clone(),
+        Arc::new(ManualClock::default()),
+    ));
+    let agent = AgentId::new("agent-done").unwrap();
+    let run = control
+        .authority()
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let grant = control
+        .authority()
+        .grants()
+        .request(
+            GrantScope::Perception {
+                display: "agent".into(),
+            },
+            Duration::from_secs(600),
+            &owner,
+        )
+        .unwrap();
+    let view = control
+        .propose(
+            &agent,
+            run,
+            Preparation {
+                action: PreparedAction {
+                    kind: CapabilityKind::Perception,
+                    class: EffectClass::R1,
+                    operation: "fake.observe",
+                    target: TargetIdentity {
+                        display: "fake target".into(),
+                        digest: Digest::of("fake.target", &[b"here"]),
+                    },
+                    parameters: Digest::of("fake.params", &[b"p"]),
+                    grants: vec![grant],
+                    leases: vec![],
+                    summary: vec!["fake".into()],
+                },
+                effect: Box::new(Done),
+                ttl: Duration::from_secs(60),
+            },
+        )
+        .unwrap();
+    control.authorize(view.id, &agent, run, &owner).unwrap();
+    let output = control.execute(view.id, &agent, run).unwrap();
+    assert!(matches!(
+        output.evidence.map(|e| e.end),
+        Some(EndStatus::Recorded { .. })
+    ));
+    view.id.to_string()
+}
+
+/// EL-1 §7 (C-9 M-A5): an effect that finished is not unsettled: after a
+/// restart, whether the session closed cleanly or not, there is no
+/// `unsettled` statement, no recovery, and governed control does not start
+/// stopped.
+#[test]
+fn el1_m6_ma5_a_finished_effect_is_settled_after_a_clean_or_unclean_restart() {
+    for clean in [true, false] {
+        let scratch = Scratch::new();
+        let path = scratch.store();
+        let commitment = {
+            let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+            let commitment = one_finished_effect(&evidence);
+            if clean {
+                assert!(matches!(
+                    evidence.close_session(),
+                    EndStatus::Recorded { .. }
+                ));
+            }
+            commitment
+        };
+        let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+        let rows = evidence.store().rows();
+        assert!(rows
+            .iter()
+            .any(|r| r.phase == "finished" && r.commitment.as_deref() == Some(&commitment)));
+        assert!(
+            !rows.iter().any(|r| r.phase == "unsettled"),
+            "clean={clean}"
+        );
+        assert_eq!(
+            rows.iter().filter(|r| r.phase == "unclean_session").count(),
+            usize::from(!clean)
+        );
+        assert!(!evidence.health().recovery_required);
+        let governed = crate::governed::GovernedControl::with_secrets(
+            &scratch.path("runtime"),
+            crate::broker::Vault::Disabled.source(),
+            evidence.clone(),
+            Arc::new(ManualClock::default()),
+        )
+        .unwrap();
+        assert!(!governed.status().emergency_stopped, "clean={clean}");
+    }
+}
+
+/// One `run_cancelled` end record owed (the store refuses it), then the
+/// store accepts again.
+fn owe_one(evidence: &PrimaryEvidence) {
+    evidence.store().refuse_inserts(true);
+    assert_eq!(
+        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        EndStatus::Owed
+    );
+    evidence.store().refuse_inserts(false);
+    assert_eq!(evidence.health().owed, 1);
+}
+
+/// EL-1 §6, §7 (C-9 M-A6): a clean shutdown writes the owed records first:
+/// owed is then 0, and the owed row comes before `session_closed`.
+#[test]
+fn el1_m6_ma6_the_close_pays_what_is_owed_first() {
+    let scratch = Scratch::new();
+    let evidence = PrimaryEvidence::open(&scratch.store(), vec![]).unwrap();
+    owe_one(&evidence);
+    assert!(matches!(
+        evidence.close_session(),
+        EndStatus::Recorded { .. }
+    ));
+    assert_eq!(evidence.health().owed, 0);
+    let rows = evidence.store().rows();
+    assert_eq!(
+        phases(&rows[rows.len() - 2..]),
+        ["run_cancelled", "session_closed"]
+    );
+}
+
+/// EL-1 §6, §7 (C-9 M-A7): with recovery required and one end record owed,
+/// the acknowledgement writes the owed record first: owed is then 0, and the
+/// owed row comes before the `acknowledged` row.
+#[test]
+fn el1_m6_ma7_the_acknowledgement_pays_what_is_owed_first() {
+    let (_scratch, path) = unsettled_store();
+    let (evidence, authority) = authority_over(&path);
+    assert!(evidence.health().recovery_required);
+    owe_one(&evidence);
+    authority.resume(&owner(true, true)).unwrap();
+    assert_eq!(evidence.health().owed, 0);
+    let rows = evidence.store().rows();
+    assert_eq!(
+        phases(&rows[rows.len() - 2..]),
+        ["run_cancelled", "acknowledged"]
+    );
+}
+
+/// EL-1 §7 (C-9 M-A8): what was acknowledged is not shown again: after a
+/// first acknowledgement whose highest shown statement is an
+/// `unclean_session`, a second dialog (forced by a newer `unsettled`
+/// statement) shows only the statements not yet acknowledged.
+#[test]
+fn el1_m6_ma8_an_acknowledged_unclean_session_is_not_shown_again() {
+    let (_scratch, path) = unsettled_store();
+    let (evidence, authority) = authority_over(&path);
+    let unclean_seq = evidence
+        .store()
+        .rows()
+        .iter()
+        .find(|r| r.phase == "unclean_session")
+        .unwrap()
+        .seq;
+    let first = owner(true, true);
+    authority.resume(&first).unwrap();
+    let shown = first.asked_acknowledgement.lock().unwrap()[0].clone();
+    assert_eq!(
+        shown.covers_through, unclean_seq,
+        "the highest shown is the unclean session"
+    );
+    assert_eq!(shown.unclean_sessions.len(), 1);
+    assert!(!evidence.health().recovery_required);
+    let body = statement(
+        "unsettled",
+        serde_json::json!({ "commitment": "cmt-later", "started_seq": 1, "text": UNSETTLED_TEXT }),
+    );
+    assert!(matches!(
+        evidence
+            .store()
+            .append("unsettled", Some("cmt-later"), &body),
+        Append::Committed { .. }
+    ));
+    assert!(evidence.health().recovery_required);
+    let second = owner(true, true);
+    authority.resume(&second).unwrap();
+    let shown = second.asked_acknowledgement.lock().unwrap()[0].clone();
+    assert_eq!(shown.unsettled, ["cmt-later".to_string()]);
+    assert!(
+        shown.unclean_sessions.is_empty(),
+        "shown again: {:?}",
+        shown.unclean_sessions
+    );
+}
