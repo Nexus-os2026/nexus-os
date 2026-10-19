@@ -12,6 +12,7 @@ use nexus_governed_control::authority::ids::AgentId;
 use nexus_governed_control::authority::run::RunOrigin;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::egress::EgressIntent;
+use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::{GovernedControl, GrantRequest, Intent};
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -67,10 +68,16 @@ fn proxy_variables_in_the_environment_are_ignored() {
 
     // Through the one front door, as the desktop drives it.
     let root = std::env::temp_dir().join(format!("nexus-p3-proxy-test-{}", std::process::id()));
+    // The evidence of record, a store of its own inside the root.
+    let evidence = PrimaryEvidence::open(
+        &root.join("p3-evidence").join("evidence.sqlite3"),
+        vec![Arc::new(MemoryEvidence::new(64))],
+    )
+    .unwrap();
     let control = GovernedControl::new(
         &root,
         Vault::Disabled,
-        Arc::new(MemoryEvidence::new(64)),
+        evidence,
         Arc::new(SystemClock::default()),
     )
     .unwrap();

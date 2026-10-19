@@ -2,10 +2,11 @@
 //!
 //! The desktop holds one `GovernedControl` (crate `nexus-governed-control`)
 //! and adds only what the desktop owns: the owner's native dialogs (the
-//! only production `ControlConfirmer`), the hash-chained audit trail as the
-//! evidence sink (evidence first: an unrecorded effect does not start), the
-//! vault as the credential source, the `p3_*` IPC commands, and the agent
-//! executor's bridge. Every effect still goes through the crate's one
+//! only production `ControlConfirmer`), the Phase Three evidence store as
+//! the evidence of record (contract EL-1; evidence first: an unrecorded
+//! effect does not start), the hash-chained audit trail and the recent
+//! history as its projections, the vault as the credential source, the
+//! `p3_*` IPC commands, and the agent executor's bridge. Every effect still goes through the crate's one
 //! pipeline; nothing here performs one.
 
 use crate::AppState;
@@ -15,12 +16,13 @@ use nexus_governed_control::authority::approval::{
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::evidence::{
-    EvidenceRecord, EvidenceSink, EvidenceUnavailable, MemoryEvidence, TeeEvidence,
+    EndStatus, EvidenceProjection, EvidenceRecord, ExecutionEvidence, MemoryEvidence,
 };
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use nexus_governed_control::authority::run::RunOrigin;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::control::EffectOutput;
+use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
 use nexus_governed_control::ingress::{understand, Attachments, CommandEnvelope, Understood};
 use nexus_kernel::audit::{AuditTrail, EventType};
@@ -40,6 +42,7 @@ const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 /// Phase Three in the desktop.
 pub(crate) struct RealWorld {
     control: GovernedControl,
+    evidence: Arc<PrimaryEvidence>,
     recent: Arc<MemoryEvidence>,
     attachments: Attachments,
     agents: Mutex<Agents>,
@@ -58,24 +61,35 @@ struct Agents {
     stopped_at: HashMap<String, u64>,
 }
 
-/// Evidence into the shared hash-chained audit trail (and its persisted
-/// table). A record that cannot be appended refuses the effect.
+/// A projection of the evidence of record into the shared hash-chained
+/// audit trail (and its persisted table): written after the evidence store
+/// committed the record; a copy that cannot be appended changes nothing
+/// (EL-1 §6).
 struct AuditEvidence {
     audit: Arc<Mutex<AuditTrail>>,
     db: Arc<NexusDatabase>,
 }
 
-impl EvidenceSink for AuditEvidence {
-    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
-        crate::append_audit_event_checked(
+impl EvidenceProjection for AuditEvidence {
+    fn project(&self, record: &EvidenceRecord) {
+        if crate::append_audit_event_checked(
             &self.audit,
             &self.db,
             uuid::Uuid::nil(),
             EventType::StateChange,
             record.to_json(),
         )
-        .map_err(|_| EvidenceUnavailable)
+        .is_err()
+        {
+            eprintln!("governed control: an evidence record was not copied to the audit trail");
+        }
     }
+}
+
+/// The evidence store's file under a state directory: `p3-evidence`, a
+/// private directory of its own, holds it (EL-1 §1, as amended: AM1.2).
+fn evidence_path(state: &std::path::Path) -> std::path::PathBuf {
+    state.join("p3-evidence").join("evidence.sqlite3")
 }
 
 impl RealWorld {
@@ -87,6 +101,16 @@ impl RealWorld {
     ) -> Result<Arc<Self>, String> {
         let state = nexus_kernel::identity_home::nexus_state_dir()
             .map_err(|e| format!("governed control: {e}"))?;
+        Self::setup_in(state, audit, db)
+    }
+
+    /// The production control under the state directory `state` (the one
+    /// the kernel resolves; tests give a temporary one).
+    fn setup_in(
+        state: std::path::PathBuf,
+        audit: Arc<Mutex<AuditTrail>>,
+        db: Arc<NexusDatabase>,
+    ) -> Result<Arc<Self>, String> {
         // Nexus's own state directory is private, as writing its identity
         // makes it: the database may have created it under a group-writable
         // umask, and the runtime root below it must have no parent another
@@ -97,24 +121,33 @@ impl RealWorld {
             let _ = std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700));
         }
         let root = state.join("p3-runtime");
+        // The evidence of record (EL-1): an unqualified store makes governed
+        // control unavailable; nothing falls back to the audit trail or to
+        // memory.
         let recent = Arc::new(MemoryEvidence::new(512));
-        let sink = Arc::new(TeeEvidence(vec![
-            Arc::new(AuditEvidence { audit, db }),
-            recent.clone(),
-        ]));
-        let control =
-            GovernedControl::new(&root, Vault::Kernel, sink, Arc::new(SystemClock::default()))
-                .map_err(|e| e.to_string())?;
+        let evidence = PrimaryEvidence::open(
+            &evidence_path(&state),
+            vec![Arc::new(AuditEvidence { audit, db }), recent.clone()],
+        )
+        .map_err(|e| format!("governed control: {e}"))?;
+        let control = GovernedControl::new(
+            &root,
+            Vault::Kernel,
+            evidence.clone(),
+            Arc::new(SystemClock::default()),
+        )
+        .map_err(|e| e.to_string())?;
         Ok(Arc::new(Self {
             control,
+            evidence,
             recent,
             attachments: Attachments::default(),
             agents: Mutex::new(Agents::default()),
         }))
     }
 
-    /// An isolated control for tests: a temporary root, the given (in
-    /// memory) audit trail and database, no vault.
+    /// An isolated control for tests: a temporary root (its evidence store
+    /// inside it), the given (in memory) audit trail and database, no vault.
     #[cfg(test)]
     #[cfg(target_os = "linux")]
     pub(crate) fn for_tests(
@@ -123,19 +156,22 @@ impl RealWorld {
         db: Arc<NexusDatabase>,
     ) -> Arc<Self> {
         let recent = Arc::new(MemoryEvidence::new(512));
-        let sink = Arc::new(TeeEvidence(vec![
-            Arc::new(AuditEvidence { audit, db }),
-            recent.clone(),
-        ]));
+        // Its own evidence store, inside the temporary root.
+        let evidence = PrimaryEvidence::open(
+            &evidence_path(root),
+            vec![Arc::new(AuditEvidence { audit, db }), recent.clone()],
+        )
+        .expect("a test evidence store");
         let control = GovernedControl::new(
             root,
             Vault::Disabled,
-            sink,
+            evidence.clone(),
             Arc::new(SystemClock::default()),
         )
         .expect("a test control");
         Arc::new(Self {
             control,
+            evidence,
             recent,
             attachments: Attachments::default(),
             agents: Mutex::new(Agents::default()),
@@ -334,8 +370,16 @@ impl RealWorld {
                 })
             })
             .collect();
+        let health = self.evidence.health();
         json!({
             "status": self.control.status(),
+            "evidence": {
+                "store": if health.latched { "latched" } else { "qualified" },
+                "owed": health.owed,
+                "recovery_required": health.recovery_required,
+                "unsettled": health.unsettled,
+                "unclean_sessions": health.unclean_sessions,
+            },
             "commitments": commitments,
             "grants": grants,
             "runs": runs.iter().rev().take(32).map(|run| json!({
@@ -408,10 +452,27 @@ fn output_json(output: &EffectOutput) -> Value {
         }
         text[..end].to_string()
     });
-    json!({
+    let mut shown = json!({
         "text": text,
         "bytes": output.bytes.as_ref().map(Vec::len),
         "meta": output.meta.iter().map(|(k, v)| json!([k, v])).collect::<Vec<_>>(),
+    });
+    // An effect that started says what became of its records (EL-1 §8).
+    if let Some(evidence) = output.evidence {
+        shown["evidence"] = evidence_json(evidence);
+    }
+    shown
+}
+
+/// `{start: recorded{seq}, end: recorded{seq} | owed | uncertain}`.
+fn evidence_json(evidence: ExecutionEvidence) -> Value {
+    let end = match evidence.end {
+        EndStatus::Recorded { seq } => json!({ "status": "recorded", "seq": seq }),
+        other => json!({ "status": other.as_str() }),
+    };
+    json!({
+        "start": { "status": "recorded", "seq": evidence.start },
+        "end": end,
     })
 }
 

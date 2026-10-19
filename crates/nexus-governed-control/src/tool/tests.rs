@@ -306,8 +306,8 @@ fn cancelling_the_run_ends_a_running_tool() {
     std::thread::sleep(Duration::from_millis(200));
     h.control.cancel_run(h.run).unwrap();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::RunCancelled
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::RunCancelled
     );
     assert!(started.elapsed() < Duration::from_secs(5));
     assert_eq!(

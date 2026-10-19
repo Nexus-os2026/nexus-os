@@ -1119,6 +1119,8 @@ mod live {
                 ("popups_closed".into(), page.popups_closed.to_string()),
                 ("downloads".into(), downloaded.len().to_string()),
             ],
+            // Set by the pipeline once the effect has ended.
+            evidence: None,
         })
     }
 }

@@ -5,7 +5,9 @@
 //! cancellation), expired or revoked. A record carries identities, classes,
 //! digests and bounded display text, never a secret, a payload body, raw
 //! pixels or audio. If the sink cannot record, the action does not start:
-//! evidence comes first.
+//! evidence comes first. The evidence of record is the Phase Three evidence
+//! store ([`crate::evidence_store`], contract EL-1); the audit trail and the
+//! interface's recent history are projections of it.
 
 use super::effect::{CapabilityKind, EffectClass};
 use serde_json::{json, Value};
@@ -305,17 +307,84 @@ impl EvidenceRecord {
 #[derive(Debug)]
 pub struct EvidenceUnavailable;
 
-/// Where evidence goes: the desktop appends to the hash-chained audit trail.
-pub trait EvidenceSink: Send + Sync {
-    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable>;
+/// What became of an end record (contract EL-1 §6): a transition that has
+/// already taken effect is never undone and never waits for the owner; its
+/// record is written, owed (kept, with its original content, and written
+/// before any later record), or uncertain (the store latched).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndStatus {
+    Recorded { seq: u64 },
+    Owed,
+    Uncertain,
 }
 
-/// An in-memory sink: the bounded recent history the interface shows, and
-/// the sink tests use.
+impl EndStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EndStatus::Recorded { .. } => "recorded",
+            EndStatus::Owed => "owed",
+            EndStatus::Uncertain => "uncertain",
+        }
+    }
+}
+
+/// The evidence of one effect that started (EL-1 §8): its start record
+/// (written before it started) and what became of its end record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExecutionEvidence {
+    pub start: u64,
+    pub end: EndStatus,
+}
+
+impl std::fmt::Display for ExecutionEvidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "evidence: start recorded {}, end ", self.start)?;
+        match self.end {
+            EndStatus::Recorded { seq } => write!(f, "recorded {seq}"),
+            other => write!(f, "{}", other.as_str()),
+        }
+    }
+}
+
+/// Where evidence goes. Production: [`crate::evidence_store::PrimaryEvidence`],
+/// the Phase Three evidence store (EL-1).
+pub trait EvidenceSink: Send + Sync {
+    /// A gating record, written before the action it permits: the action
+    /// happens only if this returns its sequence number.
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable>;
+
+    /// An end record: a transition that has already taken effect (an end, a
+    /// stop, a cancellation, a revocation). It never fails and never waits
+    /// for the owner. A sink with no owed list (a test's) cannot promise a
+    /// late write: a record it fails to take is uncertain.
+    fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
+        match self.record(record) {
+            Ok(seq) => EndStatus::Recorded { seq },
+            Err(EvidenceUnavailable) => EndStatus::Uncertain,
+        }
+    }
+
+    /// The evidence of record behind this sink, when it is the store.
+    fn primary(&self) -> Option<&crate::evidence_store::PrimaryEvidence> {
+        None
+    }
+}
+
+/// A copy of the evidence of record (the audit trail, the interface's
+/// recent history): written only after the store committed the record,
+/// best effort; what it does never changes an outcome (EL-1 §6).
+pub trait EvidenceProjection: Send + Sync {
+    fn project(&self, record: &EvidenceRecord);
+}
+
+/// An in-memory sink: the bounded recent history the interface shows (as a
+/// projection), and the sink tests use.
 pub struct MemoryEvidence {
     records: Mutex<Vec<EvidenceRecord>>,
     capacity: usize,
     failing: std::sync::atomic::AtomicBool,
+    /// The sequence number of the last record taken.
+    taken: std::sync::atomic::AtomicU64,
 }
 
 impl MemoryEvidence {
@@ -324,11 +393,29 @@ impl MemoryEvidence {
             records: Mutex::new(Vec::new()),
             capacity: capacity.max(1),
             failing: std::sync::atomic::AtomicBool::new(false),
+            taken: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
     pub fn records(&self) -> Vec<EvidenceRecord> {
         self.records.lock().expect("evidence").clone()
+    }
+
+    /// Keep `record`, the oldest dropped at capacity; returns its sequence
+    /// number.
+    fn keep(&self, record: &EvidenceRecord) -> u64 {
+        let mut records = self.records.lock().expect("evidence");
+        if records.len() == self.capacity {
+            records.remove(0);
+        }
+        records.push(record.clone());
+        self.taken
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            .saturating_add(1)
+    }
+
+    fn is_failing(&self) -> bool {
+        self.failing.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Make every later `record` fail (tests of the evidence-first rule).
@@ -339,27 +426,33 @@ impl MemoryEvidence {
 }
 
 impl EvidenceSink for MemoryEvidence {
-    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
-        if self.failing.load(std::sync::atomic::Ordering::SeqCst) {
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+        if self.is_failing() {
             return Err(EvidenceUnavailable);
         }
-        let mut records = self.records.lock().expect("evidence");
-        if records.len() == self.capacity {
-            records.remove(0);
-        }
-        records.push(record.clone());
-        Ok(())
+        Ok(self.keep(record))
     }
 }
 
-/// Fan one record out to several sinks; it fails if any of them fails.
+impl EvidenceProjection for MemoryEvidence {
+    /// A copy: a failing history keeps nothing and changes nothing.
+    fn project(&self, record: &EvidenceRecord) {
+        if !self.is_failing() {
+            self.keep(record);
+        }
+    }
+}
+
+/// Fan one record out to several sinks; it fails if any of them fails (tests;
+/// the production sink is the evidence store, with its projections).
 pub struct TeeEvidence(pub Vec<std::sync::Arc<dyn EvidenceSink>>);
 
 impl EvidenceSink for TeeEvidence {
-    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+        let mut seq = 0;
         for sink in &self.0 {
-            sink.record(record)?;
+            seq = sink.record(record)?;
         }
-        Ok(())
+        Ok(seq)
     }
 }

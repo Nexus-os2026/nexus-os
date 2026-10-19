@@ -115,7 +115,7 @@ impl ScriptedSink {
 }
 
 impl EvidenceSink for ScriptedSink {
-    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
         let (hold, fail, panic, probe, reenter) = {
             let mut script = self.script.lock().unwrap();
             let hold = script.hold == Some(record.phase);

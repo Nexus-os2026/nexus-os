@@ -551,7 +551,13 @@ fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> E
     } else {
         (None, Some(response.body))
     };
-    EffectOutput { text, bytes, meta }
+    EffectOutput {
+        text,
+        bytes,
+        meta,
+        // Set by the pipeline once the effect has ended.
+        evidence: None,
+    }
 }
 
 #[cfg(test)]

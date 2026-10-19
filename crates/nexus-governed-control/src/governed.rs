@@ -22,6 +22,7 @@ use crate::connector::{ConnectorIntent, Connectors};
 use crate::control::{Control, EffectOutput, Preparation};
 use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent};
 use crate::egress::{Egress, EgressIntent};
+use crate::evidence_store::PrimaryEvidence;
 use crate::runtime_root::RuntimeRoot;
 use crate::tool::{ToolIntent, Tools};
 use serde::{Deserialize, Serialize};
@@ -128,11 +129,12 @@ impl Drop for Starting<'_> {
 
 impl GovernedControl {
     /// Build the production control: `root` is the owned runtime directory,
-    /// `vault` where credentials come from, `evidence` the audit sink.
+    /// `vault` where credentials come from, `evidence` the evidence of
+    /// record (the Phase Three evidence store, with its projections).
     pub fn new(
         root: &Path,
         vault: Vault,
-        evidence: Arc<dyn EvidenceSink>,
+        evidence: Arc<PrimaryEvidence>,
         clock: Arc<dyn Clock>,
     ) -> Result<Self, AuthorityError> {
         Self::with_secrets(root, vault.source(), evidence, clock)
@@ -332,9 +334,19 @@ impl GovernedControl {
     /// commitment ended, the policy generation moved, the agent display
     /// stopped; no new run until the owner resumes natively.
     pub fn emergency_stop(&self) -> usize {
-        let cancelled = self.control.emergency_stop();
+        self.stop_for(None)
+    }
+
+    /// An emergency stop: every effect first, unconditionally (the display
+    /// stopped too), then the records, which may only become owed (EL-1
+    /// §6).
+    fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        let stopped = self.control.stop_effects(reason);
+        let cancelled = stopped.cancelled;
+        let display = self.display.stop();
+        self.authority().write_stop_records(stopped);
         // Recorded, as every display stop is.
-        self.stop_display();
+        self.record_display_stop(display);
         cancelled
     }
 
@@ -449,7 +461,7 @@ impl GovernedControl {
                     }
                     _ => "the start failed",
                 };
-                let _ = self.authority().record_display(
+                self.authority().record_display_end(
                     EvidencePhase::DisplayStopped,
                     vec![("outcome".into(), outcome.into())],
                 );
@@ -475,8 +487,14 @@ impl GovernedControl {
     /// Stop the agent display (recorded if one ran). A stop always counts:
     /// a start in progress ends unused, even when no display runs yet.
     pub fn stop_display(&self) {
-        if let Some(status) = self.display.stop() {
-            let _ = self.authority().record_display(
+        let display = self.display.stop();
+        self.record_display_stop(display);
+    }
+
+    /// The record of a display stop that has taken effect.
+    fn record_display_stop(&self, stopped: Option<DisplayStatus>) {
+        if let Some(status) = stopped {
+            self.authority().record_display_end(
                 EvidencePhase::DisplayStopped,
                 vec![("display".into(), status.number.to_string())],
             );

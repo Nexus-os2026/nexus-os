@@ -22,9 +22,9 @@ use std::time::Duration;
 fn control() -> (GovernedControl, Arc<MemoryEvidence>, TempRoot) {
     let root = temp_root("front-door");
     let evidence = Arc::new(MemoryEvidence::new(10_000));
-    let control = GovernedControl::new(
+    let control = GovernedControl::with_secrets(
         root.0.path(),
-        Vault::Disabled,
+        Vault::Disabled.source(),
         evidence.clone(),
         Arc::new(SystemClock::default()),
     )
@@ -719,14 +719,14 @@ fn a_display_start_counts_until_its_end_is_recorded() {
         starting: Mutex<Vec<bool>>,
     }
     impl EvidenceSink for Watch {
-        fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+        fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
             if record.phase == EvidencePhase::DisplayStopped {
                 if let Some(control) = self.control.get().and_then(Weak::upgrade) {
                     let starting = control.is_starting_display();
                     self.starting.lock().unwrap().push(starting);
                 }
             }
-            Ok(())
+            Ok(0)
         }
     }
     let root = temp_root("display-start-count");
@@ -735,9 +735,9 @@ fn a_display_start_counts_until_its_end_is_recorded() {
         starting: Mutex::new(Vec::new()),
     });
     let control = Arc::new(
-        GovernedControl::new(
+        GovernedControl::with_secrets(
             root.0.path(),
-            Vault::Disabled,
+            Vault::Disabled.source(),
             watch.clone(),
             Arc::new(SystemClock::default()),
         )
@@ -832,9 +832,9 @@ fn a_display_start_is_recorded_with_no_lock_held_and_a_stop_overtakes_it() {
     let root = temp_root("display-start-lock");
     let sink = ScriptedSink::new();
     let control = Arc::new(
-        GovernedControl::new(
+        GovernedControl::with_secrets(
             root.0.path(),
-            Vault::Disabled,
+            Vault::Disabled.source(),
             sink.clone(),
             Arc::new(SystemClock::default()),
         )

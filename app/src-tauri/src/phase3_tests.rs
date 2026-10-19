@@ -4622,13 +4622,16 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::commitment::CommitmentView",
     "nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL",
     "nexus_governed_control::authority::evidence::DIALOG_COLUMNS",
+    // Re-pinned (P3-C11-M5 N3, EL-1 §6, §8): the evidence store, its
+    // projections and its statuses; no sink of the desktop's own.
+    "nexus_governed_control::authority::evidence::EndStatus",
+    "nexus_governed_control::authority::evidence::EndStatus::Recorded",
+    "nexus_governed_control::authority::evidence::EvidenceProjection",
     "nexus_governed_control::authority::evidence::EvidenceRecord",
     "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
-    "nexus_governed_control::authority::evidence::EvidenceSink",
-    "nexus_governed_control::authority::evidence::EvidenceUnavailable",
+    "nexus_governed_control::authority::evidence::ExecutionEvidence",
     "nexus_governed_control::authority::evidence::MemoryEvidence",
     "nexus_governed_control::authority::evidence::MemoryEvidence::new",
-    "nexus_governed_control::authority::evidence::TeeEvidence",
     "nexus_governed_control::authority::ids::AgentId",
     "nexus_governed_control::authority::ids::AgentId::new",
     "nexus_governed_control::authority::ids::CommitmentId",
@@ -4642,6 +4645,8 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::broker::Vault",
     "nexus_governed_control::broker::Vault::Kernel",
     "nexus_governed_control::control::EffectOutput",
+    "nexus_governed_control::evidence_store::PrimaryEvidence",
+    "nexus_governed_control::evidence_store::PrimaryEvidence::open",
     "nexus_governed_control::governed::AgentOutcome",
     "nexus_governed_control::governed::AgentOutcome::AwaitingApproval",
     "nexus_governed_control::governed::AgentOutcome::Done",
@@ -7446,7 +7451,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 21] = [
+const STOP_ROUTINES: [(&str, &str, &str); 23] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "agent_stopped",
@@ -7535,12 +7540,25 @@ const STOP_ROUTINES: [(&str, &str, &str); 21] = [
     (
         "crates/nexus-governed-control/src/governed.rs",
         "GovernedControl::stop_display",
-        "ifletSome(status)=self.display.stop(){let_=self.authority().record_display(EvidencePhase::DisplayStopped,vec![(\"display\".into(),status.number.to_string())]);}",
+        // Re-pinned (P3-C11-M5 N3, EL-1 §6): the stop, then its end record.
+        "letdisplay=self.display.stop();self.record_display_stop(display);",
+    ),
+    (
+        "crates/nexus-governed-control/src/governed.rs",
+        "GovernedControl::record_display_stop",
+        "ifletSome(status)=stopped{self.authority().record_display_end(EvidencePhase::DisplayStopped,vec![(\"display\".into(),status.number.to_string())]);}",
     ),
     (
         "crates/nexus-governed-control/src/governed.rs",
         "GovernedControl::emergency_stop",
-        "letcancelled=self.control.emergency_stop();self.stop_display();cancelled",
+        // Re-pinned (P3-C11-M5 N3, EL-1 §6): through `stop_for`.
+        "self.stop_for(None)",
+    ),
+    (
+        "crates/nexus-governed-control/src/governed.rs",
+        "GovernedControl::stop_for",
+        // Every effect (the display stopped too) before any record.
+        "letstopped=self.control.stop_effects(reason);letcancelled=stopped.cancelled;letdisplay=self.display.stop();self.authority().write_stop_records(stopped);self.record_display_stop(display);cancelled",
     ),
     (
         "crates/nexus-governed-control/src/governed.rs",
@@ -9554,4 +9572,207 @@ fn p3_el1_n2_the_evidence_store_is_the_one_sqlite_file() {
         .collect();
     assert_eq!(naming, ["evidence_store.rs"]);
     assert!(forbidden(production_source(STORE)).is_empty(), "{STORE}");
+}
+
+/// The functions whose result is a record's result (P3-C11-M5, EL-1 §6).
+const RECORDING: [&str; 7] = [
+    "record",
+    "record_end",
+    "record_display",
+    "record_display_end",
+    "flush",
+    "write_ends",
+    "finish",
+];
+
+/// Every discard of a record's result in production `text` (comments and
+/// test-only items left out, literals masked, whitespace removed): a
+/// `let _ =`, an `.ok()` or a `drop(..)` of an expression that calls a
+/// recording function, and a gating `record(..)` call left as a statement
+/// of its own (its result unused). An end record's status may stand alone
+/// (`self.record_end(..);`): the store keeps what it could not write.
+fn record_discards(text: &str) -> Vec<String> {
+    let code = compact(&String::from_utf8_lossy(&masked(&production_text(text))));
+    let b = code.as_bytes();
+    let calls = |span: &str| {
+        RECORDING.iter().any(|name| {
+            [format!(".{name}("), format!("::{name}(")]
+                .iter()
+                .any(|call| span.contains(call.as_str()))
+        })
+    };
+    // The statement around `at`: from after the previous `;`, `{` or `}` to
+    // the next `;` at the same depth.
+    let statement = |at: usize| -> (usize, usize) {
+        let start = code[..at].rfind([';', '{', '}']).map_or(0, |i| i + 1);
+        let mut depth = 0i32;
+        let mut end = at;
+        while end < b.len() {
+            match b[end] {
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                b';' if depth <= 0 => break,
+                _ => {}
+            }
+            end += 1;
+        }
+        (start, end)
+    };
+    let mut found = Vec::new();
+    for (at, _) in code.match_indices("let_=") {
+        let (start, end) = statement(at);
+        if calls(&code[at..end]) {
+            found.push(code[start..end].to_string());
+        }
+    }
+    for (at, _) in code.match_indices(".ok()") {
+        let (start, end) = statement(at);
+        if calls(&code[start..at]) {
+            found.push(code[start..end].to_string());
+        }
+    }
+    for (at, _) in code.match_indices("drop(") {
+        if at > 0 && is_ident_byte(b[at - 1]) {
+            continue;
+        }
+        let (_, end) = statement(at);
+        if calls(&code[at..end]) {
+            found.push(code[at..end].to_string());
+        }
+    }
+    for (at, _) in code.match_indices(".record(") {
+        let (start, end) = statement(at);
+        // The call's closing parenthesis ends the statement.
+        let mut depth = 0i32;
+        let mut close = at + ".record".len();
+        while close < end {
+            match b[close] {
+                b'(' => depth += 1,
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            close += 1;
+        }
+        let rest = &code[close + 1..end];
+        let head = &code[start..at];
+        if rest.is_empty()
+            && !head.starts_with("let")
+            && !head.starts_with("return")
+            && !head.contains('=')
+            && end < b.len()
+            && b[end] == b';'
+        {
+            found.push(code[start..end].to_string());
+        }
+    }
+    found
+}
+
+/// P3-C11-M5 N3 (contract EL-1 §6, XA-R1-01): no production code of the
+/// governed-control crate or of the desktop's front door discards a
+/// record's result. The scan is proven on planted controls first.
+#[test]
+fn p3_el1_n3_no_record_result_is_discarded() {
+    for planted in [
+        "fn f() { let _ = self.record(&r); }",
+        "fn f() { let _ = self.authority().record_display(EvidencePhase::DisplayStopped, vec![]); }",
+        "fn f() { let _ = self.flush(deferred); }",
+        "fn f() { self.evidence.record(&r).ok(); }",
+        "fn f() { drop(self.record(&r)); }",
+        "fn f() { self.evidence.record(&r); }",
+        "fn f() { let _ = guard.finish(outcome); }",
+    ] {
+        assert_eq!(record_discards(planted).len(), 1, "not found: {planted}");
+    }
+    for kept in [
+        "fn f() -> R { self.record(&r)?; Ok(()) }",
+        "fn f() { self.record_end(&r); }",
+        "fn f() { let _ = sender.send(x); }",
+        "fn f() { let seq = self.evidence.record(&r); g(seq) }",
+        "fn f() { if self.record(&r).is_err() { self.runs.cancel(run); } }",
+        "// let _ = self.record(&r);\nfn f() {}",
+        "#[cfg(test)]\nfn t() { let _ = self.record(&r); }\nfn f() {}",
+    ] {
+        assert!(record_discards(kept).is_empty(), "flagged: {kept}");
+    }
+    let mut discarding: Vec<(String, Vec<String>)> = workspace_sources()
+        .iter()
+        .filter(|(path, _)| path.starts_with(P3_CRATE) || path == P3_FRONT_DOOR)
+        .map(|(path, text)| (path.clone(), record_discards(text)))
+        .filter(|(_, found)| !found.is_empty())
+        .collect();
+    discarding.sort();
+    assert!(discarding.is_empty(), "{discarding:#?}");
+}
+
+/// P3-C11-M5 N3 (contract EL-1 §6): `RealWorld::setup` (through
+/// `setup_in`, with the state directory the kernel resolves) is the one
+/// production construction of the evidence sink, and that sink is the
+/// evidence store: the one `PrimaryEvidence::open` and the one
+/// `GovernedControl::new` of the desktop's production code are in
+/// `setup_in`; no production code builds a `TeeEvidence` or implements
+/// `EvidenceSink` outside the crate; the audit trail and the recent history
+/// are projections; `GovernedControl::new` takes the store.
+#[test]
+fn p3_el1_n3_the_evidence_store_is_the_one_production_sink() {
+    let count = |needle: &str| -> Vec<(String, usize)> {
+        workspace_sources()
+            .iter()
+            .map(|(path, text)| (path.clone(), compact(text).matches(needle).count()))
+            .filter(|(_, n)| *n > 0)
+            .collect()
+    };
+    assert_eq!(
+        count("PrimaryEvidence::open("),
+        [(P3_FRONT_DOOR.to_string(), 1)]
+    );
+    assert_eq!(
+        count("GovernedControl::new("),
+        [(P3_FRONT_DOOR.to_string(), 1)]
+    );
+    assert!(count("TeeEvidence(")
+        .iter()
+        .all(|(path, _)| path.starts_with(P3_CRATE)));
+    assert!(count("TeeEvidence(vec!").is_empty());
+    let front = production_source(P3_FRONT_DOOR);
+    let setup_in = compact(one_fn(front, "RealWorld::setup_in").body_text(front));
+    assert_in_order(
+        &setup_in,
+        &[
+            "letrecent=Arc::new(MemoryEvidence::new(512));",
+            "letevidence=PrimaryEvidence::open(&evidence_path(&state),vec![Arc::new(AuditEvidence{audit,db}),recent.clone()])",
+            "GovernedControl::new(&root,Vault::Kernel,evidence.clone(),",
+        ],
+        "RealWorld::setup_in",
+    );
+    assert_eq!(
+        compact(one_fn(front, "RealWorld::setup").body_text(front)),
+        "letstate=nexus_state_dir().map_err(|e|format!(\"governed control: {e}\"))?;Self::setup_in(state,audit,db)"
+    );
+    assert_eq!(
+        compact(one_fn(front, "evidence_path").body_text(front)),
+        "state.join(\"p3-evidence\").join(\"evidence.sqlite3\")"
+    );
+    assert!(workspace_file(P3_FRONT_DOOR)
+        .contains("state.join(\"p3-evidence\").join(\"evidence.sqlite3\")"));
+    for (path, text) in workspace_sources() {
+        if path.starts_with(P3_CRATE) {
+            continue;
+        }
+        assert!(
+            !compact(text).contains("implEvidenceSinkfor"),
+            "{path} implements EvidenceSink"
+        );
+    }
+    let governed = compact(production_source(
+        "crates/nexus-governed-control/src/governed.rs",
+    ));
+    assert!(governed.contains(
+        "pubfnnew(root:&Path,vault:Vault,evidence:Arc<PrimaryEvidence>,clock:Arc<dynClock>)->Result<Self,AuthorityError>{"
+    ));
 }

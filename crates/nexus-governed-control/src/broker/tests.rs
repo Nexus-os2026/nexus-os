@@ -848,7 +848,7 @@ fn a_run_cancelled_while_the_release_is_recorded_reads_no_secret() {
     );
     assert_eq!(reads, 0, "the vault was not read");
     assert_eq!(between, Some(super::LeaseState::Ended));
-    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(result.unwrap_err().cause(), &AuthorityError::RunCancelled);
 }
 
 /// T1b: a run that finished while the release is recorded: the same.
@@ -871,7 +871,7 @@ fn a_run_finished_while_the_release_is_recorded_reads_no_secret() {
     );
     assert_eq!(reads, 0, "the vault was not read");
     assert_eq!(between, Some(super::LeaseState::Ended));
-    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(result.unwrap_err().cause(), &AuthorityError::RunCancelled);
 }
 
 /// T2: an emergency stop while the release is recorded: nothing is read,
@@ -895,7 +895,7 @@ fn an_emergency_stop_while_the_release_is_recorded_reads_no_secret() {
     );
     assert_eq!(reads, 0, "the vault was not read");
     assert_eq!(between, Some(super::LeaseState::Ended));
-    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(result.unwrap_err().cause(), &AuthorityError::RunCancelled);
 }
 
 /// T3: a lease whose deadline passes while its release is recorded is
@@ -926,8 +926,8 @@ fn a_lease_that_expires_while_its_release_is_recorded_reads_no_secret() {
     assert_eq!(vault.0.load(Ordering::SeqCst), 0, "the vault was not read");
     assert_eq!(seen.between, Some(super::LeaseState::Ended));
     assert_eq!(
-        result.unwrap_err(),
-        AuthorityError::Unavailable("the effect failed")
+        result.unwrap_err().cause(),
+        &AuthorityError::Unavailable("the effect failed")
     );
 }
 
@@ -967,7 +967,7 @@ fn a_run_cancelled_while_the_vault_is_read_gets_no_header() {
     );
     assert_eq!(vault.reads.load(Ordering::SeqCst), 1, "one read, no more");
     assert_eq!(seen.between, Some(super::LeaseState::Ended));
-    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(result.unwrap_err().cause(), &AuthorityError::RunCancelled);
 }
 
 /// T5: a sink that, while the release is recorded, re-enters the authority
@@ -1021,7 +1021,7 @@ fn a_sink_reentering_the_authority_and_the_broker_during_the_release_does_not_de
         seen.lock().unwrap().releases.first(),
         Some(&Err(AuthorityError::RunCancelled))
     );
-    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(result.unwrap_err().cause(), &AuthorityError::RunCancelled);
     assert_eq!(
         *live_then.lock().unwrap(),
         Some(false),

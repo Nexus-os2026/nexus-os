@@ -1437,8 +1437,11 @@ fn an_interrupted_drag_drops_back_where_it_was_picked_up() {
         seen
     });
     assert_eq!(
-        h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
-        AuthorityError::Unavailable("the effect failed")
+        h.control
+            .execute(view.id, &h.agent, h.run)
+            .unwrap_err()
+            .cause(),
+        &AuthorityError::Unavailable("the effect failed")
     );
     assert_eq!(
         watcher.join().unwrap(),

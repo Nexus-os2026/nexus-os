@@ -395,8 +395,8 @@ fn cancelling_the_run_drops_an_exchange_in_flight() {
     std::thread::sleep(Duration::from_millis(200));
     h.control.cancel_run(h.run).unwrap();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::RunCancelled
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::RunCancelled
     );
     assert!(
         started.elapsed() < Duration::from_secs(2),
@@ -791,8 +791,11 @@ fn a_run_cancelled_while_its_credential_is_released_sends_nothing() {
         .authorize(view.id, &h.agent, h.run, &Yes::new(true))
         .unwrap();
     assert_eq!(
-        h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
-        AuthorityError::RunCancelled
+        h.control
+            .execute(view.id, &h.agent, h.run)
+            .unwrap_err()
+            .cause(),
+        &AuthorityError::RunCancelled
     );
     assert_eq!(release.released.load(Ordering::SeqCst), 1);
     assert_eq!(transport.0.load(Ordering::SeqCst), 0, "nothing was sent");

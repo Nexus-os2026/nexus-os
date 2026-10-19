@@ -24,12 +24,15 @@
 //! interrupted. A record that fails withdraws the reservation: nothing
 //! takes effect. A transition that ends a commitment takes effect under the
 //! lock at once; its evidence and lease ends follow once the lock is
-//! released.
+//! released. Evidence-first records are gating records: refused, the
+//! transition does not happen. The records of transitions that have taken
+//! effect are end records (EL-1 §6): written, owed or uncertain, never a
+//! reason to undo what happened.
 
 use super::approval::{ActionConfirmation, ControlConfirmer, R2Approval};
 use super::clock::Clock;
 use super::effect::{CapabilityKind, EffectClass};
-use super::evidence::{bounded, is_plain, EvidencePhase, EvidenceRecord, EvidenceSink};
+use super::evidence::{bounded, is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
 use super::ids::{AgentId, CommitmentId, Digest, GrantId, LeaseId, RunId};
 use super::policy::{GrantStore, PolicyGeneration};
 use super::run::{CancelToken, RunRegistry};
@@ -267,6 +270,9 @@ struct Deferred {
     leases: Vec<LeaseId>,
 }
 
+/// End records of transitions that have taken effect, not yet written.
+pub(crate) struct Unwritten(Vec<EvidenceRecord>);
+
 /// Ends credential leases when their commitment ends (the broker).
 pub trait LeaseEnd: Send + Sync {
     fn end(&self, lease: LeaseId);
@@ -295,8 +301,9 @@ pub struct CommitmentRegistry(Arc<Inner>);
 
 /// The longest a commitment may wait to start.
 pub const MAX_COMMITMENT_TTL: Duration = Duration::from_secs(15 * 60);
-/// Most commitments kept (finished ones are pruned first).
-const CAPACITY: usize = 4096;
+/// Most commitments kept (finished ones are pruned first): no more can be
+/// live at once.
+pub(crate) const CAPACITY: usize = 4096;
 
 fn binding_of(
     id: CommitmentId,
@@ -398,8 +405,10 @@ impl CommitmentRegistry {
         }
     }
 
-    /// Write one record. Never called with a lock held.
-    fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
+    /// Write one gating record (evidence first: what it permits happens
+    /// only once it is written); returns its sequence number. Never called
+    /// with a lock held.
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, AuthorityError> {
         self.0
             .evidence
             .record(record)
@@ -408,14 +417,23 @@ impl CommitmentRegistry {
 
     /// Pay what transitions made under the lock owe, once it is released:
     /// the credential leases end first (whatever the sink does), then the
-    /// records are written.
-    fn flush(&self, deferred: Deferred) {
+    /// records are written as end records: the transitions have taken
+    /// effect (ends, which fail closed), so a record that cannot be written
+    /// now is owed or uncertain (the store keeps it, and refuses what comes
+    /// next until it is written), never a reason to undo them. Returns what
+    /// became of the last record.
+    fn flush(&self, deferred: Deferred) -> Option<EndStatus> {
         self.end_leases(&deferred.leases);
-        for record in &deferred.records {
-            // The transition has taken effect (an end, which fails closed):
-            // a record that cannot be written does not undo it.
-            let _ = self.record(record);
+        self.write_ends(Unwritten(deferred.records))
+    }
+
+    /// Write the end records of transitions that have taken effect.
+    pub(crate) fn write_ends(&self, records: Unwritten) -> Option<EndStatus> {
+        let mut last = None;
+        for record in &records.0 {
+            last = Some(self.0.evidence.record_end(record));
         }
+        last
     }
 
     fn base_record(
@@ -959,7 +977,7 @@ impl CommitmentRegistry {
             token,
         };
         let started_wall_ms = now.wall_ms;
-        self.record(&record)?;
+        let start = self.record(&record)?;
         let cancel = self.complete(
             id,
             token,
@@ -976,6 +994,7 @@ impl CommitmentRegistry {
             registry: self.clone(),
             cancel,
             started_wall_ms,
+            start,
             finished: false,
         })
     }
@@ -1027,16 +1046,24 @@ impl CommitmentRegistry {
         Ok((token, record))
     }
 
-    fn finish(&self, id: CommitmentId, started_wall_ms: u64, outcome: Outcome, cancelled: bool) {
+    fn finish(
+        &self,
+        id: CommitmentId,
+        started_wall_ms: u64,
+        outcome: Outcome,
+        cancelled: bool,
+    ) -> EndStatus {
         let mut deferred = Deferred::default();
         let now = self.now();
         {
             let mut entries = self.entries();
+            // An executing entry is never pruned, and only this ends it: a
+            // missing one cannot be claimed recorded.
             let Some(entry) = entries.get_mut(&id) else {
-                return;
+                return EndStatus::Uncertain;
             };
             if entry.state != CommitmentState::Executing {
-                return;
+                return EndStatus::Uncertain;
             }
             // The outcome is what happened: an effect that completed while
             // its run was being cancelled is recorded as completed, with the
@@ -1082,8 +1109,9 @@ impl CommitmentRegistry {
             );
         }
         // A failure to record the end of an effect that already happened
-        // cannot undo it; the start record stands either way.
-        self.flush(deferred);
+        // cannot undo it; the start record stands either way, and the end
+        // record is owed or uncertain.
+        self.flush(deferred).unwrap_or(EndStatus::Uncertain)
     }
 
     /// End a commitment that could not start: its target could not be
@@ -1209,8 +1237,10 @@ impl CommitmentRegistry {
         self.flush(deferred);
     }
 
-    /// End every unconsumed commitment (emergency stop).
-    pub(crate) fn revoke_all(&self) {
+    /// End every unconsumed commitment (emergency stop) and their leases,
+    /// at once; their records are returned to be written after the rest of
+    /// the stop has taken effect.
+    pub(crate) fn revoke_all(&self) -> Unwritten {
         let mut deferred = Deferred::default();
         let now = self.now();
         {
@@ -1231,7 +1261,8 @@ impl CommitmentRegistry {
                 }
             }
         }
-        self.flush(deferred);
+        self.end_leases(&deferred.leases);
+        Unwritten(deferred.records)
     }
 
     /// End every unconsumed commitment that can no longer start (it expired,
@@ -1339,6 +1370,8 @@ pub struct ExecutionGuard {
     registry: CommitmentRegistry,
     cancel: CancelToken,
     started_wall_ms: u64,
+    /// The sequence number of its start record.
+    start: u64,
     finished: bool,
 }
 
@@ -1351,6 +1384,11 @@ impl std::fmt::Debug for ExecutionGuard {
 impl ExecutionGuard {
     pub fn commitment(&self) -> CommitmentId {
         self.id
+    }
+
+    /// The sequence number of the start record (written before it began).
+    pub fn start_seq(&self) -> u64 {
+        self.start
     }
 
     pub fn cancel_token(&self) -> &CancelToken {
@@ -1382,18 +1420,21 @@ impl ExecutionGuard {
     }
 
     /// End the commitment with `outcome`. Whether the run was cancelled
-    /// during the effect is recorded beside the outcome.
-    pub fn finish(mut self, outcome: Outcome) {
+    /// during the effect is recorded beside the outcome. Returns what became
+    /// of its end record (EL-1 §8).
+    pub fn finish(mut self, outcome: Outcome) -> EndStatus {
         self.finished = true;
         let cancelled = self.cancel.is_cancelled();
         self.registry
-            .finish(self.id, self.started_wall_ms, outcome, cancelled);
+            .finish(self.id, self.started_wall_ms, outcome, cancelled)
     }
 }
 
 impl Drop for ExecutionGuard {
     fn drop(&mut self) {
         if !self.finished {
+            // No caller is left to report to: the store keeps the end
+            // record owed, or latched, and the interface shows it.
             self.registry.finish(
                 self.id,
                 self.started_wall_ms,

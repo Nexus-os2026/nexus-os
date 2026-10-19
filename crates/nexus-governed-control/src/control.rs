@@ -18,9 +18,10 @@ use crate::authority::approval::ControlConfirmer;
 use crate::authority::commitment::{
     CommitmentView, ExecutionGuard, FailureClass, Outcome, PreparedAction,
 };
+use crate::authority::evidence::ExecutionEvidence;
 use crate::authority::ids::{AgentId, CommitmentId, Digest, RunId};
 use crate::authority::run::RunClass;
-use crate::authority::{Authority, AuthorityError};
+use crate::authority::{Authority, AuthorityError, Stopped};
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -34,6 +35,9 @@ pub struct EffectOutput {
     pub bytes: Option<Vec<u8>>,
     /// Bounded, redacted metadata (also recorded as evidence).
     pub meta: Vec<(String, String)>,
+    /// The effect's evidence: its start record, and what became of its end
+    /// record (EL-1 §8). Set by the pipeline when the effect has ended.
+    pub evidence: Option<ExecutionEvidence>,
 }
 
 /// An effect prepared by a domain actuator, waiting for its commitment.
@@ -325,29 +329,36 @@ impl Control {
                 return Err(error);
             }
         };
+        let start = guard.start_seq();
         match effect.execute(&guard) {
-            Ok(output) => {
+            Ok(mut output) => {
                 // It happened; a cancellation requested meanwhile is
-                // recorded beside the outcome.
+                // recorded beside the outcome. Its result says what became
+                // of its end record: a completed effect whose end is owed or
+                // uncertain is reported so, never as plain success.
                 let meta = output.meta.clone();
-                guard.finish(Outcome::Succeeded { meta });
+                let end = guard.finish(Outcome::Succeeded { meta });
+                output.evidence = Some(ExecutionEvidence { start, end });
                 Ok(output)
             }
             Err((class, detail)) => {
                 let cancelled = guard.is_cancelled();
                 // A cancelled effect keeps what its actuator said: how far
                 // it got.
-                guard.finish(if cancelled {
+                let end = guard.finish(if cancelled {
                     Outcome::Cancelled {
                         detail: Some(detail),
                     }
                 } else {
                     Outcome::Failed { class, detail }
                 });
-                Err(if cancelled {
-                    AuthorityError::RunCancelled
-                } else {
-                    AuthorityError::Unavailable("the effect failed")
+                Err(AuthorityError::Ended {
+                    cause: Box::new(if cancelled {
+                        AuthorityError::RunCancelled
+                    } else {
+                        AuthorityError::Unavailable("the effect failed")
+                    }),
+                    evidence: ExecutionEvidence { start, end },
                 })
             }
         }
@@ -375,12 +386,24 @@ impl Control {
         result
     }
 
-    /// The owner's emergency stop.
+    /// The owner's emergency stop, its records written at once (tests; the
+    /// front door also stops the agent display before any record).
+    #[cfg(test)]
     pub(crate) fn emergency_stop(&self) -> usize {
-        let cancelled = self.authority.emergency_stop();
+        let stopped = self.stop_effects(None);
+        let cancelled = stopped.cancelled;
+        self.authority.write_stop_records(stopped);
+        cancelled
+    }
+
+    /// The effects of an emergency stop, its records not yet written: every
+    /// run cancelled, every unconsumed commitment ended, the generation
+    /// moved, every pending effect dropped.
+    pub(crate) fn stop_effects(&self, reason: Option<&'static str>) -> Stopped {
+        let stopped = self.authority.stop_effects(reason);
         let dropped = self.pending().take_unless(|_, _| false);
         drop(dropped);
-        cancelled
+        stopped
     }
 
     /// A run is done: nothing more can be proposed for it, and what it left

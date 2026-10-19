@@ -445,11 +445,14 @@ mod launch {
                 text: Some(String::from_utf8_lossy(&out).into_owned()),
                 bytes: None,
                 meta,
+                // Set by the pipeline once the effect has ended.
+                evidence: None,
             },
             ToolOutput::Bytes => EffectOutput {
                 text: None,
                 bytes: Some(out),
                 meta,
+                evidence: None,
             },
         })
     }

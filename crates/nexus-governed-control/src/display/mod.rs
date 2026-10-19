@@ -1134,6 +1134,8 @@ impl PendingEffect for Observe {
                 ("sha256".into(), digest.to_hex()),
                 ("format".into(), "png".into()),
             ],
+            // Set by the pipeline once the effect has ended.
+            evidence: None,
         })
     }
 }
@@ -1439,6 +1441,8 @@ impl PendingEffect for Input {
                 ),
                 ("observation".into(), self.observation.clone()),
             ],
+            // Set by the pipeline once the effect has ended.
+            evidence: None,
         })
     }
 }

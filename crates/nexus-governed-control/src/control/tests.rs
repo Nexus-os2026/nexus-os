@@ -289,8 +289,8 @@ fn cancelling_during_a_bounded_effect_stops_it_and_reports_cancellation() {
     std::thread::sleep(Duration::from_millis(30));
     f.control.cancel_run(f.run).unwrap();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::RunCancelled
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::RunCancelled
     );
     assert_eq!(f.state(id), CommitmentState::Cancelled);
 }

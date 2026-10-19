@@ -26,14 +26,27 @@
 //!   process appends, reads and qualifies nothing through it. Availability is
 //!   the cost; nothing falls back.
 //!
+//! - [`PrimaryEvidence`] is the production sink (§6): the store's result
+//!   decides; the audit trail and the recent history are projections,
+//!   written only after the store committed. A gating record (written
+//!   before the action it permits) first writes every owed record, in
+//!   order, and is refused while one is still owed or the store is latched.
+//!   An end record (a transition that has already taken effect) never fails
+//!   and never waits for the owner: written, owed (kept, bounded, with its
+//!   original content), or uncertain (latched).
+//!
 //! The tag is a SHA-256 chain over each row's fields, not a MAC: a writer
 //! running as the same OS user is outside the threat model (EL-1 §9), and
 //! tail truncation by such a writer is not detected (no external anchor).
 
+use crate::authority::evidence::{
+    EndStatus, EvidenceProjection, EvidenceRecord, EvidenceSink, EvidenceUnavailable,
+};
 use rusqlite::{params, Connection, ErrorCode, OpenFlags};
 use sha2::{Digest as _, Sha256};
+use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// The format the identity row names.
 pub(crate) const FORMAT: &str = "p3-evidence/1";
@@ -194,6 +207,35 @@ pub(crate) struct Row {
     pub(crate) tag: String,
 }
 
+/// The most records owed at once: at least the commitments that can be live
+/// at once (each ends with one record), twice over for the runs, grants and
+/// stops recorded beside them. One more latches the store.
+pub(crate) const OWED_CAPACITY: usize = 2 * crate::authority::commitment::CAPACITY;
+
+/// A record owed: its original content, written late.
+struct Owed {
+    record: EvidenceRecord,
+    phase: &'static str,
+    commitment: Option<String>,
+    body: String,
+}
+
+impl Owed {
+    fn of(record: &EvidenceRecord) -> Self {
+        Self {
+            record: record.clone(),
+            phase: record.phase.as_str(),
+            commitment: record.commitment.clone(),
+            body: body_of(record),
+        }
+    }
+}
+
+/// A record's body: its canonical JSON (`to_json`, keys in order).
+pub(crate) fn body_of(record: &EvidenceRecord) -> String {
+    record.to_json().to_string()
+}
+
 /// A fault the tests plant at COMMIT.
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,8 +253,13 @@ struct Inner {
     last_seq: u64,
     last_tag: String,
     latched: bool,
+    /// End records not yet written, in order.
+    owed: VecDeque<Owed>,
     #[cfg(test)]
     fault: Option<Fault>,
+    /// Every insert fails before COMMIT (a full disk), until cleared.
+    #[cfg(test)]
+    refusing: bool,
 }
 
 /// The evidence store: one file, one connection.
@@ -563,8 +610,11 @@ impl EvidenceStore {
                 last_seq,
                 last_tag,
                 latched: false,
+                owed: VecDeque::new(),
                 #[cfg(test)]
                 fault: None,
+                #[cfg(test)]
+                refusing: false,
             }),
         })
     }
@@ -582,14 +632,149 @@ impl EvidenceStore {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn is_latched(&self) -> bool {
         self.inner().latched
     }
 
-    /// Append one row (§5): `body` is the record's canonical JSON.
+    /// Append one row (§5): `body` is the record's canonical JSON (tests;
+    /// production appends through `gate` and `end`).
+    #[cfg(test)]
     pub(crate) fn append(&self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
         let mut inner = self.inner();
         inner.append(phase, commitment, body)
+    }
+
+    /// A gating record (§6): every owed record first, in order; refused
+    /// while one is still owed or the store is latched. Returns what it
+    /// came to and every record written (for the projections).
+    pub(crate) fn gate(
+        &self,
+        record: &EvidenceRecord,
+    ) -> (Result<u64, EvidenceUnavailable>, Vec<EvidenceRecord>) {
+        let mut inner = self.inner();
+        let mut written = Vec::new();
+        if inner.latched || !inner.pay_owed(&mut written) {
+            return (Err(EvidenceUnavailable), written);
+        }
+        let owed = Owed::of(record);
+        match inner.append(owed.phase, owed.commitment.as_deref(), &owed.body) {
+            Append::Committed { seq } | Append::AlreadyPresent { seq } => {
+                written.push(owed.record);
+                (Ok(seq), written)
+            }
+            // Not written: the action it permits does not happen (nothing
+            // is owed for it).
+            _ => (Err(EvidenceUnavailable), written),
+        }
+    }
+
+    /// An end record (§6): never fails. Every owed record first, in order;
+    /// then this one: written, owed, or uncertain.
+    pub(crate) fn end(&self, record: &EvidenceRecord) -> (EndStatus, Vec<EvidenceRecord>) {
+        let mut inner = self.inner();
+        let mut written = Vec::new();
+        let owed = Owed::of(record);
+        if inner.latched || !inner.pay_owed(&mut written) {
+            return (inner.owe(owed), written);
+        }
+        match inner.append(owed.phase, owed.commitment.as_deref(), &owed.body) {
+            Append::Committed { seq } | Append::AlreadyPresent { seq } => {
+                written.push(owed.record);
+                (EndStatus::Recorded { seq }, written)
+            }
+            Append::NotCommitted => (inner.owe(owed), written),
+            // Latched.
+            Append::Uncertain | Append::Conflict | Append::Latched => {
+                (EndStatus::Uncertain, written)
+            }
+        }
+    }
+
+    /// What the interface shows (EL-1 §8).
+    pub(crate) fn health(&self) -> EvidenceHealth {
+        let inner = self.inner();
+        EvidenceHealth {
+            latched: inner.latched,
+            owed: inner.owed.len(),
+            recovery_required: false,
+            unsettled: 0,
+            unclean_sessions: 0,
+        }
+    }
+}
+
+/// What the interface shows about the evidence store (EL-1 §8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EvidenceHealth {
+    /// The store latched in this process: nothing is admitted until restart.
+    pub latched: bool,
+    /// End records not yet written.
+    pub owed: usize,
+    /// An unsettled commitment has not been acknowledged (§7).
+    pub recovery_required: bool,
+    /// Unsettled statements in the store.
+    pub unsettled: usize,
+    /// Unclean-session statements in the store.
+    pub unclean_sessions: usize,
+}
+
+/// The production evidence sink (EL-1 §6): the store's result decides; the
+/// projections (the audit trail, the interface's recent history) are
+/// written only after it committed, best effort, and change nothing.
+pub struct PrimaryEvidence {
+    store: EvidenceStore,
+    projections: Vec<Arc<dyn EvidenceProjection>>,
+}
+
+impl PrimaryEvidence {
+    /// Open and qualify the store at `path` (absolute; built by the desktop
+    /// from its own state directory, never from a caller's text). An
+    /// unqualified store is an error: nothing falls back.
+    pub fn open(
+        path: &Path,
+        projections: Vec<Arc<dyn EvidenceProjection>>,
+    ) -> Result<Arc<Self>, Unqualified> {
+        Ok(Arc::new(Self {
+            store: EvidenceStore::open(path)?,
+            projections,
+        }))
+    }
+
+    pub fn health(&self) -> EvidenceHealth {
+        self.store.health()
+    }
+
+    /// Copy what the store wrote, in order, outside its lock.
+    fn project(&self, written: &[EvidenceRecord]) {
+        for record in written {
+            for projection in &self.projections {
+                projection.project(record);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn store(&self) -> &EvidenceStore {
+        &self.store
+    }
+}
+
+impl EvidenceSink for PrimaryEvidence {
+    fn record(&self, record: &EvidenceRecord) -> Result<u64, EvidenceUnavailable> {
+        let (gated, written) = self.store.gate(record);
+        self.project(&written);
+        gated
+    }
+
+    fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
+        let (status, written) = self.store.end(record);
+        self.project(&written);
+        status
+    }
+
+    fn primary(&self) -> Option<&PrimaryEvidence> {
+        Some(self)
     }
 }
 
@@ -676,6 +861,35 @@ impl Inner {
         self.latched = true;
     }
 
+    /// Write every owed record, in order. False when one is still owed (it
+    /// was not committed, or the store latched).
+    fn pay_owed(&mut self, written: &mut Vec<EvidenceRecord>) -> bool {
+        while let Some(owed) = self.owed.front() {
+            let (phase, body) = (owed.phase, owed.body.clone());
+            let commitment = owed.commitment.clone();
+            match self.append(phase, commitment.as_deref(), &body) {
+                Append::Committed { .. } | Append::AlreadyPresent { .. } => {
+                    if let Some(paid) = self.owed.pop_front() {
+                        written.push(paid.record);
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    /// Keep an end record owed; one more than the list holds latches the
+    /// store, and that record is neither written nor kept: uncertain.
+    fn owe(&mut self, owed: Owed) -> EndStatus {
+        if self.owed.len() >= OWED_CAPACITY {
+            self.latch();
+            return EndStatus::Uncertain;
+        }
+        self.owed.push_back(owed);
+        EndStatus::Owed
+    }
+
     fn append(&mut self, phase: &str, commitment: Option<&str>, body: &str) -> Append {
         if self.latched {
             return Append::Latched;
@@ -699,6 +913,14 @@ impl Inner {
             // No transaction began: nothing was written (unless the
             // connection is now somewhere it cannot tell).
             if self.conn.is_autocommit() {
+                return Append::NotCommitted;
+            }
+            self.latch();
+            return Append::Uncertain;
+        }
+        #[cfg(test)]
+        if self.refusing {
+            if rolled_back(&self.conn) {
                 return Append::NotCommitted;
             }
             self.latch();
@@ -797,6 +1019,21 @@ impl EvidenceStore {
         self.inner().fault = Some(fault);
     }
 
+    /// The bodies of the records owed, in order.
+    pub(crate) fn owed_bodies(&self) -> Vec<String> {
+        self.inner().owed.iter().map(|o| o.body.clone()).collect()
+    }
+
+    /// Every insert fails before COMMIT (a full disk) until `false`.
+    pub(crate) fn refuse_inserts(&self, refusing: bool) {
+        self.inner().refusing = refusing;
+    }
+
+    /// Hold the store's mutex (a slow store) until the guard is dropped.
+    pub(crate) fn hold(&self) -> MutexGuard<'_, impl Sized> {
+        self.inner()
+    }
+
     /// Limit the file's size (a full database), on this connection only.
     pub(crate) fn set_max_page_count(&self, pages: u64) {
         let inner = self.inner();
@@ -866,3 +1103,7 @@ impl EvidenceStore {
 #[cfg(test)]
 #[path = "evidence_store/tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "evidence_store/sink_tests.rs"]
+mod sink_tests;

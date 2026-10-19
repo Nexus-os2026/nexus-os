@@ -409,8 +409,8 @@ fn reading_is_r1_and_cancellation_ends_the_browser() {
     let cancelled_at = Instant::now();
     h.control.cancel_run(h.run).unwrap();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::RunCancelled
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::RunCancelled
     );
     assert!(
         cancelled_at.elapsed() < Duration::from_secs(5),
@@ -671,8 +671,8 @@ fn a_stop_ends_the_session_between_its_steps() {
     }
     h.control.cancel_run(h.run).unwrap();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::RunCancelled
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::RunCancelled
     );
     std::thread::sleep(Duration::from_millis(500));
     assert!(ticks() <= 4, "{} clicks reached the page", ticks());
@@ -790,8 +790,8 @@ fn a_revoked_grant_ends_the_session_before_its_next_step() {
     h.control.authority().grants().revoke(grant).unwrap();
     let at_revocation = ticks();
     assert_eq!(
-        worker.join().unwrap().unwrap_err(),
-        AuthorityError::Unavailable("the effect failed")
+        worker.join().unwrap().unwrap_err().cause(),
+        &AuthorityError::Unavailable("the effect failed")
     );
     std::thread::sleep(Duration::from_millis(500));
     assert!(

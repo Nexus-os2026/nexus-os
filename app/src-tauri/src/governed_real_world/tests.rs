@@ -1647,3 +1647,172 @@ fn m4_n5_an_external_steps_effect_comes_from_the_pipelines_own_answer() {
     assert!(output.is_err(), "precondition: refused: {output:?}");
     assert_eq!(effect, StepEffect::Failed, "{output:?}");
 }
+
+// ── P3-C11-M5 N3: the evidence of record (contract EL-1 §1, §3, §6, §8) ────
+
+/// A private test home (AM2 of the mission, AM2.1): a fresh directory under
+/// /tmp, mode 0700 set at creation (never the umask's), asserted not to be
+/// the user's real home and to start empty.
+fn private_home() -> std::path::PathBuf {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let home = std::env::temp_dir().join(format!("nexus-p3-home-{}", uuid::Uuid::new_v4()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&home)
+        .unwrap();
+    let meta = std::fs::metadata(&home).unwrap();
+    assert_eq!(meta.permissions().mode() & 0o777, 0o700);
+    let passwd = std::fs::read_to_string("/etc/passwd").unwrap();
+    let real = passwd
+        .lines()
+        .map(|line| line.split(':').collect::<Vec<_>>())
+        .find(|f| f.len() > 5 && f[2] == meta.uid().to_string())
+        .map(|f| std::path::PathBuf::from(f[5]))
+        .expect("the user's passwd entry");
+    assert_ne!(home, real, "the private home is the real home");
+    assert!(
+        !home.starts_with(&real),
+        "the private home is under the real home"
+    );
+    assert!(
+        std::fs::read_dir(&home).unwrap().next().is_none(),
+        "not empty"
+    );
+    home
+}
+
+const SETUP_CHILD: &str = "NEXUS_P3_EL1_SETUP_CHILD";
+
+/// The child of `p3_el1_n3_setup_opens_the_store_or_governed_control_is_unavailable`:
+/// under its own HOME (a private test home) it runs `RealWorld::setup` and
+/// reports what it found. Without its task it does nothing.
+#[test]
+#[ignore = "run by p3_el1_n3_setup_opens_the_store_or_governed_control_is_unavailable"]
+fn p3_el1_n3_setup_child() {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    let Ok(mode) = std::env::var(SETUP_CHILD) else {
+        return;
+    };
+    let state = nexus_kernel::identity_home::nexus_state_dir().unwrap();
+    let store = state.join("p3-evidence").join("evidence.sqlite3");
+    if mode == "unqualified" {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(store.parent().unwrap())
+            .unwrap();
+        std::fs::write(&store, b"not an evidence store").unwrap();
+    }
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    match RealWorld::setup(audit.clone(), db) {
+        Ok(world) => {
+            let mode = std::fs::metadata(store.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode();
+            println!(
+                "SETUP ok file={} dir_mode={:o} evidence={}",
+                store.is_file(),
+                mode & 0o777,
+                world.status()["evidence"]
+            );
+        }
+        Err(error) => println!(
+            "SETUP err unchanged={} runtime={} audited={} error={error}",
+            std::fs::read(&store).ok().as_deref() == Some(b"not an evidence store".as_slice()),
+            state.join("p3-runtime").exists(),
+            evidence_events(&audit)
+        ),
+    }
+}
+
+/// Run the setup child under a fresh private home; its report line.
+fn setup_child(mode: &str) -> String {
+    let home = private_home();
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "governed_real_world::tests::p3_el1_n3_setup_child",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env("HOME", &home)
+        .env(SETUP_CHILD, mode)
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    text.lines()
+        .find_map(|l| l.find("SETUP ").map(|at| l[at..].to_string()))
+        .unwrap_or_else(|| panic!("the child reported nothing: {text}"))
+}
+
+/// EL-1 §1, §3, §6 (AM2.3; mutant 4): the production `RealWorld::setup`,
+/// under a private test home, (a) opens the store at
+/// `<home>/.nexus/p3-evidence/evidence.sqlite3` in a 0700 directory and
+/// reports it qualified; (b) with an unqualifiable file there, returns an
+/// error: the file is unchanged, no control is built (no runtime root), and
+/// nothing is written to the audit trail instead.
+#[test]
+fn p3_el1_n3_setup_opens_the_store_or_governed_control_is_unavailable() {
+    let clean = setup_child("clean");
+    assert_eq!(
+        clean,
+        "SETUP ok file=true dir_mode=700 evidence={\"owed\":0,\"recovery_required\":false,\
+         \"store\":\"qualified\",\"unclean_sessions\":0,\"unsettled\":0}",
+        "{clean}"
+    );
+    let refused = setup_child("unqualified");
+    assert!(
+        refused.starts_with("SETUP err unchanged=true runtime=false audited=0 error=")
+            && refused.contains("evidence store unqualified"),
+        "{refused}"
+    );
+}
+
+/// EL-1 §8: an effect's result says what became of its records; a
+/// commitment that never started keeps today's exact result.
+#[test]
+fn p3_el1_n3_a_result_carries_its_evidence() {
+    let t = isolated();
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let submit = |text: &str| {
+        t.world
+            .submit(CommandEnvelope {
+                text: Some(text.into()),
+                ..Default::default()
+            })
+            .unwrap()["commitment"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let output = t.world.approve(&submit("hash abc"), &owner).unwrap();
+    let evidence = &output["evidence"];
+    assert_eq!(evidence["start"]["status"], "recorded");
+    assert_eq!(evidence["end"]["status"], "recorded");
+    assert!(evidence["end"]["seq"].as_u64().unwrap() > evidence["start"]["seq"].as_u64().unwrap());
+    assert_eq!(
+        output.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["bytes", "evidence", "meta", "text"]
+    );
+    assert_eq!(t.world.status()["evidence"]["store"], "qualified");
+    // Denied, it never started: its result is today's, exactly.
+    let denied = submit("hash abc");
+    t.world.deny(&denied).unwrap();
+    assert_eq!(
+        t.world.approve(&denied, &owner).unwrap_err(),
+        "governed control: refused: not_pending"
+    );
+}

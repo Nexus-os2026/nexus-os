@@ -10,7 +10,7 @@ use super::approval::{ControlConfirmer, GrantConfirmation};
 use super::clock::Clock;
 use super::effect::CapabilityKind;
 use super::evidence::{
-    is_plain, EvidencePhase, EvidenceRecord, EvidenceSink, MAX_DETAIL, MAX_FIELD,
+    is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink, MAX_DETAIL, MAX_FIELD,
 };
 use super::ids::{Digest, GrantId};
 use super::AuthorityError;
@@ -325,7 +325,8 @@ impl GrantStore {
             grant.scope.clone()
         };
         self.generation.bump();
-        self.record(EvidencePhase::GrantRevoked, Some(id), &scope)?;
+        // The revocation has taken effect: its record may only be owed.
+        self.record_end(&self.record_of(EvidencePhase::GrantRevoked, Some(id), &scope));
         Ok(())
     }
 
@@ -389,13 +390,30 @@ impl GrantStore {
         all
     }
 
-    /// Write one record. Never called with the grants' lock held.
+    /// Write one gating record. Never called with the grants' lock held.
     fn record(
         &self,
         phase: EvidencePhase,
         id: Option<GrantId>,
         scope: &GrantScope,
     ) -> Result<(), AuthorityError> {
+        self.evidence
+            .record(&self.record_of(phase, id, scope))
+            .map(|_| ())
+            .map_err(|_| AuthorityError::EvidenceUnavailable)
+    }
+
+    /// Write one end record (what it records has taken effect).
+    fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
+        self.evidence.record_end(record)
+    }
+
+    fn record_of(
+        &self,
+        phase: EvidencePhase,
+        id: Option<GrantId>,
+        scope: &GrantScope,
+    ) -> EvidenceRecord {
         let mut record =
             EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
         record.kind = Some(scope.kind());
@@ -417,8 +435,6 @@ impl GrantStore {
         for (index, piece) in pieces.take(MAX_DETAIL - 1).enumerate() {
             record.detail.push((format!("scope.{}", index + 1), piece));
         }
-        self.evidence
-            .record(&record)
-            .map_err(|_| AuthorityError::EvidenceUnavailable)
+        record
     }
 }

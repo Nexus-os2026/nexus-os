@@ -243,6 +243,7 @@ impl CredentialBroker {
     fn record(&self, record: EvidenceRecord) -> Result<(), AuthorityError> {
         self.evidence
             .record(&record)
+            .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 

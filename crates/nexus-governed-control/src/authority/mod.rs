@@ -20,7 +20,7 @@ mod tests;
 use self::approval::{ControlConfirmer, ResumeConfirmation};
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
-use self::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
+use self::evidence::{EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{Lift, Refusal, RunClass, RunOrigin, RunRegistry};
@@ -59,6 +59,12 @@ pub enum AuthorityError {
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
+    /// An effect that started ended with `cause` (it failed or was
+    /// cancelled); `evidence` says what became of its records (EL-1 §8).
+    Ended {
+        cause: Box<AuthorityError>,
+        evidence: evidence::ExecutionEvidence,
+    },
 }
 
 impl AuthorityError {
@@ -92,6 +98,16 @@ impl AuthorityError {
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
+            AuthorityError::Ended { cause, .. } => cause.class(),
+        }
+    }
+
+    /// What refused or ended it: for an effect that started, the cause its
+    /// evidence is reported beside.
+    pub fn cause(&self) -> &AuthorityError {
+        match self {
+            AuthorityError::Ended { cause, .. } => cause.cause(),
+            other => other,
         }
     }
 }
@@ -104,6 +120,7 @@ impl fmt::Display for AuthorityError {
                 write!(f, "governed control: invalid action: {why}")
             }
             AuthorityError::Unavailable(why) => write!(f, "governed control: unavailable: {why}"),
+            AuthorityError::Ended { cause, evidence } => write!(f, "{cause} ({evidence})"),
             other => write!(f, "governed control: refused: {}", other.class()),
         }
     }
@@ -185,23 +202,48 @@ impl Authority {
         self.runs.probe_locks();
     }
 
+    /// A gating record: what it permits happens only once it is written.
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
         self.evidence
             .record(record)
+            .map(|_| ())
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
-    /// Record that the agent display started or stopped (it is a process
-    /// Phase Three owns; its start needs a grant and no emergency stop).
+    /// An end record: what it records has already taken effect (EL-1 §6).
+    fn record_end(&self, record: &EvidenceRecord) -> EndStatus {
+        self.evidence.record_end(record)
+    }
+
+    /// Record that the agent display is starting (it is a process Phase
+    /// Three owns; its start needs a grant and no emergency stop): evidence
+    /// first.
     pub(crate) fn record_display(
         &self,
         phase: EvidencePhase,
         detail: Vec<(String, String)>,
     ) -> Result<(), AuthorityError> {
+        self.record(&self.display_record(phase, detail))
+    }
+
+    /// Record that the agent display stopped (it already has).
+    pub(crate) fn record_display_end(
+        &self,
+        phase: EvidencePhase,
+        detail: Vec<(String, String)>,
+    ) -> EndStatus {
+        self.record_end(&self.display_record(phase, detail))
+    }
+
+    fn display_record(
+        &self,
+        phase: EvidencePhase,
+        detail: Vec<(String, String)>,
+    ) -> EvidenceRecord {
         let mut record =
             EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
         record.detail = detail;
-        self.record(&record)
+        record
     }
 
     /// Open a run for `agent`: an agent's run, whatever the agent is
@@ -274,7 +316,9 @@ impl Authority {
         record.run = Some(run.to_string());
         record.agent = Some(view.agent.to_string());
         record.cancelled = true;
-        self.record(&record)
+        // The cancellation has taken effect: its record may only be owed.
+        self.record_end(&record);
+        Ok(())
     }
 
     /// A run is done: nothing more can be prepared for it, what it left
@@ -289,9 +333,21 @@ impl Authority {
     /// commitment, move the policy generation, and refuse new runs until the
     /// owner resumes. Its record carries its stop number, whether that
     /// number is exhausted, and whether the stop before it was lifted.
+    /// Everything takes effect first, unconditionally; only then are the
+    /// records written, and they may only become owed (EL-1 §6).
     pub fn emergency_stop(&self) -> usize {
+        let stopped = self.stop_effects(None);
+        let cancelled = stopped.cancelled;
+        self.write_stop_records(stopped);
+        cancelled
+    }
+
+    /// The effects of an emergency stop, with no record written: the runs
+    /// cancelled, every unconsumed commitment ended (its leases too), the
+    /// generation moved. `reason` is recorded beside it.
+    pub(crate) fn stop_effects(&self, reason: Option<&'static str>) -> Stopped {
         let stop = self.runs.stop_all();
-        self.commitments.revoke_all();
+        let revoked = self.commitments.revoke_all();
         self.generation.bump();
         let mut record = EvidenceRecord::new(
             EvidencePhase::EmergencyStop,
@@ -311,8 +367,21 @@ impl Authority {
         record
             .detail
             .push(("previous_stop_lifted".into(), stop.previous.as_str().into()));
-        let _ = self.record(&record);
-        stop.cancelled
+        if let Some(reason) = reason {
+            record.detail.push(("reason".into(), reason.into()));
+        }
+        Stopped {
+            cancelled: stop.cancelled,
+            revoked,
+            record,
+        }
+    }
+
+    /// The records of a stop that has taken effect: the commitments it
+    /// ended, then the stop.
+    pub(crate) fn write_stop_records(&self, stopped: Stopped) {
+        self.commitments.write_ends(stopped.revoked);
+        self.record_end(&stopped.record);
     }
 
     /// Lift an emergency stop: only after the owner's native confirmation,
@@ -356,6 +425,13 @@ impl Authority {
         self.runs.lift(request.stop_number).map_err(refused)?;
         Ok(())
     }
+}
+
+/// An emergency stop that has taken effect, its records still to write.
+pub(crate) struct Stopped {
+    pub(crate) cancelled: usize,
+    revoked: commitment::Unwritten,
+    record: EvidenceRecord,
 }
 
 /// What a resume the run registry refused returns.
