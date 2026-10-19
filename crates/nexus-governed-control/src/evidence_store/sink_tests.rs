@@ -726,3 +726,97 @@ fn el1_m6_c2_a_latched_store_keeps_nothing_owed() {
     assert_eq!(f.evidence.close_session(), EndStatus::Uncertain);
     assert_eq!(f.evidence.health().owed, 0);
 }
+
+// ── P3-C11-M6: corrections to EL-1 (C-5, C-6) ──────────────────────────────
+
+/// The owner answers every dialog `.1`, and each one asked is counted.
+struct Counting(std::sync::atomic::AtomicU32, bool);
+
+impl Counting {
+    fn answering(answer: bool) -> Self {
+        Self(std::sync::atomic::AtomicU32::new(0), answer)
+    }
+
+    fn asked(&self) -> u32 {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    fn ask(&self) -> bool {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        self.1
+    }
+}
+
+impl ControlConfirmer for Counting {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        self.ask()
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        self.ask()
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        self.ask()
+    }
+    fn confirm_acknowledgement(
+        &self,
+        _: &crate::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        self.ask()
+    }
+}
+
+/// EL-1 §6 as amended by C-5 (P3-C11-M6): the owner's decline of a grant
+/// has taken effect and permits nothing: its record is an end record. With
+/// the store refusing every insert the request is still declined, and its
+/// `grant_declined` record is owed.
+#[test]
+fn el1_m6_c5_a_declined_grant_is_an_end_record() {
+    let f = fixture();
+    f.evidence.store().refuse_inserts(true);
+    let owner = Counting::answering(false);
+    assert_eq!(
+        f.control
+            .authority()
+            .grants()
+            .request(
+                GrantScope::Perception {
+                    display: "agent".into()
+                },
+                Duration::from_secs(60),
+                &owner
+            )
+            .unwrap_err(),
+        AuthorityError::Declined
+    );
+    assert_eq!(owner.asked(), 1);
+    assert_eq!(f.evidence.health().owed, 1);
+    let owed: serde_json::Value =
+        serde_json::from_str(&f.evidence.store().owed_bodies()[0]).unwrap();
+    assert_eq!(owed["phase"], "grant_declined");
+}
+
+/// EL-1 §7 as amended by C-6 (P3-C11-M6): on a latched store the resume
+/// refuses before any dialog (it could record nothing): the owner is asked
+/// nothing, the stop stays, nothing is written.
+#[test]
+fn el1_m6_c6_resume_on_a_latched_store_asks_nothing() {
+    let f = fixture();
+    let id = f.propose(nothing()).unwrap();
+    assert_eq!(f.control.emergency_stop(), 1);
+    assert_eq!(
+        f.evidence
+            .store()
+            .append("prepared", Some(&id.to_string()), "{\"other\":true}"),
+        Append::Conflict
+    );
+    assert!(f.evidence.health().latched);
+    let rows = f.rows();
+    let owner = Counting::answering(true);
+    assert_eq!(
+        f.control.authority().resume(&owner).unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    assert_eq!(owner.asked(), 0, "a dialog was shown on a latched store");
+    assert!(f.control.authority().runs().is_stopped());
+    assert_eq!(f.rows(), rows);
+}

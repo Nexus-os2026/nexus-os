@@ -432,6 +432,15 @@ impl Authority {
     /// stop. A Resumed record is therefore not proof that the stop was
     /// lifted.
     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        // A latched store can record nothing in this process: refused before
+        // any dialog, and nothing changes (C-6).
+        if self
+            .evidence
+            .primary()
+            .is_some_and(|primary| primary.health().latched)
+        {
+            return Err(AuthorityError::EvidenceUnavailable);
+        }
         // Recovery first: only after the owner's acknowledgement is the
         // resume itself asked (EL-1 §7).
         self.acknowledge_recovery(confirmer)?;

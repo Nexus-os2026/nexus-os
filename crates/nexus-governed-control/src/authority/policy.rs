@@ -274,7 +274,9 @@ impl GrantStore {
             expires_in_secs: ttl.as_secs(),
         };
         if !confirmer.confirm_grant(&request) {
-            self.record(EvidencePhase::GrantDeclined, None, &scope)?;
+            // The owner's decline has taken effect and permits nothing: its
+            // record is an end record, and may only be owed (C-5).
+            self.record_end(&self.record_of(EvidencePhase::GrantDeclined, None, &scope));
             return Err(AuthorityError::Declined);
         }
         let id = GrantId::fresh();

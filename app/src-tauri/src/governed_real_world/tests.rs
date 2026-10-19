@@ -2097,3 +2097,63 @@ fn p3_el1_n4_a_clean_shutdown_leaves_no_unclean_session() {
     );
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+// ── P3-C11-M6: corrections to EL-1 (desktop parts of C-2 and C-7) ──────────
+
+/// EL-1 §6, §8 as amended by C-2 (P3-C11-M6): a result whose end record is
+/// uncertain (the store latched) is shown as `"end": {"status":
+/// "uncertain"}`, never as recorded.
+#[test]
+fn p3_el1_m6_c2_an_uncertain_end_is_shown_uncertain() {
+    use nexus_governed_control::authority::evidence::{EndStatus, ExecutionEvidence};
+    let output = nexus_governed_control::control::EffectOutput {
+        text: Some("done".into()),
+        evidence: Some(ExecutionEvidence {
+            start: 7,
+            end: EndStatus::Uncertain,
+        }),
+        ..Default::default()
+    };
+    let shown = super::output_json(&output);
+    assert_eq!(shown["evidence"]["end"], json!({ "status": "uncertain" }));
+    assert_eq!(
+        shown["evidence"]["start"],
+        json!({ "status": "recorded", "seq": 7 })
+    );
+}
+
+/// EL-1 §8 as amended by C-7 (P3-C11-M6), through the desktop: after the
+/// owner's acknowledgement (`p3_resume`) the status shows `unsettled` 0,
+/// recovery not required, the unclean sessions unchanged; a restart after
+/// it does not start stopped.
+#[test]
+fn p3_el1_m6_c7_after_the_acknowledgement_the_status_shows_nothing_unsettled() {
+    let root = private_home();
+    crash_mid_effect(&root);
+    {
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let db = Arc::new(NexusDatabase::in_memory().unwrap());
+        let world = RealWorld::for_tests(&root, audit, db);
+        let before = world.status()["evidence"].clone();
+        assert_eq!(before["unsettled"], 1);
+        assert_eq!(before["recovery_required"], true);
+        world
+            .resume(&Recovering::answering(true, true))
+            .expect("acknowledged and resumed");
+        let after = world.status()["evidence"].clone();
+        assert_eq!(after["unsettled"], 0, "{after}");
+        assert_eq!(after["recovery_required"], false);
+        assert_eq!(after["unclean_sessions"], before["unclean_sessions"]);
+        world.shutdown();
+    }
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(&root, audit, db);
+    let status = world.status();
+    assert_eq!(status["status"]["emergency_stopped"], false);
+    assert_eq!(status["evidence"]["unsettled"], 0);
+    assert_eq!(status["evidence"]["recovery_required"], false);
+    world.shutdown();
+    drop(world);
+    std::fs::remove_dir_all(&root).unwrap();
+}
