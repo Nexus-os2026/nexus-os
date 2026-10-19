@@ -5169,3 +5169,155 @@ fn p3_hm_m4_n3_a_a1_d6_start_hivemind_carries_no_goal() {
     );
     assert_eq!(hm_field(&w.result, "with_session="), "1", "{}", w.result);
 }
+
+// ── P3-C11-HM-M4 N4: the test-only capture seam, A-S5 (§18.2, AD-6) ─────────
+
+/// A-S5 through the desktop's production adapters: at the transport
+/// boundary every AR request (an agent's goal: planning and steps) and every
+/// AC request (its chat turn) carries the admission id it was admitted by;
+/// HD (the Owner's chat), SY (the connection test) and XS (a subsystem's
+/// provider) requests carry no retained-record marker; an HB request (a
+/// temporal fork naming no agent) carries its admission id.
+#[test]
+fn p3_hm_m4_n4_a_s5_every_ar_ac_request_carries_an_admission_id() {
+    const MARKER: &str = "P3-HM-M4-A-S5-SYNTH-NOTE-4f1b";
+    let name = "p3_hm_m4_n4_a_s5_every_ar_ac_request_carries_an_admission_id";
+    let Some(w) = e2e(name, hm_route(), || {
+        let state = AppState::new_in_memory();
+        let agent = register_participant(&state, ("p3-hm-m4-a-s5", false, ""));
+        route_unrestricted_work_through_the_proxy();
+        std::env::set_var("LLM_PROVIDER", "ollama");
+        // Retained records of the agent carrying the marker, then a goal
+        // that recalls them (AR).
+        let first = run_own_goal(
+            &state,
+            &agent,
+            &format!("Summarize the synthetic note {MARKER}"),
+        );
+        let second = run_own_goal(&state, &agent, "Summarize the synthetic note again");
+        // AC: the agent's chat turn.
+        let ac = hm_turn(
+            &state,
+            crate::hm_dispatch::chat_turn(&state, Some("p3-hm-m4-a-s5"))
+                .map_err(AgentError::SupervisorError)?,
+            "An AC chat turn",
+            None,
+        )
+        .is_ok();
+        // HD, SY, XS, HB.
+        let hd = hm_turn(
+            &state,
+            crate::hm_dispatch::chat_turn(&state, None).map_err(AgentError::SupervisorError)?,
+            "An HD chat turn",
+            None,
+        )
+        .is_ok();
+        let sy = crate::commands::chat_llm::test_llm_connection(&state, "ollama".to_string())
+            .map(|r| r.success)
+            .unwrap_or(false);
+        let xs = {
+            let config = nexus_kernel::config::load_config().unwrap();
+            let (provider, model) = crate::provider_from_prefixed_model(
+                "ollama/qwen3:8b",
+                &crate::build_provider_config(&config),
+            )
+            .map_err(AgentError::SupervisorError)?;
+            crate::hm_dispatch::IssuedProvider::new(&state, "p3-hm-m4-xs", provider)
+                .query("An XS request", 64, &model)
+                .is_ok()
+        };
+        let hb = crate::commands::simulation::temporal_fork(
+            &state,
+            "Plan an unrelated task".to_string(),
+            "not-a-registered-agent".to_string(),
+            Some(2),
+        )
+        .is_ok();
+        let admitted: Vec<String> = crate::hm_m3_tests::admissions(&state.db)
+            .into_iter()
+            .map(|a| a.admission_id)
+            .collect();
+        let captured = crate::hm_dispatch::capture::take();
+        let count = |class: &str| captured.iter().filter(|c| c.class == class).count();
+        let ar_ac_without = captured
+            .iter()
+            .filter(|c| c.class == "AR" || c.class == "AC")
+            .filter(|c| {
+                !c.admission_id
+                    .as_ref()
+                    .is_some_and(|id| admitted.contains(id))
+            })
+            .count();
+        let ar_marker = captured
+            .iter()
+            .filter(|c| c.class == "AR" && c.prompt.contains(MARKER))
+            .count();
+        let plain_marker = captured
+            .iter()
+            .filter(|c| c.class == "HD" || c.class == "SY/XS")
+            .filter(|c| c.prompt.contains(MARKER) || c.admission_id.is_some())
+            .count();
+        let hb_without = captured
+            .iter()
+            .filter(|c| c.class == "HB" && c.admission_id.is_none())
+            .count();
+        let unmarked = count("NONE");
+        Ok(format!(
+            "goals={}/{} ac={ac} hd={hd} sy={sy} xs={xs} hb={hb} ar={} ac_n={} hd_n={} sy_n={} hb_n={} \
+             ar_ac_without={ar_ac_without} ar_marker={ar_marker} plain_marker={plain_marker} \
+             hb_without={hb_without} unmarked={unmarked}",
+            first.is_ok(),
+            second.is_ok(),
+            count("AR"),
+            count("AC"),
+            count("HD"),
+            count("SY/XS"),
+            count("HB")
+        ))
+    }) else {
+        return;
+    };
+    hm_dump(name, &w);
+    let field = |k: &str| hm_field(&w.result, k);
+    for (key, what) in [
+        ("ac=", "AC turn"),
+        ("hd=", "HD turn"),
+        ("sy=", "SY request"),
+        ("xs=", "XS request"),
+    ] {
+        assert_eq!(field(key), "true", "precondition: the {what}: {}", w.result);
+    }
+    for key in ["ar=", "ac_n=", "hd_n=", "sy_n=", "hb_n="] {
+        assert_ne!(
+            field(key),
+            "0",
+            "precondition: {key} captured none: {}",
+            w.result
+        );
+    }
+    assert_ne!(
+        field("ar_marker="),
+        "0",
+        "precondition: no AR request carried the retained marker: {}",
+        w.result
+    );
+    assert_eq!(
+        field("ar_ac_without="),
+        "0",
+        "A-S5: an AR or AC request without a committed admission id: {}",
+        w.result
+    );
+    assert_eq!(
+        field("plain_marker="),
+        "0",
+        "A-S5: an HD or SY/XS request carried a retained record or an admission: {}",
+        w.result
+    );
+    assert_eq!(field("hb_without="), "0", "{}", w.result);
+    assert_eq!(
+        field("unmarked="),
+        "0",
+        "A-S5: a request reached a transport outside the issuer's dispatch: {}",
+        w.result
+    );
+}

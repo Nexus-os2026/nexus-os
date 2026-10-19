@@ -2447,3 +2447,90 @@ fn hm_m3_n5_a3_2_the_desktop_store_fixture_module_is_test_only() {
     }
     assert_eq!(users, vec!["app/src-tauri/src/hm_m3_tests.rs".to_string()]);
 }
+
+/// Mission P3-C11-HM-M4 N4 (AD-6): the capture seam is test code only. No
+/// production code reads the transmission in progress (its only readers are
+/// the `cfg(test)` capture seams) or calls a capture function. Planted
+/// controls first.
+#[test]
+fn hm_m4_n4_no_capture_code_outside_cfg_test() {
+    fn seam_uses(f: &ProdFile) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for name in [
+            "transmission_in_progress",
+            "take_captured",
+            "capture::record",
+            "capture::recording",
+            "capture::take",
+            "testing::capture",
+        ] {
+            let word = name.rsplit("::").next().unwrap();
+            for at in words(&f.code, word) {
+                let before = f.code[..at].trim_end();
+                // A call (a definition or a re-export is no use).
+                let call = f.code[at + word.len()..].trim_start().starts_with('(');
+                if before.ends_with("fn") || !call {
+                    continue;
+                }
+                if name.contains("::") {
+                    let prefix = name.rsplit_once("::").unwrap().0;
+                    if !before.ends_with(&format!("{prefix}::")) {
+                        continue;
+                    }
+                }
+                out.push((f.rel.clone(), name.to_string()));
+            }
+        }
+        out
+    }
+    let planted = "fn a() { let _ = nexus_kernel::hm::transmission_in_progress(); }\n\
+                   fn b(p: &str) { capture::record(p); }\n\
+                   pub use dispatch::transmission_in_progress;\n\
+                   fn c(p: &str) {\n    #[cfg(test)]\n    capture::record(p);\n}\n\
+                   pub fn transmission_in_progress() -> u8 { 0 }\n";
+    let code = mask(planted, false);
+    let mut bytes = code.clone().into_bytes();
+    let (ranges, _) = source::cfg_test_items(&code, &mask(planted, true));
+    for (a, z) in ranges {
+        for b in bytes.iter_mut().take(z).skip(a) {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    }
+    let planted_file = ProdFile {
+        rel: "planted.rs".into(),
+        code: String::from_utf8(bytes).unwrap(),
+        text: mask(planted, true),
+    };
+    assert_eq!(
+        seam_uses(&planted_file),
+        vec![
+            (
+                "planted.rs".to_string(),
+                "transmission_in_progress".to_string()
+            ),
+            ("planted.rs".to_string(), "capture::record".to_string()),
+        ]
+    );
+    let files = production_files();
+    let found: Vec<(String, String)> = files.iter().flat_map(seam_uses).collect();
+    assert!(
+        found.is_empty(),
+        "capture seam code outside cfg(test): {found:?}"
+    );
+    // The exposure is defined once, in the kernel's dispatch module, the
+    // only production file that names its thread-local.
+    let naming: Vec<&str> = files
+        .iter()
+        .filter(|f| !words(&f.code, "TRANSMITTING").is_empty())
+        .map(|f| f.rel.as_str())
+        .collect();
+    assert_eq!(naming, ["kernel/src/hm/dispatch.rs"]);
+    let defined: Vec<&str> = files
+        .iter()
+        .filter(|f| f.code.contains("fn transmission_in_progress("))
+        .map(|f| f.rel.as_str())
+        .collect();
+    assert_eq!(defined, ["kernel/src/hm/dispatch.rs"]);
+}

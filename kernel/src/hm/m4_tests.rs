@@ -177,3 +177,115 @@ fn hm_m4_n1_c3_an_hb_request_records_each_admission_and_hd_sy_xs_none() {
     assert_eq!(admissions().len(), 3);
     assert_eq!(events("memory.dispatch_admitted"), 3);
 }
+
+/// A-S5 (P3-HM-CONTRACT-02 §18.2, AD-6), the kernel's test-only capture
+/// seam at its transport boundary: every AR and AC request carries the
+/// admission id it was admitted by; HD and SY/XS requests carry none and no
+/// planted retained-record marker. A refused dispatch is never captured.
+#[test]
+fn hm_m4_n4_a_s5_ar_ac_requests_carry_admission_ids_and_hd_sy_no_record() {
+    use super::testing::take_captured;
+    use super::{NewMemory, RecallSpec, RecordTable, SourceKind};
+    const MARKER: &str = "P3-HM-M4-A-S5-RECORD-c0de";
+    let hm = TestHm::new();
+    let agent = hm.open_agent("a-s5-agent");
+    let mut goal = hm.goal(agent);
+    hm.issuer
+        .write_memory(
+            &goal,
+            &NewMemory {
+                source_kind: SourceKind::LoopEpisodic,
+                memory_type: "episodic",
+                key: "a-s5",
+                value_json: &format!("\"{MARKER}\""),
+                relevance_score: 1.0,
+            },
+            &[],
+        )
+        .unwrap();
+    take_captured();
+    let llm = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "ok");
+    // AR: a goal's prompt carrying the retained record verbatim.
+    let issuer = hm.issuer.clone();
+    llm.ask(&mut goal, &mut |c: &mut DispatchContext| {
+        let records = issuer
+            .recall_spec(c, &RecallSpec::table(RecordTable::AgentMemory, 10))
+            .ok()?;
+        let mut b = PromptBuilder::new(c);
+        b.text("AR request\n");
+        for r in &records {
+            b.include(r);
+        }
+        Some(b.build())
+    })
+    .unwrap();
+    // AC, HD and SY/XS.
+    let turn = |principal| {
+        hm.issuer
+            .begin_unit(
+                principal,
+                Unit::ChatTurn {
+                    turn_id: Uuid::new_v4(),
+                },
+            )
+            .unwrap()
+    };
+    llm.ask(
+        &mut turn(Principal::Agent(agent)),
+        &mut text_prompt("AC turn"),
+    )
+    .unwrap();
+    llm.ask(
+        &mut turn(Principal::OwnerDirect),
+        &mut text_prompt("HD turn"),
+    )
+    .unwrap();
+    llm.ask(&mut hm.system(), &mut text_prompt("SY request"))
+        .unwrap();
+    // A refused dispatch (a local-only agent on a non-local transport).
+    let local = hm.agent("a-s5-local");
+    assert!(llm
+        .ask(&mut hm.goal(local), &mut text_prompt("refused"))
+        .is_err());
+
+    let captured = take_captured();
+    assert_eq!(
+        captured.iter().map(|c| c.class).collect::<Vec<_>>(),
+        ["AR", "AC", "HD", "SY/XS"],
+        "A-S5: every transmitted request captured once, refused ones never"
+    );
+    assert!(
+        captured[0].prompt.contains(MARKER),
+        "precondition: the record reached the AR request"
+    );
+    let admitted: Vec<String> = hm
+        .db
+        .hm()
+        .read(|tx| tx.admission_rows())
+        .unwrap()
+        .into_iter()
+        .map(|a| a.admission_id)
+        .collect();
+    for c in &captured[..2] {
+        let id = c
+            .admission_id
+            .as_deref()
+            .unwrap_or_else(|| panic!("A-S5: an {} request without an admission id", c.class));
+        assert!(
+            admitted.iter().any(|a| a == id),
+            "A-S5: {id} is no committed admission"
+        );
+    }
+    for c in &captured[2..] {
+        assert_eq!(c.admission_id, None, "{}", c.class);
+        assert!(
+            !c.prompt.contains(MARKER),
+            "A-S5: a retained record in a {} request",
+            c.class
+        );
+    }
+    assert!(
+        super::transmission_in_progress().is_none(),
+        "cleared after send"
+    );
+}

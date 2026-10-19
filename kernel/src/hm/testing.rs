@@ -472,6 +472,36 @@ impl crate::cognitive::MemoryStore for DbMemoryStore {
     }
 }
 
+// ── The kernel's test-only capture seam (mission P3-C11-HM-M4 N4, AD-6) ────
+
+/// One request the issuer handed to a transport on this thread.
+#[derive(Debug, Clone)]
+pub(crate) struct Captured {
+    pub(crate) class: &'static str,
+    pub(crate) admission_id: Option<String>,
+    pub(crate) prompt: String,
+}
+
+thread_local! {
+    static CAPTURED: std::cell::RefCell<Vec<Captured>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Records one outbound request at the kernel's transport boundary.
+pub(crate) fn capture(transmission: &super::Transmission, prompt: &str) {
+    CAPTURED.with(|c| {
+        c.borrow_mut().push(Captured {
+            class: transmission.class(),
+            admission_id: transmission.admission_id().map(str::to_string),
+            prompt: prompt.to_string(),
+        })
+    });
+}
+
+/// The requests captured on this thread so far (and forgets them).
+pub(crate) fn take_captured() -> Vec<Captured> {
+    CAPTURED.with(|c| std::mem::take(&mut *c.borrow_mut()))
+}
+
 /// Every row of a query whose columns are all TEXT or NULL (CAST other
 /// columns in the query); NULL reads as "NULL".
 /// The `source_kind` of the label of row `record_id` of `table`, or

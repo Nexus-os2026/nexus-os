@@ -210,6 +210,72 @@ fn evaluate_envelope(
     Ok((raw, eligible))
 }
 
+// ── The transmission in progress (mission P3-C11-HM-M4 N4, AD-6) ───────────
+
+/// The dispatch class (§12.1) and the admission id of a request while the
+/// issuer hands it to its transport (P3-HM-CONTRACT-02 §18.2 A-S5).
+/// Read-only: the issuer marks it on the sending thread only while `send`
+/// runs, and no decision reads it. It lets a test-only capture at a
+/// transport boundary tie each request to its admission.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Transmission {
+    class: &'static str,
+    admission_id: Option<String>,
+}
+
+impl Transmission {
+    /// `AR`, `AC`, `HR`, `HB`, `HD` or `SY/XS` (a `System` request).
+    pub fn class(&self) -> &'static str {
+        self.class
+    }
+
+    /// The admission this request was admitted by (none for HD, SY, XS).
+    pub fn admission_id(&self) -> Option<&str> {
+        self.admission_id.as_deref()
+    }
+}
+
+thread_local! {
+    static TRANSMITTING: std::cell::RefCell<Option<Transmission>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The request this thread is handing to its transport right now, if any.
+/// Read by the test-only capture seams only (guard: no production caller).
+#[doc(hidden)]
+pub fn transmission_in_progress() -> Option<Transmission> {
+    TRANSMITTING.with(|t| t.borrow().clone())
+}
+
+/// The §12.1 class of a context's dispatch.
+fn class_name(ctx: &DispatchContext) -> &'static str {
+    match (ctx.class, ctx.principal, ctx.unit) {
+        (DispatchClass::Agent, _, super::context::Unit::ChatTurn { .. }) => "AC",
+        (DispatchClass::Agent, _, _) => "AR",
+        (DispatchClass::OwnerRetained, _, _) => "HR",
+        (DispatchClass::OwnerBackendShaped, _, _) => "HB",
+        (DispatchClass::Plain, Principal::OwnerDirect, _) => "HD",
+        (DispatchClass::Plain, _, _) => "SY/XS",
+    }
+}
+
+/// Runs `send` with `transmission` marked in progress on this thread (and,
+/// in the kernel's own tests only, captured with its prompt).
+fn transmitting<R>(transmission: Transmission, prompt: &str, send: impl FnOnce() -> R) -> R {
+    #[cfg(test)]
+    super::testing::capture(&transmission, prompt);
+    let _ = prompt;
+    struct Restore(Option<Transmission>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            TRANSMITTING.with(|t| *t.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(TRANSMITTING.with(|t| t.replace(Some(transmission))));
+    send()
+}
+
 /// What a reply's transport returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TransportFailure;
@@ -356,7 +422,13 @@ impl DispatchIssuer {
         }
         // Transmission: the admission transaction has committed; no lock or
         // transaction of this module is held.
-        let reply = send(transport, &admission.text);
+        let transmission = Transmission {
+            class: class_name(ctx),
+            admission_id: Some(admission.admission_id.clone()),
+        };
+        let reply = transmitting(transmission, &admission.text, || {
+            send(transport, &admission.text)
+        });
         match reply {
             Ok(text) => self
                 .accept_reply(ctx, admission, Ok(text))
@@ -396,7 +468,13 @@ impl DispatchIssuer {
         if admitted.route_class == RouteClass::Local {
             ctx.local_transport_used = true;
         }
-        let reply = send(admitted.transport, &admitted.text);
+        let transmission = Transmission {
+            class: class_name(ctx),
+            admission_id: admitted.admission_id.clone(),
+        };
+        let transport = admitted.transport;
+        let text = admitted.text;
+        let reply = transmitting(transmission, &text, || send(transport, &text));
         let outcome = |s: &Self, outcome: &str, kind: Option<&str>| {
             if let Some(id) = &admitted.admission_id {
                 s.record_owner_outcome(id, admitted.route_class, outcome, kind);

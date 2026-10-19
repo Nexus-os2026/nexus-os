@@ -39,8 +39,8 @@ pub use issuer::{
 };
 
 pub use dispatch::{
-    Admission, BuildDispatch, DispatchError, Refused, ReplyRefused, RouteAttestation,
-    TransportEvidence, TransportFailure,
+    transmission_in_progress, Admission, BuildDispatch, DispatchError, Refused, ReplyRefused,
+    RouteAttestation, Transmission, TransportEvidence, TransportFailure,
 };
 pub use events::{backfill_authority_events, BackfillReport, BACKFILL_BOUND};
 pub use policy::{

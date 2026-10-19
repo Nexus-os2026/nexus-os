@@ -69,6 +69,8 @@ impl AgentTransport {
 
     /// Sends the admitted prompt; returns the reply text and its tokens.
     fn send(self, prompt: &str, max_tokens: u32) -> Result<(String, u64), String> {
+        #[cfg(test)]
+        capture::record(prompt);
         match self {
             AgentTransport::Flash(flash) => {
                 eprintln!(
@@ -632,6 +634,8 @@ pub(crate) fn dispatch_text<T>(
 ) -> Result<DerivedItem, String> {
     let issuer = issuer_of(state)?;
     let selection_error: RefCell<Option<String>> = RefCell::new(None);
+    #[cfg(test)]
+    let send = &mut capture::recording(send);
     let result = issuer.dispatch(
         ctx,
         &mut |c: &mut DispatchContext| match select(c) {
@@ -755,5 +759,56 @@ impl LlmProvider for IssuedProvider {
             serde_json::to_string(&response).map_err(|e| e.to_string())
         })?;
         serde_json::from_str(&reply).map_err(|e| AgentError::SupervisorError(e.to_string()))
+    }
+}
+
+/// The desktop's test-only capture seam (mission P3-C11-HM-M4 N4, AD-6;
+/// `cfg(test)` only): every request a desktop adapter hands to a transport,
+/// with the class and admission id the issuer marks in progress.
+#[cfg(test)]
+pub(crate) mod capture {
+    use std::sync::Mutex;
+
+    /// One outbound request.
+    #[derive(Debug, Clone)]
+    pub(crate) struct Captured {
+        pub(crate) class: String,
+        pub(crate) admission_id: Option<String>,
+        pub(crate) prompt: String,
+    }
+
+    static CAPTURED: Mutex<Vec<Captured>> = Mutex::new(Vec::new());
+
+    /// Records one request at a transport boundary.
+    pub(crate) fn record(prompt: &str) {
+        let transmission = nexus_kernel::hm::transmission_in_progress();
+        CAPTURED
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(Captured {
+                class: transmission
+                    .as_ref()
+                    .map_or("NONE", |t| t.class())
+                    .to_string(),
+                admission_id: transmission
+                    .as_ref()
+                    .and_then(|t| t.admission_id().map(str::to_string)),
+                prompt: prompt.to_string(),
+            });
+    }
+
+    /// `send`, recording each request it is handed first.
+    pub(crate) fn recording<'a, T>(
+        send: &'a mut dyn FnMut(T, &str) -> Result<String, String>,
+    ) -> impl FnMut(T, &str) -> Result<String, String> + 'a {
+        move |transport: T, admitted: &str| {
+            record(admitted);
+            send(transport, admitted)
+        }
+    }
+
+    /// Every request captured so far in this process (and forgets them).
+    pub(crate) fn take() -> Vec<Captured> {
+        std::mem::take(&mut *CAPTURED.lock().unwrap_or_else(|p| p.into_inner()))
     }
 }
