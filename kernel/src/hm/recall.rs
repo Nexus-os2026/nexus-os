@@ -228,6 +228,18 @@ impl DispatchIssuer {
         ctx: &mut DispatchContext,
         spec: &RecallSpec<'_>,
     ) -> Result<Vec<RecalledRecord>, RecallRefused> {
+        self.recall_spec_counted(ctx, spec)
+            .map(|(records, _withheld)| records)
+    }
+
+    /// [`recall_spec`](Self::recall_spec), with the number of rows the
+    /// route withheld (§12.3: counted, never displacing an eligible row; 0
+    /// for a `local` unit). The count is content-free (§15.2 D2).
+    pub fn recall_spec_counted(
+        &self,
+        ctx: &mut DispatchContext,
+        spec: &RecallSpec<'_>,
+    ) -> Result<(Vec<RecalledRecord>, usize), RecallRefused> {
         let table = spec.table;
         let limit = spec.limit.min(ctx.restrictions.max_records);
         let words: Vec<String> = spec
@@ -240,7 +252,7 @@ impl DispatchIssuer {
             })
             .unwrap_or_default();
         let candidates = if words.is_empty() { limit } else { limit * 3 };
-        let mut walked = self.walk(ctx, spec, candidates)?;
+        let (mut walked, withheld) = self.walk(ctx, spec, candidates)?;
         if !words.is_empty() {
             walked.sort_by_key(|(r, _)| std::cmp::Reverse(keyword_score(table, r, &words)));
         }
@@ -254,7 +266,7 @@ impl DispatchIssuer {
                 .verbatim
                 .push((r.reference.clone(), r.label));
         }
-        Ok(records)
+        Ok((records, withheld))
     }
 
     /// Route-first control read (§12.3): at most `spec.limit` records, in
@@ -268,20 +280,22 @@ impl DispatchIssuer {
         let limit = spec.limit.min(ctx.restrictions.max_records);
         Ok(self
             .walk(ctx, spec, limit)?
+            .0
             .into_iter()
             .map(|(r, label)| control(spec.table, r, label))
             .collect())
     }
 
     /// The route-first walk shared by recall and control reads: at most
-    /// `limit` bound rows (any row for a `local` unit), with the
-    /// observational events of §15.1.
+    /// `limit` bound rows (any row for a `local` unit) and the number of
+    /// rows the route withheld, with the observational events of §15.1.
+    #[allow(clippy::type_complexity)]
     fn walk(
         &self,
         ctx: &DispatchContext,
         spec: &RecallSpec<'_>,
         limit: usize,
-    ) -> Result<Vec<(RecallRow, EvaluatedLabel)>, RecallRefused> {
+    ) -> Result<(Vec<(RecallRow, EvaluatedLabel)>, usize), RecallRefused> {
         if !self.issued(ctx) {
             return Err(RecallRefused::WrongIssuer);
         }
@@ -353,6 +367,7 @@ impl DispatchIssuer {
             return Err(RecallRefused::NotMigrated);
         };
 
+        let withheld = (excluded + unbound_met as i64).max(0) as usize;
         // Observational, after the read; best effort (§5.3).
         if route == RouteClass::NonLocal {
             events::observational(
@@ -362,7 +377,7 @@ impl DispatchIssuer {
                 serde_json::json!({
                     "route_class": route.class_name(),
                     "eligible_count": records.len(),
-                    "withheld_count": excluded + unbound_met as i64,
+                    "withheld_count": withheld,
                 }),
             );
         }
@@ -378,6 +393,6 @@ impl DispatchIssuer {
                 }),
             );
         }
-        Ok(records)
+        Ok((records, withheld))
     }
 }

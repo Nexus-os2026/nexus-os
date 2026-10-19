@@ -3865,3 +3865,90 @@ fn hm_m4_n2_a_tighten_that_cannot_commit_is_reported_and_latched_for_the_process
     );
     assert!(yes.shown().is_empty());
 }
+
+/// P3-C11-HM-M4 N3, A-A1 (§15.1): every `hm_event` the M4 changes write (a
+/// governed tighten, an Owner loosening, an HB admission and its outcome)
+/// has its kind's subject form, only allowlisted fields with class or count
+/// values, and no agent id, admission id, subject or content marker in a
+/// field.
+#[test]
+fn hm_m4_n3_a_a1_every_event_field_of_the_m4_kinds_is_in_the_allowlist() {
+    let e = env();
+    fixture_owner_loosen(&e.db, AGENT_B);
+    e.issuer.governed_tighten(id(AGENT_B)).unwrap();
+    e.issuer
+        .request_loosening(
+            id(AGENT_C),
+            Some(&M4Confirmer::answering(true)),
+            &mut || Ok(()),
+        )
+        .unwrap();
+    for reply in [Ok("SYNTH-reply".to_string()), Err("SYNTH-down".to_string())] {
+        let mut hb = e.issuer.begin_backend_shaped_request().unwrap();
+        let mut build = |c: &mut DispatchContext| {
+            let mut b = PromptBuilder::new(c);
+            b.text("SYNTH-hb-request");
+            Some((b.build(), (), attest(RouteClass::NonLocal)))
+        };
+        let _ = e
+            .issuer
+            .dispatch(&mut hb, &mut build, &mut |(), _: &str| reply.clone());
+    }
+    backfill_authority_events(&e.db).unwrap();
+
+    let rows: Vec<(String, String, Option<String>, String)> =
+        e.db.with_transaction(|tx| {
+            let mut stmt =
+                tx.prepare("SELECT subject, kind, agent_id, fields FROM hm_event ORDER BY n")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+            let mut v = Vec::new();
+            for row in rows {
+                v.push(row?);
+            }
+            Ok(v)
+        })
+        .unwrap();
+    let kinds: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.1.as_str()).collect();
+    for k in [
+        "memory.policy_tightened",
+        "memory.policy_loosened",
+        "memory.dispatch_admitted",
+        "memory.transport_failed",
+    ] {
+        assert!(kinds.contains(k), "scenario produced no {k}");
+    }
+    let mut forbidden: Vec<String> = [AGENT_A, AGENT_B, AGENT_C, AGENT_D, AGENT_E]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    forbidden.extend(strings(
+        &e.db,
+        "SELECT admission_id FROM hm_dispatch_admission",
+    ));
+    forbidden.push("SYNTH".to_string());
+    forbidden.extend(rows.iter().map(|r| r.0.clone()));
+    for (subject, kind, agent_id, fields) in &rows {
+        assert!(subject_fits(kind, subject), "{kind}: subject {subject}");
+        if let Some(a) = agent_id {
+            assert!(Uuid::parse_str(a).is_ok(), "{kind}: agent column is a UUID");
+        }
+        let v: serde_json::Value = serde_json::from_str(fields).unwrap();
+        let obj = v
+            .as_object()
+            .unwrap_or_else(|| panic!("{kind}: fields object"));
+        let allowed = allowed_fields(kind);
+        for (key, value) in obj {
+            assert!(
+                allowed.contains(&key.as_str()),
+                "{kind}: field {key} not allowed"
+            );
+            assert!(value_fits(key, value), "{kind}: {key} = {value}");
+        }
+        for needle in &forbidden {
+            assert!(
+                !fields.contains(needle.as_str()),
+                "{kind}: field leaks {needle}"
+            );
+        }
+    }
+}

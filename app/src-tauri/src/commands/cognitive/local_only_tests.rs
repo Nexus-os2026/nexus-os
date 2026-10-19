@@ -5031,3 +5031,141 @@ fn p3_hm_m4_n2_an_interface_config_save_loosens_only_on_native_confirmation() {
     assert_eq!(field("local="), "0|2|owner_confirmed", "{}", w.result);
     assert_eq!(field("assignment="), "|false|0|0", "{}", w.result);
 }
+
+// ── P3-C11-HM-M4 N3: audit content, A-A1 (P3-HM-CONTRACT-02 §15.2) ──────────
+
+/// The payloads of the desktop's audit events whose `action` is `action`.
+fn m4_audit_actions(state: &AppState, action: &str) -> Vec<serde_json::Value> {
+    state
+        .audit
+        .lock()
+        .unwrap()
+        .events()
+        .iter()
+        .filter(|e| e.payload.get("action").and_then(|v| v.as_str()) == Some(action))
+        .map(|e| e.payload.clone())
+        .collect()
+}
+
+/// A-A1, row D3: `agent_goal_completed` carries the goal id, its status and
+/// its success, never the result summary.
+#[test]
+fn p3_hm_m4_n3_a_a1_d3_a_goal_completion_carries_no_result() {
+    const MARKER: &str = "P3-HM-M4-A-A1-RESULT-5d70";
+    let state = AppState::new_in_memory();
+    let agent = Uuid::new_v4().to_string();
+    let goal = Uuid::new_v4().to_string();
+    persist_task_completion(
+        &state,
+        &agent,
+        &goal,
+        "completed",
+        &format!("The synthetic result {MARKER}"),
+        true,
+        0.0,
+    );
+    let completions = m4_audit_actions(&state, "agent_goal_completed");
+    assert_eq!(completions.len(), 1);
+    let payload = completions[0].to_string();
+    assert!(
+        !payload.contains(MARKER) && completions[0].get("result_summary").is_none(),
+        "A-A1: the result in an audit payload: {payload}"
+    );
+    assert_eq!(completions[0]["goal_id"], goal);
+    assert_eq!(completions[0]["success"], true);
+}
+
+/// A-A1, row D4: the audit payload of `agent_evolved_strategy` carries no
+/// strategy hash (the frontend emit is local UI delivery, unchanged).
+#[test]
+fn p3_hm_m4_n3_a_a1_d4_an_evolved_strategy_audit_carries_no_strategy_hash() {
+    const MARKER: &str = "P3-HM-M4-A-A1-EVOLVE-GOAL-3a9c";
+    let state = AppState::new_in_memory();
+    let agent = {
+        let manifest = parse_manifest(
+            r#"
+name = "p3-hm-m4-evolver"
+version = "1.0.0"
+capabilities = ["llm.query"]
+fuel_budget = 10000
+autonomy_level = 4
+"#,
+        )
+        .unwrap();
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .start_agent(manifest)
+            .unwrap()
+            .to_string()
+    };
+    let description = format!("Plan the synthetic goal {MARKER}");
+    // Five completed goals: evolution selects a strategy on every fifth.
+    let mut goal_id = String::new();
+    for _ in 0..5 {
+        goal_id = execute_agent_goal(&state, agent.clone(), description.clone(), 5, None).unwrap();
+        persist_task_completion(&state, &agent, &goal_id, "completed", "done", true, 0.0);
+    }
+    run_post_goal_evolution(
+        &BackendEventBridge::default(),
+        &state,
+        &agent,
+        &goal_id,
+        true,
+        0.0,
+        None,
+    );
+    let evolved = m4_audit_actions(&state, "agent_evolved_strategy");
+    assert_eq!(evolved.len(), 1, "precondition: a strategy evolved");
+    let hash = nexus_kernel::cognitive::hash_strategy(&description.to_lowercase());
+    let payload = evolved[0].to_string();
+    assert!(
+        !payload.contains(&hash) && evolved[0].get("strategy_hash").is_none(),
+        "A-A1: the strategy hash in an audit payload: {payload}"
+    );
+    assert!(evolved[0]["new_score"].as_f64().is_some());
+}
+
+/// A-A1, row D6: `start_hivemind` carries the session id, never the goal.
+#[test]
+fn p3_hm_m4_n3_a_a1_d6_start_hivemind_carries_no_goal() {
+    const MARKER: &str = "P3-HM-M4-A-A1-HIVE-SESSION-GOAL-19e4";
+    let name = "p3_hm_m4_n3_a_a1_d6_start_hivemind_carries_no_goal";
+    let Some(w) = e2e(name, FakeOllama::serving(&["qwen3:8b"]), || {
+        let state = AppState::new_in_memory();
+        let a = register_participant(&state, ("p3-hm-m4-hive-a", true, ""));
+        let b = register_participant(&state, ("p3-hm-m4-hive-b", true, ""));
+        let goal = format!("Answer the synthetic question {MARKER}");
+        let session = hive_session_on(&state, &goal, vec![a, b]);
+        let starts = m4_audit_actions(&state, "start_hivemind");
+        let leaks = starts
+            .iter()
+            .filter(|p| p.to_string().contains(MARKER) || p.get("goal").is_some())
+            .count();
+        let with_session = starts
+            .iter()
+            .filter(|p| p["session_id"].as_str().is_some())
+            .count();
+        Ok(format!(
+            "session_ok={} starts={} leaks={leaks} with_session={with_session}",
+            session.is_ok(),
+            starts.len()
+        ))
+    }) else {
+        return;
+    };
+    assert_eq!(
+        hm_field(&w.result, "starts="),
+        "1",
+        "precondition: the session ran: {}",
+        w.result
+    );
+    assert_eq!(
+        hm_field(&w.result, "leaks="),
+        "0",
+        "A-A1: the goal in a start_hivemind payload: {}",
+        w.result
+    );
+    assert_eq!(hm_field(&w.result, "with_session="), "1", "{}", w.result);
+}

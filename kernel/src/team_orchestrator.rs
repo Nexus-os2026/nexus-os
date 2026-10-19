@@ -107,10 +107,10 @@ impl TeamOrchestrator {
             let _ = audit.append_event(
                 uuid::Uuid::parse_str(&config.director_id).unwrap_or_default(),
                 EventType::StateChange,
+                // P3-HM-CONTRACT-02 §15.2 D5: counts, never the goal.
                 json!({
                     "event": "team.workflow_start",
                     "director": config.director_name,
-                    "goal": goal,
                     "team_size": config.members.len(),
                     "members": config.members.iter().map(|m| &m.name).collect::<Vec<_>>(),
                 }),
@@ -257,7 +257,6 @@ impl TeamOrchestrator {
                 json!({
                     "event": "team.workflow_complete",
                     "director": config.director_name,
-                    "goal": goal,
                     "success": success,
                     "tasks_completed": task_results.iter().filter(|t| t.success).count(),
                     "tasks_total": task_results.len(),
@@ -922,5 +921,72 @@ mod tests {
         assert_eq!(estimate_task_fuel("Write a 1500-word article"), 15.0);
         assert_eq!(estimate_task_fuel("Publish and save to git"), 8.0);
         assert_eq!(estimate_task_fuel("unknown task"), 10.0);
+    }
+
+    /// P3-C11-HM-M4 N3, A-A1 row D5 (P3-HM-CONTRACT-02 §15.2):
+    /// `team.workflow_start` and `team.workflow_complete` carry counts, never
+    /// the goal.
+    #[test]
+    fn hm_m4_n3_a_a1_d5_team_workflow_events_carry_no_goal() {
+        const MARKER: &str = "P3-HM-M4-A-A1-TEAM-GOAL-41aa";
+        let mut sup = Supervisor::new();
+        let director_id = create_agent(
+            &mut sup,
+            "nexus-director",
+            vec!["web.search", "llm.query", "self.modify"],
+            50000,
+        );
+        let researcher_id = create_agent(
+            &mut sup,
+            "nexus-researcher",
+            vec!["web.search", "web.read", "llm.query", "fs.write"],
+            10000,
+        );
+        let writer_id = create_agent(
+            &mut sup,
+            "nexus-writer",
+            vec!["llm.query", "fs.read", "fs.write"],
+            10000,
+        );
+        let publisher_id = create_agent(
+            &mut sup,
+            "nexus-publisher",
+            vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+            5000,
+        );
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let hm = TestHm::new().register_every_agent();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(team_mock(&hm));
+        let orchestrator = TeamOrchestrator::new(Arc::new(Mutex::new(sup)), audit.clone(), llm);
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+        let mut director = director(&hm, &director_id);
+        orchestrator
+            .execute_team_workflow(
+                &hm.issuer,
+                &mut director,
+                &config,
+                &format!("Research trending topics {MARKER}, write an article and publish it"),
+            )
+            .unwrap();
+        let audit = audit.lock().unwrap();
+        let team: Vec<&serde_json::Value> = audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .filter(|p| {
+                p.get("event")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| s.starts_with("team.workflow_"))
+            })
+            .collect();
+        assert_eq!(team.len(), 2, "precondition: start and complete events");
+        for payload in &team {
+            assert!(
+                !payload.to_string().contains(MARKER) && payload.get("goal").is_none(),
+                "A-A1: the goal in a team audit payload: {payload}"
+            );
+        }
+        assert_eq!(team[0]["team_size"], 3);
+        assert_eq!(team[1]["tasks_total"], 3);
     }
 }

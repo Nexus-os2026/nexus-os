@@ -347,6 +347,8 @@ pub fn persist_task_completion(
             }
         }
     }
+    // P3-HM-CONTRACT-02 §15.2 D3: the goal id, its status and its success,
+    // never the result summary.
     state.log_event(
         Uuid::parse_str(agent_id).unwrap_or_default(),
         EventType::StateChange,
@@ -355,7 +357,6 @@ pub fn persist_task_completion(
             "goal_id": goal_id,
             "status": status,
             "success": success,
-            "result_summary": result_summary,
         }),
     );
 }
@@ -646,6 +647,8 @@ pub(crate) fn run_post_goal_evolution(
                 {
                     let score = strategy.composite_score;
                     let generation = (completed_count / 5) as u64;
+                    // P3-HM-CONTRACT-02 §15.2 D4: no strategy hash in the audit
+                    // payload (the frontend emit below is local UI delivery).
                     state.log_event(
                         Uuid::parse_str(agent_id).unwrap_or_default(),
                         EventType::StateChange,
@@ -654,7 +657,6 @@ pub(crate) fn run_post_goal_evolution(
                             "message": format!("Agent {} evolved strategy. New composite score: {:.3}", agent_name, score),
                             "new_score": score,
                             "generation": generation,
-                            "strategy_hash": best_strategy,
                         }),
                     );
                     bridge.emit(
@@ -2981,11 +2983,11 @@ pub(crate) fn start_hivemind_with(
     state.log_event(
         SYSTEM_UUID,
         EventType::StateChange,
+        // P3-HM-CONTRACT-02 §15.2 D6: the session id, never the goal.
         json!({
             "action": "start_hivemind",
             "session_id": outcome.id,
             "session": session.id(),
-            "goal": goal,
         }),
     );
 

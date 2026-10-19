@@ -287,13 +287,28 @@ impl AgentMemoryManager {
         memory_type: Option<&str>,
         limit: usize,
     ) -> Result<Vec<RecalledRecord>, AgentError> {
+        self.recall_for_dispatch_counted(issuer, ctx, query, memory_type, limit)
+            .map(|(records, _withheld)| records)
+    }
+
+    /// [`recall_for_dispatch`](Self::recall_for_dispatch), with the number
+    /// of rows the unit's route withheld (P3-HM-CONTRACT-02 §15.2 D2: the
+    /// audit counts, never the query).
+    pub fn recall_for_dispatch_counted(
+        &self,
+        issuer: &DispatchIssuer,
+        ctx: &mut DispatchContext,
+        query: &str,
+        memory_type: Option<&str>,
+        limit: usize,
+    ) -> Result<(Vec<RecalledRecord>, usize), AgentError> {
         let spec = RecallSpec {
             column_eq: memory_type.map(|mt| ("memory_type", mt)),
             rank_words: Some(query),
             ..RecallSpec::table(RecordTable::AgentMemory, limit)
         };
-        let records = issuer
-            .recall_spec(ctx, &spec)
+        let (records, withheld) = issuer
+            .recall_spec_counted(ctx, &spec)
             .map_err(|e| AgentError::SupervisorError(format!("memory load error: {e}")))?;
         for record in &records {
             if let Ok(id) = record.record_ref().record_id().parse::<i64>() {
@@ -301,7 +316,7 @@ impl AgentMemoryManager {
                 let _ = self.store.touch_memory(id);
             }
         }
-        Ok(records)
+        Ok((records, withheld))
     }
 }
 

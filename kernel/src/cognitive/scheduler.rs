@@ -126,10 +126,11 @@ impl AgentScheduler {
             let _ = trail.append_event(
                 agent_uuid,
                 EventType::StateChange,
+                // P3-HM-CONTRACT-02 §15.2 D8: no goal text; the schedule is
+                // its agent's (the event's agent id).
                 serde_json::json!({
                     "event": "schedule_registered",
                     "cron": cron_expression,
-                    "goal": default_goal,
                 }),
             );
         }
@@ -224,9 +225,9 @@ async fn schedule_loop(
                         let _ = trail.append_event(
                             uuid,
                             EventType::StateChange,
+                            // P3-HM-CONTRACT-02 §15.2 D8: no goal text.
                             serde_json::json!({
                                 "event": "scheduled_goal_fired",
-                                "goal": default_goal,
                             }),
                         );
                     }
@@ -511,5 +512,64 @@ mod tests {
         assert_eq!(listed[0].default_goal, "goal");
         sched.shutdown();
         assert!(sched.list().is_empty());
+    }
+
+    /// The executor of a fired schedule in the A-A1 test: accepts.
+    struct M4Accepting;
+
+    impl ScheduledGoalExecutor for M4Accepting {
+        fn execute(&self, _agent_id: &str, _default_goal: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    /// P3-C11-HM-M4 N3, A-A1 row D8 (P3-HM-CONTRACT-02 §15.2): the
+    /// scheduler's `schedule_registered` and `scheduled_goal_fired` events
+    /// carry no goal text (the schedule is its agent's).
+    #[tokio::test]
+    async fn hm_m4_n3_a_a1_d8_schedule_events_carry_no_goal() {
+        const MARKER: &str = "P3-HM-M4-A-A1-SCHEDULED-GOAL-0b5e";
+        let scheduler = scheduler();
+        scheduler.set_executor(Arc::new(M4Accepting));
+        let agent = Uuid::new_v4().to_string();
+        // The next tick within two seconds (one second of each minute).
+        let second = (Utc::now().timestamp() + 2).rem_euclid(60);
+        scheduler
+            .register_agent(&agent, &format!("{second} * * * * *"), MARKER)
+            .unwrap();
+        let fired = |audit: &Arc<Mutex<AuditTrail>>| {
+            audit.lock().unwrap().events().iter().any(|e| {
+                e.payload.get("event").and_then(|v| v.as_str()) == Some("scheduled_goal_fired")
+            })
+        };
+        // Bounded wait for the tick (a deadline, not a synchronisation).
+        let deadline = std::time::Instant::now() + Duration::from_secs(70);
+        while !fired(&scheduler.audit) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "precondition: the schedule fired"
+            );
+            time::sleep(Duration::from_millis(20)).await;
+        }
+        scheduler.shutdown();
+        let audit = scheduler.audit.lock().unwrap();
+        let events: Vec<String> = audit
+            .events()
+            .iter()
+            .filter(|e| {
+                e.payload
+                    .get("event")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| s.starts_with("schedule"))
+            })
+            .map(|e| e.payload.to_string())
+            .collect();
+        assert_eq!(events.len(), 2, "registered and fired: {events:?}");
+        for payload in &events {
+            assert!(
+                !payload.contains(MARKER) && !payload.contains("\"goal\""),
+                "A-A1: the scheduled goal in an audit payload: {payload}"
+            );
+        }
     }
 }

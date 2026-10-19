@@ -475,10 +475,8 @@ impl HivemindCoordinator {
     ) -> Result<HivemindSession, AgentError> {
         let mut session = HivemindSession::new(master_goal.to_string());
 
-        self.log_audit(
-            "hivemind_start",
-            json!({"session_id": session.id, "goal": master_goal}),
-        )?;
+        // P3-HM-CONTRACT-02 §15.2 D10: the session id, never the goal.
+        self.log_audit("hivemind_start", json!({"session_id": session.id}))?;
 
         // 1. DECOMPOSE
         let caps_summary: Vec<_> = available_agents
@@ -712,10 +710,8 @@ impl HivemindCoordinator {
     {
         let mut session = HivemindSession::new(master_goal.to_string());
 
-        self.log_audit(
-            "hivemind_start",
-            json!({"session_id": session.id, "goal": master_goal}),
-        )?;
+        // P3-HM-CONTRACT-02 §15.2 D10: the session id, never the goal.
+        self.log_audit("hivemind_start", json!({"session_id": session.id}))?;
 
         // 1. DECOMPOSE
         let caps_summary: Vec<_> = available_agents
@@ -1854,5 +1850,54 @@ mod tests {
         assert!(waves[1].contains(&"b".to_string()));
         assert!(waves[1].contains(&"c".to_string()));
         assert_eq!(waves[2], vec!["d"]);
+    }
+
+    /// P3-C11-HM-M4 N3, A-A1 row D10 (P3-HM-CONTRACT-02 §15.2): the kernel's
+    /// `hivemind_start` event carries the session id, never the goal, on
+    /// both entry points.
+    #[test]
+    fn hm_m4_n3_a_a1_d10_hivemind_start_carries_no_goal() {
+        const MARKER: &str = "P3-HM-M4-A-A1-HIVE-GOAL-77c2";
+        let hm = TestHm::new();
+        let lead = hm.open_agent("a-a1-lead");
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        // A model that fails: the start event is written before the first
+        // model call.
+        let coord = HivemindCoordinator::new(
+            Box::new(ScriptedLlm::new(&hm.issuer, RouteClass::Local).then_fail("down")),
+            Arc::new(CollectingHivemindEmitter::new()),
+            audit.clone(),
+        );
+        let session = |hm: &TestHm| {
+            hm.issuer
+                .begin_unit(
+                    Principal::Agent(lead),
+                    Unit::HiveSubtask {
+                        session_id: uuid::Uuid::new_v4(),
+                        subtask_id: 0,
+                    },
+                )
+                .unwrap()
+        };
+        let goal = format!("Plan the synthetic goal {MARKER}");
+        let _ = coord.execute_hivemind_goal(&mut session(&hm), &goal, Vec::new());
+        let _ = coord.execute_with_executor(&mut session(&hm), &goal, Vec::new(), |_, _, _, _| {
+            unreachable!("no sub-task runs")
+        });
+        let audit = audit.lock().unwrap();
+        let starts: Vec<&serde_json::Value> = audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .filter(|p| p.get("hivemind").and_then(|v| v.as_str()) == Some("hivemind_start"))
+            .collect();
+        assert_eq!(starts.len(), 2, "precondition: both sessions started");
+        for payload in &starts {
+            assert!(
+                !payload.to_string().contains(MARKER) && payload["detail"].get("goal").is_none(),
+                "A-A1: the goal in a hivemind_start payload: {payload}"
+            );
+            assert!(payload["detail"]["session_id"].as_str().is_some());
+        }
     }
 }
