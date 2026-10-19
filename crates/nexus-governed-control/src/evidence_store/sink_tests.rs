@@ -212,7 +212,7 @@ fn el1_n3_while_a_record_is_owed_nothing_new_is_admitted() {
     f.run(full_while_running()).unwrap();
     let owed = f.evidence.store().owed_bodies();
     assert_eq!(owed.len(), 1);
-    // The store accepts again, but the record is still owed: nothing new.
+    // The store refuses every insert: the record stays owed and nothing new is admitted.
     f.evidence.store().refuse_inserts(true);
     assert_eq!(
         f.propose(nothing()).unwrap_err(),
@@ -226,6 +226,26 @@ fn el1_n3_while_a_record_is_owed_nothing_new_is_admitted() {
         AuthorityError::EvidenceUnavailable
     );
     assert_eq!(f.evidence.health().owed, 1);
+    // The store would take a new record; only the owed record's retry fails:
+    // still nothing new is admitted or written.
+    let before = f.rows();
+    f.evidence.store().refuse_inserts(false);
+    f.evidence.store().refuse_next_insert();
+    assert_eq!(
+        f.propose(nothing()).unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    f.evidence.store().refuse_next_insert();
+    assert_eq!(
+        f.control
+            .authority()
+            .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+            .unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    assert_eq!(f.rows().len(), before.len(), "nothing new is written");
+    assert_eq!(f.evidence.health().owed, 1);
+    assert!(!f.evidence.health().latched);
     // Accepting again: the owed record is written first, as it was.
     f.evidence.store().refuse_inserts(false);
     let id = f.propose(nothing()).expect("admitted once nothing is owed");

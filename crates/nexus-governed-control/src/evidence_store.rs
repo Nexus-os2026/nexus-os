@@ -364,6 +364,9 @@ struct Inner {
     /// Every insert fails before COMMIT (a full disk), until cleared.
     #[cfg(test)]
     refusing: bool,
+    /// The next insert alone fails before COMMIT (once), then inserts succeed.
+    #[cfg(test)]
+    refuse_next: bool,
 }
 
 /// The evidence store: one file, one connection.
@@ -723,6 +726,8 @@ impl EvidenceStore {
             fault: None,
             #[cfg(test)]
             refusing: false,
+            #[cfg(test)]
+            refuse_next: false,
         };
         // Only now, the whole chain verified: this session, then the
         // reconciliation, before anything is admitted.
@@ -1125,7 +1130,7 @@ impl Inner {
             return Append::Uncertain;
         }
         #[cfg(test)]
-        if self.refusing {
+        if self.refusing || std::mem::take(&mut self.refuse_next) {
             if rolled_back(&self.conn) {
                 return Append::NotCommitted;
             }
@@ -1312,6 +1317,11 @@ impl EvidenceStore {
     /// Every insert fails before COMMIT (a full disk) until `false`.
     pub(crate) fn refuse_inserts(&self, refusing: bool) {
         self.inner().refusing = refusing;
+    }
+
+    /// Only the next insert fails before COMMIT; the one after succeeds.
+    pub(crate) fn refuse_next_insert(&self) {
+        self.inner().refuse_next = true;
     }
 
     /// Hold the store's mutex (a slow store) until the guard is dropped.
