@@ -145,6 +145,40 @@ pub enum StepKind {
     External,
 }
 
+impl StepKind {
+    /// The class name used in audit and event fields.
+    pub fn class_name(self) -> &'static str {
+        match self {
+            StepKind::Model => "model",
+            StepKind::Internal => "internal",
+            StepKind::External => "external",
+        }
+    }
+}
+
+/// The effect of an external step, as its executor's own record has it
+/// (P3-HM-CONTRACT-02 §13.2 LK-3). No rollback is ever implied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepEffect {
+    /// The effect happened.
+    Executed,
+    /// The step failed (refused before it started, or its effect failed).
+    Failed,
+    /// Not known: the effect may still happen or may have partly happened.
+    Unknown,
+}
+
+impl StepEffect {
+    /// The class name used in audit and event fields.
+    pub fn class_name(self) -> &'static str {
+        match self {
+            StepEffect::Executed => "executed",
+            StepEffect::Failed => "failed",
+            StepEffect::Unknown => "unknown",
+        }
+    }
+}
+
 /// The step kind of `action` for an executor that has no classification of
 /// its own: an `LlmQuery` is a model step; `Noop`, the memory actions and
 /// the knowledge-graph actions are internal; everything else is treated as
@@ -168,6 +202,17 @@ pub trait ActionExecutor: Send + Sync {
     /// which lock, if any, the cycle holds around the step.
     fn step_kind(&self, action: &PlannedAction) -> StepKind {
         default_step_kind(action)
+    }
+
+    /// The effect of the external step `action` that returned `output` (its
+    /// text, or its error), from this executor's own record (§13.2 LK-3).
+    /// The default: a step that returned executed, one that failed failed.
+    fn step_effect(&self, action: &PlannedAction, output: Result<&str, &str>) -> StepEffect {
+        let _ = action;
+        match output {
+            Ok(_) => StepEffect::Executed,
+            Err(_) => StepEffect::Failed,
+        }
     }
 
     /// Executes an action outside any unit. An action that needs a unit (a
@@ -1187,11 +1232,35 @@ impl CognitiveRuntime {
         Some(state)
     }
 
-    /// §13.2: a stale result is refused; nothing of it is applied to loop
-    /// state.
-    fn stale_refused() -> CycleResult {
-        let reason = "stale result refused: the goal was cancelled, replaced or ended while it ran"
-            .to_string();
+    /// §13.2 LK-3: refuses a stale result. Nothing is applied to loop state
+    /// (committed labelled writes stay committed); an external step's effect
+    /// is recorded as it happened and no rollback is claimed. The refusal is
+    /// recorded in the step audit and as `cycle.stale_result_refused`.
+    fn refuse_stale(
+        &self,
+        agent_id: &str,
+        kind: StepKind,
+        effect: Option<&'static str>,
+        audit: &mut dyn AuditWriter,
+    ) -> CycleResult {
+        let mut payload = json!({
+            "event": "cycle.stale_result_refused",
+            "agent_id": agent_id,
+            "step_kind": kind.class_name(),
+        });
+        if let Some(effect) = effect {
+            payload["effect"] = json!(effect);
+        }
+        let agent = uuid::Uuid::parse_str(agent_id).unwrap_or_default();
+        // Best-effort: the refusal stands whatever happens to its record.
+        let _ = audit.append_event(agent, EventType::StateChange, payload);
+        if let Ok(issuer) = self.issuer() {
+            issuer.record_stale_result_refused(agent, kind.class_name(), effect);
+        }
+        let reason = format!(
+            "stale result refused ({} step): the goal was cancelled, replaced or ended while it ran",
+            kind.class_name()
+        );
         CycleResult {
             phase: CognitivePhase::Idle,
             steps_executed: 0,
@@ -1504,7 +1573,7 @@ impl CognitiveRuntime {
                 Some(state) => state,
                 None => {
                     drop(loops);
-                    return Ok(Self::stale_refused());
+                    return Ok(self.refuse_stale(agent_id, StepKind::Model, None, audit));
                 }
             };
             let plan = planned?;
@@ -1804,7 +1873,17 @@ impl CognitiveRuntime {
                 Some(state) => state,
                 None => {
                     drop(loops);
-                    return Ok(Self::stale_refused());
+                    // An external step's effect is recorded as its executor's
+                    // own record has it, and it is never retried (no later
+                    // cycle of this loop runs it).
+                    let effect = (kind == StepKind::External).then(|| {
+                        let output = executed
+                            .as_ref()
+                            .map(|output| output.text.as_str())
+                            .map_err(String::as_str);
+                        executor.step_effect(&action_clone, output).class_name()
+                    });
+                    return Ok(self.refuse_stale(agent_id, kind, effect, audit));
                 }
             };
             // The step's fuel is settled against its reservation: charged on
@@ -6063,6 +6142,12 @@ mod tests {
             }
         }
 
+        /// The `cycle.stale_result_refused` events of `agent` in the shared
+        /// synthetic store.
+        fn stale_events(agent: &str) -> usize {
+            crate::hm::testing::event_count(&hm().db, "cycle.stale_result_refused", agent)
+        }
+
         /// A-L1 (§13.2 LK-1, LK-2; mutant 10): while one agent's planner is
         /// blocked inside its model call, another agent's cycle completes,
         /// the first agent's status is read, and `loops` is acquirable within
@@ -6123,6 +6208,151 @@ mod tests {
             );
             assert!(loops_free, "A-L1: `loops` was held across the planner call");
             assert!(a_result.is_ok(), "{a_result:?}");
+        }
+
+        /// A-L2 (§13.2 LK-3, cancellation): a cancellation during
+        /// the in-flight model call completes at once; the call's result is
+        /// refused as stale (recorded as `cycle.stale_result_refused`), never
+        /// applied, and the reservation is released (the agent's next goal
+        /// runs).
+        #[test]
+        fn hm_m4_n5_a_l2_a_cancelled_in_flight_result_is_refused_as_stale() {
+            let (sup, ids) = agents(1);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            let a = ids[0].clone();
+            runtime
+                .assign_goal(&a, AgentGoal::new("A-L2".into(), 5))
+                .unwrap();
+            let (planner_a, entered, release) = gated_planner(NOOP_PLAN);
+            let (runner, id) = (runtime.clone(), a.clone());
+            let cycle_a = std::thread::spawn(move || {
+                let mut audit = AuditTrail::new();
+                runner.run_cycle(
+                    &id,
+                    &planner_a,
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut audit,
+                )
+            });
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: the planner entered its model call");
+            let (runner, id) = (runtime.clone(), a.clone());
+            let stopped = within(move || runner.stop_agent_loop(&id).is_ok());
+            release.send(()).unwrap();
+            let result = cycle_a.join().unwrap();
+            assert_eq!(
+                stopped,
+                Some(true),
+                "A-L2: the cancellation waited for the in-flight model call"
+            );
+            let cycle = result.expect("the cycle returns");
+            assert!(
+                !cycle.should_continue
+                    && cycle
+                        .blocked_reason
+                        .as_deref()
+                        .is_some_and(|r| r.contains("stale")),
+                "A-L2: the stale result was not refused: {cycle:?}"
+            );
+            assert_eq!(stale_events(&a), 1, "A-L2: the refusal was not recorded");
+            assert!(runtime.get_agent_status(&a).is_none(), "nothing applied");
+            // The reservation is released: a new goal of the agent runs.
+            runtime
+                .assign_goal(&a, AgentGoal::new("A-L2 again".into(), 5))
+                .unwrap();
+            let mut audit = AuditTrail::new();
+            assert!(runtime
+                .run_cycle(
+                    &a,
+                    &make_planner(NOOP_PLAN),
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut audit
+                )
+                .is_ok());
+        }
+
+        /// A-L2, replacement (§13.2 LK-3: a goal reassigned, stopped or
+        /// restarted makes the result stale; mutant 11): the agent's goal is
+        /// replaced (its loop stopped and a new goal assigned) while the
+        /// cycle's model call is in flight, and the replacement completes at
+        /// once. The old call's result is refused as stale (recorded) and
+        /// never applied to the new goal, which has planned nothing; the new
+        /// goal's first cycle runs.
+        #[test]
+        fn hm_m4_n5_a_l2_a_replaced_goals_in_flight_result_is_refused_as_stale() {
+            let (sup, ids) = agents(1);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            let a = ids[0].clone();
+            runtime
+                .assign_goal(&a, AgentGoal::new("A-L2 replaced".into(), 5))
+                .unwrap();
+            let (planner_a, entered, release) = gated_planner(NOOP_PLAN);
+            let (runner, id) = (runtime.clone(), a.clone());
+            let cycle_a = std::thread::spawn(move || {
+                let mut audit = AuditTrail::new();
+                runner.run_cycle(
+                    &id,
+                    &planner_a,
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut audit,
+                )
+            });
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: the planner entered its model call");
+            let new_goal = AgentGoal::new("A-L2 replacement".into(), 5);
+            let new_goal_id = new_goal.id.clone();
+            let (runner, id) = (runtime.clone(), a.clone());
+            let replaced = within(move || {
+                runner.stop_agent_loop(&id).is_ok() && runner.assign_goal(&id, new_goal).is_ok()
+            });
+            release.send(()).unwrap();
+            let result = cycle_a.join().unwrap();
+            assert_eq!(
+                replaced,
+                Some(true),
+                "A-L2: replacing the goal waited for the in-flight model call"
+            );
+            let cycle = result.expect("the cycle returns");
+            assert!(
+                !cycle.should_continue
+                    && cycle
+                        .blocked_reason
+                        .as_deref()
+                        .is_some_and(|r| r.contains("stale")),
+                "A-L2: the stale result was not refused: {cycle:?}"
+            );
+            assert_eq!(stale_events(&a), 1, "A-L2: the refusal was not recorded");
+            let status = runtime.get_agent_status(&a).expect("the new goal's loop");
+            assert_eq!(
+                status.active_goal.as_ref().map(|g| g.id.clone()),
+                Some(new_goal_id)
+            );
+            assert_eq!(
+                (
+                    status.steps_total,
+                    status.steps_completed,
+                    status.cycle_count
+                ),
+                (0, 0, 0),
+                "A-L2: the old goal's result was applied to the new goal"
+            );
+            let mut audit = AuditTrail::new();
+            assert!(runtime
+                .run_cycle(
+                    &a,
+                    &make_planner(NOOP_PLAN),
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut audit
+                )
+                .is_ok());
         }
 
         /// A-L3 (§13.2, §8 item 1): the barrier method shows no policy,
@@ -6262,6 +6492,89 @@ mod tests {
                 self.active.fetch_sub(1, Ordering::SeqCst);
                 Ok("fetched".to_string())
             }
+        }
+
+        /// A-L5 (§13.2 LK-E, LK-3; mutant 12): an external step admitted and
+        /// then cancelled mid-execution. Its effect is recorded truthfully
+        /// (executed), loop state is not advanced, no rollback is reported,
+        /// and no later cycle executes it again.
+        #[test]
+        fn hm_m4_n5_a_l5_a_cancelled_external_step_is_recorded_and_never_retried() {
+            let (sup, ids) = agents(1);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            let a = ids[0].clone();
+            runtime
+                .assign_goal(&a, AgentGoal::new("A-L5".into(), 5))
+                .unwrap();
+            let (executor, entered, release) = GatedExternal::new();
+            let executor = Arc::new(executor);
+            let (runner, id, exec) = (runtime.clone(), a.clone(), executor.clone());
+            let cycle_a = std::thread::spawn(move || {
+                let mut audit = AuditTrail::new();
+                let result = runner.run_cycle(
+                    &id,
+                    &make_planner(FETCH_PLAN),
+                    &make_memory_mgr(),
+                    exec.as_ref(),
+                    &mut audit,
+                );
+                (result, audit)
+            });
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: the external step was admitted and runs");
+            let (runner, id) = (runtime.clone(), a.clone());
+            let stopped = within(move || runner.stop_agent_loop(&id).is_ok());
+            release.send(()).unwrap();
+            let (result, audit) = cycle_a.join().unwrap();
+            assert_eq!(
+                stopped,
+                Some(true),
+                "A-L5: the cancellation waited for the external step"
+            );
+            let cycle = result.expect("the cycle returns");
+            assert!(!cycle.should_continue, "{cycle:?}");
+            let payloads: Vec<String> = audit
+                .events()
+                .iter()
+                .map(|e| e.payload.to_string())
+                .collect();
+            assert!(
+                payloads
+                    .iter()
+                    .any(|p| p.contains("cycle.stale_result_refused")
+                        && p.contains("\"step_kind\":\"external\"")
+                        && p.contains("\"effect\":\"executed\"")),
+                "A-L5: the external step's effect was not recorded truthfully: {payloads:?}"
+            );
+            assert!(
+                !payloads
+                    .iter()
+                    .any(|p| p.contains("cognitive.step_executed")),
+                "A-L5: loop state advanced: {payloads:?}"
+            );
+            for word in ["rollback", "rolled back", "undo", "retract"] {
+                assert!(
+                    !payloads.iter().any(|p| p.contains(word)),
+                    "A-L5: {word} reported"
+                );
+            }
+            assert_eq!(stale_events(&a), 1);
+            // No later cycle executes it again.
+            let mut audit = AuditTrail::new();
+            let _ = runtime.run_cycle(
+                &a,
+                &make_planner(FETCH_PLAN),
+                &make_memory_mgr(),
+                executor.as_ref(),
+                &mut audit,
+            );
+            assert_eq!(
+                executor.calls.load(Ordering::SeqCst),
+                1,
+                "A-L5: re-executed"
+            );
         }
 
         /// A-L6, model-call half (§13.2 LK-2): two agents' planner calls may

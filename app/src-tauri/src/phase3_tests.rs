@@ -521,6 +521,11 @@ const EXECUTE_IN_BODY: &str = "matchexecutor_route(self.governed.as_ref(),agent_
 /// internal.
 const STEP_KIND_BODY: &str = "use{classify,Disposition};useStepKind;ifmatches!(action,PlannedAction::LlmQuery{..}){returnStepKind::Model;}match(classify(action),&self.governed){(Disposition::Governed(_),Some(_))=>StepKind::External,_=>StepKind::Internal}";
 
+/// The normalized body of `Phase0AgentExecutor::step_effect`
+/// (P3-HM-CONTRACT-02 §13.2 LK-3; mission P3-C11-HM-M4 N5): an external
+/// step's effect from the Phase Three answer, and nothing else.
+const STEP_EFFECT_BODY: &str = "useStepEffect;matchoutput{Ok(text)iffrom_str::<Value>(text).is_ok_and(|answer|answer.get(\"awaiting_owner_approval\").is_some())=>{StepEffect::Unknown}Ok(_)=>StepEffect::Executed,Err(_)=>StepEffect::Failed}";
+
 #[test]
 fn p3e_g1_01_every_planned_action_is_classified_without_a_wildcard() {
     let declared = enum_variants(
@@ -1004,21 +1009,24 @@ fn p3e_g1_05_the_executor_classifies_before_any_route() {
     // entry points (`execute_in` runs a step of a unit, P3-HM-CONTRACT-02
     // §11.3), both exactly the one decision `executor_route`. Ported again
     // (P3-C11-HM-M4 N5, R12): and `step_kind` (§13.2), exactly the step
-    // kinds of the same classification.
+    // kinds of the same classification, and `step_effect` (§13.2 LK-3),
+    // exactly an external step's effect from the Phase Three answer.
     assert_eq!(
         methods.len(),
-        3,
-        "Phase0AgentExecutor has exactly three methods"
+        4,
+        "Phase0AgentExecutor has exactly four methods"
     );
     assert_eq!(methods[0].path, "Phase0AgentExecutor::execute");
     assert_eq!(methods[1].path, "Phase0AgentExecutor::execute_in");
     assert_eq!(methods[2].path, "Phase0AgentExecutor::step_kind");
+    assert_eq!(methods[3].path, "Phase0AgentExecutor::step_effect");
     for method in &methods {
         assert_eq!(method.trait_name, "ActionExecutor");
     }
     assert_eq!(compact(methods[0].body_text(cognitive)), EXECUTE_BODY);
     assert_eq!(compact(methods[1].body_text(cognitive)), EXECUTE_IN_BODY);
     assert_eq!(compact(methods[2].body_text(cognitive)), STEP_KIND_BODY);
+    assert_eq!(compact(methods[3].body_text(cognitive)), STEP_EFFECT_BODY);
     assert_eq!(
         compact(one_fn(cognitive, "executor_route").body_text(cognitive)),
         EXECUTOR_BODY

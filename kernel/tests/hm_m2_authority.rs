@@ -3221,6 +3221,8 @@ fn allowed_fields(kind: &str) -> &'static [&'static str] {
         "memory.migration_t0" => &["rows", "member_count", "member_set_sha256"],
         "memory.member_set_mismatch" => &["failed_checks"],
         "memory.member_record_inconsistent" => &["missing_untombstoned", "reappeared"],
+        // P3-C11-HM-M4 N5 (§13.2 LK-3, §5.3 observational).
+        "cycle.stale_result_refused" => &["step_kind", "effect"],
         other => panic!("unknown event kind {other}"),
     }
 }
@@ -3283,6 +3285,8 @@ fn value_fits(key: &str, v: &serde_json::Value) -> bool {
             .as_object()
             .is_some_and(|o| o.values().all(|n| n.as_u64().is_some())),
         "member_set_sha256" => v.as_str().is_some_and(|s| is_hex(s, 64)),
+        "step_kind" => class(&["model", "internal", "external"]),
+        "effect" => class(&["executed", "failed", "unknown"]),
         _ => matches!(v, Value::Number(n) if n.as_u64().is_some()),
     }
 }
@@ -3951,4 +3955,36 @@ fn hm_m4_n3_a_a1_every_event_field_of_the_m4_kinds_is_in_the_allowlist() {
             );
         }
     }
+}
+
+/// P3-C11-HM-M4 N5 (§13.2 LK-3, §15.1): `cycle.stale_result_refused` is an
+/// observational event with its subject form and only class-name fields:
+/// the step kind and, for an external step, its effect.
+#[test]
+fn hm_m4_n5_the_stale_result_event_is_observational_and_content_free() {
+    let e = env();
+    e.issuer
+        .record_stale_result_refused(id(AGENT_B), "external", Some("executed"));
+    e.issuer
+        .record_stale_result_refused(id(AGENT_B), "model", None);
+    let rows = events_of(&e.db, "cycle.stale_result_refused");
+    assert_eq!(rows.len(), 2);
+    for (subject, agent, fields) in &rows {
+        assert!(
+            subject_fits("cycle.stale_result_refused", subject),
+            "{subject}"
+        );
+        assert_obs_subject(subject, "cycle.stale_result_refused");
+        assert_eq!(agent.as_deref(), Some(AGENT_B));
+        let v: serde_json::Value = serde_json::from_str(fields).unwrap();
+        for (key, value) in v.as_object().unwrap() {
+            assert!(
+                allowed_fields("cycle.stale_result_refused").contains(&key.as_str()),
+                "{key}"
+            );
+            assert!(value_fits(key, value), "{key} = {value}");
+        }
+    }
+    assert_eq!(rows[0].2, r#"{"effect":"executed","step_kind":"external"}"#);
+    assert_eq!(rows[1].2, r#"{"step_kind":"model"}"#);
 }

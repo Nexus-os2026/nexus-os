@@ -1562,3 +1562,88 @@ fn live_confirmation_window() {
     dialog.response(gtk::ResponseType::Cancel);
     spin(100);
 }
+
+/// P3-HM-CONTRACT-02 §13.2 LK-3 (mission P3-C11-HM-M4 N5): the effect the
+/// cognitive loop records for an external step it refuses as stale comes
+/// from the Phase Three pipeline's own answer, through the production
+/// executor: a done action executed; an R2 commitment left for the owner's
+/// approval unknown (it has not run, and may yet); a refused action failed.
+#[test]
+fn m4_n5_an_external_steps_effect_comes_from_the_pipelines_own_answer() {
+    use nexus_kernel::cognitive::loop_runtime::{ActionExecutor, StepEffect};
+    use nexus_kernel::cognitive::PlannedAction;
+    use std::io::{Read, Write};
+
+    // A loopback page server that answers one request.
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for mut stream in server.incoming().flatten().take(1) {
+            let mut request = [0u8; 4096];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\ngoverned",
+            );
+        }
+    });
+    let t = isolated();
+    let state = crate::AppState::new_in_memory();
+    let memory = Arc::new(nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(
+        crate::DbMemoryStore {
+            db: state.db.clone(),
+        },
+    )));
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    )
+    .with_real_world(t.world.clone());
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["GET".into(), "POST".into()],
+                allow_private: true,
+            },
+            60,
+            &Owner(true, AtomicU32::new(0)),
+        )
+        .unwrap();
+    let mut audit = state.audit.clone();
+    let agent = uuid::Uuid::new_v4().to_string();
+    let mut effect_of = |action: &PlannedAction| {
+        let output = executor.execute(&agent, action, &mut audit, true);
+        (
+            executor.step_effect(action, output.as_deref().map_err(String::as_str)),
+            output,
+        )
+    };
+
+    let fetch = PlannedAction::WebFetch {
+        url: format!("{origin}/page"),
+    };
+    let (effect, output) = effect_of(&fetch);
+    assert_eq!(effect, StepEffect::Executed, "{output:?}");
+
+    let post = PlannedAction::ApiCall {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        body: Some("{}".into()),
+        headers: None,
+    };
+    let (effect, output) = effect_of(&post);
+    let answer: Value = serde_json::from_str(output.as_deref().unwrap()).unwrap();
+    assert!(
+        answer["awaiting_owner_approval"].is_string(),
+        "precondition: left for the owner's approval: {answer}"
+    );
+    assert_eq!(effect, StepEffect::Unknown, "{answer}");
+
+    let ungranted = PlannedAction::WebFetch {
+        url: "http://127.0.0.1:9/never".into(),
+    };
+    let (effect, output) = effect_of(&ungranted);
+    assert!(output.is_err(), "precondition: refused: {output:?}");
+    assert_eq!(effect, StepEffect::Failed, "{output:?}");
+}

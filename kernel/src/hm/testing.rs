@@ -526,6 +526,17 @@ pub(crate) fn label_origins(db: &NexusDatabase, table: &str, agent_id: &str) -> 
         .collect()
 }
 
+/// How many events of `kind` name `agent_id` (read through the store,
+/// never by naming its tables).
+pub(crate) fn event_count(db: &NexusDatabase, kind: &str, agent_id: &str) -> usize {
+    db.hm()
+        .read(|tx| tx.event_kinds())
+        .unwrap()
+        .into_iter()
+        .filter(|(k, a)| k == kind && a.as_deref() == Some(agent_id))
+        .count()
+}
+
 pub(crate) fn rows(db: &NexusDatabase, sql: &str) -> Vec<Vec<String>> {
     db.with_transaction(|tx| {
         let mut stmt = tx.prepare(sql)?;

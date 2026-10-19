@@ -1853,6 +1853,31 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
             _ => StepKind::Internal,
         }
     }
+
+    /// P3-HM-CONTRACT-02 §13.2 LK-3: the effect of an external step, from
+    /// the Phase Three pipeline's own record as `AgentBridge::act` returns
+    /// it. Done: executed. An R2 commitment left for the Owner's approval
+    /// (the answer with the top-level `awaiting_owner_approval` key, which a
+    /// done action's answer never has): not executed, so unknown. An error
+    /// (refused before it started, or its effect failed or was cancelled):
+    /// failed.
+    fn step_effect(
+        &self,
+        _action: &nexus_kernel::cognitive::PlannedAction,
+        output: Result<&str, &str>,
+    ) -> nexus_kernel::cognitive::loop_runtime::StepEffect {
+        use nexus_kernel::cognitive::loop_runtime::StepEffect;
+        match output {
+            Ok(text)
+                if serde_json::from_str::<serde_json::Value>(text)
+                    .is_ok_and(|answer| answer.get("awaiting_owner_approval").is_some()) =>
+            {
+                StepEffect::Unknown
+            }
+            Ok(_) => StepEffect::Executed,
+            Err(_) => StepEffect::Failed,
+        }
+    }
 }
 
 /// Where the production executor sends an action.

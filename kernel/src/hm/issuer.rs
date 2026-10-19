@@ -444,6 +444,27 @@ impl DispatchIssuer {
         }
     }
 
+    /// Records `cycle.stale_result_refused` (§5.3 observational, §13.2
+    /// LK-3): the step kind and, for an external step, its effect (class
+    /// names only). Best effort; it changes no decision.
+    pub fn record_stale_result_refused(
+        &self,
+        agent_id: Uuid,
+        step_kind: &'static str,
+        effect: Option<&'static str>,
+    ) {
+        let mut fields = serde_json::json!({ "step_kind": step_kind });
+        if let Some(effect) = effect {
+            fields["effect"] = serde_json::json!(effect);
+        }
+        events::observational(
+            &self.db,
+            "cycle.stale_result_refused",
+            Some(&agent_id.to_string()),
+            fields,
+        );
+    }
+
     /// §4.2 step 5, third case: no change; audited at most once per
     /// `(agent, config content digest)`.
     fn audit_loosening_refused(&self, p: PolicySnapshot, config_digest: &str) {
