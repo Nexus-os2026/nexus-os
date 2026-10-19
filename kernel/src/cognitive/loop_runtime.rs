@@ -689,12 +689,62 @@ struct AgentLoopState {
     #[allow(dead_code)]
     started_at_secs: u64,
     /// The goal's unit (P3-HM-CONTRACT-02 §11.1): every dispatch, recall
-    /// and write of the goal goes through it.
-    ctx: DispatchContext,
+    /// and write of the goal goes through it. Taken out of the state while a
+    /// cycle's model call or step is in flight (§13.2 LK-1).
+    ctx: UnitSlot,
+    /// The goal's assignment (§13.2 `loop_epoch`): a reassigned, stopped or
+    /// restarted goal has another.
+    epoch: u64,
+    /// The cycle whose model call or step is in flight (§13.2 LK-1). A
+    /// second cycle of the agent is refused while it is set.
+    in_flight: Option<CycleToken>,
+    /// The fuel reserved for the step in flight.
+    reserved_fuel: f64,
     /// The reply the current plan was parsed from.
     plan: Option<DerivedItem>,
     /// The typed result of each succeeded step, by step id (§11.3), kept
     /// beside the steps.
+    results: HashMap<String, StepItem>,
+}
+
+/// The identity of a cycle in flight (P3-HM-CONTRACT-02 §13.2 LK-1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CycleToken {
+    goal_id: String,
+    loop_epoch: u64,
+    cycle_no: u32,
+}
+
+/// The goal's unit in its loop state. It is taken out while a model call or
+/// step of the cycle runs with no runtime lock held, and put back when the
+/// cycle re-checks (§13.2 LK-1, LK-3). Every reader outside the cycle checks
+/// `in_flight` first; inside the cycle it is read only under `loops` while
+/// nothing is in flight.
+struct UnitSlot(Option<DispatchContext>);
+
+impl std::ops::Deref for UnitSlot {
+    type Target = DispatchContext;
+
+    fn deref(&self) -> &DispatchContext {
+        self.0
+            .as_ref()
+            .expect("the goal's unit is read only while no step is in flight")
+    }
+}
+
+impl std::ops::DerefMut for UnitSlot {
+    fn deref_mut(&mut self) -> &mut DispatchContext {
+        self.0
+            .as_mut()
+            .expect("the goal's unit is read only while no step is in flight")
+    }
+}
+
+/// What a cycle takes out of its loop state for a model call or step that
+/// runs with no runtime lock held (§13.2 LK-1).
+struct InFlight {
+    ctx: DispatchContext,
+    plan: Option<DerivedItem>,
     results: HashMap<String, StepItem>,
 }
 
@@ -733,6 +783,8 @@ pub struct CognitiveRuntime {
     /// The process's dispatch issuer (P3-HM-CONTRACT-02 §11.0). Without one
     /// no goal unit starts, so no agent dispatch happens (mission R6).
     issuer: Option<Arc<DispatchIssuer>>,
+    /// The next goal assignment's epoch.
+    next_epoch: std::sync::atomic::AtomicU64,
 }
 
 impl CognitiveRuntime {
@@ -764,6 +816,7 @@ impl CognitiveRuntime {
             status_snapshots: Mutex::new(HashMap::new()),
             state_db: None,
             issuer: None,
+            next_epoch: std::sync::atomic::AtomicU64::new(1),
         }
     }
 
@@ -868,7 +921,10 @@ impl CognitiveRuntime {
             review_each_mode: false,
             strategy_hash: None,
             started_at_secs: now,
-            ctx,
+            ctx: UnitSlot(Some(ctx)),
+            epoch: self.next_epoch.fetch_add(1, Ordering::SeqCst),
+            in_flight: None,
+            reserved_fuel: 0.0,
             plan: None,
             results: HashMap::new(),
         };
@@ -1034,6 +1090,76 @@ impl CognitiveRuntime {
         );
     }
 
+    /// §13.2 LK-1: marks the cycle in flight, reserves `fuel` for it and
+    /// takes the goal's unit, its plan and its step results out of the loop
+    /// state for a model call or a step that runs with no runtime lock held.
+    fn reserve(state: &mut AgentLoopState, fuel: f64) -> (CycleToken, InFlight) {
+        let token = CycleToken {
+            goal_id: state.goal.id.clone(),
+            loop_epoch: state.epoch,
+            cycle_no: state.cycle_count,
+        };
+        state.in_flight = Some(token.clone());
+        state.reserved_fuel = fuel;
+        let flight = InFlight {
+            ctx: state
+                .ctx
+                .0
+                .take()
+                .expect("the goal's unit is in its loop state"),
+            plan: state.plan.take(),
+            results: std::mem::take(&mut state.results),
+        };
+        (token, flight)
+    }
+
+    /// §13.2 LK-3: the loop state of `agent_id` when the cycle `token` is
+    /// still current (the loop exists; its epoch, goal and token are the
+    /// cycle's; it is not cancelled), with the unit put back and `in_flight`
+    /// cleared; the caller settles the reservation. Otherwise the result is
+    /// stale and this is `None`: the unit goes back only to the same goal's
+    /// still-present loop (its taint never falls), whose reservation is
+    /// released.
+    fn recheck<'a>(
+        loops: &'a mut HashMap<String, AgentLoopState>,
+        agent_id: &str,
+        token: &CycleToken,
+        flight: InFlight,
+    ) -> Option<&'a mut AgentLoopState> {
+        let state = loops.get_mut(agent_id)?;
+        if state.epoch != token.loop_epoch
+            || state.goal.id != token.goal_id
+            || state.in_flight.as_ref() != Some(token)
+        {
+            return None;
+        }
+        state.ctx.0 = Some(flight.ctx);
+        state.plan = flight.plan;
+        state.results = flight.results;
+        state.in_flight = None;
+        if state.shutdown.load(Ordering::Relaxed) {
+            state.reserved_fuel = 0.0;
+            return None;
+        }
+        Some(state)
+    }
+
+    /// §13.2: a stale result is refused; nothing of it is applied to loop
+    /// state.
+    fn stale_refused() -> CycleResult {
+        let reason = "stale result refused: the goal was cancelled, replaced or ended while it ran"
+            .to_string();
+        CycleResult {
+            phase: CognitivePhase::Idle,
+            steps_executed: 0,
+            fuel_consumed: 0.0,
+            should_continue: false,
+            blocked_reason: Some(reason.clone()),
+            success: false,
+            failure_reason: Some(reason),
+        }
+    }
+
     fn persist_l6_cooldown(&self, agent_id: &str, cycle_count: u32, cooled_down: bool) {
         self.with_state_db(|db| Self::record_l6_cooldown(db, agent_id, cycle_count, cooled_down));
     }
@@ -1094,9 +1220,15 @@ impl CognitiveRuntime {
         let mut phase_timings: Vec<(&str, std::time::Duration)> = Vec::new();
 
         let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
-        let state = loops.get_mut(agent_id).ok_or_else(|| {
+        let mut state = loops.get_mut(agent_id).ok_or_else(|| {
             AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
         })?;
+        // §13.2 LK-1: one cycle per agent.
+        if state.in_flight.is_some() {
+            return Err(AgentError::SupervisorError(format!(
+                "a cycle of agent '{agent_id}' is in flight"
+            )));
+        }
 
         // Check shutdown
         if state.shutdown.load(Ordering::Relaxed) {
@@ -1295,23 +1427,41 @@ impl CognitiveRuntime {
                 autonomy_level,
             };
 
-            let plan = match (&state.plan, needs_replan && !state.steps.is_empty()) {
-                (Some(previous_plan), true) => {
+            // The replan's failed and remaining steps, copied out of the state.
+            let replan =
+                (state.plan.is_some() && needs_replan && !state.steps.is_empty()).then(|| {
                     let idx = state.current_step_index.min(state.steps.len() - 1);
-                    let failed_step = &state.steps[idx];
-                    let remaining = &state.steps[(idx + 1).min(state.steps.len())..];
-                    planner.replan_after_failure(
-                        &mut state.ctx,
-                        &state.goal,
-                        failed_step,
-                        "max consecutive failures reached",
-                        remaining,
-                        &context,
-                        previous_plan,
-                    )?
-                }
-                _ => planner.plan_goal(&mut state.ctx, &state.goal, &context, &mut recall)?,
+                    (
+                        state.steps[idx].clone(),
+                        state.steps[(idx + 1).min(state.steps.len())..].to_vec(),
+                    )
+                });
+            let goal = state.goal.clone();
+            // §13.2 LK-1: reserve the cycle (the planner call is not charged
+            // fuel) and take its unit.
+            let (token, mut flight) = Self::reserve(state, 0.0);
+            // The planner's model call; §12.4 admits it.
+            let planned = match &replan {
+                Some((failed_step, remaining)) => planner.replan_after_failure(
+                    &mut flight.ctx,
+                    &goal,
+                    failed_step,
+                    "max consecutive failures reached",
+                    remaining,
+                    &context,
+                    flight.plan.as_ref().expect("a replan has a plan"),
+                ),
+                None => planner.plan_goal(&mut flight.ctx, &goal, &context, &mut recall),
             };
+            // LK-3: re-check and transition.
+            state = match Self::recheck(&mut loops, agent_id, &token, flight) {
+                Some(state) => state,
+                None => {
+                    drop(loops);
+                    return Ok(Self::stale_refused());
+                }
+            };
+            let plan = planned?;
             let mut new_steps = plan.steps;
             state.plan = Some(plan.reply);
 
@@ -1557,37 +1707,52 @@ impl CognitiveRuntime {
             // Execute the action
             let action_clone = step.action.clone();
             let issuer = self.issuer()?.clone();
-            let Some(plan) = state.plan.as_ref() else {
+            if state.plan.is_none() {
                 return Err(AgentError::SupervisorError(
                     "the plan of these steps is unknown".to_string(),
                 ));
-            };
-            let prior: Vec<(String, &StepItem)> = prior_steps
-                .iter()
-                .filter_map(|(action_type, id)| {
-                    state
-                        .results
-                        .get(id)
-                        .map(|item| (action_type.clone(), item))
-                })
-                .collect();
-            let mut scope = StepScope {
-                issuer: &issuer,
-                ctx: &mut state.ctx,
-                plan,
-                prior: &prior,
-            };
+            }
+            let step_index = state.current_step_index;
 
             eprintln!(
                 "[agent:{}] dispatching to executor: {} (step {}/{})",
                 agent_id,
                 action_clone.action_type(),
-                state.current_step_index + 1,
+                step_index + 1,
                 total_steps
             );
-            let executed =
-                executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl);
-            drop(prior);
+            // §13.2 LK-1: reserve the step and its fuel and take the unit.
+            let (token, mut flight) = Self::reserve(state, estimate_fuel_cost(&action_clone));
+            let executed = {
+                let prior: Vec<(String, &StepItem)> = prior_steps
+                    .iter()
+                    .filter_map(|(action_type, id)| {
+                        flight
+                            .results
+                            .get(id)
+                            .map(|item| (action_type.clone(), item))
+                    })
+                    .collect();
+                let mut scope = StepScope {
+                    issuer: &issuer,
+                    ctx: &mut flight.ctx,
+                    plan: flight.plan.as_ref().expect("checked above"),
+                    prior: &prior,
+                };
+                executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl)
+            };
+            // LK-3: re-check and transition.
+            state = match Self::recheck(&mut loops, agent_id, &token, flight) {
+                Some(state) => state,
+                None => {
+                    drop(loops);
+                    return Ok(Self::stale_refused());
+                }
+            };
+            // The step's fuel is settled against its reservation: charged on
+            // success, released otherwise.
+            let reserved_fuel = std::mem::take(&mut state.reserved_fuel);
+            let step = &mut state.steps[step_index];
             let (step_executed, step_fuel, step_error) = match executed {
                 Ok(StepOutput { text: result, item }) => {
                     eprintln!(
@@ -1609,7 +1774,7 @@ impl CognitiveRuntime {
                         result.clone()
                     };
                     step.result = Some(result);
-                    step.fuel_cost = estimate_fuel_cost(&action_clone);
+                    step.fuel_cost = reserved_fuel;
                     state.total_fuel_consumed += step.fuel_cost;
                     state.consecutive_failures = 0;
                     state.steps_completed += 1;
@@ -2047,7 +2212,11 @@ impl CognitiveRuntime {
     ) -> Option<R> {
         let issuer = self.issuer.as_ref()?;
         let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
-        let state = loops.get(agent_id).filter(|s| s.goal.id == goal_id)?;
+        // While a step of the goal is in flight its unit is with the cycle
+        // (§13.2 LK-1): nothing is written through it here.
+        let state = loops
+            .get(agent_id)
+            .filter(|s| s.goal.id == goal_id && s.in_flight.is_none())?;
         Some(f(issuer, &state.ctx))
     }
 
@@ -2063,6 +2232,11 @@ impl CognitiveRuntime {
             .get(agent_id)
             .filter(|s| s.goal.id == goal_id)
             .ok_or_else(|| AgentError::SupervisorError(format!("no loop of goal '{goal_id}'")))?;
+        if state.in_flight.is_some() {
+            return Err(AgentError::SupervisorError(format!(
+                "a step of goal '{goal_id}' is in flight"
+            )));
+        }
         post_goal_context(&state.ctx, goal_id).map_err(AgentError::SupervisorError)
     }
 
@@ -2075,7 +2249,9 @@ impl CognitiveRuntime {
         goal_id: &str,
     ) -> Option<(DispatchContext, Option<DerivedItem>)> {
         let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
-        let state = loops.get(agent_id).filter(|s| s.goal.id == goal_id)?;
+        let state = loops
+            .get(agent_id)
+            .filter(|s| s.goal.id == goal_id && s.in_flight.is_none())?;
         let mut ctx = post_goal_context(&state.ctx, goal_id).ok()?;
         let output = compute_goal_output(&state.steps).map(|text| ctx.produce(text));
         Some((ctx, output))
@@ -5671,5 +5847,87 @@ mod tests {
         );
         assert!(blocks[0].get("reason").is_none(), "{payload}");
         assert_eq!(blocks[0]["reason_class"], "adversarial_review_failed");
+    }
+
+    // ── P3-C11-HM-M4 N5: no runtime lock across a model call (§13; A-L1..A-L6)
+
+    mod lk {
+        use super::*;
+
+        const NOOP_PLAN: &str = r#"[{"action": {"type": "Noop"}, "description": "done"}]"#;
+
+        /// One supervisor with `n` registered agents (local-only by default).
+        fn agents(n: usize) -> (Arc<Mutex<Supervisor>>, Vec<String>) {
+            let mut sup = Supervisor::new();
+            let ids = (0..n)
+                .map(|i| {
+                    sup.start_agent(AgentManifest {
+                        name: format!("lk-agent-{i}"),
+                        version: "1.0.0".into(),
+                        capabilities: vec!["llm.query".into(), "web.read".into()],
+                        fuel_budget: 10000,
+                        autonomy_level: Some(3),
+                        consent_policy_path: None,
+                        requester_id: None,
+                        schedule: None,
+                        default_goal: None,
+                        llm_model: None,
+                        fuel_period_id: None,
+                        monthly_fuel_cap: None,
+                        allowed_endpoints: None,
+                        domain_tags: vec![],
+                        filesystem_permissions: vec![],
+                    })
+                    .unwrap()
+                    .to_string()
+                })
+                .collect();
+            (Arc::new(Mutex::new(sup)), ids)
+        }
+
+        /// §13.2 LK-1: one cycle per agent. While a cycle of the agent is in
+        /// flight a second one is refused, and changes nothing.
+        #[test]
+        fn hm_m4_n5_lk1_a_second_cycle_is_refused_while_one_is_in_flight() {
+            let (sup, ids) = agents(1);
+            let (runtime, _emitter) = make_runtime(sup);
+            let a = ids[0].clone();
+            runtime
+                .assign_goal(&a, AgentGoal::new("LK-1".into(), 5))
+                .unwrap();
+            let token = {
+                let mut loops = runtime.loops.lock().unwrap();
+                let state = loops.get_mut(&a).unwrap();
+                let token = CycleToken {
+                    goal_id: state.goal.id.clone(),
+                    loop_epoch: state.epoch,
+                    cycle_no: state.cycle_count,
+                };
+                state.in_flight = Some(token.clone());
+                token
+            };
+            let mut audit = AuditTrail::new();
+            let refused = runtime.run_cycle(
+                &a,
+                &make_planner(NOOP_PLAN),
+                &make_memory_mgr(),
+                &MockExecutor::always_ok("ok"),
+                &mut audit,
+            );
+            assert!(
+                refused
+                    .as_ref()
+                    .is_err_and(|e| e.to_string().contains("in flight")),
+                "LK-1: a second cycle ran: {refused:?}"
+            );
+            let loops = runtime.loops.lock().unwrap();
+            let state = &loops[&a];
+            assert_eq!(state.in_flight.as_ref(), Some(&token));
+            assert_eq!(
+                state.cycle_count, 0,
+                "LK-1: the refused cycle changed state"
+            );
+            assert!(state.steps.is_empty(), "LK-1: the refused cycle planned");
+        }
     }
 }
