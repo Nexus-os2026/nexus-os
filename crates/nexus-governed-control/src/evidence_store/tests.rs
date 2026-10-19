@@ -935,3 +935,155 @@ fn el1_m6_ma10_a_rollback_journal_file_with_the_application_id_is_not_a_store() 
     assert_eq!(refused(&path), Unqualified::NotAStore);
     assert_eq!(std::fs::read(&path).unwrap(), before, "the file changed");
 }
+
+// ── P3-C11-M7: D-1 (the store's end set is the registry's) ─────────────────
+
+/// Each `EvidencePhase` name and the string it is stored as (its `as_str`),
+/// read from authority/evidence.rs.
+fn phase_strings(source: &str) -> BTreeMap<String, String> {
+    let start = source
+        .find("impl EvidencePhase {")
+        .expect("impl EvidencePhase");
+    let start = start
+        + source[start..]
+            .find("pub fn as_str(self) -> &'static str {")
+            .expect("its as_str");
+    let end = start
+        + source[start..]
+            .find("\n    }\n")
+            .expect("the end of as_str");
+    source[start..end]
+        .lines()
+        .filter_map(|line| {
+            let (name, stored) = line.trim().split_once(" => ")?;
+            let name = name.strip_prefix("EvidencePhase::")?;
+            let stored = stored.trim_end_matches(',').trim_matches('"');
+            Some((name.to_string(), stored.to_string()))
+        })
+        .collect()
+}
+
+/// The top-level arguments of a call, from the text just after its `(`.
+fn call_arguments(text: &str) -> Vec<String> {
+    let mut args = vec![String::new()];
+    let mut depth = 0usize;
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        let last = args.last_mut().expect("an argument");
+        match c {
+            // A string literal, copied whole.
+            '"' => {
+                last.push(c);
+                let mut escaped = false;
+                for c in chars.by_ref() {
+                    last.push(c);
+                    if escaped {
+                        escaped = false;
+                    } else if c == '\\' {
+                        escaped = true;
+                    } else if c == '"' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' if depth == 0 => return args,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                args.push(String::new());
+                continue;
+            }
+            _ => {}
+        }
+        last.push(c);
+    }
+    panic!("an unterminated call");
+}
+
+/// The phases (by `EvidencePhase` name) with which the registry ends an
+/// entry: the phase argument of every `end_entry` call in `source`; where it
+/// is `end_unconsumed`'s own `phase`, every phase `end_unconsumed` chooses.
+/// `finish` ends an entry through `end_entry`, so its `Finished` is among
+/// them.
+fn registry_end_phases(source: &str) -> BTreeSet<String> {
+    const CALL: &str = "self.end_entry(";
+    const PHASE: &str = "EvidencePhase::";
+    let unconsumed = source
+        .find("fn end_unconsumed(")
+        .expect("fn end_unconsumed");
+    let unconsumed_end = unconsumed
+        + source[unconsumed..]
+            .find("\n    }\n")
+            .expect("the end of end_unconsumed");
+    let mut phases = BTreeSet::new();
+    let mut calls = 0;
+    for (at, _) in source.match_indices(CALL) {
+        calls += 1;
+        let args = call_arguments(&source[at + CALL.len()..]);
+        let phase = args.get(3).expect("a phase argument").trim();
+        if let Some(name) = phase.strip_prefix(PHASE) {
+            phases.insert(name.to_string());
+            continue;
+        }
+        assert_eq!(phase, "phase", "an end_entry phase this test cannot read");
+        assert!(
+            (unconsumed..unconsumed_end).contains(&at),
+            "a phase variable outside end_unconsumed"
+        );
+        let chosen = &source[unconsumed..at];
+        for (p, _) in chosen.match_indices(PHASE) {
+            let name: String = chosen[p + PHASE.len()..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric())
+                .collect();
+            phases.insert(name);
+        }
+    }
+    assert!(calls >= 6, "end_entry calls found: {calls}");
+    phases
+}
+
+/// D-1 (P3-C11-M7): the store counts as the end of a started commitment
+/// exactly the phases with which the registry ends an entry (every
+/// `end_entry` and `end_unconsumed` phase in authority/commitment.rs,
+/// `finish`'s `finished` among them). A new end phase is never missed
+/// silently.
+#[test]
+fn el1_m7_d1_the_store_ends_a_commitment_with_every_phase_the_registry_ends_one_with() {
+    const COMMITMENT: &str = include_str!("../authority/commitment.rs");
+    const EVIDENCE: &str = include_str!("../authority/evidence.rs");
+    let stored = phase_strings(EVIDENCE);
+    assert!(stored.len() >= 20, "{stored:?}");
+    let registry: BTreeSet<String> = registry_end_phases(COMMITMENT)
+        .iter()
+        .map(|name| {
+            stored
+                .get(name)
+                .unwrap_or_else(|| panic!("no stored string for {name}"))
+                .clone()
+        })
+        .collect();
+    let row = |seq: u64, phase: &str| Row {
+        seq,
+        session: "session".into(),
+        stored_ms: 0,
+        phase: phase.into(),
+        commitment: Some("cmt-end".into()),
+        body: "{}".into(),
+        prev: String::new(),
+        tag: String::new(),
+    };
+    let store: BTreeSet<String> = stored
+        .values()
+        .filter(|phase| {
+            let mut known = Known::default();
+            known.take(&row(1, "started"));
+            known.take(&row(2, phase));
+            known.ended.contains("cmt-end")
+        })
+        .cloned()
+        .collect();
+    assert!(registry.contains("finished"), "{registry:?}");
+    assert_eq!(store, registry, "the store's end set is the registry's");
+}

@@ -943,3 +943,131 @@ fn el1_m6_mb8_a_revocation_with_a_refusing_store_takes_effect_and_is_owed() {
     assert_eq!(owed.len(), 1);
     assert_eq!(owed[0]["phase"], "grant_revoked");
 }
+
+// ── P3-C11-M7: D-1 and D-2 (Z-Y1) ───────────────────────────────────────────
+
+/// A new session over the fixture's file: no `unsettled` statement, no
+/// recovery required, and governed control does not start stopped.
+fn reopened_settled(f: Fixture) {
+    let Fixture {
+        _scratch: scratch,
+        evidence,
+        control,
+        ..
+    } = f;
+    let path = scratch.store();
+    drop(control);
+    drop(evidence);
+    let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+    let unsettled: Vec<Row> = evidence
+        .store()
+        .rows()
+        .into_iter()
+        .filter(|row| row.phase == "unsettled")
+        .collect();
+    assert!(
+        unsettled.is_empty(),
+        "a start that was overtaken is not unsettled: {unsettled:?}"
+    );
+    assert!(!evidence.health().recovery_required);
+    let governed = crate::governed::GovernedControl::with_secrets(
+        &scratch.path("runtime"),
+        crate::broker::Vault::Disabled.source(),
+        evidence.clone(),
+        Arc::new(ManualClock::default()),
+    )
+    .unwrap();
+    assert!(!governed.status().emergency_stopped);
+}
+
+/// EL-1 §7 as amended by D-1 (P3-C11-M7): an effect whose start record has
+/// committed, overtaken by the owner's deny before the start completes,
+/// never runs; its commitment ends denied (interrupted at its start), and
+/// that end counts: the next session holds no `unsettled` statement for it,
+/// requires no recovery and does not start stopped.
+#[test]
+fn el1_m7_d1_a_deny_after_a_recorded_start_ends_the_commitment_and_nothing_is_unsettled() {
+    let on_start = Arc::new(OnStart(Mutex::new(None)));
+    let f = fixture_with(vec![on_start.clone()]);
+    let invoked = Arc::new(AtomicBool::new(false));
+    let id = f
+        .control
+        .propose(
+            &f.agent,
+            f.run,
+            preparation(f.grant, Box::new(Invoked(invoked.clone()))),
+        )
+        .unwrap()
+        .id;
+    f.control.authorize(id, &f.agent, f.run, &Yes).unwrap();
+    let control = Arc::downgrade(&f.control);
+    let (agent, run) = (f.agent.clone(), f.run);
+    *on_start.0.lock().unwrap() = Some(Box::new(move || {
+        let control = control.upgrade().expect("the control");
+        control.deny(id, &agent, run).expect("the owner's deny");
+    }));
+    assert_eq!(
+        f.control.execute(id, &f.agent, f.run).unwrap_err(),
+        AuthorityError::NotPending
+    );
+    assert!(on_start.0.lock().unwrap().is_none(), "the deny ran");
+    assert!(
+        !invoked.load(Ordering::SeqCst),
+        "the capability was invoked"
+    );
+    let id = id.to_string();
+    let rows = f.rows();
+    let started = rows_of(&rows, "started", &id);
+    assert_eq!(started.len(), 1);
+    let denied = rows_of(&rows, "denied", &id);
+    assert_eq!(denied.len(), 1);
+    assert!(started[0].seq < denied[0].seq);
+    let body: serde_json::Value = serde_json::from_str(&denied[0].body).unwrap();
+    assert_eq!(body["detail"]["interrupted"], "start");
+    assert!(rows_of(&rows, "finished", &id).is_empty());
+    reopened_settled(f);
+}
+
+/// EL-1 §7 (D-2 Z-Y1, P3-C11-M7): an effect whose start record has
+/// committed, overtaken by its own expiry before the start completes, never
+/// runs; its commitment ends expired (interrupted at its start), and that
+/// end counts: the next session holds no `unsettled` statement for it.
+#[test]
+fn el1_m7_y1_an_expiry_after_a_recorded_start_ends_the_commitment_and_nothing_is_unsettled() {
+    let on_start = Arc::new(OnStart(Mutex::new(None)));
+    let f = fixture_with(vec![on_start.clone()]);
+    let clock = f.clock.clone();
+    *on_start.0.lock().unwrap() = Some(Box::new(move || {
+        // Past the commitment's 60-second time to live.
+        clock.advance(Duration::from_secs(61));
+    }));
+    let invoked = Arc::new(AtomicBool::new(false));
+    let id = f
+        .control
+        .propose(
+            &f.agent,
+            f.run,
+            preparation(f.grant, Box::new(Invoked(invoked.clone()))),
+        )
+        .unwrap()
+        .id;
+    f.control.authorize(id, &f.agent, f.run, &Yes).unwrap();
+    assert_eq!(
+        f.control.execute(id, &f.agent, f.run).unwrap_err(),
+        AuthorityError::Expired
+    );
+    assert!(on_start.0.lock().unwrap().is_none(), "the clock moved");
+    assert!(
+        !invoked.load(Ordering::SeqCst),
+        "the capability was invoked"
+    );
+    let id = id.to_string();
+    let rows = f.rows();
+    assert_eq!(rows_of(&rows, "started", &id).len(), 1);
+    let expired = rows_of(&rows, "expired", &id);
+    assert_eq!(expired.len(), 1);
+    let body: serde_json::Value = serde_json::from_str(&expired[0].body).unwrap();
+    assert_eq!(body["detail"]["interrupted"], "start");
+    assert!(rows_of(&rows, "finished", &id).is_empty());
+    reopened_settled(f);
+}

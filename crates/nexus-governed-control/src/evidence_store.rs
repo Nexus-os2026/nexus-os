@@ -237,8 +237,10 @@ pub(crate) const UNSETTLED_TEXT: &str = "outcome not recorded; the effect may ha
 struct Known {
     /// Commitments with a `started` row: its sequence number.
     started: BTreeMap<String, u64>,
-    /// Commitments with an end row: `finished`, or `revoked` or `expired`
-    /// (a start overtaken before it completed: its effect never ran).
+    /// Commitments with an end row: every phase with which the registry
+    /// ends an entry (D-1 of P3-C11-M7): `finished`, or `revoked`, `expired`,
+    /// `denied` or `approval_declined` (a start overtaken before it
+    /// completed: its effect never ran).
     ended: BTreeSet<String>,
     /// `unsettled` statements: commitment → statement sequence number.
     unsettled: BTreeMap<String, u64>,
@@ -259,7 +261,10 @@ impl Known {
             ("started", Some(commitment)) => {
                 self.started.insert(commitment.clone(), row.seq);
             }
-            ("finished" | "revoked" | "expired", Some(commitment)) => {
+            (
+                "finished" | "revoked" | "expired" | "denied" | "approval_declined",
+                Some(commitment),
+            ) => {
                 self.ended.insert(commitment.clone());
             }
             ("unsettled", Some(commitment)) => {
@@ -1280,8 +1285,8 @@ impl Inner {
 
     /// The one reconciliation (§7), over the whole verified chain, before
     /// anything is admitted: an `unsettled` statement for every commitment
-    /// that started and has no end (`finished`, `revoked` or `expired`) and
-    /// none yet; an `unclean_session`
+    /// that started and has no end (`finished`, `revoked`, `expired`,
+    /// `denied` or `approval_declined`) and none yet; an `unclean_session`
     /// statement for every earlier session opened and never closed, and none
     /// yet. A second start appends nothing new.
     fn reconcile(&mut self) -> Result<(), Unqualified> {

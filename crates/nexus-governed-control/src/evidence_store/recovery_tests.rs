@@ -863,3 +863,103 @@ fn el1_m6_ma8_an_acknowledged_unclean_session_is_not_shown_again() {
         shown.unclean_sessions
     );
 }
+
+// ── P3-C11-M7 D-2: the close and the unsettled count (Z-Y3, Z-Y9, Z-Y11) ───
+
+/// EL-1 §6 as amended by C-3 (D-2 Z-Y3, P3-C11-M7): a record the clean
+/// shutdown pays (written first, before `session_closed`) is projected, as
+/// every record the store commits is.
+#[test]
+fn el1_m7_y3_records_paid_by_the_close_are_projected() {
+    let scratch = Scratch::new();
+    let recent = Arc::new(MemoryEvidence::new(100));
+    let evidence = PrimaryEvidence::open(&scratch.store(), vec![recent.clone()]).unwrap();
+    owe_one(&evidence);
+    assert!(recent.records().is_empty());
+    assert!(matches!(
+        evidence.close_session(),
+        EndStatus::Recorded { .. }
+    ));
+    assert_eq!(evidence.health().owed, 0);
+    let projected: Vec<EvidencePhase> = recent.records().iter().map(|r| r.phase).collect();
+    assert_eq!(
+        projected,
+        [EvidencePhase::RunCancelled],
+        "the record the close paid is projected"
+    );
+    let rows = evidence.store().rows();
+    assert_eq!(
+        phases(&rows[rows.len() - 2..]),
+        ["run_cancelled", "session_closed"]
+    );
+}
+
+/// EL-1 §8 as amended by C-7 (D-2 Z-Y9, P3-C11-M7): an `unsettled`
+/// statement that is itself the highest statement shown (its session closed
+/// cleanly, so no `unclean_session` follows it) is covered by the
+/// acknowledgement through it: status `unsettled` is then 0.
+#[test]
+fn el1_m7_y9_an_acknowledgement_through_the_unsettled_statement_settles_it() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    {
+        let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+        assert!(matches!(
+            evidence
+                .store()
+                .append("started", Some("cmt-open"), "{\"started\":1}"),
+            Append::Committed { .. }
+        ));
+        assert!(matches!(
+            evidence.close_session(),
+            EndStatus::Recorded { .. }
+        ));
+    }
+    let (evidence, authority) = authority_over(&path);
+    let rows = evidence.store().rows();
+    assert!(
+        !rows.iter().any(|r| r.phase == "unclean_session"),
+        "the session closed cleanly"
+    );
+    let unsettled = rows
+        .iter()
+        .find(|r| r.phase == "unsettled")
+        .expect("an unsettled statement")
+        .seq;
+    assert_eq!(evidence.health().unsettled, 1);
+    let yes = owner(true, true);
+    authority.resume(&yes).unwrap();
+    let shown = yes.asked_acknowledgement.lock().unwrap()[0].clone();
+    assert_eq!(
+        shown.covers_through, unsettled,
+        "the unsettled statement is the highest shown"
+    );
+    assert_eq!(acknowledged(&evidence.store().rows()), [unsettled]);
+    assert_eq!(
+        evidence.health().unsettled,
+        0,
+        "the statement at covers_through is acknowledged"
+    );
+    assert!(!evidence.health().recovery_required);
+}
+
+/// EL-1 §6, §7 as amended by C-2 (D-2 Z-Y11, P3-C11-M7): a clean shutdown
+/// whose `session_closed` is not committed (the store refuses every insert;
+/// it is not latched) keeps it owed: the close reports owed and the owed
+/// list grows by one.
+#[test]
+fn el1_m7_y11_a_session_closed_the_store_refuses_is_kept_owed() {
+    let scratch = Scratch::new();
+    let evidence = PrimaryEvidence::open(&scratch.store(), vec![]).unwrap();
+    let before = evidence.health().owed;
+    evidence.store().refuse_inserts(true);
+    assert_eq!(evidence.close_session(), EndStatus::Owed);
+    assert_eq!(evidence.health().owed, before + 1);
+    assert!(!evidence.health().latched);
+    let owed = evidence.store().owed_bodies();
+    assert_eq!(owed.len(), 1);
+    assert!(
+        owed[0].contains("\"statement\":\"session_closed\""),
+        "{owed:?}"
+    );
+}
