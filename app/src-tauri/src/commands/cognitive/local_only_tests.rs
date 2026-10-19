@@ -4703,6 +4703,68 @@ fn p3_hm_m4_n2_a_loosening_key_matching_two_agents_is_refused() {
     );
 }
 
+/// P3-C11-M5 N1 K-2 (an M4 carry-over): a loosening key that names two
+/// registered agents is refused even when the test confirmer would answer
+/// yes. The confirmer is never asked; neither agent's store row changes, no
+/// loosening event is written, and the config keeps the key local-only.
+#[test]
+fn p3_hm_m5_n1_k2_a_two_agent_loosening_key_is_refused_without_asking_a_willing_confirmer() {
+    let name =
+        "p3_hm_m5_n1_k2_a_two_agent_loosening_key_is_refused_without_asking_a_willing_confirmer";
+    let Some(w) = e2e(name, FakeOllama::serving(&[]), || {
+        let state = AppState::new_in_memory();
+        let first = register_by_supervisor(&state, "p3-hm-m5-shared", true);
+        let second = register_by_supervisor(&state, "p3-hm-m5-shared", true);
+        m4_resolve(&state, &first);
+        m4_resolve(&state, &second);
+        let willing = M4TestConfirmer::answering(true);
+        let set = crate::commands::chat_llm::set_agent_llm_provider(
+            &state,
+            Some(&willing),
+            "p3-hm-m5-shared".to_string(),
+            "anthropic".to_string(),
+            false,
+            0,
+            0,
+        );
+        Ok(format!(
+            "set_ok={} asked={} first={} second={} loosened={} assignment={}",
+            set.is_ok(),
+            willing.shown().len(),
+            m4_policy(&state, &first),
+            m4_policy(&state, &second),
+            m4_events(&state, &first, "memory.policy_loosened")
+                + m4_events(&state, &second, "memory.policy_loosened"),
+            m4_assignment("p3-hm-m5-shared")
+        ))
+    }) else {
+        return;
+    };
+    let field = |k: &str| hm_field(&w.result, k);
+    assert_eq!(
+        field("set_ok="),
+        "false",
+        "K-2: a key naming two agents was not refused: {}",
+        w.result
+    );
+    assert_eq!(
+        field("asked="),
+        "0",
+        "K-2: the confirmer was asked for a key naming two agents: {}",
+        w.result
+    );
+    for key in ["first=", "second="] {
+        assert_eq!(field(key), "1|1|default_restrictive", "{}", w.result);
+    }
+    assert_eq!(field("loosened="), "0", "{}", w.result);
+    assert_eq!(
+        field("assignment="),
+        "anthropic|true|0|0",
+        "K-2: the refused loosening loosened the config mirror: {}",
+        w.result
+    );
+}
+
 /// N2 (the other production writer of `local_only`: the interface's
 /// whole-configuration save): a key flipped to `true` is a governed tighten
 /// (store first); a key flipped to `false` without a native confirmation is

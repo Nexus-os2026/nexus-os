@@ -3808,6 +3808,61 @@ fn hm_m4_n2_a_policy_change_while_the_owner_is_asked_refuses_the_loosening() {
     );
 }
 
+/// P3-C11-M5 N1 K-1 (§8 item 5; an M4 carry-over): a loosening confirmed
+/// at generation g is refused when the policy moved to another local-only
+/// generation before its commit. While its dialog is open a second
+/// loosening is confirmed and committed, and then a governed tighten makes
+/// the agent local-only again at a later generation: the first commit finds
+/// the agent local-only but not at g, refuses `PolicyChanged`, and the agent
+/// stays local-only with no further history row.
+#[test]
+fn hm_m5_n1_k1_a_loosening_confirmed_at_one_generation_is_refused_after_a_move_to_another_local_only_generation(
+) {
+    let e = env();
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|1|0|t0_baseline");
+    let other = Arc::new(e.issuer_on(e.db.clone()));
+    let moved = Arc::new(Mutex::new(None));
+    let mut asking = M4Confirmer::answering(true);
+    {
+        let (other, moved) = (other.clone(), moved.clone());
+        asking.on_ask = Some(Box::new(move || {
+            // The second dialog: confirmed and committed (generation 2).
+            let second = M4Confirmer::answering(true);
+            let loosened = other
+                .request_loosening(id(AGENT_B), Some(&second), &mut || Ok(()))
+                .expect("the second loosening commits");
+            assert!(loosened.changed);
+            // Then a governed tighten: local-only again (generation 3).
+            let tightened = other
+                .governed_tighten(id(AGENT_B))
+                .expect("the tighten commits");
+            *moved.lock().unwrap() = Some(tightened.policy.policy_generation());
+        }));
+    }
+    assert_eq!(
+        e.issuer
+            .request_loosening(id(AGENT_B), Some(&asking), &mut || Ok(()))
+            .unwrap_err(),
+        LooseningRefused::PolicyChanged
+    );
+    assert_eq!(*moved.lock().unwrap(), Some(3), "precondition: the move");
+    assert_eq!(policy_of(&e.db, AGENT_B), "1|3|0|tightened");
+    assert_eq!(
+        history_of(&e.db, AGENT_B),
+        vec![
+            "1|1|t0_baseline|t0_baseline".to_string(),
+            "2|0|owner_confirmed|owner_loosen".to_string(),
+            "3|1|tightened|governed_tighten".to_string(),
+        ],
+        "the refused loosening added no row"
+    );
+    assert!(e
+        .issuer
+        .resolve_agent_route_policy(id(AGENT_B))
+        .unwrap()
+        .local_only());
+}
+
 /// N2 (§15.3; mutant 4): a governed tighten that cannot commit is reported,
 /// never claimed; the issuer then holds the agent local-only for the life
 /// of the process: every resolution and O1 (a new unit is local), O2 (a

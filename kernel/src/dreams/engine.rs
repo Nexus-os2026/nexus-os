@@ -825,6 +825,66 @@ mod tests {
         );
     }
 
+    /// P3-C11-M5 N1 K-3 (§13.2 dream LK-3; an M4 carry-over): a dream
+    /// result whose entry was cleared from the queue while it was dreamed is
+    /// dropped, not recorded: `record_dream` returns false and the scheduler
+    /// holds no result for it. A result whose entry is still queued is
+    /// recorded (the control).
+    #[test]
+    fn hm_m5_n1_k3_a_result_whose_entry_was_cleared_while_dreamed_is_dropped() {
+        let mut scheduler = DreamScheduler::new();
+        for id in ["k3-cleared", "k3-kept"] {
+            scheduler.enqueue(DreamTask {
+                id: id.into(),
+                task_type: DreamType::Explore,
+                priority: 0.5,
+                source_agent: "a".into(),
+                context: serde_json::json!({"topic": "k3"}),
+                ..DreamTask::default()
+            });
+        }
+        let mut engine = DreamEngine::new(scheduler);
+        let session = engine.begin_dream_session();
+        let llm = mock_dream_llm();
+        let dreamed: Vec<DreamResult> = session
+            .tasks
+            .iter()
+            .map(|task| DreamEngine::dream_entry(&dream_hm().issuer, &llm, task, 1_000))
+            .collect();
+        // The entry is cleared while it is dreamed (no engine borrowed).
+        engine
+            .scheduler
+            .priority_queue
+            .retain(|t| t.id != "k3-cleared");
+        let result_of = |id: &str| dreamed.iter().find(|r| r.task_id == id).unwrap().clone();
+        assert!(
+            !engine.record_dream(result_of("k3-cleared")),
+            "K-3: a cleared entry's result was reported recorded"
+        );
+        assert!(
+            engine
+                .scheduler
+                .completed_dreams
+                .iter()
+                .all(|r| r.task_id != "k3-cleared"),
+            "K-3: the scheduler holds a result for a cleared entry"
+        );
+        assert!(
+            engine.record_dream(result_of("k3-kept")),
+            "the control: a queued entry's result is recorded"
+        );
+        assert_eq!(
+            engine
+                .scheduler
+                .completed_dreams
+                .iter()
+                .map(|r| r.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["k3-kept"]
+        );
+        assert_eq!(engine.scheduler.queue_len(), 0);
+    }
+
     #[test]
     fn parse_best_score_multi() {
         let text = "STRATEGY_1: foo SCORE: 3\nSTRATEGY_2: bar SCORE: 8\nSTRATEGY_3: baz SCORE: 5";
