@@ -9,7 +9,7 @@ use crate::authority::approval::{
 };
 use crate::authority::clock::ManualClock;
 use crate::authority::commitment::{
-    CommitmentState, ExecutionGuard, FailureClass, PreparedAction, TargetIdentity,
+    CommitmentState, ExecutionGuard, FailureClass, Outcome, PreparedAction, TargetIdentity,
 };
 use crate::authority::effect::{CapabilityKind, EffectClass};
 use crate::authority::evidence::{EvidencePhase, ExecutionEvidence, MemoryEvidence};
@@ -18,7 +18,8 @@ use crate::authority::policy::GrantScope;
 use crate::authority::run::RunOrigin;
 use crate::authority::{Authority, AuthorityError};
 use crate::control::{Control, EffectOutput, PendingEffect, Preparation};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 struct Yes;
@@ -83,18 +84,27 @@ struct Fixture {
     evidence: Arc<PrimaryEvidence>,
     recent: Arc<MemoryEvidence>,
     control: Arc<Control>,
+    clock: Arc<ManualClock>,
     agent: AgentId,
     run: RunId,
     grant: GrantId,
 }
 
 fn fixture() -> Fixture {
+    fixture_with(vec![])
+}
+
+/// The fixture, with `extra` projections after the recent history.
+fn fixture_with(extra: Vec<Arc<dyn EvidenceProjection>>) -> Fixture {
     let scratch = Scratch::new();
     let recent = Arc::new(MemoryEvidence::new(10_000));
-    let evidence = PrimaryEvidence::open(&scratch.store(), vec![recent.clone()]).unwrap();
+    let mut projections: Vec<Arc<dyn EvidenceProjection>> = vec![recent.clone()];
+    projections.extend(extra);
+    let evidence = PrimaryEvidence::open(&scratch.store(), projections).unwrap();
+    let clock = Arc::new(ManualClock::default());
     let control = Arc::new(Control::new(Authority::new(
         evidence.clone(),
-        Arc::new(ManualClock::default()),
+        clock.clone(),
     )));
     let agent = AgentId::new("agent-el1").unwrap();
     let run = control
@@ -117,6 +127,7 @@ fn fixture() -> Fixture {
         evidence,
         recent,
         control,
+        clock,
         agent,
         run,
         grant,
@@ -456,4 +467,262 @@ fn el1_n3_the_owed_list_is_bounded_and_its_overflow_latches() {
     assert_eq!(evidence.record_end(&record), EndStatus::Uncertain);
     assert!(evidence.health().latched);
     assert_eq!(evidence.health().owed, OWED_CAPACITY);
+}
+
+// ── P3-C11-M6: corrections to EL-1 (C-1, C-2) ──────────────────────────────
+
+/// The fake effect's preparation over `grant` (as `Fixture::propose` builds
+/// it), for an effect of the test's own.
+fn preparation(grant: GrantId, effect: Box<dyn PendingEffect>) -> Preparation {
+    Preparation {
+        action: PreparedAction {
+            kind: CapabilityKind::Perception,
+            class: EffectClass::R1,
+            operation: "fake.observe",
+            target: TargetIdentity {
+                display: "fake target".into(),
+                digest: target(),
+            },
+            parameters: parameters(),
+            grants: vec![grant],
+            leases: vec![],
+            summary: vec!["fake".into()],
+        },
+        effect,
+        ttl: Duration::from_secs(60),
+    }
+}
+
+/// Propose, authorize and execute one fake effect through `control` (an
+/// effect run while another one executes).
+fn run_effect(
+    control: &Control,
+    evidence: &Arc<PrimaryEvidence>,
+    (agent, run, grant): (&AgentId, RunId, GrantId),
+    during: During,
+) -> Result<EffectOutput, AuthorityError> {
+    let effect = Box::new(Effect {
+        evidence: evidence.clone(),
+        during,
+    });
+    let id = control.propose(agent, run, preparation(grant, effect))?.id;
+    control.authorize(id, agent, run, &Yes)?;
+    control.execute(id, agent, run)
+}
+
+/// A fake capability that records whether it was ever invoked.
+struct Invoked(Arc<AtomicBool>);
+
+impl PendingEffect for Invoked {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        Ok(target())
+    }
+
+    fn parameters(&self) -> Digest {
+        parameters()
+    }
+
+    fn execute(
+        self: Box<Self>,
+        _guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        self.0.store(true, Ordering::SeqCst);
+        Ok(EffectOutput::default())
+    }
+}
+
+/// A projection that runs its task once, on the first start record it is
+/// given: that record has committed (projections follow the store), and
+/// `begin` has not yet completed the start. No sleep: the interleaving is
+/// the call order.
+struct OnStart(Mutex<Option<Box<dyn FnOnce() + Send>>>);
+
+impl EvidenceProjection for OnStart {
+    fn project(&self, record: &EvidenceRecord) {
+        if record.phase == EvidencePhase::Started {
+            // Taken first: the task's own records come back here.
+            let task = self.0.lock().unwrap().take();
+            if let Some(task) = task {
+                task();
+            }
+        }
+    }
+}
+
+/// The rows of `commitment` in `phase`.
+fn rows_of<'a>(rows: &'a [Row], phase: &str, commitment: &str) -> Vec<&'a Row> {
+    rows.iter()
+        .filter(|row| row.phase == phase && row.commitment.as_deref() == Some(commitment))
+        .collect()
+}
+
+/// EL-1 §7 as amended by C-1 (P3-C11-M6): an effect whose start record has
+/// committed, overtaken by an emergency stop before the start completes,
+/// never runs; its commitment ends revoked (interrupted at its start), and
+/// that end counts: the next session holds no `unsettled` statement for it,
+/// requires no recovery and does not start stopped.
+#[test]
+fn el1_m6_c1_a_stop_after_a_recorded_start_ends_the_commitment_and_nothing_is_unsettled() {
+    let on_start = Arc::new(OnStart(Mutex::new(None)));
+    let f = fixture_with(vec![on_start.clone()]);
+    let control = Arc::downgrade(&f.control);
+    *on_start.0.lock().unwrap() = Some(Box::new(move || {
+        let control = control.upgrade().expect("the control");
+        assert_eq!(control.emergency_stop(), 1);
+    }));
+    let invoked = Arc::new(AtomicBool::new(false));
+    let id = f
+        .control
+        .propose(
+            &f.agent,
+            f.run,
+            preparation(f.grant, Box::new(Invoked(invoked.clone()))),
+        )
+        .unwrap()
+        .id;
+    f.control.authorize(id, &f.agent, f.run, &Yes).unwrap();
+    assert_eq!(
+        f.control.execute(id, &f.agent, f.run).unwrap_err(),
+        AuthorityError::EmergencyStopped
+    );
+    assert!(on_start.0.lock().unwrap().is_none(), "the stop ran");
+    assert!(
+        !invoked.load(Ordering::SeqCst),
+        "the capability was invoked"
+    );
+    let id = id.to_string();
+    let rows = f.rows();
+    assert_eq!(rows_of(&rows, "started", &id).len(), 1);
+    let revoked = rows_of(&rows, "revoked", &id);
+    assert_eq!(revoked.len(), 1);
+    let body: serde_json::Value = serde_json::from_str(&revoked[0].body).unwrap();
+    assert_eq!(body["detail"]["interrupted"], "start");
+    assert!(rows_of(&rows, "finished", &id).is_empty());
+    // A new session over the same file.
+    let Fixture {
+        _scratch: scratch,
+        evidence,
+        control,
+        ..
+    } = f;
+    let path = scratch.store();
+    drop(control);
+    drop(evidence);
+    let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+    let unsettled: Vec<Row> = evidence
+        .store()
+        .rows()
+        .into_iter()
+        .filter(|row| row.phase == "unsettled")
+        .collect();
+    assert!(
+        unsettled.is_empty(),
+        "a start that a stop overtook is not unsettled: {unsettled:?}"
+    );
+    assert!(!evidence.health().recovery_required);
+    let governed = crate::governed::GovernedControl::with_secrets(
+        &scratch.path("runtime"),
+        crate::broker::Vault::Disabled.source(),
+        evidence.clone(),
+        Arc::new(ManualClock::default()),
+    )
+    .unwrap();
+    assert!(!governed.status().emergency_stopped);
+}
+
+/// C-1's premise (P3-C11-M6): an executing commitment is never ended by
+/// what ends an unconsumed one (a denial, a refused start, expiry, a revoked
+/// grant, a moved generation, a cancelled or finished run, an emergency
+/// stop); only its finish ends it, with `finished`.
+#[test]
+fn el1_m6_c1_an_executing_commitment_is_ended_only_by_its_finish() {
+    let f = fixture();
+    let id = f.propose(nothing()).unwrap();
+    f.control.authorize(id, &f.agent, f.run, &Yes).unwrap();
+    let authority = f.control.authority();
+    let commitments = authority.commitments();
+    let guard = commitments
+        .begin(id, &f.agent, f.run, &target(), &parameters())
+        .unwrap();
+    assert_eq!(
+        commitments.deny(id, &f.agent, f.run).unwrap_err(),
+        AuthorityError::NotPending
+    );
+    assert_eq!(
+        commitments
+            .fail_unstarted(id, &f.agent, f.run, &AuthorityError::Stale)
+            .unwrap_err(),
+        AuthorityError::NotPending
+    );
+    f.clock.advance(Duration::from_secs(3600));
+    commitments.sweep();
+    authority.grants().revoke(f.grant).unwrap();
+    commitments.sweep();
+    authority.cancel_run(f.run).unwrap();
+    authority.finish_run(f.run);
+    f.control.emergency_stop();
+    assert_eq!(
+        commitments.view(id).unwrap().state,
+        CommitmentState::Executing
+    );
+    let id_text = id.to_string();
+    let ends = |rows: &[Row]| -> Vec<String> {
+        ["finished", "revoked", "expired", "denied"]
+            .iter()
+            .flat_map(|phase| rows_of(rows, phase, &id_text))
+            .map(|row| row.phase.clone())
+            .collect()
+    };
+    assert!(ends(&f.rows()).is_empty(), "{:?}", ends(&f.rows()));
+    assert!(matches!(
+        guard.finish(Outcome::Succeeded { meta: vec![] }),
+        EndStatus::Recorded { .. }
+    ));
+    assert_eq!(ends(&f.rows()), ["finished"]);
+    assert_eq!(
+        commitments.view(id).unwrap().state,
+        CommitmentState::Succeeded
+    );
+}
+
+/// EL-1 §6 as amended by C-2 (P3-C11-M6): a latched store keeps nothing
+/// owed. An effect that completes after the store latched (another effect's
+/// end record was uncertain: its COMMIT failed) reports its end uncertain,
+/// and the owed list is unchanged; a clean shutdown's `session_closed` on the
+/// latched store is uncertain too.
+#[test]
+fn el1_m6_c2_a_latched_store_keeps_nothing_owed() {
+    let f = fixture();
+    let control = Arc::downgrade(&f.control);
+    let evidence = f.evidence.clone();
+    let (agent, run, grant) = (f.agent.clone(), f.run, f.grant);
+    let inner = Arc::new(Mutex::new(None));
+    let seen = inner.clone();
+    // While this effect runs, another one runs whole and its end record's
+    // COMMIT fails: the store latches.
+    let latch_while_running: During = Arc::new(move |_| {
+        let control = control.upgrade().expect("the control");
+        let fail_commit: During =
+            Arc::new(|evidence: &PrimaryEvidence| evidence.store().plant_fault(Fault::FailCommit));
+        let result = run_effect(&control, &evidence, (&agent, run, grant), fail_commit);
+        *seen.lock().unwrap() = Some(result);
+    });
+    let output = f.run(latch_while_running).expect("the effect completed");
+    let inner = inner
+        .lock()
+        .unwrap()
+        .take()
+        .expect("the inner effect ran")
+        .expect("the inner effect completed");
+    assert_eq!(inner.evidence.map(|e| e.end), Some(EndStatus::Uncertain));
+    assert!(f.evidence.health().latched);
+    assert_eq!(
+        output.evidence.map(|e| e.end),
+        Some(EndStatus::Uncertain),
+        "a latched store keeps nothing owed"
+    );
+    assert_eq!(f.evidence.health().owed, 0);
+    assert!(f.evidence.store().owed_bodies().is_empty());
+    assert_eq!(f.evidence.close_session(), EndStatus::Uncertain);
+    assert_eq!(f.evidence.health().owed, 0);
 }

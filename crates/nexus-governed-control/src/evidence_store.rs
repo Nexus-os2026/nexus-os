@@ -33,12 +33,15 @@
 //!   order, and is refused while one is still owed or the store is latched.
 //!   An end record (a transition that has already taken effect) never fails
 //!   and never waits for the owner: written, owed (kept, bounded, with its
-//!   original content), or uncertain (latched).
+//!   original content), or uncertain (latched). Only a record that was not
+//!   committed on a store that is not latched is owed: a latched store can
+//!   write nothing more in this process, so it keeps nothing owed.
 //!
 //! - Sessions (§7): each qualification appends `session_opened`; a clean
 //!   shutdown appends `session_closed`. Before anything is admitted, once,
 //!   over the whole verified chain, every commitment that started and has no
-//!   end and no `unsettled` statement gets one ("outcome not recorded; the
+//!   end (a `finished`, `revoked` or `expired` row) and no `unsettled`
+//!   statement gets one ("outcome not recorded; the
 //!   effect may have occurred"), and every earlier session opened and never
 //!   closed gets an `unclean_session` statement. Recovery is required while
 //!   an `unsettled` statement is newer than what the owner acknowledged:
@@ -233,8 +236,9 @@ pub(crate) const UNSETTLED_TEXT: &str = "outcome not recorded; the effect may ha
 struct Known {
     /// Commitments with a `started` row: its sequence number.
     started: BTreeMap<String, u64>,
-    /// Commitments with a `finished` row (the one end of a started one).
-    finished: BTreeSet<String>,
+    /// Commitments with an end row: `finished`, or `revoked` or `expired`
+    /// (a start overtaken before it completed: its effect never ran).
+    ended: BTreeSet<String>,
     /// `unsettled` statements: commitment → statement sequence number.
     unsettled: BTreeMap<String, u64>,
     /// Sessions opened, with the sequence number of `session_opened`.
@@ -254,8 +258,8 @@ impl Known {
             ("started", Some(commitment)) => {
                 self.started.insert(commitment.clone(), row.seq);
             }
-            ("finished", Some(commitment)) => {
-                self.finished.insert(commitment.clone());
+            ("finished" | "revoked" | "expired", Some(commitment)) => {
+                self.ended.insert(commitment.clone());
             }
             ("unsettled", Some(commitment)) => {
                 self.unsettled.insert(commitment.clone(), row.seq);
@@ -316,7 +320,9 @@ pub(crate) struct Recovery {
 
 /// A record owed: its original content, written late.
 struct Owed {
-    record: EvidenceRecord,
+    /// The record, for the projections; none for the store's own statement
+    /// (`session_closed`), which is not projected.
+    record: Option<EvidenceRecord>,
     phase: &'static str,
     commitment: Option<String>,
     body: String,
@@ -325,10 +331,20 @@ struct Owed {
 impl Owed {
     fn of(record: &EvidenceRecord) -> Self {
         Self {
-            record: record.clone(),
+            record: Some(record.clone()),
             phase: record.phase.as_str(),
             commitment: record.commitment.clone(),
             body: body_of(record),
+        }
+    }
+
+    /// One of the store's own statements.
+    fn statement(kind: &'static str, body: String) -> Self {
+        Self {
+            record: None,
+            phase: kind,
+            commitment: None,
+            body,
         }
     }
 }
@@ -780,7 +796,7 @@ impl EvidenceStore {
         let owed = Owed::of(record);
         match inner.append(owed.phase, owed.commitment.as_deref(), &owed.body) {
             Append::Committed { seq } | Append::AlreadyPresent { seq } => {
-                written.push(owed.record);
+                written.extend(owed.record);
                 (Ok(seq), written)
             }
             // Not written: the action it permits does not happen (nothing
@@ -790,17 +806,18 @@ impl EvidenceStore {
     }
 
     /// An end record (§6): never fails. Every owed record first, in order;
-    /// then this one: written, owed, or uncertain.
+    /// then this one: written, owed (not committed, the store not latched),
+    /// or uncertain (the store is latched: nothing is kept owed).
     pub(crate) fn end(&self, record: &EvidenceRecord) -> (EndStatus, Vec<EvidenceRecord>) {
         let mut inner = self.inner();
         let mut written = Vec::new();
         let owed = Owed::of(record);
         if inner.latched || !inner.pay_owed(&mut written) {
-            return (inner.owe(owed), written);
+            return (inner.owe_unless_latched(owed), written);
         }
         match inner.append(owed.phase, owed.commitment.as_deref(), &owed.body) {
             Append::Committed { seq } | Append::AlreadyPresent { seq } => {
-                written.push(owed.record);
+                written.extend(owed.record);
                 (EndStatus::Recorded { seq }, written)
             }
             Append::NotCommitted => (inner.owe(owed), written),
@@ -863,37 +880,48 @@ impl EvidenceStore {
     /// The owner's acknowledgement of everything through `covers_through`
     /// (the statements shown): written after every owed record; the one
     /// record written for an action while recovery is required. It grants
-    /// nothing and changes no outcome.
-    pub(crate) fn acknowledge(&self, covers_through: u64) -> Result<u64, EvidenceUnavailable> {
+    /// nothing and changes no outcome. Returns what it came to and every
+    /// record written (for the projections).
+    pub(crate) fn acknowledge(
+        &self,
+        covers_through: u64,
+    ) -> (Result<u64, EvidenceUnavailable>, Vec<EvidenceRecord>) {
         let mut inner = self.inner();
         let mut written = Vec::new();
         if inner.latched || !inner.pay_owed(&mut written) {
-            return Err(EvidenceUnavailable);
+            return (Err(EvidenceUnavailable), written);
         }
         let body = statement(
             "acknowledged",
             serde_json::json!({ "covers_through": covers_through }),
         );
         match inner.append("acknowledged", None, &body) {
-            Append::Committed { seq } => Ok(seq),
-            _ => Err(EvidenceUnavailable),
+            Append::Committed { seq } => (Ok(seq), written),
+            _ => (Err(EvidenceUnavailable), written),
         }
     }
 
-    /// A clean shutdown's `session_closed` (an end record: it never fails).
-    pub(crate) fn close_session(&self) -> EndStatus {
+    /// A clean shutdown's `session_closed` (an end record: it never fails):
+    /// written after every owed record, owed itself if it is not committed,
+    /// uncertain on a latched store. Returns what it came to and every
+    /// record written (for the projections).
+    pub(crate) fn close_session(&self) -> (EndStatus, Vec<EvidenceRecord>) {
         let mut inner = self.inner();
+        let mut written = Vec::new();
         let session = inner.session.clone();
-        let body = statement("session_closed", serde_json::json!({ "session": session }));
-        if inner.latched || !inner.pay_owed(&mut Vec::new()) {
-            return EndStatus::Owed;
+        let owed = Owed::statement(
+            "session_closed",
+            statement("session_closed", serde_json::json!({ "session": session })),
+        );
+        if inner.latched || !inner.pay_owed(&mut written) {
+            return (inner.owe_unless_latched(owed), written);
         }
-        match inner.append("session_closed", None, &body) {
+        match inner.append(owed.phase, None, &owed.body) {
             Append::Committed { seq } | Append::AlreadyPresent { seq } => {
-                EndStatus::Recorded { seq }
+                (EndStatus::Recorded { seq }, written)
             }
-            Append::NotCommitted => EndStatus::Owed,
-            _ => EndStatus::Uncertain,
+            Append::NotCommitted => (inner.owe(owed), written),
+            _ => (EndStatus::Uncertain, written),
         }
     }
 }
@@ -941,7 +969,9 @@ impl PrimaryEvidence {
 
     /// A clean shutdown: this session's `session_closed` (EL-1 §7).
     pub fn close_session(&self) -> EndStatus {
-        self.store.close_session()
+        let (status, written) = self.store.close_session();
+        self.project(&written);
+        status
     }
 
     /// What the owner must acknowledge, if recovery is required (the
@@ -953,7 +983,9 @@ impl PrimaryEvidence {
     /// Only after the owner's native confirmation of exactly `recovery`
     /// (`Authority::resume`).
     pub(crate) fn acknowledge(&self, covers_through: u64) -> Result<u64, EvidenceUnavailable> {
-        self.store.acknowledge(covers_through)
+        let (acknowledged, written) = self.store.acknowledge(covers_through);
+        self.project(&written);
+        acknowledged
     }
 
     /// Copy what the store wrote, in order, outside its lock.
@@ -1081,7 +1113,7 @@ impl Inner {
             match self.append(phase, commitment.as_deref(), &body) {
                 Append::Committed { .. } | Append::AlreadyPresent { .. } => {
                     if let Some(paid) = self.owed.pop_front() {
-                        written.push(paid.record);
+                        written.extend(paid.record);
                     }
                 }
                 _ => return false,
@@ -1090,8 +1122,20 @@ impl Inner {
         true
     }
 
-    /// Keep an end record owed; one more than the list holds latches the
-    /// store, and that record is neither written nor kept: uncertain.
+    /// What becomes of an end record that was not written: on a latched
+    /// store (latched before, or while the owed records were paid) nothing
+    /// can be written in this process, so nothing is kept: uncertain;
+    /// otherwise (not committed) it is owed.
+    fn owe_unless_latched(&mut self, owed: Owed) -> EndStatus {
+        if self.latched {
+            return EndStatus::Uncertain;
+        }
+        self.owe(owed)
+    }
+
+    /// Keep an end record owed (it was not committed; the store is not
+    /// latched); one more than the list holds latches the store, and that
+    /// record is neither written nor kept: uncertain.
     fn owe(&mut self, owed: Owed) -> EndStatus {
         if self.owed.len() >= OWED_CAPACITY {
             self.latch();
@@ -1198,7 +1242,8 @@ impl Inner {
 
     /// The one reconciliation (§7), over the whole verified chain, before
     /// anything is admitted: an `unsettled` statement for every commitment
-    /// that started and has no end and none yet; an `unclean_session`
+    /// that started and has no end (`finished`, `revoked` or `expired`) and
+    /// none yet; an `unclean_session`
     /// statement for every earlier session opened and never closed, and none
     /// yet. A second start appends nothing new.
     fn reconcile(&mut self) -> Result<(), Unqualified> {
@@ -1207,7 +1252,7 @@ impl Inner {
             .started
             .iter()
             .filter(|(commitment, _)| {
-                !self.known.finished.contains(*commitment)
+                !self.known.ended.contains(*commitment)
                     && !self.known.unsettled.contains_key(*commitment)
             })
             .map(|(commitment, seq)| (commitment.clone(), *seq))

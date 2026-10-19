@@ -497,3 +497,89 @@ fn el1_n4_a_statement_after_the_snapshot_stays_unacknowledged() {
     );
     assert!(!evidence.health().recovery_required);
 }
+
+// ── P3-C11-M6: corrections to EL-1 (C-1, C-3) ──────────────────────────────
+
+/// EL-1 §7 as amended by C-1 (P3-C11-M6), (b): a started commitment with
+/// no end row (finished, revoked or expired) still gets exactly one
+/// `unsettled` statement, and a later start adds none; one with an end row
+/// gets none.
+#[test]
+fn el1_m6_c1_b_a_start_with_no_end_row_is_unsettled_once() {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    {
+        let store = EvidenceStore::open(&path).unwrap();
+        for (phase, commitment) in [
+            ("prepared", "cmt-open"),
+            ("authorized", "cmt-open"),
+            ("started", "cmt-open"),
+            ("prepared", "cmt-ended"),
+            ("authorized", "cmt-ended"),
+            ("started", "cmt-ended"),
+            ("finished", "cmt-ended"),
+        ] {
+            assert!(matches!(
+                store.append(phase, Some(commitment), &format!("{{\"{phase}\":1}}")),
+                Append::Committed { .. }
+            ));
+        }
+    }
+    for _ in 0..2 {
+        let store = EvidenceStore::open(&path).unwrap();
+        let unsettled: Vec<Option<String>> = store
+            .rows()
+            .into_iter()
+            .filter(|row| row.phase == "unsettled")
+            .map(|row| row.commitment)
+            .collect();
+        assert_eq!(unsettled, [Some("cmt-open".to_string())]);
+        assert!(store.health().recovery_required);
+    }
+}
+
+/// A store whose chain holds a start with no end: its next open writes one
+/// `unsettled` statement, and recovery is required.
+fn unsettled_store() -> (Scratch, PathBuf) {
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    let store = EvidenceStore::open(&path).unwrap();
+    assert!(matches!(
+        store.append("started", Some("cmt-unsettled"), "{\"started\":1}"),
+        Append::Committed { .. }
+    ));
+    drop(store);
+    (scratch, path)
+}
+
+/// EL-1 §6 as amended by C-3 (P3-C11-M6): a record the acknowledgement pays
+/// (written first, before the `acknowledged` row) is projected, as every
+/// record the store commits is.
+#[test]
+fn el1_m6_c3_records_paid_by_the_acknowledgement_are_projected() {
+    let (_scratch, path) = unsettled_store();
+    let recent = Arc::new(MemoryEvidence::new(100));
+    let evidence = PrimaryEvidence::open(&path, vec![recent.clone()]).unwrap();
+    assert!(evidence.health().recovery_required);
+    // One end record owed (end records are written while recovery is
+    // required; this one is refused).
+    evidence.store().refuse_inserts(true);
+    assert_eq!(
+        evidence.record_end(&EvidenceRecord::new(EvidencePhase::RunCancelled, 1, 1)),
+        EndStatus::Owed
+    );
+    evidence.store().refuse_inserts(false);
+    assert!(recent.records().is_empty());
+    let authority = Authority::new(evidence.clone(), Arc::new(ManualClock::default()));
+    authority.resume(&owner(true, true)).unwrap();
+    assert_eq!(evidence.health().owed, 0);
+    let projected: Vec<EvidencePhase> = recent.records().iter().map(|r| r.phase).collect();
+    assert_eq!(
+        projected,
+        [EvidencePhase::RunCancelled],
+        "the record the acknowledgement paid is projected"
+    );
+    let rows = evidence.store().rows();
+    let seq_of = |phase: &str| rows.iter().find(|r| r.phase == phase).unwrap().seq;
+    assert!(seq_of("run_cancelled") < seq_of("acknowledged"));
+}
