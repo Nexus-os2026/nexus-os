@@ -1438,9 +1438,11 @@ impl CognitiveRuntime {
                 });
             let goal = state.goal.clone();
             // §13.2 LK-1: reserve the cycle (the planner call is not charged
-            // fuel) and take its unit.
+            // fuel) and take its unit; release `loops`.
             let (token, mut flight) = Self::reserve(state, 0.0);
-            // The planner's model call; §12.4 admits it.
+            drop(loops);
+            // LK-2: the planner's model call, with no runtime lock held; §12.4
+            // admits it.
             let planned = match &replan {
                 Some((failed_step, remaining)) => planner.replan_after_failure(
                     &mut flight.ctx,
@@ -1454,6 +1456,7 @@ impl CognitiveRuntime {
                 None => planner.plan_goal(&mut flight.ctx, &goal, &context, &mut recall),
             };
             // LK-3: re-check and transition.
+            loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
             state = match Self::recheck(&mut loops, agent_id, &token, flight) {
                 Some(state) => state,
                 None => {
@@ -1713,6 +1716,7 @@ impl CognitiveRuntime {
                 ));
             }
             let step_index = state.current_step_index;
+            let model = matches!(action_clone, PlannedAction::LlmQuery { .. });
 
             eprintln!(
                 "[agent:{}] dispatching to executor: {} (step {}/{})",
@@ -1723,7 +1727,7 @@ impl CognitiveRuntime {
             );
             // §13.2 LK-1: reserve the step and its fuel and take the unit.
             let (token, mut flight) = Self::reserve(state, estimate_fuel_cost(&action_clone));
-            let executed = {
+            let mut run = |flight: &mut InFlight| {
                 let prior: Vec<(String, &StepItem)> = prior_steps
                     .iter()
                     .filter_map(|(action_type, id)| {
@@ -1740,6 +1744,17 @@ impl CognitiveRuntime {
                     prior: &prior,
                 };
                 executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl)
+            };
+            let executed = if model {
+                // LK-2: an `LlmQuery`'s model call runs with no runtime lock
+                // held; §12.4 admits it.
+                drop(loops);
+                let executed = run(&mut flight);
+                loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+                executed
+            } else {
+                // Every other step still runs under `loops`.
+                run(&mut flight)
             };
             // LK-3: re-check and transition.
             state = match Self::recheck(&mut loops, agent_id, &token, flight) {
@@ -5853,6 +5868,16 @@ mod tests {
 
     mod lk {
         use super::*;
+        use crate::cognitive::PlannerLlm;
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        /// How long a test waits for what it expects (a bound, never a
+        /// synchronisation).
+        const BOUND: Duration = Duration::from_secs(5);
+        /// How long a gated call waits to be released.
+        const HELD: Duration = Duration::from_secs(60);
 
         const NOOP_PLAN: &str = r#"[{"action": {"type": "Noop"}, "description": "done"}]"#;
 
@@ -5928,6 +5953,280 @@ mod tests {
                 "LK-1: the refused cycle changed state"
             );
             assert!(state.steps.is_empty(), "LK-1: the refused cycle planned");
+        }
+
+        /// A planner model whose first call announces it entered and waits
+        /// to be released before it answers through the issuer.
+        struct GatedPlanner {
+            inner: ScriptedLlm,
+            entered: Mutex<Option<mpsc::Sender<()>>>,
+            release: Mutex<Option<mpsc::Receiver<()>>>,
+        }
+
+        fn gated_planner(reply: &str) -> (CognitivePlanner, mpsc::Receiver<()>, mpsc::Sender<()>) {
+            let (entered_tx, entered_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            let planner = GatedPlanner {
+                inner: ScriptedLlm::replying(&hm().issuer, RouteClass::Local, reply),
+                entered: Mutex::new(Some(entered_tx)),
+                release: Mutex::new(Some(release_rx)),
+            };
+            (
+                CognitivePlanner::new(Box::new(planner)),
+                entered_rx,
+                release_tx,
+            )
+        }
+
+        impl PlannerLlm for GatedPlanner {
+            fn plan_query(
+                &self,
+                ctx: &mut DispatchContext,
+                prompt: &mut PromptSource<'_>,
+            ) -> Result<DerivedItem, AgentError> {
+                if let Some(entered) = self.entered.lock().unwrap().take() {
+                    let _ = entered.send(());
+                    if let Some(release) = self.release.lock().unwrap().take() {
+                        let _ = release.recv_timeout(HELD);
+                    }
+                }
+                self.inner.plan_query(ctx, prompt)
+            }
+        }
+
+        /// Runs `probe` on its own thread and waits at most `BOUND` for it.
+        fn within<R: Send + 'static>(probe: impl FnOnce() -> R + Send + 'static) -> Option<R> {
+            let (tx, rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(probe());
+            });
+            rx.recv_timeout(BOUND).ok()
+        }
+
+        /// Whether `try_lock` of `m` succeeds within `BOUND`.
+        fn acquirable<T>(m: &Mutex<T>) -> bool {
+            let deadline = Instant::now() + BOUND;
+            loop {
+                if m.try_lock().is_ok() {
+                    return true;
+                }
+                if Instant::now() >= deadline {
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+
+        /// A-L1 (§13.2 LK-1, LK-2; mutant 10): while one agent's planner is
+        /// blocked inside its model call, another agent's cycle completes,
+        /// the first agent's status is read, and `loops` is acquirable within
+        /// a bound.
+        #[test]
+        fn hm_m4_n5_a_l1_no_loops_lock_across_the_planner_call() {
+            let (sup, ids) = agents(2);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            for id in &ids {
+                runtime
+                    .assign_goal(id, AgentGoal::new("A-L1".into(), 5))
+                    .unwrap();
+            }
+            let (planner_a, entered, release) = gated_planner(NOOP_PLAN);
+            let a = ids[0].clone();
+            let runner = runtime.clone();
+            let cycle_a = std::thread::spawn(move || {
+                let mut audit = AuditTrail::new();
+                runner.run_cycle(
+                    &a,
+                    &planner_a,
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut audit,
+                )
+            });
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: A's planner entered its model call");
+            let (runner, b) = (runtime.clone(), ids[1].clone());
+            let other_cycle = within(move || {
+                let mut audit = AuditTrail::new();
+                runner
+                    .run_cycle(
+                        &b,
+                        &make_planner(NOOP_PLAN),
+                        &make_memory_mgr(),
+                        &MockExecutor::always_ok("ok"),
+                        &mut audit,
+                    )
+                    .is_ok()
+            });
+            let (runner, a) = (runtime.clone(), ids[0].clone());
+            let status = within(move || runner.get_agent_status(&a).is_some());
+            let loops_free = acquirable(&runtime.loops);
+            release.send(()).unwrap();
+            let a_result = cycle_a.join().unwrap();
+            assert_eq!(
+                other_cycle,
+                Some(true),
+                "A-L1: another agent's cycle did not complete while a planner call was in flight"
+            );
+            assert_eq!(
+                status,
+                Some(true),
+                "A-L1: get_agent_status waited for the model call"
+            );
+            assert!(loops_free, "A-L1: `loops` was held across the planner call");
+            assert!(a_result.is_ok(), "{a_result:?}");
+        }
+
+        /// A-L3 (§13.2, §8 item 1): the barrier method shows no policy,
+        /// persistence or audit lock held during the dispatch: while a
+        /// planner call is blocked, the agent's policy resolves, another
+        /// goal's labelled write goes through the runtime's persistence path,
+        /// the state database's connection takes a transaction, and the
+        /// shared audit writer is acquirable.
+        #[test]
+        fn hm_m4_n5_a_l3_no_policy_persistence_or_audit_lock_during_dispatch() {
+            let (sup, ids) = agents(2);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            let goal_b = AgentGoal::new("A-L3 b".into(), 5);
+            let goal_b_id = goal_b.id.clone();
+            runtime
+                .assign_goal(&ids[0], AgentGoal::new("A-L3 a".into(), 5))
+                .unwrap();
+            runtime.assign_goal(&ids[1], goal_b).unwrap();
+            let audit = Arc::new(Mutex::new(AuditTrail::new()));
+            let (planner_a, entered, release) = gated_planner(NOOP_PLAN);
+            let (runner, a, writer) = (runtime.clone(), ids[0].clone(), audit.clone());
+            let cycle_a = std::thread::spawn(move || {
+                let mut writer = writer;
+                runner.run_cycle(
+                    &a,
+                    &planner_a,
+                    &make_memory_mgr(),
+                    &MockExecutor::always_ok("ok"),
+                    &mut writer,
+                )
+            });
+            entered
+                .recv_timeout(BOUND)
+                .expect("precondition: the planner entered its model call");
+            let a_uuid = uuid::Uuid::parse_str(&ids[0]).unwrap();
+            let policy = within(move || hm().issuer.resolve_agent_route_policy(a_uuid).is_ok());
+            let (runner, b) = (runtime.clone(), ids[1].clone());
+            let persisted = within(move || {
+                runner.with_goal_context(&b, &goal_b_id, |issuer, ctx| {
+                    issuer
+                        .write_memory(
+                            ctx,
+                            &NewMemory {
+                                source_kind: crate::hm::SourceKind::LoopEpisodic,
+                                memory_type: "episodic",
+                                key: "a-l3",
+                                value_json: "\"SYNTH\"",
+                                relevance_score: 0.5,
+                            },
+                            &[],
+                        )
+                        .is_ok()
+                })
+            });
+            let connection = within(|| {
+                hm().db
+                    .with_transaction(
+                        |tx| Ok(tx.query_row("SELECT 1", [], |r| r.get::<_, i64>(0))?),
+                    )
+                    .is_ok()
+            });
+            let audit_free = acquirable(&audit);
+            release.send(()).unwrap();
+            let a_result = cycle_a.join().unwrap();
+            assert_eq!(
+                policy,
+                Some(true),
+                "A-L3: the policy waited for the dispatch"
+            );
+            assert_eq!(
+                persisted,
+                Some(Some(true)),
+                "A-L3: another goal's persistence waited for the dispatch"
+            );
+            assert_eq!(
+                connection,
+                Some(true),
+                "A-L3: the persistence connection was held"
+            );
+            assert!(
+                audit_free,
+                "A-L3: the audit writer was held across the dispatch"
+            );
+            assert!(a_result.is_ok(), "{a_result:?}");
+        }
+
+        /// A-L6, model-call half (§13.2 LK-2): two agents' planner calls may
+        /// overlap: each waits (within a bound) for the other to be inside
+        /// its call too.
+        #[test]
+        fn hm_m4_n5_a_l6_two_agents_model_calls_may_overlap() {
+            struct Rendezvous {
+                inner: ScriptedLlm,
+                inside: Arc<AtomicUsize>,
+                met: Arc<AtomicUsize>,
+            }
+            impl PlannerLlm for Rendezvous {
+                fn plan_query(
+                    &self,
+                    ctx: &mut DispatchContext,
+                    prompt: &mut PromptSource<'_>,
+                ) -> Result<DerivedItem, AgentError> {
+                    self.inside.fetch_add(1, Ordering::SeqCst);
+                    let deadline = Instant::now() + BOUND;
+                    while self.inside.load(Ordering::SeqCst) < 2 && Instant::now() < deadline {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    if self.inside.load(Ordering::SeqCst) >= 2 {
+                        self.met.fetch_add(1, Ordering::SeqCst);
+                    }
+                    self.inner.plan_query(ctx, prompt)
+                }
+            }
+            let (sup, ids) = agents(2);
+            let (runtime, _emitter) = make_runtime(sup);
+            let runtime = Arc::new(runtime);
+            let (inside, met) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+            let cycles: Vec<_> = ids
+                .iter()
+                .map(|id| {
+                    runtime
+                        .assign_goal(id, AgentGoal::new("A-L6".into(), 5))
+                        .unwrap();
+                    let planner = CognitivePlanner::new(Box::new(Rendezvous {
+                        inner: ScriptedLlm::replying(&hm().issuer, RouteClass::Local, NOOP_PLAN),
+                        inside: inside.clone(),
+                        met: met.clone(),
+                    }));
+                    let (runner, id) = (runtime.clone(), id.clone());
+                    std::thread::spawn(move || {
+                        let mut audit = AuditTrail::new();
+                        runner.run_cycle(
+                            &id,
+                            &planner,
+                            &make_memory_mgr(),
+                            &MockExecutor::always_ok("ok"),
+                            &mut audit,
+                        )
+                    })
+                })
+                .collect();
+            for cycle in cycles {
+                assert!(cycle.join().unwrap().is_ok());
+            }
+            assert_eq!(
+                met.load(Ordering::SeqCst),
+                2,
+                "A-L6: two agents' model calls could not overlap"
+            );
         }
     }
 }
