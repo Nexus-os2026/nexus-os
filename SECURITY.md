@@ -29,7 +29,7 @@ grant, for example:
 
 ---
 
-## Current status: Phase One complete — Linux support profile
+## Current status: Phases Zero, One and Two complete — Linux support profile
 
 - The Phase Zero trust-boundary rebuild is complete for the validated Linux
   support profile ("PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE", declared
@@ -42,18 +42,6 @@ grant, for example:
   the project Architect on 2026-09-30 for commit
   `14270a9a38770ac84456c1f812042d2967edec42`). See
   [Governed coding (Phase One)](#governed-coding-phase-one) below.
-- Phase Two, governed verification execution for the Linux support profile,
-  is in progress: an implementation candidate on
-  `implement/phase2-governed-verification` under Architect review. It is not
-  integrated or complete and makes no claim yet; see
-  [Governed verification (Phase Two, in progress)](#governed-verification-phase-two-in-progress).
-- Phase Three, governed real-world control for the Linux support profile, is
-  an implementation candidate developed on
-  `implement/p3-governed-real-world-control` for the pull-request-governed
-  `phase3/governed-real-world-control` line, under Architect review. It is
-  not integrated into `main`, is not complete and makes no claim beyond its
-  candidate evidence; see
-  [Governed real-world control (Phase Three, candidate)](#governed-real-world-control-phase-three-candidate).
 - That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
   completion evidence is the `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
@@ -61,9 +49,28 @@ grant, for example:
   commit `6f3d64360dd21aa8d717c3995c46e48f396148b9` (`main` after Phase One
   completion), then the entry hardening described in
   [Hardening since the Phase One checkpoint](#hardening-since-the-phase-one-checkpoint).
-- Linux is the active validation target for both phases. Windows and macOS
-  portability validation is deferred, and no Phase Zero or Phase One
-  security claim is made for them.
+- Phase Two, governed verification execution, is complete for the same Linux
+  support profile ("PHASE TWO COMPLETE — LINUX SUPPORT PROFILE", declared by
+  the project Architect on 2026-10-04 for commit
+  `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc`). That checkpoint stays frozen
+  on `rebuild/phase2-governed-verification`. Its completion evidence is the
+  `evidence/phase2-closure` branch at
+  `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` contains the Phase Two
+  implementation; see
+  [Governed verification (Phase Two)](#governed-verification-phase-two).
+- Phase Three, governed real-world control for the Linux support profile, is
+  integrated into `main` as an implementation: Phase Three Candidate 11
+  (candidate commit `7f48a407155f250bb09e109dfcb4f736fe363cc5`),
+  which contains the work developed on
+  `implement/p3-governed-real-world-control` for the pull-request-governed
+  `phase3/governed-real-world-control` line. Phase Three is not complete:
+  checked activation and the Owner's completion declaration remain. It makes
+  no production, deployment, installer or release claim, and no claim beyond
+  its candidate evidence; see
+  [Governed real-world control (Phase Three)](#governed-real-world-control-phase-three).
+- Linux is the active validation target for all three completed phases.
+  Windows and macOS portability validation is deferred, and no Phase Zero,
+  Phase One or Phase Two security claim is made for them.
 - No Phase Zero production release, and no security-supported release, has
   been declared yet. This policy therefore lists no supported versions.
   Releases, tags and version numbers published before the rebuild predate
@@ -72,13 +79,35 @@ grant, for example:
   [Phase Zero Final-Gate dossier](docs/security/phase0-final-gate-dossier.md),
   the
   [Phase Zero authority inventory](docs/security/phase0-c5-authority-inventory.md)
-  and, for Phase One, the completion record on the `evidence/phase1-closure`
-  branch. They are internal engineering evidence, not an external audit or a
-  certification.
+  and, for Phase One and Phase Two, the completion records on the
+  `evidence/phase1-closure` and `evidence/phase2-closure` branches. They are
+  internal engineering evidence, not an external audit or a certification.
 
-## Governed verification (Phase Two, in progress)
+### Historical checkpoints and current dependency support
 
-The candidate's design record is
+- **Historical checkpoint validity.** The frozen Phase Zero and Phase One
+  checkpoints remain complete historical engineering checkpoints. Neither is
+  reopened, and their completion, evidence and recorded claims stand as
+  recorded for the bytes validated at each declaration.
+- **Historical dependency state.** The frozen Phase Zero and Phase One bytes
+  are not current shippable bytes and are not a current release candidate.
+  Their lockfiles resolve Wasmtime 43.0.2, which RUSTSEC-2026-0327 affects.
+  Release or deployment work must not ship directly from those historical
+  snapshots. The frozen Phase Two checkpoint resolves Wasmtime 36.0.17; the
+  later same-line updates, to 36.0.18 and then 36.0.19, were made after it on
+  the Phase Three line.
+- **Current Wasmtime.** `main` resolves Wasmtime 36.0.19 through the single
+  workspace pin in `Cargo.toml`. As that pin's comment records,
+  RUSTSEC-2026-0327 (component async-lifted callbacks) affects 39.0.0 and
+  later only; 36.0.19 carries the 36.x fixes for RUSTSEC-2026-0114, -0222,
+  -0269, -0316, -0363, -0379 and -0380, and predates the 43.0.0 Linker
+  use-after-free (RUSTSEC-2026-0090). Nexus uses core Wasm only (no component
+  model, async or WASI). This does not reopen or redefine any frozen
+  checkpoint.
+
+## Governed verification (Phase Two)
+
+Phase Two's design record is
 [docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md),
 with its authority inventory and non-claims. In short: project test code runs
 only in a dedicated trusted helper's sandbox (new user, PID, network, IPC,
@@ -92,7 +121,7 @@ unavailable; there is no fallback. It does not claim a private mount view,
 metadata confidentiality, a private `/proc`, or protection against kernel
 vulnerabilities, root, or malicious same-uid processes.
 
-## Governed real-world control (Phase Three, candidate)
+## Governed real-world control (Phase Three)
 
 The candidate's design record, bypass-closure inventory and non-claims are in
 [docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
