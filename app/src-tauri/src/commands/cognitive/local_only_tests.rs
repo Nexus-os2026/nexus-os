@@ -3068,16 +3068,6 @@ fn p3_hm_a_n10_derived_record_inherits_local_only_restriction() {
         let procedural = hm_origins(&state, &agent, "agent_memory", "evolution_procedural");
         eprintln!("HM-A-N10 PHASE-BOUNDARY");
         hm_loosen(&state, &agent);
-        let later = run_own_goal(
-            &state,
-            &agent,
-            "Review strategy: goal_type: composite: entries",
-        );
-        // Phase 2 (mutant 3): the same goal again, now in an unrestricted
-        // unit. Its post-goal evolution writes a new procedural row derived
-        // from the LOCAL_ONLY strategy aggregate (its parent): the row is
-        // LOCAL_ONLY by that parent alone, and a later non-local goal does
-        // not carry it.
         let ids = || -> std::collections::BTreeMap<String, String> {
             crate::hm_m3_tests::labels(&state.db)
                 .into_iter()
@@ -3089,15 +3079,56 @@ fn p3_hm_a_n10_derived_record_inherits_local_only_restriction() {
                 .map(|l| (l.record_id, l.origin))
                 .collect()
         };
+        // The in-between goal's own procedural row is written by its post-goal
+        // evolution after its task completes, so possibly after run_own_goal
+        // returns: it is awaited here, before the snapshot that would
+        // otherwise count it as the re-run goal's.
+        let before_later = ids();
+        let later = run_own_goal(
+            &state,
+            &agent,
+            "Review strategy: goal_type: composite: entries",
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut with_later = ids();
+        while with_later.keys().all(|id| before_later.contains_key(id))
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(20));
+            with_later = ids();
+        }
+        let later_rows: Vec<String> = with_later
+            .into_iter()
+            .filter(|(id, _)| !before_later.contains_key(id))
+            .map(|(_, origin)| origin)
+            .collect();
+        // Phase 2 (mutant 3): the same goal again, now in an unrestricted
+        // unit. Its post-goal evolution writes a new procedural row derived
+        // from the LOCAL_ONLY strategy aggregate (its parent): the row is
+        // LOCAL_ONLY by that parent alone, and a later non-local goal does
+        // not carry it.
         let before = ids();
         let again = run_own_goal(
             &state,
             &agent,
             &format!("Summarize the synthetic note {HM}"),
         );
+        // The wait ends at the re-run goal's own row: it carries the
+        // lowercased local-only goal type.
+        let local_goal_type = format!("goal_type:summarize the synthetic note {lowered}");
+        let has_again_row = |rows: &std::collections::BTreeMap<String, String>| {
+            let memories = state.db.load_memories(&agent, None, 1000).unwrap();
+            rows.keys()
+                .filter(|id| !before.contains_key(*id))
+                .any(|id| {
+                    memories
+                        .iter()
+                        .any(|m| m.id.to_string() == *id && m.value_json.contains(&local_goal_type))
+                })
+        };
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let mut after = ids();
-        while after.len() <= before.len() && std::time::Instant::now() < deadline {
+        while !has_again_row(&after) && std::time::Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(20));
             after = ids();
         }
@@ -3115,8 +3146,9 @@ fn p3_hm_a_n10_derived_record_inherits_local_only_restriction() {
             "Review strategy: goal_type: composite: entries",
         );
         Ok(format!(
-            "hash={hash} derived_rows={derived} procedural={} again_rows={} first={first:?} later={later:?} again={again:?} third={third:?}",
+            "hash={hash} derived_rows={derived} procedural={} later_rows={} again_rows={} first={first:?} later={later:?} again={again:?} third={third:?}",
             procedural.join(","),
+            later_rows.join(","),
             again_rows.join(",")
         ))
     }) else {
@@ -3133,6 +3165,11 @@ fn p3_hm_a_n10_derived_record_inherits_local_only_restriction() {
         w.ollama.iter().any(|r| r.contains(HM)),
         "A-N10: precondition: the local-only phase did not plan on loopback: {:?}",
         w.ollama
+    );
+    assert!(
+        !hm_field(&w.result, "later_rows=").is_empty(),
+        "A-N10: harness precondition: the in-between goal's own evolution row did not appear within 10 s: {}",
+        w.result
     );
     let procedural = hm_field(&w.result, "procedural=");
     assert!(
