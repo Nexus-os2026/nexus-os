@@ -1,0 +1,6 @@
+worktree (git worktree list --porcelain, this entry):
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-i4-host-qualification
+HEAD 3d46b4dbe6b920dfcc2a1fa0c2d3b055f86c1823
+branch refs/heads/review/p2-v1-native-scope-host-qualification
+
+other sessions' stash (untouched): b4e73ca499087f317d65a15cda1c93e49e0a0d44 On repair/p0-ci-resource-limiter: p0-ci-r5-before-base-correction

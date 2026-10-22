@@ -1,0 +1,72 @@
+launcher.rs: the narrow allowance (mission section 21), base 3805204f941d9694b2c0c36549d32a5f4e6c157c to the candidate
+$ git diff --stat 3805204f941d9694b2c0c36549d32a5f4e6c157c -- crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/lib.rs
+ crates/nexus-verifier-sandbox/src/launcher.rs | 25 +++++++++++++++++++++++--
+ 1 file changed, 23 insertions(+), 2 deletions(-)
+
+$ git diff 3805204f941d9694b2c0c36549d32a5f4e6c157c -- crates/nexus-verifier-sandbox/src/launcher.rs
+diff --git a/crates/nexus-verifier-sandbox/src/launcher.rs b/crates/nexus-verifier-sandbox/src/launcher.rs
+index 318cae28..8133fc4c 100644
+--- a/crates/nexus-verifier-sandbox/src/launcher.rs
++++ b/crates/nexus-verifier-sandbox/src/launcher.rs
+@@ -16,6 +16,7 @@ use std::io;
+ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+ use std::path::{Path, PathBuf};
+ use std::process::{Child, Command, Stdio};
++use std::sync::atomic::{AtomicU64, Ordering};
+ use std::time::Duration;
+
+ use crate::helper::enforced_policy_hash;
+@@ -170,8 +171,16 @@ pub struct HelperOutput {
+ pub struct Helper {
+     child: Child,
+     control: OwnedFd,
++    /// This value's identity within the backend process, never reused
++    /// (P2-V1-R3B-I4): what a pending scope operation is bound to. Unlike
++    /// the process id, it cannot come to name another child once this one
++    /// is reaped. It is no authority by itself.
++    serial: u64,
+ }
+
++/// The next helper's [`Helper::serial`].
++static NEXT_SERIAL: AtomicU64 = AtomicU64::new(1);
++
+ impl Helper {
+     /// Spawn the helper. Its environment is empty, it has no arguments, its
+     /// working directory is `/`, stdin is the control socket and stdout and
+@@ -190,7 +199,11 @@ impl Helper {
+             .map_err(LaunchError::Spawn)?;
+         // The Command and its copies of the child's ends are gone here, so
+         // the output pipes reach end of file when the verifier tree exits.
+-        let mut helper = Helper { child, control };
++        let mut helper = Helper {
++            child,
++            control,
++            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
++        };
+         if let Err(error) = helper.set_receive_timeout(Some(SETUP_STEP_TIMEOUT)) {
+             // The helper is never left running or unreaped.
+             let _ = helper.child.kill();
+@@ -212,6 +225,12 @@ impl Helper {
+         self.child.id()
+     }
+
++    /// This retained helper's identity within the backend process (see the
++    /// field): binds a pending scope operation to exactly this child.
++    pub(crate) fn serial(&self) -> u64 {
++        self.serial
++    }
++
+     fn set_receive_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+         let timeout = timeout.unwrap_or(Duration::ZERO);
+         let value = libc::timeval {
+@@ -358,7 +377,9 @@ impl Helper {
+     /// the control channel ends a helper's hold on its scope after its
+     /// final report.
+     pub fn reap(self) -> io::Result<std::process::ExitStatus> {
+-        let Self { mut child, control } = self;
++        let Self {
++            mut child, control, ..
++        } = self;
+         drop(control);
+         child.wait()
+     }

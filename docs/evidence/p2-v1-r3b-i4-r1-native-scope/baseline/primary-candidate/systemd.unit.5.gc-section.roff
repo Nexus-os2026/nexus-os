@@ -1,0 +1,95 @@
+.SH "UNIT GARBAGE COLLECTION"
+.PP
+The system and service manager loads a unit\*(Aqs configuration automatically when a unit is referenced for the first time\&. It will automatically unload the unit configuration and state again when the unit is not needed anymore ("garbage collection")\&. A unit may be referenced through a number of different mechanisms:
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 1.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  1." 4.2
+.\}
+Another loaded unit references it with a dependency such as
+\fIAfter=\fR,
+\fIWants=\fR, \&...
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 2.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  2." 4.2
+.\}
+The unit is currently starting, running, reloading or stopping\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 3.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  3." 4.2
+.\}
+The unit is currently in the
+\fBfailed\fR
+state\&. (But see below\&.)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 4.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  4." 4.2
+.\}
+A job for the unit is pending\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 5.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  5." 4.2
+.\}
+The unit is pinned by an active IPC client program\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 6.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  6." 4.2
+.\}
+The unit is a special "perpetual" unit that is always active and loaded\&. Examples for perpetual units are the root mount unit
+\-\&.mount
+or the scope unit
+init\&.scope
+that the service manager itself lives in\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 7.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  7." 4.2
+.\}
+The unit has running processes associated with it\&.
+.RE
+.PP
+The garbage collection logic may be altered with the
+\fICollectMode=\fR
+option, which allows configuration whether automatic unloading of units that are in
+\fBfailed\fR
+state is permissible, see below\&.
+.PP

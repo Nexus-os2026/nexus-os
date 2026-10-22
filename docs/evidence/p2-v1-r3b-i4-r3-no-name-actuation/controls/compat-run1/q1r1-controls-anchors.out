@@ -1,0 +1,2 @@
+{"runner": "docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/r1_controls.py", "runner_sha256": "eea344ea8394fbc6f0eb46c6b8db3b21d3f3bf728eb38b61ffdecd2c1a93a3c0", "r2_adapted": ["Q1-R1-NC2-STOP-REPLY-PROOF"]}
+Q1-R1-NC2-STOP-REPLY-PROOF: anchor occurs 0 times in crates/nexus-verifier-sandbox/src/scope/pending.rs: '        self.last_stop = Some(controller.manager.stop_unit(&self.unit));\n       '

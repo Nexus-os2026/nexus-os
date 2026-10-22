@@ -87,6 +87,16 @@ pub(crate) enum Closure {
     /// checkpoint is not that authority, and no governed replay mechanism
     /// exists.
     CheckpointReplay,
+    // Phase Three: legacy direct real-world routes closed when the governed
+    // route replaced them.
+    /// A legacy IPC route that reached a real-world effect directly: email
+    /// and messaging sends and credential-bearing reads (Gmail, Outlook,
+    /// Slack, Discord and Telegram), the dormant direct browser bridge, and a
+    /// readiness probe that ran a program found on `PATH`. Their effects run
+    /// only through Phase Three governed control (connector operations,
+    /// governed browser sessions, the agent display), committed, granted,
+    /// natively approved where sensitive, and evidenced.
+    GovernedRoute,
 }
 
 impl Closure {
@@ -141,6 +151,11 @@ impl Closure {
             Self::CheckpointReplay => {
                 "time-machine undo and redo are unavailable: a recorded checkpoint is not authority over agent state, fuel, memories or configuration"
             }
+
+            // Phase Three.
+            Self::GovernedRoute => {
+                "this real-world effect runs only through Phase Three governed control; the legacy direct route is closed"
+            }
         }
     }
 }
@@ -166,3 +181,10 @@ mod fg_secrets;
 mod fg_standalone;
 #[cfg(test)]
 mod fg_webview;
+
+// XA-R4-FINAL: the structural Rust path resolver the guards share. Like the
+// guards it lives in a file named `tests.rs`, so the production-source
+// scanners never read its tables and fixtures as production code.
+#[cfg(test)]
+#[path = "phase0_surface/rust_paths/tests.rs"]
+pub(crate) mod rust_paths;

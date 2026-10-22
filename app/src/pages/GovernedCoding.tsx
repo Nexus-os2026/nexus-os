@@ -6,13 +6,18 @@ import {
   codingListProjects,
   codingListRuns,
   codingRestoreRun,
+  codingRetryVerificationCleanup,
   codingRunStatus,
   codingSelectProject,
   codingStartRun,
+  codingStartVerification,
+  codingVerificationProfiles,
   type CodingChange,
   type CodingProject,
   type CodingRunStage,
   type CodingRunStatus,
+  type CodingSandboxVerification,
+  type CodingVerifierProfile,
 } from "../api/backend";
 
 // Governed Coding — Phase One. The owner picks a project through a native
@@ -21,6 +26,10 @@ import {
 // picks a local model, reviews the proposed changes and approves apply.
 // Approval is confirmed by a native OS dialog in the backend; this page never
 // sends an approval flag or a filesystem path.
+//
+// Phase Two: the owner may test the reviewed candidate in the verifier
+// sandbox. The page sends only the run id and a compiled-in profile name; the
+// backend confirms the launch natively. The result is advisory.
 
 const MAX_TASK_CHARS = 16000;
 const POLL_MS = 1500;
@@ -68,6 +77,62 @@ const BTN_GO =
 const BTN_WARN =
   "rounded-full border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40";
 const ERROR_BOX = "rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100";
+
+const SANDBOX_PHASES: Record<string, string> = {
+  idle: "idle",
+  prepared: "preparing",
+  materialized: "preparing",
+  approved: "starting",
+  starting: "starting",
+  running: "running",
+  finalizing: "finishing",
+  cleanup_failed: "cleanup not confirmed",
+};
+
+function SandboxResult({ view }: { view: CodingSandboxVerification }) {
+  const r = view.result;
+  return (
+    <div className="rounded-xl border border-cyan-500/15 bg-slate-950/50 px-4 py-3">
+      {view.phase !== "idle" ? (
+        <p className="text-sm text-cyan-200">Verification: {SANDBOX_PHASES[view.phase] ?? view.phase}</p>
+      ) : null}
+      {r ? (
+        <>
+          <p className={`text-sm ${r.passed ? "text-emerald-300" : "text-amber-300"}`}>
+            {r.passed ? "Tests passed" : `Result: ${r.exit.replace(/_/g, " ")}`}
+            {r.exit_code !== null ? ` (exit status ${r.exit_code})` : ""}
+            {r.signal !== null ? ` (signal ${r.signal})` : ""} · advisory
+          </p>
+          <p className="mt-1 font-mono text-xs text-cyan-100/50">
+            verification #{r.generation}
+            {r.profile ? ` · ${r.profile}` : ""} · {(r.duration_ms / 1000).toFixed(1)} s · result {r.result_short} ·
+            cleanup {r.cleanup}
+          </p>
+          <p className="font-mono text-xs text-cyan-100/50">
+            output {r.stdout_bytes} bytes{r.stdout_truncated ? " (truncated)" : ""} · errors {r.stderr_bytes} bytes
+            {r.stderr_truncated ? " (truncated)" : ""}
+          </p>
+          {r.stdout_excerpt ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-cyan-100/60">Output (end)</summary>
+              <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-cyan-100/80">
+                {r.stdout_excerpt}
+              </pre>
+            </details>
+          ) : null}
+          {r.stderr_excerpt ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-cyan-100/60">Errors (end)</summary>
+              <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-cyan-100/80">
+                {r.stderr_excerpt}
+              </pre>
+            </details>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 function isRunStatus(v: unknown): v is CodingRunStatus {
   return !!v && typeof v === "object" && typeof (v as CodingRunStatus).run_id === "string" &&
@@ -193,6 +258,25 @@ export default function GovernedCoding() {
   const [recentRuns, setRecentRuns] = useState<CodingRunStatus[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<CodingVerifierProfile[] | null>(null);
+  const verifyReady = !!run?.can_verify;
+
+  // Which compiled-in verifier profiles apply to this run's candidate.
+  useEffect(() => {
+    setProfiles(null);
+    if (!runId || !verifyReady) return;
+    let cancelled = false;
+    codingVerificationProfiles(runId)
+      .then((list) => {
+        if (!cancelled) setProfiles(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, verifyReady]);
 
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
@@ -340,6 +424,7 @@ export default function GovernedCoding() {
 
   const stageInfo = run ? STAGE_INFO[run.stage] ?? { label: run.stage, tone: "text-cyan-100" } : null;
   const changes = run?.review?.changes ?? [];
+  const canVerify = verifyReady;
 
   return (
     <section className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6" style={{ paddingBottom: 80 }}>
@@ -490,7 +575,12 @@ export default function GovernedCoding() {
           ) : null}
           {run.review ? (
             <>
-              <p className="font-mono text-xs text-cyan-100/50">review binding {run.review.binding_short}</p>
+              <p className="font-mono text-xs text-cyan-100/50">
+                review binding {run.review.binding_short}
+                {run.review.verification_short
+                  ? ` · verification ${run.review.verification_short}`
+                  : " · no verification result"}
+              </p>
               {changes.length === 0 ? (
                 <p className="text-sm text-cyan-100/60">No file changes in this review.</p>
               ) : (
@@ -515,8 +605,47 @@ export default function GovernedCoding() {
         </Step>
       ) : null}
 
+      {run && (run.can_verify || run.sandbox_verification || run.can_retry_verification_cleanup) ? (
+        <Step n={7} title="Test in the Verifier Sandbox">
+          <p className="text-sm text-cyan-100/70">
+            Runs the candidate&apos;s own tests on this machine in the verifier sandbox, with no network access. Nexus
+            asks you to confirm in a system dialog first. The result is advisory: a failure does not block Apply.
+          </p>
+          {run.sandbox_verification ? <SandboxResult view={run.sandbox_verification} /> : null}
+          {canVerify && profiles
+            ? profiles.map((p) =>
+                p.applicable ? (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className={BTN}
+                    onClick={() => void runAction("verify", (id) => codingStartVerification(id, p.name))}
+                    disabled={busy !== null}
+                  >
+                    {busy === "verify" ? "Waiting for your confirmation…" : `Run ${p.display_name}`}
+                  </button>
+                ) : (
+                  <p key={p.name} className="text-sm text-cyan-100/60">
+                    {p.display_name}: {p.reason ?? "not applicable to this candidate"}
+                  </p>
+                ),
+              )
+            : null}
+          {run.can_retry_verification_cleanup ? (
+            <button
+              type="button"
+              className={BTN_WARN}
+              onClick={() => void runAction("retry-cleanup", codingRetryVerificationCleanup)}
+              disabled={busy !== null}
+            >
+              {busy === "retry-cleanup" ? "Retrying…" : "Retry verification cleanup"}
+            </button>
+          ) : null}
+        </Step>
+      ) : null}
+
       {run?.can_apply ? (
-        <Step n={7} title="Approve & Apply">
+        <Step n={8} title="Approve & Apply">
           <p className="text-sm text-cyan-100/70">
             Nexus will ask you to confirm in a system dialog before anything is written to your project.
           </p>
@@ -532,7 +661,7 @@ export default function GovernedCoding() {
       ) : null}
 
       {run && RESULT_STAGES.has(run.stage) ? (
-        <Step n={8} title="Result">
+        <Step n={9} title="Result">
           <p className={`text-sm ${stageInfo?.tone ?? ""}`}>{stageInfo?.label ?? run.stage}</p>
           {run.message ? <p className="text-sm text-cyan-100/80">{run.message}</p> : null}
           <p className="font-mono text-xs text-cyan-100/40">
@@ -542,7 +671,7 @@ export default function GovernedCoding() {
       ) : null}
 
       {run?.can_restore ? (
-        <Step n={9} title="Restore This Run">
+        <Step n={10} title="Restore This Run">
           <p className="text-sm text-cyan-100/70">Undo the changes this run applied to your project.</p>
           <button
             type="button"

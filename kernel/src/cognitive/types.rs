@@ -534,15 +534,16 @@ impl Default for LoopConfig {
     }
 }
 
-/// Context provided to the planner for generating steps.
+/// Context provided to the planner for generating steps. It carries no
+/// retained record: memories and previous outcomes reach a planning prompt
+/// only as verbatim items (`planner::PlanningRecall`, P3-HM-CONTRACT-02
+/// §11.2, §11.3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningContext {
     pub agent_name: Option<String>,
     pub agent_description: Option<String>,
     pub agent_capabilities: Vec<String>,
     pub available_fuel: f64,
-    pub relevant_memories: Vec<String>,
-    pub previous_outcomes: Vec<String>,
     pub working_directory: Option<String>,
     /// Top-level contents of `working_directory` at planning time.
     /// Helps the planner LLM disambiguate user phrases like "src/" or
@@ -775,8 +776,6 @@ mod tests {
             agent_description: Some("test agent description".into()),
             agent_capabilities: vec!["llm.query".into()],
             available_fuel: 100.0,
-            relevant_memories: vec![],
-            previous_outcomes: vec![],
             working_directory: Some("/tmp".into()),
             directory_listing: None,
             autonomy_level: 2,

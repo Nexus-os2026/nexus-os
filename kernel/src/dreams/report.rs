@@ -1,8 +1,9 @@
 //! Morning briefing — summary of overnight dream results.
 
-use super::engine::DreamLlm;
+use super::engine::{dream_unit, DreamLlm};
 use super::scheduler::DreamScheduler;
 use super::types::{DreamOutcome, DreamResult};
+use crate::hm::{DispatchContext, DispatchIssuer, EntryLabel, PromptBuilder};
 use serde::{Deserialize, Serialize};
 
 /// A human-readable morning briefing summarizing dream results.
@@ -22,8 +23,15 @@ pub struct MorningBriefing {
 }
 
 impl MorningBriefing {
-    /// Generate a briefing from the scheduler's completed dreams.
-    pub fn generate(scheduler: &DreamScheduler, llm: &dyn DreamLlm) -> Self {
+    /// Generate a briefing from the scheduler's completed dreams. The
+    /// briefing is a derived item of every contributing entry (§11.3): its
+    /// unit starts from the ⊔ of their labels when they share one principal,
+    /// and is `LOCAL_ONLY_ORIGIN` (never non-local) otherwise.
+    pub fn generate(
+        scheduler: &DreamScheduler,
+        issuer: &DispatchIssuer,
+        llm: &dyn DreamLlm,
+    ) -> Self {
         let dreams = &scheduler.completed_dreams;
         let session_start = scheduler.last_dream_at.unwrap_or(0);
 
@@ -64,8 +72,21 @@ impl MorningBriefing {
             let user = format!(
                 "Dream results ({total} dreams, {tokens_spent} tokens used):\n{bullet_points}"
             );
-            match llm.query(system, &user, 300) {
-                Ok((text, _)) => text,
+            let labels: Option<Vec<&EntryLabel>> = dreams.iter().map(|d| d.label()).collect();
+            let combined = labels.and_then(|labels| EntryLabel::combine(&labels));
+            let briefing = dream_unit(issuer, combined.as_ref()).and_then(|mut ctx| {
+                llm.query(
+                    &mut ctx,
+                    &mut |c: &mut DispatchContext| {
+                        let mut b = PromptBuilder::new(c);
+                        b.text(&format!("[System: {system}]\n\n{user}"));
+                        Some(b.build())
+                    },
+                    300,
+                )
+            });
+            match briefing {
+                Ok((text, _)) => text.text().to_string(),
                 Err(_) => format!(
                     "Good morning. Overnight, I completed {total} dream tasks \
                      using {tokens_spent} tokens. {bullet_points}"
@@ -143,7 +164,16 @@ fn build_bullet_points(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dreams::engine::MockDreamLlm;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::RouteClass;
+
+    fn mock() -> (TestHm, ScriptedLlm) {
+        let hm = TestHm::new();
+        let llm = ScriptedLlm::answering(&hm.issuer, RouteClass::Local, |prompt| {
+            format!("Mock dream response for: {prompt}")
+        });
+        (hm, llm)
+    }
     use crate::dreams::types::DreamType;
 
     fn make_scheduler_with_dreams() -> DreamScheduler {
@@ -163,6 +193,7 @@ mod tests {
                 after_score: 9.0,
                 artifact: None,
             },
+            label: None,
         });
         s.completed_dreams.push(DreamResult {
             task_id: "t2".into(),
@@ -176,6 +207,7 @@ mod tests {
                 relevance: 0.8,
                 shared_with: vec!["forge".into()],
             },
+            label: None,
         });
         s.completed_dreams.push(DreamResult {
             task_id: "t3".into(),
@@ -189,6 +221,7 @@ mod tests {
                 reason: "CSV cleaning tasks".into(),
                 test_score: 0.85,
             },
+            label: None,
         });
         s
     }
@@ -196,7 +229,8 @@ mod tests {
     #[test]
     fn briefing_categorizes_results() {
         let scheduler = make_scheduler_with_dreams();
-        let briefing = MorningBriefing::generate(&scheduler, &MockDreamLlm);
+        let (hm, llm) = mock();
+        let briefing = MorningBriefing::generate(&scheduler, &hm.issuer, &llm);
 
         assert_eq!(briefing.total_dreams, 3);
         assert_eq!(briefing.tokens_spent, 900);
@@ -209,16 +243,66 @@ mod tests {
     #[test]
     fn briefing_has_summary() {
         let scheduler = make_scheduler_with_dreams();
-        let briefing = MorningBriefing::generate(&scheduler, &MockDreamLlm);
+        let (hm, llm) = mock();
+        let briefing = MorningBriefing::generate(&scheduler, &hm.issuer, &llm);
         assert!(!briefing.summary.is_empty());
     }
 
     #[test]
     fn empty_briefing() {
         let scheduler = DreamScheduler::new();
-        let briefing = MorningBriefing::generate(&scheduler, &MockDreamLlm);
+        let (hm, llm) = mock();
+        let briefing = MorningBriefing::generate(&scheduler, &hm.issuer, &llm);
         assert_eq!(briefing.total_dreams, 0);
         assert!(briefing.summary.contains("No dreams"));
+    }
+
+    /// P3-C11-HM-M4 N1 C-5: a morning briefing over the dream results of two
+    /// principals is never non-local. With only a non-local transport it is
+    /// refused (the briefing keeps its fallback text) and no request is made.
+    #[test]
+    fn hm_m4_n1_c5_a_briefing_over_two_principals_is_refused_without_a_local_transport() {
+        use crate::hm::{OriginLabel, Principal, Unit};
+        let hm = TestHm::new();
+        let agent = hm.open_agent("c5-briefing-agent");
+        let label_of = |principal| {
+            hm.issuer
+                .begin_unit(
+                    principal,
+                    Unit::ChatTurn {
+                        turn_id: uuid::Uuid::new_v4(),
+                    },
+                )
+                .unwrap()
+                .entry_label()
+                .unwrap()
+        };
+        let owner = label_of(Principal::OwnerDirect);
+        let agent = label_of(Principal::Agent(agent));
+        assert_eq!(
+            (owner.label(), agent.label()),
+            (
+                OriginLabel::UnrestrictedOrigin,
+                OriginLabel::UnrestrictedOrigin
+            ),
+            "precondition: each entry alone would be unrestricted"
+        );
+        let mut scheduler = make_scheduler_with_dreams();
+        scheduler.completed_dreams[0].label = Some(owner.clone());
+        scheduler.completed_dreams[1].label = Some(agent);
+        scheduler.completed_dreams[2].label = Some(owner);
+        let remote = ScriptedLlm::replying(&hm.issuer, RouteClass::NonLocal, "a cloud briefing");
+        let briefing = MorningBriefing::generate(&scheduler, &hm.issuer, &remote);
+        assert!(
+            remote.sent().is_empty(),
+            "C-5: PROHIBITED NON-LOCAL BRIEFING DISPATCH: {:?}",
+            remote.sent()
+        );
+        assert!(
+            briefing.summary.starts_with("Good morning. Overnight"),
+            "C-5: the briefing was not refused: {}",
+            briefing.summary
+        );
     }
 
     #[test]
@@ -236,6 +320,7 @@ mod tests {
                 after_score: 8.0,
                 artifact: None,
             },
+            label: None,
         }];
         let text = build_bullet_points(&improvements, &[], &[], &[]);
         assert!(text.contains("Improved: Code quality"));

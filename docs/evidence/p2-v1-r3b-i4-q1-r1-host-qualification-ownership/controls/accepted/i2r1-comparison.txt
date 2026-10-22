@@ -1,0 +1,39 @@
+reference: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/i2r1-rerun/summary.json (36 entries)
+rerun:     /home/nexus/NEXUS/p2-v1-r3b-i4-q1-r1-work/accepted/i2r1-rerun/summary.json (36 entries)
+  same counted I1-NC1 h01_same_owner_survives_failed_cleanup_and_exhausted_budgets
+  same counted I1-NC2 h12_unknown_outcome_blocks_launch_discard_and_fresh_admission
+  same counted I1-NC3 h11_dependencies_release_only_after_native_completion
+  same counted I1-NC4 h07_status_never_renews_the_lease
+  same counted I1-NC5a h14_capacity_reservation_prevents_unrecordable_admission
+  same counted I1-NC5b h14_capacity_reservation_prevents_unrecordable_admission
+  same counted I1-NC6 h19_replayed_evicted_conflicting_and_foreign_requests_execute_nothing
+  same counted I1-NC7 h10_unexpected_failure_stays_failed_after_recovery
+  same counted I2A-ACTION-GENERATION c09_digests_bind_every_identity_instant_variant_and_field
+  same counted I2A-DEBUG-RECORD c11_core_issued_records_encode_decode_and_check
+  same counted I2A-DEFAULT-TAG c06_invalid_tags_booleans_and_presence_bytes_are_refused
+  same counted I2A-DIGEST-BYPASS c07_digest_and_payload_mutations_are_detected
+  same counted I2A-INTENT-BYPASS c12_core_refuses_acknowledgements_for_altered_bytes
+  same counted I2A-RECORD-GENERATION c09_digests_bind_every_identity_instant_variant_and_field
+  same counted I2A-REQUEST-FIELD c13_request_receipts_bind_the_full_payload
+  same counted I2A-TRAIL c04_decoding_takes_exactly_one_complete_frame
+  same counted NC-REQUEST-ALTERED-DIGEST c17_core_retains_the_canonical_request_digest_in_its_receipts
+  same counted NC-REQUEST-DEBUG c17_core_retains_the_canonical_request_digest_in_its_receipts
+  same counted R1-A1 r01_actual_failure_closes_admission_within_its_case
+  same counted R1-A2 r02_failed_case_cleanup_never_permits_a_next_case
+  same counted R1-B r03_failed_evidence_keeps_the_custody_open
+  same counted R1-C1 r04_finalized_verdict_matches_acknowledged_terminal_evidence
+  same counted R1-C2 r05_late_owner_is_a_bound_incident_never_the_retired_action
+  same counted R1-D r06_detached_output_is_output_loss_never_a_clean_pass
+  same counted R2-A1 r07_cancellation_accepted_in_candidate_prevents_a_pass
+  same counted R2-A2 r07_cancellation_accepted_in_candidate_prevents_a_pass
+  same counted R2-A3 r11_finalization_winning_makes_a_later_cancellation_late
+  same counted R2-A4 r10_cancellation_while_the_recorder_is_paused_precedes_the_commitment
+  same counted R2-B1 r09_failed_first_attempt_of_a_retained_boundary_closes_admission_at_once
+  same counted R2-B2 r09_failed_first_attempt_of_a_retained_boundary_closes_admission_at_once
+  same counted R2-C1 r15_shutdown_request_is_no_second_finalization_rule
+  same counted R2A-SPLIT custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record
+  same informational NC-REQUEST-ALTERED-DIGEST-c13 c13_request_receipts_bind_the_full_payload
+  same informational NC-REQUEST-ALTERED-DIGEST-c16 c16_core_digest_paths_use_the_codec
+  same informational NC-REQUEST-DEBUG-c13 c13_request_receipts_bind_the_full_payload
+  same informational NC-REQUEST-DEBUG-c16 c16_core_digest_paths_use_the_codec
+RESULT: IDENTICAL

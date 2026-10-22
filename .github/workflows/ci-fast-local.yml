@@ -162,6 +162,12 @@ jobs:
         shell: bash
         run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
 
+      # Phase Two (P2-R1): the release's Debian package inspection refuses
+      # every deviation the Linux package must never ship.
+      - name: Linux package inspection negative controls
+        shell: bash
+        run: node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs
+
       - name: Packaged Builder toolchain verification and governed launch
         shell: bash
         env:
@@ -236,6 +242,18 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
+
+      # XA-R4C: the npm advisory gate runs before any frontend dependency is
+      # installed: its own tests, then a fresh `npm audit` of every audited
+      # npm root against security/npm-advisory-policy.json. An advisory the
+      # policy's one exact exception does not match, a stale or expired
+      # exception, an unknown or reactivated npm root, or any audit failure
+      # fails the job.
+      - name: npm advisory gate tests
+        run: node --test scripts/ci/npm-advisory-gate.test.mjs
+
+      - name: npm advisory gate (audited npm roots)
+        run: node scripts/ci/npm-advisory-gate.mjs
 
       - name: Install frontend dependencies
         run: cd app && npm ci

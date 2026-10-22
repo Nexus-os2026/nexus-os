@@ -1,0 +1,246 @@
+# P3-C11-DR01-D2A1-AD1R4-CONSOLIDATION-01 — consolidation matrix (landing rows). Fields: ID ⟫ KIND ⟫ SECTIONS ⟫ ANCHORS (‖-separated) ⟫ NOTE
+# Part A — the Architect's rulings (C4-WITNESS-01) and the mission's directives, and where each landed in AD-1-R4.
+A-01	RULING	0A.1, G.1	SOURCE AND EVIDENCE REVIEW PASSED. Prototype acceptance only. It is not a final mutation kill. ‖ source and evidence review passed; prototype acceptance only	C4 witness prototype: prototype acceptance only, not a final kill.
+A-02	RULING	0	`04e42a7ddf0d0a2af17b6506c51997006e7a08dc` ‖ `fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3` ‖ parent 42dd1bd1 ‖ +678/−0, blob `28085ce232827301104b5d757af042ec933976f8` ‖ `a464a36621523f539d2554a6b176d678c7f885ea` (parent A) ‖ `refs/heads/review/p3-c11-d2a1-c4-witness-01` ‖ `24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d` ‖ baseline `protocol.rs` blob `a2df2841b99cad5d452008a6d4150e9369d07e66` ‖ `f3793c2ff61f8adbf43fe17d6b5237b49bc507b0` ‖ `f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e` ‖ `5a4c4f17ea5b3883fb87a1a16fe19d53810608d4c229548a37932c405aa1fe8c`	Authenticated prototype lineage: A, tree, parent, model_tests.rs blob, +678/-0, B, review ref, patch, baseline and mutant blobs, both executables.
+A-03	RULING	0A.1, 0	ARCHITECT ACCEPTED AS THE REQUIRED REPAIR BASIS. ‖ accepted as the required repair basis	AD1R3-DISPOSITION-01 accepted as the repair basis.
+A-04	RULING	0A.1, F.2	R3-01 | ACCEPT. Witness artifact identity is role-specific. ‖ artifact identity is role-specific	R3-01 accepted.
+A-05	RULING	0A.1, F.1	R3-02 | ACCEPT. One receipt taxonomy, with separate PASS types. ‖ There is one taxonomy.	R3-02 accepted.
+A-06	RULING	0A.1, 1, G.5	Both P4 AND P8 remain required. The comma is never read as "or". ‖ the cell "P4, P8" is a conjunction: both P4 and P8 must be shown, and the comma is never read as "or". ‖ Both P4 AND P8 are required (S-22).	C4: both P4 and P8; the comma is not "or".
+A-07	RULING	G.5	run as `full_f8` selected alone with `--exact` and `--ignored` on the pinned C4 mutant executable	Route item 1: the primary original-explorer full_f8 receipt on the C4 mutant.
+A-08	RULING	G.5	The actual first property is recorded unchanged, exactly as printed. It is never relabelled.	Route item 2: the actual first property recorded unchanged.
+A-09	RULING	G.5	P4, observed at its frozen locus, the world after step 8 of scenario P4 ‖ P8, observed at its frozen locus, the world after step 12 of scenario P8 ‖ on the same pinned mutant executable as (A) ‖ **Only P4, or only P8, is insufficient.**	Route items 3 and 4: the same deterministic mutant witness establishes P4 and P8.
+A-10	RULING	G.5	(C) **Violation-free healthy replays.** ‖ Both scenarios show no safety violation, the expected healthy refusals and the expected preservation	Route item 5: violation-free healthy replays.
+A-11	RULING	G.5, E.3	(D) **The unchanged core's F-8 PASS.** The required full F-8 exploration PASS of the unchanged core on the exact final baseline ‖ `full_f8` (4214) | `explore`, F-8 | REQUIRED_FINAL_RUN | C4	Route item 6: unchanged-core F-8 full PASS on the exact final baseline.
+A-12	RULING	G.5	(E) **Identity, restoration and review.** ‖ the evidence passes the Sole Architect's independent review	Route item 7: final-baseline identities and independent review.
+A-13	RULING	G.5, 0A.1	The deterministic witness does not replace `full_f8`.	The witness does not replace full_f8.
+A-14	RULING	G.2, 0A.1	the complete removal of Test 1's five checks, exactly as the authenticated experimental patch defines it	C4's definition.
+A-15	RULING	0A.1, G.6	ACCEPT as proposed in AD1R3-DISPOSITION-01. Oracle is not changed. ‖ Oracle and the original replay helpers are not changed.	C4's offered-versus-consumed Oracle rule accepted; Oracle unchanged.
+A-16	RULING	G.2, 1, 0A.1	inside the arm `Rollback::Unknown`, `self.failed();` is kept and only `Persistence::Uncertain` (line 1294) is replaced with `Persistence::NotWritten` ‖ has the exact definition C9-b of G.2	C9-b selected.
+A-17	RULING	G.2, 1	the authenticated sealed definition is retained unchanged ‖ the cell's change has the retained sealed definition quoted in G.2. E4 and F-1: unchanged.	C10: sealed definition retained.
+A-18	RULING	G.2, 1	The same file's entry for C24, verbatim ‖ the cell's change has the retained sealed definition quoted in G.2. P8 and F-1: unchanged.	C24: sealed definition retained.
+A-19	RULING	0A.1, G.2, G.1	No C9, C10 or C24 execution is authorised. ‖ No execution of any of them is authorised by this draft or by the ruling it carries. ‖ No execution of any of them is authorised.	No C9/C10/C24 execution.
+A-20	RULING	0A.1, G.1	The prior rulings are unchanged. No final kill is established. ‖ Historical evidence, not a final-baseline receipt. No final kill.	C1/C25: prior rulings unchanged; no final kills.
+A-21	DIRECTIVE	F.2	It runs on the same pinned mutant executable as its control's primary mutation invocation (that control's type (a) receipt), where that primary invocation exists, and it binds the named mutation source identity of I	Mission 3: the mutant witness's identity.
+A-22	DIRECTIVE	F.2, I	It runs on the pinned unchanged-baseline executable of I ‖ Every healthy witness runs on the pinned unchanged-baseline executable (F.2).	Mission 3: the healthy witness's identity.
+A-23	DIRECTIVE	F.2	a wrong source or executable identity ‖ a wrong test selection ‖ a fixture failure (`WITNESS FIXTURE FAILURE`) ‖ an unrelated panic or failure ‖ incomplete raw output ‖ invalid process termination or resource evidence	Mission 3: common rejection rules for both roles.
+A-24	DIRECTIVE	F.2	Expected outcomes remain role-specific ‖ A positive marker in a healthy-witness receipt, or a healthy line in a mutant-witness receipt, is NOT ADMISSIBLE.	Mission 3: expected outcomes stay role-specific.
+A-25	DIRECTIVE	G.3	for (b), the pinned mutant executable of (a); for (d), the pinned unchanged-baseline executable	Mission 3: no statement that the healthy witness uses the mutant executable (also contradiction scan X1).
+A-26	DIRECTIVE	F.1	original-explorer mutant FAIL receipt ‖ named non-explorer mutant-test FAIL receipt ‖ named-property witness receipt (C1, C25, C4) ‖ C22's intentional mutant compile-failure receipt ‖ unchanged-core exploration PASS ‖ restored named-unit-test PASS ‖ healthy-witness PASS (C1, C25, C4) ‖ healthy-build success ‖ the A4 comparison	Mission 4: one taxonomy, A to F with E1 to E4, as (a)-(f) with (e1)-(e4).
+A-27	DIRECTIVE	F.1	Only this type requires an explorer outcome, state or key counts, property lines and branch coverage.	Mission 4: only E1 needs explorer evidence.
+A-28	DIRECTIVE	F.1	The explorer report, counts, property lines and branch list are NOT PRODUCED BY DESIGN. ‖ K.2 points 5 to 7 (point 7 read as a build that finished) ‖ Raw output: complete, with its sha256.	Mission 4: E2-E4 need only what their invocation produces, plus identity, complete output, process and termination evidence.
+A-29	DIRECTIVE	F.1	since the intentionally failing mutant build produces none ‖ Every artifact the build actually produces, executables included, is recorded by path, sha256 and size.	Mission 4: C22's mutant build produces no executable; the healthy build records what it produces.
+A-30	DIRECTIVE	F.1	no NOT PRODUCED BY DESIGN marking ever erases it ‖ Any artifact it does leave is recorded as found	Mission 4: no NOT-PRODUCED-BY-DESIGN rule erases an existing artifact.
+A-31	DIRECTIVE	K.2	These seven points apply to every receipt type of F.1, with these type-specific readings where no explorer runs.	Mission 4: K.2 applies to every type.
+A-32	DIRECTIVE	1	| C4 | acknowledgement test 1 removed | P4, P8 | F-8 |	Mission 5: the C4 row is unchanged (quoted verbatim under S-22).
+A-33	DIRECTIVE	G.2	Test 0 is preserved ‖ `let core = &mut *self.core;` is preserved ‖ the session is Open; no latch; the phase is Healthy; C and X are empty; U is empty, with the cell-invariant latch when it is not ‖ all code from `let set = snapshot.set;` is preserved	Mission 5: the disposable C4 mutation, item by item.
+A-34	DIRECTIVE	G.5	'C4: P4, P8 (first failure <exact property printed>; witness)'	Mission 5: the recording form.
+A-35	DIRECTIVE	G.5	The prototype results at A (G.1) are historical supporting evidence only. They are not final-baseline evidence	Mission 5: prototype results are historical supporting evidence only.
+A-36	DIRECTIVE	G.6	the same actor sequence ‖ consumption, option counts, branch labels and remaining fault budget are identical on both cores, and frozen ‖ refuses before storage and consumes zero storage choices; the full offered suffix remains unused ‖ it consumes exactly the frozen storage-choice stream; no suffix remains unused ‖ consumption beyond the offered stream ‖ consumption differing from the offered prefix ‖ an unexplained unused suffix ‖ a fixture deviation ‖ a property at the wrong locus ‖ Oracle defaults to option zero once its explicit prefix ends ‖ Silent fallback is never accepted as a specified schedule.	Mission 6: the Oracle rule, item by item.
+A-37	DIRECTIVE	G.3, G.1	E3 is never counted as P1, and E4 never as P7. ‖ Predicted: E3 in 4 steps for C1; E4 in 1 step for C25. ‖ `NAMED PROPERTY P1: OBSERVED at step 11 (admission: admitted)` ‖ the historical receipts support the intended P1 attribution	Mission 7: C1's rules.
+A-38	DIRECTIVE	G.2	preserve `self.failed();`, `self.rolled(io.rollback());` and `self.keep = true;`, and replace ONLY `return refused(Persistence::Uncertain, Reason::Storage);` ‖ with `return GatingOutcome::Committed(seq);`	Mission 7: C25's narrow one-line mutation.
+A-39	DIRECTIVE	G.3	`NAMED PROPERTY P7: OBSERVED on the world after step 1 (append_gating: Committed (inserted))` ‖ 'C25: P7 (first failure E4; witness)'	Mission 7: C25's named P7 needs the witness; no relabelling.
+A-40	DIRECTIVE	G.1	Historical evidence, not a final-baseline receipt. No final kill.	Mission 7: prototype receipts historical; no final kill yet.
+A-41	DIRECTIVE	G.2	The healthy arm, verbatim ‖ The disposable mutation's resulting arm	Mission 8: C9-b written out, before and after.
+A-42	DIRECTIVE	A	in force only once the Owner approves it	Mission 9: F-1's 60M standing ceiling, effective only after Owner approval.
+A-43	DIRECTIVE	C	For F-3, F-PT and F-B, and only when E admits them, the 30,000,000-state ceiling of 8.3 counts the keys of the composed quotient	Mission 9: quotient keys only for expressly admitted F-3/F-PT/F-B.
+A-44	DIRECTIVE	N, B	If any one fails, the claim is not made. ‖ the run's runtime guards raise no refusal	Mission 9: exact proof and runtime prerequisites.
+A-45	DIRECTIVE	E.3, E.4	`model_tests.rs` has 34 ignored tests ‖ It approves skipping no test the contract now requires.	Mission 9: the complete ignored-test disposition policy.
+A-46	DIRECTIVE	F	runs the ORIGINAL explorer	Mission 9: the original explorer for mutation controls.
+A-47	DIRECTIVE	M	Every INCOMPLETE run below stays INCOMPLETE	Mission 9: historical INCOMPLETE results remain INCOMPLETE.
+A-48	DIRECTIVE	K.1	The overshoot is how the stop is detected. It is not extra budget ‖ INCOMPLETE — BUDGET EXCEEDED	Mission 9: process-aware classification and cap-overshoot handling (with K.2).
+A-49	DIRECTIVE	I	No historical PASS substitutes for a final-baseline run.	Mission 9: final-baseline evidence policy.
+A-50	DIRECTIVE	H.1, H.6	is preserved byte for byte ‖ It is never placed in the commit it attests.	Mission 9: historical manifest preserved; detached final-tree attestation.
+A-51	DIRECTIVE	L	No bound on the number of failed exchanges, and no wait-freedom, is claimed (6.3).	Mission 9: corrected CAS wording.
+A-52	DIRECTIVE	J	stay stated and undischarged	Mission 9: A-1/A-2 remain undischarged.
+A-53	DIRECTIVE	Q	A line that is not applicable, or not claimed, is printed as such.	Mission 9: property applicability and result-line rules.
+A-54	DIRECTIVE	O, D	The one operative text, for every run, original or quotient, healthy or mutant ‖ replayed in the original semantics before it is cited	Mission 9: trace wording and replay requirements.
+A-55	DIRECTIVE	R	ChatGPT is the Sole Architect and the independent reviewer of Claude Code's work	Mission 9: the current Owner/Architect/executor mapping.
+A-56	DIRECTIVE	header, 0A.5	A reader does not need AD-1, AD-1-R1, AD-1-R2, AD-1-R3 or AD1R3-DISPOSITION-01 to determine it. ‖ None of them is changed, regenerated or overwritten.	Mission 10: self-contained; earlier files immutable history.
+A-57	DIRECTIVE	1	S-22 to S-25 are new.	Mission 10: the exact supersession table, S-1 to S-25.
+A-58	DIRECTIVE	header	DRAFT — NOT ACCEPTED — NOT ADOPTED — NOT APPLIED. NOT IN FORCE.	Mission 1: R4 remains a draft, not accepted, adopted or applied.
+A-59	DIRECTIVE	header	The Owner keeps authority over every contract amendment and over its adoption.	Mission 1: the Owner retains contract-adoption authority.
+A-60	DIRECTIVE	K.2	C4 witness on the mutant showing only one of P4 and P8	Mission 5: only one of P4 and P8 is insufficient (classification case 9).
+# Part B — every sentence of AD1R3-DISPOSITION-01 (sha256 a8a6d293…cf11c), by scan id.
+DISP-ff9f6444b2	PROVENANCE	header, 0A.5	DRAFT — NOT ACCEPTED — NOT ADOPTED — NOT APPLIED ‖ AD1R3-DISPOSITION-01	The sheet's title and status; AD-1-R4 carries its own status, and the sheet is history (0A.5).
+DISP-89c018a13b	PROVENANCE	header	NOT ADOPTED — NOT APPLIED.	Status kept for AD-1-R4.
+DISP-edaaf0cd58	PROVENANCE	header	NOT IN FORCE. ‖ Prepared by the executor (Claude Code, Claude Opus 5.5) ‖ Sole Architect's independent final contract review	Not in force; prepared by the executor for the Architect's review.
+DISP-d61e9309e3	PROVENANCE	header	It decides nothing those rulings left open.	The executor decides nothing.
+DISP-966c4a840d	OPERATIVE	header	The Owner keeps authority over every contract amendment and over its adoption.	Owner authority kept.
+DISP-008c48a029	PROVENANCE	0A.5	`485d9256932220644d7368d64b7b9b4d8df8a3a5c65aba4a1c5fcdf390ae286e`, blob `7f2463f5421502cc6ee74c070fc3abc41d467770`, evidence commit c2c69e3a	The sheet supplemented AD-1-R3; AD-1-R4 consolidates both and lists each as history.
+DISP-df83bb7ee0	OPERATIVE	0A.5	None of them is changed, regenerated or overwritten.	AD-1-R3 not changed or regenerated.
+DISP-bb174b165c	PROVENANCE	header	It is the one canonical consolidated amendment candidate.	True of the sheet's own mission; this mission makes AD-1-R4, as directed.
+DISP-61b34abba5	POINTER	header	A reader does not need AD-1, AD-1-R1, AD-1-R2, AD-1-R3 or AD1R3-DISPOSITION-01 to determine it.	The sheet's "R3 n" line pointers are resolved into AD-1-R4's own sections; none remains (check-ad1r4 C25a).
+DISP-d417d0e003	PROVENANCE	0A.1	**The ruling of P3-C11-DR01-D2A1-C4-WITNESS-01**	The sheet's ARCHITECT-RULED marks are now the governing ruling table of 0A.1.
+DISP-8da736b2aa	PROVENANCE	0A.1	ARCHITECT ACCEPTED AS THE REQUIRED REPAIR BASIS.	The sheet's proposals were ruled; what stays open is in the open items.
+DISP-ec09a66804	DEFECT	G.3	an executable other than the one its role requires (F.2)	R3-01's defect: the single-executable rejection is replaced by the role-specific one.
+DISP-d12c998e7a	DEFECT	G.3	They apply only to the witness invocations of (b) and (d) (F.1 types (c) and (e3); F.2)	G.3(c) still covers both witness invocations, each with its own executable.
+DISP-45260419c0	DEFECT	G.3	on the pinned unchanged-baseline executable of the exact final baseline (F.2), PASSes (type (e3))	G.3(d) runs on the baseline executable.
+DISP-0be94c4ac5	DEFECT	F.2	artifact identity is role-specific	The literal-reading defect no longer arises.
+DISP-847aca1be7	DEFECT	I	Every healthy witness runs on the pinned unchanged-baseline executable (F.2).	I now names the healthy witness's executable.
+DISP-912bc9ac48	OPERATIVE	F.2	It runs on the same pinned mutant executable as its control's primary mutation invocation (that control's type (a) receipt) ‖ it binds the named mutation source identity of I (items 1 to 3)	Mutant witness identity.
+DISP-9842270415	OPERATIVE	F.2	The executable's sha256 is equal before and after the run. ‖ Its sha256 is equal before and after the run.	Equal before and after, both roles.
+DISP-a42b2240d7	OPERATIVE	F.2	It runs on the pinned unchanged-baseline executable of I: the one fresh optimised build of the exact final baseline.	Healthy witness identity.
+DISP-091caae0b1	POINTER	G.3	an executable other than the one its role requires (F.2)	The replaced R3 bullet is G.3(c)'s executable bullet.
+DISP-aa15b03648	OPERATIVE	G.3	an executable other than the one its role requires (F.2): for (b), the pinned mutant executable of (a); for (d), the pinned unchanged-baseline executable	The replacement text, as proposed.
+DISP-a755e56b3e	OPERATIVE	F.2	a fixture failure (`WITNESS FIXTURE FAILURE`) ‖ an unrelated panic or failure ‖ anything but exactly the one named test, with `--exact` and one match ‖ a compilation failure ‖ a wrong source or executable identity ‖ incomplete raw output ‖ K.2 points 5 to 7: exit or signal, the launching command's termination and resource records, completion	Common to both roles, and mandatory.
+DISP-4213603fb2	OPERATIVE	F.2	| mutant | (c) | the pinned mutant executable of the control's type (a) receipt | the witness's own verdict panic, `1 failed`, exit 101 by a normal exit | ‖ | healthy | (e3) | the pinned unchanged-baseline executable | `ok`, `1 passed`, exit 0 by a normal exit | ‖ A positive marker in a healthy-witness receipt, or a healthy line in a mutant-witness receipt, is NOT ADMISSIBLE.	The role table and its rejection, carried.
+DISP-14441f27a0	POINTER	F.1	**(c) Named-property witness receipt.**	The aligned F.1(c).
+DISP-5701e42b4c	OPERATIVE	F.1	on the pinned mutant executable that F.2 requires ‖ on the pinned unchanged-baseline executable that F.2 requires	F.1: (c) on the mutant executable, (e3) on the baseline executable.
+DISP-3568d5387a	OPERATIVE	I	Every healthy witness runs on the pinned unchanged-baseline executable (F.2).	I's addition.
+DISP-7fb6b8da1d	OPERATIVE	K.2	| 3 | C1/C25 witness on the mutant:	Case 3 stays for the mutant witness.
+DISP-2f6ecdbf21	OPERATIVE	K.2	| 10 | Healthy witness (F.1 (e3)): the exact healthy line or lines and no positive marker	The new healthy-witness case.
+DISP-f5cf09e2ce	OPERATIVE	K.2	| 11 | A witness on the other role's executable	Either witness on the other role's executable: NOT ADMISSIBLE.
+DISP-0c40c49c31	DEFECT	F.1	**(e1) Unchanged-core exploration PASS.**	R3-02's defect: the single PASS type is split.
+DISP-ea95b69cb5	DEFECT	F.1	Only this type requires an explorer outcome, state or key counts, property lines and branch coverage.	Explorer evidence is no longer demanded where none exists.
+DISP-ffda685331	DEFECT	F.1	**(e2) Restored named-unit-test PASS.** The restored receipt of C14 T-BIND, C19 T-CELL, C21 W6, C27 T-PREC and C28 T-RES.	The named-unit-test restorations have their own type.
+DISP-9a48ad6d6c	DEFECT	F.1	**(e4) Healthy-build success.** C22's restored receipt (the healthy build evidence of (d))	C22's restoration has its own type.
+DISP-d416650415	DEFECT	F.1	**(e3) Healthy-witness PASS.**	The healthy witness PASS has its own type.
+DISP-31c1458799	DEFECT	K.2	(F.1 (b), (c), (e2) and (e3)), point 2 needs no configuration bounds and point 7 no discovered count	K.2's reading now covers (e2) and (e3).
+DISP-f8179c354f	DEFECT	K.2	| 1 | Unchanged-core exploration (F.1 (e1)):	Case 1 is the (e1) case.
+DISP-24d9c6f970	OPERATIVE	F.1	| (e1) | unchanged-core exploration PASS | ‖ | (e4) | healthy-build success |	(e) split into (e1) to (e4).
+DISP-7e358459c6	OPERATIVE	F, I	is of type (e1) ‖ and the restored PASS receipt, of its control's type (F.1)	Every restored receipt is still required; only its type is named.
+DISP-daa9d9cb41	OPERATIVE	F.1	Every required run of 8.2 and 8.3 (E), and the restored receipt of every control that names a configuration (F, I).	(e1)'s coverage.
+DISP-272176038b	OPERATIVE	F.1	Raw output: `outcome: PASS`, every property line of Q, the counts of D and the branch list.	(e1) keeps F.1(e) as it stood.
+DISP-7794c5c207	OPERATIVE	F.1	The discovered count is at most the ceiling (K.1). ‖ `test result: ok. 1 passed; 0 failed`). The process exited 0, by a normal exit and not by a signal. ‖ K.2 points 5 to 7, as for every type.	(e1): count at most C, 1 passed, exit 0, K.2 points 5 to 7.
+DISP-62ba10cfe1	OPERATIVE	F.1	Only this type requires an explorer outcome, state or key counts, property lines and branch coverage.	Only (e1) needs explorer evidence.
+DISP-5d142ef873	OPERATIVE	F.1	The restored receipt of C14 T-BIND, C19 T-CELL, C21 W6, C27 T-PREC and C28 T-RES.	(e2)'s coverage.
+DISP-8cb30f51e9	OPERATIVE	F.1	Selection: exactly that test, `ledger::protocol::unit_tests::<name>` with `--exact`, one match, on the pinned baseline executable. ‖ `test <name> ... ok` and `test result: ok. 1 passed; 0 failed`	(e2)'s requirements.
+DISP-c366f078c5	MARKER	F.1	`test result: ok. 1 passed; 0 failed`	A fragment of (e2)'s harness line, cut by the sentence splitter; carried in F.1 (e2).
+DISP-b12ed5f2a1	MARKER	F.1	exit 0 by a normal exit and not by a signal	A fragment of (e2)'s harness line; carried in F.1 (e2).
+DISP-a8af25edde	OPERATIVE	F.1	K.2 points 5 to 7 ‖ Raw output: complete, with its sha256.	The sheet's "5–6" is written "5 to 7": K.2 requires all seven points of every receipt, point 7 read without a discovered count, and the sheet's own section 1 lists 5–7 for witnesses.
+DISP-a34153b309	OPERATIVE	F.1	The explorer report, counts, property lines and branch list are NOT PRODUCED BY DESIGN.	(e2): explorer fields not produced.
+DISP-3ed6e231c1	OPERATIVE	F.1	on the pinned unchanged-baseline executable that F.2 requires ‖ Selection: exactly that witness test with `--exact`, one match (F.2). ‖ the exact healthy line or lines that G.3(d) or G.5(C) names and no violation ‖ `ok`, `test result: ok. 1 passed; 0 failed`; exit 0 by a normal exit and not by a signal	(e3)'s requirements (K.2 points as in DISP-a8af25edde).
+DISP-d78f6fefee	OPERATIVE	F.1	Raw output: complete, with the exact healthy line or lines	(e3): complete output.
+DISP-25cb55ae91	OPERATIVE	F.1	The explorer report, counts, property lines and branch list are NOT PRODUCED BY DESIGN.	(e3): no explorer report.
+DISP-0c8d2d63bb	OPERATIVE	F.1	C22's restored receipt (the healthy build evidence of (d)), and any other healthy build.	(e4)'s coverage.
+DISP-38082b9e10	OPERATIVE	F.1	Command: the pinned build command of N.7 on the unmutated baseline. ‖ exit 0 by a normal exit and not by a signal; the build's finished line; the toolchain; the complete compiler output; the source identity; K.2 points 5 to 7	(e4)'s requirements.
+DISP-856e9a7182	OPERATIVE	F.1	Every artifact the build actually produces, executables included, is recorded by path, sha256 and size.	(e4): every artifact recorded.
+DISP-6262f0a651	OPERATIVE	F.1	This marking covers only that mutant build.	The C22 exemption covers only the intentionally failing mutant build.
+DISP-a1df373605	OPERATIVE	F.1	it never extends to the healthy build's outputs (e4)	Never extended to a healthy build.
+DISP-05424215a5	POINTER	F.1	It must then show what its own type requires below, and nothing of another type is required of it.	F.1's "own type" sentence, kept.
+DISP-3e12015700	OPERATIVE	F.1	There is one taxonomy. Every receipt has exactly one of these types	Types (a)-(d), (e1)-(e4) and (f).
+DISP-bc4c906d09	POINTER	F.1	**(f) The A4 comparison.**	The aligned (f).
+DISP-b6971654a2	OPERATIVE	F.1	Two admissible receipts of type (e1)	(f) compares two (e1) receipts.
+DISP-114bdeb57e	OPERATIVE	G.3	PASSes (type (e3))	G.3(d)'s receipt is of type (e3).
+DISP-43294a0f9c	OPERATIVE	I	and the restored PASS receipt, of its control's type (F.1)	I item 7, typed.
+DISP-213c0af39e	OPERATIVE	I, 1	(e1) for a control that names a configuration, (e2) for a control killed by a named unit test, (e4) for C22	Restored receipt types (I item 7; S-5).
+DISP-cdd1403415	OPERATIVE	K.2	(F.1 (b), (c), (e2) and (e3)), point 2 needs no configuration bounds	K.2's reading names (b), (c), (e2) and (e3).
+DISP-0ac47f7f2a	OPERATIVE	K.2	For a healthy build's receipt (F.1 (e4)), points 1, 2, 4 and 7 read as for (d), but with the intended zero exit ‖ every artifact the build actually produced recorded by path, sha256 and size	(e4)'s reading.
+DISP-b365b49bea	OPERATIVE	K.2	| 1 | Unchanged-core exploration (F.1 (e1)):	Case 1 applies to (e1) only.
+DISP-493e5b5887	OPERATIVE	K.2	| 12 | Healthy build (F.1 (e4)) ‖ | 13 | Restored named unit test (F.1 (e2)) ‖ | 10 | Healthy witness (F.1 (e3))	New cases for (e2), (e3) and (e4).
+DISP-8615b38e08	OPERATIVE	F.1	the restored receipt of every control that names a configuration	No "every restored receipt" remains under F.1 (check-ad1r4 C9b).
+DISP-5dc193d617	DESCRIPTIVE	K.2	**Classification cases**	C4-WITNESS-01's classifier (tools/classify.py at B) is that mission's tooling, not operative text; K.2's case table carries the rules, and this packet's classify-cases tool applies them to synthetic cases.
+DISP-bb90b5c03b	DESCRIPTIVE	K.2	document and checker cases, not Nexus executions	The earlier classifier was tested on synthetic descriptors only; so is this packet's.
+DISP-617535a66e	OPERATIVE	G	G.5 and G.6 apply to C4 only.	The C4 route, for C4 only.
+DISP-2ce60587a2	OPERATIVE	G, 0A.1, header	Neither is an exception for any other control, and neither extends to one. ‖ Both P4 AND P8 remain required. The comma is never read as "or". ‖ NOT ADOPTED	Not extended; the row keeps its comma; still not adopted.
+DISP-9438d43344	OPERATIVE	1	both P4 and P8 must be shown	Both preserved (S-22).
+DISP-4b9df34077	OPERATIVE	G.2	the five checks of Test 1 are removed: the session is Open; no latch; the phase is Healthy; C and X are empty; U is empty, with the cell-invariant latch when it is not	The five checks.
+DISP-083b0edb27	OPERATIVE	G.2	Test 0 is preserved ‖ `let core = &mut *self.core;` is preserved ‖ all code from `let set = snapshot.set;` is preserved	What is kept.
+DISP-ff6331341f	OPERATIVE	G.2	Documentary patch `C4-test1-removed.patch`, sha256 `24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d`	The patch.
+DISP-0245ad614e	OPERATIVE	G.2	lines 1627–1642 removed, none added	Sixteen lines removed, none added (check-ad1r4 C1r-d).
+DISP-6e6df01ca8	OPERATIVE	G.2	mutant `protocol.rs` blob `f3793c2ff61f8adbf43fe17d6b5237b49bc507b0`	The mutant blob (check-ad1r4 C1r-c).
+DISP-9d9c44e8cf	OPERATIVE	G.5	Predicted: P4 (EXECUTOR-REPORTED static analysis).	Predicted first failure.
+DISP-0cb11ec87f	OPERATIVE	G.5	The prediction is not a receipt.	Not a receipt.
+DISP-35a484694a	OPERATIVE	G.5	For C4 only, the control is killed when (A), (B), (C), (D) and (E) all hold; it is then recorded as (F) states.	The sheet's (a)-(f) are G.5's (A)-(F).
+DISP-89c313e24c	OPERATIVE	G.5	run as `full_f8` selected alone with `--exact` and `--ignored` on the pinned C4 mutant executable, under F-8's ceiling of 30,000,000 states	(A).
+DISP-eeae17449b	OPERATIVE	G.5	The receipt is of type (a) (F.1), admissible under K.2	(A)'s type.
+DISP-a6cfc329d1	OPERATIVE	G.5	Its raw report is kept unedited	(A)'s raw report.
+DISP-147096778f	OPERATIVE	G.5	The actual first property is recorded unchanged, exactly as printed.	(A)'s property as printed.
+DISP-4be2af6986	VERBATIM	G.5	It is never relabelled.	Carried verbatim.
+DISP-3ed6aa0da1	OPERATIVE	G.5	If it names neither P4 nor P8, that is reported as it is and not reinterpreted. C4 is then not recorded as killed under this clause until the Architect rules.	Reported as it is; the Architect rules.
+DISP-91c1c8e81e	OPERATIVE	G.5	(B) **P4 and P8 both established by the deterministic witness on the actual mutant.** ‖ on the same pinned mutant executable as (A)	(B).
+DISP-2e2aacdb26	OPERATIVE	G.5	two separately initialised scenarios, each from the unchanged `initial(F8)` with at most 32 actor steps	(B)'s scenarios.
+DISP-a82ff86f5a	OPERATIVE	G.5	`NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (`	The P4 line (prefix, and in full as printed at A).
+DISP-060e6a726e	OPERATIVE	G.5	`NAMED PROPERTY P4: OBSERVED on the world after step 8 of scenario P4 (` ‖ `NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (`	Both lines.
+DISP-3c1c66e81c	OPERATIVE	G.5	`NAMED PROPERTY P8: OBSERVED on the world after step 12 of scenario P8 (`	The P8 line.
+DISP-155bfd4edc	OPERATIVE	G.5	collects both scenarios before its verdict	Both collected before the verdict.
+DISP-77b3fb7fa0	OPERATIVE	G.5	**Only P4, or only P8, is insufficient.** A witness receipt showing one of them does not establish (B).	One alone is not this receipt.
+DISP-2f859c7141	OPERATIVE	G.5	(C) **Violation-free healthy replays.** The same witness, selected alone with `--exact` on the pinned unchanged-baseline executable (F.2), on the same two schedules, PASSes (type (e3)).	(C).
+DISP-8cd867ae07	OPERATIVE	G.5	Both scenarios show no safety violation	No violation in either.
+DISP-afded3bfdc	OPERATIVE	G.5	`append_acknowledgement: Refused(NotNow(CellsBusy))`, consuming 0 of its 6 offered choices	The P4 append refused.
+DISP-4588fe0014	OPERATIVE	G.5	`append_acknowledgement: Refused(NotNow(NotHealthy))`, consuming 0 of its 4 offered choices; G1's written attempt stays in U.	The P8 append refused; G1 kept in U.
+DISP-2e31d022b3	OPERATIVE	G.5	The required full F-8 exploration PASS of the unchanged core on the exact final baseline: `full_f8`, original explorer, type (e1)	(D).
+DISP-d83627c069	OPERATIVE	G.5	Every receipt is on the exact final baseline or its C4 mutant, with the identities of I ‖ the evidence passes the Sole Architect's independent review (R)	(E).
+DISP-9bffe7ebda	OPERATIVE	G.5	(F) **Recording.** Only then is the row recorded as 'C4: P4, P8 (first failure <exact property printed>; witness)'.	(F).
+DISP-f6be9dc816	OPERATIVE	G.5, 1	'C4: P4, P8 (first failure <exact property printed>; witness)' ‖ "P4, P8 (first failure <exact property printed>; witness)"	The sheet's "<as printed>" is the mission's "<exact property printed>".
+DISP-707a6e723e	OPERATIVE	0A.1, G	ACCEPT as proposed in AD1R3-DISPOSITION-01. ‖ The offered-versus-consumed Oracle rule (C4's schedules only)	The rule, accepted, in G.6.
+DISP-064881dbcc	OPERATIVE	G.6	the same deterministic stream of choices is offered at every corresponding step	A fixed offered stream per step.
+DISP-ca21fca2ac	OPERATIVE	G.6	Healthy and mutant executions receive the same actor sequence	Same actor sequence and stream.
+DISP-6bc54f13be	MARKER	G.6		A list numeral of the rule, carried as G.6's numbering.
+DISP-69f230b737	OPERATIVE	G.6	Before the changed acknowledgement, consumption, option counts, branch labels and remaining fault budget are identical on both cores, and frozen: each step consumes its whole offered stream, as frozen, each consumed choice with its option count.	Rule 2.
+DISP-267c23695b	MARKER	G.6		A list numeral.
+DISP-b736873e2a	VERBATIM	G.6	At the changed acknowledgement, exactly two planned ends are allowed:	Carried verbatim.
+DISP-6f397e9d34	OPERATIVE	G.6	healthy: it refuses before storage and consumes zero storage choices; the full offered suffix remains unused	The healthy end.
+DISP-93822cf53b	OPERATIVE	G.6	mutant: it consumes exactly the frozen storage-choice stream; no suffix remains unused	The mutant end.
+DISP-23f663630e	MARKER	G.6		A list numeral.
+DISP-07aa6b68d7	OPERATIVE	G.6	Every consumed choice equals the offered prefix.	Rule 4.
+DISP-540dd397b2	MARKER	G.6		A list numeral.
+DISP-c1967482cf	OPERATIVE	G.6	Rejected: consumption beyond the offered stream	Rule 5.
+DISP-b96b0d42ea	OPERATIVE	G.6	Oracle defaults to option zero once its explicit prefix ends ‖ Silent fallback is never accepted as a specified schedule.	The reason, with its source (model_tests.rs line 552).
+DISP-d80edd7fb0	MARKER	G.6		A list numeral.
+DISP-24afc0f231	OPERATIVE	G.6	an unexplained unused suffix (one not justified and frozen before execution)	Rule 6 of the sheet, in G.6's rule 5.
+DISP-a50aa8b9a9	MARKER	G.6		A list numeral.
+DISP-981d592510	OPERATIVE	G.6	Each step's offered choices, consumed choices with their option counts, unused suffix, branches and remaining faults are recorded, and verified twice: by the witness, and by the classifier from the raw output.	Rule 7 of the sheet, G.6's rule 6.
+DISP-6ce012fd10	MARKER	G.6		A list numeral.
+DISP-674ba25e74	VERBATIM	G.6	Oracle and the original replay helpers are not changed.	Carried verbatim.
+DISP-b2f553ae6a	VERBATIM	G.5	P4 is shown with the simultaneous occupants U (the acknowledgement) and X (F1's explanation).	Carried verbatim.
+DISP-85a4960d48	VERBATIM	G.5	P8 is shown with G1's facts	Carried verbatim.
+DISP-53548e4229	VERBATIM	G.5	The Owner's confirmation in these schedules is a simulated model actor's choice.	Carried verbatim.
+DISP-cd1313fab3	OPERATIVE	G	G.3 applies to C1 and C25 only.	G.3 stays for C1 and C25.
+DISP-5751fdb1ca	OPERATIVE	G	Neither is an exception for any other control, and neither extends to one.	No exception for any other control.
+DISP-22c9715f63	OPERATIVE	G.2	C9, C10 and C24 are recorded here only. ‖ (ARCHITECT-RULED: C9-b selected)	Recorded, not applied, not run.
+DISP-ec5c596f20	OPERATIVE	G.2	In `Publish::rolled` (`protocol.rs` lines 1289–1297 at 42dd1bd1), inside the arm `Rollback::Unknown`, `self.failed();` is kept and only `Persistence::Uncertain` (line 1294) is replaced with `Persistence::NotWritten`.	C9-b.
+DISP-7befc7d88d	OPERATIVE	G.2	Named property E4; configuration F-B2.	E4 on F-B2.
+DISP-a516d46092	VERBATIM	G.1	Not applied, built or run.	Carried verbatim.
+DISP-79d8451702	OPERATIVE	G.2	the authenticated sealed definition is retained unchanged ‖ `ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f` ‖ were never applied, built or run	C10 and C24 retained; preparation by its own mission.
+DISP-4af086403d	OPERATIVE	0A.1	The prior rulings are unchanged.	C1, C25 rulings kept.
+DISP-22331d9b86	OPERATIVE	header, open	authorises any run, mutation, source change, manifest, adoption or integration ‖ none is made or authorised here	No further execution of either witness or mutant is authorised here.
+DISP-49b47622b6	QUESTION	0A.1	ARCHITECT ACCEPTED AS THE REQUIRED REPAIR BASIS.	The sheet's open items were answered by the ruling.
+DISP-2359f0f578	QUESTION	0A.1	R3-01 | ACCEPT. ‖ R3-02 | ACCEPT.	Answered: ACCEPT. Whether any other line refers to F.1(e): none does in AD-1-R4 (check-ad1r4 C9b, C18b).
+DISP-0b8d0be0ad	QUESTION	0A.1, open, G.6	ACCEPT as proposed in AD1R3-DISPOSITION-01. ‖ carrying the C1, C25 and C4 witnesses to the final baseline ‖ Carrying it to the final baseline needs its own authorised mission.	Answered: the route and Oracle rule accepted; carrying the witness needs its own mission (open item 5).
+DISP-cbd36b1d7b	QUESTION	open	the `full_f8` primary run on the C4 mutant (G.5(A))	Still open: authorisation of full_f8 (open item 5).
+# Part C — every obligation-bearing AD-1-R3 sentence that is not verbatim in AD-1-R4, by scan id. (The others are carried verbatim; check-matrix M2b locates them.)
+R3-eecf4b0210	HISTORY	header, 0A.3	consolidates AD-1-R3, the disposition sheet AD1R3-DISPOSITION-01 and the Architect's ruling of P3-C11-DR01-D2A1-C4-WITNESS-01 into one operative text (0A.1, 0A.2), and keeps every other disposition of AD-1-R3 unchanged ‖ | A | F-1 ceiling: standing 60M proposal	AD-1-R3's statement of its own mission is replaced by AD-1-R4's; AD-1-R2's dispositions A to Q are still carried (0A.3).
+R3-7f05b14d38	AMENDED	header	The Owner keeps authority over every contract amendment and over its adoption.	Owner authority, with adoption named.
+R3-5579d8bba6	HISTORY	header	The diff from AD-1-R3 to this file	The diff now kept is AD-1-R3 to AD-1-R4.
+R3-3a56bbae81	AMENDED	header	(`tools/check-ad1r4.py`; its output is in the review packet)	The checker is check-ad1r4.py; PROTOCOL and DEFS sources added.
+R3-1bdb3e1f99	RECARRIED	0	Historical, not final-baseline evidence; no final mutation kill (G)	The C1/C25 probe row is unchanged; its sentence joined a new following row.
+R3-cc4b1e9dcb	AMENDED	0A.2	the witness-only rules apply only to the witness invocations ‖ process-aware, fail-closed classification in place of	R2-01's row now names the witness invocations generally (C4 included).
+R3-e0039b72e5	RECARRIED	0A.2, 0A.3	O.4 has one operative reading ‖ Every other disposition below (A to Q) is carried unchanged, except where these items name its text. ‖ F-1 ceiling: standing 60M proposal, not effective until Owner approval; no one-run authorisation inferred	The 0A.2/0A.3 run of text: "these four items" became "these items" (eight now); the 0A.3 table is unchanged.
+R3-457f5f7422	AMENDED	1	S-1, S-2, S-6 and S-14 were amended by AD-1-R3; S-5, S-6 and S-18 are amended by this draft (0A.2). ‖ REPLACED for F-1's state ceiling (A; only once the Owner approves).	Numbering note updated; S-1's row unchanged.
+R3-0090cdb04f	AMENDED	1	The witness-only rules (G.3(c), G.5, G.6) apply only to the witness invocations, of types (c) and (e3), never to any other receipt.	S-6 widened to C4's witness rules; still never any other receipt.
+R3-932078ce07	AMENDED	1	"every control is killed" reads per G.3 for C1 and C25, per G.5 for C4 and per F for A4.	S-18 names G.5 for C4.
+R3-a703e36a38	RECARRIED	1	Historical authorship, dates and acceptances are unchanged.	S-21's row unchanged; it is no longer the table's last row.
+R3-002e9b6c24	RECARRIED	1	The following stay in force exactly as written.	Unchanged; the S-22 to S-25 blocks now precede it.
+R3-01be0c4b83	AMENDED	1	are not a control script, are never applied from the repository, and add nothing to the mutation-control manifest	The line-750 note now says the patch copies travel only in earlier packets.
+R3-f06b878bd3	AMENDED	1	every row of 7.5 other than the readings of S-7, S-8, S-16 and S-22 to S-25	Not-superseded list names S-22 to S-25.
+R3-aca6ffdec2	AMENDED	F	A control is killed only by an admissible receipt of its own type (F.1, K.2): the original explorer's FAIL of its named property, read under G.3 for C1 and C25 and under G.5 for C4	F's kill sentence names G.5 for C4.
+R3-9da13b3a74	AMENDED	F	the restored receipt that shows the unchanged core passes the configuration is of type (e1)	Restored receipts typed (R3-02).
+R3-b74701a109	RECARRIED	F, F.1	the first-reported property may differ (O). ‖ Every receipt is first classified under K.2	Both sentences kept; F.1's opening now carries the taxonomy table.
+R3-173ef27f35	REPLACED-BY-RULING	F.1, 1	C4's attribution of both P4 and P8 comes from G.5(B), never from this receipt alone ‖ the cell "P4, P8" is a conjunction	C4's reading settled by the ruling (S-22).
+R3-49497101bd	AMENDED	F.1	The witness-only rules (F.2; G.3(c); G.5 and G.6) apply to this invocation and to the healthy witness of (e3), and only to them.	Type (c) is the mutant witness; the healthy witness is (e3).
+R3-1c06ae325d	AMENDED	F.1	They do not apply to the primary receipt of C1, C25 or C4 (type (a)), or to any other control.	C4 added.
+R3-17800793b0	AMENDED	F.1	**(e1) Unchanged-core exploration PASS.** Every required run of 8.2 and 8.3 (E), and the restored receipt of every control that names a configuration (F, I).	(e) became (e1), with the other restored receipts typed (e2) and (e4).
+R3-c824766bac	RECARRIED	F.1	It is evidence for A4 only, and it is not a kill receipt.	Unchanged; F.2 now follows it.
+R3-2c5910777d	AMENDED	G.1	They are not modified or run again. ‖ First failures under the original explorer (E3 for C1, E4 for C25, P4 for C4)	G.1's rows: C4 rows added; first-failures row names C4.
+R3-d19e5066db	RECARRIED	G.2, G.3	The compound mutation that also drops `self.keep = true` is historical evidence only. ‖ For C1 and C25 only, the control is killed when (a), (b) and (d) all hold and none of (c) occurs; it is then recorded as (e) states.	Both kept; C4, C9, C10 and C24 definitions now stand between them.
+R3-8c9ecacfae	AMENDED	G.3	(b) **The named property is established by exact replay.** A type (c) receipt (F.1, F.2). The control's witness test, selected alone with `--exact` on the same pinned mutant executable as (a)	G.3(b) names its type.
+R3-42df5e608c	AMENDED	G.3	(c) **Rejections of the witness receipt.** They apply only to the witness invocations of (b) and (d) (F.1 types (c) and (e3); F.2), never to the primary receipt of (a) or to any other control's receipt.	G.3(c) names both witness types.
+R3-ffc1e98948	AMENDED	I	every C1, C25 and C4 witness receipt (mutant and healthy)	I covers C4's witness receipts.
+R3-462fe3b828	AMENDED	I	The same pinned mutant executable serves every invocation of that mutant: its original-explorer run and, for C1, C25 and C4, its mutant witness run.	R3-01.
+R3-c03891bf0f	AMENDED	I	and the restored PASS receipt, of its control's type (F.1) ‖ (e4) for C22 (the healthy build evidence of F.1 (d))	R3-02.
+R3-ced3c4f1a3	AMENDED	K.2	For a test that is not an exploration (F.1 (b), (c), (e2) and (e3)), point 2 needs no configuration bounds and point 7 no discovered count	R3-02.
+R3-854dbb5ee0	RECARRIED	K.2	**Classification cases** (document and checker cases, not Nexus executions; the packet's checker applies these rules to each) ‖ | 1 | Unchanged-core exploration (F.1 (e1)): `outcome: PASS` and every line of Q	Case table kept; case 1 typed (e1).
+R3-9faddff297	RECARRIED	K.2	yes where E4 is the control's named property (for example C10); for C25 only the primary receipt of G.3(a) ‖ | 6 | C22: the build of the mutant source exits nonzero	Case 5 unchanged; case 6 names the mutant executable and case 12.
+R3-060d822c80	RECARRIED	K.2	INCOMPLETE — BUDGET EXCEEDED, unless a separate, explicit authorisation names that run	Case 7 unchanged; cases 8 to 14 follow.
+R3-e8bf1fdf41	AMENDED	O	A control's attribution comes only from the original explorer on the mutant (F), and for C1, C25 and C4 also from the witness (G.3, G.5).	C4 added.
+R3-8fcf3b8aae	AMENDED	P	added after every existing line (42dd1bd1 for C1 and C25; A, 04e42a7d, for C4)	C4's witness at A.
+R3-d11818767d	HISTORY	P	`docs/evidence/p3-candidate11/ad1r4-consolidation-01/`, in one documentation-only commit whose parent is the C4 evidence commit a464a366 (B)	This packet's prefix and parent.
+R3-b82a8564e3	HISTORY	P	The earlier packets (the AD1R2, AD1R3 and C4-WITNESS-01 packets) are not changed, and none is copied into this one.	Earlier packets unchanged.
+R3-16d4157906	AMENDED	open	The Sole Architect's independent final contract review of every resolution in this draft, A to R, of the supersession table (S-1 to S-25) and of the consolidation itself (0A.5).	Open item 2.
+R3-6693dc6d97	AMENDED	open	Neither ruling establishes a final mutation kill.	Open item 4, with the C4-WITNESS-01 ruling.
+R3-66660660b6	REPLACED-BY-RULING	open, G.2	The attribution preflight's first-failure orderings (C9 and C10 E4, C24 P8, C4 P4) remain predictions, not measurements. ‖ The other candidate encoding of the AD1R3 attribution preflight	The preflight's analysis is history; the definitions are now ruled (G.2).
+R3-232e55fcff	AMENDED	open	remain predictions, not measurements	Kept.
+R3-31ddd5b2e1	REPLACED-BY-RULING	open, 1	Closed as to C4's reading by the Architect's ruling (S-22, G.5): both P4 and P8 are required. ‖ the cell "P4, P8" is a conjunction	The open question is answered by the ruling.
+R3-6442cc854c	REPLACED-BY-RULING	G, open	G.3 applies to C1 and C25 only. G.5 and G.6 apply to C4 only. ‖ G.3 and G.5 extend to no other control.	G now also holds C4's route; neither extends further.
+R3-5a277daa29	AMENDED	open	The typed receipt requirements (F.1, F.2; the Architect accepted R3-01 and R3-02 as the repair basis) and the process-aware classification (K.2), including INCOMPLETE — BUDGET EXCEEDED and the separate authorisation that it names.	Open item 12.

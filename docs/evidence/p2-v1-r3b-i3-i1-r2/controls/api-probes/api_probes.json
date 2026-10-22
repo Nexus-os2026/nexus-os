@@ -1,0 +1,561 @@
+[
+  {
+    "id": "H-TYPE-ERROR",
+    "category": "harness-check",
+    "exit": 101,
+    "errors": [
+      "error[E0308]: mismatched types"
+    ],
+    "ok": true
+  },
+  {
+    "id": "POSITIVE-CONTROL",
+    "category": "positive-control",
+    "exit": 0,
+    "errors": [],
+    "ok": true
+  },
+  {
+    "id": "P-B1-CLOSURE-DATA",
+    "category": "api-type-guard",
+    "boundary": "closure to seal",
+    "base": "B1: Recorder::request_seal(&header, &fabricated_closed, 0) sealed a journal whose custody refused closure",
+    "attempt": "request a seal with fabricated closure data through the owner's recorder",
+    "why": "the owner's recorder is a private field; only StoreOwner::close requests the seal, from the actual closure",
+    "expect": [
+      "error[E0616]: field `recorder` of struct `StoreOwner` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `recorder` of struct `StoreOwner` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
+        "anchor": "    pub(super) control: Control,\n    pub(super) recorder: Recorder,",
+        "replacement": "    pub(super) control: Control,\n    pub recorder: Recorder,"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
+        "anchor": "pub(super) struct Recorder {",
+        "replacement": "pub struct Recorder {"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
+        "anchor": "    pub(super) fn request_seal(",
+        "replacement": "    pub fn request_seal("
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B2-CUSTODY-SWAP",
+    "category": "api-type-guard",
+    "boundary": "closure to seal",
+    "base": "B2: another custody's genuine closure sealed this journal",
+    "attempt": "exchange the custodies of two owners, so that one closure seals the other's journal",
+    "why": "the custody is retained with its recorder, header and guard in one value; there is no &mut Custody",
+    "expect": [
+      "error[E0616]: field `custody` of struct `StoreOwner` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `custody` of struct `StoreOwner` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
+        "anchor": "    pub(super) custody: Custody<R>,",
+        "replacement": "    pub custody: Custody<R>,"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B2-HEADER-SWAP",
+    "category": "api-type-guard",
+    "boundary": "closure to seal",
+    "base": "B2: the seal was requested with a caller's header",
+    "attempt": "replace the claimed header an owner seals with",
+    "why": "the claimed header is retained internally",
+    "expect": [
+      "error[E0616]: field `header` of struct `StoreOwner` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `header` of struct `StoreOwner` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
+        "anchor": "    pub(super) guard: Arc<StoreGuard<P>>,\n    pub(super) header: Header,\n    pub(super) claim: u64,",
+        "replacement": "    pub(super) guard: Arc<StoreGuard<P>>,\n    pub header: Header,\n    pub(super) claim: u64,"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-SEAL-AGAIN",
+    "category": "api-type-guard",
+    "boundary": "one-way seal",
+    "base": "(R1) a closed store requesting a second seal",
+    "attempt": "request a seal again through a closed store's recorder",
+    "why": "a closed store has no close and no seal request; its recorder is private (and refuses AlreadyRequested)",
+    "expect": [
+      "error[E0616]: field `recorder` of struct `ClosedStore` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `recorder` of struct `ClosedStore` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
+        "anchor": "pub struct ClosedStore<R, P: Platform> {\n    pub(super) recorder: Recorder,",
+        "replacement": "pub struct ClosedStore<R, P: Platform> {\n    pub recorder: Recorder,"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
+        "anchor": "pub(super) struct Recorder {",
+        "replacement": "pub struct Recorder {"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
+        "anchor": "    pub(super) fn request_seal(",
+        "replacement": "    pub fn request_seal("
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B3-DECISION-EDIT",
+    "category": "api-type-guard",
+    "boundary": "opening immutability",
+    "base": "B3: opened.decision.blocking.clear() then opened.claim(...) accepted",
+    "attempt": "clear the opening's blocking incidents in place",
+    "why": "the opening's decision is retained; a caller gets only a borrow or a copy",
+    "expect": [
+      "error[E0616]: field `decision` of struct `Opened` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `decision` of struct `Opened` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "    scan: ScanResult,\n    decision: Decision,\n    admission: StorageAdmission,\n}",
+        "replacement": "    scan: ScanResult,\n    pub decision: Decision,\n    admission: StorageAdmission,\n}"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B3-SCAN-EDIT",
+    "category": "api-type-guard",
+    "boundary": "opening immutability",
+    "base": "B3/B5: the opening's scan was a public field",
+    "attempt": "remove the opening's verified incidents in place",
+    "why": "the verified scan is retained; editing a copy changes nothing",
+    "expect": [
+      "error[E0616]: field `scan` of struct `Opened` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `scan` of struct `Opened` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "    scan: ScanResult,\n    decision: Decision,\n    admission: StorageAdmission,\n}",
+        "replacement": "    pub scan: ScanResult,\n    decision: Decision,\n    admission: StorageAdmission,\n}"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B3-CLAIM-CALL",
+    "category": "api-type-guard",
+    "boundary": "opening immutability",
+    "base": "B3: Opened::claim(io, config, generation, applied) took the caller's applied list",
+    "attempt": "claim through an opening from outside the store",
+    "why": "only start_owner claims, through the opening's own claim, which derives what it needs internally (its result type is internal too)",
+    "expect": [
+      "error[E0624]: method `claim` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0624]: method `claim` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "    pub(super) fn claim(\n        self,",
+        "replacement": "    pub fn claim(\n        self,"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "pub(super) struct Claim<P: Platform> {",
+        "replacement": "pub struct Claim<P: Platform> {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B4-IDENTITY-EDIT",
+    "category": "api-type-guard",
+    "boundary": "admission binding",
+    "base": "B4: opened.opening and opened.selection.digest were overwritten with another opening's",
+    "attempt": "overwrite the opening's identity and selection digest",
+    "why": "the opening's identity and revalidated selection are retained",
+    "expect": [
+      "error[E0616]: field `opening` of struct `Opened` is private",
+      "error[E0616]: field `selection` of struct `Opened` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `opening` of struct `Opened` is private",
+      "error[E0616]: field `selection` of struct `Opened` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "pub struct Opened<P: Platform> {\n    opening: OpeningId,\n    selection: Selection,",
+        "replacement": "pub struct Opened<P: Platform> {\n    pub opening: OpeningId,\n    pub selection: Selection,"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B4-OPENING-MINT",
+    "category": "api-type-guard",
+    "boundary": "admission binding",
+    "base": "B4: OpeningId::fresh() was public",
+    "attempt": "mint a new opening identity outside the store",
+    "why": "only the store's openings mint identities",
+    "expect": [
+      "error[E0624]: associated function `fresh` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0624]: associated function `fresh` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "    pub(super) fn fresh() -> OpeningId {",
+        "replacement": "    pub fn fresh() -> OpeningId {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B4-ADMISSION-FORGE",
+    "category": "api-type-guard",
+    "boundary": "admission binding",
+    "base": "(I3-I1 guard, re-verified) an admission built from parts",
+    "attempt": "construct a StorageAdmission for another opening",
+    "why": "an admission has one constructor, the storage check",
+    "expect": [
+      "error[E0451]: fields `opening`, `provision_digest` and `observation` of struct `StorageAdmission` are private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0451]: fields `opening`, `provision_digest` and `observation` of struct `StorageAdmission` are private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
+        "anchor": "pub struct StorageAdmission {\n    opening: OpeningId,\n    provision_digest: [u8; 32],\n    observation: StorageObservation,\n}",
+        "replacement": "pub struct StorageAdmission {\n    pub opening: OpeningId,\n    pub provision_digest: [u8; 32],\n    pub observation: StorageObservation,\n}"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B5-VALIDATOR-FROM-COPY",
+    "category": "api-type-guard",
+    "boundary": "disposition provenance",
+    "base": "B5: StoreValidator::new(&root, &edited_scan) validated a fabricated disposition",
+    "attempt": "build a validator over an edited copy of a scan",
+    "why": "a validator exists only as a borrow of an opening's verified state",
+    "expect": [
+      "error[E0624]: associated function `of` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0624]: associated function `of` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs",
+        "anchor": "    pub(super) fn of(",
+        "replacement": "    pub fn of("
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B6-EXCHANGE-TYPE",
+    "category": "api-type-guard",
+    "boundary": "exchange containment",
+    "base": "B6: Exchange::acquire().state.{fatal, durable_through, claim, seal} were writable",
+    "attempt": "name the exchange to reach its state",
+    "why": "the exchange, its state and its guard are internal; a caller reads copies",
+    "expect": [
+      "error[E0603]: struct `Exchange` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0603]: struct `Exchange` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
+        "anchor": "pub(super) struct Exchange {",
+        "replacement": "pub struct Exchange {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-B6-WORKER-TYPE",
+    "category": "api-type-guard",
+    "boundary": "exchange containment",
+    "base": "B6: Worker::new pointed a worker at any file and exchange",
+    "attempt": "name the worker to construct one",
+    "why": "only start_owner constructs an owner's worker",
+    "expect": [
+      "error[E0603]: struct `Worker` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0603]: struct `Worker` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs",
+        "anchor": "pub(super) struct Worker<P: StoreIo> {",
+        "replacement": "pub struct Worker<P: StoreIo> {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-SESSION-VERIFIED",
+    "category": "api-type-guard",
+    "boundary": "session verification",
+    "base": "(R1) maintenance procedures took a caller's report, name or refusal",
+    "attempt": "replace the session's retained verification",
+    "why": "a procedure decides from the session's own latest verification only (R2: the field and its type are both private; the self-check reopens both)",
+    "expect": [
+      "error[E0616]: field `verified` of struct `Session` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `verified` of struct `Session` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "    verified: Option<Verification>,",
+        "replacement": "    pub verified: Option<Verification>,"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "#[derive(Clone)]\nstruct Verification {",
+        "replacement": "#[derive(Clone)]\npub struct Verification {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-PROVISION-REWRITE",
+    "category": "api-type-guard",
+    "boundary": "session verification",
+    "base": "(R1) a public PROVISION rewrite skipped retirement's and re-qualification's preconditions",
+    "attempt": "rewrite PROVISION's retirement directly in a session",
+    "why": "section 13.3 uses the rewrite only inside recycling, retirement and re-qualification",
+    "expect": [
+      "error[E0603]: function `rewrite_provision` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0603]: function `rewrite_provision` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "pub(super) fn rewrite_provision<P: Platform + Clone + 'static>(",
+        "replacement": "pub fn rewrite_provision<P: Platform + Clone + 'static>("
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-VERIFICATION-TRANSPLANT",
+    "category": "api-type-guard",
+    "boundary": "session verification",
+    "base": "(R2, NC-SUCC-FOREIGN) a verification of one session or store authorizing another's succession",
+    "attempt": "move one session's retained verification into another session",
+    "why": "a session's verification is private to it (the field and its type), bound to its opening, selection and mutation count, and taken only by its own procedures",
+    "expect": [
+      "error[E0616]: field `verified` of struct `Session` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0616]: field `verified` of struct `Session` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "    verified: Option<Verification>,",
+        "replacement": "    pub verified: Option<Verification>,"
+      },
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "#[derive(Clone)]\nstruct Verification {",
+        "replacement": "#[derive(Clone)]\npub struct Verification {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-VERIFICATION-FORGE",
+    "category": "api-type-guard",
+    "boundary": "session verification",
+    "base": "(R2) a caller-built verification standing in for the session's own",
+    "attempt": "build a verification from a caller's assessment and an opening's identity",
+    "why": "the verification type is internal to the store; a caller holds only Assessment copies, which no procedure accepts",
+    "expect": [
+      "error[E0603]: struct `Verification` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0603]: struct `Verification` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "struct Verification {\n    epoch: u64,\n    opening: OpeningId,\n    root_id: [u8; 16],\n    revision: u64,\n    digest: [u8; 32],\n    state: String,\n    assessment: Assessment,\n}",
+        "replacement": "pub struct Verification {\n    pub epoch: u64,\n    pub opening: OpeningId,\n    pub root_id: [u8; 16],\n    pub revision: u64,\n    pub digest: [u8; 32],\n    pub state: String,\n    pub assessment: Assessment,\n}"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-TAKE-ASSESSMENT",
+    "category": "api-type-guard",
+    "boundary": "session verification",
+    "base": "(R2) a caller consuming or reading the session's retained verify-before",
+    "attempt": "take the session's retained verification from outside the store",
+    "why": "only the store's procedures take the verification, once",
+    "expect": [
+      "error[E0624]: method `take_assessment` is private"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0624]: method `take_assessment` is private"
+    ],
+    "guarded": true,
+    "reopen": [
+      {
+        "file": "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+        "anchor": "    fn take_assessment(&mut self) -> Result<Assessment, String> {",
+        "replacement": "    pub fn take_assessment(&mut self) -> Result<Assessment, String> {"
+      }
+    ],
+    "reopened_exit": 0,
+    "reopened_errors": [],
+    "self_check": true,
+    "ok": true
+  },
+  {
+    "id": "P-CLOSE-TWICE",
+    "category": "api-ownership-guard",
+    "boundary": "one-way seal",
+    "base": "(R1) one closure, one seal request",
+    "attempt": "close one owner twice",
+    "why": "close consumes the owner; only the owner a refusal returns can be closed again",
+    "expect": [
+      "error[E0382]: use of moved value: `owner`"
+    ],
+    "exit": 101,
+    "errors": [
+      "error[E0382]: use of moved value: `owner`"
+    ],
+    "guarded": true,
+    "variant_exit": 0,
+    "variant_errors": [],
+    "self_check": true,
+    "ok": true
+  }
+]

@@ -1,0 +1,1149 @@
+{
+  "model": "P2-V1-R3B-I3-P-R2 design model",
+  "source_baseline": "45898e05178a56efaadeb1f8f9ee7a0a521c72c9",
+  "r1_model_sha256": "17f606f2111aee1753b20874b2b16f15041abf4bae84178600ea83fb01705ac1",
+  "r1_reproduction": [
+    {
+      "id": "R1-A",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "loss with 3 acknowledged and none issued: ledger.failed=None, admission of the acknowledged start still permitted=True"
+    },
+    {
+      "id": "R1-B",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "conflict on acknowledged sequence 1: latched (1, 'different digest'), failure never delivered; R1 INV-4 (no sequence >= 1 acknowledged) contradicts 3 applied acknowledgements"
+    },
+    {
+      "id": "R1-C zero",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (0, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C out of range",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (17, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C foreign",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (4, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C future",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "a submission for unissued sequence 7 stored silently"
+    },
+    {
+      "id": "R1-C beyond",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "conflict at 6 with 3 applied: records 4-6 pending forever, failure never delivered (ledger.failed=None)"
+    },
+    {
+      "id": "R1-D",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "ActionStarted acknowledged, reservation unadmitted, loss observed: admission permitted"
+    },
+    {
+      "id": "R1-E",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "append in flight when a conflict latched: durable 1 -> 2, acknowledged 2"
+    },
+    {
+      "id": "R1-F",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "loss during the claim leaves claim state 'None'; during the seal, seal state 'None': neither failed nor completed"
+    },
+    {
+      "id": "R1-F2",
+      "finding": "F2",
+      "reproduced": true,
+      "observed": "verifier inside maintenance: Busy; R1 model procedures took a store lock: False"
+    },
+    {
+      "id": "R1-F3",
+      "finding": "F3",
+      "reproduced": true,
+      "observed": "stale startup Ready on 10111213, fresh startup Ready on 20212223: two owners"
+    },
+    {
+      "id": "R1-F4a",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "after the link and the unlink, before the directory sync, F2 has one outcome (absent): a link already committed is not representable"
+    },
+    {
+      "id": "R1-F4b",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "make_lock synced ['store-a'] (not in the R1 text); pool files durable at creation without a sync step"
+    },
+    {
+      "id": "R1-F4c",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "clean pages cannot be reclaimed while the writer's descriptor is open"
+    },
+    {
+      "id": "R1-S8",
+      "finding": "8",
+      "reproduced": true,
+      "observed": "5000 orphan dispositions all read (5000); 5000 revoked entries all examined (5000); no aggregate bound"
+    }
+  ],
+  "checks": [
+    {
+      "id": "C00",
+      "marker": "[golden-codec]",
+      "requirement": "D-9",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "50 golden vectors reproduced and decoded",
+      "restored": "PASS"
+    },
+    {
+      "id": "C01",
+      "marker": "[F1-volatile]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        1
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "after F1: K shows the record, D does not, locks released",
+      "restored": "PASS"
+    },
+    {
+      "id": "C02",
+      "marker": "[F1-F2-sync]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        2
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "without a sync the record is lost; after the startup sync it survives F2",
+      "restored": "PASS"
+    },
+    {
+      "id": "C03",
+      "marker": "[errseq-reopen]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        3
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "new-description sync 0 is not a certificate; an unseen error refuses",
+      "restored": "PASS"
+    },
+    {
+      "id": "C04",
+      "marker": "[tear-containment]",
+      "requirement": "R2, D-10",
+      "r1_mission_items": [
+        4
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "containment holds for records and seal; tear classes ['AbandonedClaim', 'MalformedJournal', 'UnsealedAction', 'UnsealedNoAction', 'Unused']",
+      "restored": "PASS"
+    },
+    {
+      "id": "C05",
+      "marker": "[lock-retained]",
+      "requirement": "R3",
+      "r1_mission_items": [
+        5
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "locks outlive recorder failure; 3 descriptors survive the claim; after exit/eviction: closed Ready/Ready, seal failed Ready/PriorUnresolved, claim failed Ready/Ready",
+      "restored": "PASS"
+    },
+    {
+      "id": "C06",
+      "marker": "[busy-before-sync]",
+      "requirement": "R4",
+      "r1_mission_items": [
+        6
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "Busy before any journal operation; a held journal lock refuses as Live untouched",
+      "restored": "PASS"
+    },
+    {
+      "id": "C07",
+      "marker": "[dup-bounded]",
+      "requirement": "R5",
+      "r1_mission_items": [
+        7
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "6 records x 201 submissions: one acknowledgement each, no growth",
+      "restored": "PASS"
+    },
+    {
+      "id": "C08",
+      "marker": "[fatal-latched]",
+      "requirement": "R5, D-5",
+      "r1_mission_items": [
+        8
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "failure and loss (drop guard or join handle) reach the core after a stall; no ack at or beyond",
+      "restored": "PASS"
+    },
+    {
+      "id": "C09",
+      "marker": "[late-uncertain]",
+      "requirement": "R6, D-3",
+      "r1_mission_items": [
+        9
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "18 restart images refused, no identity invented",
+      "restored": "PASS"
+    },
+    {
+      "id": "C10",
+      "marker": "[exact-bytes]",
+      "requirement": "R7",
+      "r1_mission_items": [
+        10
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "every byte of header, seal and record block checked; 21 checksum-valid header variants and 17 non-canonical texts refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C11",
+      "marker": "[archive-binding]",
+      "requirement": "R9",
+      "r1_mission_items": [
+        11
+      ],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "binding preserved across archival; a changed byte made the disposition stale",
+      "restored": "PASS"
+    },
+    {
+      "id": "C12",
+      "marker": "[admin-crash]",
+      "requirement": "R9, D-7, D-8, F4",
+      "r1_mission_items": [
+        12
+      ],
+      "r2_mission_items": [
+        12
+      ],
+      "baseline": "PASS",
+      "detail": "outcomes checked: P-ARCH 67, P-ARCH recovered 32, P-DISP 67, P-DISP recovered 32, P-PROV 338, P-RECYCLE 99, P-RECYCLE recovered 66, P-REQUALIFY 52, P-RETIRE 52, P-RETIRE refused 1, P-REVOKE 30, P-SUCCESSOR 400",
+      "restored": "PASS"
+    },
+    {
+      "id": "C13",
+      "marker": "[grammar-conformance]",
+      "requirement": "R6",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "13 fixtures, 110 prefixes accepted; 32 mutations rejected by their rules",
+      "restored": "PASS"
+    },
+    {
+      "id": "C14",
+      "marker": "[safe-open]",
+      "requirement": "R4, R8, D-6",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "FIFO and symlink refused unopened; 8 mount cases refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C15",
+      "marker": "[ack-durable]",
+      "requirement": "R1, R5, F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "12 fault scenarios: every acknowledgement durable; none at or after a failure",
+      "restored": "PASS"
+    },
+    {
+      "id": "C16",
+      "marker": "[no-false-resolution]",
+      "requirement": "R6, D-3",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "26078 restart images over 13 fixtures; refusals without native work: 11132 (disclosed)",
+      "restored": "PASS"
+    },
+    {
+      "id": "C17",
+      "marker": "[arith-bounds]",
+      "requirement": "R7, D-2",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "baseline": "PASS",
+      "detail": "claim exhaustion, configuration, size, PROVISION, incident and gap bounds refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C18",
+      "marker": "[fatal-total]",
+      "requirement": "F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "baseline": "PASS",
+      "detail": "15 fatal scenarios: admission refused at once, acknowledgements kept, failures only at issued records",
+      "restored": "PASS"
+    },
+    {
+      "id": "C19",
+      "marker": "[admission-fence]",
+      "requirement": "F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        5
+      ],
+      "baseline": "PASS",
+      "detail": "27 interleavings: no admission or publication after the latch",
+      "restored": "PASS"
+    },
+    {
+      "id": "C20",
+      "marker": "[session-verify]",
+      "requirement": "F2",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        7,
+        8
+      ],
+      "baseline": "PASS",
+      "detail": "verification inside the session: no lock request, competitors excluded, nested rewrite covered",
+      "restored": "PASS"
+    },
+    {
+      "id": "C21",
+      "marker": "[provision-selection]",
+      "requirement": "F3",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        9,
+        10
+      ],
+      "baseline": "PASS",
+      "detail": "post-lock revalidation: succession, retire, requalify, recycle, bounded",
+      "restored": "PASS"
+    },
+    {
+      "id": "C22",
+      "marker": "[metadata-schedules]",
+      "requirement": "F4",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        11,
+        12
+      ],
+      "baseline": "PASS",
+      "detail": "8 procedures: computed crash matrix equals section 15.2; link durable before sync, reclaim with open descriptors represented",
+      "restored": "PASS"
+    },
+    {
+      "id": "C23",
+      "marker": "[step-parity]",
+      "requirement": "F4",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        13
+      ],
+      "baseline": "PASS",
+      "detail": "10 procedures and recoveries: operations, order and crash points match section 13",
+      "restored": "PASS"
+    },
+    {
+      "id": "C24",
+      "marker": "[aggregate-bounds]",
+      "requirement": "Section 8",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        14
+      ],
+      "baseline": "PASS",
+      "detail": "bounded: dispositions, revoked, archive, partial report, retirement uses the complete set",
+      "restored": "PASS"
+    }
+  ],
+  "r2_mission_items": {
+    "1": "worker loss with no pending or unissued record",
+    "2": "loss between durable reservation and admission",
+    "3": "an acknowledged-sequence conflict",
+    "4": "zero, foreign, future and out-of-range submissions",
+    "5": "fatal signal versus publication and admission ordering",
+    "6": "unexpected acknowledgement outcomes",
+    "7": "lock-aware verification without lock conversion or reacquisition",
+    "8": "exclusion of independent competitors during maintenance",
+    "9": "PROVISION replacement between read and lock",
+    "10": "stale predecessor startup after successor publication",
+    "11": "metadata persistence before explicit directory sync",
+    "12": "administrative fault points with the corrected schedules",
+    "13": "protocol and model durability-step parity",
+    "14": "bounded aggregate scanning and reporting"
+  },
+  "negative_controls": [
+    {
+      "id": "NC01",
+      "target": "C01",
+      "restores": "process death makes kernel-visible bytes durable (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[F1-volatile] process death made a pending record durable"
+    },
+    {
+      "id": "NC02",
+      "target": "C02",
+      "restores": "startup reports evidence preserved without syncing",
+      "result": "CAUGHT",
+      "assertion": "[F1-F2-sync] a report of preserved evidence did not survive F2"
+    },
+    {
+      "id": "NC03",
+      "target": "C03",
+      "restores": "a new description's sync treated as certifying visible records",
+      "result": "CAUGHT",
+      "assertion": "[errseq-reopen] the report certified a record that is not durable"
+    },
+    {
+      "id": "NC04",
+      "target": "C04",
+      "restores": "first-candidate geometry: 128-byte slots in shared pages, seal in block 0",
+      "result": "CAUGHT",
+      "assertion": "[tear-containment] writing record 2 altered durable data: ('garbage', 4096)"
+    },
+    {
+      "id": "NC05a",
+      "target": "C05",
+      "restores": "the recorder thread owns the lock descriptions (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[lock-retained] the store lock was released by recorder failure"
+    },
+    {
+      "id": "NC05b",
+      "target": "C05",
+      "restores": "the store-lock description duplicated into the worker, which unlocks",
+      "result": "CAUGHT",
+      "assertion": "[lock-retained] the store lock was released by recorder failure"
+    },
+    {
+      "id": "NC06",
+      "target": "C06",
+      "restores": "startup syncs and reads journals before locking (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[busy-before-sync] journal touched before the lock: [('rival', 'open', 'j00000.journal'), ('rival', 'fdatasync', 'j00000.journal'), ('rival', 'pread', 'j00000.journal')]"
+    },
+    {
+      "id": "NC07",
+      "target": "C07",
+      "restores": "bounded submission queue with re-acknowledgement (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[dup-bounded] the owner would block on submission"
+    },
+    {
+      "id": "NC08",
+      "target": "C08",
+      "restores": "failure delivered as a message on a bounded event queue (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-latched] the core never learned of the failure at record 6"
+    },
+    {
+      "id": "NC09",
+      "target": "C09",
+      "restores": "refuse only when recorded outstanding work exists",
+      "result": "CAUGHT",
+      "assertion": "[late-uncertain] F1: restart permitted with a late owner held"
+    },
+    {
+      "id": "NC10a",
+      "target": "C10",
+      "restores": "header reserved bytes unchecked",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] header reserved byte 60: valid"
+    },
+    {
+      "id": "NC10b",
+      "target": "C10",
+      "restores": "seal reserved bytes and tail unchecked (first candidate's unassigned bytes)",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] seal byte 160 unchecked"
+    },
+    {
+      "id": "NC10c",
+      "target": "C10",
+      "restores": "record-block padding unchecked",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] record byte 77 unchecked"
+    },
+    {
+      "id": "NC10d",
+      "target": "C10",
+      "restores": "checksum-valid invalid header taken as an abandoned claim (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] header reserved byte 60 classified AbandonedClaim"
+    },
+    {
+      "id": "NC10e",
+      "target": "C10",
+      "restores": "non-canonical decimals accepted in text",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] disposition text accepted with leading zero"
+    },
+    {
+      "id": "NC11a",
+      "target": "C11",
+      "restores": "binding includes the file location (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[archive-binding] the binding depends on the file location"
+    },
+    {
+      "id": "NC11b",
+      "target": "C11",
+      "restores": "binding ignores the content",
+      "result": "CAUGHT",
+      "assertion": "[archive-binding] the old disposition must be visible as stale"
+    },
+    {
+      "id": "NC12a",
+      "target": "C12",
+      "restores": "temporary disposition names read as dispositions",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] a disposition took effect without its final name (F1 2)"
+    },
+    {
+      "id": "NC12b",
+      "target": "C12",
+      "restores": "a PROVISION inode mismatch ignored",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] a replaced pool file was accepted (F1 after step 4)"
+    },
+    {
+      "id": "NC12c",
+      "target": "C12",
+      "restores": "retirement without preconditions hides pool claims",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] retirement hid an unresolved generation (Ready)"
+    },
+    {
+      "id": "NC13",
+      "target": "C13",
+      "restores": "grammar rule G16 (verdict iff closure) removed",
+      "result": "CAUGHT",
+      "assertion": "[grammar-conformance] mutation 'Failed verdict without a closure' gave None, expected G16"
+    },
+    {
+      "id": "NC14a",
+      "target": "C14",
+      "restores": "untrusted entries opened in blocking mode before the type check",
+      "result": "CAUGHT",
+      "assertion": "[safe-open] startup blocked opening a FIFO"
+    },
+    {
+      "id": "NC14b",
+      "target": "C14",
+      "restores": "ext4 decided by the shared magic alone (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[safe-open] ext3 with the shared magic: Ready"
+    },
+    {
+      "id": "NC15a",
+      "target": "C15",
+      "restores": "durable published before the sync",
+      "result": "CAUGHT",
+      "assertion": "[ack-durable] clean: record 1 acknowledged before it was durable"
+    },
+    {
+      "id": "NC15b",
+      "target": "C15",
+      "restores": "sync retried after EIO",
+      "result": "CAUGHT",
+      "assertion": "[ack-durable] sync EIO at record 1: record 1 acknowledged before it was durable"
+    },
+    {
+      "id": "NC16",
+      "target": "C16",
+      "restores": "a visible RunEnded taken as resolution",
+      "result": "CAUGHT",
+      "assertion": "[no-false-resolution] T7 {'lazy': False} at native+i1 (F1): restart permitted with ['i1'] outstanding as UnsealedAction"
+    },
+    {
+      "id": "NC17",
+      "target": "C17",
+      "restores": "claim counter unbounded",
+      "result": "CAUGHT",
+      "assertion": "[arith-bounds] claim after 2^63 gave Ready"
+    },
+    {
+      "id": "NC18a",
+      "target": "C18",
+      "restores": "no store admission gate: admission continues after a fatal condition (R1)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] A/D worker loss: admission after the fatal condition was not refused"
+    },
+    {
+      "id": "NC18b",
+      "target": "C18",
+      "restores": "R1 failure targeting: the cause's own sequence, delivered only at that position",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] B conflict on an acknowledged record: failure delivered at None (None), expected 4"
+    },
+    {
+      "id": "NC18c",
+      "target": "C18",
+      "restores": "a submission for an unissued future sequence accepted silently (R1)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] C future: admission after the fatal condition was not refused"
+    },
+    {
+      "id": "NC18d",
+      "target": "C19",
+      "restores": "publication after the fatal latch (R1)",
+      "result": "CAUGHT",
+      "assertion": "[admission-fence] publication after the latch (schedule [0, 0, 1, 0])"
+    },
+    {
+      "id": "NC18e",
+      "target": "C18",
+      "restores": "an unexpected acknowledgement outcome ignored",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] unexpected ack: None"
+    },
+    {
+      "id": "NC18f",
+      "target": "C18",
+      "restores": "record_failed for an unissued record counted as delivered",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] A/D worker loss: a failure was reported without a real record"
+    },
+    {
+      "id": "NC19",
+      "target": "C19",
+      "restores": "a health check followed by an unprotected admission call",
+      "result": "CAUGHT",
+      "assertion": "[admission-fence] an admission linearized after the fatal latch (schedule [0, 1, 0, 0])"
+    },
+    {
+      "id": "NC20a",
+      "target": "C20",
+      "restores": "in-session verification requests a new shared lock (R1 workflow)",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] in-session verification did not run (Busy)"
+    },
+    {
+      "id": "NC20b",
+      "target": "C20",
+      "restores": "in-session verification converts the session's lock to shared",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] a standalone verifier was not excluded during maintenance (Ready)"
+    },
+    {
+      "id": "NC20c",
+      "target": "C20",
+      "restores": "the session releases its lock around verification",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] an owner started while the session released its lock"
+    },
+    {
+      "id": "NC20d",
+      "target": "C20",
+      "restores": "a Busy verification taken as success",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] in-session verification did not run (Ready)"
+    },
+    {
+      "id": "NC20e",
+      "target": "C20",
+      "restores": "maintenance authority asserted by a flag instead of the retained lock",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] verification without the retained lock was not refused"
+    },
+    {
+      "id": "NC20f",
+      "target": "C20",
+      "restores": "in-session verification skipped: an earlier report reused",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] verify-after inside the same session: Ready"
+    },
+    {
+      "id": "NC21a",
+      "target": "C21",
+      "restores": "no post-lock revalidation of the PROVISION selection (R1)",
+      "result": "CAUGHT",
+      "assertion": "[provision-selection] a stale selection regained authority: Ready 10111213"
+    },
+    {
+      "id": "NC21b",
+      "target": "C21",
+      "restores": "revalidation through the descriptor kept from selection",
+      "result": "CAUGHT",
+      "assertion": "[provision-selection] a stale selection regained authority: Ready 10111213"
+    },
+    {
+      "id": "NC22a",
+      "target": "C22",
+      "restores": "directory entries durable only through fsync_dir (R1 model)",
+      "result": "CAUGHT",
+      "assertion": "[metadata-schedules] a link durable before the directory sync is not represented: {'F1': {'published'}, 'ordered': {'blocks'}, 'perdir': {'blocks'}}"
+    },
+    {
+      "id": "NC22b",
+      "target": "C22",
+      "restores": "no page reclaim while a descriptor is open (R1 model)",
+      "result": "CAUGHT",
+      "assertion": "[metadata-schedules] clean pages must be reclaimable while a descriptor is open"
+    },
+    {
+      "id": "NC23",
+      "target": "C23",
+      "restores": "an undocumented directory sync in recycling (a hidden model-only step)",
+      "result": "CAUGHT",
+      "assertion": "[step-parity] P-RECYCLE: modelled operations differ from the protocol: [('13.8/3', 'fsync_dir', 'provdir')]"
+    },
+    {
+      "id": "NC24a",
+      "target": "C24",
+      "restores": "enumeration bounds checked only after examining the entries",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] dispositions: 4097 entries gave Invalid disposition 0000000000000000000000000000000000000000000000000000000000000000.disposition type"
+    },
+    {
+      "id": "NC24b",
+      "target": "C24",
+      "restores": "a startup authorized from the truncated report",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] a startup decided from the truncated report: Ready partial=True"
+    },
+    {
+      "id": "NC24c",
+      "target": "C24",
+      "restores": "retirement preconditions evaluated on the truncated report",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] retirement from a partial report hid an incident (Ready)"
+    }
+  ],
+  "crash_matrix": {
+    "P-PROV": [
+      [
+        0,
+        21,
+        [
+          "unprovisioned"
+        ],
+        [
+          "unprovisioned"
+        ],
+        []
+      ],
+      [
+        22,
+        22,
+        [
+          "fresh"
+        ],
+        [
+          "fresh",
+          "unprovisioned"
+        ],
+        []
+      ],
+      [
+        23,
+        23,
+        [
+          "fresh"
+        ],
+        [
+          "fresh"
+        ],
+        []
+      ]
+    ],
+    "P-DISP": [
+      [
+        0,
+        0,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        []
+      ],
+      [
+        1,
+        4,
+        [
+          "maintenance"
+        ],
+        [
+          "blocks",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "published"
+        ],
+        [
+          "blocks",
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        6,
+        6,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ]
+    ],
+    "P-REVOKE": [
+      [
+        0,
+        0,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ],
+      [
+        1,
+        1,
+        [
+          "blocks"
+        ],
+        [
+          "blocks",
+          "published"
+        ],
+        [
+          "invalid"
+        ]
+      ],
+      [
+        2,
+        2,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        [
+          "invalid"
+        ]
+      ],
+      [
+        3,
+        3,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        []
+      ]
+    ],
+    "P-ARCH": [
+      [
+        0,
+        0,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ],
+      [
+        1,
+        4,
+        [
+          "maintenance"
+        ],
+        [
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "archived"
+        ],
+        [
+          "archived",
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        6,
+        6,
+        [
+          "archived"
+        ],
+        [
+          "archived"
+        ],
+        []
+      ]
+    ],
+    "P-RECYCLE": [
+      [
+        0,
+        0,
+        [
+          "archived"
+        ],
+        [
+          "archived"
+        ],
+        []
+      ],
+      [
+        1,
+        3,
+        [
+          "maintenance"
+        ],
+        [
+          "archived",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "lost"
+        ],
+        [
+          "archived",
+          "lost",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        5,
+        8,
+        [
+          "lost"
+        ],
+        [
+          "lost"
+        ],
+        []
+      ],
+      [
+        9,
+        9,
+        [
+          "recycled"
+        ],
+        [
+          "lost",
+          "recycled"
+        ],
+        []
+      ],
+      [
+        10,
+        10,
+        [
+          "recycled"
+        ],
+        [
+          "recycled"
+        ],
+        []
+      ]
+    ],
+    "P-RETIRE": [
+      [
+        0,
+        3,
+        [
+          "bound 0"
+        ],
+        [
+          "bound 0"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "bound 1"
+        ],
+        [
+          "bound 0",
+          "bound 1"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "bound 1"
+        ],
+        [
+          "bound 1"
+        ],
+        []
+      ]
+    ],
+    "P-REQUALIFY": [
+      [
+        0,
+        3,
+        [
+          "unsupported"
+        ],
+        [
+          "unsupported"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "revision 2"
+        ],
+        [
+          "revision 2",
+          "unsupported"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "revision 2"
+        ],
+        [
+          "revision 2"
+        ],
+        []
+      ]
+    ],
+    "P-SUCCESSOR": [
+      [
+        0,
+        27,
+        [
+          "predecessor"
+        ],
+        [
+          "predecessor"
+        ],
+        []
+      ],
+      [
+        28,
+        28,
+        [
+          "successor"
+        ],
+        [
+          "predecessor",
+          "successor"
+        ],
+        []
+      ],
+      [
+        29,
+        29,
+        [
+          "successor"
+        ],
+        [
+          "successor"
+        ],
+        []
+      ]
+    ]
+  },
+  "assertion_changes": [
+    "C05: recorder loss is read from the exchange's latched fatal cause (WorkerLost) instead of R1's separate 'lost' flag; the requirement (loss is latched while locks stay held) is unchanged.",
+    "C08: R1 asserted that, without the drop guard, an apply step saw no signal until a separate join-handle call. R2 makes the join-handle check part of every apply step, so the first apply latches WorkerVanished and delivers the failure: the requirement is preserved and the timing strengthened.",
+    "C11 and C12: procedures run inside a maintenance session (R1's modelled procedures held no lock). C12 now runs under ordered and per-directory persistence schedules instead of fsync_dir-only durability; its safety assertions are unchanged; re-qualification and a valid retirement series were added.",
+    "C15: the INV-4 assertion 'acknowledged before the failed sequence' became 'acknowledged no further than P, the durable position at the latch', which covers every fatal cause.",
+    "C03 and C05: R1's evict (pages and inode, only with no open descriptor) became evict_inode in the same scenarios; page reclaim with open descriptors is now separate (C22).",
+    "C10: the PROVISION grammar has a revision field; two non-canonical variants were added.",
+    "C03: the writer's EIO is read from the exchange's latched fatal cause (Sync) instead of R1's 'failed' field; the requirement (the writer observes EIO; a new description's sync certifies nothing) is unchanged.",
+    "C09 and C16: every restart image set now also includes page reclaim while descriptors are open (F1+page-reclaim), so their counts grew (C09 17 to 18 images, C16 25787 to 26078 images); every R1 assertion is applied to every image.",
+    "C12: its summary counts outcomes (one per crash point after F1, and one per schedule and data choice after F2) instead of R1's crash points, and adds recovery counts."
+  ],
+  "tool_failures": [],
+  "assumptions_not_established": [
+    "A-S1 flush honesty, A-S2 4096-byte containment, A-S3 no silent loss, A-S4 read stability (design section 5): assumed by the model, never established by it.",
+    "A-M1: on the supported ext4 profile, metadata operations become durable atomically and in issue order. The 'ordered' schedules use it and are themselves a superset of ext4 outcomes; the 'per-directory' schedules are a conservative over-approximation, not ext4 behaviour.",
+    "Kernel semantics as documented: errseq sampling at open and reporting per open file description; flock per open file description; fifo(7) non-blocking open; clean-page reclaim regardless of open descriptors. Modelled, not tested.",
+    "ext4 overwrite of written, unshared extents needs no allocation (qualification, D-6).",
+    "SHA-256 collision resistance (bindings, digests).",
+    "Domain A (store-uid rewriting) is outside the model's guarantees: gate G-AUTH stays open.",
+    "CoreSim and the fixtures T1-T15 are derived by reading the source; they are not the Rust core. Conformance of the real core's journals (I9) and of the implementation's mutex linearization are left to the implementation mission.",
+    "Interleavings are enumerated over the model's atomic steps; a step stands for one critical section of the design.",
+    "The maintenance session is a specified future interface; no executable exists or is authorized.",
+    "The Python model is not the Rust implementation; no Cargo command or Rust test ran.",
+    "A-S2 is load-bearing: with a 16 KiB failure unit, losing a durable ActionStarted block while the next block stays zero yields a valid shorter prefix (UnsealedAction -> UnsealedNoAction). Outside every guarantee; attested by the Owner, qualified empirically."
+  ],
+  "result": "PASS"
+}

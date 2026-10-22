@@ -96,6 +96,12 @@ pub enum EventKind {
     RestoreRejected,
     RestorePrepared,
     RestoreCompleted,
+    VerificationPrepared,
+    VerificationApproved,
+    VerificationDeclined,
+    VerificationLaunched,
+    VerificationFinished,
+    VerificationCleanup,
 }
 
 impl EventKind {
@@ -133,6 +139,12 @@ impl EventKind {
             Self::RestoreRejected => "restore.rejected",
             Self::RestorePrepared => "restore.prepared",
             Self::RestoreCompleted => "restore.completed",
+            Self::VerificationPrepared => "verify.prepared",
+            Self::VerificationApproved => "verify.approval_granted",
+            Self::VerificationDeclined => "verify.approval_declined",
+            Self::VerificationLaunched => "verify.launch",
+            Self::VerificationFinished => "verify.result",
+            Self::VerificationCleanup => "verify.cleanup",
         }
     }
 }

@@ -1,0 +1,121 @@
+P2-V1-R3B-I3-P-R1 design validation record
+
+recorded (UTC): 2026-10-01T23:38:43Z
+host: the development host, Linux 6.17.0-35-generic; Python 3.12.3
+working tree: branch review/p2-v1-custody-recorder-design, HEAD b23ae1ac040732c8332e8a45cc80b10734ca0b36 (the design base),
+  with the candidate's changes uncommitted; the candidate commit did not exist when this was recorded
+working directory: the repository root; all paths below are relative to it
+output normalization: none (standard output and standard error captured verbatim)
+
+tested files (SHA-256):
+3fef5a06b272b53d517da7dfba6f89e92c252f2061e1763ef1a2c4f2b237925b  docs/architecture/p2-custody-durable-recorder-design.md
+17f606f2111aee1753b20874b2b16f15041abf4bae84178600ea83fb01705ac1  docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py
+1855b343265040ed0920e7dc5851cded41ab037fca3c14db02c389bec8238996  docs/evidence/p2-v1-r3b-i3-p-r1/reference_check.py
+
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py --json docs/evidence/p2-v1-r3b-i3-p-r1/coverage.json
+P2-V1-R3B-I3-P-R1 design model
+source baseline: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+
+== baseline checks ==
+C00 [golden-codec] PASS: 50 golden vectors reproduced and decoded
+C01 [F1-volatile] PASS: after F1: K shows the record, D does not, locks released
+C02 [F1-F2-sync] PASS: without a sync the record is lost; after the startup sync it survives F2
+C03 [errseq-reopen] PASS: new-description sync 0 is not a certificate; an unseen error refuses
+C04 [tear-containment] PASS: containment holds for records and seal; tear classes ['AbandonedClaim', 'MalformedJournal', 'UnsealedAction', 'UnsealedNoAction', 'Unused']
+C05 [lock-retained] PASS: locks outlive recorder failure; 3 descriptors survive the claim; after exit/eviction: closed Ready/Ready, seal failed Ready/PriorUnresolved, claim failed Ready/Ready
+C06 [busy-before-sync] PASS: Busy before any journal operation; a held journal lock refuses as Live untouched
+C07 [dup-bounded] PASS: 6 records x 201 submissions: one acknowledgement each, no growth
+C08 [fatal-latched] PASS: failure and loss (drop guard or join handle) reach the core after a stall; no ack at or beyond
+C09 [late-uncertain] PASS: 17 restart images refused, no identity invented
+C10 [exact-bytes] PASS: every byte of header, seal and record block checked; 21 checksum-valid header variants and 15 non-canonical texts refused
+C11 [archive-binding] PASS: binding preserved across archival; a changed byte made the disposition stale
+C12 [admin-crash] PASS: crash points: P-ARCH 14, P-DISP 16, P-PROV 18, P-RECYCLE 14, P-RETIRE 9, P-REVOKE 8, P-SUCCESSOR 20
+C13 [grammar-conformance] PASS: 13 fixtures, 110 prefixes accepted; 32 mutations rejected by their rules
+C14 [safe-open] PASS: FIFO and symlink refused unopened; 8 mount cases refused
+C15 [ack-durable] PASS: 12 fault scenarios: every acknowledgement durable; none at or after a failure
+C16 [no-false-resolution] PASS: 25787 restart images over 13 fixtures; refusals without native work: 11018 (disclosed)
+C17 [arith-bounds] PASS: claim exhaustion, configuration, size, PROVISION, incident and gap bounds refused
+
+== negative controls (in-memory mutants) ==
+NC01 -> C01 CAUGHT: process death makes kernel-visible bytes durable (first candidate)
+    assertion: [F1-volatile] process death made a pending record durable
+NC02 -> C02 CAUGHT: startup reports evidence preserved without syncing
+    assertion: [F1-F2-sync] a report of preserved evidence did not survive F2
+NC03 -> C03 CAUGHT: a new description's sync treated as certifying visible records
+    assertion: [errseq-reopen] the report certified a record that is not durable
+NC04 -> C04 CAUGHT: first-candidate geometry: 128-byte slots in shared pages, seal in block 0
+    assertion: [tear-containment] writing record 2 altered durable data: ('garbage', 4096)
+NC05a -> C05 CAUGHT: the recorder thread owns the lock descriptions (first candidate)
+    assertion: [lock-retained] the store lock was released by recorder failure
+NC05b -> C05 CAUGHT: the store-lock description duplicated into the worker, which unlocks
+    assertion: [lock-retained] the store lock was released by recorder failure
+NC06 -> C06 CAUGHT: startup syncs and reads journals before locking (first candidate)
+    assertion: [busy-before-sync] journal touched before the lock: [('rival', 'open', 'j00000.journal'), ('rival', 'fdatasync', 'j00000.journal'), ('rival', 'pread', 'j00000.journal')]
+NC07 -> C07 CAUGHT: bounded submission queue with re-acknowledgement (first candidate)
+    assertion: [dup-bounded] the owner would block on submission
+NC08 -> C08 CAUGHT: failure delivered as a message on a bounded event queue (first candidate)
+    assertion: [fatal-latched] the core never learned of the failure at record 6
+NC09 -> C09 CAUGHT: refuse only when recorded outstanding work exists
+    assertion: [late-uncertain] F1: restart permitted with a late owner held
+NC10a -> C10 CAUGHT: header reserved bytes unchecked
+    assertion: [exact-bytes] header reserved byte 60: valid
+NC10b -> C10 CAUGHT: seal reserved bytes and tail unchecked (first candidate's unassigned bytes)
+    assertion: [exact-bytes] seal byte 160 unchecked
+NC10c -> C10 CAUGHT: record-block padding unchecked
+    assertion: [exact-bytes] record byte 77 unchecked
+NC10d -> C10 CAUGHT: checksum-valid invalid header taken as an abandoned claim (first candidate)
+    assertion: [exact-bytes] header reserved byte 60 classified AbandonedClaim
+NC10e -> C10 CAUGHT: non-canonical decimals accepted in text
+    assertion: [exact-bytes] disposition text accepted with leading zero
+NC11a -> C11 CAUGHT: binding includes the file location (first candidate)
+    assertion: [archive-binding] the binding depends on the file location
+NC11b -> C11 CAUGHT: binding ignores the content
+    assertion: [archive-binding] the old disposition must be visible as stale
+NC12a -> C12 CAUGHT: temporary disposition names read as dispositions
+    assertion: [admin-crash] a disposition took effect without its final name (F1 3)
+NC12b -> C12 CAUGHT: a PROVISION inode mismatch ignored
+    assertion: [admin-crash] a replaced pool file was accepted (F1 after step 2)
+NC12c -> C12 CAUGHT: retirement without preconditions hides pool claims
+    assertion: [admin-crash] retirement hid an unresolved generation (Ready)
+NC13 -> C13 CAUGHT: grammar rule G16 (verdict iff closure) removed
+    assertion: [grammar-conformance] mutation 'Failed verdict without a closure' gave None, expected G16
+NC14a -> C14 CAUGHT: untrusted entries opened in blocking mode before the type check
+    assertion: [safe-open] startup blocked opening a FIFO
+NC14b -> C14 CAUGHT: ext4 decided by the shared magic alone (first candidate)
+    assertion: [safe-open] ext3 with the shared magic: Ready
+NC15a -> C15 CAUGHT: durable published before the sync
+    assertion: [ack-durable] clean: record 1 acknowledged before it was durable
+NC15b -> C15 CAUGHT: sync retried after EIO
+    assertion: [ack-durable] sync EIO at record 1: record 1 acknowledged before it was durable
+NC16 -> C16 CAUGHT: a visible RunEnded taken as resolution
+    assertion: [no-false-resolution] T7 {'lazy': False} at native+i1 (F1): restart permitted with ['i1'] outstanding as UnsealedAction
+NC17 -> C17 CAUGHT: claim counter unbounded
+    assertion: [arith-bounds] claim after 2^63 gave Ready
+
+== restored baseline ==
+C00=PASS C01=PASS C02=PASS C03=PASS C04=PASS C05=PASS C06=PASS C07=PASS C08=PASS C09=PASS C10=PASS C11=PASS C12=PASS C13=PASS C14=PASS C15=PASS C16=PASS C17=PASS
+
+== tool failures ==
+none
+
+== assumptions not established by the model ==
+- A-S1 flush honesty, A-S2 4096-byte containment, A-S3 no silent loss, A-S4 read stability (design section 5): assumed by the model, never established by it.
+- Kernel semantics as documented: errseq sampling at open and reporting per open file description; flock per open file description; fifo(7) non-blocking open. Modelled, not tested.
+- ext4 overwrite of written, unshared extents needs no allocation (qualification, D-6).
+- SHA-256 collision resistance (bindings, digests).
+- Domain A (store-uid rewriting) is outside the model's guarantees: gate G-AUTH stays open.
+- The fixtures T1-T15 are source-derived design fixtures, not Rust execution results; conformance of the real core's journals (I9) is left to the implementation mission.
+- The Python model is not the Rust implementation; no Cargo command or Rust test ran.
+- A-S2 is load-bearing: with a 16 KiB failure unit, losing a durable ActionStarted block while the next block stays zero yields a valid shorter prefix (UnsealedAction -> UnsealedNoAction). Outside every guarantee; attested by the Owner, qualified empirically.
+
+summary: baseline 18/18 pass; negative controls 27/27 caught; restored 18/18 pass; tool failures 0
+RESULT: PASS
+exit status: 0
+
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r1/reference_check.py --self-test
+baseline 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 tree cd197e047cb5a57e458b2af5d32f9c5406371301: OK
+references in the document: 108; checked against 45898e05178a: 108
+golden record vectors: model 50, baseline RECORD_VECTORS 50
+self-test: moved reference reported True; altered golden digest reported True
+RESULT: PASS
+exit status: 0

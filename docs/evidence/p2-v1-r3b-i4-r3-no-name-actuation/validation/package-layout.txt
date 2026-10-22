@@ -1,0 +1,8 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-work/snapshots/validation/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.47s
+     Running tests/phase2_package_layout.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-work/targets/validation/debug/deps/phase2_package_layout-3b9881dacc3c88a3)
+
+running 1 test
+test layout::p2r1_the_package_layout_is_what_production_derives ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s

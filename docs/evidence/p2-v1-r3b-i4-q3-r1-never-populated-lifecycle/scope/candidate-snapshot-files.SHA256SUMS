@@ -1,0 +1,14 @@
+9b437d82ee3837bf797f07fb492dd3c98903653cc285980c5617e462ec187792  app/src-tauri/src/phase2_tests.rs
+ba720ee09707d0a7709206680af39f4557b869d01f3210423decf54220aea3ed  crates/nexus-verifier-sandbox/src/execution/tests.rs
+c38e3b3776292e3c2333752c995600f67ae54685228f9e128266b70508e6ea90  crates/nexus-verifier-sandbox/src/scope/tests.rs
+8a2c6471dbd0462a6cbc2ddaa510ba343c4ac17ee4569be866cb84cdb536e1a6  crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+f5f75f07297810d8f8b26e382cb145b963fe70d21e9bb92e292d4a77764397a8  crates/nexus-verifier-sandbox/tests/phase2_never_populated.rs
+1d8f30eb2bf29122c842f6e28d1e3757e426b17ae4fa8eed9575ec2a49dd4084  crates/nexus-verifier-sandbox/tests/support/never_populated.rs
+6acb87b777f4bf5971b3a583da05a1bd82d6f6873ff9fdc514aed9cc981a96ad  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/accepted_reruns.sh
+c381c21dcc95ac1ff9fa9b6308bc03e72882b163be26c6c3b0c3d3b7d543edaf  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/baseline.sh
+c312af05acc77e8f13810275cf97dd17d109adb1aad85bfc047fc90ea9fff0c9  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/make_snapshot.sh
+6162f030bd686c88da9625baccbcaf23fa8e837e9056da84333f8ea3d74f7dc9  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/primary_excerpts.sh
+5c895c7245053e5667d5c4f68a09c205cf8e07a4199e5f73bf0be28cfc0a5f0b  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/q3r1_controls.py
+de036564cea6463e5a12ed01ddf33519f87c2b7941f5a319f15411ab3d6057d1  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/run_controls.sh
+6348be54847ef6a7e7471439b9d0932bb7d210f85da4c0d84db8cbac8e5b9833  docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/validate.sh
+2807bac99506fd98755c5b9accd75eb8715af365790750ce53196a996258f0cb  docs/security/phase2-governed-verification.md

@@ -1,0 +1,20 @@
+controls_defs.py /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-ad1r4-consolidation-01/inputs/controls_defs.py.txt
+  sha256 ef0420a1a69a756d4e71b3a746e39f7e29933643c121645f44dce32c7e4a108f (= expected)
+  controls defined: C1, C2, C10, C24, C25, C12, C14, C19, C21, C22, C27, C28
+  crates/nexus-governed-control/src/ledger/protocol.rs at 42dd1bd1: blob a2df2841b99cad5d452008a6d4150e9369d07e66, sha256 a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296
+
+C10: Commit::Unknown followed by Rollback::Undone gives Not written (fact append, step 6)
+  file crates/nexus-governed-control/src/ledger/protocol.rs; kind explore; target full_f1; properties ['E4']
+  edit 1: anchor occurs 1 time(s) (lines 1404-1408); replacement occurs 0 time(s)
+    anchor sha256 37f74ba67470e9acddc8006a77f4de04d384dd4b8cb6c8a997666cc7cd25e8cf; replacement sha256 a3a2a2739bfcd8d88f7a26cd69bea6bec8e0c63c8a43f5d5239f130875dc53ae
+
+C24: resolve empties U for a present gating record without placing the correction
+  file crates/nexus-governed-control/src/ledger/protocol.rs; kind explore; target full_f1; properties ['P8']
+  edit 1: anchor occurs 1 time(s) (lines 1774-1787); replacement occurs 0 time(s)
+    anchor sha256 6e9d5ca83c1f636f918b5c9eb814aef7b501565df2bc1801d1573596c616affb; replacement sha256 7d1107e133ac16eff68e5638ff54793edc30cdf475f16338f262148845696f82
+
+C9: NO SEALED DEFINITION in controls_defs.py
+
+C4: NO SEALED DEFINITION in controls_defs.py
+
+ANCHOR CHECK: every anchor occurs exactly once and no replacement occurs

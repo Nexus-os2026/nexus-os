@@ -1,0 +1,231 @@
+base: 3805204f941d9694b2c0c36549d32a5f4e6c157c
+file crates/nexus-verifier-sandbox/src/scope.rs: sha256 fbaec363a91add7f2759174eeab17e34055f61322b6e5b5a88b1fe9a212950ea (454 lines)
+file crates/nexus-verifier-sandbox/src/execution.rs: sha256 fa24e63e6bb91caf15929837c5e6b0a95d334b5e18b0d93d2f3fa11a6db87669 (623 lines)
+
+== B-I4-1: StartTransientUnit error or timeout is propagated by `?` before any retained scope object exists
+-- crates/nexus-verifier-sandbox/src/scope.rs:123-148 sha256 68c9907c8ee1c24b48566faa545e0319bbca8de1d427172e1e33b82a7dc5323d needles all present
+  123|     fn call<B, R>(
+  124|         &self,
+  125|         path: &str,
+  126|         interface: &str,
+  127|         method: &str,
+  128|         body: &B,
+  129|     ) -> Result<R, ScopeError>
+  130|     where
+  131|         B: serde::Serialize + zbus::zvariant::DynamicType,
+  132|         R: for<'d> zbus::zvariant::DynamicDeserialize<'d>,
+  133|     {
+  134|         self.runtime.block_on(async {
+  135|             let reply = tokio::time::timeout(
+  136|                 BUS_CALL_TIMEOUT,
+  137|                 self.connection
+  138|                     .call_method(Some(SYSTEMD), path, Some(interface), method, body),
+  139|             )
+  140|             .await
+  141|             .map_err(|_| ScopeError::Bus(format!("{method} timed out")))?
+  142|             .map_err(|e| ScopeError::Bus(e.to_string()))?;
+  143|             reply
+  144|                 .body()
+  145|                 .deserialize::<R>()
+  146|                 .map_err(|e| ScopeError::Bus(e.to_string()))
+  147|         })
+  148|     }
+-- crates/nexus-verifier-sandbox/src/scope.rs:163-196 sha256 95c09551c7ae3bdef0ab4a65c4a6c04e7060e528d891b523cfbf8ff078472406 needles all present
+  163|     ) -> Result<Scope, ScopeError> {
+  164|         use zbus::zvariant::Value;
+  165|         let helper_pid = helper.pid();
+  166|         let unit = format!("nexus-verifier-{}.scope", random_hex()?);
+  167|         let properties: Vec<(&str, Value<'_>)> = vec![
+  168|             ("Description", Value::from("Nexus verifier execution")),
+  169|             ("PIDs", Value::from(vec![helper_pid])),
+  170|             ("MemoryAccounting", Value::from(true)),
+  171|             ("MemoryMax", Value::from(limits.memory_max_bytes)),
+  172|             ("MemorySwapMax", Value::from(limits.swap_max_bytes)),
+  173|             ("TasksAccounting", Value::from(true)),
+  174|             ("TasksMax", Value::from(limits.pids_max)),
+  175|             ("CPUAccounting", Value::from(true)),
+  176|             (
+  177|                 "CPUQuotaPerSecUSec",
+  178|                 Value::from(limits.cpu_quota_us_per_sec),
+  179|             ),
+  180|             (
+  181|                 "RuntimeMaxUSec",
+  182|                 Value::from(limits.runtime_backstop_secs * 1_000_000),
+  183|             ),
+  184|             ("KillSignal", Value::from(libc::SIGKILL)),
+  185|             // The manager must not stop the scope when the kernel kills one
+  186|             // process for memory: the backend classifies that itself.
+  187|             ("OOMPolicy", Value::from("continue")),
+  188|             ("CollectMode", Value::from("inactive-or-failed")),
+  189|         ];
+  190|         let aux: Vec<(&str, Vec<(&str, Value<'_>)>)> = Vec::new();
+  191|         let _job: zbus::zvariant::OwnedObjectPath = self.call(
+  192|             SYSTEMD_PATH,
+  193|             MANAGER,
+  194|             "StartTransientUnit",
+  195|             &(unit.as_str(), "fail", properties, aux),
+  196|         )?;
+-- crates/nexus-verifier-sandbox/src/execution.rs:478-482 sha256 aa6effa4a6cc3644e5e61390c3e8efed30abb467ce14ab9c4020fe0e746f494b needles all present
+  478|     // The helper waits for its launch; it is placed in its scope first.
+  479|     match scopes.start_with_fault(helper, limits, fault) {
+  480|         Ok(scope) => owned.scope = Some(scope),
+  481|         Err(error) => return not_run(NotRun::Scope(error)),
+  482|     }
+
+== B-I4-2: A proof failure calls StopUnit best-effort and discards the StopUnit result
+-- crates/nexus-verifier-sandbox/src/scope.rs:197-213 sha256 94f648f717f3e0a735ce650c8629c083d3f31a299ba933f0cfcf857e3099e19d needles all present
+  197|         // The unit is this call's own creation: one that is not proven, a
+  198|         // panic while proving it included, is stopped here (a helper that
+  199|         // never entered it leaves it empty, and an empty scope is never
+  200|         // stopped by its manager). The panic then continues to the
+  201|         // execution, which still owns the helper.
+  202|         let proven = catch_unwind(AssertUnwindSafe(|| {
+  203|             self.prove(helper_pid, unit.clone(), limits, fault)
+  204|         }));
+  205|         if !matches!(proven, Ok(Ok(_))) {
+  206|             let _: Result<zbus::zvariant::OwnedObjectPath, _> = self.call(
+  207|                 SYSTEMD_PATH,
+  208|                 MANAGER,
+  209|                 "StopUnit",
+  210|                 &(unit.as_str(), "replace"),
+  211|             );
+  212|         }
+  213|         proven.unwrap_or_else(|panic| resume_unwind(panic))
+
+== B-I4-3: A panic in proof follows the same best-effort StopUnit path before resuming the unwind
+-- crates/nexus-verifier-sandbox/src/scope.rs:202-213 sha256 aa08dcaaadc5860f15f4814cb5d013fbaabc01f3ac717ef03320811579c98b6e needles all present
+  202|         let proven = catch_unwind(AssertUnwindSafe(|| {
+  203|             self.prove(helper_pid, unit.clone(), limits, fault)
+  204|         }));
+  205|         if !matches!(proven, Ok(Ok(_))) {
+  206|             let _: Result<zbus::zvariant::OwnedObjectPath, _> = self.call(
+  207|                 SYSTEMD_PATH,
+  208|                 MANAGER,
+  209|                 "StopUnit",
+  210|                 &(unit.as_str(), "replace"),
+  211|             );
+  212|         }
+  213|         proven.unwrap_or_else(|panic| resume_unwind(panic))
+-- crates/nexus-verifier-sandbox/src/scope.rs:216-225 sha256 b791a57c2296e5b4fe5dfd3d808e97392318265b85bbd0fb1893698eece26782 needles all present
+  216|     fn prove(
+  217|         &self,
+  218|         helper_pid: u32,
+  219|         unit: String,
+  220|         limits: &ResourcePolicy,
+  221|         fault: Option<Fault>,
+  222|     ) -> Result<Scope, ScopeError> {
+  223|         let path = wait_for_placement(helper_pid, &unit)?;
+  224|         fault::at(fault, FaultPoint::ScopeProof);
+  225|         let scope = Scope::open(&path, unit, helper_pid)?;
+
+== B-I4-4: Owned and RetainedBoundary have no pending-scope state
+-- crates/nexus-verifier-sandbox/src/execution.rs:151-158 sha256 e767b722e94f1c0d274bb890129aa7f28d87bc01605704a261a7124a5461c14b needles all present
+  151| /// An execution whose cleanup is unconfirmed: its scope and, if not yet
+  152| /// reaped, its helper. Retaining it is the only way to finish the cleanup:
+  153| /// its owner keeps it until [`Self::retry`] succeeds.
+  154| #[derive(Debug)]
+  155| pub struct RetainedBoundary {
+  156|     scope: Option<Scope>,
+  157|     helper: Option<Helper>,
+  158| }
+-- crates/nexus-verifier-sandbox/src/execution.rs:334-358 sha256 47ce0d093bc6f6e60ae1b2697d175b4661751c035d51ab8c4bb3c082d1c8a393 needles all present
+  334| /// Everything one execution owns. It lives in [`execute`]'s own frame and
+  335| /// is only ever borrowed by the code that can panic.
+  336| #[derive(Default)]
+  337| struct Owned {
+  338|     helper: Option<Helper>,
+  339|     scope: Option<Scope>,
+  340|     stdout: Option<JoinHandle<StreamRecord>>,
+  341|     stderr: Option<JoinHandle<StreamRecord>>,
+  342|     /// The launch may have reached the helper: something untrusted may
+  343|     /// have run. Only ever set once the scope exists.
+  344|     launched: bool,
+  345|     /// When the helper reported the verifier running.
+  346|     started: Option<Instant>,
+  347| }
+  348|
+  349| impl Owned {
+  350|     /// Hand whatever remains to a retained boundary; with nothing left, the
+  351|     /// cleanup is confirmed.
+  352|     fn retain(&mut self) -> Cleanup {
+  353|         match (self.scope.take(), self.helper.take()) {
+  354|             (None, None) => Cleanup::Confirmed,
+  355|             (scope, helper) => Cleanup::Failed(RetainedBoundary { scope, helper }),
+  356|         }
+  357|     }
+  358| }
+
+== B-I4-5: Finalization knows only Option<Scope>: it cannot reconcile a maybe-created unit when no Scope was proven
+-- crates/nexus-verifier-sandbox/src/execution.rs:531-582 sha256 150b36cfb7dcd339c13996f625faf7a0cca813bf2a8332246a25c92b90cac975 needles all present
+  531| /// The one finalizer, whether the attempt returned or panicked. A panic
+  532| /// inside it leaves what it could not confirm retained.
+  533| fn finalize(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
+  534|     catch_unwind(AssertUnwindSafe(|| finalize_steps(owned, fault)))
+  535|         .unwrap_or_else(|_| Finalized::without_output(owned.retain(), None))
+  536| }
+  537|
+  538| fn finalize_steps(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
+  539|     // After a final report the helper still holds the scope, so its
+  540|     // counters are read before anything in it is ended.
+  541|     let events = owned.scope.as_ref().and_then(|scope| scope.events().ok());
+  542|     if fault::at(fault, FaultPoint::Finalizing) || !end(owned.scope.as_ref(), &mut owned.helper) {
+  543|         // Do not wait on output that a surviving process may still hold.
+  544|         return Finalized::without_output(owned.retain(), events);
+  545|     }
+  546|     // Nothing of this execution remains, so every writer of the output
+  547|     // pipes is gone.
+  548|     owned.scope = None;
+  549|     let (stdout, stdout_lost) = join(owned.stdout.take());
+  550|     let (stderr, stderr_lost) = join(owned.stderr.take());
+  551|     Finalized {
+  552|         cleanup: Cleanup::Confirmed,
+  553|         stdout,
+  554|         stderr,
+  555|         output_lost: stdout_lost || stderr_lost,
+  556|         events,
+  557|     }
+  558| }
+  559|
+  560| /// End everything an execution may have left, and confirm it: `cgroup.kill`
+  561| /// on the scope, a kill of the helper (whose death-signal chain also ends
+  562| /// its namespace init), a bounded reap of the helper, then a bounded wait
+  563| /// for the scope to be empty or removed. A helper without a scope never
+  564| /// received a launch, so reaping it ends everything it started. The helper
+  565| /// is released once reaped; the scope stays with the caller. `true` only
+  566| /// once nothing can remain.
+  567| fn end(scope: Option<&Scope>, helper: &mut Option<Helper>) -> bool {
+  568|     if let Some(scope) = scope {
+  569|         let _ = scope.kill();
+  570|     }
+  571|     if let Some(child) = helper.as_mut() {
+  572|         let _ = child.kill();
+  573|         if !reap_within(child, FINALIZE_TIMEOUT) {
+  574|             return false;
+  575|         }
+  576|         *helper = None;
+  577|     }
+  578|     match scope {
+  579|         Some(scope) => scope.wait_empty(FINALIZE_TIMEOUT).unwrap_or(false),
+  580|         None => true,
+  581|     }
+  582| }
+-- crates/nexus-verifier-sandbox/src/execution.rs:160-176 sha256 f18c40aa313245424c0bcccc4eb045b5a77511db0dd197e5bf8aba3224102d97 needles all present
+  160| impl RetainedBoundary {
+  161|     /// End everything again with the finalizer's own steps and re-check.
+  162|     /// `Ok(())` once the helper is reaped and the scope empty or removed;
+  163|     /// otherwise, a panic while retrying included, the boundary is still
+  164|     /// retained.
+  165|     pub fn retry(mut self) -> Result<(), Self> {
+  166|         let ended = catch_unwind(AssertUnwindSafe(|| {
+  167|             end(self.scope.as_ref(), &mut self.helper)
+  168|         }))
+  169|         .unwrap_or(false);
+  170|         if ended {
+  171|             self.scope = None;
+  172|             Ok(())
+  173|         } else {
+  174|             Err(self)
+  175|         }
+  176|     }
+
+RESULT: every excerpt holds its needles

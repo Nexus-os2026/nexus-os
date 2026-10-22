@@ -158,6 +158,8 @@ mod inner {
 mod inner {
     use super::TranscriptionResult;
 
+    const UNAVAILABLE: &str = "whisper transcription unavailable: Candle-backed local inference is temporarily unavailable in this build pending security review";
+
     /// Stub transcriber when `local-slm` feature is disabled.
     #[derive(Debug, Clone)]
     pub struct WhisperTranscriber {
@@ -170,7 +172,7 @@ mod inner {
         }
 
         pub fn load_model(_path: &str) -> Result<Self, String> {
-            Err("whisper transcription requires the 'local-slm' feature flag".to_string())
+            Err(UNAVAILABLE.to_string())
         }
 
         pub fn transcribe(
@@ -178,7 +180,7 @@ mod inner {
             _audio_pcm: &[f32],
             _sample_rate: u32,
         ) -> Result<TranscriptionResult, String> {
-            Err("whisper transcription requires the 'local-slm' feature flag".to_string())
+            Err(UNAVAILABLE.to_string())
         }
 
         pub fn is_loaded(&self) -> bool {
@@ -216,7 +218,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("does not exist") || err.contains("local-slm"),
+            err.contains("does not exist") || err.contains("pending security review"),
             "unexpected error: {err}"
         );
     }
@@ -234,8 +236,25 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("not loaded") || err.contains("local-slm"),
+            err.contains("not loaded") || err.contains("pending security review"),
             "unexpected error: {err}"
         );
+    }
+
+    #[cfg(not(feature = "local-slm"))]
+    #[test]
+    fn test_whisper_stub_reports_withdrawal_without_feature_guidance() {
+        let t = WhisperTranscriber::new();
+        for err in [
+            WhisperTranscriber::load_model("/any/path").unwrap_err(),
+            t.transcribe(&[0.0_f32; 16], 16000).unwrap_err(),
+        ] {
+            assert!(
+                err.contains("Candle-backed local inference is temporarily unavailable in this build pending security review"),
+                "{err}"
+            );
+            // The withdrawn feature cannot be enabled, so no guidance to enable it.
+            assert!(!err.contains("feature"), "{err}");
+        }
     }
 }

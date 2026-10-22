@@ -1,0 +1,10 @@
+[package]
+name = "r1-normal-caller"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+nexus-verifier-sandbox = { path = "/home/nexus/.claude/jobs/4a4dc130/tmp/r1/base/crates/nexus-verifier-sandbox" }
+
+[workspace]

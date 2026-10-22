@@ -1,0 +1,44 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/snapshots/final-v/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.38s
+     Running tests/phase2_cleanup_observation.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/targets/validate/debug/deps/phase2_cleanup_observation-c0f53b91d5757d19)
+
+running 36 tests
+test controls::a_cleanup_confirmed_only_on_a_later_attempt_still_fails ... ok
+test controls::a_failed_retry_keeps_its_owner_for_a_later_explicit_retry ... ok
+test controls::a_kept_scope_and_a_first_confirmed_cleanup_pass ... ok
+test controls::a_panicking_observation_is_a_failure_and_the_other_still_runs ... ok
+test controls::a_connection_closed_before_the_answer_is_an_error ... ok
+test controls::a_reply_lists_each_loaded_verifier_scope ... ok
+test controls::a_reply_with_more_body_data_never_ends_a_wait_or_reads_as_clean ... ok
+test controls::an_observation_failure_survives_a_confirming_retry ... ok
+test controls::each_failed_attempt_returns_the_same_owner ... ok
+test controls::a_manager_error_is_an_error_never_no_scopes ... ok
+test controls::each_probe_or_driver_mode_is_chosen_by_its_own_first_argument ... ok
+test controls::evidence_is_judged_only_after_the_cleanup ... ok
+case: the scope could not be observed while the boundary was retained: the query failed; the cleanup is still unconfirmed after 3 explicit attempts: releasing the unconfirmed owner to its drop backstop, never a confirmation
+test controls::observation_and_cleanup_failures_are_kept_together_with_the_owner ... ok
+test controls::only_two_answers_of_nothing_left_are_clean_and_neither_failure_hides_the_other ... ok
+test controls::an_unusable_runtime_directory_or_bus_is_an_error_and_nothing_is_reached ... ok
+test controls::a_reply_of_another_shape_is_malformed ... ok
+test controls::the_observation_mode_and_invalid_arguments_never_enter_the_suite ... ok
+test controls::an_empty_workspaces_directory_is_nothing_left ... ok
+test controls::a_failed_handshake_or_hello_is_an_error ... ok
+test controls::a_wrong_owner_mode_or_filesystem_is_never_empty ... ok
+test controls::where_the_sandbox_does_not_exist_only_the_suites_note_remains ... ok
+test controls::absence_is_only_a_missing_final_component_of_a_checked_runtime_directory ... ok
+test controls::a_symlink_or_another_type_is_never_empty ... ok
+test controls::a_refused_or_failing_inspection_is_never_empty ... ok
+test controls::the_request_is_exactly_the_managers_listing_of_verifier_scopes ... ok
+test controls::duplicate_or_out_of_pattern_units_are_malformed ... ok
+test controls::whatever_the_workspaces_directory_holds_is_left_behind ... ok
+test controls::poisoned_or_absent_ambient_environment_never_redirects_the_observation ... ok
+test controls::the_observer_has_no_process_path_and_reads_no_environment ... ok
+test controls::a_complete_list_followed_by_more_body_data_is_malformed ... ok
+test controls::a_complete_reply_decodes_in_either_byte_order_whatever_its_padding ... ok
+test controls::every_bound_on_an_accepted_reply_is_enforced ... ok
+test controls::a_failed_observation_never_ends_a_wait_as_done ... ok
+test controls::the_bus_is_reached_only_through_the_checked_runtime_directory ... ok
+test controls::a_wait_gives_every_observation_its_callers_one_deadline ... ok
+test controls::an_observation_that_does_not_finish_times_out_and_releases_its_connection ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s

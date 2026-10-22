@@ -1,0 +1,13 @@
+binary: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137
+unit tests under strace: exit 0; test result: ok. 116 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.68s
+trace lines: 15854
+connect() calls: 0
+programs executed:
+     158 /bin/cat
+      81 /bin/dd
+       1 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137
+     394 /tmp/nexus-i4-helper-<pid>-<n>/helper
+systemd tools executed: 0
+accesses beneath /sys/fs/cgroup: 14 (other than a read-only cpu.max: 0)
+/proc cgroup reads: 2 (other than /proc/self/cgroup: 0)
+RESULT: PASS

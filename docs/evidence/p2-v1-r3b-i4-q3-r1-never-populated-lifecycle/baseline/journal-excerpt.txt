@@ -1,0 +1,7 @@
+== user manager journal (uid 1001, user@1001.service) for the case-18 scope and the job, read-only, 2026-10-04T01:38:23Z
+2026-10-04T00:58:15.300938+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW runsvc.sh[431555]: 2026-10-03 23:58:15Z: Running job: phase2-linux-sandbox
+2026-10-04T01:00:59.719016+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW systemd[262275]: Started nexus-verifier-e8cfd1a233a03681b90eb21706d52962.scope - Nexus verifier execution.
+2026-10-04T01:00:59.754095+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW systemd[262275]: Started nexus-verifier-deb565108b334be56fbff5e9df044ead.scope - Nexus verifier execution.
+2026-10-04T01:01:53.704952+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW runsvc.sh[431555]: 2026-10-04 00:01:53Z: Job phase2-linux-sandbox completed with result: Failed
+2026-10-04T01:02:59.766005+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW systemd[262275]: nexus-verifier-deb565108b334be56fbff5e9df044ead.scope: Scope reached runtime time limit. Stopping.
+2026-10-04T01:02:59.766354+01:00 nexus-ROG-Zephyrus-Duo-16-GX650RW-GX650RW systemd[262275]: nexus-verifier-deb565108b334be56fbff5e9df044ead.scope: Failed with result 'timeout'.

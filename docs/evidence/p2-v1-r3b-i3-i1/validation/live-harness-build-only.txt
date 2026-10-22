@@ -1,0 +1,3 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.36s
+  Executable tests/phase2_live_sandbox.rs (target/debug/deps/phase2_live_sandbox-54a4964f6371dd7e)

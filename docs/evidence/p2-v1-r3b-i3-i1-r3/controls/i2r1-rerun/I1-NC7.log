@@ -1,0 +1,24 @@
+
+running 1 test
+test h10_unexpected_failure_stays_failed_after_recovery ... FAILED
+
+failures:
+
+---- h10_unexpected_failure_stays_failed_after_recovery stdout ----
+
+thread 'h10_unexpected_failure_stays_failed_after_recovery' (86028) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:3332:5:
+assertion `left == right` failed: [failure-retained] a successful recovery cleared an earlier failure
+  left: (0, 0, 0, 0)
+ right: (1, 1, 2, 1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    h10_unexpected_failure_stays_failed_after_recovery
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.26s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

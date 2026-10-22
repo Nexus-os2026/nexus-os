@@ -1,0 +1,22 @@
+
+running 1 test
+test b04_a_truncated_report_hides_no_blocking_incident ... FAILED
+
+failures:
+
+---- b04_a_truncated_report_hides_no_blocking_incident stdout ----
+
+thread 'b04_a_truncated_report_hides_no_blocking_incident' (3643515) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:8254:23:
+[complete-set] Store(Refusal { refused: PriorUnresolved([[17, 63, 86, 165, 57, 172, 9, 113, 76, 7, 207, 90, 181, 16, 88, 3, 113, 33, 57, 146, 2, 160, 20, 13, 98, 116, 155, 202, 2, 126, 202, 75], [83, 102, 252, 168, 124, 121, 200, 190, 118, 22, 26, 120, 31, 245, 30, 24, 149, 244, 182, 163, 111, 14, 159, 21, 71, 231, 62, 216, 69, 221, 241, 73]]), revision: Some(1) })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    b04_a_truncated_report_hides_no_blocking_incident
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.45s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.92s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

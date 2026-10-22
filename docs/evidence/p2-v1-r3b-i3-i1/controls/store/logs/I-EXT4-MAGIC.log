@@ -1,0 +1,22 @@
+
+running 1 test
+test o06_the_mount_is_identified_through_the_descriptor ... FAILED
+
+failures:
+
+---- o06_the_mount_is_identified_through_the_descriptor stdout ----
+
+thread 'o06_the_mount_is_identified_through_the_descriptor' (3451950) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3535:14:
+[safe-open] ext3 with the shared magic: Opened { opening: OpeningId(1), revision: 1, decision: Decision { current: [], dispositioned: [], blocking: [] }, .. }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o06_the_mount_is_identified_through_the_descriptor
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.65s
+     Running tests/phase2_custody_store.rs (target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

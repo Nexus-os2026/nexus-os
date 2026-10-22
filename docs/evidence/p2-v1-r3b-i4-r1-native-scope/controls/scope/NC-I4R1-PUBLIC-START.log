@@ -1,0 +1,24 @@
+
+running 1 test
+test scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run ... FAILED
+
+failures:
+
+---- scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run stdout ----
+
+thread 'scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run' (1213310) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1120:5:
+assertion `left == right` failed: a normal build exposes a direct scope start
+  left: ["use manager::BUS_CALL_TIMEOUT", "const PLACEMENT_TIMEOUT", "const SETTLE_TIMEOUT", "enum ScopeError", "fn expected_limit_files", "struct ScopeManager", "fn connect", "fn start", "struct ScopeEvents", "enum Occupancy", "struct Scope", "fn unit", "fn kill", "fn occupancy", "fn wait_empty", "fn events"]
+ right: ["use manager::BUS_CALL_TIMEOUT", "const PLACEMENT_TIMEOUT", "const SETTLE_TIMEOUT", "enum ScopeError", "fn expected_limit_files", "struct ScopeManager", "fn connect", "struct ScopeEvents", "enum Occupancy", "struct Scope", "fn unit", "fn kill", "fn occupancy", "fn wait_empty", "fn events"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.63s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

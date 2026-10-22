@@ -1,0 +1,759 @@
+# Phase Three: governed real-world control
+
+Status: Candidate 10 closure work on `repair/p3-candidate10-closure`, based on
+Candidate 9 (`9d5fdf95920bdeddb7453911f86390417b6a4604`), a bounded repair of
+Candidate 8 (`7d1eaced` on `implement/p3-governed-real-world-control`, base
+`forward/post-p2-hardening` `309f2c5a`), Linux support profile, awaiting
+independent Architect review. It is not integrated into `main` and is not a
+completed phase. This document states what Phase Three governs, how, and
+what it does not claim.
+
+## Architect decisions P1-A and P3-A (Candidate 10)
+
+Candidate 9 closes the demonstrated in-scope R2 content-scroll spoof.
+The native GTK confirmation is **not authenticated secure attention against
+a hostile same-user X11 client**. Hostile desktop clients running as the same
+user and synthetic same-session input are outside the existing Phase Three
+threat model. Its fixed header and marked content do not establish such an
+authentication boundary.
+
+Machine-policy checks rely on the trusted-root/trusted-administrator
+assumption. Root/admin is outside the Phase Three threat model. The checks
+are **not atomic confinement against hostile root**: a privileged adversary
+could change policy between checking it and Chrome reading it. The
+post-launch proxy observation is **detection, not prevention**; a bypass may
+already have reached its initial page before Nexus refuses the session.
+These are explicit limits of the existing design, not additional isolation
+claims. Candidate 10 adds no secure-attention or namespace isolation.
+
+## 1. One authority architecture
+
+Every real-world effect a Phase Three route can cause (a contained process,
+a network request, a browser session, an observation of a display, mouse or
+keyboard input, a connector operation with a credential) passes through one
+pipeline in `crates/nexus-governed-control`:
+
+1. **Data in.** A request is data: the owner's command text or voice
+   transcript, an agent's `PlannedAction`, a structured intent from the
+   interface. A string is never authority.
+2. **Preparation.** The domain actuator resolves it into a canonical target
+   identity (an origin, an executable identity, a window identity, a
+   connector origin) and a digest of the exact parameters it will use.
+3. **Commitment.** The authority records an `ActionCommitment` bound to the
+   agent, the run, the capability kind, the effect class, the operation,
+   the target digest, the parameter digest, the grants and credential leases
+   it relies on, the policy generation and its deadline (the binding digest
+   covers all of them). Evidence is recorded first: an unrecorded
+   commitment is never created.
+4. **Authorization.** Every commitment rests on at least one live owner
+   grant of its own kind. R2 additionally needs the owner's native approval
+   of exactly this commitment (its id and binding digest are shown in the
+   dialog); the approval is a crate-private, non-`Clone`,
+   non-deserializable value consumed by authorization, which is recorded
+   before it takes effect. The confirmation is a window Nexus owns, not a
+   system message box, in two parts it keeps apart. Its header, the
+   security identity of what is asked (an action's effect class,
+   operation, canonical target, acting agent, run, commitment and binding;
+   a grant's or Resume's own identity), is a grid outside every scrolled
+   view, always in view while the answer can be given: the labels are the
+   window's own, the values the backend's, each shown whole (wrapped within
+   its own column). The request's details (its content) are below, in a
+   frame captioned as such, beside a solid bar the window draws and that
+   does not scroll, in monospace, never re-wrapping a line, scrolling both
+   ways. Cancel is the default answer, and Allow is armed only after a
+   one-second delay and once the end and the right edge of the details
+   have been reached. It shows everything the approval allows, never shortened:
+   a line is at most 96 columns and a longer value continues on `↳` lines,
+   every request header is shown with its value, content (a body, filled or
+   typed text) is quoted line by line behind `│` with backslashes, hidden
+   characters and stacked combining marks shown escaped, so that none of it
+   can pass for the window's own text, and an action that would need more
+   than 192 lines is refused rather than cut.
+5. **Execution, once.** Immediately before the effect, the actuator resolves
+   the target again; the commitment is consumed exactly once (`begin`, under
+   the registry lock) only if the target and parameter digests still match,
+   the run is active, the deadline has not passed, the policy generation has
+   not moved and every grant is live. The effect runs under a one-shot guard
+   that observes the run's cancellation between bounded steps: a browser
+   session checks it before every DevTools command it sends and at every
+   step, a tool is not spawned once its run is cancelled and is polled
+   every 10 ms after, and an input action checks it before every step.
+6. **Finalization.** The commitment ends succeeded, failed or cancelled
+   (a dropped guard ends it as abandoned), evidenced, and its credential
+   leases end with it.
+
+There is no other way to an actuator: outside the crate the only entry is
+`GovernedControl`'s intent-level API; the pipeline, the domain
+preparations, the pending effects and the commitment lifecycle are
+crate-private, and pending effects are keyed by commitment and taken out
+exactly once.
+
+### Effect classes
+
+| Class | Meaning | Needs |
+|---|---|---|
+| R0 | local observation or computation | a live grant |
+| R1 | bounded external or reversible effect | a live grant, commitment, revalidation, bounds, evidence |
+| R2 | sensitive, irreversible or privileged effect | all of R1, plus the owner's exact, one-shot native approval |
+
+### Grants, generation, cancellation
+
+- Grants exist only after the owner's native confirmation of their exact,
+  plain-text scope (at most 24 hours); the dialog says that any agent may
+  use the grant until it expires or is revoked. Revoking a grant or an
+  emergency stop moves the policy generation, which ends every unconsumed
+  commitment (recorded as it happens). Grants and commitments expire by the
+  wall clock as well as the monotonic one, so a suspended machine does not
+  stretch them. A browser session asks before its start page, before
+  each step and after the last whether its grants are still live and the
+  policy generation unchanged: a grant revoked or expired, or any policy
+  change (another grant revoked, an emergency stop), ends it there, and its
+  evidence says which. Input actions are bound to their display and target
+  instead and are checked at every press.
+- A run holds at most 32 effects waiting to execute (an R2 commitment
+  waits for its approval), and agents together can never take the last 64
+  places, which are kept for the owner's own command runs. A run's class
+  (the owner's or an agent's) is set by the backend when it opens the run
+  and kept with it: only the owner's command front door opens an owner run,
+  an agent's action is refused in one, and no agent name (not even the
+  owner's label) carries the owner's places. A place is checked and taken
+  at once.
+- A run is the scope of one command or agent loop. Cancelling or finishing
+  it sets its token (every executing effect observes it, and so does a
+  browser session's proxy), ends its unconsumed commitments with their
+  credential leases, and releases what it owns. A run whose agent loop or owner command has ended finishes as
+  soon as nothing in it can start any more.
+- The owner's emergency stop (the Phase Three control or the global
+  emergency key, Ctrl+Alt+Shift+K) cancels every run, ends every
+  unconsumed commitment, moves the policy generation, stops the agent
+  display, and refuses new runs until the owner resumes through a native
+  dialog, and tells every HiveMind session under way to stop. Every way
+  the owner stops agents (Stop, the Admin "Stop all" and bulk Stop, and
+  clearing all agents) works on the interface's IPC thread, before anything
+  waits: everything every named agent runs or left waiting in Phase Three
+  is cancelled first (a running effect is interrupted at its next step),
+  then for each agent its schedule ends (under any spelling of its id), its
+  loop's cancel flag is set, and the supervisor records the stop. A thread
+  of its own then removes the agents' loops (only the loops they had then,
+  never one started after the stop), which may wait while any agent's cycle
+  holds the loop lock. A scheduled tick already under way when the owner
+  stops the agent does not bring it back, and starts no loop for it (its
+  goal is recorded as skipped; a paused agent's ticks run, as pausing
+  keeps schedules). A stopped agent's loop runs no further cycle, so a
+  loop whose start was under way when the owner stopped the agent ends at
+  its first cycle. An agent the supervisor holds no record of (an id that
+  is not one, an agent cleared or never registered) counts as stopped
+  everywhere. Clearing all agents first stops, this way, every agent
+  anything still knows of (the supervisor, a schedule, a loop or its
+  driver, Phase Three's runs), under every spelling, and only then clears
+  their records.
+  Ending an agent's goal cancels it in Phase Three at once and removes its
+  loop the same way, under every spelling; it leaves the agent and its
+  schedule, so a scheduled goal may start it again. A
+  stopped or paused agent acts no more in Phase Three: the loop's bridge
+  asks the supervisor whether the agent is running before every action,
+  and refuses any action after a stop that came after the loop began.
+  Pausing does not stop the agent's loop or schedule (they keep planning,
+  and may use routes outside Phase Three) and does not cancel: an effect
+  already executing runs to its end within its own bounds, and a paused
+  agent's waiting R2 actions stay approvable until the owner denies them
+  or cancels their run. The page's stop controls (the emergency stop,
+  each run's Cancel, the display's Stop) stay usable while an approved
+  effect runs: every command that reaches the agent loops' lock (consent
+  decisions, goal assignment, review mode, HiveMind sessions) runs off the
+  interface thread (`p3_g10_01` follows every chain of direct calls and
+  function values to it), a HiveMind session on a thread of its own (so
+  the loops of its sub-tasks can run), and consent decisions are still made
+  one at a time. A HiveMind session gives a stopped agent no sub-task, a
+  sub-task ends when its agent is stopped, and the session's own time
+  limit ends only that sub-task's goal. At most two HiveMind sessions run
+  at once, each admitted (within that cap, then the agent-execution rate
+  limit) before its thread starts, with its own identity (recorded in the
+  audit trail) and cancellation: the owner's `cancel_hivemind`, both
+  emergency stops and quitting signal it, and a cancelled session assigns
+  no further sub-task (the one it waits on ends, only its own goal). Its
+  place is given back when its thread ends, however it ends. A goal's own
+  cleanup (a session's cancellation or time limit, a refused tick)
+  compares the goal and removes its loop under the loops' one lock, so it
+  never ends a goal given since, and wakes only that goal's consent wait.
+  Quitting the desktop refuses every new HiveMind session and signals
+  those under way, refuses every new run and display start, cancels every open run, waits
+  up to five seconds for executing effects and a display start under way
+  to end, and stops the agent display. A display stop always counts: a
+  start in progress, or one waiting for another to finish, ends unused.
+- With the owner's Warden review enabled, an agent's governed action that
+  the review covers is refused, as the kernel registry refuses it.
+- Nothing is ever killed by process name: every process Phase Three starts
+  runs in its own process group, which is what ends.
+
+### Evidence
+
+Every phase (run opened or cancelled, grant issued, declined or revoked,
+commitment prepared, approved, declined, authorized, denied, started,
+finished, expired, revoked, lease issued, credential released, emergency
+stop, resumed, display started and stopped) is appended to the existing
+hash-chained audit trail as a `p3.action.evidence` event, and no authority
+lock is held while a record is written. A step that gives authority is
+recorded first: a commitment enters the registry only once its
+preparation is recorded, a grant or a lease holds its room while it is
+recorded and only then exists, a run's id reaches its caller only once
+the run's opening is recorded (a run whose record fails is cancelled), and
+the display's server is launched only once its start is recorded. An
+approval, authorization or start is reserved under the lock (a
+reservation makes nothing approvable, authorizable or executable),
+recorded with the lock released, and completed only if the same
+reservation still holds the commitment, in the same state, still live; a
+cancellation, revocation, denial, stop or expiry that comes meanwhile
+wins, and its record names the transition it interrupted. A record that
+fails (or panics) leaves nothing of the step it precedes in effect. A step
+that ends authority (a commitment finished, cancelled, revoked, denied or
+expired) takes effect at once; its credential leases end and its record is
+written right after, with the lock released, and a record that cannot be
+written does not undo it. A display start that does not complete is recorded as ended
+(stopped while it started, when a stop or quitting overtook it), and so is
+the display an emergency stop ends. Records carry
+identities, classes, digests and bounded, plain text only: never a secret,
+a request or response body, typed text, pixels or audio. A commitment's
+parameters digest is salted with a nonce kept only in memory, so a record
+cannot be used to guess low-entropy content (a PIN, a short message); a
+request's path and query are not recorded at all (a URL may carry a token),
+and a redirect records only its origin. A grant's scope is recorded line by
+line, each line its own bounded field.
+
+Everything a native dialog shows must be plain text: control,
+bidirectional-override and zero-width characters, and every space but the
+ASCII space (U+3000, U+00A0, U+2000 to U+200A, U+202F, U+205F, U+1680),
+are refused, so a target or summary cannot read differently from what it
+is. Content shown in full (a body, typed or filled text) has its hidden
+characters and those spaces escaped, and a
+character (grapheme cluster) shows at most three code points, the rest
+escaped, so stacked marks cannot cover text (a value that begins with
+marks may show them on the character before it, and some scripts' joined
+letters show escapes); an escaped quote is written `\u{22}`, never `\"`.
+Each line break of the content starts a new marked line (a trailing
+Return shows as an empty marked line), and a window title is shown with
+its own quotes escaped, exactly once. The owner's confirmation window lays every
+line out left to right (right-to-left content cannot move where a line
+starts), only one is open at a time, and its answer arms only after a
+second, once the end and the right edge of its details have been reached;
+each of the two is latched on its own, and line bounds count characters,
+not rendered width (wide text may need more scrolling).
+
+## 2. Domains
+
+### P3-A tools (processes)
+
+The runtime root holding every scratch directory is refused when a
+directory above it could be changed by another user (owned by someone other
+than root or the user, or writable by others without the sticky bit), so
+no one else can swap a scratch directory for one of theirs. The root must
+be this process's own (a path renamed to lead elsewhere is refused).
+Directories Nexus creates on the way are private (0700), and the desktop
+makes its own state directory (`~/.nexus`) private before opening the root,
+as writing its identity does. Any other directory above the root that
+another user could change (a group-writable home, say) leaves Phase Three
+unavailable.
+
+There is no shell, interpreter, container or code runner (`ShellCommand`,
+`DockerCommand` and `CodeExecute` stay closed). A tool is code: a key, one
+executable at a canonical absolute path, an effect class, a typed input
+builder producing an argument vector and fixed-name input files, a static
+environment allowlist, a deadline and an output bound. The owner's grant
+pins the executable's identity (canonical path, device, inode, size, mtime,
+mode, owner and SHA-256; production executables and every directory above
+them must belong to root and be writable by no one else); preparation and
+the launch both check it again. The launch uses the kernel's sealed spawn:
+absolute program, cleared environment, a fresh private working directory,
+its own process group with resource limits, no standard input; the deadline,
+cancellation and output overflow end the whole group, and every exit reaps
+it. Session processes (the agent display, the browser) are started by the
+crate's own launcher, and only by the display and the browser, each with
+the executable it pinned: absolute program, an explicit environment, their
+own process group; every descriptor above the ones they inherit is
+close-on-exec, the X server is given a second to remove its lock and socket
+before the group is killed, and the browser's group is killed at once.
+Session processes have no resource limits of their own (see §4); at most
+four browser sessions run at once. Production tools: `text.sha256` (R0)
+and `speech.synthesize` (the local `espeak-ng`, R1; the audio is held in
+memory and reported to the agent by its size, and no file is written).
+
+### P3-B egress
+
+URLs are parsed with the WHATWG rules (numeric host tricks become the
+address they are), stripped of fragments, and refused with user
+information, whitespace, control characters or any scheme other than https
+(http only where a grant names it). Every address a destination resolves to
+is classified; loopback, private, shared, link-local, unique-local and
+site-local addresses need a grant that names private destinations; the
+unspecified, multicast, broadcast, reserved, documentation and benchmarking
+ranges and the deprecated IPv6 transition forms are never reachable;
+IPv4-mapped, NAT64 and 6to4 addresses are classified by the IPv4 address
+they embed; a mixed DNS answer is refused. Where private destinations are
+not granted, every address is also checked, before any socket is opened,
+against this machine's own network boundary as it is at that moment: an
+address of any of its interfaces, an address in a network directly
+connected through one (the interface's address with its prefix) and a
+point-to-point peer are refused however public they look, in their mapped,
+NAT64 and 6to4 forms too; an answer holding one is refused whole, and a
+boundary that cannot be read refuses (off Linux it cannot be read). The
+browser proxy and the connectors use the same check. Grants name exactly one origin
+and its methods; GET, HEAD and OPTIONS are R1, the others R2. The
+destination is resolved at preparation and again immediately before the
+request, and the connection is pinned to exactly the addresses checked then
+(the peer is verified, and a peer the client cannot name is refused). The transport ignores proxy variables, follows no
+redirect, keeps no cookies, sends no referer and only allow-listed plain
+headers (each shown with its value for approval), and bounds the body and
+the time; cancellation drops the exchange.
+Redirects are followed only for safe requests without a credential, within
+the origin, each hop checked again. Every address of an answer is
+classified before any is set aside.
+
+### P3-C browser
+
+A browser session is one commitment: a start URL and at most 32 typed steps,
+under the owner's browser grant naming the reachable origins and pinning the
+browser executable's identity; every file of its installation directory
+must belong to root and be writable by no one else, not only the
+executable. The session is a fresh headless Chrome with a new profile in a
+private directory deleted when it ends, driven over its DevTools pipe (no
+debugging port), in its own process group, with a `PATH` of an empty
+session directory (a page cannot reach the system's opener through it).
+The browser does not run while any machine policy is configured where
+Google Chrome, Chrome for Testing or Chromium read one on Linux
+(`/etc/opt/chrome/policies`, `/etc/opt/chrome_for_testing/policies`,
+`/etc/chromium/policies`, `/etc/chromium-browser/policies`, each
+`managed`, `recommended` and `enrollment`): a policy can override the
+session's proxy switch, so which settings it holds is not judged, and a
+place that cannot be read, or is not a plain directory, counts as
+configured. It is checked when a session is prepared and again
+immediately before launch. A session whose start page needed the network
+while the browser never came to its proxy, or that loaded with no
+connection admitted, is refused before any step and never reported done
+(this notices a bypass after it happened; the policy refusal is what
+prevents one).
+Its only way out is a session-owned loopback proxy that admits connections
+to the granted origins only, applying the egress address policy with the
+same pinning, so subresources, redirects and page-initiated navigations
+cannot reach anything else; the proxy holds at most 64 connections and
+ends them with the session. Local schemes are refused before launch, every
+other page is listed and closed before each step, downloads are refused or
+kept inside the session, steps run fixed page scripts with JSON arguments
+in an isolated world of the page (no model-written script runs, and nothing
+the page redefines changes what they see), a step's selector must match
+exactly one element and may hold no comment, and password and file inputs
+are never filled (checked after the field takes focus). A read the page
+interrupts by changing under it is asked again; an action never is.
+Chrome's own temporary files stay in a private directory of the session,
+QUIC is disabled, and only the DevTools events the session uses are kept,
+bounded. A stop is checked before every DevTools command, so nothing a
+session would do after it is sent. The proxy goes no further on any
+connection once the run is cancelled or the session's grant is revoked or
+expires (checked after a request is read, after it is admitted, between
+connection attempts and before every write upstream; data already handed
+to the kernel, or a write already under way, may still complete), and then
+carries nothing more, ending every tunnel (a name lookup or a connection
+already under way may complete, and carries nothing); it keeps its port,
+closing every new connection unserved, until the session ends, so no other
+process can take the port while the browser uses it. Once a session has
+reached its start page, a failure or a cancellation is recorded with where
+it stopped: at the start page, at a step, or after the last. Reading is R1; clicking, filling and
+pressing are R2.
+
+### P3-D perception and P3-E input
+
+Both act only on the agent display: a backend-owned Xvfb on a random
+display number that is never the owner's, with no TCP or abstract socket,
+admitting only clients that present its private MIT-MAGIC-COOKIE; Nexus
+connects with explicit authorization, only to a socket this user owns in
+a socket directory no other user can replace entries of and only while its
+own server runs, and never reads `DISPLAY` or `XAUTHORITY` (that one
+connection constructor is pinned, `p3_g9_02`). Starting the
+display needs a live perception or input grant and no emergency stop; it is
+recorded before the server is launched and is serialized against a stop,
+so a stop always wins. Perception (R0, its own grant) binds the display instance and,
+for a window, its id and geometry (a title only selects); the PNG is data
+held in memory and only its digest and size are evidence. Input (its own
+grant with a step budget) needs an observation of the run first and binds
+the display instance, the window under the point and the run's latest
+observation, all checked again immediately before the effect and before
+every press, with the X server held so that nothing can intervene between
+the check and the event (a window appearing over the point fails the
+action); a press is checked where the pointer actually is; keys must reach
+the bound window (the keyboard focus follows the pointer or is that window,
+and keys aimed at the display background need the focus on no other
+window); an active keyboard or pointer grab by anyone fails the action; a
+drag is bound to the window it is dropped on as well, and its release is
+checked at the drop point under the same hold; whatever an action pressed
+is released on every way out of it, and one action runs at a time. A
+button an interrupted action still holds is let go, with the server held,
+where it was pressed only while the exact window it was pressed on is on
+top there (a drag let go where it began moves nothing); otherwise on the
+bare display (a corner no window covers, checked under the hold), where a
+drop reaches no window, whether or not that window has the focus. Only
+with no bare corner left is the button let go where it was pressed, after
+an Escape (which cancels a drag in most toolkits) sent only when the
+keyboard focus is on the window it was pressed on and no client holds a
+keyboard grab. No key is
+sent that would follow the pointer onto another window, or go to the
+display background. The grant's step budget is spent at the effect.
+Moves and scrolls are R1, and the input grant says so; clicks, drags and
+keys are R2 unless the owner granted R1 input. Typed text is shown for approval and recorded only as a
+digest. `ComputerAction` is an orchestrator: each step is its own
+commitment.
+
+### P3-F credentials and connectors
+
+Secrets stay in the kernel vault (`SecretsFacade`, the verified `http`
+connector scope); the desktop can only choose `Vault::Kernel` or
+`Vault::Disabled` (no other secret reader can be passed in, and the raw
+transport is crate-private); with no vault configured, every credentialed
+operation fails closed, and a secret the facade would resolve from the
+process environment is refused. An operation gets a lease bound to the agent, the run, the
+service, the one origin and the header it may go to, and an expiry; the
+commitment lists the lease (never the secret). Only while that commitment is
+executing, for its own origin, once, does the broker read the secret and
+hand it to the transport, which sends it marked sensitive and redacts it,
+as the header value, the bare token, and the token JSON-escaped or
+percent-encoded, from the body, the location and the content type of
+what comes back; the forms it searches for and the replaced text are
+zeroized, and so is every buffer Nexus collects a response body in (the
+transport's chunks and the HTTP and TLS stack's own buffers are not; once
+returned, the body is a plain vector, zeroized only where redaction
+replaced it). A lease no commitment will list (its preparation failed or was
+refused) ends at once, and the broker checks its capacity before recording
+a lease. Connectors are code: one fixed origin and typed
+operations whose requests must parse to that origin; an operation runs only
+under the owner's connector grant naming it. The production catalog
+migrates the Phase Zero email and messaging endpoints: Gmail and Outlook
+list, search and send; Slack and Discord connection checks, reads and
+posts. Reads are R1; sends are R2 with one bare recipient address (no
+display name, quotes, brackets or lists), the subject and the whole text
+shown natively. A Slack or Discord post's destination is identified
+before the post is proposed, by the connector's own API (Slack's
+`auth.test` and `conversations.info`, Discord's channel object), each read
+an R1 commitment of the same run under the post's grant: the id the post
+names must be the conversation's own (a name is refused), and an unknown
+kind, an answer for another id or a destination the API does not identify
+refuses the post. The identity (the readable destination, from the API
+and escaped, and its immutable ids) is shown in the approval and bound
+into the commitment's digests; immediately before the post is sent the
+same reads run again, and any difference fails it as `target_changed`
+with nothing sent. The account in a connector grant is only the owner's
+label: the connector uses its one stored credential. Telegram is not migrated: its Bot API carries
+the token in the URL path.
+
+### P3-G front door
+
+`GovernedControl` is the one object the desktop holds. Owner commands come
+through a strict grammar (`fetch`, `browse`, `observe`, `hash`, `say`,
+`connector`); a voice transcript is only text someone spoke; attachments
+arrive only through the native picker, as data, and are used once. A
+submission runs off the interface thread. The crate items the desktop may
+name are pinned. Agents' `PlannedAction`s are
+classified by an exhaustive, wildcard-free table: 10 inert actions keep
+their routes, 16 are governed (R0 and R1 run under the owner's standing
+grants; R2 waits for the owner's native approval in the interface; an
+agent's path never raises the dialog itself), 20 stay closed. Without Phase
+Three (unavailable) the executor is exactly the Phase Zero executor.
+
+## 3. Direct-bypass closure (§22)
+
+Every production route able to launch a process, reach the network, drive a
+browser, capture the screen, move the mouse or press keys, use a credential
+or run a connector effect has exactly one of four classes: **Phase Three
+governed**, **existing stronger governed** (Phase Zero, One or Two
+governance or an Architect decision, named per file), **intentionally
+closed**, or **non-production**. There is no fifth.
+
+`p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified`
+(`app/src-tauri/src/phase3_tests.rs`) resolves every workspace production
+source (and the production modules named like test files) with the
+structural resolver introduced in XA-R4 (aliases and module indirection
+resolve to the real path) and pins each file's mechanisms by kind: process
+launch and termination, raw system calls, sockets and HTTP and WebSocket
+clients, the X server, the desktop bus (D-Bus, AT-SPI), loading a shared
+library, the credential vault (its global facade and the OS keyring),
+the GUI toolkit's own routes (gtk-rs and every crate it re-exports or
+binds: process spawns, subprocesses and URI openers, root-window and
+screen access, sockets and resolvers, the desktop bus; any other toolkit
+use outside the exact APIs the native approval window uses is a site to
+classify),
+sealed spawns, launching the OS opener, name resolution (std's
+`ToSocketAddrs`, a `to_socket_addrs` or `socket_addrs` call written as a
+method or through any path, libc's resolver functions and the DNS
+crates), network-capable crates in the production dependencies (the
+Prometheus exporter, with the builder methods that start its listener or
+push gateway counted as calls, and the Hugging Face hub client), and direct screen,
+input, clipboard, audio and browser-driver crates, the kernel's unsealed spawn
+(`ResourceSpawnSpec`, `ResourceProgram`), nix and rustix sockets and
+process calls, sysinfo signals (and any kill in a file that lists
+processes with sysinfo), inline assembly and input device nodes. It fails
+closed on shadowing: a path is also measured as written, so a module or
+binding named like a mechanism crate, even one in a test module, hides
+nothing. Every "latent" classification names its entries
+(`LATENT_ENTRIES`: the module, type or function a caller must name, and a
+few method names), and a reference to one from any production source in
+the workspace is itself a pinned `latent` site: a new caller anywhere fails
+until it is classified. At this candidate: 180 rows over 149 files, classed
+8 Phase Three (exactly `crates/nexus-governed-control`), 35 existing
+governed, 97 closed and 9 non-production. A new mechanism anywhere in the
+workspace fails the guard until it is classified.
+
+The file set is the module tree (`p3_g6_13`): every production `mod`
+declaration, `#[path]` included, is followed from the crate roots and must
+load a source the guards scan, every target a manifest names is below its
+crate's `src`, and the only production `include!`s are the two generated
+toolchain manifests, pinned. `p3_g6_14` pins the production `macro_rules!`
+and refuses a macro fragment in a path, as a trait, as a method or as a
+macro name. `p3_g6_10` pins the files that declare foreign functions
+(name-skipped modules included, with or without an ABI string), refuses
+`#[link_name]` and any foreign declaration of a process, network (name
+resolution and the resolver's query functions included), signal,
+raw-syscall or loader function (a local `extern` would escape the
+resolver), and pins by name every foreign function those files declare,
+so a new declaration fails whatever it is. `p3_g6_09` pins the desktop's reach into the embedded Nexus Code
+application (it lists tools and configures a router slot; its router, tool
+execution, MCP manager and self-improvement run only behind the closed
+`nx_*` commands). `p3_g6_11` pins that the global emergency key, every stop
+route and quitting reach Phase Three, and that a paused or stopped agent
+acts no more. `p3_g6_18` pins the direct production dependencies of the
+desktop and of `nexus-governed-control`, so a new mechanism crate cannot
+arrive unreviewed. `p3_g6_15` pins the non-forgeability doctests with their
+error codes, `p3_g6_16` that test-only features are enabled only by tests
+(so the production scanners may leave their items out), `p3_g6_17` that
+only the browser and the display launch session processes, `p3_g9_01` that
+a response body lives only in zeroizing buffers (and an unknown peer is
+unpinned), and `p3_g9_02` that the agent display's X connection is made
+only on its checked socket, with its cookie, `p3_g9_03` that a browser
+session goes out only while it may, and `p3_g10_01` that no command the
+interface thread runs, in any desktop file, reaches the agent loops' lock
+through any chain of direct calls or function values among desktop
+functions (attributes are read with their literals blanked, `cfg_attr`
+included, and a thread that is joined counts as the caller). A loops
+method is found by its name on any receiver, by any path to it (a type
+path, an imported alias of the type) and as a value; every kernel method
+that touches the loops, or reaches one that does, counts, and the one call
+of another type's same-named method is a pinned, reviewed exception.
+
+Routes closed or repaired by Phase Three (`Closure::GovernedRoute` unless
+stated):
+
+- **G-INV-1 and G-INV-4:** the six email and messaging commands (open sends
+  and credential-bearing reads); their transport is removed and their
+  endpoints run as governed connector operations.
+- **G-INV-2:** `nx_computer_use_status`, a readiness probe that ran programs
+  found on `PATH`; the agent display's status replaces it.
+- **G-INV-3:** the seven legacy direct browser commands.
+- **G-INV-5:** `builder_image_gen_status` (`Closure::HelperLaunch`): it sent
+  a request to an unowned local service, following its redirects, and ran
+  `which` from `PATH`, only to report on image generators that are stubs
+  behind closed commands.
+- **G-INV-6:** `marketplace_search_gitlab`, the fixed-host GitLab read,
+  now follows no redirect, sends no Referer, ends within 30 seconds and
+  reads at most 4 MiB.
+
+## 4. Non-claims
+
+- **Linux only.** Windows and macOS compile and fail closed: on Windows
+  the runtime root cannot be made private, so no control is built; on
+  macOS no program can be pinned; and off Linux the owner's grant and
+  approval dialogs refuse. The desktop's end-to-end Phase Three tests run
+  on Linux only. No security claim is made for either platform.
+- **No owner-desktop observation or input.** Perception and input act only
+  on the agent display; capturing or driving the owner's own session stays
+  closed.
+- **No microphone capture.** Voice enters only as a transcript (data);
+  microphone capture is not a Phase Three route.
+- **Same-user attackers are out of scope.** Another process of the same
+  user can reach what that user can (the agent display's socket, the
+  loopback proxy, the session directories).
+- **Chrome is trusted to honour its flags.** The proxy, QUIC, WebRTC and
+  DNS-prefetch settings bound what the browser reaches; they were not
+  verified in a separate network namespace. A machine policy where Google
+  Chrome, Chrome for Testing or Chromium read one on Linux refuses the
+  browser; a browser that read policy from elsewhere is not detected
+  beyond the check that its start page came through the proxy.
+- **The local network boundary is the interface view.** On-link routes
+  that carry no address of this machine (a static device route, an
+  advertised on-link prefix with no address taken from it) are not part
+  of it.
+- **A plain-HTTP proxied connection is checked once.** The browser proxy
+  checks the first request on a plain-HTTP connection and asks the
+  upstream to close after it; a request a non-compliant upstream keeps
+  alive for reaches only that already checked, granted address.
+- **Speech text is parsed by `espeak-ng`.** It runs without SSML; its
+  parser was not fuzzed.
+- **Zeroization is Nexus's own.** Nexus's copies of a released secret are
+  zeroized; the HTTP and TLS stack's copies are not under its control.
+- **Tool processes rely on close-on-exec.** The kernel's sealed spawn
+  starts tools without closing descriptors Nexus might hold without
+  close-on-exec; the session launcher does close them.
+- **No sandbox beyond the process group.** Tools and session processes run
+  in their own process group with resource limits; a workload that escapes
+  its group (`setsid`) is not contained by Phase Three. Chrome keeps its own
+  sandbox.
+- **Root is trusted.** Executable identity relies on root-owned, non-writable
+  locations; an attacker with root is out of scope. A host where anyone
+  else could replace a pinned program cannot use it: the GitHub-hosted
+  runner image makes `/opt` world-writable, so CI restores Chrome's
+  packaged modes, and checks them, before the live browser tests.
+- **The loopback proxy is unauthenticated.** It admits only the session's
+  granted public origins, which any local process could reach directly.
+- **Telegram is not migrated** and stays closed.
+- **Drags whose toolkit maps a drag image under the pointer fail
+  closed.** The release is checked against the windows at the drop point,
+  and a drag image there reads as a changed target; the button is then let
+  go as an interrupted drag's is (a drag image is not the source window).
+- **An interrupted drag's release is a best effort.** Let go on the bare
+  display, a manipulation that follows the pointer (a slider, a selection,
+  a window moved by its title bar) takes that corner's position. With no
+  bare corner left (windows covering all four corners of the display) and
+  the source not on top at the press point, the button is let go there: a
+  drag-and-drop that the Escape does not cancel (or that gets no Escape:
+  the focus elsewhere, or a keyboard grab held) may drop on the window
+  covering the press point. Windows are judged by their rectangles (input
+  shapes are ignored), and the bare display at its four corners. The
+  release, its moves and any Escape are not recorded as evidence.
+- **Confirmation windows queue.** One is open at a time; a later one
+  (Resume included) waits until the open one is answered (at most 15
+  minutes, the longest a commitment lives, and is then declined), and an emergency
+  stop does not close an open window: the action it would approve was
+  revoked by the stop and is refused, but a grant window still takes
+  effect if answered; a Resume window lifts only the stop it names, so
+  answered after a newer emergency stop, or once the desktop is quitting,
+  it lifts nothing and the stop stays.
+- **A Resumed record is not proof that a stop was lifted.** It records
+  that the owner confirmed lifting stop number *n* and is written before
+  the lift, which a newer stop, an exhausted stop number, quitting or a
+  poisoned run registry can still prevent (two resumes of one stop can
+  leave two records). Stop numbers count the emergency stops of one run
+  of the desktop and start again in the next, so records of different
+  runs are never matched by number, and within one run records are read
+  by their stop number, not by their position in the trail (a record can
+  reach the trail before the record of a step that came first). The runs
+  a Resume window says the stop cancelled are those cancelled by
+  emergency stops since the last lift, which can span more than one stop.
+- **Other slow interface commands can still hold the interface thread**
+  (a model call or a download, not the agent loops' lock). The global
+  emergency key works meanwhile on X11; the page needs the interface
+  thread.
+- **An owner's stop of an agent does not cancel a HiveMind session.** Its
+  sub-tasks for stopped agents are refused at once (one already running
+  ends with its agent), and the session ends once more than half of them
+  have failed. The owner cancels a session through `cancel_hivemind` with
+  the identity its admission recorded in the audit trail; the interface
+  does not show that identity yet. A session's planning and merging model
+  calls in flight are not interrupted, the number of sub-tasks a plan may
+  hold is not capped (each is waited on for at most 300 s), and an
+  emergency stop signals the sessions under way without keeping new ones
+  from starting (their agents' Phase Three actions are refused until the
+  owner resumes).
+- **The stop's loop removal can end a goal given right after the stop.**
+  What it removes is decided when the stop is made, and the removal waits
+  for the loop lock: if the owner restarts the agent and gives it a goal
+  while another agent's cycle holds that lock, the new goal may be the one
+  removed (the owner gives it again).
+- **A display Stop that comes before a pending start begins is overtaken.**
+  A start waits for the runtime to pick it up; a Stop pressed before then
+  stops only a display already running, and the pending start then brings
+  one up (recorded): pressing Stop again stops it.
+- **Quitting during a display start longer than its wait** leaves that
+  start's record without an end. The display then ends with the desktop,
+  by its parent-death signal and without its own cleanup: its lock and
+  socket in `/tmp` and its scratch directory (with its cookie, private to
+  the user) remain until removed.
+- **Window titles may contain characters that look like quotes.** A title
+  only selects a window: the window's id is what an action binds (a drop
+  line also shows it).
+- **The global emergency key is X11-only.** It is registered with an X11
+  key grab: under Wayland it fires only while an XWayland window has the
+  focus. The Phase Three page's emergency stop works under both.
+- **Another local user can keep the agent display from starting.**
+  Creating the display's lock, socket or keymap names in `/tmp` for every
+  number it tries makes each start fail (availability only: Nexus uses only
+  a socket this user owns, in a directory no one else can replace entries
+  of).
+- **A page can steer approved steps within its granted origins.** It can
+  move the focus, take trusted key presses into a frame of a granted
+  origin, or navigate between granted origins; it reaches nothing else.
+- **Chrome's crash handlers leave the session's process group.** Chrome
+  starts two crashpad handlers per session, which daemonize out of it.
+  They end with the browser (a live test checks that no process whose
+  command line names the session's directory outlives a stopped session),
+  and their uploads need a consent the fresh profile never gives. No switch of the pinned Chrome removes them without
+  breaking page loads: `--disable-crash-reporter` has no effect and
+  `--disable-crashpad-for-testing` aborts navigations (checked live with
+  Chrome 149).
+- **A reading browser session can still write.** A session is R1 by its
+  steps, not by its traffic: the page's own scripts can send any request,
+  writes included, to a granted origin through the proxy. The fresh profile
+  has no cookies or stored credentials.
+- **Session processes have no resource limits.** The X server and Chrome
+  run without per-process limits; concurrent browser sessions are capped at
+  four and there is one agent display.
+- **A crash leaves debris.** Quitting stops Phase Three cleanly (but see a
+  display start longer than its wait, above); a crash
+  leaves the display's lock and socket, session profiles and scratch
+  directories (all private to the user) until removed.
+- **"Observe before input" is procedural.** Input needs an observation of
+  the same run and display generation, not one that shows the target; a
+  window observation captures what is on screen in its rectangle.
+- **Passive grabs and RECORD are not detected.** On a display other clients
+  could join, a passive key grab or the RECORD extension could see or take
+  input; today only Nexus can connect to the agent display.
+- **Governed actions spend no kernel fuel.** The agent loop's capability
+  and approval gates still apply.
+- **The emergency key stops Phase Three and the legacy engines.** Agent
+  loops' model and WebSearch calls continue until the loops are stopped.
+- **Destinations are resolved before authorization.** DNS lookups at
+  preparation (before an R2 approval) and again before the request are not
+  evidenced.
+- **An expired detached run settles lazily.** Its expiry evidence is
+  recorded when the run is next touched.
+- **The guards read Rust.** The llama-bridge build script and its C stubs,
+  and build scripts generally, are outside them (no process, network or
+  loader call in the C code today); the two generated manifests that
+  production includes are pinned. The latent guard sees paths and a few
+  named methods, not every method call on a value. `p3_g10_01` follows
+  direct calls and function values that are bound to a name or passed as a
+  first argument; a function stored in a structure, or called through a
+  trait object, is not followed.
+- **CI compiles Linux only.** Windows is type-checked and the CRLF checkout
+  simulated locally for every candidate. Under CI, the live display,
+  browser and speech tests fail rather than skip if their program is
+  missing or refused. Rustdoc checks the doctests' error
+  codes only on nightly; on the pinned stable toolchain their text is pinned
+  and the codes were verified once with rustc.
+- **No economic autonomy**, payments, trading, self-modification,
+  governance changes by agents, or Phase Four powers.
+
+### Residuals in the existing-governed class
+
+These routes are governed by earlier decisions, not by Phase Three
+commitments. They are recorded rather than changed:
+
+- **Hardware and disk probes** (`nvidia-smi`, `rocm-smi`, `lspci`, `dmesg`,
+  `dmidecode`, `df`; the flash engine runs `dmesg` and `dmidecode` at
+  startup): fixed program names and arguments found through `PATH`, under
+  Architect decision A. Open IPC can run them, read-only, without a
+  commitment.
+- **Fixed-host reads:** the kernel WebSearch and the external-tools web
+  search send the model's query text to their fixed search hosts by design
+  (Phase Zero class A; §15 keeps them unweakened). The kernel WebSearch
+  follows https redirects from those hosts to any host (`curl -L
+  --proto-redir =https`), so a search engine's redirect would carry the
+  query there; DuckDuckGo answered a bang query without one when checked.
+  This is Phase Zero's design (P0-002C5B), recorded for the Architect.
+- **The operator's Ollama:** `delete_model` deletes a model from the
+  authorized local Ollama address without a native confirmation
+  (destination policy only, decision F), and the swarm's Ollama client
+  follows redirects from that address (it carries no credential).
+- **Credentialed provider calls** that predate Phase Three (LLM providers,
+  swarm providers, Builder deploy reads with the stored deploy token) keep
+  their Phase Zero bounds (fixed hosts, no redirect, size and time limits)
+  and do not use the Phase Three broker. A swarm health refresh spends one
+  small provider request. LLM keys are placed in the process environment
+  (Phase Zero), so unsealed kernel children inherit them; Phase Three's
+  children start with cleared environments.
+- **The GitLab marketplace search** honours proxy variables; it carries no
+  credential.

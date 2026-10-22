@@ -1,0 +1,6 @@
+2026-10-02T22:36:07Z https://dbus.freedesktop.org/doc/dbus-specification.html -> dbus-specification.html exit=0 bytes=339535 sha256=623a8a947f820a521d12b5706ef603f5bf443cf312695bb756c4e4efd258e75a
+2026-10-02T22:36:08Z https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.systemd1.html -> org.freedesktop.systemd1.html exit=0 bytes=477109 sha256=e49014d28b05291658105a30aaaf4b7aee546073dd22e8a0fff3018bef714711
+2026-10-02T22:37:34Z https://networkmanager.dev/blog/notes-on-dbus/ -> networkmanager-notes-on-dbus.html exit=0 bytes=21629 sha256=c539498794375cd826494376a25672424ef772c0d39e1b17ba3a929bf1369c42
+2026-10-02T22:37:34Z https://raw.githubusercontent.com/bus1/dbus-broker/main/README.md -> dbus-broker-README.md exit=0 bytes=1939 sha256=3cbe6e06fb545ec39e7db6dd9fd81d17da4b241c2248f05bc8fcb8d4670b00d3
+2026-10-02T22:37:35Z https://lwn.net/Articles/731764/ -> lwn-731764-dbus-broker.html exit=0 bytes=4669 sha256=90e675728ad76ab7250be14c3c4aedb8357940919d15af57be096da9c9f42d6c
+2026-10-02T22:37:52Z /usr/share/man/man5/org.freedesktop.systemd1.5.gz (systemd 255.4-1ubuntu8.17, rendered with man -l | col -b) -> org.freedesktop.systemd1.v255-host.txt sha256(gz)=d4c0ecd5b65388d1ad4fb1e2e929dc853a6b9d127c921776dfa4a7d5f28a8ad3 lines=4804

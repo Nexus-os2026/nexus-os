@@ -1,0 +1,81 @@
+   Compiling tokio v1.50.0
+   Compiling ahash v0.8.12
+   Compiling zvariant v4.2.0
+   Compiling nexus-protocols v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/protocols)
+   Compiling nexus-desktop-backend v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app/src-tauri)
+   Compiling hashbrown v0.14.5
+   Compiling metrics v0.24.3
+   Compiling metrics-util v0.20.1
+   Compiling hashlink v0.9.1
+   Compiling dashmap v6.1.0
+   Compiling rusqlite v0.31.0
+   Compiling governor v0.7.0
+   Compiling nexus-persistence v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/persistence)
+   Compiling zbus_names v3.0.0
+   Compiling tokio-util v0.7.18
+   Compiling tokio-native-tls v0.3.1
+   Compiling tokio-rustls v0.26.4
+   Compiling tower v0.5.3
+   Compiling nexus-swarm-core v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-swarm-core)
+   Compiling nexus-governance-oracle v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-governance-oracle)
+   Compiling tauri v2.10.3
+   Compiling tokio-tungstenite v0.28.0
+   Compiling zbus v4.4.0
+   Compiling nexus-memory v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-memory)
+   Compiling nexus-governance-engine v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-governance-engine)
+   Compiling nexus-computer-use v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-computer-use)
+   Compiling h2 v0.4.16
+   Compiling h2 v0.3.27
+   Compiling tower-http v0.6.8
+   Compiling nexus-governance-evolution v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-governance-evolution)
+   Compiling hyper v0.14.32
+   Compiling hyper v1.8.1
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-verifier-sandbox)
+   Compiling hyper-util v0.1.20
+   Compiling tauri-plugin-fs v2.5.0
+   Compiling hyper-tls v0.5.0
+   Compiling reqwest v0.11.27
+   Compiling hyper-rustls v0.27.7
+   Compiling hyper-tls v0.6.0
+   Compiling axum v0.8.8
+   Compiling reqwest v0.12.28
+   Compiling metrics-exporter-prometheus v0.18.1
+   Compiling tauri-plugin-dialog v2.7.0
+   Compiling tauri-plugin-global-shortcut v2.3.1
+   Compiling readability v0.3.0
+   Compiling nexus-telemetry v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/telemetry)
+   Compiling nexus-kernel v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/kernel)
+   Compiling nexus-flash-infer v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-flash-infer)
+   Compiling nexus-connectors-core v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/core)
+   Compiling nexus-connectors-llm v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/llm)
+   Compiling nexus-sdk v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/sdk)
+   Compiling nexus-enterprise v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/enterprise)
+   Compiling nexus-code v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/nexus-code)
+   Compiling nexus-a2a v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-a2a)
+   Compiling nexus-distributed v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/distributed)
+   Compiling nexus-connectors-web v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/web)
+   Compiling nexus-connectors-social v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/social)
+   Compiling nexus-connectors-messaging v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/messaging)
+   Compiling nexus-integrations v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/integrations)
+   Compiling nexus-analytics v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/analytics)
+   Compiling nexus-content v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/content)
+   Compiling nexus-factory v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/factory)
+   Compiling nexus-research v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/research)
+   Compiling nexus-adaptation v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/adaptation)
+   Compiling nexus-control v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/control)
+   Compiling coder-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/coder)
+   Compiling nexus-workflows v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/workflows)
+   Compiling social-poster-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/social-poster)
+   Compiling web-builder-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/web-builder)
+   Compiling nexus-auth v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/auth)
+   Compiling nexus-marketplace v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/marketplace)
+   Compiling nexus-metering v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/metering)
+   Compiling nexus-swarm v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-swarm)
+   Compiling nexus-conductor v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/conductor)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 49s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_desktop_backend-19dc1c7ea5a94095)
+
+running 1 test
+test phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 494 filtered out; finished in 2.11s

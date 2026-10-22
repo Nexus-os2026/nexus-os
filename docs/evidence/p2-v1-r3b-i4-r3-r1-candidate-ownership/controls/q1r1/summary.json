@@ -1,0 +1,294 @@
+{
+  "summary": {
+    "original": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "59d6723b6dcfd3471cdb8b9b5b91fbe854921342d38698c751918bc461dd5ca3",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "36303b0f5de7053e56651c89c816bb26ce479a340361234d23950aa421adb809",
+      "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs": "f4f55c833d14daa002eebec3dc2d78f57cd67aac2c1053dbda0cdc0c0fc27216",
+      "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs": "afdd4980efdadb63c34d75fa75c4ba6c0c20fae00081afa1317c5e2e4efb2396",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "28a27f7afa96ba60b007cfd37a375885521de141efc2ecdcd9c3432559fa0082",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "048330068d1bf6dd0f36bfbf5452586d8552c3a91190311a104561e52b14488e",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb",
+      "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs": "f74a6f80b0ffd14b02d7ea986d4d4544c067bd22df28948487395adb2c414b51",
+      ".github/workflows/ci-phase2-linux-sandbox.yml": "802b5ec68092e7c501fe558c581ea395241a50cf1dbcf9ffd5549be8c96a2daa",
+      "app/src-tauri/src/phase2_tests.rs": "a779aebb6dee9fb4d2da5d8c93985bb8d4dc4e86fd07f5a1f50dab63d9777236"
+    },
+    "final": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "59d6723b6dcfd3471cdb8b9b5b91fbe854921342d38698c751918bc461dd5ca3",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "36303b0f5de7053e56651c89c816bb26ce479a340361234d23950aa421adb809",
+      "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs": "f4f55c833d14daa002eebec3dc2d78f57cd67aac2c1053dbda0cdc0c0fc27216",
+      "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs": "afdd4980efdadb63c34d75fa75c4ba6c0c20fae00081afa1317c5e2e4efb2396",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "28a27f7afa96ba60b007cfd37a375885521de141efc2ecdcd9c3432559fa0082",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "048330068d1bf6dd0f36bfbf5452586d8552c3a91190311a104561e52b14488e",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb",
+      "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs": "f74a6f80b0ffd14b02d7ea986d4d4544c067bd22df28948487395adb2c414b51",
+      ".github/workflows/ci-phase2-linux-sandbox.yml": "802b5ec68092e7c501fe558c581ea395241a50cf1dbcf9ffd5549be8c96a2daa",
+      "app/src-tauri/src/phase2_tests.rs": "a779aebb6dee9fb4d2da5d8c93985bb8d4dc4e86fd07f5a1f50dab63d9777236"
+    },
+    "identical": true,
+    "status": [],
+    "expected_status": [],
+    "counted": 13,
+    "baseline_all_pass": true,
+    "all_required": true,
+    "failures": []
+  },
+  "baseline": {
+    "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name": true,
+    "scope::tests::i4q1r1_connect_derives_the_bus_from_the_real_uid_alone": true,
+    "scope::tests::i4q1r1_nc1_a_first_start_refused_as_loaded_ends_only_the_harness_s_helper": true,
+    "scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed": true,
+    "scope::tests::i4q1r1_nc3_a_panic_after_the_first_start_is_dispatched_keeps_one_owner": true,
+    "scope::tests::i4q1r1_nc4_a_proven_first_start_is_released_by_its_owner_and_observed": true
+  },
+  "counted": [
+    {
+      "id": "Q1-R1-NC1-FOREIGN-KILLED",
+      "nc": "NC1",
+      "layer": "first-start owner",
+      "what": "a first start refused as loaded has the foreign unit's cgroup taken and killed [R3-R1-adapted: an equivalent mutation: R3-R1's acquire() only observes, and only with a captured identity (a collision has none), so the accepted call is now harmless (the unadapted run's test passes); the same harm (the cgroup the helper is in taken and ended in the collided arm) is restored, as acquire() did until R3, for a cgroup of the unit's name the kernel reports the helper in: opened and ended through its descriptor there. Same anchor, test and marker.]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "scope::tests::i4q1r1_nc1_a_first_start_refused_as_loaded_ends_only_the_harness_s_helper",
+      "marker": "the foreign unit was killed",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "true: the foreign unit was killed"
+    },
+    {
+      "id": "Q1-R1-NC1-H6-UNPROVEN-UNIT",
+      "nc": "NC1",
+      "layer": "live harness",
+      "what": "H6 sends its request for a name it generated instead of its proven unit",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "H6 acts on a unit it has not proven",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "H6 acts on a unit it has not proven: let unit = placed.scope().unwrap().unit().to_string();"
+    },
+    {
+      "id": "Q1-R1-NC2-UNRESOLVED-REAPED",
+      "nc": "NC2",
+      "layer": "first-start owner",
+      "what": "the helper of an unresolved first start is reaped",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed",
+      "marker": "the helper was reaped while unresolved",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Timeout, effect false: the helper was reaped while unresolved"
+    },
+    {
+      "id": "Q1-R1-NC2-HARNESS-RAW-REAP",
+      "nc": "NC2",
+      "layer": "live harness",
+      "what": "the qualification ends and reaps a helper outside its owner",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "the qualification ends a helper outside its owner",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the qualification ends a helper outside its owner"
+    },
+    {
+      "id": "Q1-R1-NC3-PANIC-ESCAPES",
+      "nc": "NC3",
+      "layer": "first-start owner",
+      "what": "a panic in the first start crosses its owner (no last owner)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "scope::tests::i4q1r1_nc3_a_panic_after_the_first_start_is_dispatched_keeps_one_owner",
+      "marker": "a panic crossed the owner of the first start",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Start, Never: a panic crossed the owner of the first start"
+    },
+    {
+      "id": "Q1-R1-NC3-PANIC-SPLITS",
+      "nc": "NC3",
+      "layer": "first-start owner",
+      "what": "a panicked first start's helper is reaped and split from its operation",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "scope::tests::i4q1r1_nc3_a_panic_after_the_first_start_is_dispatched_keeps_one_owner",
+      "marker": "the operation was split from its helper",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Start, Never: the operation was split from its helper"
+    },
+    {
+      "id": "Q1-R1-NC3-HARNESS-OWN-OWNER",
+      "nc": "NC3",
+      "layer": "live harness",
+      "what": "the qualification has an owner of its own (old H6's Existing) beside the production owner",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "the qualification owns a native effect beside the production owner",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the qualification owns a native effect beside the production owner"
+    },
+    {
+      "id": "Q1-R1-NC4-CLEANUP-UNOBSERVED",
+      "nc": "NC4",
+      "layer": "first-start owner",
+      "what": "the owner confirms a proven scope's cleanup without observing it empty",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "scope::tests::i4q1r1_nc4_a_proven_first_start_is_released_by_its_owner_and_observed",
+      "marker": "never observed empty",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the owner confirmed a scope that was never observed empty"
+    },
+    {
+      "id": "Q1-R1-NC4-HARNESS-REAP-BEFORE-KILL",
+      "nc": "NC4",
+      "layer": "live harness",
+      "what": "released() reaps the helper before its proven scope is ended",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "released() reaps the helper before its scope is ended",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "released() reaps the helper before its scope is ended"
+    },
+    {
+      "id": "Q1-R1-NC5-PROBE-STOPS-BY-NAME",
+      "nc": "NC5",
+      "layer": "live harness",
+      "what": "the probe regains a StopUnit by the unit's name",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "the probe acts on a unit by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the probe acts on a unit by its name\n  left: [\"Get\", \"GetUnit\", \"StartTransientUnit\", \"StopUnit\"]\n right: [\"Get\", \"GetUnit\", \"StartTransientUnit\"]"
+    },
+    {
+      "id": "Q1-R1-NC5-PROBE-START-CARRIES-A-PROCESS",
+      "nc": "NC5",
+      "layer": "live harness",
+      "what": "the probe's start request carries a process (PIDs)",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "the probe's start request carries a process or a property",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the probe's start request carries a process or a property: PIDs"
+    },
+    {
+      "id": "Q1-R1-H1-CONNECT-ENV",
+      "nc": "H1",
+      "layer": "production source",
+      "what": "connect() follows an ambient session bus address",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs"
+      ],
+      "test": "scope::tests::i4q1r1_connect_derives_the_bus_from_the_real_uid_alone",
+      "marker": "reads the environment or names an ambient bus",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the scope module reads the environment or names an ambient bus: std::env in scope.rs"
+    },
+    {
+      "id": "Q1-R1-H1-ENV-MUTATION",
+      "nc": "H1",
+      "layer": "live harness",
+      "what": "H1 changes the environment of the multi-threaded live harness again",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name",
+      "marker": "the qualification changes the process environment",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the qualification changes the process environment: set_var"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests/r1_base_probes.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/r1_base_probes-8eccfdfa934955fb)
+
+running 9 tests
+test b1_fabricated_closure_data ... PROBE B1: late owner delivered after the terminal record: Ok("Late { incident: IncidentId { generation: Generation([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), seq: 1 }, entry: EntryId { generation: Generation([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), seq: 2 } }")
+PROBE B1: custody phase Finalized, records issued 7, acknowledged 6, unsent 1, held entries 1; recorder durable_through 6, submitted_through 6
+PROBE B1: the actual custody REFUSED closure: shutdown decision Refused([LateIncidents(1), EvidencePending(1)]); held entries 1
+PROBE B1: request_seal with fabricated Closed { records: 6 }: Ok(())
+PROBE B1: seal state after the worker ran: Sealed (the worker wrote the seal)
+PROBE B1: restart: pool file 0: class Sealed, refused false; the next owner STARTED (Ready): the generation is not refused
+ok
+test b2_foreign_closure ... PROBE B2: a genuine Closed from another custody (generation Generation([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252])): records 6, verdict Passed; this recorder's durable_through 6
+PROBE B2: this recorder's request_seal with the foreign Closed: Ok(())
+PROBE B2: seal state after the worker ran: Sealed
+PROBE B2: restart: pool file 0: class Sealed, refused false; the next owner STARTED (Ready): the generation is not refused
+ok
+test b3_edited_refusal_decision ... PROBE B3: the unedited path: refused PriorUnresolved (1 blocking)
+PROBE B3: the returned decision: current 1, blocking 1, dispositioned 0; an unused pool file: true
+PROBE B3: after clearing blocking and current, claim ACCEPTED: pool file 1, claim 2, the header lists 0 applied incidents
+ok
+test b4_rebound_storage_admission ... PROBE B4: A opening OpeningId(9) digest 515f21a864d739c88fd955e7434c509a0dd64f421cc3687deaca7d00cc33b689; B admission opening OpeningId(10) digest 515f21a864d739c88fd955e7434c509a0dd64f421cc3687deaca7d00cc33b689
+PROBE B4: A's claim presenting B's admission after the edit: ACCEPTED (pool file 0, claim 1)
+ok
+test b5_fabricated_disposition_provenance ... PROBE B5: disposition files the store holds: []
+PROBE B5: pure data comparison (disposition_matches): true
+PROBE B5: StoreValidator built from an edited scan: Some(ValidatedDisposition { binding: IncidentBinding([115, 172, 169, 4, 107, 10, 160, 170, 187, 176, 42, 78, 115, 95, 143, 238, 73, 132, 98, 47, 47, 6, 92, 186, 242, 93, 162, 91, 205, 150, 120, 69]), reason: OwnerDestroyed })
+PROBE B5: before: start_run Err(PriorUnresolved); apply_disposition with that validator: Ok(()); then start_run: Ok("started")
+ok
+test b6_writable_exchange_state ... PROBE B6: fatal latch via Recorder::exchange().acquire().state.fatal: Some((WorkerLost, 0)) -> None
+PROBE B6: durable_through set to 1 from outside: the core acknowledged 1 record(s); record 1's block written: false
+PROBE B6: claim state via the guard: Claimed -> Failed
+PROBE B6: seal state via the guard: Sealed; seal block written: false
+PROBE B6: the public call sites: Recorder::exchange() -> &Arc<Exchange>; Exchange::acquire() -> Held { pub state: MutexGuard<ExchangeState> }; ExchangeState's pub fields fatal, durable_through, claim, seal, submitted_through, pending, worker_exit, stop; Exchange::latch; Exchange::fixture_poison; and the constructors Exchange::new, Recorder::new, Worker::new, WorkerHandle::new
+ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Entry, met: Some(Entry); 2. control side: gate.try_lock() -> Free; 3. control side: cancel at the boundary -> Accepted(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((5, Failed)), published Failed, failures [Cancelled], admission AdmissionView { admitted: 0, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }), committed: Some(Commitment { at: Tick(9) }) }
+ok
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Decided, met: Some(Decided); 2. control side: gate.try_lock() -> Held; 3. control side: cancel at the boundary -> not attempted (the gate was not free); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((4, Passed)), published Passed, failures [], admission AdmissionView { admitted: 0, closure: None, committed: Some(Commitment { at: Tick(9) }) }
+ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s

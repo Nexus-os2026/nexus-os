@@ -1,0 +1,70 @@
+mode: worktree status against the base (before the commit)
+base: ed7c7088247badf87b3b1d483ee57360f867e2f1
+changed paths (30):
+  M  crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs
+  M  crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs
+  M  crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs
+  M  crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs
+  M  crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs
+  M  docs/architecture/p2-custody-store-implementation-boundary.md
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/REPORT.md
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/base-store-sources.SHA256SUMS
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/base-tree.txt
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/commands.txt
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/probe-build.txt
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/probe-run.txt
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/provenance.txt
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/r2_base_probes.rs
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/matrices/maintenance-procedure-authority.md
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/matrices/module-self-review.md
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/normalization.tsv
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/adaptation_check.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/api_probes.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/candidate_runs.sh
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/checks.sh
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/compare_i2r1.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/control_mapping.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/matrices.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/normalize.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/preflight.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/requirements.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/scope.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/store_controls.py
+  ?? docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/validate.sh
+protected files (SHA-256 at the base, and now; absent at both is unchanged):
+  same 90862ccdc994ff22c0e0d5786a30eb18d441efd99f0b5f4e14c5f23988b27d7c crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs
+  same 26d1fc828484b638d436c12309e9643fc8a35d9fb6c46c57759b4fd3d6c68c57 crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs
+  same fbb87d36400df5bbbc96726754b832fdc26663976a54743fd03eac235e0a0064 crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs
+  same 538cbca7e98b4c86c675b80611d5c2793129f0c4e201e1a0563809678b1a2420 crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs
+  same e26302faad80e90d51ab43d8151ce9cdc50f7671a2a026c5cc8a0a10646e12ce crates/nexus-verifier-sandbox/tests/support/custody/store/faults.rs
+  same a5dc3b33162547a7f518950684b8212892c2a4439acfe72c5dd995cdc77422a4 crates/nexus-verifier-sandbox/tests/support/custody/core.rs
+  same 3b32071bc90b9bf1a974be60a39a87693108dbf0697ea75a72bee4e2a45d5709 crates/nexus-verifier-sandbox/tests/support/custody/model.rs
+  same 83fd29a8eebdefea9178be4c4ed83609f24113ca8184f7061e61514b3112534c crates/nexus-verifier-sandbox/tests/support/custody/codec.rs
+  same ff6379ed837328a4404d2092ef6d2a0b660781d848b6ddc8818be6b2f6b440d1 crates/nexus-verifier-sandbox/tests/support/custody/mod.rs
+  same 801588711b04173136bebb2e9e36382cc65ed9e617f98ee4958faf162237fd16 crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs
+  same 2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500 crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs
+  same d151f0fc59864ded756f4aa5d7f7fdb40def145253181b259a7b140dd659a07d crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs
+  same 1ff533f92e6c84806e404ff9917a05e7399942596a2e251d91ae3878c7e9d702 crates/nexus-verifier-sandbox/tests/phase2_cleanup_observation.rs
+  same cc897051884a5b2f446e138e44ed78314d43753c47563712cfaa7b61ccce1d2b crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+  same aed4d4f5f7cec174e7ab6bbcd7515a4d40494b0f705ef4639365475b8b72e519 crates/nexus-verifier-sandbox/tests/phase2_package_layout.rs
+  same 1c95a293acd51440b57885e8ac3fec98d391cc53ef00eef9cfe16f5b8b185c81 crates/nexus-verifier-sandbox/Cargo.toml
+  same ab7831217f4b8e83f2e3dbb18cc745ad9ea8949249682c3be8b6f8ff7fb9edde crates/nexus-verifier-sandbox/build.rs
+  same 237389b518a148ade23eeebad7ff7c093c5b698ef60c20b0b9de32027a464082 Cargo.toml
+  same a50216382d813af53e272bd2c56e818adf59993481cc8f9aade25dfd67a53d69 Cargo.lock
+  same fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298 rust-toolchain.toml
+  same 9a2996f84a92e4bd4dbea978a18775f768ca37a1399b0645d1c6db55b9eca02f AGENTS.md
+  same 4ee2d6b73f0dc9f51638f3cdfee315f6f6efd8f2be3e2279104264bbc7bdb46c CLAUDE.md
+  same (absent) .gitattributes
+  same f2f79558499ab67a5786fcd5a9eddca4043117d65df288aecca86b0720f1bae8 .gitignore
+  same bc75d0385a39dfe4c4e21ec6a06cee79a43dbc42df7c198910bf134ee2aebb2e docs/architecture/p2-custody-durable-recorder-design.md
+protected trees (no path under them changed):
+  unchanged crates/nexus-verifier-sandbox/src
+  unchanged .github
+  unchanged docs/evidence/p2-v1-r3b-i3-i1
+  unchanged docs/evidence/p2-v1-r3b-i3-i1-r1
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r1
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r2
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r3
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r4
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r5
+RESULT: PASS

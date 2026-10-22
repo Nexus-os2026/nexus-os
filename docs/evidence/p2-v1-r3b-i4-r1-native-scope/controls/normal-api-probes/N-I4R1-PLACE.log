@@ -1,0 +1,16 @@
+error[E0425]: cannot find function `place` in module `execution`
+   --> src/main.rs:11:24
+    |
+ 11 |     let _ = execution::place(scopes, helper, &ResourcePolicy::RUST_OFFLINE_V1);
+    |                        ^^^^^ not found in `execution`
+    |
+note: found an item that was configured out
+   --> /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox/src/execution.rs:257:8
+    |
+256 | #[cfg(any(test, feature = "live-sandbox-harness"))]
+    |          ---------------------------------------- the item is gated here
+257 | pub fn place(
+    |        ^^^^^
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `i4r1-normal-caller` (bin "i4r1-normal-caller") due to 1 previous error

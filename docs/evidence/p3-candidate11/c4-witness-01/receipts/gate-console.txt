@@ -1,0 +1,25 @@
+08:07:17 P3-C11-DR01-D2A1-C4-WITNESS-01 DECLARED GATE — A 04e42a7ddf0d0a2af17b6506c51997006e7a08dc
+08:07:17   freeze verification (frozen/FREEZE-SHA256SUMS): exit 0  
+08:07:17   engineering worktree: HEAD 04e42a7ddf0d0a2af17b6506c51997006e7a08dc tree fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3 porcelain ''; pins {'source_commit': '04e42a7ddf0d0a2af17b6506c51997006e7a08dc', 'source_tree': 'fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3', 'model_tests_blob': '28085ce232827301104b5d757af042ec933976f8', 'baseline_protocol_blob': 'a2df2841b99cad5d452008a6d4150e9369d07e66', 'mutant_protocol_blob': 'f3793c2ff61f8adbf43fe17d6b5237b49bc507b0'}
+08:07:17 STEP 2: healthy build
+08:10:05   supervise build exit 0
+08:10:06   classify receipts/08-build-healthy/descriptor.json: receipt 08-build-healthy type build role baseline: BUILD OK
+08:10:06   pinned baseline executable /home/nexus/NEXUS/nexus-os-p3-c11-c4-witness-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e size 8984464
+08:10:06 STEP 3: healthy invocation
+08:10:06   supervise run exit 0
+08:10:06   classify receipts/09-run-healthy/descriptor.json: receipt 09-run-healthy type c4-healthy-witness role baseline: PASS
+08:10:06 HEALTHY GATE PASSED
+08:10:06 STEP 4: the disposable mutant
+08:10:07   c4-mutant apply exit 0
+08:10:07 STEP 5: mutant build
+08:12:55   supervise build exit 0
+08:12:55   classify receipts/11-build-mutant/descriptor.json: receipt 11-build-mutant type build role mutant: BUILD OK
+08:12:55   pinned mutant executable /home/nexus/NEXUS/nexus-os-p3-c11-c4-witness-01-mutant/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 sha256 5a4c4f17ea5b3883fb87a1a16fe19d53810608d4c229548a37932c405aa1fe8c size 8988320
+08:12:55 STEP 6: mutant invocation
+08:12:55   supervise run exit 0
+08:12:55   classify receipts/12-run-mutant/descriptor.json: receipt 12-run-mutant type c4-mutant-witness role mutant: POSITIVE: P4 AND P8 OBSERVED
+08:12:55 MUTANT GATE PASSED
+08:12:55 STEP 7: restore the mutant
+08:12:55   c4-mutant restore exit 0
+08:12:55 GATE RESULT: BOTH GATES PASSED (healthy PASS; mutant P4 and P8 OBSERVED); mutant restored to A
+gate exit 0

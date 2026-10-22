@@ -1,0 +1,22 @@
+
+running 1 test
+test r05_late_owner_is_a_bound_incident_never_the_retired_action ... FAILED
+
+failures:
+
+---- r05_late_owner_is_a_bound_incident_never_the_retired_action stdout ----
+
+thread 'r05_late_owner_is_a_bound_incident_never_the_retired_action' (3928242) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:1101:5:
+[late-incident] the late owner's evidence is not its own incident's: [ActionFailed { action: ActionId { generation: Generation([17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]), seq: 1 } }, Control { fact: AdmissionClosed { reason: Failed(LateOwner), after: 1 } }, RecoveryRequired]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r05_late_owner_is_a_bound_incident_never_the_retired_action
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.35s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

@@ -1,0 +1,3 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.94s
+  Executable tests/i4_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/api-guards/debug/deps/i4_api_probe-6881bf52c57a6d0d)

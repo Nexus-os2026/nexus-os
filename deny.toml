@@ -24,8 +24,6 @@ unmaintained = "all"
 unsound = "all"
 yanked = "warn"
 ignore = [
-    { id = "RUSTSEC-2026-0193", reason = "ammonia 4.1.2 sanitizer bypass; web-builder-agent -> desktop; only design_import::import_design uses it, no production code calls it, and builder_import_design is closed in Phase Zero" },
-    { id = "RUSTSEC-2026-0213", reason = "ammonia 4.1.2 sanitizer bypass; same path and reachability as RUSTSEC-2026-0193" },
     { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 unbounded empty DATA frames; readability 0.3 -> reqwest 0.11 -> hyper 0.14 -> nexus-kernel; the kernel calls only readability::extractor::extract on text it holds and builds no reqwest 0.11 client; no fix on the 0.3 line" },
     { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.30.0; zbus_xml -> atspi 0.24 -> nexus-ui-repair, a developer tool that is not shipped (D3)" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.30.0; same path and reachability as RUSTSEC-2026-0194" },

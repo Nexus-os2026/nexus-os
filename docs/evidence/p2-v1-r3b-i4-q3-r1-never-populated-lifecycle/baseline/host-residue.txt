@@ -1,0 +1,4 @@
+== host verifier residue now (read-only), 2026-10-04T01:38:23Z
+nexus-verifier cgroups anywhere under /sys/fs/cgroup: 0
+user-manager journal lines naming the case-18 scope after its timeout: 0
+workflow runs of ci-phase2-linux-sandbox.yml (all): 37163435032,37091121444

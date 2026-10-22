@@ -48,9 +48,13 @@ enum Disposition {
     Developer,
     /// A benchmark that no recipe ships (coordinator decision D3).
     Benchmark,
+    /// The Phase Two verifier sandbox helper: started only by the desktop
+    /// backend, which gives it its whole launch over a private control
+    /// socket; it reads no arguments or environment.
+    VerifierHelper,
 }
 
-use Disposition::{Benchmark, Desktop, Developer, Withdrawn};
+use Disposition::{Benchmark, Desktop, Developer, VerifierHelper, Withdrawn};
 
 /// Every effective binary target of the workspace: (package directory,
 /// binary name, source path within the package, disposition).
@@ -72,6 +76,12 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "nexus-desktop-backend",
         "src/main.rs",
         Desktop,
+    ),
+    (
+        "crates/nexus-verifier-sandbox",
+        "nexus-verifier-sandbox",
+        "src/main.rs",
+        VerifierHelper,
     ),
     (
         "benchmarks/conductor-bench",
@@ -520,7 +530,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
         found, expected,
         "every binary target must be inventoried with a reviewed disposition"
     );
-    assert_eq!(BINARY_TARGETS.len(), 30);
+    assert_eq!(BINARY_TARGETS.len(), 31);
 
     let mut messages = BTreeMap::new();
     for (member, name, path, disposition) in BINARY_TARGETS {
@@ -540,7 +550,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
                     "{name}: withdrawal messages must be unique"
                 );
             }
-            Desktop | Developer | Benchmark => assert!(
+            Desktop | Developer | Benchmark | VerifierHelper => assert!(
                 message.is_none(),
                 "{member}/{path}: `{name}` is not inventoried as withdrawn"
             ),
@@ -913,14 +923,16 @@ impl IgnoredDirectory {
 /// prefix), joined by line feeds. A new or changed anchored entry in
 /// `.gitignore` could hide a recipe or a pipeline file from the walk, so it
 /// fails here until it is reviewed and the pin is updated.
+// Phase Two P2F reviewed `/app/src-tauri/verifier-toolchain/` and its
+// `.assembly-*` work directories: the assembled verifier toolchain only.
 const IGNORED_DIRECTORIES_PIN: (usize, &str) = (
-    10,
-    "6fa2a363ee77a556134b6c454da1eb3e830e243905cebc6fa315693d0e356ce5",
+    12,
+    "2228363af9c03cbff2d27b3424b65703f35594df43d2af6ec3b6f7bc4545a93f",
 );
 
 /// The anchored ignored directories of the root `.gitignore`: ignored build
-/// output and local state, such as the Builder toolchain that the packaging
-/// step assembles, cloned upstream sources and agent worktrees (other
+/// output and local state, such as the Builder and verifier toolchains that
+/// the packaging steps assemble, cloned upstream sources and agent worktrees (other
 /// checkouts of this repository, each guarded by its own copy of these
 /// tests). Read at run time, so the walk never names them itself, and pinned
 /// ([`IGNORED_DIRECTORIES_PIN`]).

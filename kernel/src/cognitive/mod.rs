@@ -23,14 +23,14 @@ pub use evolution::{
 };
 pub use hivemind::{
     AgentInfo, HivemindCoordinator, HivemindEvent, HivemindEventEmitter, HivemindLlm,
-    HivemindSession, HivemindStatus, SubTask, SubTaskStatus,
+    HivemindSession, HivemindStatus, SubTask, SubTaskStatus, SubtaskRun,
 };
 pub use loop_runtime::{
-    ActionExecutor, CognitiveRuntime, EventEmitter, LlmProvider, LlmQueryHandler, NoOpEmitter,
-    RegistryExecutor,
+    llm_query_envelope, ActionExecutor, CognitiveRuntime, EventEmitter, LlmProvider,
+    LlmQueryHandler, NoOpEmitter, RegistryExecutor, StepItem, StepOutput, StepScope,
 };
 pub use memory_manager::{AgentMemoryManager, MemoryEntry, MemoryStore};
-pub use planner::{CognitivePlanner, PlannerLlm};
+pub use planner::{CognitivePlanner, Plan, PlanRecallSource, PlannerLlm, PlanningRecall};
 pub use scheduler::{AgentScheduler, ScheduledAgent, ScheduledGoalExecutor};
 pub use types::{
     AgentGoal, AgentStep, CognitiveEvent, CognitivePhase, CognitiveStatusResponse, CycleResult,

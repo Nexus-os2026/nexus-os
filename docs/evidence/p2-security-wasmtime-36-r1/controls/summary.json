@@ -1,0 +1,57 @@
+{
+ "baseline": {
+  "exit": 0,
+  "passed": true
+ },
+ "controls": [
+  {
+   "id": "GC-01-WASMTIME-EXCEPTION-RETURNS",
+   "file": "deny.toml",
+   "marker": "a Wasmtime advisory is accepted",
+   "exit": 101,
+   "compiled": true,
+   "failed": true,
+   "marker_found": true,
+   "restored": true,
+   "detected": true
+  },
+  {
+   "id": "GC-02-CALL-ASYNC-IN-PRODUCTION",
+   "file": "sdk/src/wasmtime_sandbox.rs",
+   "marker": "Wasmtime's async and component-model APIs are not used",
+   "exit": 101,
+   "compiled": true,
+   "failed": true,
+   "marker_found": true,
+   "restored": true,
+   "detected": true
+  },
+  {
+   "id": "GC-03-COMPONENT-IMPORT-IN-PRODUCTION",
+   "file": "sdk/src/module_cache.rs",
+   "marker": "Wasmtime's component module is not used",
+   "exit": 101,
+   "compiled": true,
+   "failed": true,
+   "marker_found": true,
+   "restored": true,
+   "detected": true
+  },
+  {
+   "id": "GC-04-CRATE-ALIAS-IN-PRODUCTION",
+   "file": "sdk/src/wasm_agent.rs",
+   "marker": "the wasmtime crate is not aliased or renamed",
+   "exit": 101,
+   "compiled": true,
+   "failed": true,
+   "marker_found": true,
+   "restored": true,
+   "detected": true
+  }
+ ],
+ "identical": true,
+ "status_before": [],
+ "status_after": [],
+ "all_detected": true,
+ "ok": true
+}

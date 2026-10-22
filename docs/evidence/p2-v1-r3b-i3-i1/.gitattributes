@@ -1,0 +1,6 @@
+# Kept byte for byte. A unified diff's empty context lines are a single
+# space, and the --nocapture test output is verbatim tool output in which a
+# test's result line ends in a space where other output interleaved, so
+# Git's whitespace checks do not apply to these two files.
+scripts/i2r1_controls_rerun.diff -whitespace
+validation/store-tests-nocapture.txt -whitespace

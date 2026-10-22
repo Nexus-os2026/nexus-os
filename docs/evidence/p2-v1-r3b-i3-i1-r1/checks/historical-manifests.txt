@@ -1,0 +1,214 @@
+docs/evidence/p2-v1-r3b-i3-p-r1: snapshot 34cb35d833ef9dd317708615211fee7d02d2eb78
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r2: snapshot 8f8882521535db82a6ba08867c95518040a71cd2
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r3: snapshot b0f8437636d0bc7d38818e75df71d1bf516cff8e
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r4: snapshot 91d91e5052805f432586b5f1f9a0e2e14ca1af87
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r5: snapshot 7689e599ed8fc89ec7720d13869ef58cab767ecb
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file match (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-i1: snapshot 72ffc4fcc0141e2e5ae77a927481017ca711ab7c
+  OK  docs/evidence/p2-v1-r3b-i3-i1/.gitattributes: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/REPORT.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC2.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC3.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC4.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC5a.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC5b.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC6.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I1-NC7.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-ACTION-GENERATION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-DEBUG-RECORD.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-DEFAULT-TAG.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-DIGEST-BYPASS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-INTENT-BYPASS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-RECORD-GENERATION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-REQUEST-FIELD.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/I2A-TRAIL.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-ALTERED-DIGEST-c13.info.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-ALTERED-DIGEST-c16.info.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-ALTERED-DIGEST.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-DEBUG-c13.info.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-DEBUG-c16.info.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/NC-REQUEST-DEBUG.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-A1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-A2.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-B.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-C1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-C2.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R1-D.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-A1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-A2.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-A3.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-A4.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-B1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-B2.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2-C1.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/logs/R2A-SPLIT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/run.jsonl: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/run.meta: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/status-at-run.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/i2r1-rerun/summary.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-ADMISSION-CLONE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-ADMISSION-FORGED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-ADMISSION-UNBOUND.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-ENTRY-CALLS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-ENTRY-SWITCH.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-GATE-SPLIT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-LOCK-UNLOCK.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-SELECTION-KEPT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/A-WORKER-LOCK.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-A2-IDENTITY.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-ACTIVATION-AFTER-SCAN.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-ACTIVATION-ERROR-IGNORED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-ATTESTATION-ADMITS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-AUTHORITY-FLAG.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-BINDING-LOCATION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-BINDING-NO-CONTENT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-BOUND-AFTER-EXAMINE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-BUSY-SUCCESS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-CLAIM-UNBOUNDED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DECIDE-FROM-REPORT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DECIMAL-LEADING-ZERO.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DELIVERY-DROPPED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DUP-CONFLICT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DUP-RETAINED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-DURABLE-BEFORE-SYNC.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-EXCLUDED-MODE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-EXT4-MAGIC.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-EXTERNAL-JOURNAL.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-FAIL-UNISSUED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-FAILURE-AT-CAUSE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-FRESH-ROOT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-FUTURE-SILENT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-GRAMMAR-G16.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-HEADER-RESERVED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-HIDDEN-STEP.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-IDENTITY-UNCHECKED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-INVALID-HEADER-ABANDONED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-KERNEL-PREFIX.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-LATE-NOTE-MISSING.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-A4-PROFILE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-A4.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-ACTIVATION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-DROP-GUARD.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-GATE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-PROBE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NO-REVALIDATION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-NONDETERMINISTIC-REPORT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-OPEN-BEFORE-TYPE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-POISON-IGNORED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-PRESERVATION-SKIPPED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-PROBE-FIRST.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-PROFILE-FROM-PINNED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-PROVISION-INODE-IGNORED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-PUBLISH-AFTER-LATCH.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-R2-PROTOCOL.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-RECORD-PADDING.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-REFUSE-ONLY-RECORDED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-RETIRE-FROM-REPORT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-RETIRE-NO-PRECONDITIONS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SEAL-TAIL.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SEAL-WHILE-LATCHED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SESSION-NEW-LOCK.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SESSION-RELOCK.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SESSION-SHARED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SYNC-BEFORE-LOCK.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-SYNC-RETRIED-AFTER-EIO.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-TIMEOUT-STOPS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-TMP-DISPOSITION.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-UNEXPECTED-ACK-IGNORED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-VALIDATOR-INEXACT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-VANISHED-IGNORED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-VERIFY-CACHED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-VISIBLE-RUNENDED-RESOLVES.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-WORKER-IDENTITY.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/I-WRITE-CACHE-ALONE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/N-BLOCKING.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/N-DOT-NAME.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/N-FOLLOW.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-COMPLETED-TESTS-ABORT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-ERRSEQ-NO-WRAP.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-F1-DURABLE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-HOME-ERROR-SUCCESS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-INFLIGHT-COMPLETE.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-INVENTED-ABORT.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-NO-RECLAIM-WHILE-OPEN.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-REOPEN-CERTIFIES.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-SCHEDULES-GUARANTEED-ONLY.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-TAIL-WITHOUT-HOME.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-TEAR-SPANS.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/logs/S-WRITEBACK-ERROR-SWALLOWED.log: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/run.jsonl: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/run.meta: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/status-at-run.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/controls/store/summary.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/coverage-matrix.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/coverage-matrix.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scope/changed-paths.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scope/refs-before-commit.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scope/scope-check.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/coverage_matrix.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.diff: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/manifests.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/scope.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/store_controls.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/scripts/validate.sh: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/traces.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/cleanup-observation.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/clippy.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/codec-tests.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/commands.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/core-tests.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/diff-check.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/fmt-check.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/historical-manifests.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/live-harness-build-only.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/r5-design-checks.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/r5-reference-check.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/store-tests-nocapture.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/store-tests.txt: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-i1/validation/toolchain.txt: snapshot match, working file match
+  OK  docs/architecture/p2-custody-store-implementation-boundary.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file match (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/mod.rs: snapshot match, working file match (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs: snapshot match, working file match (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/format.rs: snapshot match, working file match (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/io.rs: snapshot match, working file match (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs: snapshot match, working file differs (outside the evidence directory)
+  OK  crates/nexus-verifier-sandbox/tests/support/custody/store/sim.rs: snapshot match, working file match (outside the evidence directory)
+RESULT: PASS

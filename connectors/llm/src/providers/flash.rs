@@ -26,6 +26,12 @@ pub struct FlashProvider {
 }
 
 impl FlashProvider {
+    /// The model file this provider loads (P3-HM-CONTRACT-02 §2.4 (L2) item
+    /// 5 is checked on it by `attest::attest_route`).
+    pub fn model_path(&self) -> &str {
+        &self.model_path
+    }
+
     /// Create a provider for a specific model path with auto-configured settings.
     ///
     /// Pass the `LoadConfig` and `GenerationConfig` from the session's

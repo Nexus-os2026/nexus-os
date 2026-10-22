@@ -1,0 +1,54 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-v/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.67s
+     Running tests/phase2_custody_core.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-validate/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+
+running 47 tests
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test h05_cancellation_before_admission_prevents_native_creation ... ok
+test h03_explicit_recovery_resolves_without_erasing_earlier_failure ... ok
+test h01_same_owner_survives_failed_cleanup_and_exhausted_budgets ... ok
+test h04_shutdown_is_refused_while_native_or_evidence_state_is_unresolved ... ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... ok
+test h07_status_never_renews_the_lease ... ok
+test h09_expected_retained_boundary_needs_its_first_attempt_to_confirm ... ok
+test h06_cancellation_after_admission_still_adopts_the_later_owner ... ok
+test h08_stalled_adapters_do_not_block_the_control_side ... ok
+test h13_acknowledgements_bind_exact_records_in_order ... ok
+test h12_unknown_outcome_blocks_launch_discard_and_fresh_admission ... ok
+test h13_late_stale_and_duplicate_results_cannot_act_on_another_operation ... ok
+test h14_capacity_reservation_prevents_unrecordable_admission ... ok
+test h15_physical_cleanup_and_recording_failure_stay_distinct ... ok
+test h16_refused_deposits_and_admissions_return_or_retain_ownership ... ok
+test h11_dependencies_release_only_after_native_completion ... ok
+test h02_reporting_snapshots_and_lending_cannot_consume_the_owner ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... ok
+test h10_unexpected_failure_stays_failed_after_recovery ... ok
+test h20_prior_incidents_need_a_bound_external_disposition ... ok
+test h19_replayed_evicted_conflicting_and_foreign_requests_execute_nothing ... ok
+test r03_failed_evidence_keeps_the_custody_open ... ok
+test r01_actual_failure_closes_admission_within_its_case ... ok
+test h22_group_bounds_refuse_before_creation ... ok
+test r04_finalized_verdict_matches_acknowledged_terminal_evidence ... ok
+test h21_failure_history_is_bounded_classified_and_never_cleared ... ok
+test h24_finalization_boundary_candidate_terminal_and_final ... ok
+test r02_failed_case_cleanup_never_permits_a_next_case ... ok
+test h25_declared_output_detachment_is_expected_and_checked ... ok
+test r06_detached_output_is_output_loss_never_a_clean_pass ... ok
+test r09_failed_first_attempt_of_a_retained_boundary_closes_admission_at_once ... ok
+test r05_late_owner_is_a_bound_incident_never_the_retired_action ... ok
+test r07_cancellation_accepted_in_candidate_prevents_a_pass ... ok
+test h26_every_failure_entry_point_closes_admission_itself ... ok
+test r08_lease_expiry_observed_in_candidate_prevents_a_pass ... ok
+test r11_finalization_winning_makes_a_later_cancellation_late ... ok
+test r14_expected_first_attempt_success_and_ordinary_retries_keep_their_semantics ... ok
+test r15_shutdown_request_is_no_second_finalization_rule ... ok
+test r13_every_unconfirmed_first_attempt_latches_its_expectation ... ok
+test r10_cancellation_while_the_recorder_is_paused_precedes_the_commitment ... ok
+test h23_public_api_phase_matrix ... ok
+test r16_commitment_wiring_reaches_the_tested_primitive ... ok
+test h05_admission_linearizes_against_concurrent_cancellation ... ok
+test r12_commitment_and_concurrent_cancellation_agree_whichever_wins ... ok
+test h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership ... ok
+test h18_adversarial_transition_sequences_keep_every_invariant ... ok
+
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.18s

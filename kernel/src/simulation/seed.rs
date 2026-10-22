@@ -1,4 +1,4 @@
-use crate::cognitive::PlannerLlm;
+use super::SimulationLlm;
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 
@@ -34,11 +34,11 @@ pub struct SeedVariable {
     pub description: String,
 }
 
-pub fn parse_seed(text: &str, llm: &dyn PlannerLlm) -> Result<WorldSeed, AgentError> {
+pub fn parse_seed(text: &str, llm: &SimulationLlm) -> Result<WorldSeed, AgentError> {
     let prompt = format!(
         "Analyze this text and extract: 1) The key scenario/situation described. 2) All entities involved (people, organizations, concepts). 3) All relationships between entities. 4) Key variables that could change the outcome. 5) Suggested persona archetypes that would exist in this scenario. Return as structured JSON.\n\nTEXT:\n{text}"
     );
-    let response = llm.plan_query(&prompt)?;
+    let response = llm.ask(&prompt)?;
     serde_json::from_value::<WorldSeed>(crate::simulation::extract_json_value(&response)?)
         .map_err(|error| AgentError::SupervisorError(format!("invalid world seed json: {error}")))
 }

@@ -1,0 +1,24 @@
+P2-V1-R3B-I4-Q3-R1: the worktree against the base d16d7ca3 before assembly, 2026-10-04T02:03:20Z (git status --porcelain=v1 --untracked-files=all; the run outputs, the scope records and SHA256SUMS are added to docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/ by scripts/assemble.sh after this)
+ M app/src-tauri/src/phase2_tests.rs
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+ M docs/security/phase2-governed-verification.md
+?? crates/nexus-verifier-sandbox/tests/phase2_never_populated.rs
+?? crates/nexus-verifier-sandbox/tests/support/never_populated.rs
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/REPORT.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/baseline-failure.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/case-18.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/controls.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/lifecycle-model.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/root-cause.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/matrices/test-changes.md
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/accepted_reruns.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/baseline.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/primary_excerpts.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/production_files.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/q3r1_controls.py
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/run_controls.sh
+?? docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/scripts/validate.sh

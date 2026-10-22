@@ -1,0 +1,22 @@
+
+running 1 test
+test execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor ... FAILED
+
+failures:
+
+---- execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor stdout ----
+
+thread 'execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor' (548015) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:650:5:
+the candidate retained before the uncertain query was not kept
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.15s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.36s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

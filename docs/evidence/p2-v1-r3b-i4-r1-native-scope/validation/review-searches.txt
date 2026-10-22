@@ -1,0 +1,303 @@
+P2-V1-R3B-I4-R1 whole-module review searches; HEAD cca9cb7ad351b50da18774c63fa0fe1ed0df31bc, tree e7a631270803a566ae0a175e3fc70bd452257774
+
+== R1. public pending ownership without the helper: every declaration and re-export of the pending operation, its failure types and settling
+$ grep -n -E struct PendingScope|use pending::|StartFailed|fn settle|fn reconcile|fn prepare|into_pending|pub struct PlacementFailed|pub struct ScopedHelper|pub fn place crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope.rs:64:pub(crate) use pending::PendingState;
+crates/nexus-verifier-sandbox/src/scope.rs:65:pub(crate) use pending::{PendingScope, ScopeBoundary};
+crates/nexus-verifier-sandbox/src/scope.rs:177:    pub(crate) fn prepare(
+crates/nexus-verifier-sandbox/src/scope/pending.rs:90:pub(crate) struct PendingScope {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:164:    pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+crates/nexus-verifier-sandbox/src/execution.rs:235:pub struct ScopedHelper {
+crates/nexus-verifier-sandbox/src/execution.rs:245:pub struct PlacementFailed {
+crates/nexus-verifier-sandbox/src/execution.rs:257:pub fn place(
+
+== R2. public alternate manager socket: every constructor of a manager or a connection
+$ grep -n -E fn connect|connect_at|connect_to|Builder::address|fn with_controller|ZbusManager:: crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope.rs:141:    pub fn connect() -> Result<Self, ScopeError> {
+crates/nexus-verifier-sandbox/src/scope.rs:144:        Self::connect_to(&format!("/run/user/{uid}/bus"))
+crates/nexus-verifier-sandbox/src/scope.rs:150:    pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
+crates/nexus-verifier-sandbox/src/scope.rs:151:        Self::connect_to(path)
+crates/nexus-verifier-sandbox/src/scope.rs:156:    fn connect_to(path: &str) -> Result<Self, ScopeError> {
+crates/nexus-verifier-sandbox/src/scope.rs:159:                manager: Box::new(ZbusManager::connect_at(path)?),
+crates/nexus-verifier-sandbox/src/scope.rs:168:    pub(crate) fn with_controller(controller: Controller) -> Self {
+crates/nexus-verifier-sandbox/src/scope/manager.rs:113:    pub(crate) fn connect_at(path: &str) -> Result<Self, ScopeError> {
+crates/nexus-verifier-sandbox/src/scope/manager.rs:132:                    zbus::connection::Builder::address(address.as_str())?
+
+== R3. public direct start weaker than execution::run: every start of a scope operation
+$ grep -n -E fn start\(|\.establish\(|ScopeBoundary::Pending\(|fn place|fn run\(|fn run_with_fault|fn execute crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/execution.rs:215:            ScopeBoundary::Pending(pending) => Some(pending.state()),
+crates/nexus-verifier-sandbox/src/execution.rs:257:pub fn place(
+crates/nexus-verifier-sandbox/src/execution.rs:266:    let error = match catch_unwind(AssertUnwindSafe(|| owned.establish(scopes, limits))) {
+crates/nexus-verifier-sandbox/src/execution.rs:290:        self.scope = ScopeBoundary::Pending(scopes.prepare(helper, limits)?);
+crates/nexus-verifier-sandbox/src/execution.rs:291:        self.scope.establish(helper, None)
+crates/nexus-verifier-sandbox/src/execution.rs:454:pub fn run(
+crates/nexus-verifier-sandbox/src/execution.rs:466:pub fn run_with_fault(
+crates/nexus-verifier-sandbox/src/execution.rs:551:fn execute(
+crates/nexus-verifier-sandbox/src/execution.rs:634:        Ok(pending) => owned.scope = ScopeBoundary::Pending(pending),
+crates/nexus-verifier-sandbox/src/execution.rs:637:    if let Err(error) = owned.scope.establish(helper, fault) {
+crates/nexus-verifier-sandbox/src/execution.rs:736:        ScopeBoundary::Pending(pending) => {
+
+== R4. resume_unwind while pending, and every catch_unwind with what it covers
+$ grep -n -E resume_unwind|catch_unwind|AssertUnwindSafe|panic:: crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/execution.rs:32://! `catch_unwind`; whether they return or panic, the same finalizer then
+crates/nexus-verifier-sandbox/src/execution.rs:46:use std::panic::{catch_unwind, AssertUnwindSafe};
+crates/nexus-verifier-sandbox/src/execution.rs:187:        let ended = catch_unwind(AssertUnwindSafe(|| {
+crates/nexus-verifier-sandbox/src/execution.rs:266:    let error = match catch_unwind(AssertUnwindSafe(|| owned.establish(scopes, limits))) {
+crates/nexus-verifier-sandbox/src/execution.rs:321:        let ended = catch_unwind(AssertUnwindSafe(|| {
+crates/nexus-verifier-sandbox/src/execution.rs:559:    let observed = catch_unwind(AssertUnwindSafe(|| {
+crates/nexus-verifier-sandbox/src/execution.rs:695:    catch_unwind(AssertUnwindSafe(|| finalize_steps(owned, fault)))
+
+== R5. unit-name-only authority: every use of the unit name
+$ grep -n -E self\.unit|&self\.unit|unit: |\.unit\(\)|names_unit|nexus-verifier- crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope.rs:182:        let unit = format!("nexus-verifier-{}.scope", random_hex()?);
+crates/nexus-verifier-sandbox/src/scope.rs:270:    unit: String,
+crates/nexus-verifier-sandbox/src/scope.rs:277:        &self.unit
+crates/nexus-verifier-sandbox/src/scope/manager.rs:75:    pub unit: &'a str,
+crates/nexus-verifier-sandbox/src/scope/manager.rs:86:    fn stop_unit(&self, unit: &str) -> Remote<()>;
+crates/nexus-verifier-sandbox/src/scope/manager.rs:87:    fn get_unit(&self, unit: &str) -> Remote<Presence>;
+crates/nexus-verifier-sandbox/src/scope/manager.rs:229:    fn stop_unit(&self, unit: &str) -> Remote<()> {
+crates/nexus-verifier-sandbox/src/scope/manager.rs:242:    fn get_unit(&self, unit: &str) -> Remote<Presence> {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:98:    unit: String,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:128:        unit: String,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:174:            self.settled = outside(&controller, helper, &self.unit);
+crates/nexus-verifier-sandbox/src/scope/pending.rs:192:        self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+crates/nexus-verifier-sandbox/src/scope/pending.rs:220:            if names_unit(&path, &self.unit) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:240:            None => absent(controller, &self.unit, helper),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:264:            unit: &self.unit,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:307:        let path = wait_for_placement(controller, helper, &self.unit)?;
+crates/nexus-verifier-sandbox/src/scope/pending.rs:327:        let unit_path = match controller.manager.get_unit(&self.unit) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:341:            Remote::Answered(Some(id)) if id == self.unit => {}
+crates/nexus-verifier-sandbox/src/scope/pending.rs:382:            .field("unit", &self.unit)
+crates/nexus-verifier-sandbox/src/scope/pending.rs:418:/// component) and named for the unit: a locator of the unit's possible
+crates/nexus-verifier-sandbox/src/scope/pending.rs:420:fn names_unit(path: &str, unit: &str) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:428:fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:430:        matches!(controller.native.membership(helper), Ok(Some(path)) if !names_unit(&path, unit))
+crates/nexus-verifier-sandbox/src/scope/pending.rs:438:fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:451:    unit: &str,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:460:            if names_unit(&path, unit) {
+crates/nexus-verifier-sandbox/src/execution.rs:95:        .name("nexus-verifier-output".to_string())
+crates/nexus-verifier-sandbox/src/launcher.rs:35:const INSTALLED_HELPER: &str = "nexus-verifier-sandbox";
+crates/nexus-verifier-sandbox/src/launcher.rs:65:    /// `/usr/bin/nexus-verifier-sandbox`, derived only from this process's
+
+== R6. basename-only binding: every comparison of a path, an id or a name
+$ grep -n -E rsplit|ends_with|starts_with|strip_prefix|== path|== self\.unit|id ==|group ==|canonical crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/scope/native.rs
+crates/nexus-verifier-sandbox/src/scope.rs:228:        .find_map(|line| line.strip_prefix("populated "))
+crates/nexus-verifier-sandbox/src/scope.rs:311:                .find_map(|line| line.strip_prefix(key)?.trim().parse().ok())
+crates/nexus-verifier-sandbox/src/scope/pending.rs:341:            Remote::Answered(Some(id)) if id == self.unit => {}
+crates/nexus-verifier-sandbox/src/scope/pending.rs:346:            Remote::Answered(Some(group)) if group == path => {}
+crates/nexus-verifier-sandbox/src/scope/pending.rs:421:    path.strip_prefix('/')
+crates/nexus-verifier-sandbox/src/scope/pending.rs:423:        && path.rsplit('/').next() == Some(unit)
+crates/nexus-verifier-sandbox/src/scope/native.rs:53:        Ok(text.trim_end().strip_prefix("0::").map(str::to_string))
+
+== R7. GetUnit absence after an uncertain start: every absence, acceptance and uncertainty
+$ grep -n -E accepted|absent\(|Presence::Absent|Started::Uncertain|Started::Accepted|fn gone crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/scope/manager.rs
+crates/nexus-verifier-sandbox/src/scope/pending.rs:109:    /// The manager accepted the request: its reply, a job path, was
+crates/nexus-verifier-sandbox/src/scope/pending.rs:112:    accepted: bool,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:140:            accepted: false,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:231:    fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:239:            None if !self.accepted => false,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:240:            None => absent(controller, &self.unit, helper),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:270:            Started::Accepted => {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:271:                self.accepted = true;
+crates/nexus-verifier-sandbox/src/scope/pending.rs:282:            // proven like an accepted one, or settled, and nothing the
+crates/nexus-verifier-sandbox/src/scope/pending.rs:284:            Started::Uncertain(reason) => Some(reason),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:330:            Remote::Answered(Presence::Absent) => {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:371:            accepted: self.accepted,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:386:            .field("accepted", &self.accepted)
+crates/nexus-verifier-sandbox/src/scope/pending.rs:410:    pub accepted: bool,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:438:fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:441:        Remote::Answered(Presence::Absent)
+crates/nexus-verifier-sandbox/src/scope/manager.rs:222:            Ok(Ok(_job)) => Started::Accepted,
+crates/nexus-verifier-sandbox/src/scope/manager.rs:224:            Ok(Err(name)) => Started::Uncertain(format!("StartTransientUnit: {name}")),
+crates/nexus-verifier-sandbox/src/scope/manager.rs:225:            Err(reason) => Started::Uncertain(reason),
+crates/nexus-verifier-sandbox/src/scope/manager.rs:250:            Ok(Err(name)) if name == NO_SUCH_UNIT => Remote::Answered(Presence::Absent),
+
+== R8. StopUnit reply as proof: where every StopUnit outcome goes
+$ grep -n -E stop_unit|last_stop|stops crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope/manager.rs:86:    fn stop_unit(&self, unit: &str) -> Remote<()>;
+crates/nexus-verifier-sandbox/src/scope/manager.rs:229:    fn stop_unit(&self, unit: &str) -> Remote<()> {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:119:    stops: u32,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:120:    last_stop: Option<Remote<()>>,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:142:            stops: 0,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:143:            last_stop: None,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:188:        self.stops = self.stops.saturating_add(1);
+crates/nexus-verifier-sandbox/src/scope/pending.rs:192:        self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+crates/nexus-verifier-sandbox/src/scope/pending.rs:373:            stops: self.stops,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:388:            .field("stops", &self.stops)
+crates/nexus-verifier-sandbox/src/scope/pending.rs:389:            .field("last_stop", &self.last_stop)
+crates/nexus-verifier-sandbox/src/scope/pending.rs:412:    pub stops: u32,
+
+== R9. helper reaped before its operation is confirmed: every reap
+$ grep -n -E reap\(|try_reap|reap_within|reap_helper|waitpid|unresolved\(\) crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope/pending.rs:165:        if !self.unresolved() {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:247:        if self.unresolved() {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:520:            Self::Pending(pending) => pending.unresolved(),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:528:        matches!(self, Self::Pending(pending) if pending.unresolved())
+crates/nexus-verifier-sandbox/src/execution.rs:308:    pub fn reap_helper(&mut self) -> std::io::Result<std::process::ExitStatus> {
+crates/nexus-verifier-sandbox/src/execution.rs:313:            Some(helper) => helper.reap(),
+crates/nexus-verifier-sandbox/src/execution.rs:749:        if !reap_within(child, FINALIZE_TIMEOUT) {
+crates/nexus-verifier-sandbox/src/execution.rs:770:        if !scope.unresolved() {
+crates/nexus-verifier-sandbox/src/execution.rs:771:            let _ = helper.try_reap();
+crates/nexus-verifier-sandbox/src/execution.rs:787:fn reap_within(helper: &mut Helper, timeout: Duration) -> bool {
+crates/nexus-verifier-sandbox/src/execution.rs:790:        match helper.try_reap() {
+crates/nexus-verifier-sandbox/src/launcher.rs:413:    pub fn reap(self) -> io::Result<std::process::ExitStatus> {
+crates/nexus-verifier-sandbox/src/launcher.rs:422:    pub fn try_reap(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+
+== R10. serial wrap and spawn before identity: the identity allocation and the spawn
+$ grep -n -E NEXT_SERIAL|allocate_serial|fetch_add|fetch_update|checked_add|wrapping|IdentitiesExhausted|\.spawn\(\)|serial crates/nexus-verifier-sandbox/src/launcher.rs
+148:    IdentitiesExhausted,
+183:    serial: u64,
+186:/// The next helper's [`Helper::serial`].
+187:static NEXT_SERIAL: AtomicU64 = AtomicU64::new(1);
+192:pub(crate) fn allocate_serial(next: &AtomicU64) -> Option<u64> {
+193:    next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |serial| {
+194:        serial.checked_add(1).filter(|_| serial != 0)
+210:        Self::spawn_with(program, &NEXT_SERIAL)
+213:    /// [`Self::spawn`], with its identity from `serials`.
+216:        serials: &AtomicU64,
+220:        let serial = allocate_serial(serials).ok_or(LaunchError::IdentitiesExhausted)?;
+230:            .spawn()
+239:            serial,
+264:    pub(crate) fn serial(&self) -> u64 {
+265:        self.serial
+
+== R11. candidate dropped on a later proof error: every assignment and take of the candidate
+$ grep -n -E candidate = |candidate\.take|candidate\.insert|self\.candidate|Option<Box<dyn CgroupDir>> crates/nexus-verifier-sandbox/src/scope/pending.rs
+116:    candidate: Option<Box<dyn CgroupDir>>,
+178:        if let Some(candidate) = &self.candidate {
+213:        if self.candidate.is_some() {
+223:                    self.candidate = Some(candidate);
+232:        match &self.candidate {
+248:            if let Some(candidate) = &self.candidate {
+311:        let candidate = &**self.candidate.insert(controller.native.open(&path)?);
+372:            candidate: self.candidate.is_some(),
+387:            .field("candidate", &self.candidate.is_some())
+495:        let Some(dir) = pending.candidate.take() else {
+
+== R12. launch before the ControlGroup proof: the proof's steps and the launch's guard
+$ grep -n -E control_group\(|unit_id\(|get_unit\(|runtime_max_usec\(|oom_policy\(|is_proven|handshake\(|\.launch\(|launched = true crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs
+crates/nexus-verifier-sandbox/src/scope/pending.rs:327:        let unit_path = match controller.manager.get_unit(&self.unit) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:340:        match controller.manager.unit_id(&unit_path) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:345:        match controller.manager.control_group(&unit_path) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:351:        match controller.manager.runtime_max_usec(&unit_path) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:357:        match controller.manager.oom_policy(&unit_path) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:440:        controller.manager.get_unit(unit),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:512:    pub(crate) fn is_proven(&self) -> bool {
+crates/nexus-verifier-sandbox/src/execution.rs:309:        if !self.scope.is_proven() {
+crates/nexus-verifier-sandbox/src/execution.rs:642:    if !owned.scope.is_proven() {
+crates/nexus-verifier-sandbox/src/execution.rs:645:    if let Err(error) = helper.handshake() {
+crates/nexus-verifier-sandbox/src/execution.rs:648:    owned.launched = true;
+crates/nexus-verifier-sandbox/src/execution.rs:649:    if let Err(error) = helper.launch(spec) {
+
+== R13. test manager available in production: every test seam
+$ grep -n -E cfg\(test\)|cfg\(any\(test|mod tests|FakeManager|FakeNative|World|with_controller|SPAWNED crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope.rs:59:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/scope.rs:60:pub(crate) mod tests;
+crates/nexus-verifier-sandbox/src/scope.rs:63:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/scope.rs:149:    #[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/scope.rs:167:    #[cfg(test)]
+crates/nexus-verifier-sandbox/src/scope.rs:168:    pub(crate) fn with_controller(controller: Controller) -> Self {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:366:    #[cfg(test)]
+crates/nexus-verifier-sandbox/src/scope/pending.rs:405:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/execution.rs:57:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:62:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:200:    #[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:206:    #[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:212:    #[cfg(test)]
+crates/nexus-verifier-sandbox/src/execution.rs:233:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:243:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:256:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:277:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:333:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:465:#[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/execution.rs:802:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/execution.rs:803:mod tests;
+crates/nexus-verifier-sandbox/src/launcher.rs:59:    #[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/launcher.rs:86:    #[cfg(any(test, feature = "live-sandbox-harness"))]
+crates/nexus-verifier-sandbox/src/launcher.rs:199:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/launcher.rs:202:    pub(crate) static SPAWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+crates/nexus-verifier-sandbox/src/launcher.rs:232:        #[cfg(test)]
+crates/nexus-verifier-sandbox/src/launcher.rs:233:        SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
+crates/nexus-verifier-sandbox/src/launcher.rs:427:#[cfg(test)]
+crates/nexus-verifier-sandbox/src/launcher.rs:428:mod tests {
+
+== R14. unit-name sweeps: enumeration, patterns, lookups by process or cgroup
+$ grep -n -E ListUnits|SubscribeUnits|GetUnitBy|read_dir|nexus-verifier-\* crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+
+== R15. PID-only cleanup: every signal, wait or open of a process by id
+$ grep -n -E libc::kill|waitpid|waitid|pidfd|/proc/\{|\.pid\(\)|helper_pid crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope/manager.rs:71:/// holding exactly the helper (`helper_pid`, the locator of the backend's
+crates/nexus-verifier-sandbox/src/scope/manager.rs:76:    pub helper_pid: u32,
+crates/nexus-verifier-sandbox/src/scope/manager.rs:194:            ("PIDs", Value::from(vec![request.helper_pid])),
+crates/nexus-verifier-sandbox/src/scope/native.rs:52:        let text = std::fs::read_to_string(format!("/proc/{}/cgroup", helper.pid()))?;
+crates/nexus-verifier-sandbox/src/scope/pending.rs:101:    helper_pid: u32,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:135:            helper_pid: helper.pid(),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:151:        helper.serial() == self.helper_serial && helper.pid() == self.helper_pid
+crates/nexus-verifier-sandbox/src/scope/pending.rs:265:            helper_pid: helper.pid(),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:322:            .any(|line| line.trim() == helper.pid().to_string())
+crates/nexus-verifier-sandbox/src/scope/pending.rs:383:            .field("helper_pid", &self.helper_pid)
+crates/nexus-verifier-sandbox/src/launcher.rs:371:        let dir = PathBuf::from(format!("/proc/{}", self.child.id()));
+
+== R16. manager reconnect changing authority: every controller and its sharing
+$ grep -n -E Arc<Controller>|Arc::clone\(&self\.controller\)|Arc::new\(Controller|controller:|Weak crates/nexus-verifier-sandbox/src/scope.rs crates/nexus-verifier-sandbox/src/scope/manager.rs crates/nexus-verifier-sandbox/src/scope/native.rs crates/nexus-verifier-sandbox/src/scope/pending.rs crates/nexus-verifier-sandbox/src/execution.rs crates/nexus-verifier-sandbox/src/launcher.rs crates/nexus-verifier-sandbox/src/fault.rs
+crates/nexus-verifier-sandbox/src/scope.rs:135:    controller: Arc<Controller>,
+crates/nexus-verifier-sandbox/src/scope.rs:158:            controller: Arc::new(Controller {
+crates/nexus-verifier-sandbox/src/scope.rs:166:    /// A manager over a deterministic test controller: unit tests only.
+crates/nexus-verifier-sandbox/src/scope.rs:168:    pub(crate) fn with_controller(controller: Controller) -> Self {
+crates/nexus-verifier-sandbox/src/scope.rs:170:            controller: Arc::new(controller),
+crates/nexus-verifier-sandbox/src/scope.rs:184:            Arc::clone(&self.controller),
+crates/nexus-verifier-sandbox/src/scope/pending.rs:95:    controller: Arc<Controller>,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:127:        controller: Arc<Controller>,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:168:        let controller = Arc::clone(&self.controller);
+crates/nexus-verifier-sandbox/src/scope/pending.rs:212:    fn acquire(&mut self, controller: &Controller, helper: Option<&Helper>) {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:231:    fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:259:        let controller = Arc::clone(&self.controller);
+crates/nexus-verifier-sandbox/src/scope/pending.rs:303:        controller: &Controller,
+crates/nexus-verifier-sandbox/src/scope/pending.rs:428:fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:438:fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+crates/nexus-verifier-sandbox/src/scope/pending.rs:449:    controller: &Controller,
+
+== R17. the live harness's callers of the direct scope API
+$ grep -n -E execution::place|ScopedHelper|PlacementFailed|reap_helper|placed\.|connect_at|scopes\.start|StartFailed|PendingScope|unplaced crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+716:        fn unplaced(name: &str, failed: execution::PlacementFailed) -> ! {
+750:            let mut placed = match execution::place(scopes, helper, &limits()) {
+752:                Err(failed) => unplaced("helper_holds_the_scope", failed),
+754:            let helper = placed.helper().unwrap();
+762:            let scope = placed.scope().unwrap();
+767:            placed.reap_helper().unwrap();
+768:            let scope = placed.scope().unwrap();
+778:                placed.end().is_confirmed(),
+897:            let failed = match execution::place(scopes, helper, &limits()) {
+924:                ScopeManager::connect_at("/nonexistent/nexus-p2d/bus"),
+931:                ScopeManager::connect_at(file.to_str().unwrap()),
+942:            assert!(ScopeManager::connect_at(path.to_str().unwrap()).is_err());
+
+== R18. the desktop's route to the sandbox, and its guards of the closed surface
+$ grep -n -E ScopeManager::connect|execution::run\(|execution::place|connect_at|ScopedHelper|PlacementFailed|StartFailed|pub fn start|RetainedBoundary::retry app/src-tauri/src/coding_flow/verification.rs app/src-tauri/src/coding_flow.rs app/src-tauri/src/phase2_tests.rs
+app/src-tauri/src/coding_flow/verification.rs:65:        RetainedBoundary::retry(self)
+app/src-tauri/src/coding_flow/verification.rs:582:        Some(Ok(spec)) => match ScopeManager::connect() {
+app/src-tauri/src/coding_flow/verification.rs:586:                let report = execution::run(&scopes, helper, spec, &profile.resources);
+app/src-tauri/src/phase2_tests.rs:63:        ("execution::run(", 1),
+app/src-tauri/src/phase2_tests.rs:64:        ("ScopeManager::connect()", 1),
+app/src-tauri/src/phase2_tests.rs:65:        ("connect_at", 0),
+app/src-tauri/src/phase2_tests.rs:66:        ("execution::place", 0),
+app/src-tauri/src/phase2_tests.rs:67:        ("ScopedHelper", 0),
+app/src-tauri/src/phase2_tests.rs:282:    // `ScopeManager::connect`, starts a scope only within `execution::run`,
+app/src-tauri/src/phase2_tests.rs:286:    assert!(gated(&execution, "place", HARNESS_ONLY), "execution::place");
+app/src-tauri/src/phase2_tests.rs:288:        gated(&scope, "connect_at", HARNESS_ONLY),
+app/src-tauri/src/phase2_tests.rs:289:        "ScopeManager::connect_at"
+app/src-tauri/src/phase2_tests.rs:293:        "#[derive(Debug)]\npub struct ScopedHelper {",
+app/src-tauri/src/phase2_tests.rs:294:        "#[derive(Debug)]\npub struct PlacementFailed {",
+app/src-tauri/src/phase2_tests.rs:295:        "impl ScopedHelper {",
+app/src-tauri/src/phase2_tests.rs:296:        "impl Drop for ScopedHelper {",
+app/src-tauri/src/phase2_tests.rs:305:        !code(&scope).contains("pub fn start("),
+app/src-tauri/src/phase2_tests.rs:310:        assert!(!code(source).contains("StartFailed"));
+app/src-tauri/src/phase2_tests.rs:352:        "execution::place",
+app/src-tauri/src/phase2_tests.rs:353:        "ScopedHelper",
+app/src-tauri/src/phase2_tests.rs:354:        "PlacementFailed",
+app/src-tauri/src/phase2_tests.rs:356:        "connect_at",
+app/src-tauri/src/phase2_tests.rs:403:    let run = launch.find("execution::run(").unwrap();
+app/src-tauri/src/phase2_tests.rs:889:    assert_eq!(harness.matches("RetainedBoundary::retry").count(), 4);
+app/src-tauri/src/phase2_tests.rs:891:        harness.contains("match settle(boundary, EXPLICIT_ATTEMPTS, RetainedBoundary::retry) {")
+app/src-tauri/src/phase2_tests.rs:897:                 execution::RetainedBoundary::retry,\n                )"
+app/src-tauri/src/phase2_tests.rs:928:    assert!(retained.contains("EXPLICIT_ATTEMPTS,\n                RetainedBoundary::retry,"));

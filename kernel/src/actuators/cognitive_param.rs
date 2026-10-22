@@ -1,17 +1,25 @@
 //! L6 actuators for cognitive tuning, model routing, algorithm selection,
 //! ecosystem design, counterfactual analysis, and temporal planning.
 
-use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+use super::types::{
+    ActionResult, Actuator, ActuatorContext, ActuatorError, ActuatorScope, SideEffect,
+};
 use crate::autonomy::AutonomyLevel;
 use crate::cognitive::algorithms::{
     AdversarialArena, EvolutionEngine, SwarmCoordinator, WorldModel,
 };
 use crate::cognitive::types::PlannedAction;
+use crate::hm::{ControlRecord, NewMemory, Parent, RecallSpec, SourceKind};
 use crate::manifest::AgentManifest;
 use crate::orchestration::orchestrator::Orchestrator;
 use crate::orchestration::roles::canonical_pipeline_order;
 use crate::time_machine::{Checkpoint, TimeMachine};
 use nexus_persistence::{NexusDatabase, StateStore};
+
+/// The refusal of an L6 action outside a unit: these actuators open no
+/// database of their own (P3-HM-CONTRACT-02 §6.5; mission R7).
+const NO_UNIT: &str =
+    "l6 actuator: refused: it runs only as a step of a unit (P3-HM-CONTRACT-02 §6.1)";
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
@@ -57,10 +65,6 @@ fn ensure_l6(context: &ActuatorContext) -> Result<(), ActuatorError> {
     Ok(())
 }
 
-fn db_path(context: &ActuatorContext) -> PathBuf {
-    context.working_dir.join(".nexus").join("nexus.db")
-}
-
 fn state_root(context: &ActuatorContext) -> Result<PathBuf, ActuatorError> {
     let root = context.working_dir.join(STATE_DIR);
     std::fs::create_dir_all(&root)
@@ -94,36 +98,74 @@ fn append_checkpoint(
         .map_err(|e| ActuatorError::IoError(format!("write l6 checkpoint ledger: {e}")))
 }
 
-fn db(context: &ActuatorContext) -> Result<NexusDatabase, ActuatorError> {
-    NexusDatabase::open(&db_path(context))
-        .map_err(|e| ActuatorError::IoError(format!("open l6 db: {e}")))
+/// The source kind of an L6 memory row (§6.5): `model_mapping` rows are
+/// `model_mapping`; every other row these actuators write is
+/// `cognitive_param`.
+fn kind_of(memory_type: &str) -> SourceKind {
+    if memory_type == "model_mapping" {
+        SourceKind::ModelMapping
+    } else {
+        SourceKind::CognitiveParam
+    }
 }
 
+/// The newest eligible row of `memory_type` (route-first: a non-local unit
+/// reads only rows it may disclose), with its JSON value.
 fn latest_memory_json(
-    db: &NexusDatabase,
-    agent_id: &str,
+    scope: &ActuatorScope<'_>,
     memory_type: &str,
-) -> Result<Option<(i64, Value)>, ActuatorError> {
-    let mut rows = db
-        .load_memories(agent_id, Some(memory_type), 100)
-        .map_err(|e| ActuatorError::IoError(format!("load {memory_type} memory: {e}")))?;
-    rows.sort_by_key(|row| row.id);
-    let Some(row) = rows.last() else {
+) -> Result<Option<(ControlRecord, Value)>, ActuatorError> {
+    let Some(row) = scope
+        .issuer
+        .control_records(&*scope.ctx, &RecallSpec::memory_type(memory_type, 1))
+        .map_err(|e| ActuatorError::IoError(format!("load {memory_type} memory: {e}")))?
+        .into_iter()
+        .next()
+    else {
         return Ok(None);
     };
-    let parsed = serde_json::from_str::<Value>(&row.value_json)
+    let parsed = serde_json::from_str::<Value>(row.field("value_json").unwrap_or_default())
         .map_err(|e| ActuatorError::IoError(format!("parse {memory_type} memory json: {e}")))?;
-    Ok(Some((row.id, parsed)))
+    Ok(Some((row, parsed)))
+}
+
+/// A labelled `agent_memory` write of the unit (§6.1): the plan and the
+/// row it was derived from, if any, are its parents.
+fn save_labelled_memory(
+    scope: &ActuatorScope<'_>,
+    memory_type: &str,
+    key: &str,
+    value_json: &str,
+    base: Option<&ControlRecord>,
+) -> Result<(), ActuatorError> {
+    let mut parents = vec![Parent::Derived(scope.plan)];
+    if let Some(base) = base {
+        parents.push(Parent::Record(base.record_ref()));
+    }
+    scope
+        .issuer
+        .write_memory(
+            &*scope.ctx,
+            &NewMemory {
+                source_kind: kind_of(memory_type),
+                memory_type,
+                key,
+                value_json,
+                relevance_score: 1.0,
+            },
+            &parents,
+        )
+        .map(|_| ())
+        .map_err(|e| ActuatorError::IoError(format!("save {memory_type} memory: {e}")))
 }
 
 fn upsert_json_memory(
-    db: &NexusDatabase,
-    agent_id: &str,
+    scope: &ActuatorScope<'_>,
     memory_type: &str,
     value: &Value,
+    base: Option<&ControlRecord>,
 ) -> Result<(), ActuatorError> {
-    db.save_memory(agent_id, memory_type, "active", &value.to_string())
-        .map_err(|e| ActuatorError::IoError(format!("save {memory_type} memory: {e}")))
+    save_labelled_memory(scope, memory_type, "active", &value.to_string(), base)
 }
 
 fn validate_param(param_key: &str, param_value: &str) -> Result<f64, ActuatorError> {
@@ -188,17 +230,25 @@ fn save_evolution_history(
     .map_err(|e| ActuatorError::IoError(format!("save evolution history: {e}")))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn triple_audit_memory_change(
-    db: &NexusDatabase,
+    scope: &ActuatorScope<'_>,
     context: &ActuatorContext,
     memory_type: &str,
+    base: Option<&ControlRecord>,
     before: Value,
     after: Value,
     change_summary: &str,
 ) -> Result<(), ActuatorError> {
     checkpoint_config(context, memory_type, before.clone(), after.clone())?;
-    upsert_json_memory(db, &context.agent_id, memory_type, &after)?;
-    save_evolution_history(db, context, &before, &after, change_summary)
+    upsert_json_memory(scope, memory_type, &after, base)?;
+    save_evolution_history(
+        scope.issuer.state_database(),
+        context,
+        &before,
+        &after,
+        change_summary,
+    )
 }
 
 fn parse_ecosystem(ecosystem_json: &str) -> Result<Vec<EcosystemAgentDefinition>, ActuatorError> {
@@ -266,7 +316,20 @@ impl Actuator for CognitiveParamActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::ModifyCognitiveParams { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let scope = &*scope;
 
         match action {
             PlannedAction::ModifyCognitiveParams {
@@ -274,17 +337,20 @@ impl Actuator for CognitiveParamActuator {
                 param_value,
             } => {
                 validate_param(param_key, param_value)?;
-                let before = latest_memory_json(&db, &context.agent_id, "cognitive_params")?
-                    .map(|(_, v)| v)
+                let latest = latest_memory_json(scope, "cognitive_params")?;
+                let before = latest
+                    .as_ref()
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| Value::Object(Map::new()));
                 let mut after = before.clone();
                 if let Some(map) = after.as_object_mut() {
                     map.insert(param_key.clone(), Value::String(param_value.clone()));
                 }
                 triple_audit_memory_change(
-                    &db,
+                    scope,
                     context,
                     "cognitive_params",
+                    latest.as_ref().map(|(r, _)| r),
                     before,
                     after,
                     "l6.cognitive_param_override",
@@ -324,7 +390,20 @@ impl Actuator for ModelOrchestrationActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::SelectLlmProvider { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let scope = &*scope;
 
         match action {
             PlannedAction::SelectLlmProvider {
@@ -351,8 +430,10 @@ impl Actuator for ModelOrchestrationActuator {
                     )));
                 }
 
-                let before = latest_memory_json(&db, &context.agent_id, "model_mapping")?
-                    .map(|(_, v)| v)
+                let latest = latest_memory_json(scope, "model_mapping")?;
+                let before = latest
+                    .as_ref()
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| Value::Object(Map::new()));
                 let mut after = before.clone();
                 if let Some(map) = after.as_object_mut() {
@@ -366,9 +447,10 @@ impl Actuator for ModelOrchestrationActuator {
                 }
 
                 triple_audit_memory_change(
-                    &db,
+                    scope,
                     context,
                     "model_mapping",
+                    latest.as_ref().map(|(r, _)| r),
                     before,
                     after,
                     "l6.model_orchestration",
@@ -408,7 +490,21 @@ impl Actuator for AlgorithmSelectionActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::SelectAlgorithm { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let db = scope.issuer.state_database().clone();
+        let scope = &*scope;
 
         match action {
             PlannedAction::SelectAlgorithm {
@@ -428,8 +524,10 @@ impl Actuator for AlgorithmSelectionActuator {
                 })?;
                 instantiate_algorithm(algorithm)?;
 
-                let before = latest_memory_json(&db, &context.agent_id, "algorithm_selection")?
-                    .map(|(_, v)| v)
+                let latest = latest_memory_json(scope, "algorithm_selection")?;
+                let before = latest
+                    .as_ref()
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| Value::Object(Map::new()));
                 let after = json!({
                     "algorithm": algorithm,
@@ -437,9 +535,10 @@ impl Actuator for AlgorithmSelectionActuator {
                 });
 
                 triple_audit_memory_change(
-                    &db,
+                    scope,
                     context,
                     "algorithm_selection",
+                    latest.as_ref().map(|(r, _)| r),
                     before,
                     after,
                     "l6.algorithm_selection",
@@ -485,7 +584,21 @@ impl Actuator for EcosystemDesignActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::DesignAgentEcosystem { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let db = scope.issuer.state_database().clone();
+        let scope = &*scope;
 
         match action {
             PlannedAction::DesignAgentEcosystem { ecosystem_json } => {
@@ -514,8 +627,10 @@ impl Actuator for EcosystemDesignActuator {
                     }
                 }
 
-                let before = latest_memory_json(&db, &context.agent_id, "agent_ecosystem")?
-                    .map(|(_, v)| v)
+                let latest = latest_memory_json(scope, "agent_ecosystem")?;
+                let before = latest
+                    .as_ref()
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| json!({"ecosystems": []}));
 
                 let ecosystem_id = Uuid::new_v4().to_string();
@@ -605,9 +720,10 @@ impl Actuator for EcosystemDesignActuator {
                 }
 
                 triple_audit_memory_change(
-                    &db,
+                    scope,
                     context,
                     "agent_ecosystem",
+                    latest.as_ref().map(|(r, _)| r),
                     before,
                     after,
                     "l6.ecosystem_design",
@@ -651,23 +767,38 @@ impl Actuator for CounterfactualActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::RunCounterfactual { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let scope = &*scope;
 
         match action {
             PlannedAction::RunCounterfactual {
                 decision_id,
                 alternatives,
             } => {
-                let world_model = latest_memory_json(&db, &context.agent_id, "world_model")?
+                let latest = latest_memory_json(scope, "world_model")?;
+                let world_model = latest
+                    .as_ref()
                     // Optional: deserialization failure means no prior world model; falls back to default
-                    .and_then(|(_, value)| serde_json::from_value::<WorldModel>(value).ok())
+                    .and_then(|(_, value)| serde_json::from_value::<WorldModel>(value.clone()).ok())
                     .unwrap_or_default();
                 let simulations = alternatives
                     .iter()
                     .map(|alternative| world_model.simulate_action(decision_id, alternative))
                     .collect::<Vec<_>>();
-                db.save_memory(
-                    &context.agent_id,
+                save_labelled_memory(
+                    scope,
                     "episodic",
                     &format!("counterfactual:{decision_id}"),
                     &json!({
@@ -676,8 +807,8 @@ impl Actuator for CounterfactualActuator {
                         "alternatives": simulations,
                     })
                     .to_string(),
-                )
-                .map_err(|e| ActuatorError::IoError(format!("save counterfactual memory: {e}")))?;
+                    latest.as_ref().map(|(r, _)| r),
+                )?;
 
                 Ok(ActionResult {
                     success: true,
@@ -713,7 +844,20 @@ impl Actuator for TemporalPlanActuator {
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
         ensure_l6(context)?;
-        let db = db(context)?;
+        match matches!(action, PlannedAction::TemporalPlan { .. }) {
+            true => Err(ActuatorError::IoError(NO_UNIT.into())),
+            false => Err(ActuatorError::ActionNotHandled),
+        }
+    }
+
+    fn execute_in(
+        &self,
+        action: &PlannedAction,
+        context: &ActuatorContext,
+        scope: &mut ActuatorScope<'_>,
+    ) -> Result<ActionResult, ActuatorError> {
+        ensure_l6(context)?;
+        let scope = &*scope;
 
         match action {
             PlannedAction::TemporalPlan {
@@ -729,49 +873,29 @@ impl Actuator for TemporalPlanActuator {
                     "medium_term": {"goal": medium_term, "review_at": (now + chrono::Duration::days(7)).to_rfc3339()},
                     "long_term": {"goal": long_term, "review_at": (now + chrono::Duration::days(30)).to_rfc3339()},
                 });
-                db.save_memory(
-                    &context.agent_id,
+                save_labelled_memory(
+                    scope,
                     "temporal_goals",
                     "active",
                     &review_schedule.to_string(),
-                )
-                .map_err(|e| ActuatorError::IoError(format!("save temporal plan: {e}")))?;
-                db.save_memory(
-                    &context.agent_id,
-                    "temporal_goal_immediate",
-                    "active",
-                    immediate,
-                )
-                .map_err(|e| {
-                    ActuatorError::IoError(format!("save immediate temporal goal: {e}"))
-                })?;
-                db.save_memory(
-                    &context.agent_id,
+                    None,
+                )?;
+                save_labelled_memory(scope, "temporal_goal_immediate", "active", immediate, None)?;
+                save_labelled_memory(
+                    scope,
                     "temporal_goal_short_term",
                     "active",
                     short_term,
-                )
-                .map_err(|e| {
-                    ActuatorError::IoError(format!("save short-term temporal goal: {e}"))
-                })?;
-                db.save_memory(
-                    &context.agent_id,
+                    None,
+                )?;
+                save_labelled_memory(
+                    scope,
                     "temporal_goal_medium_term",
                     "active",
                     medium_term,
-                )
-                .map_err(|e| {
-                    ActuatorError::IoError(format!("save medium-term temporal goal: {e}"))
-                })?;
-                db.save_memory(
-                    &context.agent_id,
-                    "temporal_goal_long_term",
-                    "active",
-                    long_term,
-                )
-                .map_err(|e| {
-                    ActuatorError::IoError(format!("save long-term temporal goal: {e}"))
-                })?;
+                    None,
+                )?;
+                save_labelled_memory(scope, "temporal_goal_long_term", "active", long_term, None)?;
 
                 Ok(ActionResult {
                     success: true,
@@ -788,8 +912,38 @@ impl Actuator for TemporalPlanActuator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hm::testing::{label_source, rows, TestHm};
     use std::collections::HashSet;
     use tempfile::TempDir;
+
+    /// Runs `action` as a step of a unit of the context's agent (registered
+    /// in `hm`, whose state database is the primary one), with a plan.
+    fn run_in(
+        hm: &TestHm,
+        actuator: &dyn Actuator,
+        action: &PlannedAction,
+        ctx: &ActuatorContext,
+    ) -> Result<ActionResult, ActuatorError> {
+        let agent = Uuid::parse_str(&ctx.agent_id).unwrap();
+        hm.registry.add(agent, &ctx.agent_name);
+        let mut unit = hm.goal(agent);
+        let plan = unit.produce("the plan");
+        let mut scope = ActuatorScope {
+            issuer: &hm.issuer,
+            ctx: &mut unit,
+            plan: &plan,
+            recalled: Vec::new(),
+        };
+        actuator.execute_in(action, ctx, &mut scope)
+    }
+
+    fn run(
+        actuator: &dyn Actuator,
+        action: &PlannedAction,
+        ctx: &ActuatorContext,
+    ) -> Result<ActionResult, ActuatorError> {
+        run_in(&TestHm::new(), actuator, action, ctx)
+    }
 
     fn make_context(workspace: &std::path::Path) -> ActuatorContext {
         let mut caps = HashSet::new();
@@ -813,15 +967,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = CognitiveParamActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::ModifyCognitiveParams {
-                    param_key: "bad_key".to_string(),
-                    param_value: "3".to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+        let err = run(
+            &actuator,
+            &PlannedAction::ModifyCognitiveParams {
+                param_key: "bad_key".to_string(),
+                param_value: "3".to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("invalid param_key"));
     }
 
@@ -830,15 +984,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = CognitiveParamActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::ModifyCognitiveParams {
-                    param_key: "max_cycles".to_string(),
-                    param_value: "501".to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+        let err = run(
+            &actuator,
+            &PlannedAction::ModifyCognitiveParams {
+                param_key: "max_cycles".to_string(),
+                param_value: "501".to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("out of bounds"));
     }
 
@@ -847,23 +1001,34 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = CognitiveParamActuator;
-        let result = actuator
-            .execute(
-                &PlannedAction::ModifyCognitiveParams {
-                    param_key: "planning_depth".to_string(),
-                    param_value: "6".to_string(),
-                },
-                &ctx,
-            )
-            .unwrap();
+        let hm = TestHm::new();
+        let result = run_in(
+            &hm,
+            &actuator,
+            &PlannedAction::ModifyCognitiveParams {
+                param_key: "planning_depth".to_string(),
+                param_value: "6".to_string(),
+            },
+            &ctx,
+        )
+        .unwrap();
         assert!(result.success);
 
-        let db = super::db(&ctx).unwrap();
-        let memories = db
-            .load_memories(&ctx.agent_id, Some("cognitive_params"), 10)
-            .unwrap();
+        // In the primary state database, labelled (P3-HM-CONTRACT-02 §6.5).
+        let memories = rows(
+            &hm.db,
+            &format!(
+                "SELECT CAST(m.id AS TEXT), m.value_json FROM agent_memory m \
+                 WHERE m.agent_id = '{}' AND m.memory_type = 'cognitive_params'",
+                ctx.agent_id
+            ),
+        );
         assert!(!memories.is_empty());
-        assert!(memories[0].value_json.contains("planning_depth"));
+        assert!(memories[0][1].contains("planning_depth"));
+        assert_eq!(
+            label_source(&hm.db, "agent_memory", &memories[0][0]),
+            "cognitive_param"
+        );
 
         let raw = std::fs::read_to_string(super::checkpoint_path(&ctx).unwrap()).unwrap();
         assert!(raw.contains("cognitive_params"));
@@ -874,16 +1039,16 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = ModelOrchestrationActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::SelectLlmProvider {
-                    phase: "unknown".to_string(),
-                    provider: "mock".to_string(),
-                    model: "mock-model".to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+        let err = run(
+            &actuator,
+            &PlannedAction::SelectLlmProvider {
+                phase: "unknown".to_string(),
+                provider: "mock".to_string(),
+                model: "mock-model".to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("invalid phase"));
     }
 
@@ -892,15 +1057,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = AlgorithmSelectionActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::SelectAlgorithm {
-                    algorithm: "bad".to_string(),
-                    config_json: "{}".to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+        let err = run(
+            &actuator,
+            &PlannedAction::SelectAlgorithm {
+                algorithm: "bad".to_string(),
+                config_json: "{}".to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("invalid algorithm"));
     }
 
@@ -909,21 +1074,21 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = EcosystemDesignActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::DesignAgentEcosystem {
-                    ecosystem_json: r#"[{
+        let err = run(
+            &actuator,
+            &PlannedAction::DesignAgentEcosystem {
+                ecosystem_json: r#"[{
                         "name":"child-a",
                         "version":"1.0.0",
                         "capabilities":["fs.read"],
                         "fuel_budget":1000,
                         "autonomy_level":7
                     }]"#
-                    .to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+                .to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("exceeds parent autonomy"));
     }
 
@@ -932,21 +1097,21 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let actuator = EcosystemDesignActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::DesignAgentEcosystem {
-                    ecosystem_json: r#"[{
+        let err = run(
+            &actuator,
+            &PlannedAction::DesignAgentEcosystem {
+                ecosystem_json: r#"[{
                         "name":"child-a",
                         "version":"1.0.0",
                         "capabilities":["fs.read"],
                         "fuel_budget":1000,
                         "autonomy_level":6
                     }]"#
-                    .to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+                .to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("direct human authorization"));
     }
 
@@ -956,21 +1121,63 @@ mod tests {
         let mut ctx = make_context(tmp.path());
         ctx.fuel_remaining = 500.0;
         let actuator = EcosystemDesignActuator;
-        let err = actuator
-            .execute(
-                &PlannedAction::DesignAgentEcosystem {
-                    ecosystem_json: r#"[{
+        let err = run(
+            &actuator,
+            &PlannedAction::DesignAgentEcosystem {
+                ecosystem_json: r#"[{
                         "name":"child-a",
                         "version":"1.0.0",
                         "capabilities":["fs.read"],
                         "fuel_budget":600,
                         "autonomy_level":3
                     }]"#
-                    .to_string(),
-                },
-                &ctx,
-            )
-            .unwrap_err();
+                .to_string(),
+            },
+            &ctx,
+        )
+        .unwrap_err();
         assert!(matches!(err, ActuatorError::InsufficientFuel { .. }));
+    }
+
+    /// Mission R7: the L6 actuators open no database of their own; outside
+    /// a unit every action that reads or writes memory is refused, and no
+    /// database file appears in the workspace.
+    #[test]
+    fn l6_actuators_open_no_database_of_their_own() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_context(tmp.path());
+        let actions: [(&dyn Actuator, PlannedAction); 3] = [
+            (
+                &CognitiveParamActuator,
+                PlannedAction::ModifyCognitiveParams {
+                    param_key: "planning_depth".to_string(),
+                    param_value: "6".to_string(),
+                },
+            ),
+            (
+                &CounterfactualActuator,
+                PlannedAction::RunCounterfactual {
+                    decision_id: "d1".to_string(),
+                    alternatives: vec!["a".to_string()],
+                },
+            ),
+            (
+                &TemporalPlanActuator,
+                PlannedAction::TemporalPlan {
+                    immediate: "i".to_string(),
+                    short_term: "s".to_string(),
+                    medium_term: "m".to_string(),
+                    long_term: "l".to_string(),
+                },
+            ),
+        ];
+        for (actuator, action) in actions {
+            let err = actuator.execute(&action, &ctx).unwrap_err();
+            assert!(
+                err.to_string().contains("only as a step of a unit"),
+                "{err}"
+            );
+        }
+        assert!(!tmp.path().join(".nexus").join("nexus.db").exists());
     }
 }

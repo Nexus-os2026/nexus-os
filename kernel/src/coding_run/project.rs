@@ -123,8 +123,9 @@ struct Registered {
 #[derive(Debug)]
 pub struct ProjectRegistry {
     authority: Arc<WorkspaceAuthorityRegistry>,
-    /// Canonical locations no project may contain or lie within (the Nexus
-    /// state directory).
+    /// Locations no project may contain or lie within (the Nexus state
+    /// directory and any other reserved backend location), each as given
+    /// and canonicalized.
     forbidden: Vec<PathBuf>,
     projects: Mutex<HashMap<ProjectId, Registered>>,
 }
@@ -158,9 +159,21 @@ impl ProjectRegistry {
     /// A registry issuing grants from `authority`. No project may contain or
     /// lie within `nexus_state_dir`.
     pub fn new(authority: Arc<WorkspaceAuthorityRegistry>, nexus_state_dir: &Path) -> Self {
-        let forbidden = std::fs::canonicalize(nexus_state_dir)
-            .into_iter()
-            .chain(std::iter::once(nexus_state_dir.to_path_buf()))
+        Self::reserving(authority, &[nexus_state_dir])
+    }
+
+    /// A registry issuing grants from `authority`. No project may contain or
+    /// lie within any `reserved` location (the Nexus state directory and the
+    /// other backend-owned locations the caller names, such as the verifier's
+    /// workspaces), in its given spelling or its canonical one if it exists.
+    pub fn reserving(authority: Arc<WorkspaceAuthorityRegistry>, reserved: &[&Path]) -> Self {
+        let forbidden = reserved
+            .iter()
+            .flat_map(|root| {
+                std::fs::canonicalize(root)
+                    .into_iter()
+                    .chain(std::iter::once(root.to_path_buf()))
+            })
             .collect();
         Self {
             authority,

@@ -206,7 +206,8 @@ fn p0_fg_webview_app_manifest_lists_every_registered_command() {
     );
     // Matches the recorded desktop surface (inventory: 804 registered commands,
     // plus the 9 Phase One governed coding commands).
-    assert_eq!(APP_COMMANDS.len(), 813, "registered command count changed");
+    // Phase Two added the three governed verification commands (reviewed).
+    assert_eq!(APP_COMMANDS.len(), 829, "registered command count changed");
 }
 
 /// build.rs must actually feed APP_COMMANDS into the app manifest, or the ACL
@@ -472,7 +473,10 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
         );
         merges += 1;
     }
-    assert_eq!(merges, 1, "the one reviewed release-time config merge");
+    // Reviewed: the Builder toolchain resource and (Phase Two P2F, P2-R1)
+    // the Linux verifier runtime (toolchain resource and helper sidecar),
+    // each touching only the bundle.
+    assert_eq!(merges, 2, "the reviewed release-time config merges");
 }
 
 /// The privileged document loads nothing from a third party: `index.html`
@@ -893,7 +897,7 @@ fn p0_fg_webview_app_command_ipc_is_local_main_only() {
     // at the local origin on the main window, and the handler/closure decides
     // the rest. A command missing from the manifest would be refused here
     // even at the local origin.
-    assert_eq!(APP_COMMANDS.len(), 813);
+    assert_eq!(APP_COMMANDS.len(), 829);
     for &cmd in APP_COMMANDS {
         // Allowed: local origin, main window/webview.
         assert!(

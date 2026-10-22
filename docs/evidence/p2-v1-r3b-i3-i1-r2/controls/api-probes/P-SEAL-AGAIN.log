@@ -1,0 +1,18 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run
+exit 101
+--- probe body ---
+    let owner = owner(fixture, config);
+    if let Ok(closed) = owner.close(Tick(2)) {
+        let _ = closed.recorder.request_seal(closed.header(), 0, 0);
+    }
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+error[E0616]: field `recorder` of struct `ClosedStore` is private
+  --> crates/nexus-verifier-sandbox/tests/r2_api_probe.rs:59:24
+   |
+59 |         let _ = closed.recorder.request_seal(closed.header(), 0, 0);
+   |                        ^^^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `nexus-verifier-sandbox` (test "r2_api_probe") due to 1 previous error
+--- stdout ---

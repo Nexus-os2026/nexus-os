@@ -1,0 +1,28 @@
+ M crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs
+ M crates/nexus-verifier-sandbox/tests/support/custody/store/io.rs
+ M crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs
+ M crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs
+ M crates/nexus-verifier-sandbox/tests/support/custody/store/sim.rs
+ M docs/architecture/p2-custody-store-implementation-boundary.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/ERRATA.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/matrices/module-self-review.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/matrices/r5-15.2-recovery-matrix.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/matrices/revocation-capacity-recovery.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/matrices/successor-operations.md
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/adaptation_check.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/candidate_runs.sh
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/checks.sh
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/compare_i2r1.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/control_mapping.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/crash_tallies.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/matrices.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/normalize.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/post_commit.sh
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/preflight.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/requirements.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/scope.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py
+?? docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/validate.sh

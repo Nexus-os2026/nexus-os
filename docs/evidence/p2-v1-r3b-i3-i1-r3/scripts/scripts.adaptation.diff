@@ -1,0 +1,957 @@
+--- a/api_probes.py
++++ b/api_probes.py
+@@ -1,5 +1,18 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 compile-time API probes: the store's authority
++"""P2-V1-R3B-I3-I1-R3 compile-time API probes: the store's authority
++boundary, checked from outside it.
++
++Adapted from docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/api_probes.py (which
++stays unchanged); scripts.adaptation.diff is the difference. R2's probes
++keep their ids, bodies, expected errors and reopen edits. The positive
++control adds the two R3 recoveries. R3 adds seven guards: the session's
++hold check and every decision and removal helper of the R3 recoveries stay
++private to the store (P-R3-*), so the only public way to them is a session
++procedure.
++
++R2's description follows.
++
++P2-V1-R3B-I3-I1-R2 compile-time API probes: the store's authority
+ boundary, checked from outside it.
+
+ Adapted from docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/api_probes.py (which
+@@ -13,7 +26,7 @@
+ (P-TAKE-ASSESSMENT).
+
+ Each probe is a small test target, written into a scratch checkout as
+-crates/nexus-verifier-sandbox/tests/r2_api_probe.rs. It reaches the store
++crates/nexus-verifier-sandbox/tests/r3_api_probe.rs. It reaches the store
+ only as an external caller does, through `custody::store::...` paths, and
+ attempts one of the authority paths the R1 and R2 repairs close. Each
+ counted probe must:
+@@ -52,7 +65,7 @@
+
+ TESTS = "crates/nexus-verifier-sandbox/tests"
+ STORE = f"{TESTS}/support/custody/store"
+-PROBE = f"{TESTS}/r2_api_probe.rs"
++PROBE = f"{TESTS}/r3_api_probe.rs"
+ OWN = f"{STORE}/owner.rs"
+ EXC = f"{STORE}/exchange.rs"
+ OPN = f"{STORE}/open.rs"
+@@ -61,7 +74,7 @@
+ MNT = f"{STORE}/maintenance.rs"
+ SOURCES = [OWN, EXC, OPN, DSP, REC, MNT, f"{STORE}/faults.rs", f"{STORE}/mod.rs"]
+
+-HEADER = r'''//! P2-V1-R3B-I3-I1-R2 API probe: an external caller of the store.
++HEADER = r'''//! P2-V1-R3B-I3-I1-R3 API probe: an external caller of the store.
+ #![cfg(target_os = "linux")]
+ #![allow(unused, dead_code, unreachable_code, private_interfaces)]
+
+@@ -388,6 +401,77 @@
+           "    pub fn take_assessment(&mut self) -> Result<Assessment, String> {")],
+         "only the store's procedures take the verification, once",
+     ),
++    probe(
++        "P-R3-HOLDS-SELECTION", "api-type-guard", "session authority",
++        "(R3) a caller asserting the session's hold on its selection",
++        "call the session's own authority check from outside the store",
++        r'''    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
++        .expect("a session");
++    let held = session.holds_selection();''',
++        ["error[E0624]: method `holds_selection` is private"],
++        [(MNT, "    pub(super) fn holds_selection(&self) -> Result<(), String> {",
++          "    pub fn holds_selection(&self) -> Result<(), String> {")],
++        "the recoveries read the session's lock and selection themselves; a caller has no such check to supply or skip",
++    ),
++    probe(
++        "P-R3-KEPT-COPY", "api-type-guard", "administrative recovery",
++        "(R3) a caller classifying a kept predecessor copy for a succession",
++        "call the kept-copy decision from outside the store",
++        r'''    let decided = maint::kept_copy(&fixture.root, &fixture.path, &[0; 16], &[]);''',
++        ["error[E0603]: function `kept_copy` is private"],
++        [(MNT, "fn kept_copy<P: Platform>(", "pub fn kept_copy<P: Platform>("),
++         (MNT, "\nenum KeptCopy {", "\npub enum KeptCopy {")],
++        "whether step 2a runs is decided inside the succession, at authorization and at its gate",
++    ),
++    probe(
++        "P-R3-UNREFERENCED", "api-type-guard", "administrative recovery",
++        "(R3) a caller deciding that a candidate root is referenced by nothing",
++        "call the cleanup's reference check from outside the store",
++        r'''    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
++        .expect("a session");
++    let decided = maint::unreferenced(&fixture.root, &fixture.path, session.selection(), &fixture.layout);''',
++        ["error[E0603]: function `unreferenced` is private"],
++        [(MNT, "fn unreferenced<P: Platform>(", "pub fn unreferenced<P: Platform>(")],
++        "the cleanup reads its references afresh, under the session's lock, at construction and at its gate",
++    ),
++    probe(
++        "P-R3-INSPECT", "api-type-guard", "administrative recovery",
++        "(R3) a caller inspecting a candidate root and taking its locks",
++        "call the cleanup's inspection from outside the store",
++        r'''    let found = maint::inspect_incomplete(&fixture.root, &fixture.layout, None);''',
++        ["error[E0603]: function `inspect_incomplete` is private"],
++        [(MNT, "fn inspect_incomplete<P: Platform>(", "pub fn inspect_incomplete<P: Platform>("),
++         (MNT, "\nstruct Incomplete {", "\npub struct Incomplete {")],
++        "only the cleanup inspects a candidate, and it keeps what it inspected private",
++    ),
++    probe(
++        "P-R3-REMOVE-KNOWN", "api-type-guard", "administrative recovery",
++        "(R3) a caller removing a named entry through the store's identity-checked removal",
++        "call the cleanup's removal step from outside the store",
++        r'''    let removed = maint::remove_known(&fixture.root, &fixture.layout.parent, 0, "x", 0, true);''',
++        ["error[E0603]: function `remove_known` is private"],
++        [(MNT, "fn remove_known<P: Platform>(", "pub fn remove_known<P: Platform>(")],
++        "the store's removals run only as steps of a gated session procedure",
++    ),
++    probe(
++        "P-R3-REVOCATION-STATE", "api-type-guard", "administrative recovery",
++        "(R3) a caller proving an interrupted revocation",
++        "call R-REVOKE's state check from outside the store",
++        r'''    let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);''',
++        ["error[E0603]: function `interrupted_revocation` is private"],
++        [(MNT, "fn interrupted_revocation<P: Platform>(", "pub fn interrupted_revocation<P: Platform>("),
++         (MNT, "\nenum Revocation {", "\npub enum Revocation {")],
++        "R-REVOKE proves the split itself, at construction, at its gate and in its verify-after",
++    ),
++    probe(
++        "P-R3-REVOCATION-ADMISSIBLE", "api-type-guard", "administrative recovery",
++        "(R3) a caller deciding that a revocation is admissible",
++        "call the revocation's bound and replacement check from outside the store",
++        r'''    let admissible = maint::revocation_admissible(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);''',
++        ["error[E0603]: function `revocation_admissible` is private"],
++        [(MNT, "fn revocation_admissible<P: Platform>(", "pub fn revocation_admissible<P: Platform>(")],
++        "P-REVOKE reads its admissibility itself, at construction and at its gate",
++    ),
+ ]
+
+ ONE_WAY = dict(
+@@ -459,6 +543,8 @@
+     let _ = maint::leftover(Rc::clone(&session));
+     let _ = session.borrow_mut().verify(config);
+     let _ = maint::successor(Rc::clone(&session), &fixture.layout, &[]);
++    let _ = maint::recover_incomplete_successor(Rc::clone(&session), &fixture.layout);
++    let _ = maint::resume_revocation(Rc::clone(&session), [0; 32], "20261002T000000Z");
+     let _ = maint::predecessor_statement(&[]);
+     if let Ok(session) = Rc::try_unwrap(session) {
+         session.into_inner().end();
+@@ -489,9 +575,9 @@
+     (checkout / PROBE).write_text(HEADER + body + FOOTER)
+     env = dict(os.environ)
+     run = subprocess.run(
+-        ["cargo", "test", "--locked", "-p", "nexus-verifier-sandbox", "--test", "r2_api_probe", "--no-run"],
++        ["cargo", "test", "--locked", "-p", "nexus-verifier-sandbox", "--test", "r3_api_probe", "--no-run"],
+         cwd=checkout, env=env, capture_output=True, text=True)
+-    log.write_text(f"$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run\n"
++    log.write_text(f"$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run\n"
+                    f"exit {run.returncode}\n--- probe body ---\n{body}\n--- stderr ---\n{run.stderr}"
+                    f"--- stdout ---\n{run.stdout}")
+     return run.returncode, errors(run.stderr)
+--- a/candidate_runs.sh
++++ b/candidate_runs.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R2 candidate runs, serially and alone in one clean Git
++# P2-V1-R3B-I3-I1-R3 candidate runs, serially and alone in one clean Git
+ # checkout of the candidate (nothing else may build, test or edit there):
+ #   1. validate.sh (the section 11 commands);
+ #   2. store_controls.py (the counted store controls);
+@@ -14,7 +14,7 @@
+ out="$2"
+ mkdir -p "$out"
+ out="$(cd "$out" && pwd)"
+-scripts="$checkout/docs/evidence/p2-v1-r3b-i3-i1-r2/scripts"
++scripts="$checkout/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts"
+ export PYTHONDONTWRITEBYTECODE=1
+ log="$out/runs.txt"
+ : > "$log"
+--- a/checks.sh
++++ b/checks.sh
+@@ -1,10 +1,10 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R2 repository checks, run in the repository itself (they
++# P2-V1-R3B-I3-I1-R3 repository checks, run in the repository itself (they
+ # read Git objects and history; they write nothing there): the R5 design
+ # model and reference self-check (bytecode writes disabled, the cited Linux
+ # v6.17 files verified by SHA-256), every historical evidence manifest
+-# against its own snapshot (R1's evidence included), and the R2 scope check
+-# against the base.
++# against its own snapshot (R1's and R2's evidence included), and the R3
++# scope check against the base.
+ # Usage: checks.sh <repository> <output directory> <kernel directory>
+ set -u
+ repo="$1"
+@@ -31,6 +31,6 @@
+ run historical-manifests python3 -B docs/evidence/p2-v1-r3b-i3-i1/scripts/manifests.py "$repo" \
+   docs/evidence/p2-v1-r3b-i3-p-r1 docs/evidence/p2-v1-r3b-i3-p-r2 docs/evidence/p2-v1-r3b-i3-p-r3 \
+   docs/evidence/p2-v1-r3b-i3-p-r4 docs/evidence/p2-v1-r3b-i3-p-r5 docs/evidence/p2-v1-r3b-i3-i1 \
+-  docs/evidence/p2-v1-r3b-i3-i1-r1
+-run scope python3 -B docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/scope.py "$repo" ed7c7088247badf87b3b1d483ee57360f867e2f1
++  docs/evidence/p2-v1-r3b-i3-i1-r1 docs/evidence/p2-v1-r3b-i3-i1-r2
++run scope python3 -B docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/scope.py "$repo" 66a245c183b04ff1e2ae30fbbd065a57381df09c
+ cat "$summary"
+--- a/control_mapping.py
++++ b/control_mapping.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 old-to-new mapping of the store controls (R1's
+-mapping script, generalized to name the two lists it compares).
++"""P2-V1-R3B-I3-I1-R3 old-to-new mapping of the store controls (R2's
++mapping script, comparing R2's list with R3's).
+
+ Loads the R1 control list (docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/
+ store_controls.py, unchanged) and the R2 list (this directory's
+@@ -11,7 +11,7 @@
+ Every R2 control that has no R1 counterpart is listed as added. With an
+ as-run summary.json it also gives each R2 control's result.
+
+-Usage: control_mapping.py <R1 store_controls.py> <R2 store_controls.py> <out dir> [summary.json]
++Usage: control_mapping.py <R2 store_controls.py> <R3 store_controls.py> <out dir> [summary.json]
+ """
+ import json
+ import pathlib
+@@ -40,7 +40,7 @@
+     new_by_id = {c["id"]: c for c in new["COUNTED"]}
+     remapped = {c["id"]: c for c in new.get("REMAPPED", [])}
+     remapped_to = new.get("REMAPPED_TO", {})
+-    reanchored = new.get("REANCHORED", {})
++    reanchored = new.get("REANCHORED_R3", {})
+     rows = []
+     for c in old["COUNTED"]:
+         cid = c["id"]
+@@ -63,19 +63,19 @@
+     old_ids = {c["id"] for c in old["COUNTED"]}
+     for c in new["COUNTED"]:
+         if c["id"] not in old_ids:
+-            rows.append(dict(old=None, new=c["id"], status="added (R2)", changed=[], guards=[],
++            rows.append(dict(old=None, new=c["id"], status="added (R3)", changed=[], guards=[],
+                              category=c["category"], result=results.get(c["id"])))
+     counts = {}
+     for r in rows:
+         counts[r["status"]] = counts.get(r["status"], 0) + 1
+     (out / "control_mapping.json").write_text(json.dumps(dict(rows=rows, counts=counts), indent=2) + "\n")
+     lines = [
+-        "# Store controls: R1 to R2 mapping",
++        "# Store controls: R2 to R3 mapping",
+         "",
+-        f"R1 counted controls: {len(old['COUNTED'])}. R2 counted controls: {len(new['COUNTED'])}. "
+-        f"Remapped (not run, carried by API/type guards, as in R1): {len(remapped)}.",
++        f"R2 counted controls: {len(old['COUNTED'])}. R3 counted controls: {len(new['COUNTED'])}. "
++        f"Remapped (not run, carried by API/type guards, as in R1 and R2): {len(remapped)}.",
+         "",
+-        "| R1 control | R2 control | status | changed fields | category | R2 result |",
++        "| R2 control | R3 control | status | changed fields | category | R3 result |",
+         "|---|---|---|---|---|---|",
+     ]
+     for r in rows:
+--- a/matrices.py
++++ b/matrices.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 control matrices, kept apart:
++"""P2-V1-R3B-I3-I1-R3 control matrices, kept apart:
+
+ - behavioural controls: the counted store controls (by category) and the
+   I2-R1 suite's counted controls and informational runs, from their as-run
+@@ -28,7 +28,7 @@
+     out = pathlib.Path(sys.argv[4])
+     out.mkdir(parents=True, exist_ok=True)
+
+-    lines = ["# Behavioural controls (P2-V1-R3B-I3-I1-R2)", ""]
++    lines = ["# Behavioural controls (P2-V1-R3B-I3-I1-R3)", ""]
+     s = store["summary"]
+     lines.append(f"Store controls: {s['counted']} counted; all as required: {s['all_required']}; "
+                  f"sources identical after the run: {s['identical']}; failures: {s['failures'] or 'none'}.")
+@@ -63,7 +63,7 @@
+                      f"{r.get('failed')} | {r.get('passed')} | {r.get('files_restored')} |")
+     (out / "behavioural-controls.md").write_text("\n".join(lines) + "\n")
+
+-    lines = ["# API/type guards (P2-V1-R3B-I3-I1-R2)", "",
++    lines = ["# API/type guards (P2-V1-R3B-I3-I1-R3)", "",
+              "Compile-time probes from outside the store boundary. Each guard must fail to build with "
+              "exactly its expected error and, once that one access is reopened in a scratch copy, build. "
+              "They prove the safe API surface only; they are not behavioural detections and are not added "
+--- a/normalize.py
++++ b/normalize.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 evidence normalization (R1's, unchanged in substance).
++"""P2-V1-R3B-I3-I1-R3 evidence normalization (R1's and R2's, unchanged in substance).
+
+ Copies a raw output file into the evidence directory with one documented
+ transformation, so that `git diff --check` accepts it without any
+--- a/preflight.py
++++ b/preflight.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 publication preflight and ref readback.
++"""P2-V1-R3B-I3-I1-R3 publication preflight and ref readback.
+
+ Reads, and changes nothing:
+ - every protected ref and the candidate branch, locally and on the remote
+@@ -79,7 +79,7 @@
+     for line in git(root, "ls-remote", remote, *[f"refs/heads/{name}" for name, _ in rows]).splitlines():
+         sha, ref = line.split("\t", 1)
+         remote_refs[ref[len("refs/heads/"):]] = sha
+-    lines = [f"P2-V1-R3B-I3-I1-R2 publication preflight and ref readback, {now}",
++    lines = [f"P2-V1-R3B-I3-I1-R3 publication preflight and ref readback, {now}",
+              f"remote {remote}: {git(root, 'remote', 'get-url', remote)}", "",
+              f"{'ref':45} {'expected':41} {'local':41} {'remote':41} result"]
+     ok = True
+--- a/scope.py
++++ b/scope.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 scope check.
++"""P2-V1-R3B-I3-I1-R3 scope check.
+
+ Every path changed relative to the base must lie in the mission's envelope,
+ and every protected file and tree must be unchanged from the base. Before
+@@ -13,17 +13,20 @@
+ import subprocess
+ import sys
+
+-# The mission's section 4: maintenance.rs, classify.rs, the store test
+-# target and the boundary document; open.rs and mod.rs narrowly; the R2
+-# evidence directory.
++# The mission's section 5: maintenance.rs, io.rs, sim.rs, the store test
++# target, store/mod.rs and the boundary document; format.rs, open.rs and
++# classify.rs narrowly; the R3 evidence directory. (No new store submodule.)
+ ENVELOPE = [
+     "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/io.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/sim.rs",
+     "crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/format.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs",
+     "crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs",
+     "docs/architecture/p2-custody-store-implementation-boundary.md",
+-    "docs/evidence/p2-v1-r3b-i3-i1-r2/*",
++    "docs/evidence/p2-v1-r3b-i3-i1-r3/*",
+ ]
+ PROTECTED = [
+     "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
+@@ -57,6 +60,7 @@
+     ".github",
+     "docs/evidence/p2-v1-r3b-i3-i1",
+     "docs/evidence/p2-v1-r3b-i3-i1-r1",
++    "docs/evidence/p2-v1-r3b-i3-i1-r2",
+     "docs/evidence/p2-v1-r3b-i3-p-r1",
+     "docs/evidence/p2-v1-r3b-i3-p-r2",
+     "docs/evidence/p2-v1-r3b-i3-p-r3",
+--- a/store_controls.py
++++ b/store_controls.py
+@@ -1,5 +1,22 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R2 negative controls for the custody store.
++"""P2-V1-R3B-I3-I1-R3 negative controls for the custody store.
++
++Adapted from docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/store_controls.py
++(which stays unchanged); scripts.adaptation.diff is the difference. R2's
++137 counted controls keep their ids, categories, intended tests and
++markers; 135 keep their edits unchanged. Two moved to the equivalent
++defect point of the R3 sources, where an R3 check had come to mask R2's
++mutation (REANCHORED_R3 names each and why).
++matrices/r2-to-r3-control-mapping.md states each one's result. R3 adds R3_RECOVERY (category administrative-recovery, and
++one authority-api-surface guard), R3_SIMULATOR (simulator-source-
++conformance) and R3_NATIVE (implementation-safety). Each restores one wrong
++behaviour of the R3 administrative recoveries, of the simulator's rmdir and
++rename rules, or of the native directory removal, and must fail its R3
++regression with its marker.
++
++R2's description follows.
++
++P2-V1-R3B-I3-I1-R2 negative controls for the custody store.
+
+ Adapted from docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/store_controls.py
+ (which stays unchanged); the adaptation diff is
+@@ -86,7 +103,7 @@
+     f"{TESTS}/phase2_custody_codec.rs",
+ ]
+ # The frozen candidate's sources (store_controls.py <checkout> --print-sources).
+-CANDIDATE_SOURCES = {}  # R2-CANDIDATE-SOURCES
++CANDIDATE_SOURCES = {}  # R3-CANDIDATE-SOURCES
+
+ SIM = f"{STORE}/sim.rs"
+ FMT = f"{STORE}/format.rs"
+@@ -1817,18 +1834,23 @@
+     ),
+     control(
+         "NC-SUCC-MUTATE-BEFORE-GATE", "maintenance-authority", [],
+-        "a procedure's gate is checked after its first operation, not before it",
++        "the succession's gate is checked after its first operation, not before it",
+         [(MNT, r'''            if self.done == 0 {
+                 if let Some(gate) = self.gate.as_mut() {
+                     gate().map_err(|why| format!("{} (gate): {why}", self.name))?;
+                 }
+             }
+             let step = &mut self.steps[self.done];
+-''', r'''            let step = &mut self.steps[self.done];
++''', r'''            if self.done == 0 && self.name != "P-SUCCESSOR" {
++                if let Some(gate) = self.gate.as_mut() {
++                    gate().map_err(|why| format!("{} (gate): {why}", self.name))?;
++                }
++            }
++            let step = &mut self.steps[self.done];
+ '''), (MNT, r'''            let mut result = (step.action)();
+             if result.is_ok() && self.done + 1 == last {
+ ''', r'''            let mut result = (step.action)();
+-            if result.is_ok() && self.done == 0 {
++            if result.is_ok() && self.done == 0 && self.name == "P-SUCCESSOR" {
+                 if let Some(gate) = self.gate.as_mut() {
+                     // Checked after the first operation, discounting that
+                     // operation's own step.
+@@ -1890,7 +1912,7 @@
+     ),
+     control(
+         "NC-SUCC-SAME-ROOT", "maintenance-authority", [],
+-        "a successor may reuse the predecessor's root id",
++        "a successor may reuse the predecessor's root id (in R3: its root id and its existing state root)",
+         [(MNT, r'''    if layout.root_id == old.root_id
+         || old
+             .predecessor
+@@ -1899,6 +1921,12 @@
+     {
+         return Err("the successor needs a new root id".into());
+     }
++''', r''''''), (MNT, r'''    if !state_root_absent(session.borrow().io(), layout)? {
++        return Err(format!(
++            "the successor's state root {} exists: an interrupted succession's incomplete root is recovered first (R-SUCCESSOR)",
++            layout.state_name
++        ));
++    }
+ ''', r'''''')],
+         "v22_a_successor_is_a_new_root_of_a_recovered_predecessor", "[succession-precondition]",
+         require=["the predecessor's own root id"],
+@@ -2157,6 +2185,511 @@
+
+ # R1 controls whose anchor moved to the equivalent defect point of the R2
+ # sources; the intention, test and marker are unchanged.
++# ---------------------------------------------------------------------------
++# P2-V1-R3B-I3-I1-R3: administrative crash recovery (category
++# administrative-recovery), and the simulator and native rules R3 added
++# (categories simulator-source-conformance and implementation-safety). Each
++# restores one wrong behaviour of the R3 sources and fails its R3 regression.
++# ---------------------------------------------------------------------------
++
++R3_RECOVERY = [
++    control(
++        "NC-R3-SUCC-KEEP-OVERWRITE", "administrative-recovery", ["R303", "R314"],
++        "a kept copy that is not the selected PROVISION is taken for absent, so step 2a runs over it",
++        [(MNT, r'''    if bytes != selected {
++        return Err(format!(
++            "the kept predecessor copy {name} is not the selected PROVISION: the repeat is refused"
++        ));
++    }
++    Ok(KeptCopy::Exact { ino: stat.ino })''', r'''    if bytes != selected {
++        return Ok(KeptCopy::Absent);
++    }
++    Ok(KeptCopy::Exact { ino: stat.ino })''')],
++        "r303_a_kept_copy_one_byte_off_refuses_the_repeat", "[succession-keep]",
++        require=["the repeat proceeded"],
++    ),
++    control(
++        "NC-R3-SUCC-KEEP-BLESS", "administrative-recovery", ["R303"],
++        "a kept copy that is not the selected PROVISION is blessed as the exact copy (step 2a skipped)",
++        [(MNT, r'''    if bytes != selected {
++        return Err(format!(
++            "the kept predecessor copy {name} is not the selected PROVISION: the repeat is refused"
++        ));
++    }
++    Ok(KeptCopy::Exact { ino: stat.ino })''', r'''    let _ = selected;
++    Ok(KeptCopy::Exact { ino: stat.ino })''')],
++        "r303_a_kept_copy_one_byte_off_refuses_the_repeat", "[succession-keep]",
++        require=["the repeat proceeded"],
++    ),
++    control(
++        "NC-R3-SUCC-NO-SKIP", "administrative-recovery", ["R302"],
++        "an exact kept copy does not skip step 2a",
++        [(MNT, "    if keep == KeptCopy::Absent {\n",
++          "    if matches!(keep, KeptCopy::Absent | KeptCopy::Exact { .. }) {\n")],
++        "r302_a_repeat_after_the_kept_copy_skips_step_2a", "[succession-repeat]",
++        require=["step 2a skipped"],
++    ),
++    control(
++        "NC-R3-SUCC-ORDINARY-SKIP", "administrative-recovery", ["R301"],
++        "the ordinary succession (no kept copy) skips step 2a",
++        [(MNT, "    if keep == KeptCopy::Absent {\n", "    if keep != KeptCopy::Absent {\n")],
++        "r301_an_ordinary_succession_is_the_documented_29_operations", "[succession-repeat]",
++        require=["the ordinary path runs step 2a"],
++    ),
++    control(
++        "NC-R3-SUCC-KEEP-METADATA", "administrative-recovery", ["R304"],
++        "a kept copy of another owner, mode or link count is taken for the exact copy",
++        [(MNT, r'''    if (stat.uid, stat.gid, stat.mode, stat.nlink) != (0, 0, 0o444, 1) {
++        return Err(format!(
++            "the kept predecessor copy {name} is not root:root 0444 with one link: the repeat is refused"
++        ));
++    }
++''', "")],
++        "r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses", "[succession-keep]",
++        require=["owner: the repeat proceeded"],
++    ),
++    control(
++        "NC-R3-SUCC-LEFTOVER-IGNORED", "administrative-recovery", ["R305"],
++        "a leftover PROVISION temporary does not refuse the repeat",
++        [(MNT, r'''    for leftover in [path.predecessor_tmp_name(), path.tmp_name()] {
++        if !absent(io, &provdir.dir, &leftover)? {''', r'''    for leftover in [path.predecessor_tmp_name(), path.tmp_name()] {
++        if false && !absent(io, &provdir.dir, &leftover)? {''')],
++        "r305_a_leftover_temporary_refuses_the_repeat_until_r_leftover", "[succession-keep]",
++        require=["the repeat proceeded"],
++    ),
++    control(
++        "NC-R3-SUCC-ROOT-IGNORED", "administrative-recovery", ["R306"],
++        "an existing successor root does not refuse the repeat",
++        [(MNT, r'''    if !state_root_absent(session.borrow().io(), layout)? {
++        return Err(format!(''', r'''    if false && !state_root_absent(session.borrow().io(), layout)? {
++        return Err(format!(''')],
++        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
++        require=["the incomplete root refuses the repeat"],
++    ),
++    control(
++        "NC-R3-SUCC-GATE-COPY", "administrative-recovery", ["R314"],
++        "the succession's gate does not recheck the kept copy",
++        [(MNT, r'''            if kept_copy(s.io(), &gate_path, &old_provision.root_id, &gate_bytes)? != keep {''',
++          r'''            if false && kept_copy(s.io(), &gate_path, &old_provision.root_id, &gate_bytes)? != keep {''')],
++        "r314_a_mismatched_kept_copy_is_never_overwritten", "[succession-keep]",
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-NONZERO", "administrative-recovery", ["R307"],
++        "a successor pool file with a non-zero byte is removed",
++        [(MNT, r'''                    if bytes.iter().any(|byte| *byte != 0) {
++                        return Err(format!(
++                            "journals/{pool} holds a non-zero byte: it may hold history, and is never removed"
++                        ));
++                    }''', r'''                    let _ = &bytes;''')],
++        "r307_a_successor_pool_byte_that_is_not_zero_refuses", "[succession-cleanup]",
++        require=["removable"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-UNEXPECTED", "administrative-recovery", ["R308"],
++        "an unexpected entry of the candidate's root is ignored",
++        [(MNT, r'''            other => {
++                return Err(format!(
++                    "{other} is not made by step 2b: the candidate is refused"
++                ))
++            }''', r'''            _ => {}''')],
++        "r308_an_unexpected_entry_refuses_the_cleanup", "[succession-cleanup]",
++        require=["an entry in place of archive/: removable"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-SELECTED", "administrative-recovery", ["R309"],
++        "the selected store is not refused as a candidate",
++        [(MNT, r'''    if layout.state_name == selection.state_name || layout.root_id == selection.provision.root_id {
++        return Err("the candidate is the selected store: it is never removed".into());
++    }
++''', "")],
++        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
++        require=["the selected store"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-UID", "administrative-recovery", ["R309"],
++        "a candidate of another uid or gid is not refused as another store's",
++        [(MNT, r'''    if (layout.uid, layout.gid) != (selection.provision.uid, selection.provision.gid) {
++        return Err("the candidate is not this store's: another uid or gid".into());
++    }
++''', "")],
++        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
++        require=["another store's uid"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-COPY-CONTENT", "administrative-recovery", ["R309"],
++        "what a kept copy records (root id, state root, predecessor) does not refuse the candidate",
++        [(MNT, r'''        if kept.root_id == layout.root_id
++            || kept.state_root == candidate
++            || kept
++                .predecessor
++                .as_ref()
++                .is_some_and(|(id, _)| *id == layout.root_id)
++        {''', r'''        if false {
++            let _ = (&kept, &candidate);''')],
++        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
++        require=["referenced by a kept copy's content"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-NOT-INTERRUPTED", "administrative-recovery", ["R309"],
++        "the cleanup is built for a store with no interrupted succession",
++        [(MNT, r'''    unreferenced(&*io, &path, &selection, layout)?;
++    succession_interrupted(&*io, &path, &selection.provision.root_id, &selected)?;
++''', r'''    unreferenced(&*io, &path, &selection, layout)?;
++''')],
++        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
++        require=["no interrupted succession"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-NO-LOCK", "administrative-recovery", ["R310"],
++        "the cleanup takes no lock on the candidate's LOCK",
++        [(MNT, r'''                if let Some(locks) = locks.as_mut() {
++                    io.flock(&file, LockRequest::Exclusive)
++                        .map_err(|_| "the candidate's LOCK is held by another process (Busy)")?;
++                    locks.push(file);
++                }''', r'''                if let Some(locks) = locks.as_mut() {
++                    locks.push(file);
++                }''')],
++        "r310_a_candidate_held_elsewhere_refuses_the_cleanup", "[succession-cleanup]",
++        require=["LOCK: removable while held"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-RECURSIVE", "administrative-recovery", ["R308", "R328"],
++        "a directory's removal first removes what it holds (recursive)",
++        [(MNT, r'''    if directory {
++        io.remove_dir(&at.dir, name).map_err(err)
++    } else {''', r'''    if directory {
++        let inner = io.open_dir(&at.dir, name).map_err(err)?;
++        if let Ok(Listing::Names(children)) = io.list_dir(&inner, 8192) {
++            for child in children {
++                let _ = io.unlink(&inner, &child);
++            }
++        }
++        io.remove_dir(&at.dir, name).map_err(err)
++    } else {''')],
++        "r308_an_unexpected_entry_refuses_the_cleanup", "[successor-cleanup-recursive]",
++        require=["a directory that is not empty"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-RECURSIVE-API", "authority-api-surface", ["R328"],
++        "the I/O trait gains a recursive removal",
++        [(IO, r'''    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
++''', r'''    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
++    /// A whole tree (the defect).
++    fn remove_tree(&self, at: &Self::Dir, name: &str) -> Result<(), IoError> {
++        self.remove_dir(at, name)
++    }
++''')],
++        "r328_no_new_public_authority_bearing_interface", "[successor-cleanup-recursive]",
++        require=["the I/O trait's operations"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-IDENTITY", "administrative-recovery", ["R308"],
++        "a removal does not check that the entry is the inode the inspection found",
++        [(MNT, r'''    if stat.ino != ino || (stat.file_type == FileType::Directory) != directory {
++        return Err(format!("{name} is not the entry the inspection found"));
++    }''', r'''    if (stat.file_type == FileType::Directory) != directory {
++        return Err(format!("{name} is not the entry the inspection found ({ino})"));
++    }''')],
++        "r308_an_unexpected_entry_refuses_the_cleanup", "[succession-cleanup]",
++        require=["a replaced entry"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-GATE", "administrative-recovery", ["R307"],
++        "the cleanup's gate does not inspect the candidate again",
++        [(MNT, r'''            if inspect_incomplete(s.io(), &gate_layout, None)? != gate_found {''',
++          r'''            if false && inspect_incomplete(s.io(), &gate_layout, None)? != gate_found {''')],
++        "r307_a_successor_pool_byte_that_is_not_zero_refuses", "[succession-cleanup]",
++        require=["the gate"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-GONE-REFUSED", "administrative-recovery", ["R311"],
++        "the cleanup refuses when the candidate is already gone, instead of syncing the parent",
++        [(MNT, "    let found = inspect_incomplete(&*io, layout, Some(&mut held))?;\n",
++          "    let found = inspect_incomplete(&*io, layout, Some(&mut held))?;\n"
++          "    if found.root.is_none() {\n"
++          "        return Err(\"the candidate is already gone\".into());\n"
++          "    }\n")],
++        "r3x3_every_interrupted_cleanup_recovers", "[succession-cleanup]",
++        require=["refused: the candidate is already gone"],
++    ),
++    control(
++        "NC-R3-SUCC-CLEAN-NO-PARENT-SYNC", "administrative-recovery", ["R306", "R311"],
++        "the cleanup does not sync the parent after removing the root",
++        [(MNT, r'''    {
++        let (io, dir) = (Rc::clone(&io), parent_path.clone());
++        proc.add(label, move || sync_known(&*io, &dir, parent_ino));
++    }
++''', "")],
++        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
++        require=["the parent's sync last"],
++    ),
++    control(
++        "NC-R3-SUCC-REUSE-VERIFY", "administrative-recovery", ["R312"],
++        "the cleanup runs outside the session's accounting and without its verify-after, so the verification before it still authorizes",
++        [(MNT, r'''    let mut proc = Procedure::new("R-SUCCESSOR");
++    proc.within(Rc::clone(&s.mutations));
++''', r'''    let mut proc = Procedure::new("R-SUCCESSOR");
++'''), (MNT, r'''        let _retained = &held;
++        generic()?;''', r'''        let _retained = &held;
++        let _ = &mut generic;''')],
++        "r312_the_repeat_needs_a_fresh_verification_after_the_cleanup", "[succession-current]",
++        require=["a verification older than the cleanup"],
++    ),
++    control(
++        "NC-R3-RECOVERY-NO-POSTVERIFY-SUCC", "administrative-recovery", ["R306"],
++        "R-SUCCESSOR's verify-after does not require the candidate gone",
++        [(MNT, r'''        if state_root_absent(s.io(), &candidate)? {
++            Ok(())
++        } else {
++            Err("the candidate's state root is still present".into())
++        }''', r'''        let _ = (&s, &candidate);
++        Ok(())''')],
++        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
++        require=["the candidate reappeared"],
++    ),
++    control(
++        "NC-R3-REVOKE-BOUND-EARLY", "administrative-recovery", ["R315"],
++        "a revocation refuses below revoked/'s bound (at 4095 entries)",
++        [(MNT, "        Listing::Names(names) if names.len() >= format::REVOKED_ENTRY_LIMIT => {\n",
++          "        Listing::Names(names) if names.len() + 1 >= format::REVOKED_ENTRY_LIMIT => {\n")],
++        "r315_a_revocation_below_the_bound_fills_it", "[revocation-bound]",
++        require=["below the bound"],
++    ),
++    control(
++        "NC-R3-REVOKE-OVERFLOW", "administrative-recovery", ["R316"],
++        "a revocation at revoked/'s bound proceeds and exceeds it",
++        [(MNT, "        Listing::Names(names) if names.len() >= format::REVOKED_ENTRY_LIMIT => {\n",
++          "        Listing::Names(names) if names.len() > format::REVOKED_ENTRY_LIMIT => {\n")],
++        "r316_a_revocation_at_the_bound_refuses_before_any_operation", "[revocation-bound]",
++        require=["at the bound"],
++    ),
++    control(
++        "NC-R3-REVOKE-REPLACE", "administrative-recovery", ["R317"],
++        "a revocation renames over an existing revoked file",
++        [(MNT, r'''    if !absent(io, &revoked.dir, revoked_name)? {
++        return Err(format!(
++            "revoked/{revoked_name} exists: a revocation never replaces revoked evidence"
++        ));
++    }
++''', "")],
++        "r317_a_revocation_never_replaces_revoked_evidence", "[revocation-replace]",
++        require=["the name exists"],
++    ),
++    control(
++        "NC-R3-REVOKE-TIME-IGNORED", "administrative-recovery", ["R318"],
++        "the revoked name ignores the revocation's time, so a second revocation of a binding meets the first",
++        [(MNT, r'''    let name = format::disposition_name(&binding);
++    let revoked_name = format::revoked_name(&binding, compact_time);
++''', r'''    let name = format::disposition_name(&binding);
++    let revoked_name = format::revoked_name(&binding, "20260101T000000Z");
++    let _ = compact_time;
++''')],
++        "r318_revocations_at_two_times_are_both_kept", "[revocation-replace]",
++        require=["a second revocation at another time"],
++    ),
++    control(
++        "NC-R3-REVOKE-NO-VERIFY-AFTER", "administrative-recovery", ["R323"],
++        "a normal revocation has no verify-after",
++        [(MNT, r'''    drop(s);
++    proc.finish(verified_after(Rc::clone(&session)));
++    {
++        let (io, from, to) = (''', r'''    drop(s);
++    {
++        let (io, from, to) = (''')],
++        "r323_a_revocation_completes_with_its_verify_after", "[revocation-verify-after]",
++    ),
++    control(
++        "NC-R3-REVOKE-GATE", "administrative-recovery", ["R316"],
++        "the revocation's gate does not read its admissibility again",
++        [(MNT, r'''            unchanged()?;
++            if revocation_admissible(''', r'''            unchanged()?;
++            if false && revocation_admissible(''')],
++        "r316_a_revocation_at_the_bound_refuses_before_any_operation", "[revocation-bound]",
++        require=["the gate"],
++    ),
++    control(
++        "NC-R3-REVOKE-RECOVER-WRONG", "administrative-recovery", ["R320"],
++        "R-REVOKE accepts another file under the revoked name",
++        [(MNT, r'''            if !active.same_inode(&artifact) {
++                Err(format!(
++                    "{name} is another file than revoked/{revoked_name}: not an interrupted revocation, and nothing is removed"
++                ))
++            } else if (active.nlink, artifact.nlink) != (2, 2) {
++                Err(format!(
++                    "{name} has {} links, not the 2 of an interrupted revocation",
++                    active.nlink
++                ))
++            } else {
++                Ok(Revocation::Split { ino: artifact.ino })
++            }''', r'''            let _ = (active, &name);
++            Ok(Revocation::Split { ino: artifact.ino })''')],
++        "r320_a_differing_revocation_state_refuses_r_revoke", "[revocation-recovery]",
++        require=["another file: applied"],
++    ),
++    control(
++        "NC-R3-REVOKE-RECOVER-NAME", "administrative-recovery", ["R320"],
++        "R-REVOKE takes a revocation time that is not a compact UTC time",
++        [(MNT, r'''    let s = session.borrow();
++    s.holds_selection()?;
++    let revoked_name = format::revoked_name(&binding, compact_time);
++    if format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {''',
++          r'''    let s = session.borrow();
++    s.holds_selection()?;
++    let revoked_name = format::revoked_name(&binding, compact_time);
++    if false && format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {''')],
++        "r320_a_differing_revocation_state_refuses_r_revoke", "[revocation-recovery]",
++        require=["2026-10-03T00:00:00Z"],
++    ),
++    control(
++        "NC-R3-REVOKE-RECOVER-DELETE-TARGET", "administrative-recovery", ["R319"],
++        "R-REVOKE removes the revoked file instead of the active name",
++        [(MNT, r'''        proc.add("13.4-revoke/recover", move || {
++            remove_known(&*io, &dir, dispositions_ino, &name, ino, false)
++        });''', r'''        let (revoked_dir, revoked_entry) = (revoked_path.clone(), revoked_name.clone());
++        proc.add("13.4-revoke/recover", move || {
++            let _ = (&dir, &name, ino, dispositions_ino);
++            let at = dir_ref(&*io, &revoked_dir)?;
++            io.unlink(&at.dir, &revoked_entry).map_err(err)
++        });''')],
++        "r319_r_revoke_unlinks_only_the_active_name_and_syncs", "[revocation-recovery]",
++        require=["the revoked file was removed"],
++    ),
++    control(
++        "NC-R3-REVOKE-RECOVER-NO-SYNC", "administrative-recovery", ["R319"],
++        "R-REVOKE does not sync dispositions/ after the unlink",
++        [(MNT, r'''    {
++        let (io, dir) = (Rc::clone(&io), dispositions_path.clone());
++        proc.add("13.4-revoke/recover", move || {
++            sync_known(&*io, &dir, dispositions_ino)
++        });
++    }
++''', "")],
++        "r319_r_revoke_unlinks_only_the_active_name_and_syncs", "[revocation-recovery]",
++        require=["the unlink and the sync"],
++    ),
++    control(
++        "NC-R3-REVOKE-CAPACITY-CONFLATED", "administrative-recovery", ["R321"],
++        "R-REVOKE refuses at revoked/'s bound as a normal revocation does",
++        [(MNT, r'''    let io = Rc::new(s.io().clone());
++    let state = interrupted_revocation(''', r'''    let io = Rc::new(s.io().clone());
++    if let Listing::Names(names) = io
++        .list_dir(&dir_ref(&*io, &revoked_path)?.dir, 8192)
++        .map_err(err)?
++    {
++        if names.len() >= format::REVOKED_ENTRY_LIMIT {
++            return Err("revoked/ is at its bound".into());
++        }
++    }
++    let state = interrupted_revocation(''')],
++        "r321_r_revoke_applies_at_the_bound", "[revocation-capacity]",
++        require=["at the bound"],
++    ),
++    control(
++        "NC-R3-REVOKE-COMPLETED-REFUSED", "administrative-recovery", ["R322"],
++        "R-REVOKE does not recognize a completed revocation (it refuses instead of repeating the sync)",
++        [(MNT, r'''            if artifact.nlink == 1 {
++                Ok(Revocation::Completed { ino: artifact.ino })''', r'''            if artifact.nlink == 1 && false {
++                Ok(Revocation::Completed { ino: artifact.ino })''')],
++        "r3x4_every_interrupted_revocation_recovers", "[revocation-recovery]",
++        require=["refused"],
++    ),
++    control(
++        "NC-R3-RECOVERY-NO-POSTVERIFY", "administrative-recovery", ["R324"],
++        "R-REVOKE's verify-after does not require the revocation completed",
++        [(MNT, r'''        match interrupted_revocation(
++            s.io(),
++            &dispositions_path,
++            &revoked_path,
++            &binding,
++            &revoked_name,
++            &root_id,
++        )? {
++            Revocation::Completed { ino: now } if now == ino => Ok(()),
++            other => Err(format!("the revocation is not complete: {other:?}")),
++        }''', r'''        let _ = (&s, &dispositions_path, &revoked_path, &binding, &revoked_name, &root_id, ino);
++        Ok(())''')],
++        "r324_r_revoke_completes_with_its_verify_after", "[revocation-verify-after]",
++        require=["not completed"],
++    ),
++]
++
++R3_SIMULATOR = [
++    control(
++        "S-R3-RMDIR-NOT-EMPTY", "simulator-source-conformance", ["R3-SIM"],
++        "the simulator's rmdir removes a directory that is not empty",
++        [(SIM, r'''            if !directory.ents_k.is_empty() {
++                return Err(Errno::NotEmpty);
++            }
++            state.check_journal()?;''', r'''            state.check_journal()?;''')],
++        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
++        require=["not empty"],
++    ),
++    control(
++        "S-R3-RMDIR-DURABLE", "simulator-source-conformance", ["R3-SIM"],
++        "the simulator's rmdir is durable at once, with no pending half",
++        [(SIM, r'''            state.meta(vec![(at.ino, name.to_string(), ino, false)]);
++            state.record("rmdir", Some(at.ino), Some(name), Some(ino));''', r'''            if let Some(parent) = state.inodes.get_mut(&at.ino) {
++                parent.ents_d.remove(name);
++            }
++            state.record("rmdir", Some(at.ino), Some(name), Some(ino));''')],
++        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
++        require=["pending until its parent's sync"],
++    ),
++    control(
++        "S-R3-REMOVED-DIR-ENTRY", "simulator-source-conformance", ["R3-SIM"],
++        "a removed directory takes new entries",
++        [(SIM, r'''    fn reachable(&self, dir: Ino) -> bool {
++        dir == self.root''', r'''    fn reachable(&self, dir: Ino) -> bool {
++        true || dir == self.root''')],
++        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
++        require=["a removed directory"],
++    ),
++    control(
++        "S-R3-SAME-FILE-RENAME", "simulator-source-conformance", ["R3-SIM"],
++        "a rename between two names of one file removes the source name",
++        [(SIM, r'''                == Some(&ino)
++            {
++                // POSIX: both names already name one file; the call succeeds
++                // and changes nothing.''', r'''                == Some(&ino)
++                && false
++            {
++                // POSIX: both names already name one file; the call succeeds
++                // and changes nothing.''')],
++        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
++        require=["both names remain"],
++    ),
++]
++
++R3_NATIVE = [
++    control(
++        "N-R3-RMDIR-FLAG", "implementation-safety", ["R3-NATIVE"],
++        "the native removal is unlinkat without AT_REMOVEDIR",
++        [(IO, "            let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), libc::AT_REMOVEDIR) };\n",
++          "            let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), 0) };\n")],
++        "n09_native_remove_dir_is_one_empty_directory", "[successor-cleanup-recursive]",
++        require=["native: not empty"],
++    ),
++    control(
++        "N-R3-RMDIR-NAME", "implementation-safety", ["R3-NATIVE"],
++        "the native removal passes a name with a separator or a dot to the kernel",
++        [(IO, r'''        fn remove_dir(&self, at: &LinuxDir, entry: &str) -> Result<(), IoError> {
++            let entry = name(entry, "unlinkat")?;''', r'''        fn remove_dir(&self, at: &LinuxDir, entry: &str) -> Result<(), IoError> {
++            let entry = std::ffi::CString::new(entry).map_err(|_| IoError::new("unlinkat", Errno::Inval))?;''')],
++        "n09_native_remove_dir_is_one_empty_directory", "[safe-open]",
++    ),
++]
++
++
++REANCHORED_R3 = {
++    "NC-SUCC-MUTATE-BEFORE-GATE": (
++        "R3's P-REVOKE gate rereads its admissibility, so a gate moved after the first operation of "
++        "every procedure refuses v12's helper revocation after its own rename, before the succession "
++        "v12 examines; the mutation is confined to the succession's gate (S17's subject)"),
++    "NC-SUCC-SAME-ROOT": (
++        "R3 also refuses a successor whose state root exists, and v22's layout is the predecessor's own; "
++        "the equivalent defect point removes both R2's root-id check and R3's state-root check"),
++}
++
+ REANCHORED = {
+     "I-PRESERVATION-SKIPPED": "the scan's preservation sync now meets the findings collector",
+     "I-PROVISION-INODE-IGNORED": "the scan's pool-inode check now meets the findings collector",
+@@ -2195,7 +2728,7 @@
+ }
+
+ COUNTED = (SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY
+-           + R1_BINDINGS + R2_MAINTENANCE)
++           + R1_BINDINGS + R2_MAINTENANCE + R3_RECOVERY + R3_SIMULATOR + R3_NATIVE)
+
+ # ---------------------------------------------------------------------------
+ # The runner
+--- a/validate.sh
++++ b/validate.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R2 validation: the mission's section 17 commands, in
++# P2-V1-R3B-I3-I1-R3 validation: the mission's section 19 commands, in
+ # order, each with its exit status and complete output; the toolchain; the
+ # identity of the checkout; and the SHA-256 of every source it validated.
+ # Usage: validate.sh <checkout> <output directory>

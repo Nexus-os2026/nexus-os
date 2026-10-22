@@ -1,0 +1,317 @@
+   Compiling serde_core v1.0.228
+   Compiling futures-macro v0.3.32
+   Compiling yoke v0.8.1
+   Compiling tracing v0.1.44
+   Compiling serde_json v1.0.149
+   Compiling aws-lc-sys v0.45.0
+   Compiling num-traits v0.2.19
+   Compiling rustls v0.23.45
+   Compiling rustls-native-certs v0.8.3
+   Compiling zerovec v0.11.5
+   Compiling zerotrie v0.2.3
+   Compiling phf_codegen v0.11.3
+   Compiling phf_macros v0.11.3
+   Compiling web_atoms v0.1.3
+   Compiling selectors v0.31.0
+   Compiling futures-util v0.3.32
+   Compiling tinystr v0.8.2
+   Compiling potential_utf v0.1.4
+   Compiling aws-lc-rs v1.18.1
+   Compiling icu_collections v2.1.1
+   Compiling phf v0.11.3
+   Compiling icu_locale_core v2.1.1
+   Compiling rand_distr v0.6.0
+   Compiling cssparser-macros v0.6.1
+   Compiling derive_more-impl v2.1.1
+   Compiling match_token v0.35.0
+   Compiling rand_chacha v0.9.0
+   Compiling icu_provider v2.1.1
+   Compiling rand v0.9.3
+   Compiling icu_properties v2.1.2
+   Compiling rustls-webpki v0.103.15
+   Compiling derive_more v2.1.1
+   Compiling raw-cpuid v11.6.0
+   Compiling serde v1.0.228
+   Compiling indexmap v2.13.0
+   Compiling smallvec v1.15.1
+   Compiling parking_lot_core v0.9.12
+   Compiling icu_normalizer v2.1.1
+   Compiling serde_spanned v0.6.9
+   Compiling serde_urlencoded v0.7.1
+   Compiling parking_lot v0.12.5
+   Compiling toml_datetime v0.6.11
+   Compiling uuid v1.22.0
+   Compiling tokio v1.50.0
+   Compiling string_cache v0.8.9
+   Compiling string_cache v0.9.0
+   Compiling idna_adapter v1.2.1
+   Compiling web_atoms v0.2.3
+   Compiling markup5ever v0.11.0
+   Compiling idna v1.1.0
+   Compiling toml_edit v0.22.27
+   Compiling ed25519 v2.2.3
+   Compiling chrono v0.4.44
+   Compiling ed25519-dalek v2.2.0
+   Compiling url v2.5.8
+   Compiling markup5ever v0.38.0
+   Compiling html5ever v0.26.0
+   Compiling xml5ever v0.17.0
+   Compiling xml5ever v0.38.0
+   Compiling html5ever v0.38.0
+   Compiling markup5ever_rcdom v0.2.0
+   Compiling dashmap v6.1.0
+   Compiling rusqlite v0.31.0
+   Compiling cron v0.15.0
+   Compiling nexus-crypto v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-crypto)
+   Compiling governor v0.7.0
+   Compiling toml v0.8.23
+   Compiling markup5ever_rcdom v0.38.0+unofficial
+   Compiling cranelift-bitset v0.123.17
+   Compiling htmd v0.5.4
+   Compiling nexus-persistence v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/persistence)
+   Compiling cranelift-entity v0.123.17
+   Compiling gimli v0.32.3
+   Compiling cssparser v0.35.0
+   Compiling markup5ever v0.35.0
+   Compiling cranelift-bforest v0.123.17
+   Compiling html5ever v0.35.0
+   Compiling pulley-interpreter v36.0.17
+   Compiling regalloc2 v0.12.2
+   Compiling tokio-util v0.7.18
+   Compiling tokio-native-tls v0.3.1
+   Compiling h2 v0.4.16
+   Compiling h2 v0.3.27
+   Compiling tower v0.5.3
+   Compiling tokio-rustls v0.26.4
+   Compiling scraper v0.24.0
+   Compiling tower-http v0.6.8
+   Compiling object v0.37.3
+   Compiling semver v1.0.27
+   Compiling wasmparser v0.236.1
+   Compiling postcard v1.1.3
+   Compiling debugid v0.8.0
+   Compiling tungstenite v0.28.0
+   Compiling wit-parser v0.236.1
+   Compiling wasmtime-internal-cache v36.0.17
+   Compiling hyper v0.14.32
+   Compiling hyper v1.8.1
+   Compiling cranelift-codegen v0.123.17
+   Compiling wasmtime-internal-jit-debug v36.0.17
+   Compiling fxprof-processed-profile v0.6.0
+   Compiling hyper-util v0.1.20
+   Compiling wasmtime-internal-wit-bindgen v36.0.17
+   Compiling addr2line v0.25.1
+   Compiling quanta v0.12.6
+   Compiling metrics v0.24.3
+   Compiling tokio-tungstenite v0.28.0
+   Compiling hyper-tls v0.5.0
+   Compiling reqwest v0.11.27
+   Compiling metrics-util v0.20.1
+   Compiling hyper-rustls v0.27.7
+   Compiling wasmprinter v0.236.1
+   Compiling reqwest v0.12.28
+   Compiling wasmtime-internal-component-macro v36.0.17
+   Compiling serde_path_to_error v0.1.20
+   Compiling axum-core v0.5.6
+   Compiling nexus-protocols v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/protocols)
+   Compiling metrics-exporter-prometheus v0.18.1
+   Compiling readability v0.3.0
+   Compiling wasmtime-environ v36.0.17
+   Compiling nexus-kernel v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/kernel)
+   Compiling axum v0.8.8
+   Compiling cranelift-native v0.123.17
+   Compiling cranelift-frontend v0.123.17
+   Compiling wasmtime-internal-unwinder v36.0.17
+   Compiling wasmtime-internal-cranelift v36.0.17
+   Compiling wasmtime v36.0.17
+   Compiling nexus-connectors-core v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/core)
+   Compiling nexus-connectors-llm v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/llm)
+   Compiling nexus-sdk v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/sdk)
+   Compiling nexus-connectors-web v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/web)
+   Compiling nexus-connectors-social v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/social)
+   Compiling nexus-connectors-messaging v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/connectors/messaging)
+   Compiling nexus-analytics v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/analytics)
+   Compiling nexus-content v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/content)
+   Compiling nexus-research v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/research)
+   Compiling nexus-adaptation v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/adaptation)
+   Compiling nexus-control v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/control)
+   Compiling nexus-factory v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/factory)
+   Compiling nexus-workflows v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/workflows)
+   Compiling nexus-marketplace v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/marketplace)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 50.60s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_protocols-6a81b50196f1eeec)
+
+running 112 tests
+test http_gateway::tests::agent_card_not_found ... ok
+test http_gateway::tests::agent_card_list_all ... ok
+test http_gateway::tests::agent_card_returns_valid_json ... ok
+test http_gateway::tests::cors_headers_present ... ok
+test http_gateway::tests::graceful_shutdown_completes_cleanly ... ok
+test http_gateway::tests::api_list_agents_without_auth_rejected ... ok
+test http_gateway::tests::api_middleware_rejects_unauthenticated ... ok
+test http_gateway::tests::health_check_returns_extended_fields ... ok
+test http_gateway::tests::api_compliance_report_returns_transparency ... ok
+test http_gateway::tests::api_firewall_status_returns_patterns ... ok
+test http_gateway::tests::api_list_agents_returns_registered ... ok
+test http_gateway::tests::api_compliance_status_returns_result ... ok
+test http_gateway::tests::api_bulk_update_permissions ... ok
+test http_gateway::tests::api_agent_status_returns_detail ... ok
+test http_gateway::tests::api_identity_get_by_id ... ok
+test http_gateway::tests::api_audit_events_with_pagination ... ok
+test http_gateway::tests::health_check_returns_status ... ok
+test http_gateway::tests::api_create_agent_succeeds ... ok
+test http_gateway::tests::api_identity_list_returns_dids ... ok
+test http_gateway::tests::jwks_endpoint_returns_valid_key ... ok
+test http_gateway::tests::api_get_permissions_returns_categories ... ok
+test http_gateway::tests::mcp_tool_invoke_without_auth_rejected ... ok
+test http_gateway::tests::metrics_endpoint_returns_prometheus_format ... ok
+test http_gateway::tests::api_update_permission_toggles_capability ... ok
+test http_gateway::tests::task_status_without_auth_rejected ... ok
+test http_gateway::tests::mcp_tool_list_without_auth_rejected ... ok
+test http_gateway::tests::task_submission_without_auth_rejected ... ok
+test http_gateway::tests::task_submission_invalid_jwt_rejected ... ok
+test http_gateway::tests::test_anthropic_error_format ... ok
+test http_gateway::tests::test_anthropic_error_no_auth ... ok
+test http_gateway::tests::mcp_tool_invoke_succeeds ... ok
+test http_gateway::tests::task_status_lookup ... ok
+test http_gateway::tests::mcp_tool_list_returns_governed_tools ... ok
+test http_gateway::tests::api_stop_and_start_agent ... ok
+test http_gateway::tests::task_submission_creates_task ... ok
+test http_gateway::tests::mcp_tool_invoke_unauthorized_capability_rejected ... ok
+test http_gateway::tests::task_status_not_found ... ok
+test http_gateway::tests::ws_event_serialization_roundtrip ... ok
+test http_gateway::tests::ws_broadcast_delivers_event ... ok
+test http_gateway::tests::ws_broadcast_multiple_event_types ... ok
+test http_gateway::tests::task_submission_wrong_key_rejected ... ok
+test mcp_client::tests::p0_002c5b_hostile_server_urls_and_auth_headers_never_reach_curl ... ok
+test http_gateway::tests::ws_invalid_token_rejected ... ok
+test mcp_client::tests::test_governed_host_audit_trail ... ok
+test mcp_client::tests::p0_fg_mcp_credentials_never_reach_a_process_command_line ... ok
+test mcp_client::tests::test_governed_host_call_with_governance ... ok
+test mcp_client::tests::test_governed_host_fuel_deduction ... ok
+test mcp_client::tests::test_governed_host_capability_denied ... ok
+test mcp_client::tests::test_governed_host_fuel_exhaustion ... ok
+test mcp_client::tests::test_governed_host_with_consent_constructor ... ok
+test mcp_client::tests::test_host_manager_add_remove ... ok
+test mcp_client::tests::test_host_manager_empty ... ok
+test mcp_client::tests::test_host_manager_tool_routing ... ok
+test mcp_client::tests::test_jsonrpc_error_parsing ... ok
+test mcp_client::tests::test_jsonrpc_request_format ... ok
+test mcp_client::tests::test_jsonrpc_response_parsing ... ok
+test mcp_client::tests::test_mcp_auth_variants ... ok
+test mcp_client::tests::test_mcp_client_new ... ok
+test mcp_client::tests::test_mcp_content_variants ... ok
+test http_gateway::tests::test_openai_chat_no_auth ... ok
+test mcp_client::tests::test_server_config_creation ... ok
+test mcp_client::tests::test_stdio_spawn_and_shutdown ... ok
+test mcp_client::tests::test_stdio_spawn_nonexistent_binary ... ok
+test mcp_client::tests::test_tool_definition_serde ... ok
+test mcp_client::tests::test_tool_result_error ... ok
+test mcp_client::tests::test_tool_result_serde ... ok
+test metrics::tests::metrics_increment_correctly ... ok
+test metrics::tests::render_returns_valid_prometheus_format ... ok
+test openai_compat::tests::test_chunk_serialization ... ok
+test openai_compat::tests::test_chunk_text ... ok
+test openai_compat::tests::test_chunk_text_empty ... ok
+test openai_compat::tests::test_content_text_null ... ok
+test openai_compat::tests::test_content_text_string ... ok
+test openai_compat::tests::test_error_response_format ... ok
+test openai_compat::tests::test_estimate_tokens ... ok
+test openai_compat::tests::test_governance_metadata_serialization ... ok
+test openai_compat::tests::test_messages_to_prompt ... ok
+test openai_compat::tests::test_model_not_found_error ... ok
+test openai_compat::tests::test_models_response_serialization ... ok
+test openai_compat::tests::test_request_defaults ... ok
+test openai_compat::tests::test_request_deserialization ... ok
+test openai_compat::tests::test_request_with_tools ... ok
+test openai_compat::tests::test_resolve_model_agent_prefix ... ok
+test openai_compat::tests::test_resolve_model_claude ... ok
+test openai_compat::tests::test_resolve_model_deepseek ... ok
+test openai_compat::tests::test_resolve_model_gemini ... ok
+test openai_compat::tests::test_resolve_model_gpt ... ok
+test openai_compat::tests::test_resolve_model_known_agent ... ok
+test openai_compat::tests::test_resolve_model_provider_prefixed ... ok
+test openai_compat::tests::test_resolve_model_unknown_defaults_ollama ... ok
+test openai_compat::tests::test_response_serialization ... ok
+test openai_compat::tests::test_response_with_governance ... ok
+test openai_compat::tests::test_sse_data_format ... ok
+test openai_compat::tests::test_stop_chunk ... ok
+test openai_compat::tests::test_stop_value_multiple ... ok
+test openai_compat::tests::test_stop_value_single ... ok
+test openai_compat::tests::test_tool_definition_roundtrip ... ok
+test http_gateway::tests::test_openai_list_models ... ok
+test http_gateway::tests::test_openai_embeddings ... ok
+test http_gateway::tests::ws_agent_lifecycle_emits_broadcast ... ok
+test http_gateway::tests::ws_wrong_key_rejected ... ok
+test http_gateway::tests::ws_valid_token_connects_and_receives_event ... ok
+test mcp_client::tests::test_request_counter_increments ... ok
+test http_gateway::tests::test_anthropic_stream_format ... ok
+test mcp_client::tests::test_pii_redaction_on_arguments ... ok
+test http_gateway::tests::test_anthropic_messages_basic ... ok
+test http_gateway::tests::test_anthropic_bearer_auth_accepted ... ok
+test http_gateway::tests::test_anthropic_messages_string_content ... ok
+test http_gateway::tests::test_anthropic_usage_tracking ... ok
+test http_gateway::tests::test_openai_chat_completions_basic ... ok
+test http_gateway::tests::test_anthropic_messages_structured_content ... ok
+test http_gateway::tests::test_anthropic_messages_with_system ... ok
+
+test result: ok. 112 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src/bin/nexus-os.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_os-3c97c3f7cd529bfc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/nexus-server.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_protocols_server-9d8b0d95b334869b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/binary_target_identity.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/binary_target_identity-0fe2bdfafd98d97e)
+
+running 1 test
+test p0_fg1_protocols_binary_target_identity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase0_withdrawal.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/phase0_withdrawal-0ea39d811e1c9f75)
+
+running 11 tests
+test p0_j2_j3_compose_recipe_defines_no_services ... ok
+test p0_j2_j3_docker_recipe_fails_before_any_build_step ... ok
+test p0_j2_j3_helm_chart_fails_for_every_values_override ... ok
+test p0_j2_j3_package_has_no_other_entry_point ... ok
+test p0_j3_install_script_downloads_and_installs_nothing ... ok
+test p0_j3_make_target_builds_nothing ... ok
+test p0_j2_j3_entry_points_are_only_the_withdrawal ... ok
+test p0_j2_j3_deployment_docs_withdraw_without_claiming_a_stop ... ok
+test p0_j2_j3_denial_echoes_no_environment_or_argument_value ... ok
+test p0_j2_j3_default_invocation_is_withdrawn ... ok
+test p0_j2_j3_server_commands_cannot_reactivate_it ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.68s
+
+     Running tests/web_api_integration_tests.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/web_api_integration_tests-daa724597ddace4f)
+
+running 11 tests
+test metrics_endpoint_returns_prometheus_format ... ok
+test health_endpoint_returns_all_fields ... ok
+test wasm_module_cache_improves_startup_time ... ok
+test rest_create_agent_returns_new_agent_id ... ok
+test websocket_connects_and_receives_events ... ok
+test rest_compliance_status_returns_valid_response ... ok
+test rest_list_agents_returns_correct_data ... ok
+test graceful_shutdown_completes_within_5_seconds ... ok
+test rest_marketplace_search_works ... ok
+test all_rest_endpoints_require_jwt_auth ... ok
+test rest_permissions_crud_works ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests nexus_protocols
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

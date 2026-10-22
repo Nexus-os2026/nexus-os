@@ -1,0 +1,24 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let mut a = maint::begin(fixture.root_process("a"), &fixture.path, false).expect("A");
+    let mut b = maint::begin(fixture.root_process("b"), &fixture.path, false).expect("B");
+    let _ = a.verify(config);
+    b.verified = a.verified.take();
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0616]: field `verified` of struct `Session` is private
+  --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:60:7
+   |
+60 |     b.verified = a.verified.take();
+   |       ^^^^^^^^ private field
+
+error[E0616]: field `verified` of struct `Session` is private
+  --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:60:20
+   |
+60 |     b.verified = a.verified.take();
+   |                    ^^^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 2 previous errors
+--- stdout ---

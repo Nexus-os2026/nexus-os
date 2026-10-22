@@ -1,0 +1,22 @@
+
+running 1 test
+test c01_classes_and_the_conservative_refusal ... FAILED
+
+failures:
+
+---- c01_classes_and_the_conservative_refusal stdout ----
+
+thread 'c01_classes_and_the_conservative_refusal' (3449328) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1645:5:
+[late-uncertain] the late-owner note
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c01_classes_and_the_conservative_refusal
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.60s
+     Running tests/phase2_custody_store.rs (target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

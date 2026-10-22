@@ -1,0 +1,13 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run
+exit 0
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let mut a = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("A");
+    let b = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("B");
+    a.opening = b.admission().opening();
+    a.selection.digest = b.admission().provision_digest();
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.82s
+  Executable tests/r1_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/r1_api_probe-91fb36aa8b09324e)
+--- stdout ---

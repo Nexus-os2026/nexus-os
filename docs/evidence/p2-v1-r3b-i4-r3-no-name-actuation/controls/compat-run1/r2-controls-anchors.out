@@ -1,0 +1,1 @@
+NC-R2-01-UNCONDITIONAL-STOP: anchor occurs 0 times in crates/nexus-verifier-sandbox/src/scope/pending.rs: '        if !self.stop_authorized() {\n            return self.observe(&controller'

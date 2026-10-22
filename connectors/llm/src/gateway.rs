@@ -308,6 +308,112 @@ fn flash_model_path(config: &ProviderSelectionConfig) -> Option<&str> {
         .filter(|path| std::path::Path::new(path).is_absolute())
 }
 
+// ── Local-only inference (P3 D-2) ─────────────────────────────────────────
+//
+// A local-only request reaches a model only through an Ollama runtime at a
+// loopback address, and only for a model that runtime reports it runs
+// itself. A provider name, a model identifier or a configured address is
+// not, on its own, evidence of local execution.
+
+/// The Ollama base URL a local-only request may use, from the authorized
+/// address `base`: an http(s) URL whose host is a loopback IP literal or
+/// `localhost`, with no user information, path, query or fragment. The
+/// result names the loopback address itself (`localhost` becomes
+/// `127.0.0.1`), so the address checked is the address connected to and no
+/// resolver is consulted. Any other host is refused, including names that
+/// merely contain `localhost`.
+pub fn local_only_ollama_base(base: &str) -> Result<String, AgentError> {
+    let refused = || {
+        AgentError::SupervisorError(
+            "local-only: the Ollama address is not a loopback address".to_string(),
+        )
+    };
+    let url = nexus_kernel::governed_http::http_url(base).map_err(|_| refused())?;
+    if url.query().is_some() || url.fragment().is_some() || !matches!(url.path(), "" | "/") {
+        return Err(refused());
+    }
+    let host = url.host_str().unwrap_or_default();
+    let loopback = match host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+        Some(v6) => v6
+            .parse::<std::net::Ipv6Addr>()
+            .is_ok_and(|ip| ip.is_loopback()),
+        None if host == "localhost" => true,
+        None => host
+            .parse::<std::net::Ipv4Addr>()
+            .is_ok_and(|ip| ip.is_loopback()),
+    };
+    if !loopback {
+        return Err(refused());
+    }
+    let host = if host == "localhost" {
+        "127.0.0.1"
+    } else {
+        host
+    };
+    let port = url
+        .port()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    Ok(format!("{}://{host}{port}", url.scheme()))
+}
+
+/// Whether an Ollama model name is one of the runtime's cloud models (for
+/// example `gpt-oss:120b-cloud`), which the runtime relays to a remote
+/// service. Any name with a `cloud` component counts.
+pub fn ollama_model_name_is_cloud(model: &str) -> bool {
+    model
+        .to_ascii_lowercase()
+        .split([':', '-', '/', '.', '_'])
+        .any(|part| part == "cloud")
+}
+
+/// Whether an Ollama `/api/show` reply says the model runs elsewhere: it
+/// names a remote host or a remote model.
+pub fn ollama_show_names_remote(show: &serde_json::Value) -> bool {
+    ["remote_host", "remote_model"].iter().any(|field| {
+        show.get(field).is_some_and(|value| {
+            !value.is_null() && value.as_str().is_none_or(|text| !text.trim().is_empty())
+        })
+    })
+}
+
+/// Asks the Ollama runtime at the loopback address `base` about `model`
+/// before any prompt is sent: it must be installed there and the runtime
+/// must not report that it runs elsewhere. Every failure (a non-loopback
+/// address, a cloud model name, an unreachable runtime, an error status, a
+/// reply that is not an object, a remote model) refuses the model. The
+/// question goes over the same direct loopback connection as the prompt
+/// that may follow ([`OllamaProvider::local_only`]): no proxy, no redirect.
+pub fn verify_local_ollama_model(base: &str, model: &str) -> Result<(), AgentError> {
+    let runtime = OllamaProvider::local_only(base)?;
+    let refused = |reason: &str| {
+        AgentError::SupervisorError(format!(
+            "local-only: the model '{model}' is not verified local: {reason}"
+        ))
+    };
+    if model.trim().is_empty() {
+        return Err(refused("no model is named"));
+    }
+    if ollama_model_name_is_cloud(model) {
+        return Err(refused("it is a cloud model"));
+    }
+    let (status, reply) = runtime
+        .show_model(model)
+        .map_err(|_| refused("the local runtime did not answer"))?;
+    if !(200..300).contains(&status) {
+        return Err(refused(&format!("the local runtime answered {status}")));
+    }
+    if !reply.is_object() {
+        return Err(refused(
+            "the local runtime's reply is not a model description",
+        ));
+    }
+    if ollama_show_names_remote(&reply) {
+        return Err(refused("the local runtime relays it to a remote host"));
+    }
+    Ok(())
+}
+
 fn explicit_provider(
     explicit: &str,
     config: &ProviderSelectionConfig,

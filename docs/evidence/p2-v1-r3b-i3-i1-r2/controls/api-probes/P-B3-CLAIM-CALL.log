@@ -1,0 +1,27 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run
+exit 101
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let _ = opened.claim(&io, config, Generation::new([1; 16]));
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+error[E0624]: method `claim` is private
+    --> crates/nexus-verifier-sandbox/tests/r2_api_probe.rs:59:20
+     |
+  59 |       let _ = opened.claim(&io, config, Generation::new([1; 16]));
+     |                      ^^^^^ private method
+     |
+    ::: crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs:2194:5
+     |
+2194 | /     pub(super) fn claim(
+2195 | |         self,
+2196 | |         io: &P,
+2197 | |         config: &Config,
+2198 | |         generation: Generation,
+2199 | |     ) -> Result<Claim<P>, Refusal> {
+     | |__________________________________- private method defined here
+
+For more information about this error, try `rustc --explain E0624`.
+error: could not compile `nexus-verifier-sandbox` (test "r2_api_probe") due to 1 previous error
+--- stdout ---

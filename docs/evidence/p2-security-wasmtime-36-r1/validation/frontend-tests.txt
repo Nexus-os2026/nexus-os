@@ -1,0 +1,142 @@
+
+> nexus-desktop@9.0.0 test
+> node --test ./tests/*.test.js && npx vitest run
+
+TAP version 13
+# Subtest: All page files exist and are non-empty
+ok 1 - All page files exist and are non-empty
+  ---
+  duration_ms: 8.755463
+  ...
+# Subtest: No orphan component files (all imported somewhere)
+ok 2 - No orphan component files (all imported somewhere)
+  ---
+  duration_ms: 241.5943
+  ...
+# Subtest: Backend API file exists and has expected export count
+ok 3 - Backend API file exists and has expected export count
+  ---
+  duration_ms: 0.962463
+  ...
+# WARNING: 4 hardcoded localhost references found
+# Total pages: 91
+# Subtest: all required page files exist
+ok 4 - all required page files exist
+  ---
+  duration_ms: 1.827843
+  ...
+# Subtest: all pages have an export (default or named)
+ok 5 - all pages have an export (default or named)
+  ---
+  duration_ms: 5.98816
+  ...
+# Subtest: all pages are valid TSX (basic structural checks)
+ok 6 - all pages are valid TSX (basic structural checks)
+  ---
+  duration_ms: 7.399849
+  ...
+# Subtest: backend API file exists and has invokeDesktop
+ok 7 - backend API file exists and has invokeDesktop
+  ---
+  duration_ms: 0.804956
+  ...
+# Subtest: types file exists and has AgentSummary
+ok 8 - types file exists and has AgentSummary
+  ---
+  duration_ms: 0.166714
+  ...
+# Subtest: App.tsx exists and has router
+ok 9 - App.tsx exists and has router
+  ---
+  duration_ms: 0.480224
+  ...
+# Subtest: required components exist
+ok 10 - required components exist
+  ---
+  duration_ms: 0.183265
+  ...
+# Subtest: PageErrorBoundary catches errors
+ok 11 - PageErrorBoundary catches errors
+  ---
+  duration_ms: 0.214795
+  ...
+# Subtest: backend API has agent management functions
+ok 12 - backend API has agent management functions
+  ---
+  duration_ms: 0.8278
+  ...
+# Subtest: backend API has flash inference functions
+ok 13 - backend API has flash inference functions
+  ---
+  duration_ms: 0.976871
+  ...
+# Subtest: pages do not hardcode localhost URLs
+ok 14 - pages do not hardcode localhost URLs
+  ---
+  duration_ms: 11.660214
+  ...
+# Subtest: types file has all critical type definitions
+ok 15 - types file has all critical type definitions
+  ---
+  duration_ms: 0.197813
+  ...
+# Subtest: no page file is suspiciously small (likely broken)
+ok 16 - no page file is suspiciously small (likely broken)
+  ---
+  duration_ms: 0.861042
+  ...
+# Subtest: no page file is suspiciously large (>500KB, possible generated code)
+ok 17 - no page file is suspiciously large (>500KB, possible generated code)
+  ---
+  duration_ms: 0.641458
+  ...
+# Subtest: tsconfig.json exists
+ok 18 - tsconfig.json exists
+  ---
+  duration_ms: 0.121289
+  ...
+# Subtest: vite.config exists
+ok 19 - vite.config exists
+  ---
+  duration_ms: 0.168888
+  ...
+# Subtest: page directory has expected number of pages
+ok 20 - page directory has expected number of pages
+  ---
+  duration_ms: 0.317668
+  ...
+# Subtest: p1_g_frontend_never_relies_on_native_alert_or_confirm
+ok 21 - p1_g_frontend_never_relies_on_native_alert_or_confirm
+  ---
+  duration_ms: 29.859366
+  ...
+# Subtest: p1_g_governed_coding_sends_no_path_grant_or_approval
+ok 22 - p1_g_governed_coding_sends_no_path_grant_or_approval
+  ---
+  duration_ms: 1.998935
+  ...
+# Subtest: desktop scaffold files exist
+ok 23 - desktop scaffold files exist
+  ---
+  duration_ms: 1.310309
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 301.5131
+11:29:08 AM [vite] warning: `esbuild` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `oxc` instead.
+11:29:08 AM [vite] warning: `optimizeDeps.esbuildOptions` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `optimizeDeps.rolldownOptions` instead.
+Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored. The following esbuild options were set: `{ jsx: 'automatic', jsxImportSource: undefined }`
+
+ RUN  v4.1.2 /home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app
+
+
+ Test Files  105 passed (105)
+      Tests  483 passed (483)
+   Start at  11:29:08
+   Duration  16.11s (transform 13.60s, setup 12.21s, import 33.00s, tests 38.31s, environment 117.73s)

@@ -1,0 +1,82 @@
+//! Deterministic faults at the real ownership points of one verifier
+//! execution: the live panic controls (P2-R1).
+//!
+//! Production never injects a fault: [`crate::execution::run`] passes none.
+//! Only builds with the `live-sandbox-harness` feature (this crate's live
+//! sandbox suite, through its own dev-dependency) can name a fault at all.
+// Without the harness no fault is ever constructed.
+#![cfg_attr(not(any(test, feature = "live-sandbox-harness")), allow(dead_code))]
+
+use std::time::Duration;
+
+/// Where a fault is injected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaultPoint {
+    /// The helper exists and its output is being drained; no scope yet.
+    AfterSpawn,
+    /// Scope creation (P2-V1-R3B-I4): the pending scope is owned and
+    /// StartTransientUnit is about to be issued.
+    BeforeScopeStart,
+    /// StartTransientUnit may have been dispatched: its reply (or its
+    /// absence) is in hand and not yet acted on.
+    AfterScopeStart,
+    /// Inside scope creation: the new unit holds the helper but is not yet
+    /// proven.
+    ScopeProof,
+    /// The candidate cgroup's descriptor is retained: observed, not yet
+    /// bound to the unit invocation (no cleanup or launch authority); its
+    /// limits and the manager's properties are not yet proven.
+    ScopeCandidate,
+    /// GetUnit answered; the unit's invocation, identity and control group
+    /// are not yet bound to the kernel's cgroup (P2-V1-R3B-I4-R1, -R3-R1).
+    ScopeBinding,
+    /// The candidate is bound to the unit invocation the start began
+    /// (cleanup ownership); the sandbox policy is not yet proven
+    /// (P2-V1-R3B-I4-R3-R1).
+    ScopeOwned,
+    /// During the manager-property proof (RuntimeMaxUSec, OOMPolicy).
+    ScopeProperties,
+    /// Every proof passed; the pending operation is about to become the
+    /// proven scope (P2-V1-R3B-I4-R3-R1).
+    ScopePromotion,
+    /// During the reconciliation that confirms a pending scope is gone.
+    ScopeReconcile,
+    /// The proven scope holds the helper; no launch has been sent.
+    AfterScope,
+    /// The helper accepted the launch: the verifier is running.
+    AfterLaunch,
+    /// The verifier has been running for [`RUNNING_FAULT_AFTER`].
+    Running,
+    /// The verifier's output is being drained.
+    Draining,
+    /// Inside an output thread, after it has read the verifier's output.
+    DrainThread,
+    /// The wait has ended; ordinary finalization is about to begin.
+    BeforeFinalize,
+    /// Finalization has read the scope's counters and is about to end
+    /// everything in the scope.
+    Finalizing,
+}
+
+/// A fault to inject.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fault {
+    /// Panic at the point.
+    Panic(FaultPoint),
+    /// At [`FaultPoint::Finalizing`] only: the step fails without a panic,
+    /// as when `cgroup.kill` cannot be written.
+    Fail(FaultPoint),
+}
+
+/// How long the verifier runs before a [`FaultPoint::Running`] fault.
+pub const RUNNING_FAULT_AFTER: Duration = Duration::from_secs(2);
+
+/// Apply `fault` at `point`: panic there, or answer whether the step at
+/// `point` fails.
+pub(crate) fn at(fault: Option<Fault>, point: FaultPoint) -> bool {
+    match fault {
+        Some(Fault::Panic(at)) if at == point => panic!("injected verifier fault at {point:?}"),
+        Some(Fault::Fail(at)) => at == point,
+        _ => false,
+    }
+}

@@ -1,0 +1,25 @@
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/fault.rs
+ M crates/nexus-verifier-sandbox/src/scope.rs
+ M crates/nexus-verifier-sandbox/src/scope/manager.rs
+ M crates/nexus-verifier-sandbox/src/scope/pending.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M docs/security/phase2-governed-verification.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/matrices/controls.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/matrices/manager-surface.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/matrices/root-cause.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/matrices/state-machine.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/matrices/test-changes.md
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/reproduction/name_reuse_on_the_base.rs
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/accepted_r1_controls_r3.py
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/accepted_r2_controls_r3.py
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/accepted_reruns.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/accepted_scope_controls_r3.py
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/accepted_source_guards_r3.py
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/compat_run1.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/r3_controls.py
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/reproduce_name_reuse.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/run_controls.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/scripts/validate.sh

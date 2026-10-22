@@ -1,0 +1,8 @@
+rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+clippy: clippy 0.1.94 (4a4ef493e3 2026-03-02)
+rustfmt: rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+python3: Python 3.12.3
+host kernel (uname -sr): Linux 6.17.0-35-generic
+HEAD: 7689e599ed8fc89ec7720d13869ef58cab767ecb
+branch: review/p2-v1-custody-store-implementation

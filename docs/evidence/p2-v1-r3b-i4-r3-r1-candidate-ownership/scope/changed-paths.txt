@@ -1,0 +1,32 @@
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/fault.rs
+ M crates/nexus-verifier-sandbox/src/scope.rs
+ M crates/nexus-verifier-sandbox/src/scope/manager.rs
+ M crates/nexus-verifier-sandbox/src/scope/native.rs
+ M crates/nexus-verifier-sandbox/src/scope/pending.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+ M docs/security/phase2-governed-verification.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/controls.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/manager-surface.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/root-cause.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/state-machine.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/test-changes.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/matrices/unit-instance-identity.md
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/reproduction/candidate_cleanup_on_the_base.rs
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_api_guards_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_r1_controls_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_r2_controls_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_r3_controls_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_reruns.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_scope_controls_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_source_guards_r3r1.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/compat_run1.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/primary_excerpts.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/r3r1_controls.py
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/reproduce_candidate_cleanup.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/run_controls.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/validate.sh
+?? docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/verify_after_repair.sh

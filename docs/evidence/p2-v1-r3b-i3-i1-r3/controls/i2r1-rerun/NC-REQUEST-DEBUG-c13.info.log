@@ -1,0 +1,9 @@
+
+running 1 test
+test c13_request_receipts_bind_the_full_payload ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.00s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)

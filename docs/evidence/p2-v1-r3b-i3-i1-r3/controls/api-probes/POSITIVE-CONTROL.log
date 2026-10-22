@@ -1,0 +1,68 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 0
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let _ = (
+        opened.report(),
+        opened.decision().clone(),
+        opened.scan().clone(),
+        opened.selection().clone(),
+        opened.opening(),
+        opened.admission().opening(),
+    );
+    let _ = opened.validator();
+    drop(opened);
+    let mut owner = owner(fixture, config);
+    owner.run_worker_until_idle();
+    let _ = (owner.header(), owner.claim(), owner.index(), owner.generation());
+    let _ = (owner.retained().len(), owner.status(), owner.latched());
+    let now = Tick(2);
+    let _ = owner.start_run(now);
+    let _ = owner.flush(now);
+    match owner.close(Tick(3)) {
+        Ok(mut closed) => {
+            let _ = (closed.closed().records, closed.seal_request().clone());
+            closed.run_worker_until_idle();
+            let _ = closed.seal_state();
+        }
+        Err(owner) => {
+            let _ = owner.shutdown_decision();
+        }
+    }
+    let session = Rc::new(RefCell::new(
+        maint::begin(fixture.root_process("probe"), &fixture.path, false).expect("a session"),
+    ));
+    let _ = session.borrow_mut().verify(config);
+    if let Some(assessment) = session.borrow().assessment() {
+        let _ = (
+            assessment.complete,
+            assessment.conditions.len(),
+            assessment.invalid_conditions(),
+            assessment.outcome(),
+        );
+    }
+    let _ = maint::archive(Rc::clone(&session), 0);
+    let _ = session.borrow_mut().verify(config);
+    let words = maint::OwnerWords {
+        reason: DispositionReason::Other,
+        statement: "probe".into(),
+        operator: "probe".into(),
+        at: "2026-10-02T00:00:00Z".into(),
+    };
+    let _ = maint::publish_disposition(Rc::clone(&session), [0; 32], &words);
+    let _ = maint::revoke(Rc::clone(&session), [0; 32], "20261002T000000Z");
+    let _ = maint::leftover(Rc::clone(&session));
+    let _ = session.borrow_mut().verify(config);
+    let _ = maint::successor(Rc::clone(&session), &fixture.layout, &[]);
+    let _ = maint::recover_incomplete_successor(Rc::clone(&session), &fixture.layout);
+    let _ = maint::resume_revocation(Rc::clone(&session), [0; 32], "20261002T000000Z");
+    let _ = maint::predecessor_statement(&[]);
+    if let Ok(session) = Rc::try_unwrap(session) {
+        session.into_inner().end();
+    }
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.36s
+  Executable tests/r3_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/r3_api_probe-c22bd2e7894be692)
+--- stdout ---

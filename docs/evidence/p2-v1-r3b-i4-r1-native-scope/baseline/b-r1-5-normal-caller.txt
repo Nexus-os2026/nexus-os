@@ -1,0 +1,9 @@
+$ cargo check --offline (in /home/nexus/.claude/jobs/4a4dc130/tmp/r1/normal-caller; the sandbox crate by path from the isolated base copy; no feature of it enabled)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.27s
+exit=0
+
+$ cargo tree --offline -e features -i nexus-verifier-sandbox
+nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/base/crates/nexus-verifier-sandbox)
+└── nexus-verifier-sandbox feature "default"
+    └── r1-normal-caller v0.0.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/normal-caller)
+        └── r1-normal-caller feature "default" (command-line)

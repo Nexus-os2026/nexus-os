@@ -1,0 +1,21 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run
+exit 101
+--- probe body ---
+    fn reach(worker: custody::store::recorder::Worker<SimIo>) {}
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+error[E0603]: struct `Worker` is private
+  --> crates/nexus-verifier-sandbox/tests/r1_api_probe.rs:57:48
+   |
+57 |     fn reach(worker: custody::store::recorder::Worker<SimIo>) {}
+   |                                                ^^^^^^ private struct
+   |
+note: the struct `Worker` is defined here
+  --> crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs:75:1
+   |
+75 | pub(super) struct Worker<P: StoreIo> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r1_api_probe") due to 1 previous error
+--- stdout ---

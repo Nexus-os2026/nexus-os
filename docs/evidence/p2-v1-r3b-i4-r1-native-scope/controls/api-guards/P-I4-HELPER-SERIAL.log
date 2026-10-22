@@ -1,0 +1,15 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0624]: method `serial` is private
+   --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:20
+    |
+ 21 |     let _ = helper.serial();
+    |                    ^^^^^^ private method
+    |
+   ::: crates/nexus-verifier-sandbox/src/launcher.rs:264:5
+    |
+264 |     pub(crate) fn serial(&self) -> u64 {
+    |     ---------------------------------- private method defined here
+
+For more information about this error, try `rustc --explain E0624`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

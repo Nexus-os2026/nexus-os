@@ -5,6 +5,38 @@ use std::fmt;
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
+// Drive projection
+// ---------------------------------------------------------------------------
+
+/// What the temporal engine may know of an agent's state (P3-HM-CONTRACT-02
+/// §11.3, §12.1 class HB): its drives, and no text. `ConsciousnessState`
+/// holds text (its current task is a chat message); only this projection
+/// reaches the engine.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DriveProjection {
+    pub urgency: f64,
+    pub confidence: f64,
+}
+
+impl DriveProjection {
+    /// The projection of `state`: its urgency and confidence only.
+    pub fn of(state: &crate::consciousness::ConsciousnessState) -> Self {
+        Self {
+            urgency: state.urgency,
+            confidence: state.confidence,
+        }
+    }
+}
+
+impl Default for DriveProjection {
+    /// The projection of a fresh state: the request of a caller that names
+    /// no registered agent.
+    fn default() -> Self {
+        Self::of(&crate::consciousness::ConsciousnessState::new(""))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Error
 // ---------------------------------------------------------------------------
 
@@ -365,6 +397,18 @@ impl TemporalConfig {
 
 #[cfg(test)]
 mod tests {
+    /// P3-HM-CONTRACT-02 §18.2 A-T1h (compile-time): the drive projection
+    /// is exactly two drives; an exhaustive pattern stops compiling if it
+    /// gains a field.
+    #[test]
+    fn hm_m3_n6_a_t1h_the_drive_projection_has_no_text_field() {
+        let DriveProjection {
+            urgency,
+            confidence,
+        } = DriveProjection::default();
+        assert!((0.0..=1.0).contains(&urgency) && (0.0..=1.0).contains(&confidence));
+    }
+
     use super::*;
 
     #[test]

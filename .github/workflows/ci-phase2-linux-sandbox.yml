@@ -6,9 +6,18 @@ name: NEXUS OS Phase Two Linux Sandbox
 # every layer required. If this host cannot provide one (unprivileged user,
 # PID, network, IPC, UTS and cgroup namespaces; Landlock ABI >= 6; the seccomp
 # allow-list; cgroup v2 limits delegated through the runner user's systemd
-# user manager; a private /run/user/<uid>), the job fails. There is no
-# degraded mode and no skipped case: the suite runs with
-# NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1 and the passed-case count is checked.
+# user manager; a private /run/user/<uid>; the unified cgroup v2
+# hierarchy), the job fails. There is no degraded mode and no skipped case:
+# the suite runs with NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1 and the passed-case
+# count is checked.
+#
+# The suite includes the supported-host qualification of the native scope
+# mechanism (P2-V1-R3B-I4-Q1, G-HOST H1 to H7): the real user manager's
+# bus, the live helper's unified cgroup membership, the manager's unit Id and
+# ControlGroup bound to that membership, the runtime properties, the exact
+# NoSuchUnit and UnitExists answers, and a killed, unreaped helper's
+# membership; a passing run means the manager/native binding held on this
+# host. Host and version facts are printed as evidence only.
 #
 # It never runs for pull requests or pushes (the repository is public and
 # this runner is a self-hosted machine): only by dispatch, on the ref whose
@@ -139,6 +148,18 @@ jobs:
           [[ -d "$runtime" && "$(stat -f -c %T "$runtime")" == "tmpfs" && "$(stat -c %u:%a "$runtime")" == "$uid:700" ]] \
             || need "$runtime is missing or not a private tmpfs: the runner user needs a systemd user manager (lingering)"
           [[ -S "$runtime/bus" ]] || need "no systemd user manager bus at $runtime/bus for $(id -un)"
+          # The unified cgroup v2 hierarchy (I4's membership model: one
+          # `0::` line per process); hybrid or v1 fails closed here too.
+          [[ "$(stat -f -c %T /sys/fs/cgroup)" == "cgroup2fs" ]] || need "/sys/fs/cgroup is not the unified cgroup v2 hierarchy ($(stat -f -c %T /sys/fs/cgroup))"
+          echo "this job's cgroup membership: $(tr '\n' ' ' < /proc/self/cgroup)"
+          # Version facts of the host (evidence only, never authority).
+          echo "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"
+          echo "dbus: $(dbus-daemon --version 2>/dev/null | head -1 || echo unknown)"
+          echo "os: $(. /etc/os-release && echo "$PRETTY_NAME")"
+          {
+            echo "Host: $(id -un) ($uid), $(uname -r) $(uname -m), $(. /etc/os-release && echo "$PRETTY_NAME")"
+            echo "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"
+          } >> "$GITHUB_STEP_SUMMARY"
           delegated="/sys/fs/cgroup/user.slice/user-$uid.slice/user@$uid.service/cgroup.controllers"
           for controller in memory pids cpu; do
             grep -qw "$controller" "$delegated" 2>/dev/null || need "the $controller controller is not delegated to $(id -un)'s user manager"
@@ -160,6 +181,19 @@ jobs:
       - name: Verifier sandbox unit tests
         run: cargo test -p nexus-verifier-sandbox --locked --lib
 
+      # The checked cleanup observations the live suite and its step rely on,
+      # the live harness's entry, and the live step's own script, against
+      # fixtures only (no user manager or bus daemon is contacted, no
+      # observation starts a process, nothing is created outside the tests'
+      # temporary directories): a failed observation or inspection is never
+      # "nothing left", and only no argument enters the suite.
+      - name: Cleanup observation controls (fixtures only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p nexus-verifier-sandbox --locked --test phase2_cleanup_observation
+          python3 scripts/ci/test_phase2_cleanup_check.py
+
       - name: Live Phase Two isolation, escape and cleanup suite (every layer required)
         shell: bash
         env:
@@ -167,14 +201,57 @@ jobs:
           NEXUS_VERIFIER_TOOLCHAIN: packaged
         run: |
           set -o pipefail
-          cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log
-          grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log
-          if systemctl --user list-units --all --no-legend 'nexus-verifier-*' | grep -q .; then
-            echo "::error::a verifier scope was left behind"
+          # The cleanup observation is the live harness's own observation-only
+          # mode, built from this checkout by the suite's own cargo command:
+          # exactly one argument (no path, uid, bus or target) and no
+          # authority (it stops, kills, creates and removes nothing). Both of
+          # its observations (the loaded verifier scopes and the verification
+          # workspaces) always run; it fails if either cannot answer or finds
+          # anything.
+          observe_cleanup() {
+            cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox -- --cleanup-observation
+          }
+          # The gate: whatever is already loaded or present, or an observation
+          # that cannot answer, blocks the suite. Nothing is cleaned up and
+          # nothing is cleared.
+          preflight=0
+          observe_cleanup || preflight=$?
+          if (( preflight != 0 )); then
+            echo "::error::the cleanup observation found something left, or could not answer, before the live suite (cargo exit $preflight): the live suite was not run"
             exit 1
           fi
-          if [[ -n "$(ls -A "/run/user/$(id -u)/nexus-verifier" 2>/dev/null)" ]]; then
-            echo "::error::a verification workspace was left behind"
+          # Every result is kept. Each command of the suite's pipeline keeps
+          # its own status, taken at once (the next command replaces
+          # PIPESTATUS); the cleanup observation runs whatever the suite
+          # reported (both of its observations, neither failure suppressing
+          # the other); and the step fails if the suite, the capture of its
+          # output, its passed-case count or an observation failed. A failed
+          # suite keeps its own exit status, whatever else failed.
+          if cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then
+            statuses=("${PIPESTATUS[@]}")
+          else
+            statuses=("${PIPESTATUS[@]}")
+          fi
+          live=${statuses[0]:-255}
+          captured=${statuses[1]:-255}
+          passed=0
+          grep -qx 'test result: ok. 39 live sandbox cases passed' phase2-live.log || passed=$?
+          observed=0
+          observe_cleanup || observed=$?
+          if (( captured != 0 )); then
+            echo "::error::the live suite's output was not fully captured (tee exit $captured)"
+          fi
+          if (( passed != 0 )); then
+            echo "::error::the live suite did not report 39 passed cases"
+          fi
+          if (( observed != 0 )); then
+            echo "::error::the cleanup observation found something left, or could not answer, after the live suite (cargo exit $observed)"
+          fi
+          if (( live != 0 )); then
+            echo "::error::the live suite failed (cargo exit $live)"
+            exit "$live"
+          fi
+          if (( captured != 0 || passed != 0 || observed != 0 )); then
             exit 1
           fi
 

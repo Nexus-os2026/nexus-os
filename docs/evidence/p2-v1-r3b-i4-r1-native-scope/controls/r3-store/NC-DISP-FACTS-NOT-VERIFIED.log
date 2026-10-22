@@ -1,0 +1,24 @@
+
+running 1 test
+test v15_a_disposition_restates_only_a_verified_incident ... FAILED
+
+failures:
+
+---- v15_a_disposition_restates_only_a_verified_incident stdout ----
+
+thread 'v15_a_disposition_restates_only_a_verified_incident' (1281496) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9718:5:
+assertion `left == right` failed: [disposition-verified] the verified facts and the Owner's words
+  left: ([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [13, 182, 209, 68, 104, 42, 32, 153, 42, 23, 55, 234, 199, 142, 73, 33, 45, 148, 134, 122, 120, 146, 16, 155, 115, 3, 237, 94, 212, 115, 21, 96], IncidentFacts { kind: Journal, claim: Some(1), generation: Some([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), pool_index: None, content: Some([203, 196, 238, 35, 219, 136, 104, 167, 131, 235, 72, 55, 165, 0, 172, 151, 101, 194, 125, 98, 123, 132, 142, 47, 165, 249, 242, 115, 154, 181, 203, 59]), class: Unresolved, recorded_unsettled: 2 }, HostRebooted, "rebooted", "an operator", "2026-10-02T12:30:00Z")
+ right: ([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [13, 182, 209, 68, 104, 42, 32, 153, 42, 23, 55, 234, 199, 142, 73, 33, 45, 148, 134, 122, 120, 146, 16, 155, 115, 3, 237, 94, 212, 115, 21, 96], IncidentFacts { kind: Journal, claim: Some(1), generation: Some([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), pool_index: None, content: Some([203, 196, 238, 35, 219, 136, 104, 167, 131, 235, 72, 55, 165, 0, 172, 151, 101, 194, 125, 98, 123, 132, 142, 47, 165, 249, 242, 115, 154, 181, 203, 59]), class: Unresolved, recorded_unsettled: 1 }, HostRebooted, "rebooted", "an operator", "2026-10-02T12:30:00Z")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v15_a_disposition_restates_only_a_verified_incident
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.21s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

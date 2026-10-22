@@ -1,0 +1,9 @@
+
+running 1 test
+test c16_core_digest_paths_use_the_codec ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.86s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)

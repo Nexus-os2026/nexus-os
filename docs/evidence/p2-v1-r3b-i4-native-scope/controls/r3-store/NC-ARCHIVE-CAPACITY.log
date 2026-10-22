@@ -1,0 +1,22 @@
+
+running 1 test
+test v18_over_capacity_archival_lets_dispositioned_history_leave ... FAILED
+
+failures:
+
+---- v18_over_capacity_archival_lets_dispositioned_history_leave stdout ----
+
+thread 'v18_over_capacity_archival_lets_dispositioned_history_leave' (609456) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9914:42:
+[capacity-archival] archival over capacity: "the session's latest verification refused: Capacity(\"5 current incidents\")"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v18_over_capacity_archival_lets_dispositioned_history_leave
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.15s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.89s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

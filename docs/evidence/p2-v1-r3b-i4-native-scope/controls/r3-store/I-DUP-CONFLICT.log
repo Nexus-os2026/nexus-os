@@ -1,0 +1,25 @@
+
+running 1 test
+test r09_resubmission_is_idempotent_and_bounded ... FAILED
+
+failures:
+
+---- r09_resubmission_is_idempotent_and_bounded stdout ----
+
+thread 'r09_resubmission_is_idempotent_and_bounded' (588031) panicked at crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs:112:13:
+fault injection: the sink panics after storing
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'r09_resubmission_is_idempotent_and_bounded' (588031) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:5255:5:
+[dup-bounded] a duplicate is not a conflict
+
+
+failures:
+    r09_resubmission_is_idempotent_and_bounded
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.89s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

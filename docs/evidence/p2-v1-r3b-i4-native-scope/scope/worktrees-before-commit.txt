@@ -1,0 +1,411 @@
+worktree /home/nexus/NEXUS/nexus-os
+HEAD f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+branch refs/heads/rebuild/phase0-trust-boundary
+
+worktree /home/nexus/.codex/worktrees/b3d9/nexus-os
+HEAD 9f8fc3e7ab29043e3f86343e9cfcc4be9153f61c
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-ci-fast-local
+HEAD 9bbe4d8abdc7668c8f31069324b22ab315922f03
+branch refs/heads/implement/ci-fast-local-final-cloud
+
+worktree /home/nexus/NEXUS/nexus-os-ci-repair
+HEAD 9f8fc3e7ab29043e3f86343e9cfcc4be9153f61c
+branch refs/heads/repair/phase0-ci-baseline
+
+worktree /home/nexus/NEXUS/nexus-os-claude-instructions
+HEAD 647c1677ea9bd1e535cfa0c55474b1e84643025a
+branch refs/heads/docs/refresh-claude-instructions
+
+worktree /home/nexus/NEXUS/nexus-os-claude-instructions-c4b
+HEAD 4abf74debf02b312068aa984876ddaac48087307
+branch refs/heads/docs/replay-claude-instructions-after-c4b
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002b-ci
+HEAD b9c6d5ae972f861b31a7f8add627454673a98a36
+branch refs/heads/repair/p0-002b-ci-portability
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c-plan
+HEAD 109d16a1430e84c7cd4cc5e9db679629fc71d3e8
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c1
+HEAD 3d190599f4f1ba3c996736c6c73e557842ed1bbb
+branch refs/heads/work/p0-002c1-authority
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c2-plan
+HEAD 077a386c9b227931b5e69bfbd261dcfea2b1ca94
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c2-revalidate
+HEAD 28e1ee82642da4dc3437a74ccd47962fcfe31b04
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c3-impl
+HEAD 2fde39c99ea327ec804fd90e8265d8e865a0af2b
+branch refs/heads/implement/p0-002c3-builder-existing-write
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c3-plan
+HEAD 22a76880bb5788bea57b25a04e2be3b8acd2c1fc
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4-plan
+HEAD 2fde39c99ea327ec804fd90e8265d8e865a0af2b
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4a-impl
+HEAD 42cd90d558ad2e3d87817d32eae931130f7ea1c4
+branch refs/heads/implement/p0-002c4a-close-unsafe-devserver
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4b-impl
+HEAD dcf834ab794fafdcae2600f2ec890a0f00a7cf7c
+branch refs/heads/implement/p0-002c4b-process-lifecycle
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4b-plan
+HEAD 42cd90d558ad2e3d87817d32eae931130f7ea1c4
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4c-plan
+HEAD 4abf74debf02b312068aa984876ddaac48087307
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4c1-impl
+HEAD 48d17dfbe668c981705c5a5fc5a59b87c006aaa5
+branch refs/heads/implement/p0-002c4c1-production-lifecycle
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4c2-impl
+HEAD 517f09bc0306f2b21492c6e543ec440cb8f0e7bf
+branch refs/heads/implement/p0-002c4c2-sealed-runtime
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4c2-plan
+HEAD 48d17dfbe668c981705c5a5fc5a59b87c006aaa5
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4c3-impl
+HEAD 889f1e52983d98bb4b308e0eb455ff22d4ceba48
+branch refs/heads/implement/p0-002c4c3-governed-dev-server-launch
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d-plan
+HEAD 517f09bc0306f2b21492c6e543ec440cb8f0e7bf
+branch refs/heads/plan/p0-002c4d-trusted-toolchain
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d0-static-build
+HEAD e6c47a12ac7cff3a612304665a8279daaa78cd51
+branch refs/heads/implement/p0-002c4d0-static-build-closure
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d1a-impl
+HEAD a83f25de4fead1cec1cf5ab9866d2b0cc210ae93
+branch refs/heads/implement/p0-002c4d1a-toolchain-verifier
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d1a-plan
+HEAD e6c47a12ac7cff3a612304665a8279daaa78cd51
+branch refs/heads/plan/p0-002c4d1a-toolchain-verifier
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d1b-impl
+HEAD 51187291e8f166810f9dadfa15215af47bb6b16b
+branch refs/heads/implement/p0-002c4d1b-governed-react-runtime
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c4d2-impl
+HEAD 3b9b05e33546b9eb703343c53a8bf86a14214e33
+branch refs/heads/implement/p0-002c4d2-packaged-toolchain
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c5-impl
+HEAD 889f1e52983d98bb4b308e0eb455ff22d4ceba48
+branch refs/heads/implement/p0-002c5-authority-closure
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c5a-impl
+HEAD d3ef6c29762707d155d5d5e46eeae377d7f729be
+branch refs/heads/implement/p0-002c5a-fail-closed-surfaces
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c5b-impl
+HEAD 58e5a4c00c6617792455c207583242dcb5531b19
+branch refs/heads/implement/p0-002c5b-governed-recovery-filesystem
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c5c-impl
+HEAD 98fbb6a369daa9f3f3998a8555fec7cf67078664
+branch refs/heads/implement/p0-002c5c-final-authority-sweep
+
+worktree /home/nexus/NEXUS/nexus-os-p0-002c5c-nc
+HEAD 98fbb6a369daa9f3f3998a8555fec7cf67078664
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-deep-audit
+HEAD e3d68a795418144b0f71e0a467414de9f512541c
+branch refs/heads/diagnostic/p0-ci-deep-audit
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r1
+HEAD 30f83e35f94cb25a22f3fa7604b5ccf90793aa94
+branch refs/heads/repair/p0-ci-linux-fixture
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r2
+HEAD acca797eab3e24ba07d94a2cafd86ac1367033d4
+branch refs/heads/repair/p0-ci-windows-path-test
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r3
+HEAD fd41c4ef092bfa40577f6d42433f4f8a0dd6b83e
+branch refs/heads/repair/p0-ci-windows-oracle-test-mode
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r3b
+HEAD a9693f2524a15c0fef9d1d7c4840b0cec4a64e5a
+branch refs/heads/repair/p0-ci-windows-identity-home
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r3b-plan
+HEAD fd41c4ef092bfa40577f6d42433f4f8a0dd6b83e
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r4
+HEAD 281861571afc8fb2cbe6dc686a4f988a3c2c91a1
+branch refs/heads/repair/p0-ci-cross-platform-ram
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r4-plan
+HEAD a9693f2524a15c0fef9d1d7c4840b0cec4a64e5a
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r5
+HEAD 4195558088ede5e2a163219b6d05f2ba0b7dbdd2
+branch refs/heads/repair/p0-ci-resource-limiter
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r5-macos
+HEAD 4195558088ede5e2a163219b6d05f2ba0b7dbdd2
+branch refs/heads/repair/p0-ci-r5-macos-zombie-group
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r5-macos-group-state
+HEAD 295356903555afcb63c4228eeb8f045392de7f85
+branch refs/heads/repair/p0-ci-r5-macos-group-state
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-r5-plan
+HEAD 281861571afc8fb2cbe6dc686a4f988a3c2c91a1
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-ci-triage
+HEAD 077a386c9b227931b5e69bfbd261dcfea2b1ca94
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-approval
+HEAD 93dbdbafc68701caa8974859ded4374d29301751
+branch refs/heads/component/p0-closure-approval
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-docs
+HEAD db99f2408bf3b3c11c9978fe68b65773bd3da630
+branch refs/heads/component/p0-closure-docs
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-egress
+HEAD 353d5c680ce9a1c48aba45f27cc4491846657a3d
+branch refs/heads/component/p0-closure-egress
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-evidence
+HEAD e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1
+branch refs/heads/evidence/phase0-closure
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-reliability
+HEAD 691456c17e28595fac3bef617496a8c3963532a5
+branch refs/heads/component/p0-closure-reliability
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-secrets
+HEAD 2ef4ae6bf99c87f2cc0a43b3b16609a34dc28ad3
+branch refs/heads/component/p0-closure-secrets
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-standalone
+HEAD d6bd03a26bad57839e5538fa4229018e6656e64a
+branch refs/heads/component/p0-closure-standalone
+
+worktree /home/nexus/NEXUS/nexus-os-p0-closure-webview
+HEAD 2a92a910a5abfcb150c3ac7b404e4be78b057839
+branch refs/heads/component/p0-closure-webview
+
+worktree /home/nexus/NEXUS/nexus-os-p0-doc-truth-02
+HEAD f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+branch refs/heads/repair/p0-doc-truth-02
+
+worktree /home/nexus/NEXUS/nexus-os-p0-fg1-ci-composition
+HEAD 2b47bb09e13cdbee167372c21ad12c51273c5f81
+branch refs/heads/implement/p0-fg1-ci-composition
+
+worktree /home/nexus/NEXUS/nexus-os-p0-fg1-impl
+HEAD 1b049e15e27666f573af24bb4ac0a579dbf860c0
+branch refs/heads/implement/p0-fg1-j1-server-withdrawal
+
+worktree /home/nexus/NEXUS/nexus-os-p0-fg1-nc
+HEAD 1b049e15e27666f573af24bb4ac0a579dbf860c0
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p0-fg1-protocols-binary-name
+HEAD 71c47acbf3f8ee8210109587b3229f8d89067b6b
+branch refs/heads/repair/p0-fg1-protocols-binary-name
+
+worktree /home/nexus/NEXUS/nexus-os-p0-final-gate-closure
+HEAD 9ed607f8ab7f54ef0e00b510db5703f5f5d78207
+branch refs/heads/implement/p0-final-gate-closure
+
+worktree /home/nexus/NEXUS/nexus-os-p0-linux-final-closure-r2
+HEAD cae7bb5288820589b5cddf255e1bfc9f5e49c88a
+branch refs/heads/repair/p0-linux-final-closure-r2
+
+worktree /home/nexus/NEXUS/nexus-os-p0-linux-final-r1
+HEAD b8402283bcf284af6963671f13a79092a2b59b2b
+branch refs/heads/repair/p0-linux-final-closure-r1
+
+worktree /home/nexus/NEXUS/nexus-os-p0-post-complete-status
+HEAD 28835843f065ce9efee31b145ea18543b8eea432
+branch refs/heads/repair/p0-post-complete-status
+
+worktree /home/nexus/NEXUS/nexus-os-p0-public-main
+HEAD 4b36f60694148b60029733bc7b3d26e5a215d460
+branch refs/heads/main
+
+worktree /home/nexus/NEXUS/nexus-os-p1-evidence
+HEAD c237937189b5977eaad01acad6a4c52bcce796cc
+branch refs/heads/evidence/phase1-closure
+
+worktree /home/nexus/NEXUS/nexus-os-p1-status
+HEAD 5e6d993976fa5e655af27bebe0f87a7b20eae426
+branch refs/heads/docs/phase1-completion-status
+
+worktree /home/nexus/NEXUS/nexus-os-p1a-002-governed-coding-run
+HEAD 6cd2147d80c99d81f0a2f97056786432c5a73746
+branch refs/heads/implement/p1a-002-governed-coding-run-primitive
+
+worktree /home/nexus/NEXUS/nexus-os-p1a-002-r1
+HEAD 299b6730461744df31b907444c0dfa66be9985a5
+branch refs/heads/repair/p1a-002-r1-staging-authority-lifecycle
+
+worktree /home/nexus/NEXUS/nexus-os-p1a-002-r2
+HEAD a271181722ddaa77afc41b8f1d79239a397e8ae7
+branch refs/heads/repair/p1a-002-r2-staging-identity-cleanup
+
+worktree /home/nexus/NEXUS/nexus-os-p1a-002-r3
+HEAD 80dc0e97ef45421cb4f65ad9cb38aaf41030f8da
+branch refs/heads/repair/p1a-002-r3-ledger-state-reconciliation
+
+worktree /home/nexus/NEXUS/nexus-os-p2-entry-audit
+HEAD 6f3d64360dd21aa8d717c3995c46e48f396148b9
+detached
+
+worktree /home/nexus/NEXUS/nexus-os-p2-entry-h1
+HEAD e47bf65788247946eb8401138f57435e7c1680fc
+branch refs/heads/repair/p2-entry-h1-authority-hygiene
+
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers
+HEAD 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+branch refs/heads/review/p2-v1-cleanup-observers
+
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-custody-recorder-design
+HEAD 7689e599ed8fc89ec7720d13869ef58cab767ecb
+branch refs/heads/review/p2-v1-custody-recorder-design
+
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-custody-store-implementation
+HEAD 3805204f941d9694b2c0c36549d32a5f4e6c157c
+branch refs/heads/review/p2-v1-custody-store-implementation
+
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-native-scope-ownership
+HEAD 3805204f941d9694b2c0c36549d32a5f4e6c157c
+branch refs/heads/review/p2-v1-native-scope-ownership
+
+worktree /home/nexus/NEXUS/nexus-os-p2-v1-r3b-i2-r1-evidence
+HEAD 8e2c46c00cd4071bbae41815d1d1cd0c4814655f
+branch refs/heads/evidence/p2-v1-r3b-i2-r1
+
+worktree /home/nexus/NEXUS/nexus-os-p2-validation-bootstrap
+HEAD 4b36f60694148b60029733bc7b3d26e5a215d460
+branch refs/heads/repair/p2-validation-workflow-bootstrap
+
+worktree /home/nexus/NEXUS/nexus-os-phase1-acl-schema-hygiene
+HEAD 6f3d64360dd21aa8d717c3995c46e48f396148b9
+branch refs/heads/repair/phase1-generated-acl-schema-hygiene
+
+worktree /home/nexus/NEXUS/nexus-os-phase1-autonomous
+HEAD 14270a9a38770ac84456c1f812042d2967edec42
+branch refs/heads/implement/phase1-autonomous-candidate
+
+worktree /home/nexus/NEXUS/nexus-os-phase2-verification
+HEAD 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f
+branch refs/heads/implement/phase2-governed-verification
+
+worktree /home/nexus/NEXUS/nexus-os-r1-audit
+HEAD 796bc435495a93206efcb9cbd2be30758d619fd7
+branch refs/heads/component/r1-audit
+
+worktree /home/nexus/NEXUS/nexus-os-r1-network
+HEAD 4bc4c488a39646b896c993220e98c7edde064cfb
+branch refs/heads/component/r1-network
+
+worktree /home/nexus/NEXUS/nexus-os-runner-hardening
+HEAD 6eae37431145100b9a32a08a27496e52de2222e1
+branch refs/heads/repair/local-runner-hardening
+
+worktree /tmp/nexus-os-p0-002c2-impl
+HEAD 22a76880bb5788bea57b25a04e2be3b8acd2c1fc
+branch refs/heads/implement/p0-002c2-builder-authority
+
+worktree /tmp/nexus-p0-ci-r52-inventory
+HEAD d68cc96563307018ad8f42760dad4a4522f024f5
+branch refs/heads/diagnostic/p0-ci-r52-inventory
+
+worktree /tmp/nexus-p0-ci-r53-windows-handle-baseline
+HEAD d7c38f0b614d2e86e6d5acb453b94c75c9d6579f
+branch refs/heads/repair/p0-ci-r53-windows-handle-baseline
+
+worktree /tmp/nexus-p0-ci-r6-bash-temporary-paths
+HEAD 287bd2fd0b1294c2a97bb36b95ec3c3302b0a6e5
+branch refs/heads/diagnostic/p0-ci-r6-bash-temporary-paths
+
+worktree /tmp/nexus-p0-ci-r6-contained-diagnostic
+HEAD eb97bfb78f8fd90b25500d40aa2eab6d75a11ca3
+branch refs/heads/diagnostic/p0-ci-r6-contained-execution
+
+worktree /tmp/nexus-p0-ci-r6-contained-windows-execution
+HEAD 9967cbf7897a5dca8676aa6737b0cb7d6bb12162
+branch refs/heads/repair/p0-ci-r6-contained-windows-execution
+
+worktree /tmp/nexus-p0-ci-r6-final-environment
+HEAD fb012bd6b13f1e33fa77e15c317620e19e6d1f08
+branch refs/heads/diagnostic/p0-ci-r6-final-environment
+
+worktree /tmp/nexus-p0-ci-r6-windows-execution
+HEAD aae371b3eba4231c36b66cfadaa489e53949945e
+branch refs/heads/repair/p0-ci-r6-windows-execution
+
+worktree /tmp/nexus-p0-ci-r61-bash-output-contract
+HEAD 2bfb44d531d8b56750d11d52cf8b600da4d5e996
+branch refs/heads/repair/p0-ci-r61-bash-output-contract
+
+worktree /tmp/nexus-p0-ci-r7-cancellation-readiness
+HEAD 68a7ef5afcb80bfdd81c6c2e4562ca3d603ce80b
+branch refs/heads/repair/p0-ci-r7-cancellation-readiness
+
+worktree /tmp/nexus-p0-ci-r7-canonical-media-paths
+HEAD 8128cc100c694a5bdf902929b9011577e79b8317
+branch refs/heads/repair/p0-ci-r7-canonical-media-paths
+
+worktree /tmp/nexus-p0-ci-r7-codex-native-echo
+HEAD 28e1ee82642da4dc3437a74ccd47962fcfe31b04
+branch refs/heads/repair/p0-ci-r7-codex-native-echo
+
+worktree /tmp/nexus-p0-ci-r7-codex-native-vision
+HEAD 9967cbf7897a5dca8676aa6737b0cb7d6bb12162
+branch refs/heads/repair/p0-ci-r7-codex-native-vision
+
+worktree /tmp/nexus-p0-ci-r7-expiry-clock-resolution
+HEAD 2f33515c3e3fafb26cb0dc794663ba5833a727bb
+branch refs/heads/repair/p0-ci-r7-expiry-clock-resolution
+
+worktree /tmp/nexus-p0-ci-r7-fixture-frontier
+HEAD a4a832c79cffc790ac6167ec98f3273a57f3ac74
+branch refs/heads/diagnostic/p0-ci-r7-fixture-frontier
+
+worktree /tmp/nexus-p0-ci-r7-shell-fixtures
+HEAD 26086c9641dfbdfd31af5d874e1c1224b803f19c
+branch refs/heads/repair/p0-ci-r7-shell-fixtures
+
+worktree /tmp/nexus-p0-ci-r8-tcp-stream-mode
+HEAD aae371b3eba4231c36b66cfadaa489e53949945e
+branch refs/heads/repair/p0-ci-r8-tcp-stream-mode
+
+worktree /tmp/nexus-p0-ci-r9-tauri-events
+HEAD 39e7cf78c78c0abe1db135ead32de07ddedd19fa
+branch refs/heads/repair/p0-ci-r9-tauri-events
+
+worktree /tmp/nexus-p0-ci-windows-handle-count
+HEAD 086ee22bddc8a0fa955eb4444c52628482fcb095
+branch refs/heads/diagnostic/p0-ci-windows-handle-count

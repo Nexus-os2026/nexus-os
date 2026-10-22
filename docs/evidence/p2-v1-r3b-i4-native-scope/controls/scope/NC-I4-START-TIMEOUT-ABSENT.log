@@ -1,0 +1,22 @@
+
+running 1 test
+test scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven ... FAILED
+
+failures:
+
+---- scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven stdout ----
+
+thread 'scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven' (545843) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:720:13:
+Timeout: the unit a lost-reply start created was not discovered and proven: StartFailed { error: Bus("StartTransientUnit timed out"), unresolved: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.29s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

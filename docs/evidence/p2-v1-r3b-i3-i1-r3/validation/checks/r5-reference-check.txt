@@ -1,0 +1,18 @@
+baseline 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 tree cd197e047cb5a57e458b2af5d32f9c5406371301: OK
+references in the document: 115; checked against 45898e05178a: 115
+golden record vectors: model 50, baseline RECORD_VECTORS 50
+crash matrix rows: document 30, model 30
+operation rows: document 11, model 11
+coverage rows: document 8, model 8; outcomes 1105
+checks: document 33, model 33; negative controls: model 67
+activation operations: document 10, model 10
+composed dimensions: document 13, model 6
+kernel citations in the document: 204; expectations 204
+enumeration counts: document 7, model 7
+profile options: required 2, excluded 9; model 2, 9
+PROVISION keys: document 33, model 33
+storage rule: class, cache values, identity prefix and 4 identity attributes compared with the model
+storage-event dimensions: model 7
+kernel citations against the files: 204 citations in 35 files, SHA-256 verified, all match
+self-test: moved reference reported True; altered golden digest reported True; crash-matrix cell reported True; operation reported True; coverage count reported True; check marker reported True; activation operation reported True; composed count reported True; kernel citation moved reported True; enumeration count reported True; excluded option dropped reported True; PROVISION key reported True; R5 kernel citation moved reported True; admitted fua value reported True; identity attributes' order reported True; storage-event count reported True; kernel expectation altered reported True; R5 kernel expectation altered reported True
+RESULT: PASS

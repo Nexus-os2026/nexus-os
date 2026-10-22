@@ -1,0 +1,49 @@
+  159      /// Settle this operation: end whatever it may have created and confirm
+  160      /// it gone. `true` once nothing it may have created can still hold or
+  161      /// receive a process; `false` keeps it owned, for another attempt. Only
+  162      /// the execution's finalizer settles, after killing `helper`, the bound
+  163      /// helper its owner keeps unreaped (another helper is ignored).
+  164      pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+  165          if !self.unresolved() {
+  166              return true;
+  167          }
+  168          let controller = Arc::clone(&self.controller);
+  169          let helper = helper.filter(|helper| self.binds(helper));
+  170          if self.collided {
+  171              // Refused before any effect: the unit of that name is not this
+  172              // request's, so it is never stopped or claimed.
+  173              fault::at(fault, FaultPoint::ScopeReconcile);
+  174              self.settled = outside(&controller, helper, &self.unit);
+  175              return self.settled;
+  176          }
+  177          // Cleanup ownership: everything in the candidate is ended.
+  178          if let Some(candidate) = &self.candidate {
+  179              let _ = candidate.kill();
+  180          }
+  181          self.acquire(&controller, helper);
+  182          fault::at(fault, FaultPoint::ScopeReconcile);
+  183          if self.gone(&controller, helper) {
+  184              self.settled = true;
+  185              return true;
+  186          }
+  187          fault::at(fault, FaultPoint::BeforeScopeStop);
+  188          self.stops = self.stops.saturating_add(1);
+  189          // Neither reply is a confirmation, nor a failure proof that nothing
+  190          // was stopped: it is kept for diagnostics only, and what remains is
+  191          // observed again.
+  192          self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+  193          fault::at(fault, FaultPoint::AfterScopeStop);
+  194          let start = Instant::now();
+  195          loop {
+  196              self.acquire(&controller, helper);
+  197              fault::at(fault, FaultPoint::ScopeReconcile);
+  198              if self.gone(&controller, helper) {
+  199                  self.settled = true;
+  200                  return true;
+  201              }
+  202              if start.elapsed() >= controller.timing.settle {
+  203                  return false;
+  204              }
+  205              std::thread::sleep(controller.timing.poll);
+  206          }
+  207      }

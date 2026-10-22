@@ -134,6 +134,11 @@ pub async fn flash_generate(
     let session_id_clone = session_id.clone();
     let model_path_clone = model_path.clone();
     let audit_arc = state.audit.clone();
+    // P3-HM-CONTRACT-02 §12.1 (HD): the Owner's chat turn, moved into the
+    // inference thread; the prompt is dispatched through the issuer on the
+    // session's provider, attested by `attest_route` on it.
+    let mut turn = crate::hm_dispatch::chat_turn(&state, None)?;
+    let issued_state = state.inner().clone();
 
     // Run inference on a blocking thread (llama.cpp is CPU-bound).
     let result = tokio::task::spawn_blocking(move || {
@@ -143,16 +148,46 @@ pub async fn flash_generate(
         ))]
         let stream_app = app_handle.clone();
 
-        let response = provider.query_streaming(&prompt, max_tokens, move |token_text| {
-            #[cfg(all(
-                feature = "tauri-runtime",
-                any(target_os = "windows", target_os = "macos", target_os = "linux")
-            ))]
-            {
-                // Best-effort: stream token to frontend; dropped tokens are non-fatal
-                let _ = stream_app.emit("flash-token", json!({ "text": token_text }));
-            }
-            true // continue generating
+        let streamed: std::cell::RefCell<Option<nexus_connectors_llm::providers::LlmResponse>> =
+            std::cell::RefCell::new(None);
+        let response = crate::hm_dispatch::dispatch_text(
+            &issued_state,
+            &mut turn,
+            &prompt,
+            &mut |_| Ok(((), nexus_connectors_llm::attest::attest_route(&provider))),
+            &mut |(), admitted| {
+                #[cfg(all(
+                    feature = "tauri-runtime",
+                    any(target_os = "windows", target_os = "macos", target_os = "linux")
+                ))]
+                let stream_app = stream_app.clone();
+                let resp = provider
+                    .query_streaming(admitted, max_tokens, move |token_text| {
+                        #[cfg(all(
+                            feature = "tauri-runtime",
+                            any(target_os = "windows", target_os = "macos", target_os = "linux")
+                        ))]
+                        {
+                            // Best-effort: stream token to frontend; dropped tokens are non-fatal
+                            let _ = stream_app.emit("flash-token", json!({ "text": token_text }));
+                        }
+                        #[cfg(not(all(
+                            feature = "tauri-runtime",
+                            any(target_os = "windows", target_os = "macos", target_os = "linux")
+                        )))]
+                        let _ = token_text;
+                        true // continue generating
+                    })
+                    .map_err(|e| e.to_string())?;
+                let text = resp.output_text.clone();
+                *streamed.borrow_mut() = Some(resp);
+                Ok(text)
+            },
+        )
+        .and_then(|_| {
+            streamed
+                .into_inner()
+                .ok_or_else(|| "flash: no reply".to_string())
         });
 
         match response {

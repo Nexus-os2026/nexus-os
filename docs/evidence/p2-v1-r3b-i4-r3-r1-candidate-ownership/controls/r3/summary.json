@@ -1,0 +1,237 @@
+{
+  "summary": {
+    "original": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "59d6723b6dcfd3471cdb8b9b5b91fbe854921342d38698c751918bc461dd5ca3",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "048330068d1bf6dd0f36bfbf5452586d8552c3a91190311a104561e52b14488e",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "36303b0f5de7053e56651c89c816bb26ce479a340361234d23950aa421adb809",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "c58b6ffbea89c25e1deb31189fec56454dcb9e730cfca637f76ccce9b1e0094a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "28a27f7afa96ba60b007cfd37a375885521de141efc2ecdcd9c3432559fa0082",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "cd0c2a5cf45fa6b06f637cf320484718bb2e1f900392f56641261d026f2c1fd8"
+    },
+    "final": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "59d6723b6dcfd3471cdb8b9b5b91fbe854921342d38698c751918bc461dd5ca3",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "048330068d1bf6dd0f36bfbf5452586d8552c3a91190311a104561e52b14488e",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "36303b0f5de7053e56651c89c816bb26ce479a340361234d23950aa421adb809",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "c58b6ffbea89c25e1deb31189fec56454dcb9e730cfca637f76ccce9b1e0094a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "28a27f7afa96ba60b007cfd37a375885521de141efc2ecdcd9c3432559fa0082",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "cd0c2a5cf45fa6b06f637cf320484718bb2e1f900392f56641261d026f2c1fd8"
+    },
+    "identical": true,
+    "status": [],
+    "expected_status": [],
+    "counted": 10,
+    "by_category": {
+      "r3-1": 1,
+      "r3-10": 1,
+      "r3-2": 1,
+      "r3-3": 1,
+      "r3-4": 1,
+      "r3-5": 1,
+      "r3-6": 1,
+      "r3-7": 1,
+      "r3-8": 1,
+      "r3-9": 1
+    },
+    "baseline_all_pass": true,
+    "all_required": true,
+    "failures": []
+  },
+  "baseline": {
+    "execution::tests::i4r1_15_a_collision_never_stops_or_claims_the_foreign_unit": true,
+    "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name": true,
+    "execution::tests::i4r3_01_an_accepted_operation_never_acts_on_a_unit_loaded_under_its_name_again": true,
+    "execution::tests::i4r3_02_an_accepted_operation_whose_unit_stays_loaded_stays_owned_and_bounded": true,
+    "execution::tests::i4r3_04_an_accepted_operation_s_candidate_is_ended_by_descriptor_and_observed": true,
+    "scope::tests::i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms": true,
+    "scope::tests::i4r3_10_settling_never_acts_on_a_unit_by_its_name": true,
+    "scope::tests::i4r3_10_the_manager_can_only_start_a_scope_and_read": true
+  },
+  "counted": [
+    {
+      "id": "NC-R3-01-STOPUNIT-IN-RECONCILE",
+      "category": "r3-1",
+      "what": "StopUnit by the unit's name reintroduced into settling (reconcile), for every operation not collided [R3-R1-adapted: re-anchored: the mutation inserted between R3-R1's end_owned() and the observation]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "scope::tests::i4r3_10_settling_never_acts_on_a_unit_by_its_name",
+      "marker": "settling acts on a unit through the manager",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: settling acts on a unit through the manager\n  left: [\"control_group\", \"control_group_id\", \"get_unit\", \"get_unit\", \"oom_policy\", \"runtime_max_usec\", \"start_scope\", \"stop_unit\", \"unit_id\", \"unit_instance\"]\n right: [\"control_group\", \"control_group_id\", \"get_unit\", \"get_unit\", \"oom_policy\", \"runtime_max_usec\", \"start_scope\", \"unit_id\", \"unit_instance\"]"
+    },
+    {
+      "id": "NC-R3-02-MANAGER-STOP-RESTORED",
+      "category": "r3-2",
+      "what": "the manager's StopUnit restored (the trait method and the production request), unused",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "test": "scope::tests::i4r3_10_the_manager_can_only_start_a_scope_and_read",
+      "marker": "the manager can act on a unit by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the manager can act on a unit by its name\n  left: [\"start_scope\", \"stop_unit\", \"get_unit\", \"runtime_max_usec\", \"oom_policy\", \"unit_id\", \"control_group\", \"unit_instance\", \"control_group_id\"]\n right: [\"start_scope\", \"get_unit\", \"runtime_max_usec\", \"oom_policy\", \"unit_id\", \"control_group\", \"unit_instance\", \"control_group_id\"]"
+    },
+    {
+      "id": "NC-R3-03-ACCEPTED-AUTHORIZES-STOP",
+      "category": "r3-3",
+      "what": "the recorded start reply authorizes a stop by the unit's name again (the R2 shape) [R3-R1-adapted: re-anchored: the mutation inserted between R3-R1's end_owned() and the observation]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "scope::tests::i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms",
+      "marker": "the recorded start reply gates more than what the manager's absence can confirm",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the recorded start reply gates more than what the manager's absence can confirm: self.accepted\n  left: 5\n right: 4"
+    },
+    {
+      "id": "NC-R3-04-PRESENCE-AS-OWNERSHIP",
+      "category": "r3-4",
+      "what": "a unit the manager reports loaded under the name is taken as the accepted operation's: its control group is retained as the candidate and ended [R3-R1-adapted: re-anchored after R3-R1's acquire head; the retained candidate is R3-R1's Candidate, owned]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r3_01_an_accepted_operation_never_acts_on_a_unit_loaded_under_its_name_again",
+      "marker": "an accepted operation was confirmed while a unit of its name is loaded",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: an accepted operation was confirmed while a unit of its name is loaded\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R3-05-OBJECT-PATH-IDENTITY",
+      "category": "r3-5",
+      "what": "the object path GetUnit returns is taken as the unit's identity, and the unit at it ended through its control group [R3-R1-adapted: re-anchored: the mutation inserted between R3-R1's end_owned() and the observation]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r3_01_an_accepted_operation_never_acts_on_a_unit_loaded_under_its_name_again",
+      "marker": "the foreign unit loaded under the name was claimed",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "retry 1: the foreign unit loaded under the name was claimed: [GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), ControlGroup(\"/unit/nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Open(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Kill(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit(\"nexus-verifier-65a42f5cacdd5e9bfef1bace520cb14f.scope\"), Membership(3748193, true), GetUnit"
+    },
+    {
+      "id": "NC-R3-06-FOREIGN-PRESENCE-CONFIRMS",
+      "category": "r3-6",
+      "what": "an accepted operation without a candidate is confirmed while a unit is loaded under its name (a loaded unit that does not hold the helper taken as another's, this one as gone) [R3-R1-adapted: re-anchored: the same weakening of R3-R1's accepted-without-ownership rule in gone()]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r3_01_an_accepted_operation_never_acts_on_a_unit_loaded_under_its_name_again",
+      "marker": "an accepted operation was confirmed while a unit of its name is loaded",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: an accepted operation was confirmed while a unit of its name is loaded\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R3-07-REAPED-WHILE-PRESENT",
+      "category": "r3-7",
+      "what": "the helper of an accepted operation without a candidate is reaped while the manager reports its unit loaded (reaped whenever settling stays unconfirmed)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "execution::tests::i4r3_02_an_accepted_operation_whose_unit_stays_loaded_stays_owned_and_bounded",
+      "marker": "the helper of an accepted operation was reaped while its unit is loaded",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "retry 1: the helper of an accepted operation was reaped while its unit is loaded"
+    },
+    {
+      "id": "NC-R3-08-UNCERTAIN-WEAKENED",
+      "category": "r3-8",
+      "what": "an uncertain start without a candidate is recorded as accepted, so the manager's absence settles it [R3-R1-adapted: re-anchored: R3-R1's uncertain arm, recorded as accepted]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name",
+      "marker": "an uncertain start was resolved by its unit name or presence",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: an uncertain start was resolved by its unit name or presence\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R3-09-CANDIDATE-BY-NAME",
+      "category": "r3-9",
+      "what": "the candidate is ended through the unit's cgroup path, rebuilt from its name beside the helper's cgroup, instead of through its retained descriptor [R3-R1-adapted: re-anchored: the by-name kill replaces R3-R1's end_owned() in settling]",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r3_04_an_accepted_operation_s_candidate_is_ended_by_descriptor_and_observed",
+      "marker": "the candidate was not ended through its descriptor alone",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the candidate was not ended through its descriptor alone\n  left: [Membership(3754690, true), Open(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-15e052c0e1067ef38588ddaa207bc697.scope\"), Kill(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-15e052c0e1067ef38588ddaa207bc697.scope\")]\n right: [Kill(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-15e052c0e1067ef38588ddaa207bc697.scope\")]"
+    },
+    {
+      "id": "NC-R3-10-COLLISION-WEAKENED",
+      "category": "r3-10",
+      "what": "a definite collision is confirmed at once, without observing the helper outside the foreign unit",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r1_15_a_collision_never_stops_or_claims_the_foreign_unit",
+      "marker": "a collision was confirmed while the foreign unit holds the helper",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a collision was confirmed while the foreign unit holds the helper"
+    }
+  ]
+}

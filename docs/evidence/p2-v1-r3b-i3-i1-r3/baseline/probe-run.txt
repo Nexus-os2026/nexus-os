@@ -1,0 +1,116 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests/r3_base_probes.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/base-target/debug/deps/r3_base_probes-4c3e5a4b8d708659)
+
+running 11 tests
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Entry, met: Some(Entry); 2. control side: gate.try_lock() -> Free; 3. control side: cancel at the boundary -> Accepted(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((5, Failed)), published Failed, failures [Cancelled], admission AdmissionView { admitted: 0, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }), committed: Some(Commitment { at: Tick(9) }) }
+ok
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Decided, met: Some(Decided); 2. control side: gate.try_lock() -> Held; 3. control side: cancel at the boundary -> not attempted (the gate was not free); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((4, Passed)), published Passed, failures [], admission AdmissionView { admitted: 0, closure: None, committed: Some(Commitment { at: Tick(9) }) }
+ok
+test r3b1_repeat_after_successor_step_2a ... PROBE R3-B1: the authorized succession has 32 steps; steps 1 to 6: ["13.6/2a", "13.6/2a", "13.6/2a", "13.6/2a", "13.6/2a", "13.6/2a"]
+PROBE R3-B1: after F1 at operation 6, the PROVISION directory holds ["uid-1001.provision", "uid-1001.provision.predecessor-101112131415161718191a1b1c1d1e1f"]; durably ["uid-1001.provision", "uid-1001.provision.predecessor-101112131415161718191a1b1c1d1e1f"]
+PROBE R3-B1: uid-1001.provision.predecessor-101112131415161718191a1b1c1d1e1f equals the PROVISION the session verified: true
+PROBE R3-B1: PROVISION selects root 101112131415161718191a1b1c1d1e1f (revision 1); the successor's root exists: false
+PROBE R3-B1: R-LEFTOVER has 1 step(s): ["13.1/recover"]
+PROBE R3-B1: R-LEFTOVER: Ok(())
+PROBE R3-B1: a fresh in-session verification: Ok((0, 0))
+PROBE R3-B1: the repeat: Err("13.6/2a (step 4): linkat: Exist"); steps done 3 of 32
+PROBE R3-B1: the repeat's operations: ["create uid-1001.provision.predecessor.tmp", "write ", "fsync "]
+PROBE R3-B1: the PROVISION directory after the repeat: ["uid-1001.provision", "uid-1001.provision.predecessor-101112131415161718191a1b1c1d1e1f", "uid-1001.provision.predecessor.tmp"]
+PROBE R3-B1: PROVISION still selects root 101112131415161718191a1b1c1d1e1f (revision 1)
+ok
+test r3b2_partially_created_successor_root ... PROBE R3-B2: operations 7 to 23 are ["13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b", "13.6/2b"]
+PROBE R3-B2: PROVISION selects root 101112131415161718191a1b1c1d1e1f (revision 1): the predecessor stays selected: true
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/LOCK: Regular 1001:1001 600 nlink 1 size 0 nonzero false
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/archive: Directory 0:0 755 nlink 2
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/dispositions: Directory 0:0 755 nlink 2
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/dispositions/revoked: Directory 0:0 755 nlink 2
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/journals: Directory 0:0 755 nlink 2
+PROBE R3-B2: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/journals/j00000.journal: Regular 1001:1001 600 nlink 1 size 73728 nonzero false
+PROBE R3-B2: an owner's opening of the selected store: opens
+PROBE R3-B2: R-LEFTOVER has 1 step(s) ["13.1/recover"]: Ok(())
+PROBE R3-B2: the repeat with the same layout: Err("13.6/2a (step 4): linkat: Exist"); operations ["create uid-1001.provision.predecessor.tmp", "write ", "fsync "]
+PROBE R3-B2: the successor's root still exists: true
+PROBE R3-B2: the StoreIo trait declares a directory removal (AT_REMOVEDIR, remove_dir, rmdir): false
+PROBE R3-B2: io.rs's only AT_REMOVEDIR use is the Linux fixture helper for a test's own entries (linux::fixture_remove): true
+PROBE R3-B2: maintenance names any removal of a successor root (remove_dir, rmdir, incomplete_successor): false
+ok
+test r3b3_nonzero_incomplete_successor ... PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/LOCK: Regular 1001:1001 600 nlink 1 size 0 nonzero false
+PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/archive: Directory 0:0 755 nlink 2
+PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/dispositions: Directory 0:0 755 nlink 2
+PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/dispositions/revoked: Directory 0:0 755 nlink 2
+PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/journals: Directory 0:0 755 nlink 2
+PROBE R3-B3: successor /var/lib/nexus-os/phase2-custody/roots/uid-1001-202122232425262728292a2b2c2d2e2f/journals/j00000.journal: Regular 1001:1001 600 nlink 1 size 73728 nonzero true
+PROBE R3-B3: roots that may hold history: Ok(["uid-1001-202122232425262728292a2b2c2d2e2f"])
+PROBE R3-B3: R-LEFTOVER ["13.1/recover"]: Ok(())
+PROBE R3-B3: the non-zero successor root still exists after every available procedure: true
+ok
+test r3b4_wrong_kept_predecessor_copy ... PROBE R3-B4: the succession: Err("13.6/2a (step 4): linkat: Exist"); steps done 3 of 32; operations ["create uid-1001.provision.predecessor.tmp", "write ", "fsync "]
+PROBE R3-B4: the mismatched copy is unchanged (same inode, same bytes): true
+PROBE R3-B4: the PROVISION directory now holds ["uid-1001.provision", "uid-1001.provision.predecessor-101112131415161718191a1b1c1d1e1f", "uid-1001.provision.predecessor.tmp"]
+PROBE R3-B4: PROVISION still selects root 101112131415161718191a1b1c1d1e1f (revision 1)
+ok
+test r3b5_interrupted_revocation_split_state ... PROBE R3-B5: P-REVOKE's steps: ["13.4-revoke/2", "13.4-revoke/3", "13.4-revoke/3"]
+PROBE R3-B5: per-directory schedules for the pending log: 2
+PROBE R3-B5: /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition: Regular 0:0 444 nlink 2 size 442 nonzero true
+PROBE R3-B5: /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/revoked: Directory 0:0 755 nlink 2
+PROBE R3-B5: /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/revoked/d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T120000Z.disposition: Regular 0:0 444 nlink 2 size 442 nonzero true
+PROBE R3-B5: both names present: true; the same inode: true
+PROBE R3-B5: an owner's opening: Invalid("disposition d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition type: d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition link count 2")
+PROBE R3-B5: the in-session verification: Err(Invalid("disposition d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition type: d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition link count 2"))
+PROBE R3-B5: R-LEFTOVER ["13.1/recover"]: Ok(())
+PROBE R3-B5: after R-LEFTOVER the verification: Err(Invalid("disposition d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition type: d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition link count 2"))
+PROBE R3-B5: P-REVOKE again (another time): Ok(())
+PROBE R3-B5: after the second revocation /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/revoked: Directory 0:0 755 nlink 2
+PROBE R3-B5: after the second revocation /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/revoked/d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T120000Z.disposition: Regular 0:0 444 nlink 2 size 442 nonzero true
+PROBE R3-B5: after the second revocation /var/lib/nexus-os/phase2-custody/roots/uid-1001-101112131415161718191a1b1c1d1e1f/dispositions/revoked/d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T130000Z.disposition: Regular 0:0 444 nlink 2 size 442 nonzero true
+PROBE R3-B5: the verification after it: Err(Invalid("revoked d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T120000Z.disposition type: d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T120000Z.disposition link count 2"))
+PROBE R3-B5: maintenance names a revocation recovery (resume_revocation, recover_revocation): false
+ok
+test r3b6_revoked_directory_limit ... PROBE R3-B6: the verification with 4096 revoked entries: Ok(1)
+PROBE R3-B6: P-REVOKE: Ok(()); complete true; operations ["rename d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T130000Z.disposition", "fsync_dir ", "fsync_dir "]
+PROBE R3-B6: revoked/ now holds 4097 entries
+PROBE R3-B6: the session's last event: Some(VerifyAfter(Err(Invalid("enumeration bound: dispositions/revoked"))))
+PROBE R3-B6: the verify-after's conditions: [(Invalid, "enumeration-bound dispositions/revoked")]
+PROBE R3-B6: an owner's opening afterwards: Invalid("enumeration bound: dispositions/revoked")
+ok
+test r3b7_revoked_target_collision ... PROBE R3-B7: the second revocation at the same time: Ok(()); operations ["rename d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T140000Z.disposition", "fsync_dir ", "fsync_dir "]
+PROBE R3-B7: the revoked name now names the first revoked file: false; its bytes are the first's: false
+PROBE R3-B7: revoked/ holds 1 entr(y/ies); any of them is the first revoked file: false
+PROBE R3-B7: the remaining revoked file's statement is the first publication's: false; the second's: true
+ok
+test r3b8_succession_repeat_at_every_crash_point ... PROBE R3-B8: the succession has 29 steps on one pool file
+PROBE R3-B8: crash point  0: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: completed (29 steps)
+PROBE R3-B8: crash point  1: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: completed (29 steps)
+PROBE R3-B8: crash point  2: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: completed (29 steps)
+PROBE R3-B8: crash point  3: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: completed (29 steps)
+PROBE R3-B8: crash point  4: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point  5: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point  6: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point  7: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point  8: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point  9: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 10: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 11: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 12: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 13: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 14: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 15: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 16: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 17: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 18: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 19: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 20: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 21: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 22: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 23: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 24: predecessor selected; R-LEFTOVER Ok((1, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 25: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 26: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 27: predecessor selected; R-LEFTOVER Ok((2, true)); verifies true; repeat: failed: 13.6/2a (step 4): linkat: Exist
+PROBE R3-B8: crash point 28: Ok(()); PROVISION selects the successor (revision 2); no repeat
+PROBE R3-B8: crash point 29: Ok(()); PROVISION selects the successor (revision 2); no repeat
+PROBE R3-B8: the base has a successor-cleanup or revocation-recovery procedure to interrupt: false
+ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s

@@ -1,0 +1,3 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.16s
+  Executable tests/phase2_live_sandbox.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/phase2_live_sandbox-82f77a8e8ad83810)

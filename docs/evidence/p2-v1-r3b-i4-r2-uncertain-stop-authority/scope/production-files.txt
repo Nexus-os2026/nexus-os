@@ -1,0 +1,23 @@
+P2-V1-R3B-I4-R2: production and governance files, worktree vs the base c3a12b2b and the I4-R1 acceptance ea475eac (2026-10-03T06:06:51Z)
+CHANGED-vs-base differs-from-I4R1 crates/nexus-verifier-sandbox/src/scope/pending.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/scope.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/scope/manager.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/scope/native.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/execution.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/launcher.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/helper.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/src/fault.rs
+same-as-base same-as-I4R1 crates/nexus-verifier-sandbox/Cargo.toml
+same-as-base same-as-I4R1 Cargo.lock
+same-as-base same-as-I4R1 Cargo.toml
+same-as-base same-as-I4R1 AGENTS.md
+same-as-base same-as-I4R1 CLAUDE.md
+same-as-base same-as-I4R1 .gitignore
+same-as-base same-as-I4R1 app/src-tauri/src/coding_flow/verification.rs
+same-as-base differs-from-I4R1 app/src-tauri/src/phase2_tests.rs
+same-as-base differs-from-I4R1 .github/workflows/ci-phase2-linux-sandbox.yml
+same-as-base differs-from-I4R1 scripts/ci/test_phase2_cleanup_check.py
+same-as-base differs-from-I4R1 crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+same-as-base differs-from-I4R1 crates/nexus-verifier-sandbox/tests/support/host_qualification.rs
+same-as-base differs-from-I4R1 crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs
+production src/ files changed vs c3a12b2b: crates/nexus-verifier-sandbox/src/scope/pending.rs

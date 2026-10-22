@@ -1,0 +1,22 @@
+
+running 1 test
+test o02_activation_precedes_every_decision_and_the_claim ... FAILED
+
+failures:
+
+---- o02_activation_precedes_every_decision_and_the_claim stdout ----
+
+thread 'o02_activation_precedes_every_decision_and_the_claim' (3625524) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3260:5:
+[durable-activation] order [55, 154, 238, 239, 240, 98]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o02_activation_precedes_every_decision_and_the_claim
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.90s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

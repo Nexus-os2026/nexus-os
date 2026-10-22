@@ -1,0 +1,12 @@
+--- check-ad1r4.v3.py
++++ check-ad1r4.v4.py
+@@ -342,7 +342,8 @@
+     "fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3": ("tree", lambda: git("rev-parse", "04e42a7ddf0d0a2af17b6506c51997006e7a08dc^{tree}").decode().strip() == "fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3"),
+     "28085ce232827301104b5d757af042ec933976f8": ("blob", lambda: git("rev-parse", "04e42a7ddf0d0a2af17b6506c51997006e7a08dc:" + FILES[0]).decode().strip() == "28085ce232827301104b5d757af042ec933976f8"),
+     "a464a36621523f539d2554a6b176d678c7f885ea": ("commit", lambda: git("log", "-1", "--format=%P", "a464a36621523f539d2554a6b176d678c7f885ea").decode().strip() == "04e42a7ddf0d0a2af17b6506c51997006e7a08dc"),
+-    "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0": ("blob", lambda: True),
++    "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0": ("blob (derived in C1r-c)", lambda: True),
++    "a2df2841b99cad5d452008a6d4150e9369d07e66": ("blob", lambda: git("rev-parse", f"{commit}:crates/nexus-governed-control/src/ledger/protocol.rs").decode().strip() == "a2df2841b99cad5d452008a6d4150e9369d07e66"),
+     "7f2463f5421502cc6ee74c070fc3abc41d467770": ("blob", lambda: git("rev-parse", "c2c69e3a8a5cc447cac8a86424a1600a1f23cecf:docs/evidence/p3-candidate11/ad1r3-review-01/ad1r3/P3-C11-D2A1-CONTRACT-02-R1-ADDENDUM-AD1-R3-DRAFT.md").decode().strip() == "7f2463f5421502cc6ee74c070fc3abc41d467770"),
+ }
+ for h in sorted(set(re.findall(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", draft))):

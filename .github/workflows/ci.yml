@@ -110,6 +110,8 @@ jobs:
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # espeak-ng: the governed speech tool's live test runs here, and fails
+      # rather than skips under CI if the engine is missing.
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -125,7 +127,27 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             glib-2.0 \
             pkg-config \
-            xvfb
+            xvfb \
+            espeak-ng
+
+      # The runner image makes /opt world-writable (`chmod -R 777 /opt`), and
+      # the governed browser refuses a Chrome that anyone but root could
+      # replace. Restore the package's modes so the live browser tests drive
+      # it, and fail here if any part of its path is still not root-only.
+      - name: Restore Chrome's packaged permissions (governed browser)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo chmod 0755 /opt /opt/google
+          sudo chmod -R go-w /opt/google/chrome
+          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
+          for path in / /opt /opt/google /opt/google/chrome /opt/google/chrome/chrome /opt/google/chrome/chrome-sandbox; do
+            stat -c '%n owner=%U mode=%a' "$path"
+            if [[ $(stat -c %u "$path") != 0 ]] || (( 0$(stat -c %a "$path") & 022 )); then
+              echo "::error::$path is not root-only"
+              exit 1
+            fi
+          done
 
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
@@ -367,6 +389,18 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
+
+      # XA-R4C: the npm advisory gate runs before any frontend dependency is
+      # installed: its own tests, then a fresh `npm audit` of every audited
+      # npm root against security/npm-advisory-policy.json. An advisory the
+      # policy's one exact exception does not match, a stale or expired
+      # exception, an unknown or reactivated npm root, or any audit failure
+      # fails the job.
+      - name: npm advisory gate tests
+        run: node --test scripts/ci/npm-advisory-gate.test.mjs
+
+      - name: npm advisory gate (audited npm roots)
+        run: node scripts/ci/npm-advisory-gate.mjs
 
       - name: Install frontend dependencies
         run: cd app && npm ci

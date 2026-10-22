@@ -1,0 +1,13 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 0
+--- probe body ---
+    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    let _ = maint::rewrite_provision(Rc::new(RefCell::new(session)), |provision| {
+        provision.retired_through = 9;
+    });
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+  Executable tests/r3_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-api/debug/deps/r3_api_probe-c22bd2e7894be692)
+--- stdout ---

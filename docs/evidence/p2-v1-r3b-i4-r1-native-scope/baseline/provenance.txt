@@ -1,0 +1,3 @@
+isolated copy: git archive of bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9 into a scratch Git repository (tree d92c819da744722701a1db103b70fc17f6d7f4c9, equal to the base tree d92c819da744722701a1db103b70fc17f6d7f4c9)
+probe addition: b-r1-1-to-4-probes.diff (appended to src/scope/tests.rs, the base's test-only simulation module; sha256 5ddf105614c59f5bedcbfe746972dc2455e9b494793a36b4afa4baddd118db9a)
+every other file of the copy is the base's blob (git status: 1 entry:  M crates/nexus-verifier-sandbox/src/scope/tests.rs)

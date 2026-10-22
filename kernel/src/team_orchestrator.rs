@@ -7,10 +7,11 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::cognitive::hivemind::{
     AgentInfo, CollectingHivemindEmitter, HivemindCoordinator, HivemindEvent, HivemindEventEmitter,
-    HivemindLlm, HivemindSession, HivemindStatus,
+    HivemindLlm, HivemindSession, HivemindStatus, SubTaskStatus, SubtaskRun,
 };
 use crate::cognitive::loop_runtime::LlmQueryHandler;
 use crate::errors::AgentError;
+use crate::hm::{DerivedItem, DispatchContext, DispatchIssuer, PromptBuilder, PromptSource};
 use crate::supervisor::Supervisor;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -84,8 +85,16 @@ impl TeamOrchestrator {
     }
 
     /// Execute a team workflow: Director decomposes goal, assigns to workers, collects results.
+    ///
+    /// P3-HM-CONTRACT-02 §11.3: `director` is the director's context,
+    /// minted at workflow start. Every member task runs under
+    /// `director.derive_member(member)` (the member's own §4.2 policy ⊔ the
+    /// director's floor) and every member dispatch is admitted (§12.4); each
+    /// member's context joins the director's before the merge.
     pub fn execute_team_workflow(
         &self,
+        issuer: &DispatchIssuer,
+        director: &mut DispatchContext,
         config: &TeamConfig,
         goal: &str,
     ) -> Result<TeamWorkflowResult, AgentError> {
@@ -98,10 +107,10 @@ impl TeamOrchestrator {
             let _ = audit.append_event(
                 uuid::Uuid::parse_str(&config.director_id).unwrap_or_default(),
                 EventType::StateChange,
+                // P3-HM-CONTRACT-02 §15.2 D5: counts, never the goal.
                 json!({
                     "event": "team.workflow_start",
                     "director": config.director_name,
-                    "goal": goal,
                     "team_size": config.members.len(),
                     "members": config.members.iter().map(|m| &m.name).collect::<Vec<_>>(),
                 }),
@@ -142,10 +151,12 @@ impl TeamOrchestrator {
             Arc::new(Mutex::new(Vec::new()));
         let results_ref = session_results.clone();
 
+        let mut task_index = 0u32;
         let session = coordinator.execute_with_executor(
+            director,
             goal,
             agents,
-            |task_id: &str, agent_id: &str, task_desc: &str| {
+            |director: &DispatchContext, task_id: &str, agent_id: &str, task_desc: &str| {
                 let agent_name = name_map
                     .get(agent_id)
                     .cloned()
@@ -166,9 +177,33 @@ impl TeamOrchestrator {
                      If this is a publishing task, confirm the actions taken."
                 );
 
-                let result = llm.query(&prompt).unwrap_or_else(|e| {
-                    format!("Task execution failed: {e}")
-                });
+                // The member's own context (§11.3): its policy ⊔ the
+                // director's floor; an agent whose policy cannot be
+                // established takes no task.
+                task_index += 1;
+                let member = uuid::Uuid::parse_str(agent_id)
+                    .map_err(|e| format!("Task execution failed: invalid agent id: {e}"))
+                    .and_then(|id| {
+                        director
+                            .derive_member(issuer, id, task_index)
+                            .map_err(|e| format!("Task execution failed: {e}"))
+                    });
+                let (result, context) = match member {
+                    Ok(mut member_ctx) => {
+                        // P3 D-2 R2: a failed or refused model call is a
+                        // failed task, for the record and for the
+                        // coordinator.
+                        let result = llm
+                            .query(&mut member_ctx, &mut |c: &mut DispatchContext| {
+                                let mut b = PromptBuilder::new(c);
+                                b.text(&prompt);
+                                Some(b.build())
+                            })
+                            .map_err(|e| format!("Task execution failed: {e}"));
+                        (result, Some(member_ctx))
+                    }
+                    Err(reason) => (Err(reason), None),
+                };
 
                 let fuel_cost = estimate_task_fuel(task_desc);
 
@@ -180,12 +215,18 @@ impl TeamOrchestrator {
                         agent_id: agent_id.to_string(),
                         agent_name: agent_name.clone(),
                         description: task_desc.to_string(),
-                        success: true,
-                        output: result.clone(),
+                        success: result.is_ok(),
+                        output: match &result {
+                            Ok(output) => output.text().to_string(),
+                            Err(output) => output.clone(),
+                        },
                         fuel_cost,
                     });
 
-                Ok(result)
+                SubtaskRun {
+                    outcome: result,
+                    context,
+                }
             },
         )?;
 
@@ -195,10 +236,16 @@ impl TeamOrchestrator {
             .unwrap_or_else(|p| p.into_inner())
             .clone();
 
-        let success = session.status == HivemindStatus::Completed;
+        // P3 D-2 R2: successful only when every sub-task completed; the
+        // coordinator completes a session with a minority of failed tasks.
+        let success = session.status == HivemindStatus::Completed
+            && session
+                .sub_tasks
+                .iter()
+                .all(|task| task.status == SubTaskStatus::Completed);
 
-        // Generate summary using LLM
-        let summary = self.generate_team_summary(config, goal, &session, &task_results);
+        // The summary is composed here; no model is asked.
+        let summary = self.generate_team_summary(config, goal, &session, &task_results, success);
 
         // Log completion
         {
@@ -210,7 +257,6 @@ impl TeamOrchestrator {
                 json!({
                     "event": "team.workflow_complete",
                     "director": config.director_name,
-                    "goal": goal,
                     "success": success,
                     "tasks_completed": task_results.iter().filter(|t| t.success).count(),
                     "tasks_total": task_results.len(),
@@ -328,17 +374,14 @@ impl TeamOrchestrator {
         goal: &str,
         session: &HivemindSession,
         results: &[TaskAssignmentResult],
+        success: bool,
     ) -> String {
         let completed = results.iter().filter(|r| r.success).count();
         let total = results.len();
         let member_summaries: Vec<String> = results
             .iter()
             .map(|r| {
-                let preview = if r.output.len() > 100 {
-                    format!("{}...", &r.output[..100])
-                } else {
-                    r.output.clone()
-                };
+                let preview = summary_preview(&r.output);
                 format!("- {} ({}): {}", r.agent_name, r.task_id, preview)
             })
             .collect();
@@ -353,16 +396,23 @@ impl TeamOrchestrator {
              \nTask Results:\n{}",
             config.director_name,
             goal,
-            if session.status == HivemindStatus::Completed {
-                "SUCCESS"
-            } else {
-                "PARTIAL"
-            },
+            if success { "SUCCESS" } else { "PARTIAL" },
             completed,
             total,
             session.total_fuel_consumed,
             member_summaries.join("\n"),
         )
+    }
+}
+
+/// A task output as the team summary shows it: at most its first 100 bytes,
+/// cut at a character boundary (never inside a character), followed by
+/// "..." when it is longer.
+fn summary_preview(output: &str) -> String {
+    if output.len() > 100 {
+        format!("{}...", &output[..output.floor_char_boundary(100)])
+    } else {
+        output.to_string()
     }
 }
 
@@ -372,15 +422,23 @@ struct TeamLlmBridge {
 }
 
 impl HivemindLlm for TeamLlmBridge {
-    fn decompose(&self, prompt: &str) -> Result<String, AgentError> {
+    fn decompose(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError> {
         self.handler
-            .query(prompt)
+            .query(ctx, prompt)
             .map_err(|e| AgentError::SupervisorError(format!("LLM decompose failed: {e}")))
     }
 
-    fn merge(&self, prompt: &str) -> Result<String, AgentError> {
+    fn merge(
+        &self,
+        ctx: &mut DispatchContext,
+        prompt: &mut PromptSource<'_>,
+    ) -> Result<DerivedItem, AgentError> {
         self.handler
-            .query(prompt)
+            .query(ctx, prompt)
             .map_err(|e| AgentError::SupervisorError(format!("LLM merge failed: {e}")))
     }
 }
@@ -404,14 +462,33 @@ mod tests {
     use super::*;
     use crate::audit::AuditTrail;
     use crate::cognitive::loop_runtime::LlmQueryHandler;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::{Principal, RouteClass, Unit};
     use crate::manifest::AgentManifest;
     use crate::supervisor::Supervisor;
 
-    /// Mock LLM that handles decomposition and task execution.
-    struct TeamMockLlm;
+    /// The mock team model: decomposition and task execution, by prompt. It
+    /// answers through the issuer (P3-HM-CONTRACT-02 §12.4) on an attested
+    /// local transport.
+    fn team_mock(hm: &TestHm) -> ScriptedLlm {
+        ScriptedLlm::answering_or_failing(&hm.issuer, RouteClass::Local, team_mock_reply)
+    }
 
-    impl LlmQueryHandler for TeamMockLlm {
-        fn query(&self, prompt: &str) -> Result<String, String> {
+    /// The director's context of a workflow (minted at its start, §11.3).
+    fn director(hm: &TestHm, director_id: &str) -> crate::hm::DispatchContext {
+        hm.issuer
+            .begin_unit(
+                Principal::Agent(uuid::Uuid::parse_str(director_id).unwrap()),
+                Unit::TeamTask {
+                    workflow_id: uuid::Uuid::new_v4(),
+                    task_index: 0,
+                },
+            )
+            .unwrap()
+    }
+
+    fn team_mock_reply(prompt: &str) -> Result<String, String> {
+        {
             let lower = prompt.to_lowercase();
 
             // Hivemind decomposition prompt
@@ -589,14 +666,18 @@ mod tests {
 
         let supervisor = Arc::new(Mutex::new(sup));
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
-        let llm: Arc<dyn LlmQueryHandler> = Arc::new(TeamMockLlm);
+        let hm = TestHm::new().register_every_agent();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(team_mock(&hm));
 
         let orchestrator = TeamOrchestrator::new(supervisor.clone(), audit.clone(), llm);
 
         let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
 
+        let mut director = director(&hm, &director_id);
         let result = orchestrator
             .execute_team_workflow(
+                &hm.issuer,
+                &mut director,
                 &config,
                 "Research trending topics, write an article on the best one, and publish it",
             )
@@ -661,6 +742,121 @@ mod tests {
         );
     }
 
+    /// The mock team, except that every attempt at the writing task fails,
+    /// as a refused or failed model call does.
+    fn writer_fails(hm: &TestHm) -> ScriptedLlm {
+        ScriptedLlm::answering_or_failing(&hm.issuer, RouteClass::Local, |prompt| {
+            if prompt.contains("Task: Write a 1500-word article") {
+                return Err("local-only: no local model is installed".to_string());
+            }
+            team_mock_reply(prompt)
+        })
+    }
+
+    /// P3 D-2 R2: a member task whose model call fails (here, on its
+    /// reassignment too) is reported as a failed task, not as a success with
+    /// the error as its output, and the workflow is not reported successful
+    /// although most sub-tasks completed.
+    #[test]
+    fn p3_d2r2_a_failed_member_task_is_not_reported_successful() {
+        let mut sup = Supervisor::new();
+        let director_id = create_agent(&mut sup, "nexus-director", vec!["llm.query"], 50000);
+        let researcher_id = create_agent(
+            &mut sup,
+            "nexus-researcher",
+            vec!["web.search", "web.read", "llm.query", "fs.write"],
+            10000,
+        );
+        let writer_id = create_agent(
+            &mut sup,
+            "nexus-writer",
+            vec!["llm.query", "fs.read", "fs.write"],
+            10000,
+        );
+        let publisher_id = create_agent(
+            &mut sup,
+            "nexus-publisher",
+            vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+            5000,
+        );
+        let hm = TestHm::new().register_every_agent();
+        let orchestrator = TeamOrchestrator::new(
+            Arc::new(Mutex::new(sup)),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            Arc::new(writer_fails(&hm)),
+        );
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+        let mut director = director(&hm, &director_id);
+        let result = orchestrator
+            .execute_team_workflow(
+                &hm.issuer,
+                &mut director,
+                &config,
+                "Research, write and publish",
+            )
+            .unwrap();
+
+        let writes: Vec<_> = result
+            .task_results
+            .iter()
+            .filter(|t| t.task_id == "write")
+            .collect();
+        assert!(!writes.is_empty());
+        for write in &writes {
+            assert!(
+                !write.success,
+                "a failed task reported successful: {write:?}"
+            );
+            assert!(write.output.contains("local-only"), "{write:?}");
+        }
+        for other in result.task_results.iter().filter(|t| t.task_id != "write") {
+            assert!(other.success, "{other:?}");
+        }
+        assert!(!result.success, "the workflow reported successful");
+        assert!(result.error.is_some());
+        assert!(result.summary.contains("PARTIAL"), "{}", result.summary);
+    }
+
+    /// P3: the summary preview keeps at most 100 bytes and never cuts a
+    /// character, whatever its encoded width.
+    #[test]
+    fn p3_summary_preview_keeps_100_bytes_on_a_character_boundary() {
+        let check = |output: &str, kept: &str, cut: bool| {
+            let preview = summary_preview(output);
+            let expected = if cut {
+                format!("{kept}...")
+            } else {
+                kept.to_string()
+            };
+            assert_eq!(preview, expected, "{output:?}");
+            assert!(preview.trim_end_matches("...").len() <= 100);
+        };
+        // Empty, ASCII, and exactly 100 bytes.
+        check("", "", false);
+        check(&"a".repeat(150), &"a".repeat(100), true);
+        check(&"a".repeat(100), &"a".repeat(100), false);
+        let exact = format!("{}a", "\u{20ac}".repeat(33));
+        assert_eq!(exact.len(), 100);
+        check(&exact, &exact, false);
+        // Two-byte characters: byte 100 on a boundary, then crossing it.
+        check(&"\u{e9}".repeat(60), &"\u{e9}".repeat(50), true);
+        check(
+            &format!("a{}", "\u{e9}".repeat(60)),
+            &format!("a{}", "\u{e9}".repeat(49)),
+            true,
+        );
+        // Three-byte characters: byte 100 inside the 34th.
+        check(&"\u{20ac}".repeat(40), &"\u{20ac}".repeat(33), true);
+        // Four-byte characters: byte 100 on a boundary, then crossing it.
+        check(&"\u{1f600}".repeat(30), &"\u{1f600}".repeat(25), true);
+        check(
+            &format!("ab{}", "\u{1f600}".repeat(30)),
+            &format!("ab{}", "\u{1f600}".repeat(24)),
+            true,
+        );
+    }
+
     /// Test fuel transfer between agents.
     #[test]
     fn test_fuel_transfer() {
@@ -670,7 +866,8 @@ mod tests {
 
         let supervisor = Arc::new(Mutex::new(sup));
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
-        let llm: Arc<dyn LlmQueryHandler> = Arc::new(TeamMockLlm);
+        let hm = TestHm::new().register_every_agent();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(team_mock(&hm));
         let orchestrator = TeamOrchestrator::new(supervisor.clone(), audit, llm);
 
         // Read starting fuel (start_agent may deduct a small amount)
@@ -709,7 +906,8 @@ mod tests {
 
         let supervisor = Arc::new(Mutex::new(sup));
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
-        let llm: Arc<dyn LlmQueryHandler> = Arc::new(TeamMockLlm);
+        let hm = TestHm::new().register_every_agent();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(team_mock(&hm));
         let orchestrator = TeamOrchestrator::new(supervisor, audit, llm);
 
         let result = orchestrator.transfer_fuel(&agent_a, &agent_b, 500);
@@ -723,5 +921,72 @@ mod tests {
         assert_eq!(estimate_task_fuel("Write a 1500-word article"), 15.0);
         assert_eq!(estimate_task_fuel("Publish and save to git"), 8.0);
         assert_eq!(estimate_task_fuel("unknown task"), 10.0);
+    }
+
+    /// P3-C11-HM-M4 N3, A-A1 row D5 (P3-HM-CONTRACT-02 §15.2):
+    /// `team.workflow_start` and `team.workflow_complete` carry counts, never
+    /// the goal.
+    #[test]
+    fn hm_m4_n3_a_a1_d5_team_workflow_events_carry_no_goal() {
+        const MARKER: &str = "P3-HM-M4-A-A1-TEAM-GOAL-41aa";
+        let mut sup = Supervisor::new();
+        let director_id = create_agent(
+            &mut sup,
+            "nexus-director",
+            vec!["web.search", "llm.query", "self.modify"],
+            50000,
+        );
+        let researcher_id = create_agent(
+            &mut sup,
+            "nexus-researcher",
+            vec!["web.search", "web.read", "llm.query", "fs.write"],
+            10000,
+        );
+        let writer_id = create_agent(
+            &mut sup,
+            "nexus-writer",
+            vec!["llm.query", "fs.read", "fs.write"],
+            10000,
+        );
+        let publisher_id = create_agent(
+            &mut sup,
+            "nexus-publisher",
+            vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+            5000,
+        );
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let hm = TestHm::new().register_every_agent();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(team_mock(&hm));
+        let orchestrator = TeamOrchestrator::new(Arc::new(Mutex::new(sup)), audit.clone(), llm);
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+        let mut director = director(&hm, &director_id);
+        orchestrator
+            .execute_team_workflow(
+                &hm.issuer,
+                &mut director,
+                &config,
+                &format!("Research trending topics {MARKER}, write an article and publish it"),
+            )
+            .unwrap();
+        let audit = audit.lock().unwrap();
+        let team: Vec<&serde_json::Value> = audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .filter(|p| {
+                p.get("event")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| s.starts_with("team.workflow_"))
+            })
+            .collect();
+        assert_eq!(team.len(), 2, "precondition: start and complete events");
+        for payload in &team {
+            assert!(
+                !payload.to_string().contains(MARKER) && payload.get("goal").is_none(),
+                "A-A1: the goal in a team audit payload: {payload}"
+            );
+        }
+        assert_eq!(team[0]["team_size"], 3);
+        assert_eq!(team[1]["tasks_total"], 3);
     }
 }

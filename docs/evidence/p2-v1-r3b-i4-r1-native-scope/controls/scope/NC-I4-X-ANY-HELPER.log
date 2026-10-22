@@ -1,0 +1,22 @@
+
+running 1 test
+test scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper ... FAILED
+
+failures:
+
+---- scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper stdout ----
+
+thread 'scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper' (1210583) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:985:5:
+another helper's membership settled the operation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.15s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.44s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

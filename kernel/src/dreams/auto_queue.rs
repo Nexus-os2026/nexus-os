@@ -3,6 +3,7 @@
 use super::scheduler::DreamScheduler;
 use super::types::{DreamTask, DreamType};
 use crate::consciousness::state::ConsciousnessState;
+use crate::hm::{DispatchContext, Principal};
 use serde_json::json;
 
 /// Context from a completed chat interaction.
@@ -17,12 +18,28 @@ pub struct ChatInteraction {
 }
 
 /// Queue dream tasks based on the agent's consciousness state after an interaction.
+///
+/// P3-HM-CONTRACT-02 §6.5 `dream_queue`, §11.3: every entry is owned by the
+/// chat turn's real principal (`turn`: a registered agent, or
+/// `OwnerDirect`) and carries the turn's label
+/// ([`DispatchContext::entry_label`]). A context that is not a chat turn
+/// queues nothing.
 pub fn queue_dreams_from_interaction(
     scheduler: &mut DreamScheduler,
-    agent_id: &str,
+    turn: &DispatchContext,
     consciousness: &ConsciousnessState,
     interaction: &ChatInteraction,
 ) {
+    let Some(label) = turn.entry_label() else {
+        return;
+    };
+    let agent_id = match label.principal() {
+        Principal::Agent(id) => id.to_string(),
+        Principal::OwnerDirect => "owner".to_string(),
+        Principal::System(_) => return,
+    };
+    let agent_id = agent_id.as_str();
+    let label = Some(label);
     // High frustration → queue Experiment dream
     if consciousness.frustration > 0.5 {
         scheduler.enqueue(DreamTask {
@@ -34,6 +51,7 @@ pub fn queue_dreams_from_interaction(
                 "failures": interaction.error_message.as_deref().unwrap_or("")
             }),
             estimated_tokens: 800,
+            label: label.clone(),
             ..DreamTask::default()
         });
     }
@@ -47,6 +65,7 @@ pub fn queue_dreams_from_interaction(
                 source_agent: agent_id.to_string(),
                 context: json!({"topic": topic}),
                 estimated_tokens: 600,
+                label: label.clone(),
                 ..DreamTask::default()
             });
         }
@@ -64,6 +83,7 @@ pub fn queue_dreams_from_interaction(
                 "error": interaction.error_message.as_deref().unwrap_or("")
             }),
             estimated_tokens: 600,
+            label: label.clone(),
             ..DreamTask::default()
         });
     }
@@ -82,6 +102,7 @@ pub fn queue_dreams_from_interaction(
                 "missing_capabilities": []
             }),
             estimated_tokens: 600,
+            label: label.clone(),
             ..DreamTask::default()
         });
     }
@@ -122,6 +143,8 @@ pub fn queue_end_of_session_dreams(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hm::testing::TestHm;
+    use crate::hm::{OriginLabel, Unit};
 
     fn make_consciousness(
         frustration: f64,
@@ -150,13 +173,27 @@ mod tests {
         }
     }
 
+    /// A chat turn of a registered agent.
+    fn agent_turn(hm: &TestHm) -> DispatchContext {
+        let agent = hm.agent("dream-turn");
+        hm.issuer
+            .begin_unit(
+                Principal::Agent(agent),
+                Unit::ChatTurn {
+                    turn_id: uuid::Uuid::new_v4(),
+                },
+            )
+            .unwrap()
+    }
+
     #[test]
     fn high_frustration_queues_experiment() {
         let mut sched = DreamScheduler::new();
         let cons = make_consciousness(0.7, 0.3, false);
         let interaction = make_interaction(false);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         assert_eq!(sched.queue_len(), 1);
         assert_eq!(sched.priority_queue[0].task_type, DreamType::Experiment);
@@ -169,7 +206,8 @@ mod tests {
         let cons = make_consciousness(0.0, 0.9, false);
         let interaction = make_interaction(false);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         assert_eq!(sched.queue_len(), 1);
         assert_eq!(sched.priority_queue[0].task_type, DreamType::Explore);
@@ -181,7 +219,8 @@ mod tests {
         let cons = make_consciousness(0.0, 0.3, false);
         let interaction = make_interaction(true);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         assert_eq!(sched.queue_len(), 1);
         assert_eq!(sched.priority_queue[0].task_type, DreamType::Replay);
@@ -193,7 +232,8 @@ mod tests {
         let cons = make_consciousness(0.0, 0.3, true);
         let interaction = make_interaction(false);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         assert_eq!(sched.queue_len(), 1);
         assert_eq!(sched.priority_queue[0].task_type, DreamType::Create);
@@ -205,10 +245,60 @@ mod tests {
         let cons = make_consciousness(0.8, 0.9, true);
         let interaction = make_interaction(true);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         // Frustration → Experiment, Curiosity → Explore, Error → Replay, Handoff → Create
         assert_eq!(sched.queue_len(), 4);
+    }
+
+    /// P3-HM-CONTRACT-02 §6.5, §11.3 (A-D4): every entry is owned by the
+    /// turn's real principal and carries the turn's label, never the
+    /// ephemeral chat id; an `OwnerDirect` turn's entries are the Owner's;
+    /// a context that is not a chat turn queues nothing.
+    #[test]
+    fn hm_m3_n4_entries_carry_the_turns_principal_and_label() {
+        let hm = TestHm::new();
+        let cons = make_consciousness(0.8, 0.9, true);
+        let interaction = make_interaction(true);
+
+        let turn = agent_turn(&hm);
+        let expected = turn.entry_label().unwrap();
+        let Principal::Agent(agent) = expected.principal() else {
+            panic!("an agent's turn");
+        };
+        // The agent is local-only (the restrictive default).
+        assert_eq!(expected.label(), OriginLabel::LocalOnlyOrigin);
+        let mut sched = DreamScheduler::new();
+        queue_dreams_from_interaction(&mut sched, &turn, &cons, &interaction);
+        assert_eq!(sched.queue_len(), 4);
+        for task in &sched.priority_queue {
+            assert_eq!(task.label(), Some(&expected));
+            assert_eq!(task.source_agent, agent.to_string());
+        }
+
+        let owner = hm
+            .issuer
+            .begin_unit(
+                Principal::OwnerDirect,
+                Unit::ChatTurn {
+                    turn_id: uuid::Uuid::new_v4(),
+                },
+            )
+            .unwrap();
+        let mut sched = DreamScheduler::new();
+        queue_dreams_from_interaction(&mut sched, &owner, &cons, &interaction);
+        assert_eq!(sched.queue_len(), 4);
+        for task in &sched.priority_queue {
+            assert_eq!(task.label(), owner.entry_label().as_ref());
+            assert_eq!(task.label().unwrap().principal(), Principal::OwnerDirect);
+            assert_eq!(task.source_agent, "owner");
+        }
+
+        let goal = hm.goal(hm.agent("dream-goal"));
+        let mut sched = DreamScheduler::new();
+        queue_dreams_from_interaction(&mut sched, &goal, &cons, &interaction);
+        assert_eq!(sched.queue_len(), 0);
     }
 
     #[test]
@@ -232,7 +322,8 @@ mod tests {
         let cons = make_consciousness(0.0, 0.3, false);
         let interaction = make_interaction(false);
 
-        queue_dreams_from_interaction(&mut sched, "agent-a", &cons, &interaction);
+        let hm = TestHm::new();
+        queue_dreams_from_interaction(&mut sched, &agent_turn(&hm), &cons, &interaction);
 
         assert_eq!(sched.queue_len(), 0);
     }

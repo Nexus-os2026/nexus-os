@@ -77,6 +77,9 @@ pub struct ConfirmationRequest {
     pub creates: usize,
     pub replaces: usize,
     pub deletes: usize,
+    /// The identity of the review being approved, as the app shows it beside
+    /// the reviewed changes ([`ReviewBinding::short`]).
+    pub review_short: String,
     pub candidate_short: String,
     pub base_short: String,
     pub paths: Vec<String>,
@@ -103,13 +106,14 @@ impl ConfirmationRequest {
         };
         let mut text = format!(
             "{action} the project \"{}\".\n\nRun: {}\nFiles: {} ({} created, {} replaced, {} deleted)\n\
-             Candidate: {}\nBase: {}\n",
+             Review: {}\nCandidate: {}\nBase: {}\n",
             self.project_name,
             self.run_id,
             self.files(),
             self.creates,
             self.replaces,
             self.deletes,
+            self.review_short,
             self.candidate_short,
             self.base_short
         );
@@ -134,6 +138,7 @@ impl ConfirmationRequest {
             creates: 0,
             replaces: 0,
             deletes: 0,
+            review_short: binding.short(),
             candidate_short: binding.candidate_manifest_hash.to_hex()[..12].to_string(),
             base_short: binding.base_manifest_hash.to_hex()[..12].to_string(),
             paths: Vec::new(),
@@ -213,6 +218,10 @@ pub enum Refusal {
     Unsupported(String),
     PreimageUnavailable,
     Unrecorded,
+    /// A sandboxed verification is starting, running or finalizing.
+    VerificationInProgress,
+    /// A sandboxed verification's cleanup is unconfirmed.
+    VerificationCleanupFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -378,6 +387,17 @@ fn refused(refusal: Refusal) -> ApplyError {
 }
 
 impl CodingRun {
+    /// Verification is advisory, but Apply waits for an active execution to
+    /// be finalized and for an unconfirmed cleanup to be confirmed.
+    fn verification_permits_apply(&self) -> Result<(), ApplyError> {
+        use super::verifier::VerificationPhase;
+        match self.verification_phase() {
+            VerificationPhase::CleanupFailed => Err(refused(Refusal::VerificationCleanupFailed)),
+            phase if phase.blocks_apply() => Err(refused(Refusal::VerificationInProgress)),
+            _ => Ok(()),
+        }
+    }
+
     /// Where this run stands with respect to the owner's project.
     pub fn apply_state(&self) -> ApplyState {
         self.apply_state
@@ -405,6 +425,7 @@ impl CodingRun {
         {
             return Err(ApplyError::InvalidState);
         }
+        self.verification_permits_apply()?;
         let review = self.review().map_err(|error| match error {
             RunError::CandidateChanged | RunError::CandidateUnavailable => {
                 refused(Refusal::CandidateChanged)
@@ -498,12 +519,10 @@ impl CodingRun {
             .verification
             .clone()
             .ok_or(refused(Refusal::CandidateChanged))?;
-        let current = ReviewBinding {
-            run_id: self.id,
-            base_manifest_hash: verification.base_manifest_hash,
-            candidate_manifest_hash: verification.candidate_manifest_hash,
-            profile_hash: verification.profile_hash,
-        };
+        self.verification_permits_apply()?;
+        let current = self
+            .review_binding(&verification)
+            .map_err(|_| refused(Refusal::CandidateChanged))?;
         if approved.is_none() {
             return Err(refused(Refusal::NotApproved));
         }

@@ -1,0 +1,28 @@
+.RE
+.PP
+\fICollectMode=\fR
+.RS 4
+Tweaks the "garbage collection" algorithm for this unit\&. Takes one of
+\fBinactive\fR
+or
+\fBinactive\-or\-failed\fR\&. If set to
+\fBinactive\fR
+the unit will be unloaded if it is in the
+\fBinactive\fR
+state and is not referenced by clients, jobs or other units \(em however it is not unloaded if it is in the
+\fBfailed\fR
+state\&. In
+\fBfailed\fR
+mode, failed units are not unloaded until the user invoked
+\fBsystemctl reset\-failed\fR
+on them to reset the
+\fBfailed\fR
+state, or an equivalent command\&. This behaviour is altered if this option is set to
+\fBinactive\-or\-failed\fR: in this case the unit is unloaded even if the unit is in a
+\fBfailed\fR
+state, and thus an explicitly resetting of the
+\fBfailed\fR
+state is not necessary\&. Note that if this mode is used unit results (such as exit codes, exit signals, consumed resources, \&...) are flushed out immediately after the unit completed, except for what is stored in the logging subsystem\&. Defaults to
+\fBinactive\fR\&.
+.sp
+Added in version 236\&.

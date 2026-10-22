@@ -1,0 +1,345 @@
+module-self-review.md:17: scope/pending.rs:249-249 ok
+    249|         let started = controller.manager.start_scope(&ScopeRequest {
+module-self-review.md:17: scope/pending.rs:181-181 ok
+    181|         self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+module-self-review.md:17: scope/pending.rs:316-316 ok
+    316|         let unit_path = match controller.manager.get_unit(&self.unit) {
+module-self-review.md:17: scope/pending.rs:403-403 ok
+    403|         controller.manager.get_unit(unit),
+module-self-review.md:17: scope/pending.rs:325-325 ok
+    325|         match controller.manager.runtime_max_usec(&unit_path) {
+module-self-review.md:17: scope/pending.rs:331-331 ok
+    331|         match controller.manager.oom_policy(&unit_path) {
+module-self-review.md:17: scope/pending.rs:296-296 ok
+    296|         let path = wait_for_placement(controller, helper, &self.unit)?;
+module-self-review.md:17: scope/pending.rs:300-300 ok
+    300|         let candidate = &**self.candidate.insert(controller.native.open(&path)?);
+module-self-review.md:17: scope/pending.rs:308-308 ok
+    308|         let procs = candidate.read("cgroup.procs").map_err(ScopeError::Io)?;
+module-self-review.md:17: scope/pending.rs:315-315 ok
+    315|         verify_limits(candidate, &self.limits)?;
+module-self-review.md:17: scope/pending.rs:456-456 ok
+    456|         pending.issue_and_prove(helper, fault)?;
+module-self-review.md:18: scope/pending.rs:181-181 ok
+    181|         self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+module-self-review.md:18: scope/pending.rs:361-361 ok
+    361|             .field("last_stop", &self.last_stop)
+module-self-review.md:18: scope/pending.rs:183-195 ok
+    183|         let start = Instant::now();
+    184|         loop {
+    185|             self.acquire(&controller, helper);
+module-self-review.md:19: scope/manager.rs:160-177 ok
+    160|                 self.connection
+    161|                     .call_method(Some(SYSTEMD), path, Some(interface), method, body),
+    162|             )
+module-self-review.md:19: scope/manager.rs:214-218 ok
+    214|         ) {
+    215|             Ok(Ok(_job)) => Started::Accepted,
+    216|             Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,
+module-self-review.md:19: scope/manager.rs:227-231 ok
+    227|             &(unit, "replace"),
+    228|         ) {
+    229|             Ok(Ok(_job)) => Remote::Answered(()),
+module-self-review.md:19: scope/manager.rs:240-245 ok
+    240|             &(unit,),
+    241|         ) {
+    242|             Ok(Ok(path)) => Remote::Answered(Presence::Present(path.as_str().to_string())),
+module-self-review.md:19: scope/manager.rs:254-258 ok
+    254|             &(SCOPE_INTERFACE, "RuntimeMaxUSec"),
+    255|         ) {
+    256|             Ok(Ok(value)) => Remote::Answered(u64::try_from(value).ok()),
+module-self-review.md:19: scope/manager.rs:267-271 ok
+    267|             &(SCOPE_INTERFACE, "OOMPolicy"),
+    268|         ) {
+    269|             Ok(Ok(value)) => Remote::Answered(String::try_from(value).ok()),
+module-self-review.md:19: scope/manager.rs:243-243 ok
+    243|             Ok(Err(name)) if name == NO_SUCH_UNIT => Remote::Answered(Presence::Absent),
+module-self-review.md:19: scope/pending.rs:401-406 ok
+    401| fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+    402|     matches!(
+    403|         controller.manager.get_unit(unit),
+module-self-review.md:19: scope/manager.rs:216-216 ok
+    216|             Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,
+module-self-review.md:20: scope/pending.rs:388-388 ok
+    388| fn names_unit(path: &str, unit: &str) -> bool {
+module-self-review.md:20: scope/native.rs:52-52 ok
+    52|         let text = std::fs::read_to_string(format!("/proc/{}/cgroup", helper.pid()))?;
+module-self-review.md:20: scope/pending.rs:311-311 ok
+    311|             .any(|line| line.trim() == helper.pid().to_string())
+module-self-review.md:20: scope/pending.rs:134-136 ok
+    134|     fn binds(&self, helper: &Helper) -> bool {
+    135|         helper.serial() == self.helper_serial && helper.pid() == self.helper_pid
+    136|     }
+module-self-review.md:20: scope/native.rs:57-57 ok
+    57|         let full = CString::new(format!("/sys/fs/cgroup{path}"))
+module-self-review.md:20: launcher.rs:337-337 ok
+    337|         let dir = PathBuf::from(format!("/proc/{}", self.child.id()));
+module-self-review.md:21: scope/pending.rs:163-163 ok
+    163|             self.settled = outside(&controller, helper, &self.unit);
+module-self-review.md:21: scope/pending.rs:173-173 ok
+    173|             self.settled = true;
+module-self-review.md:21: scope/pending.rs:188-188 ok
+    188|                 self.settled = true;
+module-self-review.md:21: scope/pending.rs:461-461 ok
+    461|         pending.settled = true;
+module-self-review.md:21: execution.rs:369-369 ok
+    369|             (false, None) => Cleanup::Confirmed,
+module-self-review.md:21: execution.rs:577-577 ok
+    577|         cleanup: Cleanup::Confirmed,
+module-self-review.md:22: scope/pending.rs:300-300 ok
+    300|         let candidate = &**self.candidate.insert(controller.native.open(&path)?);
+module-self-review.md:22: scope/pending.rs:458-458 ok
+    458|         let Some(dir) = pending.candidate.take() else {
+module-self-review.md:22: scope/pending.rs:201-217 ok
+    201|     fn acquire(&mut self, controller: &Controller, helper: Option<&Helper>) {
+    202|         if self.candidate.is_some() {
+    203|             return;
+module-self-review.md:23: execution.rs:423-423 ok
+    423|     let observed = catch_unwind(AssertUnwindSafe(|| {
+module-self-review.md:23: execution.rs:559-559 ok
+    559|     catch_unwind(AssertUnwindSafe(|| finalize_steps(owned, fault)))
+module-self-review.md:23: execution.rs:178-178 ok
+    178|         let ended = catch_unwind(AssertUnwindSafe(|| {
+module-self-review.md:23: scope.rs:192-192 ok
+    192|         let error = match catch_unwind(AssertUnwindSafe(|| boundary.establish(helper, None))) {
+module-self-review.md:24: scope/pending.rs:367-367 ok
+    367| impl Drop for PendingScope {
+module-self-review.md:24: execution.rs:203-203 ok
+    203| impl Drop for RetainedBoundary {
+module-self-review.md:24: execution.rs:375-375 ok
+    375| impl Drop for Owned {
+module-self-review.md:24: execution.rs:630-639 ok
+    630| fn end_now(scope: &ScopeBoundary, helper: &mut Option<Helper>) {
+    631|     scope.end_now();
+    632|     if let Some(helper) = helper.as_mut() {
+module-self-review.md:24: execution.rs:607-607 ok
+    607|             *scope = ScopeBoundary::None;
+module-self-review.md:24: execution.rs:623-623 ok
+    623|     *scope = ScopeBoundary::None;
+module-self-review.md:24: execution.rs:367-367 ok
+    367|         let scope = std::mem::take(&mut self.scope);
+module-self-review.md:25: execution.rs:509-509 ok
+    509|     if let Err(error) = helper.handshake() {
+module-self-review.md:25: execution.rs:513-513 ok
+    513|     if let Err(error) = helper.launch(spec) {
+module-self-review.md:25: execution.rs:506-506 ok
+    506|     if !owned.scope.is_proven() {
+module-self-review.md:26: scope/pending.rs:68-68 ok
+    68|     controller: Arc<Controller>,
+module-self-review.md:27: execution.rs:85-85 ok
+    85|     std::thread::Builder::new()
+module-self-review.md:28: scope.rs:169-169 ok
+    169|         let unit = format!("nexus-verifier-{}.scope", random_hex()?);
+module-self-review.md:29: scope.rs:143-151 ok
+    143|     pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
+    144|         Ok(Self {
+    145|             controller: Arc::new(Controller {
+module-self-review.md:29: scope/manager.rs:106-136 ok
+    106|     pub(crate) fn connect_at(path: &str) -> Result<Self, ScopeError> {
+    107|         use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    108|         let metadata = std::fs::symlink_metadata(path).map_err(ScopeError::BusUnavailable)?;
+module-self-review.md:33: scope.rs:53-54 ok
+    53| #[cfg(test)]
+    54| pub(crate) mod tests;
+module-self-review.md:33: scope.rs:154-154 ok
+    154|     #[cfg(test)]
+ownership-transition-matrix.md:14: execution.rs:349-349 ok
+    349| struct Owned {
+ownership-transition-matrix.md:15: execution.rs:167-167 ok
+    167| pub struct RetainedBoundary {
+ownership-transition-matrix.md:16: scope/pending.rs:63-63 ok
+    63| pub struct PendingScope {
+ownership-transition-matrix.md:17: scope.rs:297-297 ok
+    297| pub struct Scope {
+ownership-transition-matrix.md:18: scope.rs:129-129 ok
+    129| pub struct ScopeManager {
+ownership-transition-matrix.md:24: execution.rs:463-490 ok
+    463| fn attempt(
+    464|     owned: &mut Owned,
+    465|     scopes: &ScopeManager,
+ownership-transition-matrix.md:25: execution.rs:497-500 ok
+    497|     match scopes.prepare(helper, limits) {
+    498|         Ok(pending) => owned.scope = ScopeBoundary::Pending(pending),
+    499|         Err(error) => return not_run(NotRun::Scope(error)),
+ownership-transition-matrix.md:26: scope/pending.rs:248-248 ok
+    248|         self.issued = true;
+ownership-transition-matrix.md:27: scope/pending.rs:257-262 ok
+    257|             Started::Collision => {
+    258|                 self.collided = true;
+    259|                 return Err(ScopeError::Bus(
+ownership-transition-matrix.md:28: scope/pending.rs:300-300 ok
+    300|         let candidate = &**self.candidate.insert(controller.native.open(&path)?);
+ownership-transition-matrix.md:28: scope/pending.rs:201-217 ok
+    201|     fn acquire(&mut self, controller: &Controller, helper: Option<&Helper>) {
+    202|         if self.candidate.is_some() {
+    203|             return;
+ownership-transition-matrix.md:29: scope/pending.rs:448-466 ok
+    448|     pub(crate) fn establish(
+    449|         &mut self,
+    450|         helper: &Helper,
+ownership-transition-matrix.md:30: execution.rs:506-513 ok
+    506|     if !owned.scope.is_proven() {
+    507|         return not_run(NotRun::Scope(ScopeError::Mismatch("scope not proven")));
+    508|     }
+ownership-transition-matrix.md:31: scope/pending.rs:153-196 ok
+    153|     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+    154|         if !self.unresolved() {
+    155|             return true;
+ownership-transition-matrix.md:31: execution.rs:600-607 ok
+    600|         ScopeBoundary::Pending(pending) => {
+    601|             if let Some(child) = helper.as_mut() {
+    602|                 let _ = child.kill();
+ownership-transition-matrix.md:32: execution.rs:366-372 ok
+    366|     fn retain(&mut self) -> Cleanup {
+    367|         let scope = std::mem::take(&mut self.scope);
+    368|         match (scope.holds(), self.helper.take()) {
+ownership-transition-matrix.md:32: execution.rs:558-571 ok
+    558| fn finalize(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
+    559|     catch_unwind(AssertUnwindSafe(|| finalize_steps(owned, fault)))
+    560|         .unwrap_or_else(|_| Finalized::without_output(owned.retain(), None))
+ownership-transition-matrix.md:33: execution.rs:177-186 ok
+    177|     pub fn retry(mut self) -> Result<(), Self> {
+    178|         let ended = catch_unwind(AssertUnwindSafe(|| {
+    179|             end(&mut self.scope, &mut self.helper, None)
+ownership-transition-matrix.md:34: execution.rs:177-186 ok
+    177|     pub fn retry(mut self) -> Result<(), Self> {
+    178|         let ended = catch_unwind(AssertUnwindSafe(|| {
+    179|             end(&mut self.scope, &mut self.helper, None)
+ownership-transition-matrix.md:35: execution.rs:595-624 ok
+    595| fn end(scope: &mut ScopeBoundary, helper: &mut Option<Helper>, fault: Option<Fault>) -> bool {
+    596|     match scope {
+    597|         ScopeBoundary::Proven(proven) => {
+ownership-transition-matrix.md:36: execution.rs:366-372 ok
+    366|     fn retain(&mut self) -> Cleanup {
+    367|         let scope = std::mem::take(&mut self.scope);
+    368|         match (scope.holds(), self.helper.take()) {
+ownership-transition-matrix.md:37: scope/pending.rs:154-156 ok
+    154|         if !self.unresolved() {
+    155|             return true;
+    156|         }
+ownership-transition-matrix.md:37: execution.rs:366-372 ok
+    366|     fn retain(&mut self) -> Cleanup {
+    367|         let scope = std::mem::take(&mut self.scope);
+    368|         match (scope.holds(), self.helper.take()) {
+ownership-transition-matrix.md:38: scope/pending.rs:367-373 ok
+    367| impl Drop for PendingScope {
+    368|     /// Defense in depth for an operation dropped unresolved (see
+    369|     /// [`Self::end_now`]). Never a confirmation; owners keep an unresolved
+ownership-transition-matrix.md:38: execution.rs:203-209 ok
+    203| impl Drop for RetainedBoundary {
+    204|     /// Defense in depth for a boundary dropped without a confirmed retry:
+    205|     /// end what it holds without waiting. Never a confirmation; owners keep
+ownership-transition-matrix.md:38: execution.rs:375-380 ok
+    375| impl Drop for Owned {
+    376|     /// Defense in depth only: [`execute`] never lets a live boundary reach
+    377|     /// this point (it is confirmed ended or moved into a retained boundary).
+ownership-transition-matrix.md:38: execution.rs:630-639 ok
+    630| fn end_now(scope: &ScopeBoundary, helper: &mut Option<Helper>) {
+    631|     scope.end_now();
+    632|     if let Some(helper) = helper.as_mut() {
+ownership-transition-matrix.md:39: scope.rs:186-218 ok
+    186|     pub fn start(&self, helper: &Helper, limits: &ResourcePolicy) -> Result<Scope, StartFailed> {
+    187|         let pending = self.prepare(helper, limits).map_err(|error| StartFailed {
+    188|             error,
+panic-fault-matrix.md:6: execution.rs:324-334 ok
+    324| pub fn run(
+    325|     scopes: &ScopeManager,
+    326|     program: &HelperProgram,
+panic-fault-matrix.md:8: execution.rs:336-336 ok
+    336| pub fn run_with_fault(
+panic-fault-matrix.md:12: execution.rs:423-423 ok
+    423|     let observed = catch_unwind(AssertUnwindSafe(|| {
+panic-fault-matrix.md:13: execution.rs:558-558 ok
+    558| fn finalize(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
+panic-fault-matrix.md:15: execution.rs:560-560 ok
+    560|         .unwrap_or_else(|_| Finalized::without_output(owned.retain(), None))
+panic-fault-matrix.md:21: execution.rs:491-491 ok
+    491|     fault::at(fault, FaultPoint::AfterSpawn);
+panic-fault-matrix.md:22: scope/pending.rs:246-246 ok
+    246|         fault::at(fault, FaultPoint::BeforeScopeStart);
+panic-fault-matrix.md:23: scope/pending.rs:254-254 ok
+    254|         fault::at(fault, FaultPoint::AfterScopeStart);
+panic-fault-matrix.md:24: scope/pending.rs:269-269 ok
+    269|                 fault::at(fault, FaultPoint::ScopeReconcile);
+panic-fault-matrix.md:24: scope/pending.rs:162-162 ok
+    162|             fault::at(fault, FaultPoint::ScopeReconcile);
+panic-fault-matrix.md:24: scope/pending.rs:171-171 ok
+    171|         fault::at(fault, FaultPoint::ScopeReconcile);
+panic-fault-matrix.md:24: scope/pending.rs:186-186 ok
+    186|             fault::at(fault, FaultPoint::ScopeReconcile);
+panic-fault-matrix.md:25: scope/pending.rs:297-297 ok
+    297|         fault::at(fault, FaultPoint::ScopeProof);
+panic-fault-matrix.md:26: scope/pending.rs:301-301 ok
+    301|         fault::at(fault, FaultPoint::ScopeCandidate);
+panic-fault-matrix.md:27: scope/pending.rs:324-324 ok
+    324|         fault::at(fault, FaultPoint::ScopeProperties);
+panic-fault-matrix.md:28: scope/pending.rs:176-176 ok
+    176|         fault::at(fault, FaultPoint::BeforeScopeStop);
+panic-fault-matrix.md:29: scope/pending.rs:182-182 ok
+    182|         fault::at(fault, FaultPoint::AfterScopeStop);
+panic-fault-matrix.md:30: execution.rs:504-504 ok
+    504|     fault::at(fault, FaultPoint::AfterScope);
+panic-fault-matrix.md:31: execution.rs:518-518 ok
+    518|     fault::at(fault, FaultPoint::AfterLaunch);
+panic-fault-matrix.md:31: execution.rs:537-537 ok
+    537|                     fault::at(fault, FaultPoint::Running);
+panic-fault-matrix.md:31: execution.rs:540-540 ok
+    540|                     fault::at(fault, FaultPoint::Draining);
+panic-fault-matrix.md:31: execution.rs:115-115 ok
+    115|                 fault::at(fault, FaultPoint::DrainThread);
+panic-fault-matrix.md:31: execution.rs:547-547 ok
+    547|     fault::at(fault, FaultPoint::BeforeFinalize);
+panic-fault-matrix.md:32: execution.rs:567-567 ok
+    567|     if fault::at(fault, FaultPoint::Finalizing) || !end(&mut owned.scope, &mut owned.helper, fault)
+panic-fault-matrix.md:38: scope.rs:192-200 ok
+    192|         let error = match catch_unwind(AssertUnwindSafe(|| boundary.establish(helper, None))) {
+    193|             Ok(Ok(())) => None,
+    194|             Ok(Err(error)) => Some(error),
+panic-fault-matrix.md:39: execution.rs:177-186 ok
+    177|     pub fn retry(mut self) -> Result<(), Self> {
+    178|         let ended = catch_unwind(AssertUnwindSafe(|| {
+    179|             end(&mut self.scope, &mut self.helper, None)
+panic-fault-matrix.md:41: scope/manager.rs:276-283 ok
+    276| impl Drop for ZbusManager {
+    277|     /// Shut the runtime down without blocking, wherever the last owner of a
+    278|     /// pending scope is dropped; the connection goes after it, as before.
+remote-operation-state-matrix.md:7: scope/pending.rs:153-153 ok
+    153|     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+remote-operation-state-matrix.md:12: scope/pending.rs:220-228 ok
+    220|     fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+    221|         match &self.candidate {
+    222|             Some(candidate) => matches!(
+remote-operation-state-matrix.md:12: scope.rs:270-270 ok
+    270| fn occupancy(dir: &dyn CgroupDir) -> io::Result<Occupancy> {
+remote-operation-state-matrix.md:17: scope/pending.rs:393-406 ok
+    393| fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool {
+    394|     helper.is_some_and(|helper| {
+    395|         matches!(controller.native.membership(helper), Ok(Some(path)) if !names_unit(&path, unit))
+remote-operation-state-matrix.md:21: scope/pending.rs:176-182 ok
+    176|         fault::at(fault, FaultPoint::BeforeScopeStop);
+    177|         self.stops = self.stops.saturating_add(1);
+    178|         // Neither reply is a confirmation, nor a failure proof that nothing
+remote-operation-state-matrix.md:23: scope/pending.rs:241-283 ok
+    241|     fn issue_and_prove(&mut self, helper: &Helper, fault: Option<Fault>) -> Result<(), ScopeError> {
+    242|         if self.issued || !self.binds(helper) {
+    243|             return Err(ScopeError::Mismatch("scope operation"));
+remote-operation-state-matrix.md:25: scope/manager.rs:182-219 ok
+    182|     fn start_scope(&self, request: &ScopeRequest<'_>) -> Started {
+    183|         use zbus::zvariant::Value;
+    184|         let limits = request.limits;
+remote-operation-state-matrix.md:34: scope/pending.rs:290-337 ok
+    290|     fn prove(
+    291|         &mut self,
+    292|         controller: &Controller,
+remote-operation-state-matrix.md:38: scope/pending.rs:300-300 ok
+    300|         let candidate = &**self.candidate.insert(controller.native.open(&path)?);
+remote-operation-state-matrix.md:45: scope/pending.rs:316-336 ok
+    316|         let unit_path = match controller.manager.get_unit(&self.unit) {
+    317|             Remote::Answered(Presence::Present(path)) => path,
+    318|             // The kernel and the manager disagree: nothing is proven.
+remote-operation-state-matrix.md:56: scope/pending.rs:176-196 ok
+    176|         fault::at(fault, FaultPoint::BeforeScopeStop);
+    177|         self.stops = self.stops.saturating_add(1);
+    178|         // Neither reply is a confirmation, nor a failure proof that nothing
+citations: 125
+RESULT: PASS

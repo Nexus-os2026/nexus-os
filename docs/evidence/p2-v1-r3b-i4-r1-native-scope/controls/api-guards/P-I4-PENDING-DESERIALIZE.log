@@ -1,0 +1,39 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:47
+   |
+22 |     restored::<nexus_verifier_sandbox::scope::PendingScope>();
+   |                                               ^^^^^^^^^^^^ private struct
+   |
+note: the struct `PendingScope` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:65:26
+   |
+65 | pub(crate) use pending::{PendingScope, ScopeBoundary};
+   |                          ^^^^^^^^^^^^
+
+error[E0277]: the trait bound `nexus_verifier_sandbox::scope::pending::PendingScope: serde::de::DeserializeOwned` is not satisfied
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:16
+   |
+22 |     restored::<nexus_verifier_sandbox::scope::PendingScope>();
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `for<'de> Deserialize<'de>` is not implemented for `nexus_verifier_sandbox::scope::pending::PendingScope`
+   |
+   = help: the following other types implement trait `Deserialize<'de>`:
+             `&'a [u8]` implements `Deserialize<'de>`
+             `&'a std::path::Path` implements `Deserialize<'de>`
+             `&'a str` implements `Deserialize<'de>`
+             `()` implements `Deserialize<'de>`
+             `(T,)` implements `Deserialize<'de>`
+             `(T0, T1)` implements `Deserialize<'de>`
+             `(T0, T1, T2)` implements `Deserialize<'de>`
+             `(T0, T1, T2, T3)` implements `Deserialize<'de>`
+           and 179 others
+   = note: required for `nexus_verifier_sandbox::scope::pending::PendingScope` to implement `DeserializeOwned`
+note: required by a bound in `restored`
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:20
+   |
+21 |     fn restored<T: serde::de::DeserializeOwned>() {}
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `restored`
+
+Some errors have detailed explanations: E0277, E0603.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors

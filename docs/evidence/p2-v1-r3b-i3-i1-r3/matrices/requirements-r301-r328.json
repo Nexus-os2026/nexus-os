@@ -1,0 +1,795 @@
+{
+  "rows": [
+    {
+      "id": "R301",
+      "requirement": "Ordinary succession: design section 15.3's 29 operations, unchanged",
+      "tests": [
+        "r301_an_ordinary_succession_is_the_documented_29_operations: ok",
+        "m08_procedures_perform_exactly_the_documented_steps: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-ORDINARY-SKIP",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R302",
+      "requirement": "A crash after the kept copy: the repeat skips step 2a (23 operations)",
+      "tests": [
+        "r302_a_repeat_after_the_kept_copy_skips_step_2a: ok",
+        "r3x1_every_interrupted_succession_recovers_to_the_successor: ok",
+        "r3x2_every_interrupted_repeat_recovers_to_the_successor: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-NO-SKIP",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R303",
+      "requirement": "A kept copy one byte off (changed, missing or added) refuses before any operation",
+      "tests": [
+        "r303_a_kept_copy_one_byte_off_refuses_the_repeat: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-KEEP-OVERWRITE",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-KEEP-BLESS",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-KEPT-COPY",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R304",
+      "requirement": "A kept copy of the wrong type, owner, mode or link count refuses",
+      "tests": [
+        "r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-KEEP-METADATA",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-KEPT-COPY",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R305",
+      "requirement": "A leftover predecessor.tmp (or PROVISION.tmp) refuses until R-LEFTOVER",
+      "tests": [
+        "r305_a_leftover_temporary_refuses_the_repeat_until_r_leftover: ok",
+        "r3x1_every_interrupted_succession_recovers_to_the_successor: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-LEFTOVER-IGNORED",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R306",
+      "requirement": "A zero partial successor root: R-SUCCESSOR removes it, durably, and the repeat completes",
+      "tests": [
+        "r306_a_zero_incomplete_successor_root_is_removed: ok",
+        "r3x1_every_interrupted_succession_recovers_to_the_successor: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-ROOT-IGNORED",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-NO-PARENT-SYNC",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-RECOVERY-NO-POSTVERIFY-SUCC",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R307",
+      "requirement": "A non-zero successor pool byte refuses, at construction or at the gate; nothing is removed",
+      "tests": [
+        "r307_a_successor_pool_byte_that_is_not_zero_refuses: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-NONZERO",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-GATE",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-INSPECT",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R308",
+      "requirement": "An unexpected entry refuses; after the gate, each removal is by identity and never recursive",
+      "tests": [
+        "r308_an_unexpected_entry_refuses_the_cleanup: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-UNEXPECTED",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-RECURSIVE",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-IDENTITY",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-REMOVE-KNOWN",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R309",
+      "requirement": "A selected or referenced candidate refuses (and any candidate without an interrupted succession)",
+      "tests": [
+        "r309_a_referenced_candidate_refuses_the_cleanup: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-SELECTED",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-UID",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-COPY-CONTENT",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-NOT-INTERRUPTED",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-UNREFERENCED",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R310",
+      "requirement": "A candidate's LOCK or pool file held elsewhere refuses (Busy); the cleanup retains its own locks",
+      "tests": [
+        "r310_a_candidate_held_elsewhere_refuses_the_cleanup: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-NO-LOCK",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R311",
+      "requirement": "Crash and restart at every cleanup boundary recover",
+      "tests": [
+        "r3x3_every_interrupted_cleanup_recovers: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-GONE-REFUSED",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-CLEAN-NO-PARENT-SYNC",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R312",
+      "requirement": "A fresh verification is required after the cleanup",
+      "tests": [
+        "r312_the_repeat_needs_a_fresh_verification_after_the_cleanup: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-REUSE-VERIFY",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-VERIFICATION-TRANSPLANT",
+          "ok": true
+        },
+        {
+          "id": "P-TAKE-ASSESSMENT",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R313",
+      "requirement": "The repeat with the exact copy and the cleaned root completes with its verify-after",
+      "tests": [
+        "r313_the_repeat_completes_with_its_verify_after: ok",
+        "r3x2_every_interrupted_repeat_recovers_to_the_successor: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-SUCC-NO-POSTVERIFY",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-POSTVERIFY-IGNORED",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-VERIFY-OLD-ROOT",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R314",
+      "requirement": "A mismatched kept copy is never overwritten (before or after the authorization)",
+      "tests": [
+        "r314_a_mismatched_kept_copy_is_never_overwritten: ok",
+        "r303_a_kept_copy_one_byte_off_refuses_the_repeat: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-KEEP-OVERWRITE",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-SUCC-GATE-COPY",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R315",
+      "requirement": "A revocation at 4095 entries succeeds, giving 4096",
+      "tests": [
+        "r315_a_revocation_below_the_bound_fills_it: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-BOUND-EARLY",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R316",
+      "requirement": "A revocation at 4096 refuses before the rename (at construction or at the gate)",
+      "tests": [
+        "r316_a_revocation_at_the_bound_refuses_before_any_operation: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-OVERFLOW",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-REVOKE-GATE",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-REVOCATION-ADMISSIBLE",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R317",
+      "requirement": "An existing revoked target refuses, and its bytes stay",
+      "tests": [
+        "r317_a_revocation_never_replaces_revoked_evidence: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-REPLACE",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-REVOCATION-ADMISSIBLE",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R318",
+      "requirement": "Two revocations of one binding at two times are both retained",
+      "tests": [
+        "r318_revocations_at_two_times_are_both_kept: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-TIME-IGNORED",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R319",
+      "requirement": "R-REVOKE removes only the active name, then syncs dispositions/",
+      "tests": [
+        "r319_r_revoke_unlinks_only_the_active_name_and_syncs: ok",
+        "r3x4_every_interrupted_revocation_recovers: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-RECOVER-DELETE-TARGET",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-REVOKE-RECOVER-NO-SYNC",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R320",
+      "requirement": "A differing revoked target, or a time that is not a compact UTC time, refuses R-REVOKE",
+      "tests": [
+        "r320_a_differing_revocation_state_refuses_r_revoke: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-RECOVER-WRONG",
+          "ok": true
+        },
+        {
+          "id": "NC-R3-REVOKE-RECOVER-NAME",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-REVOCATION-STATE",
+          "ok": true
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "R321",
+      "requirement": "Split recovery with revoked/ at 4096 is allowed",
+      "tests": [
+        "r321_r_revoke_applies_at_the_bound: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-CAPACITY-CONFLATED",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R322",
+      "requirement": "Crash and restart at every resume boundary recover",
+      "tests": [
+        "r3x4_every_interrupted_revocation_recovers: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-COMPLETED-REFUSED",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R323",
+      "requirement": "A normal revocation's verify-after runs",
+      "tests": [
+        "r323_a_revocation_completes_with_its_verify_after: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-REVOKE-NO-VERIFY-AFTER",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R324",
+      "requirement": "R-REVOKE's verify-after runs and requires the revocation completed",
+      "tests": [
+        "r324_r_revoke_completes_with_its_verify_after: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-RECOVERY-NO-POSTVERIFY",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R325",
+      "requirement": "The R1 regressions stay green",
+      "tests": [
+        "b01_a_refused_closure_requests_no_seal_and_keeps_its_owner: ok",
+        "b02_a_closure_seals_only_its_own_journal: ok",
+        "b03_an_edited_opening_report_changes_no_decision: ok",
+        "b04_a_truncated_report_hides_no_blocking_incident: ok",
+        "b05_another_openings_admission_rebinds_nothing: ok",
+        "b06_a_disposition_takes_effect_only_through_its_opening: ok",
+        "b07_status_copies_and_fault_operations_clear_and_manufacture_nothing: ok",
+        "b08_a_session_decides_only_from_its_own_current_verification: ok",
+        "b09_exclusion_outlasts_the_owner_while_its_io_is_in_flight: ok"
+      ],
+      "controls": [
+        {
+          "id": "R1-APPLIED-REASON-INVENTED",
+          "ok": true
+        },
+        {
+          "id": "R1-FAULT-ACKS-UNDURABLE",
+          "ok": true
+        },
+        {
+          "id": "R1-FAULT-INJECTS-NEXT",
+          "ok": true
+        },
+        {
+          "id": "R1-GUARD-NOT-KEPT",
+          "ok": true
+        },
+        {
+          "id": "R1-LATCH-REPLACED",
+          "ok": true
+        },
+        {
+          "id": "R1-REFUSED-CLOSE-SEALS",
+          "ok": true
+        },
+        {
+          "id": "R1-START-FROM-REPORT",
+          "ok": true
+        },
+        {
+          "id": "R1-VALIDATOR-UNCHECKED",
+          "ok": true
+        },
+        {
+          "id": "R1-VERIFICATION-NEVER-LAPSES",
+          "ok": true
+        },
+        {
+          "id": "R1-VERIFICATION-REUSED",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R326",
+      "requirement": "The R2 regressions stay green",
+      "tests": [
+        "v01_succession_needs_every_bound_incident_dispositioned: ok",
+        "v02_succession_verifies_the_selected_successor_after_publication: ok",
+        "v03_succession_decides_over_the_complete_set_not_the_report: ok",
+        "v04_a_stale_or_consumed_verification_authorizes_no_succession: ok",
+        "v05_only_the_sessions_own_verify_before_authorizes: ok",
+        "v06_over_capacity_a_complete_proof_authorizes_succession: ok",
+        "v07_capacity_without_a_complete_proof_refuses_succession: ok",
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement: ok",
+        "v09_a_condition_set_that_does_not_fit_the_statement_refuses: ok",
+        "v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete: ok",
+        "v11_an_edited_assessment_copy_authorizes_nothing: ok",
+        "v12_no_succession_operation_precedes_its_gate: ok",
+        "v13_both_locks_are_held_through_publication_and_verify_after: ok",
+        "v14_an_indeterminate_verification_authorizes_no_succession: ok",
+        "v15_a_disposition_restates_only_a_verified_incident: ok",
+        "v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes: ok",
+        "v17_provisioning_and_republication_never_replace_a_store: ok",
+        "v18_over_capacity_archival_lets_dispositioned_history_leave: ok",
+        "v19_every_session_procedure_completes_with_its_verify_after: ok",
+        "v20_what_cannot_be_examined_is_indeterminate: ok",
+        "v21_a_leftover_temporary_fails_the_verify_after: ok",
+        "v22_a_successor_is_a_new_root_of_a_recovered_predecessor: ok",
+        "v23_a_recorded_name_is_one_condition: ok",
+        "v24_a_session_outlives_its_procedures: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-ARCHIVE-CAPACITY",
+          "ok": true
+        },
+        {
+          "id": "NC-DISP-ARCHIVED-NAME-ONLY",
+          "ok": true
+        },
+        {
+          "id": "NC-DISP-FACTS-NOT-VERIFIED",
+          "ok": true
+        },
+        {
+          "id": "NC-DISP-NO-POSTVERIFY",
+          "ok": true
+        },
+        {
+          "id": "NC-DISP-UNREPORTED",
+          "ok": true
+        },
+        {
+          "id": "NC-ENTRY-STAT-DETERMINATE",
+          "ok": true
+        },
+        {
+          "id": "NC-GAP-UNBOUNDED",
+          "ok": true
+        },
+        {
+          "id": "NC-LEFTOVER-AFTER-ACCEPTED",
+          "ok": true
+        },
+        {
+          "id": "NC-NAMES-EXAMINED-TWICE",
+          "ok": true
+        },
+        {
+          "id": "NC-OWNER-COLLECTS",
+          "ok": true
+        },
+        {
+          "id": "NC-PROV-OVER-EXISTING",
+          "ok": true
+        },
+        {
+          "id": "NC-PROV-OVER-HISTORY",
+          "ok": true
+        },
+        {
+          "id": "NC-REPUBLISH-OVER-EXISTING",
+          "ok": true
+        },
+        {
+          "id": "NC-REVOKED-BOUND-INDETERMINATE",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-CAPACITY-BYPASS",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-CAPACITY-REFUSED",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-DUAL-LOCK",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-GATE-PROVISION",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-INVENT-INVALID",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-LEFTOVER",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-MISSING-DISPOSITION",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-MUTATE-BEFORE-GATE",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-NO-GATE",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-NO-POSTVERIFY",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-NO-VERIFY",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-OMIT-INVALID",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-POSTVERIFY-IGNORED",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-REPEAT-INVALID",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-REPORT-TRUNCATION",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-REUSE-AUTH",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-SAME-ROOT",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-STALE",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-STATEMENT-CALLER",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-STATEMENT-TRUNCATED",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-UNDISPOSITIONED-HISTORY",
+          "ok": true
+        },
+        {
+          "id": "NC-SUCC-VERIFY-OLD-ROOT",
+          "ok": true
+        },
+        {
+          "id": "NC-VERIFY-AFTER-AUTHORIZES",
+          "ok": true
+        },
+        {
+          "id": "NC-VERIFY-FIRST-ONLY",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R327",
+      "requirement": "No real configured-store entry",
+      "tests": [
+        "o01_the_real_store_entry_is_closed: ok"
+      ],
+      "controls": [
+        {
+          "id": "A-ENTRY-CALLS",
+          "ok": true
+        },
+        {
+          "id": "A-ENTRY-SWITCH",
+          "ok": true
+        }
+      ],
+      "guards": [],
+      "ok": true
+    },
+    {
+      "id": "R328",
+      "requirement": "No new public authority-bearing mutation interface",
+      "tests": [
+        "r328_no_new_public_authority_bearing_interface: ok",
+        "a01_the_authority_surface_is_fixed_in_the_source: ok"
+      ],
+      "controls": [
+        {
+          "id": "NC-R3-SUCC-CLEAN-RECURSIVE-API",
+          "ok": true
+        }
+      ],
+      "guards": [
+        {
+          "id": "P-R3-HOLDS-SELECTION",
+          "ok": true
+        },
+        {
+          "id": "P-R3-KEPT-COPY",
+          "ok": true
+        },
+        {
+          "id": "P-R3-UNREFERENCED",
+          "ok": true
+        },
+        {
+          "id": "P-R3-INSPECT",
+          "ok": true
+        },
+        {
+          "id": "P-R3-REMOVE-KNOWN",
+          "ok": true
+        },
+        {
+          "id": "P-R3-REVOCATION-STATE",
+          "ok": true
+        },
+        {
+          "id": "P-R3-REVOCATION-ADMISSIBLE",
+          "ok": true
+        }
+      ],
+      "ok": true
+    }
+  ],
+  "all": true
+}

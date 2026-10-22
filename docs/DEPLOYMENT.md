@@ -11,6 +11,12 @@
 > and change nothing on this page. The server and deployment surfaces
 > withdrawn during Phase Zero remain withdrawn unless a later approved phase
 > explicitly reopens them.
+>
+> The Phase Three implementation (governed real-world control, Linux only) is
+> integrated into `main`, but Phase Three is not complete: checked activation
+> and the Owner's completion declaration remain. It makes no production,
+> deployment, installer or release claim, and the withdrawals on this page
+> are unchanged.
 
 ## Platform scope
 

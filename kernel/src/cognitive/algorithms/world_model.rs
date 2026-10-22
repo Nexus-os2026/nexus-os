@@ -1,5 +1,6 @@
 use crate::cognitive::PlannerLlm;
 use crate::errors::AgentError;
+use crate::hm::{DispatchContext, PromptBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -102,12 +103,23 @@ impl WorldModel {
         })
     }
 
-    pub fn build_from_seed(seed_text: &str, llm: &dyn PlannerLlm) -> Result<Self, AgentError> {
+    /// Builds the world model of a simulation seed (class XS,
+    /// P3-HM-CONTRACT-02 §12.2): `ctx` is the explicit `System` context the
+    /// call runs under. The prompt is backend text built from the seed.
+    pub fn build_from_seed(
+        seed_text: &str,
+        llm: &dyn PlannerLlm,
+        ctx: &mut DispatchContext,
+    ) -> Result<Self, AgentError> {
         let prompt = format!(
             "Extract all entities (people, organizations, concepts, events) and relationships from this text. Return as JSON object with keys `entities` and `relationships`. Entities must be {{entity_name, entity_type, properties}}. Relationships must be {{from, to, relation_type, strength}}.\n\nTEXT:\n{seed_text}"
         );
-        let response = llm.plan_query(&prompt)?;
-        let value = crate::simulation::extract_json_value(&response)?;
+        let response = llm.plan_query(ctx, &mut |c: &mut DispatchContext| {
+            let mut b = PromptBuilder::new(c);
+            b.text(&prompt);
+            Some(b.build())
+        })?;
+        let value = crate::simulation::extract_json_value(response.text())?;
         match serde_json::from_value::<SeedGraphResponse>(value).map_err(|error| {
             AgentError::SupervisorError(format!("invalid world model json: {error}"))
         })? {

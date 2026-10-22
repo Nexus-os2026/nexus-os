@@ -64,6 +64,38 @@
 //!     (approval.clone(), approval) // not Clone
 //! }
 //! ```
+//!
+//! Phase Two (P2B) adds the run-bound verification types
+//! ([`VerifierLaunchBinding`], [`VerifierLaunchApproval`],
+//! [`VerificationResult`]): a verifier launch approval is, like an owner
+//! approval, only the result of the backend's native confirmation of one
+//! exact launch binding.
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::{VerifierLaunchApproval, VerifierLaunchBinding};
+//! fn forge(binding: VerifierLaunchBinding) -> VerifierLaunchApproval {
+//!     VerifierLaunchApproval { binding } // the field is private
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::{VerifierLaunchApproval, VerifierLaunchBinding};
+//! fn forge(binding: VerifierLaunchBinding) -> VerifierLaunchApproval {
+//!     VerifierLaunchApproval::confirmed(binding) // crate-private
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! let _: nexus_kernel::coding_run::VerifierLaunchApproval =
+//!     serde_json::from_str(r#"{"approved": true}"#).unwrap(); // no deserializer
+//! ```
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::VerifierLaunchApproval;
+//! fn twice(approval: VerifierLaunchApproval) -> (VerifierLaunchApproval, VerifierLaunchApproval) {
+//!     (approval.clone(), approval) // not Clone
+//! }
+//! ```
 
 mod apply;
 mod fsops;
@@ -74,6 +106,7 @@ mod project;
 mod review;
 mod scope;
 mod structural;
+mod verifier;
 mod worker;
 
 #[cfg(test)]
@@ -115,6 +148,12 @@ pub use review::{
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
+};
+pub use verifier::{
+    ExecutionGeneration, StreamSummary, VerificationCandidate, VerificationError,
+    VerificationPhase, VerificationResult, VerifierCleanup, VerifierExit, VerifierInputs,
+    VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer, VerifierLaunchFacts,
+    VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
 };
 pub use worker::{
     run_worker, EditProposal, ProposalOp, ProposalRejection, WorkerError, WorkerLimits,
@@ -307,6 +346,8 @@ pub enum RunError {
     CandidateChanged,
     #[error("the verified candidate is no longer available")]
     CandidateUnavailable,
+    #[error("the verification input could not be prepared")]
+    VerificationInput,
 }
 
 /// A candidate edit. Content is data; the path is checked against the frozen
@@ -642,6 +683,8 @@ pub struct CodingRun {
     applied: Option<apply::ApplyRecord>,
     /// The owner's native approval to restore this run's apply.
     restore_approved: Option<ReviewBinding>,
+    /// The sandboxed verification lifecycle (Phase Two).
+    verifier: verifier::VerifierState,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -738,6 +781,7 @@ impl CodingRun {
             apply_state: apply::ApplyState::NotApplied,
             applied: None,
             restore_approved: None,
+            verifier: verifier::VerifierState::default(),
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -1501,14 +1545,10 @@ impl CodingRun {
             Err(error) => return Err(self.withdraw_verification(error)),
         };
         let base = self.base.clone().ok_or(RunError::CandidateUnavailable)?;
-        let binding = ReviewBinding {
-            run_id: self.id,
-            base_manifest_hash: verification.base_manifest_hash,
-            candidate_manifest_hash: verification.candidate_manifest_hash,
-            profile_hash: verification.profile_hash,
-        };
+        let binding = self.review_binding(&verification)?;
         let review = review::build(
             binding,
+            self.verifier_latest(),
             base.entries(),
             candidate.entries(),
             &self.base_contents,
@@ -1518,6 +1558,10 @@ impl CodingRun {
             "binding": hex::encode(binding.hash()),
             "base_manifest": binding.base_manifest_hash.to_hex(),
             "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
+            "verification": match binding.verification {
+                VerifierMarker::NoResult => "none".to_string(),
+                VerifierMarker::Result(hash) => hex::encode(hash),
+            },
             "create": review.count(ChangeKind::Create),
             "replace": review.count(ChangeKind::Replace),
             "delete": review.count(ChangeKind::Delete),
@@ -1564,6 +1608,133 @@ impl CodingRun {
             bytes.insert(path.clone(), content);
         }
         Ok((candidate, bytes))
+    }
+
+    // ── Verification input (Phase Two, P2E) ────────────────────────────
+
+    /// Materialize the verified candidate into `input`, the empty input
+    /// directory of a fresh verification workspace, and prove the copy.
+    /// Returns the verified candidate manifest hash the copy matches.
+    ///
+    /// The staged candidate is re-read through the retained staging handle
+    /// (the revoked staging grant is never reopened) and must still hash to
+    /// the verified candidate manifest; otherwise the verification is
+    /// withdrawn, as for a review. Only the candidate's regular files are
+    /// copied, each through retained handles and checked against its
+    /// manifest entry. The copy is then scanned like staging (a symlink,
+    /// special file, hard link, unscoped name or redirect is a violation) and
+    /// must hash to exactly the verified candidate manifest. Any other failure
+    /// is `VerificationInput` and leaves the run as it was: verification is
+    /// advisory and never costs the owner a reviewable candidate.
+    pub fn materialize_verification_input(
+        &mut self,
+        input: std::os::fd::OwnedFd,
+    ) -> Result<ManifestHash, RunError> {
+        let verification = self.unapplied_verification("materialize_verification_input")?;
+        if !self.verifier.may_materialize() {
+            return Err(RunError::InvalidState {
+                operation: "materialize_verification_input",
+                state: self.state,
+            });
+        }
+        let input = DirHandle::from_directory_fd(input).map_err(|_| RunError::VerificationInput)?;
+        if !input
+            .entries()
+            .map_err(|_| RunError::VerificationInput)?
+            .is_empty()
+        {
+            return Err(RunError::VerificationInput);
+        }
+        let candidate = match self.staged_candidate(&verification) {
+            Ok(candidate) => candidate,
+            Err(error) => return Err(self.withdraw_verification(error)),
+        };
+        for (path, entry) in candidate.entries() {
+            let content = match self.read_staged_file(path, self.profile.max_file_bytes) {
+                Ok(content) if ManifestEntry::of(&content) == *entry => content,
+                _ => return Err(self.withdraw_verification(RunError::CandidateChanged)),
+            };
+            write_input_file(&input, path, &content).map_err(|_| RunError::VerificationInput)?;
+        }
+        input.sync().map_err(|_| RunError::VerificationInput)?;
+        self.input_matches(&input, &verification)
+            .map_err(|_| RunError::VerificationInput)?;
+        self.verifier.materialized();
+        Ok(verification.candidate_manifest_hash)
+    }
+
+    fn verifier_latest(&self) -> Option<VerificationResult> {
+        self.latest_verification().copied()
+    }
+
+    /// Rescan a materialized verification input after its verifier ended.
+    /// It must still hash to exactly the verified candidate manifest;
+    /// otherwise (`CandidateChanged`) the execution's result is invalid.
+    pub fn check_verification_input(&self, input: std::os::fd::OwnedFd) -> Result<(), RunError> {
+        let verification = self.unapplied_verification("check_verification_input")?;
+        let input = DirHandle::from_directory_fd(input).map_err(|_| RunError::CandidateChanged)?;
+        self.input_matches(&input, &verification)
+    }
+
+    /// The passing verification of a structurally verified candidate that
+    /// is not in the owner's project.
+    pub(crate) fn unapplied_verification(
+        &self,
+        operation: &'static str,
+    ) -> Result<StructuralVerification, RunError> {
+        self.require(operation, &[RunState::StructurallyVerified])?;
+        if !matches!(
+            self.apply_state,
+            apply::ApplyState::NotApplied | apply::ApplyState::RolledBack
+        ) {
+            return Err(RunError::InvalidState {
+                operation,
+                state: self.state,
+            });
+        }
+        if !self.generation_valid {
+            return Err(RunError::CandidateChanged);
+        }
+        self.verification
+            .clone()
+            .ok_or(RunError::CandidateUnavailable)
+    }
+
+    /// Re-scan the staged candidate: it must still hash to the verified
+    /// candidate manifest with no structural violation.
+    pub(crate) fn staged_candidate(
+        &self,
+        verification: &StructuralVerification,
+    ) -> Result<Manifest, RunError> {
+        let base = self.base.as_ref().ok_or(RunError::CandidateUnavailable)?;
+        let staging = self
+            .staging_handle()
+            .map_err(|_| RunError::CandidateUnavailable)?;
+        let mut changed_text = Vec::new();
+        let (candidate, violations) =
+            structural::scan_staging(staging, &self.profile, &mut changed_text, base);
+        if !violations.is_empty() || candidate.hash() != verification.candidate_manifest_hash {
+            return Err(RunError::CandidateChanged);
+        }
+        Ok(candidate)
+    }
+
+    /// Scan a verification input like staging: no violation, and exactly the
+    /// verified candidate manifest.
+    fn input_matches(
+        &self,
+        input: &DirHandle,
+        verification: &StructuralVerification,
+    ) -> Result<(), RunError> {
+        let base = self.base.as_ref().ok_or(RunError::CandidateUnavailable)?;
+        let mut changed_text = Vec::new();
+        let (copied, violations) =
+            structural::scan_staging(input, &self.profile, &mut changed_text, base);
+        if violations.is_empty() && copied.hash() == verification.candidate_manifest_hash {
+            Ok(())
+        } else {
+            Err(RunError::CandidateChanged)
+        }
     }
 
     /// The verified candidate is gone or changed: it can never be approved.
@@ -2056,6 +2227,22 @@ impl SnapshotCopy {
             _ => Self::reject(SnapshotRejection::Io, parts),
         }
     }
+}
+
+/// Write one candidate file into a verification input, creating its parent
+/// directories one at a time beneath the retained input handle.
+fn write_input_file(input: &DirHandle, path: &RelPath, content: &[u8]) -> Result<(), RunError> {
+    let (parents, name) = path.parent_and_name();
+    let mut owned: Option<DirHandle> = None;
+    for part in parents {
+        let dir = owned.as_ref().unwrap_or(input);
+        owned = Some(ensure_dir(dir, part)?);
+    }
+    owned
+        .as_ref()
+        .unwrap_or(input)
+        .create_snapshot_file(name, content)
+        .map_err(|_| RunError::StagingIo)
 }
 
 /// Open a staging subdirectory, creating it if missing. Anything else at the

@@ -1,0 +1,24 @@
+
+running 1 test
+test r01_acknowledged_implies_durable_under_write_and_sync_faults ... FAILED
+
+failures:
+
+---- r01_acknowledged_implies_durable_under_write_and_sync_faults stdout ----
+
+thread 'r01_acknowledged_implies_durable_under_write_and_sync_faults' (585036) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4356:9:
+assertion `left == right` failed: [ack-durable] clean: record 1 acknowledged before it was durable
+  left: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ right: [78, 88, 67, 68, 82, 1, 0, 37, 11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 11, 1, 0, 0, 0, 0, 175, 125, 79, 187, 1, 67, 1, 210, 223, 189, 44, 71, 196, 206, 226, 113, 195, 249, 119, 25, 158, 13, 36, 53, 174, 67, 194, 242, 94, 197, 1, 139]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r01_acknowledged_implies_durable_under_write_and_sync_faults
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.05s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

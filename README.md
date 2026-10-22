@@ -13,7 +13,7 @@ It is not production-ready.
 | Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
 | Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
 | Phase Two — governed verification execution | **PHASE TWO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-10-04 | `rebuild/phase2-governed-verification` at `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc` |
-| Phase Three | Not current; not integrated | — |
+| Phase Three — governed real-world control | Implementation integrated into `main`; not complete: checked activation and the Owner's completion declaration remain | — |
 
 - Phase Zero, Phase One and Phase Two are complete and frozen, for the Linux
   support profile only. Windows and macOS portability validation remains
@@ -21,22 +21,39 @@ It is not production-ready.
 - This is not a production-readiness declaration.
 - This is not an external certification or audit.
 - The frozen checkpoints are the validated bytes. Later commits on `main` do
-  not reopen or redefine them.
+  not redefine them.
 - Completion evidence: for Phase Zero, the `evidence/phase0-closure` branch
   at `e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1`; for Phase One, the
   `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`; for Phase Two, the
   `evidence/phase2-closure` branch at
   `4966a295e395703fc8ff823413b63a32f3d069e0`.
-- `main` contains the frozen Phase Zero and Phase One checkpoints, followed
-  by later status documentation and security and CI hardening, including the
-  current forward dependency remediation. It does not contain the Phase Two
-  implementation, and it does not redefine any frozen checkpoint.
+- `main` after Phase One completion is
+  `6f3d64360dd21aa8d717c3995c46e48f396148b9`: the frozen Phase One
+  checkpoint plus status documentation and a generated ACL schema and test
+  hygiene commit. Pre-Phase-Two entry hardening follows it (see
+  [SECURITY.md](SECURITY.md)). None of these redefines the frozen Phase One
+  checkpoint.
+- `main` contains the frozen Phase Zero, Phase One and Phase Two checkpoints
+  and the Phase Three implementation. It does not redefine any frozen
+  checkpoint.
+- Phase Two (governed verification execution, Linux support profile) is
+  complete on its frozen checkpoint, and `main` contains its implementation;
+  see [Governed verification](#governed-verification-phase-two).
+- Phase Three (governed real-world control, Linux support profile): its
+  implementation, Phase Three Candidate 11 (candidate commit
+  `7f48a407155f250bb09e109dfcb4f736fe363cc5`, which contains the
+  `implement/p3-governed-real-world-control` and
+  `phase3/governed-real-world-control` work), is integrated into `main`.
+  Phase Three is not complete: checked activation and the Owner's completion
+  declaration remain. No production, deployment, installer or release claim
+  is made; see
+  [Governed real-world control](#governed-real-world-control-phase-three).
 - The frozen Phase Zero and Phase One checkpoints remain valid historical
   engineering checkpoints, but they are not current release candidates:
   their lockfiles contain Wasmtime 43.0.2, which RUSTSEC-2026-0327 affects.
-  The frozen Phase Two checkpoint and current `main` use Wasmtime 36.0.17
-  (see [SECURITY.md](SECURITY.md)).
+  The frozen Phase Two checkpoint's lockfile contains Wasmtime 36.0.17.
+  `main` uses Wasmtime 36.0.19 (see [SECURITY.md](SECURITY.md)).
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based
@@ -47,19 +64,16 @@ Phase One builds one governed coding workflow on that foundation (see
 [Governed coding](#governed-coding-phase-one) below). It does not make Nexus a
 complete, general-purpose autonomous coding system.
 
-Phase Two adds governed, sandboxed verification of a verified coding
-candidate, for the same Linux support profile. It is complete on its frozen
-checkpoint, which `main` does not contain.
-
 The public default branch (`main`) was fast-forwarded to the Phase Zero and
-Phase One checkpoints after their hosted validation passed. Changes now reach
-`main` only through pull requests merged with a merge commit. Older releases
-and tags predate the rebuild. They remain historical and are explicitly
-labelled as such.
+Phase One checkpoints after their hosted validation passed. The Phase Two
+checkpoint and the Phase Three implementation reach `main` through the Phase
+Three Candidate 11 integration merge. Older releases and tags predate the
+rebuild. They remain historical and are explicitly labelled as such.
 
 ## Platform scope
 
-- Linux is the active validation profile for Phase Zero and Phase One.
+- Linux is the active validation profile for Phase Zero, Phase One and Phase
+  Two.
 - Windows and macOS portability validation is deferred. Governed coding is
   not available on them.
 - Linux security claims do not automatically apply to Windows or macOS.
@@ -114,6 +128,42 @@ Phase One does not claim:
 Structural verification checks that the candidate stays within the run's
 scopes and policy. It is not semantic verification and does not run the
 project's tests.
+
+## Governed verification (Phase Two)
+
+On a supported Linux host, the owner may run a reviewed candidate's own
+tests, locally, in a backend-owned verifier sandbox before deciding whether to
+apply it. The first and only profile is `rust.cargo-test.offline.v1`: a
+single dependency-free Rust library package, tested offline with a Rust
+toolchain packaged with Nexus. The owner confirms each launch in a native
+dialog; the frontend sends only the run and a profile name. The sandbox runs
+the tests in new user, PID, network, IPC, UTS and cgroup namespaces with no
+network, strict Landlock, a seccomp allow-list and backend-owned cgroup
+limits. The result is advisory and is bound into the owner's review; Apply
+waits while a verification is active or its cleanup is unconfirmed. Without
+every required layer, verification is unavailable. The design and its
+explicit non-claims are in
+[docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md).
+Phase Two is complete for the Linux support profile, declared by the project
+Architect on 2026-10-04, and `main` contains its implementation.
+
+## Governed real-world control (Phase Three)
+
+On a supported Linux host, agents and the owner can act in the world only
+through one governed pipeline: contained tools with pinned executables (no
+shell), network requests to granted origins, headless browser sessions
+confined to granted origins, observation of and input to a separate agent
+display (never the owner's own), and connector operations whose credentials
+stay in the vault. Each effect is an action commitment bound to its exact
+target and parameters, under a grant the owner confirmed natively; sensitive
+or irreversible (R2) effects also need the owner's native approval of that
+exact commitment. Every step is recorded in the audit trail, and the owner's
+emergency stop ends everything until the owner resumes. The design and its
+explicit non-claims are in
+[docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
+The implementation is integrated into `main`, but Phase Three is not
+complete: checked activation and the Owner's completion declaration remain.
+No production, deployment, installer or release claim is made.
 
 ## Local-first is not local-only
 
@@ -181,6 +231,9 @@ deployment guide linked below.
 - [Phase Zero authority inventory](docs/security/phase0-c5-authority-inventory.md):
   current engineering evidence on authority surfaces and closures. It is
   not a certification.
+- [Phase Three governed real-world control](docs/security/phase3-governed-real-world-control.md):
+  the candidate's design record, bypass-closure inventory and non-claims. It
+  is not a certification.
 - [Security policy](SECURITY.md): how to report a vulnerability.
 - [Deployment status](docs/DEPLOYMENT.md): what is and is not deployable.
   Phase One and Phase Two add no server deployment.

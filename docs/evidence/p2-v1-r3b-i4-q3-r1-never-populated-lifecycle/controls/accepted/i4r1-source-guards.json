@@ -1,0 +1,494 @@
+{
+  "production_files": [
+    "applicability.rs",
+    "execution.rs",
+    "fault.rs",
+    "hash.rs",
+    "helper.rs",
+    "landlock_rules.rs",
+    "launcher.rs",
+    "lib.rs",
+    "main.rs",
+    "policy.rs",
+    "profile.rs",
+    "profile_launch.rs",
+    "protocol.rs",
+    "scope.rs",
+    "scope/manager.rs",
+    "scope/native.rs",
+    "scope/pending.rs",
+    "seccomp.rs",
+    "seccomp_policy.rs",
+    "sys.rs",
+    "toolchain.rs",
+    "toolchain/contract.rs",
+    "workspace.rs"
+  ],
+  "guards": {
+    "SG-I4-BUS": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-DESTINATION": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-SWEEP": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-PID-SIGNAL": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-TEST-SEAMS": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-SERIALIZE": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-BACKGROUND": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-ONE-WAY": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-DESKTOP-REPLICA": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R1-NORMAL-SURFACE": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R1-NO-RESUME-UNWIND": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R1-BINDING": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R1-UNCERTAIN": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R1-IDENTITY": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4R3-NO-NAME-ACTUATION": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-R3R1-CANDIDATE-OWNERSHIP": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "all_guards_pass": true,
+  "self_tests": [
+    {
+      "guard": "SG-I4-BUS",
+      "file": "scope.rs",
+      "injected": "        let uid = unsafe { libc::getuid() };\n        let _ = std::env::var(\"DBUS_SESSION_BUS_ADDRESS\");\n        Self::co",
+      "reported": [
+        "std::env: {'scope.rs': 1}",
+        "env::var: {'scope.rs': 1}",
+        "DBUS_SESSION_BUS_ADDRESS: {'scope.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-BUS",
+      "file": "scope/manager.rs",
+      "injected": "!metadata.file_type().is_socket()",
+      "reported": [
+        "manager.rs: not exactly once: !metadata.file_type().is_socket() || metadata.uid() != uid"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "const SYSTEMD: &str = \"org.example.other\";",
+      "reported": [
+        "constant: const SYSTEMD: &str = \"org.freedesktop.systemd1\";"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SWEEP",
+      "file": "scope/pending.rs",
+      "injected": "fn sweep() { let _ = \"ListUnitsByPatterns\"; }\nfn names_unit(",
+      "reported": [
+        "ListUnits: {'scope/pending.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SWEEP",
+      "file": "scope/pending.rs",
+      "injected": "const PATTERN: &str = \"nexus-verifier-*.scope\";\nfn names_unit(",
+      "reported": [
+        "nexus-verifier-*: {'scope/pending.rs': 1}",
+        "unit-name strings: {'scope/pending.rs': 1, 'scope.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-PID-SIGNAL",
+      "file": "execution.rs",
+      "injected": "fn signal(pid: i32) { unsafe { libc::kill(pid, libc::SIGKILL) }; }\nfn end_now(",
+      "reported": [
+        "libc::kill: {'execution.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-TEST-SEAMS",
+      "file": "scope.rs",
+      "injected": "    pub(crate) fn with_controller(",
+      "reported": [
+        "with_controller is not test-only and crate-private"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-TEST-SEAMS",
+      "file": "scope.rs",
+      "injected": "pub(crate) mod tests;",
+      "reported": [
+        "the simulation module is not test-only"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SERIALIZE",
+      "file": "scope/pending.rs",
+      "injected": "#[derive(serde::Serialize)]\nstruct Saved;\n/// What tests observe about a pending scope operation.",
+      "reported": [
+        "scope/pending.rs"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-BACKGROUND",
+      "file": "scope/pending.rs",
+      "injected": "fn background() { std::thread::spawn(|| {}); }\nfn names_unit(",
+      "reported": [
+        "scope: thread::spawn: {'scope/pending.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-ONE-WAY",
+      "file": "scope/pending.rs",
+      "injected": "pub fn from_name(unit: &str) {}\nfn names_unit(",
+      "reported": [
+        "a public function takes a unit name"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESKTOP-REPLICA",
+      "file": "execution.rs",
+      "injected": "    pub fn holds_scope(",
+      "reported": [
+        "holds_scope is not gated"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESKTOP-REPLICA",
+      "file": "execution.rs",
+      "injected": "pub fn place(",
+      "reported": [
+        "place is not gated"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-NORMAL-SURFACE",
+      "file": "scope.rs",
+      "injected": "    pub fn connect_at(",
+      "reported": [
+        "scope.rs: ['use manager::BUS_CALL_TIMEOUT', 'const PLACEMENT_TIMEOUT', 'const SETTLE_TIMEOUT', 'enum ScopeError', 'fn expected_limit_files', 'struct ScopeManager', 'fn connect', 'fn connect_at', 'struct ScopeEvents', 'enum Occupancy', 'struct Scope', 'fn unit', 'fn kill', 'fn occupancy', 'fn wait_empty', 'fn events']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-NORMAL-SURFACE",
+      "file": "scope/pending.rs",
+      "injected": "pub struct PendingScope {",
+      "reported": [
+        "scope/pending.rs: ['struct PendingScope']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-NORMAL-SURFACE",
+      "file": "execution.rs",
+      "injected": "#[derive(Debug)]\npub struct ScopedHelper {",
+      "reported": [
+        "execution.rs: ['const FINALIZE_TIMEOUT', 'struct StreamRecord', 'enum EndedBy', 'enum NotRun', 'enum Cleanup', 'fn is_confirmed', 'struct RetainedBoundary', 'fn retry', 'struct ScopedHelper', 'struct ExecutionReport', 'enum ExitClass', 'fn classify', 'fn run']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-NO-RESUME-UNWIND",
+      "file": "execution.rs",
+      "injected": "        Err(panic) => std::panic::resume_unwind(panic),\n    };",
+      "reported": [
+        "resume_unwind: {'execution.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-BINDING",
+      "file": "scope/pending.rs",
+      "injected": "Remote::Answered(Some(group)) if group.ends_with(&self.unit) => {}",
+      "reported": [
+        "not exactly once: Remote::Answered(Some(group)) if group == candidate.path => {}",
+        "the binding uses ends_with"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-BINDING",
+      "file": "scope/pending.rs",
+      "injected": "Remote::Answered(Some(_)) => {}",
+      "reported": [
+        "not exactly once: Remote::Answered(Some(id)) if id == self.unit => {}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-UNCERTAIN",
+      "file": "scope/pending.rs",
+      "injected": "        absent(controller, &self.unit, helper)\n",
+      "reported": [
+        "the manager's absence is consulted without an accepted start"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-UNCERTAIN",
+      "file": "scope/pending.rs",
+      "injected": "        self.issued = true;\n        self.accepted = true;\n",
+      "reported": [
+        "a start is accepted, or its identity recorded, other than in the delivered reply's arm",
+        "the reply is recorded before the post-dispatch fault point"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-IDENTITY",
+      "file": "launcher.rs",
+      "injected": "Some(serial.wrapping_add(1))",
+      "reported": [
+        "the allocation is not checked"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-IDENTITY",
+      "file": "launcher.rs",
+      "injected": "",
+      "reported": [
+        "the child is spawned before its identity"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "    fn get_unit(&self, destination: &str, unit: &str) -> Remote<Presence>;",
+      "reported": [
+        "manager interface: ['fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn control_group_id(&self, unit_path: &str) -> Remote<Option<u64>>;', 'fn get_unit(&self, destination: &str, unit: &str) -> Remote<Presence>;', 'fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>>;', \"fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;\", 'fn unit_id(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn unit_instance(&self, unit_path: &str) -> Remote<Option<UnitInstance>>;']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "    fn stop_unit(&self, unit: &str) -> Remote<()>;\n    fn get_unit(&self, unit: &str) -> Remote<Presence>;",
+      "reported": [
+        "manager interface: ['fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn control_group_id(&self, unit_path: &str) -> Remote<Option<u64>>;', 'fn get_unit(&self, unit: &str) -> Remote<Presence>;', 'fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>>;', \"fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;\", 'fn stop_unit(&self, unit: &str) -> Remote<()>;', 'fn unit_id(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn unit_instance(&self, unit_path: &str) -> Remote<Option<UnitInstance>>;']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/pending.rs",
+      "injected": "        let _ = self.controller.manager.get_unit(&self.unit);\n        self.observe(&controller, helper, fault)\n    }\n",
+      "reported": [
+        "pub(crate) fn reconcile( asks the manager",
+        "pub(crate) fn reconcile( asks the manager"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/pending.rs",
+      "injected": "    pub(crate) fn end_now(&self) {\n        if self.unresolved() {\n            let _ = self.controller.manager.get_unit(&",
+      "reported": [
+        "pub(crate) fn end_now( asks the manager",
+        "pub(crate) fn end_now( asks the manager"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/manager.rs",
+      "injected": "    fn stop_unit(&self, unit: &str) -> Remote<()> {\n        match self.call::<_, zbus::zvariant::OwnedObjectPath>(\n     ",
+      "reported": [
+        "StopUnit: {'scope/manager.rs': 2}",
+        "stop_unit: {'scope/manager.rs': 1}",
+        "manager requests: [('SYSTEMD_PATH', 'MANAGER', 'Subscribe'), ('SYSTEMD_PATH', 'MANAGER', 'StartTransientUnit'), ('SYSTEMD_PATH', 'MANAGER', 'StopUnit'), ('SYSTEMD_PATH', 'MANAGER', 'GetUnit'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get')]"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/manager.rs",
+      "injected": "            \"KillUnit\",\n",
+      "reported": [
+        "KillUnit: {'scope/manager.rs': 1}",
+        "manager requests: [('SYSTEMD_PATH', 'MANAGER', 'Subscribe'), ('SYSTEMD_PATH', 'MANAGER', 'StartTransientUnit'), ('SYSTEMD_PATH', 'MANAGER', 'KillUnit'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get')]"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/manager.rs",
+      "injected": "MANAGER, \"Unsubscribe\", &()",
+      "reported": [
+        "manager requests: [('SYSTEMD_PATH', 'MANAGER', 'Unsubscribe'), ('SYSTEMD_PATH', 'MANAGER', 'StartTransientUnit'), ('SYSTEMD_PATH', 'MANAGER', 'GetUnit'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get'), ('unit_path', 'PROPERTIES', 'Get')]"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "    fn control_group_id(&self, unit: &str) -> Remote<Option<u64>>;",
+      "reported": [
+        "manager interface: ['fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn control_group_id(&self, unit: &str) -> Remote<Option<u64>>;', 'fn get_unit(&self, unit: &str) -> Remote<Presence>;', 'fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>>;', \"fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;\", 'fn unit_id(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn unit_instance(&self, unit_path: &str) -> Remote<Option<UnitInstance>>;']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-ONE-WAY",
+      "file": "scope/pending.rs",
+      "injected": "fn forged(dir: Box<dyn CgroupDir>, instance: UnitInstance) -> Scope {\n    Scope { unit: String::new(), dir, instance }\n}",
+      "reported": [
+        "Scope literals: {'applicability.rs': 0, 'execution.rs': 0, 'fault.rs': 0, 'hash.rs': 0, 'helper.rs': 0, 'landlock_rules.rs': 0, 'launcher.rs': 0, 'lib.rs': 0, 'main.rs': 0, 'policy.rs': 0, 'profile.rs': 0, 'profile_launch.rs': 0, 'protocol.rs': 0, 'scope/manager.rs': 0, 'scope/native.rs': 0, 'scope/pending.rs': 2, 'scope.rs': 0, 'seccomp.rs': 0, 'seccomp_policy.rs': 0, 'sys.rs': 0, 'toolchain/contract.rs': 0, 'toolchain.rs': 0, 'workspace.rs': 0}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-BINDING",
+      "file": "scope/pending.rs",
+      "injected": "            Remote::Answered(Some(_)) => {}",
+      "reported": [
+        "not exactly once: Remote::Answered(Some(id)) if id == retained => {}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-BINDING",
+      "file": "scope/pending.rs",
+      "injected": "        Remote::Answered(Some(_)) => Ok(()),",
+      "reported": [
+        "not exactly once: Remote::Answered(Some(current)) if current == instance => Ok(()),"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R1-UNCERTAIN",
+      "file": "scope/pending.rs",
+      "injected": "            Started::Uncertain(reason) => {\n                self.instance = Some(UnitInstance::from_property(&[1; 16]).u",
+      "reported": [
+        "the identity is recorded other than in the delivered reply's arm"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4R3-NO-NAME-ACTUATION",
+      "file": "scope/pending.rs",
+      "injected": "    fn own(&mut self, controller: &Controller, helper: Option<&Helper>) -> bool {\n        let _ = controller.manager.get",
+      "reported": [
+        "fn own( asks the manager"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-R3R1-CANDIDATE-OWNERSHIP",
+      "file": "scope/pending.rs",
+      "injected": "                    self.candidate = Some(Candidate {\n                        dir,\n                        path,\n       ",
+      "reported": [
+        "a candidate is made owned"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-R3R1-CANDIDATE-OWNERSHIP",
+      "file": "scope/pending.rs",
+      "injected": "        fault::at(fault, FaultPoint::ScopeCandidate);\n        let _ = candidate.dir.kill();\n",
+      "reported": [
+        "cgroup.kill other than through the owned candidate: ['owned', 'scope']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-R3R1-CANDIDATE-OWNERSHIP",
+      "file": "scope/pending.rs",
+      "injected": "        if self.candidate.is_some() {\n",
+      "reported": [
+        "a candidate is retained without a captured identity"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-R3R1-CANDIDATE-OWNERSHIP",
+      "file": "scope/manager.rs",
+      "injected": "    if result.is_empty() {",
+      "reported": [
+        "the capture rule lacks: if result != \"done\" {"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-R3R1-CANDIDATE-OWNERSHIP",
+      "file": "scope/pending.rs",
+      "injected": "        let Some(candidate) = pending.candidate.take() else {",
+      "reported": [
+        "the promotion's order: {'pending.issue_and_prove(helper, fault)?;': 270, 'fault::at(fault, FaultPoint::ScopePromotion);': 346, 'take_if(|candidate| candidate.owned)': -1, '*self = Self::Proven(Scope {': 755}"
+      ],
+      "detected": true
+    }
+  ],
+  "all_self_tests_detected": true,
+  "guards_with_self_test": [
+    "SG-I4-BUS",
+    "SG-I4-DESKTOP-REPLICA",
+    "SG-I4-DESTINATION",
+    "SG-I4-NO-BACKGROUND",
+    "SG-I4-NO-PID-SIGNAL",
+    "SG-I4-NO-SERIALIZE",
+    "SG-I4-NO-SWEEP",
+    "SG-I4-ONE-WAY",
+    "SG-I4-TEST-SEAMS",
+    "SG-I4R1-BINDING",
+    "SG-I4R1-IDENTITY",
+    "SG-I4R1-NO-RESUME-UNWIND",
+    "SG-I4R1-NORMAL-SURFACE",
+    "SG-I4R1-UNCERTAIN",
+    "SG-I4R3-NO-NAME-ACTUATION",
+    "SG-R3R1-CANDIDATE-OWNERSHIP"
+  ]
+}

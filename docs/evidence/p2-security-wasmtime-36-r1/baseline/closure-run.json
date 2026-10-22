@@ -1,0 +1,12 @@
+{
+  "id": 37191730167,
+  "run_attempt": 1,
+  "event": "workflow_dispatch",
+  "head_sha": "a7001311221023d37d73e6355ec0c0f5020a32a8",
+  "head_branch": "review/p2-v1-native-scope-host-qualification",
+  "path": ".github/workflows/ci.yml",
+  "status": "completed",
+  "conclusion": "failure",
+  "created_at": "2026-10-04T09:18:31Z",
+  "updated_at": "2026-10-04T09:45:35Z"
+}

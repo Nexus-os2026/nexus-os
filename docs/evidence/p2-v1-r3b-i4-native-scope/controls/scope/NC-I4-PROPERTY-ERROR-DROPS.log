@@ -1,0 +1,22 @@
+
+running 1 test
+test execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate ... FAILED
+
+failures:
+
+---- execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate stdout ----
+
+thread 'execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate' (548564) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:495:9:
+cleanup not confirmed through the retained candidate
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.15s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

@@ -420,6 +420,12 @@ pub async fn swarm_plan(
     state: tauri::State<'_, AppState>,
     intent: String,
 ) -> Result<PlannedSwarmJson, String> {
+    // P3-HM-CONTRACT-02 §12.1 (HD), A2.4 I2: the swarm runs the Owner's own
+    // request: its explicit `OwnerDirect` context is minted here (no
+    // thread-local default; without an issuer nothing runs). Its providers
+    // carry only the human's intent and the swarm's own outputs (guard A-S6).
+    let _owner_direct =
+        crate::hm_dispatch::request_unit(&state, nexus_kernel::hm::Principal::OwnerDirect)?;
     let s = self::state();
     // Pick Director's planner — prefer ollama if available, else first
     // registered public provider.
@@ -492,6 +498,10 @@ pub async fn swarm_approve(
     state: tauri::State<'_, AppState>,
     ticket_id: Uuid,
 ) -> Result<Uuid, String> {
+    // P3-HM-CONTRACT-02 §12.1 (HD), A2.4 I2: the Owner's approved run, under
+    // its explicit `OwnerDirect` context.
+    let _owner_direct =
+        crate::hm_dispatch::request_unit(&state, nexus_kernel::hm::Principal::OwnerDirect)?;
     ensure_forwarder(app);
     let s = self::state();
     let planned = s

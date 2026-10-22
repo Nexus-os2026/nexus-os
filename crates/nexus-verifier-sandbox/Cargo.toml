@@ -1,0 +1,44 @@
+[package]
+name = "nexus-verifier-sandbox"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+description = "Phase Two governed verification: verifier profiles, sandbox and resource policy identities, and the Linux verifier sandbox helper"
+
+[dependencies]
+sha2 = "0.10"
+hex = "0.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+landlock = "=0.4.4"
+seccompiler = "=0.5.0"
+zbus = { version = "4.4", default-features = false, features = ["tokio"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+serde = "1"
+
+[build-dependencies]
+sha2 = "0.10"
+
+# The live sandbox harness enables its feature for this crate's own tests
+# (unit, live and package-layout) and nothing else: dev-dependencies are
+# never part of a normal build, such as the desktop backend's or the
+# release package's.
+[dev-dependencies]
+nexus-verifier-sandbox = { path = ".", features = ["live-sandbox-harness"] }
+
+[features]
+# Verify a development (user-owned) toolchain tree against the embedded
+# manifest. Never production authority; enabled only for the live suite.
+development-toolchain = []
+# The live sandbox harness only: a helper at an arbitrary path (the build's
+# own helper binary), deterministic fault injection (the live panic
+# controls) and the extracted-package layout check. Never production
+# authority; only the dev-dependency above enables it.
+live-sandbox-harness = []
+
+[[test]]
+name = "phase2_live_sandbox"
+path = "tests/phase2_live_sandbox.rs"
+harness = false

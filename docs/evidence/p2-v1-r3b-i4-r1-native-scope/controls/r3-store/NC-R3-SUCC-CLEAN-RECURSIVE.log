@@ -1,0 +1,35 @@
+
+running 1 test
+test r308_an_unexpected_entry_refuses_the_cleanup ... FAILED
+
+failures:
+
+---- r308_an_unexpected_entry_refuses_the_cleanup stdout ----
+R308 an entry of the root: the candidate's state root holds more than step 2b makes
+R308 an entry in place of archive/: extra is not made by step 2b: the candidate is refused
+R308 a temporary in journals/: journals/ holds more than step 2b makes
+R308 a pool file beyond the pool: journals/ holds more than step 2b makes
+R308 a disposition: dispositions/ holds more than step 2b makes
+R308 a revoked entry: dispositions/revoked/ holds more than step 2b makes
+R308 an archive entry: archive/ holds more than step 2b makes
+R308 LOCK of another mode: LOCK is not the empty store-owned 0600 file step 2b makes
+R308 LOCK with bytes: LOCK is not the empty store-owned 0600 file step 2b makes
+R308 a directory of another mode: archive is not a root:root 0755 directory
+R308 a pool file owned by root: journals/j00000.journal is not a store-owned 0600 pool file within its size
+R308 a symbolic link for a directory: archive is not a root:root 0755 directory
+R308 a directory for a pool file: journals/j00000.journal is not a store-owned 0600 pool file within its size
+
+thread 'r308_an_unexpected_entry_refuses_the_cleanup' (1288577) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:11595:10:
+[successor-cleanup-recursive] a directory that is not empty: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r308_an_unexpected_entry_refuses_the_cleanup
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.11s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.00s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

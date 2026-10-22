@@ -1,0 +1,4 @@
+identities issued near the end of the range: [18446744073709551613, 18446744073709551614, 18446744073709551615, 0, 1]
+zero issued as an identity: true
+the first identity ever issued (1) issued again: true
+RESULT: the allocation wraps; it does reuse identities

@@ -1,0 +1,16 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run
+exit 0
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let edited = opened.scan().clone();
+    let validator = custody::store::disposition::StoreValidator::of(
+        &[0; 16],
+        &edited.level.incidents,
+        &edited.dispositions,
+    );
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.90s
+  Executable tests/r2_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/r2_api_probe-69a9f6c2d1a96f67)
+--- stdout ---

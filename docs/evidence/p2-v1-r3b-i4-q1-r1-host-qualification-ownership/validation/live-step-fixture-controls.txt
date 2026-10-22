@@ -1,0 +1,12 @@
+test_a_failed_observation_after_the_suite_fails_a_passing_suite (__main__.WorkflowLiveStep.test_a_failed_observation_after_the_suite_fails_a_passing_suite) ... ok
+test_a_failed_or_finding_gate_blocks_the_live_suite (__main__.WorkflowLiveStep.test_a_failed_or_finding_gate_blocks_the_live_suite) ... ok
+test_a_failed_suite_keeps_its_failure_and_is_still_observed (__main__.WorkflowLiveStep.test_a_failed_suite_keeps_its_failure_and_is_still_observed) ... ok
+test_a_missing_passed_count_fails_and_is_still_observed (__main__.WorkflowLiveStep.test_a_missing_passed_count_fails_and_is_still_observed) ... ok
+test_a_passing_suite_with_nothing_left_passes (__main__.WorkflowLiveStep.test_a_passing_suite_with_nothing_left_passes) ... ok
+test_each_pipeline_command_keeps_its_own_status (__main__.WorkflowLiveStep.test_each_pipeline_command_keeps_its_own_status) ... ok
+test_the_step_observes_only_through_the_harness_and_hides_no_error (__main__.WorkflowLiveStep.test_the_step_observes_only_through_the_harness_and_hides_no_error) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.231s
+
+OK

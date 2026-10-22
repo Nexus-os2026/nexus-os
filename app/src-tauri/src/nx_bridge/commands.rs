@@ -394,18 +394,15 @@ pub async fn nx_computer_use_screenshot() -> Result<NxScreenshot, String> {
     ))
 }
 
-/// Check computer-use system readiness: display server, capture, input.
+/// Phase Three G-INV-2: the readiness probe ran programs found on `PATH`
+/// (`which`) from open IPC. Phase Three readiness is the governed agent
+/// display's own status (`p3_status`); this probe is closed.
 #[command]
 pub async fn nx_computer_use_status() -> Result<ComputerUseStatus, String> {
-    let reqs = nexus_computer_use::capability::check_system_requirements();
-    Ok(ComputerUseStatus {
-        display_server: reqs.display_server,
-        capture_tool: reqs.capture_tool,
-        input_tool: reqs.input_tool,
-        capture_ready: reqs.all_capture_ready,
-        input_ready: reqs.all_input_ready,
-        safety_guard_active: true, // always active when computer-use is loaded
-    })
+    Err(crate::phase0_surface::closed(
+        "nx_computer_use_status",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[command]

@@ -1,0 +1,22 @@
+
+running 1 test
+test r321_r_revoke_applies_at_the_bound ... FAILED
+
+failures:
+
+---- r321_r_revoke_applies_at_the_bound stdout ----
+
+thread 'r321_r_revoke_applies_at_the_bound' (621195) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:12466:10:
+[revocation-capacity] at the bound: "revoked/ is at its bound"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r321_r_revoke_applies_at_the_bound
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 3.33s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.93s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

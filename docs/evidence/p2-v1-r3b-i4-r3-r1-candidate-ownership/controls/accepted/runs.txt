@@ -1,0 +1,27 @@
+checkout: /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a
+HEAD: 2fd42c7b000d87e13629c553ef04ca7558b81227
+HEAD tree: c46796f92a334bdcdf4e6c42be61c99b6940b39f
+targets: /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted (each step's own, empty before it)
+before status entries: 0
+i4r1-scope-controls exit=0 started=2026-10-03T12:56:17Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_scope_controls_r3r1.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i4r1-scope-controls --target-dir /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/i4r1-scope-controls
+after i4r1-scope-controls status entries: 0
+i4r1-api-guards exit=0 started=2026-10-03T12:59:11Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_api_guards_r3r1.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i4r1-api-guards --target-dir /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/i4r1-api-guards
+after i4r1-api-guards status entries: 0
+i4r1-normal-api-probes exit=0 started=2026-10-03T13:01:46Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/normal_api_probes.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/base-bb0dfec0 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/normal-api-probes-scratch /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i4r1-normal-api-probes --target-dir /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/i4r1-normal-api-probes
+after i4r1-normal-api-probes status entries: 0
+i4r1-source-guards exit=0 started=2026-10-03T13:02:51Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-r3-r1-candidate-ownership/scripts/accepted_source_guards_r3r1.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i4r1-source-guards.json
+after i4r1-source-guards status entries: 0
+custody-hashes exit=0 started=2026-10-03T13:02:51Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/custody_hashes.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a
+after custody-hashes status entries: 0
+r3-store-controls exit=0 started=2026-10-03T13:02:51Z :: env CARGO_TARGET_DIR=/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/r3-store python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/r3-store
+after r3-store-controls status entries: 0
+i2r1-rerun exit=0 started=2026-10-03T13:14:46Z :: env CARGO_TARGET_DIR=/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/i2r1 python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i2r1-rerun
+after i2r1-rerun status entries: 0
+r3-api-probes exit=0 started=2026-10-03T13:15:46Z :: env CARGO_TARGET_DIR=/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-accepted/r3-api python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/r3-api-probes
+after r3-api-probes status entries: 0
+r3-store-comparison exit=0 started=2026-10-03T13:16:59Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py store /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/store/summary.json /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/r3-store/summary.json
+after r3-store-comparison status entries: 0
+i2r1-comparison exit=0 started=2026-10-03T13:16:59Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/compare_i2r1.py /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/i2r1-rerun/summary.json /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/i2r1-rerun/summary.json
+after i2r1-comparison status entries: 0
+r3-api-comparison exit=0 started=2026-10-03T13:16:59Z :: python3 /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py api /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-a/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/api-probes/api_probes.json /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/accepted/r3-api-probes/api_probes.json
+after r3-api-comparison status entries: 0

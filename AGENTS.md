@@ -935,11 +935,11 @@ GitHub: Nexus-os2026/nexus-os
 |---|---|---|---|
 | Phase Zero — trust-boundary foundation | Complete, Linux support profile (Architect declaration 2026-09-29) | `rebuild/phase0-trust-boundary` = `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` | `evidence/phase0-closure` = `e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1` |
 | Phase One — governed coding workflow | Complete, Linux support profile (Architect declaration 2026-09-30) | `rebuild/phase1-governed-coding` = `14270a9a38770ac84456c1f812042d2967edec42` | `evidence/phase1-closure` = `c237937189b5977eaad01acad6a4c52bcce796cc` |
-| Phase Two | **Not started** | — | — |
+| Phase Two — governed verification execution | **In progress** (P2-IMPLEMENT, Linux support profile): implementation candidate on `implement/phase2-governed-verification`, under Architect review; not complete | — | — |
 
-- `main` is the public default branch. At this snapshot its base is `6f3d64360dd21aa8d717c3995c46e48f396148b9`: the frozen Phase One checkpoint plus post-completion status documentation and generated ACL schema/test hygiene. Those commits do not redefine the frozen checkpoint. Later Architect-approved commits may advance `main`; verify it with Git.
+- `main` is the public default branch. The Phase Two mission started from `main` = `e47bf65788247946eb8401138f57435e7c1680fc` (tree `1ea52b426ae859aaa1dadea0a0c8f1726e513376`): the frozen Phase One checkpoint plus post-completion status documentation, generated ACL schema/test hygiene and the Architect-authorized P2-ENTRY hardening integration. Those commits do not redefine the frozen checkpoint. Later Architect-approved commits may advance `main`; verify it with Git.
 - The P1→P2 deep local reality audit is complete and was accepted by the Architect for Phase Two architecture design.
-- Phase Two implementation remains gated on the Architect-required entry hardening and then on an explicit Architect-approved Phase Two mission. Finishing a hardening mission does not start Phase Two.
+- Phase Two is implemented under the Architect-approved P2-IMPLEMENT mission; its design record is `docs/security/phase2-governed-verification.md`. The implementation branch is a candidate only: it is not integrated, no Phase Two evidence or frozen ref exists, and only the Architect declares completion.
 
 ---
 
@@ -960,6 +960,7 @@ The four closure refs above (`rebuild/phase0-trust-boundary`, `evidence/phase0-c
 # 24. Supported Validation Profile
 
 - Linux is the supported validation profile for Phase Zero and Phase One.
+- Phase Two's sandboxed verification exists only on Linux x86_64 and only where every mandatory layer is available (unprivileged user namespaces, Landlock ABI ≥ 6, the seccomp allow-list, cgroup v2 user delegation through the systemd user manager, the packaged verifier toolchain and the installed helper). Anywhere else it is unavailable: it fails closed, with no degraded mode.
 - Windows and macOS portability validation is deferred. Linux success is not Windows or macOS proof, and no Phase Zero or Phase One security claim is made for them.
 - Part I §14 still applies to new code: do not add platform assumptions that would block the deferred portability work.
 

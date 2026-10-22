@@ -1,0 +1,2198 @@
+{
+  "model": "P2-V1-R3B-I3-P-R5 design model",
+  "source_baseline": "45898e05178a56efaadeb1f8f9ee7a0a521c72c9",
+  "r1_model_sha256": "17f606f2111aee1753b20874b2b16f15041abf4bae84178600ea83fb01705ac1",
+  "r2_model_sha256": "53b8dbb5da194d62da35178dd06c2c8f38dc0fb6c39076552fb74cb1a54934bc",
+  "r3_model_sha256": "31afe335be8faaeb7a02d31ce5463ea9f7a256f5d49e6af40ebfbfbbbbd8b678",
+  "r4_model_sha256": "f25d2a79fe1192befae21203017eb8b22d6495778c7aab88697836f2812af9ce",
+  "r1_reproduction": [
+    {
+      "id": "R1-A",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "loss with 3 acknowledged and none issued: ledger.failed=None, admission of the acknowledged start still permitted=True"
+    },
+    {
+      "id": "R1-B",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "conflict on acknowledged sequence 1: latched (1, 'different digest'), failure never delivered; R1 INV-4 (no sequence >= 1 acknowledged) contradicts 3 applied acknowledgements"
+    },
+    {
+      "id": "R1-C zero",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (0, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C out of range",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (17, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C foreign",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "latched (4, 'invalid submission'); never delivered; admission still permitted"
+    },
+    {
+      "id": "R1-C future",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "a submission for unissued sequence 7 stored silently"
+    },
+    {
+      "id": "R1-C beyond",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "conflict at 6 with 3 applied: records 4-6 pending forever, failure never delivered (ledger.failed=None)"
+    },
+    {
+      "id": "R1-D",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "ActionStarted acknowledged, reservation unadmitted, loss observed: admission permitted"
+    },
+    {
+      "id": "R1-E",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "append in flight when a conflict latched: durable 1 -> 2, acknowledged 2"
+    },
+    {
+      "id": "R1-F",
+      "finding": "F1",
+      "reproduced": true,
+      "observed": "loss during the claim leaves claim state 'None'; during the seal, seal state 'None': neither failed nor completed"
+    },
+    {
+      "id": "R1-F2",
+      "finding": "F2",
+      "reproduced": true,
+      "observed": "verifier inside maintenance: Busy; R1 model procedures took a store lock: False"
+    },
+    {
+      "id": "R1-F3",
+      "finding": "F3",
+      "reproduced": true,
+      "observed": "stale startup Ready on 10111213, fresh startup Ready on 20212223: two owners"
+    },
+    {
+      "id": "R1-F4a",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "after the link and the unlink, before the directory sync, F2 has one outcome (absent): a link already committed is not representable"
+    },
+    {
+      "id": "R1-F4b",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "make_lock synced ['store-a'] (not in the R1 text); pool files durable at creation without a sync step"
+    },
+    {
+      "id": "R1-F4c",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "clean pages cannot be reclaimed while the writer's descriptor is open"
+    },
+    {
+      "id": "R1-S8",
+      "finding": "8",
+      "reproduced": true,
+      "observed": "5000 orphan dispositions all read (5000); 5000 revoked entries all examined (5000); no aggregate bound"
+    }
+  ],
+  "r2_reproduction": [
+    {
+      "id": "R2-W-ASIS",
+      "finding": "composed (analysis)",
+      "reproduced": true,
+      "observed": "unchanged R2 model as is: startup Ready on store-b, but the claim Failed ((('ClaimSync',), 0)): its Worker rechecks identity (W5) through World.state = 'store-a', the first root. Design W5 and section 8.1 use the opened root's retained journals descriptor, so this is an unmodelled transition, not a design guard"
+    },
+    {
+      "id": "R2-W",
+      "finding": "composed",
+      "reproduced": true,
+      "observed": "pending before the second crash: [(21, 'PROVISION.tmp', True), (22, 'PROVISION.tmp', False), (22, 'PROVISION', True)]; startup Ready on store-b; acknowledged 3, admission Admitted; B journal UnsealedAction; after F2 a fresh startup was Ready on store-a with B's generation outside the decision in 10 of 14 outcomes {\"('ordered', 'PriorUnresolved', 'store-b', True)\": 2, \"('ordered', 'Ready', 'store-a', False)\": 4, \"('perdir', 'PriorUnresolved', 'store-b', True)\": 2, \"('perdir', 'Ready', 'store-a', False)\": 6}"
+    },
+    {
+      "id": "R2-P",
+      "finding": "composed",
+      "reproduced": true,
+      "observed": "after F2 a fresh startup is Unprovisioned in 10 of 14 outcomes (fail closed), yet the unpublished root's journal is UnsealedAction: R2 section 15.2's recovery premise ('the incomplete root holds no history') is false; following it with the R2 provisioning helper gives Ready on store-c with no incident"
+    }
+  ],
+  "r3_reproduction": [
+    {
+      "id": "R3-F4",
+      "finding": "F4",
+      "reproduced": true,
+      "observed": "R3's probe state is ['probe_pending']: no running/completed distinction. After the probe's transaction completed and a later commit aborted the journal, R3's fsync_file returns EIO; jbd2_complete_transaction returns 0 for a completed tid without testing the abort flag (journal.c:800-805), as the R4 model does (0). R3's touch() has no abort landing between ext4's and jbd2's handle tests either"
+    },
+    {
+      "id": "R3-F4-REACH",
+      "finding": "F4 (scope)",
+      "reproduced": true,
+      "observed": "over R3's 27 checks (27 pass), R3's fsync_file ran 3484 times and took the inaccurate aborted-journal branch 0 times: no R3 check result depended on it"
+    },
+    {
+      "id": "R3-PROFILE",
+      "finding": "section 5 (profile)",
+      "reproduced": true,
+      "observed": "R3's host model observes only ['bsize', 'frsize', 'lines', 'magic', 'mnt_id', 'page', 'protected', 'st_dev']: its opening decides the profile from the pinned mountinfo strings ('rw,relatime', 'rw,errors=remount-ro'), which omit the superblock's defaults (super.c:2949-2951), and has no journal location or kernel identity (R3: Ready with a claim). On the same mountinfo the R4 opening refuses an effective nobarrier (Unsupported: effective profile) and an external journal (Unsupported: journal not internal)"
+    }
+  ],
+  "r4_reproduction": [
+    {
+      "id": "R4-F2-WITNESS",
+      "finding": "F2 (A-S5)",
+      "reproduced": true,
+      "observed": "on the R4 model, activation certified with results [0, 0, 0, 0]; after a checkpoint whose flush fails (sites {('commit.c:152-154', 'ok'): 2, ('checkpoint.c:338-339', 'fail'): 1}) the journal is not aborted (False) and d1 survives a power loss: False (its transaction: committed, in the log False, home 'written', log durable True). A later commit's successful flush before the power loss keeps it (True). The witness is conditional: it holds for a volatile write-back cache that fails that flush and loses power before a later successful flush; it was derived from the sources and the model, not observed live"
+    },
+    {
+      "id": "R4-PATHS",
+      "finding": "F2 (scope)",
+      "reproduced": true,
+      "observed": "R4's JournalSim has none of ['device', 'fua', 'sb_plan', 'home_plan', 'dev_err']: it models neither the superblock's tail write and its failure, nor native or emulated FUA, nor a failed or incomplete home write, nor a device without a write cache. Its _tail_update moves the tail at once, so the abort's rewrite of the new tail (journal.c:2592-2595) and emulated FUA's later flush are outside it. R5's JournalSim adds them (design section 5.8)"
+    },
+    {
+      "id": "R4-FIXTURE",
+      "finding": "storage (scope)",
+      "reproduced": true,
+      "observed": "R4's fixture host is the device {'253:1': 'dm-1'}, a device-mapper device; R4's opening was Ready with a claim on it and observed nothing below the filesystem. On that device R5's opening refuses (Unsupported: storage not a direct NVMe namespace on PCI Express). R5's fixture is a partition of an NVMe namespace"
+    }
+  ],
+  "checks": [
+    {
+      "id": "C00",
+      "marker": "[golden-codec]",
+      "requirement": "D-9",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "50 golden vectors reproduced and decoded",
+      "restored": "PASS"
+    },
+    {
+      "id": "C01",
+      "marker": "[F1-volatile]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        1
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "after F1: K shows the record, D does not, locks released",
+      "restored": "PASS"
+    },
+    {
+      "id": "C02",
+      "marker": "[F1-F2-sync]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        2
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "without a sync the record is lost; after the startup sync it survives F2",
+      "restored": "PASS"
+    },
+    {
+      "id": "C03",
+      "marker": "[errseq-reopen]",
+      "requirement": "R1",
+      "r1_mission_items": [
+        3
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "new-description sync 0 is not a certificate; an unseen error refuses",
+      "restored": "PASS"
+    },
+    {
+      "id": "C04",
+      "marker": "[tear-containment]",
+      "requirement": "R2, D-10",
+      "r1_mission_items": [
+        4
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "containment holds for records and seal; tear classes ['AbandonedClaim', 'MalformedJournal', 'UnsealedAction', 'UnsealedNoAction', 'Unused']",
+      "restored": "PASS"
+    },
+    {
+      "id": "C05",
+      "marker": "[lock-retained]",
+      "requirement": "R3",
+      "r1_mission_items": [
+        5
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "locks outlive recorder failure; 3 descriptors survive the claim; after exit/eviction: closed Ready/Ready, seal failed Ready/PriorUnresolved, claim failed Ready/Ready",
+      "restored": "PASS"
+    },
+    {
+      "id": "C06",
+      "marker": "[busy-before-sync]",
+      "requirement": "R4",
+      "r1_mission_items": [
+        6
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "Busy before any journal operation; a held journal lock refuses as Live untouched",
+      "restored": "PASS"
+    },
+    {
+      "id": "C07",
+      "marker": "[dup-bounded]",
+      "requirement": "R5",
+      "r1_mission_items": [
+        7
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "6 records x 201 submissions: one acknowledgement each, no growth",
+      "restored": "PASS"
+    },
+    {
+      "id": "C08",
+      "marker": "[fatal-latched]",
+      "requirement": "R5, D-5",
+      "r1_mission_items": [
+        8
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "failure and loss (drop guard or join handle) reach the core after a stall; no ack at or beyond",
+      "restored": "PASS"
+    },
+    {
+      "id": "C09",
+      "marker": "[late-uncertain]",
+      "requirement": "R6, D-3",
+      "r1_mission_items": [
+        9
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "18 restart images refused, no identity invented",
+      "restored": "PASS"
+    },
+    {
+      "id": "C10",
+      "marker": "[exact-bytes]",
+      "requirement": "R7",
+      "r1_mission_items": [
+        10
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "every byte of header, seal and record block checked; 21 checksum-valid header variants and 17 non-canonical texts refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C11",
+      "marker": "[archive-binding]",
+      "requirement": "R9",
+      "r1_mission_items": [
+        11
+      ],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "binding preserved across archival; a changed byte made the disposition stale",
+      "restored": "PASS"
+    },
+    {
+      "id": "C12",
+      "marker": "[admin-crash]",
+      "requirement": "R9, D-7, D-8, F4",
+      "r1_mission_items": [
+        12
+      ],
+      "r2_mission_items": [
+        12
+      ],
+      "r3_mission_items": [
+        10
+      ],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "outcomes checked: P-ARCH 67, P-ARCH recovered 32, P-DISP 67, P-DISP recovered 32, P-PROV 338, P-RECYCLE 99, P-RECYCLE recovered 66, P-REQUALIFY 52, P-RETIRE 52, P-RETIRE refused 1, P-REVOKE 30, P-SUCCESSOR 400",
+      "restored": "PASS"
+    },
+    {
+      "id": "C13",
+      "marker": "[grammar-conformance]",
+      "requirement": "R6",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "13 fixtures, 110 prefixes accepted; 32 mutations rejected by their rules",
+      "restored": "PASS"
+    },
+    {
+      "id": "C14",
+      "marker": "[safe-open]",
+      "requirement": "R4, R8, D-6",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "FIFO and symlink refused unopened; 8 mount cases refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C15",
+      "marker": "[ack-durable]",
+      "requirement": "R1, R5, F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "12 fault scenarios: every acknowledgement durable; none at or after a failure",
+      "restored": "PASS"
+    },
+    {
+      "id": "C16",
+      "marker": "[no-false-resolution]",
+      "requirement": "R6, D-3",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "26078 restart images over 13 fixtures; refusals without native work: 11132 (disclosed)",
+      "restored": "PASS"
+    },
+    {
+      "id": "C17",
+      "marker": "[arith-bounds]",
+      "requirement": "R7, D-2",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "claim exhaustion, configuration, size, PROVISION, incident and gap bounds refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C18",
+      "marker": "[fatal-total]",
+      "requirement": "F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "15 fatal scenarios: admission refused at once, acknowledgements kept, failures only at issued records",
+      "restored": "PASS"
+    },
+    {
+      "id": "C19",
+      "marker": "[admission-fence]",
+      "requirement": "F1",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        5
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "27 interleavings: no admission or publication after the latch",
+      "restored": "PASS"
+    },
+    {
+      "id": "C20",
+      "marker": "[session-verify]",
+      "requirement": "F2",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        7,
+        8
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "verification inside the session: no lock request, competitors excluded, nested rewrite covered",
+      "restored": "PASS"
+    },
+    {
+      "id": "C21",
+      "marker": "[provision-selection]",
+      "requirement": "F3",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        9,
+        10
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "post-lock revalidation: succession, retire, requalify, recycle, bounded",
+      "restored": "PASS"
+    },
+    {
+      "id": "C22",
+      "marker": "[metadata-schedules]",
+      "requirement": "F4",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        11,
+        12
+      ],
+      "r3_mission_items": [
+        7
+      ],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "8 procedures: computed crash matrix equals section 15.2; link durable before sync, reclaim with open descriptors represented",
+      "restored": "PASS"
+    },
+    {
+      "id": "C23",
+      "marker": "[step-parity]",
+      "requirement": "F4",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        13
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "11 procedures and recoveries: operations, order and crash points match section 13",
+      "restored": "PASS"
+    },
+    {
+      "id": "C24",
+      "marker": "[aggregate-bounds]",
+      "requirement": "Section 8",
+      "r1_mission_items": [],
+      "r2_mission_items": [
+        14
+      ],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "bounded: dispositions, revoked, archive, partial report, retirement uses the complete set",
+      "restored": "PASS"
+    },
+    {
+      "id": "C25",
+      "marker": "[durable-activation]",
+      "requirement": "R3 section 4",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        12,
+        13
+      ],
+      "r4_mission_items": [
+        4,
+        6
+      ],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "activation before every claim: successor witness: 3 second crashes; provisioning witness: 3 second crashes; EIO at the PROVISION directory; EINTR four times; silent journal abort; emergency read-only; established store; completed succession; EINTR twice retried; read-only superblock; identity; F1 during activation; F2 during activation; verifier read-only; session activation; PROVISION directory; state root a mount point; stale reader and competing owner; replacement during activation",
+      "restored": "PASS"
+    },
+    {
+      "id": "C26",
+      "marker": "[composed-recovery]",
+      "requirement": "R3 sections 5, 6",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [
+        1,
+        2,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "r4_mission_items": [
+        11
+      ],
+      "r5_mission_items": [
+        10,
+        11
+      ],
+      "baseline": "PASS",
+      "detail": "101 administrative prefixes, 1135 first crashes, 566 runs with dependent work, 1860 second crashes: every acknowledged, unsealed generation discoverable or explicitly refused",
+      "restored": "PASS"
+    },
+    {
+      "id": "C27",
+      "marker": "[supported-profile]",
+      "requirement": "R4 sections 5, 7",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "r5_mission_items": [],
+      "baseline": "PASS",
+      "detail": "the qualified profile activated and claimed; 13 unsupported, unknown, contradictory or unqualified profiles refused before any claim by owners, the verifier and sessions; a profile changed during activation refused at A4; qualification refuses fast_commit, an external journal and no journal; the store uid cannot observe the superblock features, which the Owner keeps (section 13.2); a kernel update refused until re-qualification, which never accepts an unsupported profile",
+      "restored": "PASS"
+    },
+    {
+      "id": "C28",
+      "marker": "[activation-proof]",
+      "requirement": "R4 sections 6, 7",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [
+        5,
+        6,
+        7,
+        10
+      ],
+      "r5_mission_items": [
+        8,
+        11
+      ],
+      "baseline": "PASS",
+      "detail": "50 initial journal states, 259200 activation runs: 51820 certified, 207380 refused; 32460 certified after a late abort; 621840 later continuations and power losses kept every certified dependency; 4 windows through the whole model",
+      "restored": "PASS"
+    },
+    {
+      "id": "C29",
+      "marker": "[journal-conformance]",
+      "requirement": "R4 sections 4, 7",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [
+        8,
+        9,
+        10
+      ],
+      "r5_mission_items": [
+        9,
+        11
+      ],
+      "baseline": "PASS",
+      "detail": "fsync: completed 0, running EIO, emergency EROFS; 54024 runs with the abort before the probe's test returned EROFS; 32460 reached the completed branch with the journal aborted and returned 0, each abort after the probe's test; the commit.c:775-778 and 883-886 flushes never ran; on a volatile write-back cache, checkpoint.c:338-339, commit.c:775-778 and commit.c:883-886: a failed flush is discarded, the journal does not abort, and a committed operation is lost at power loss; R4's counterexample, retained: on a volatile write-back cache, activation certified with every result 0, then a failed checkpoint flush; the dependency is lost at power loss and no process sees an error. Such storage is not admitted (C30); 8 paths on a volatile cache, each with its own outcome: a discarded flush failure loses history unaborted; a checked superblock failure aborts but its rewrite can still carry the new tail; emulated FUA's later flush, or any later successful flush, keeps it; on admitted storage: no flush sent and no injected failure consumed; a failed home write aborts before a new tail is set, so the abort writes the old one; a failed tail write aborts and the abort rewrites the new one; a write in flight holds the tail; a failed commit record aborts and its waiting sync returns EIO; the next handle forces emergency read-only; an abort never moves the tail",
+      "restored": "PASS"
+    },
+    {
+      "id": "C30",
+      "marker": "[storage-qualification]",
+      "requirement": "R5 sections 5, 6, 7",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [
+        1,
+        2,
+        3,
+        4,
+        7
+      ],
+      "baseline": "PASS",
+      "detail": "the qualified stable-completion fixture activated, claimed, acknowledged and admitted; prior history discoverable; a disposition and a retirement took effect; an owner claimed on a completed successor; 16 volatile, contradictory, unreadable, stacked, remote, virtual or changed storage configurations refused before any claim by owners, the verifier and sessions, with no admission made; a PROVISION without a storage qualification, or with another class, refused as Invalid; an earlier opening's admission and a forged one refused at the claim; no admission from a constructor without the key or from decoded bytes; storage changed during activation refused at A4; re-qualification never admits a volatile cache; qualification refuses a virtual machine guest and a controller reporting a volatile cache; the store uid observes neither (design section 5.9); a firmware update outside any procedure: the running owner kept its custody, later openings and sessions refused with the history intact, and re-qualification brought the generation back into the decision",
+      "restored": "PASS"
+    },
+    {
+      "id": "C31",
+      "marker": "[stable-completion]",
+      "requirement": "R5 sections 4, 5, 7, 8",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [
+        5,
+        6,
+        8,
+        12
+      ],
+      "baseline": "PASS",
+      "detail": "6 storage events after a certified activation on admitted storage, R4's witness sequence included: every dependency kept at power loss; a write the device reported failed, at each of six records: latched, never acknowledged; 33 steps of a run: no record acknowledged before its write completed; the whole model's checkpoint agrees with JournalSim on 12 paths; necessity of A-S1: on a cache the kernel registered as absent, the opening admits what it observes, and after a checkpoint and a power loss the successor's acknowledged generation is lost with no error reported",
+      "restored": "PASS"
+    },
+    {
+      "id": "C32",
+      "marker": "[storage-composed]",
+      "requirement": "R5 sections 7, 8",
+      "r1_mission_items": [],
+      "r2_mission_items": [],
+      "r3_mission_items": [],
+      "r4_mission_items": [],
+      "r5_mission_items": [
+        3,
+        7,
+        10
+      ],
+      "baseline": "PASS",
+      "detail": "60 administrative prefixes and process death, 240 openings on 4 hosts: 35 runs with dependent work on admitted storage, 849 second crashes after 5 storage events, every acknowledged, unsealed generation discoverable or explicitly refused; 261 second crashes after a loss of qualification, each refused with the history kept; on storage that is not admitted, no dependent work: 75 Unprovisioned, 105 Unsupported",
+      "restored": "PASS"
+    }
+  ],
+  "r2_mission_items": {
+    "1": "worker loss with no pending or unissued record",
+    "2": "loss between durable reservation and admission",
+    "3": "an acknowledged-sequence conflict",
+    "4": "zero, foreign, future and out-of-range submissions",
+    "5": "fatal signal versus publication and admission ordering",
+    "6": "unexpected acknowledgement outcomes",
+    "7": "lock-aware verification without lock conversion or reacquisition",
+    "8": "exclusion of independent competitors during maintenance",
+    "9": "PROVISION replacement between read and lock",
+    "10": "stale predecessor startup after successor publication",
+    "11": "metadata persistence before explicit directory sync",
+    "12": "administrative fault points with the corrected schedules",
+    "13": "protocol and model durability-step parity",
+    "14": "bounded aggregate scanning and reporting"
+  },
+  "r3_mission_items": {
+    "1": "the root-changing witness: a successor visible but not durable, dependent work, power loss",
+    "2": "the initial-provisioning variant; an absent selection fails closed and never permits a fresh replacement",
+    "3": "successful activation of fully established stores and completed transitions",
+    "4": "activation failure before any claim: EIO, EINTR, emergency read-only, read-only, identity",
+    "5": "failure between persistence steps: process death or power loss during activation",
+    "6": "stale readers and competing owners",
+    "7": "persistence before an explicit sync and after it, under the ordered and per-directory families",
+    "8": "persistence domains: one filesystem required and verified; independent directories over-approximated",
+    "9": "a second crash after dependent records became durable",
+    "10": "safe conservative refusals and their recoveries",
+    "11": "every administrative procedure composed with dependent work",
+    "12": "a silent journal commit failure before activation (the certification probe)",
+    "13": "the read-only verifier never activates; a maintenance session activates before verifying"
+  },
+  "r4_mission_items": {
+    "1": "the supported profile (internal journal, data=ordered, barriers, no fast or asynchronous commits, normal journal loading); each unsupported profile refused before the claim",
+    "2": "the profile established from the effective option listing, the journal's location and the qualified kernel; never from an absent string, a version prefix or an attestation",
+    "3": "unknown, contradictory or unqualified profile information refused; an unqualified profile cannot authorize from a claimed feature string",
+    "4": "a qualified profile activates; established stores claim and work; completed successions work",
+    "5": "activation's dependencies established durable across the transaction windows: running, committing or completed; an abort before, inside or after the probe's handle start",
+    "6": "a failed dependency persistence never becomes activation, even behind later successes",
+    "7": "a harmless late error is not mislabelled as lost history",
+    "8": "the completed-transaction return of jbd2_complete_transaction represented",
+    "9": "discarded flush statuses never replaced by invented aborts; the checkpoint flush shown to need A-S5",
+    "10": "checkpoint and log-tail interactions within the declared bounds",
+    "11": "every R3 composed scenario preserves discoverability or refuses"
+  },
+  "r5_mission_items": {
+    "1": "a qualified stable-completion fixture activates; ordinary claims, records and acknowledgements work",
+    "2": "completed succession works; prior unresolved history stays discoverable; disposition and retirement follow the existing authority",
+    "3": "volatile-completion storage is not admitted; unknown or contradictory storage refuses before any claim; an unsupported configuration gets no activation token",
+    "4": "a spoofed or stale qualification cannot authorize; decoding bytes manufactures no verified qualification",
+    "5": "a reported write failure never becomes an acknowledgement",
+    "6": "an incomplete write never becomes a durable record",
+    "7": "a loss of qualification discards no existing native custody or history",
+    "8": "on admitted storage R4's witness cannot lose required history: the completed home writes are stable, or a failure prevents the discard",
+    "9": "on a volatile cache the paths stay separate (a discarded flush, a checked superblock failure, native FUA, emulated FUA, a later flush); no abort invented; R4's witness retained",
+    "10": "composed administrative, process-death, startup, dependent-work and second-crash scenarios with storage events",
+    "11": "R4's 30 checks and 61 controls retained; each domain change documented",
+    "12": "stable completion shown necessary: a volatile cache the kernel registered as absent loses history undetected"
+  },
+  "negative_controls": [
+    {
+      "id": "NC01",
+      "target": "C01",
+      "restores": "process death makes kernel-visible bytes durable (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[F1-volatile] process death made a pending record durable",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC02",
+      "target": "C02",
+      "restores": "startup reports evidence preserved without syncing",
+      "result": "CAUGHT",
+      "assertion": "[F1-F2-sync] a report of preserved evidence did not survive F2",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC03",
+      "target": "C03",
+      "restores": "a new description's sync treated as certifying visible records",
+      "result": "CAUGHT",
+      "assertion": "[errseq-reopen] the report certified a record that is not durable",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC04",
+      "target": "C04",
+      "restores": "first-candidate geometry: 128-byte slots in shared pages, seal in block 0",
+      "result": "CAUGHT",
+      "assertion": "[tear-containment] writing record 2 altered durable data: ('garbage', 4096)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC05a",
+      "target": "C05",
+      "restores": "the recorder thread owns the lock descriptions (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[lock-retained] the store lock was released by recorder failure",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC05b",
+      "target": "C05",
+      "restores": "the store-lock description duplicated into the worker, which unlocks",
+      "result": "CAUGHT",
+      "assertion": "[lock-retained] the store lock was released by recorder failure",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC06",
+      "target": "C06",
+      "restores": "startup syncs and reads journals before locking (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[busy-before-sync] journal touched before the lock: [('rival', 'open', 'j00000.journal'), ('rival', 'fdatasync', 'j00000.journal'), ('rival', 'pread', 'j00000.journal')]",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC07",
+      "target": "C07",
+      "restores": "bounded submission queue with re-acknowledgement (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[dup-bounded] the owner would block on submission",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC08",
+      "target": "C08",
+      "restores": "failure delivered as a message on a bounded event queue (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-latched] the core never learned of the failure at record 6",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC09",
+      "target": "C09",
+      "restores": "refuse only when recorded outstanding work exists",
+      "result": "CAUGHT",
+      "assertion": "[late-uncertain] F1: restart permitted with a late owner held",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC10a",
+      "target": "C10",
+      "restores": "header reserved bytes unchecked",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] header reserved byte 60: valid",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC10b",
+      "target": "C10",
+      "restores": "seal reserved bytes and tail unchecked (first candidate's unassigned bytes)",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] seal byte 160 unchecked",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC10c",
+      "target": "C10",
+      "restores": "record-block padding unchecked",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] record byte 77 unchecked",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC10d",
+      "target": "C10",
+      "restores": "checksum-valid invalid header taken as an abandoned claim (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] header reserved byte 60 classified AbandonedClaim",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC10e",
+      "target": "C10",
+      "restores": "non-canonical decimals accepted in text",
+      "result": "CAUGHT",
+      "assertion": "[exact-bytes] disposition text accepted with leading zero",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC11a",
+      "target": "C11",
+      "restores": "binding includes the file location (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[archive-binding] the binding depends on the file location",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC11b",
+      "target": "C11",
+      "restores": "binding ignores the content",
+      "result": "CAUGHT",
+      "assertion": "[archive-binding] the old disposition must be visible as stale",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC12a",
+      "target": "C12",
+      "restores": "temporary disposition names read as dispositions",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] a disposition took effect without its final name (F1 2)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC12b",
+      "target": "C12",
+      "restores": "a PROVISION inode mismatch ignored",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] a replaced pool file was accepted (F1 after step 4)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC12c",
+      "target": "C12",
+      "restores": "retirement without preconditions hides pool claims",
+      "result": "CAUGHT",
+      "assertion": "[admin-crash] retirement hid an unresolved generation (Ready)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC13",
+      "target": "C13",
+      "restores": "grammar rule G16 (verdict iff closure) removed",
+      "result": "CAUGHT",
+      "assertion": "[grammar-conformance] mutation 'Failed verdict without a closure' gave None, expected G16",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC14a",
+      "target": "C14",
+      "restores": "untrusted entries opened in blocking mode before the type check",
+      "result": "CAUGHT",
+      "assertion": "[safe-open] startup blocked opening a FIFO",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC14b",
+      "target": "C14",
+      "restores": "ext4 decided by the shared magic alone (first candidate)",
+      "result": "CAUGHT",
+      "assertion": "[safe-open] ext3 with the shared magic: Ready",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC15a",
+      "target": "C15",
+      "restores": "durable published before the sync",
+      "result": "CAUGHT",
+      "assertion": "[ack-durable] clean: record 1 acknowledged before it was durable",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC15b",
+      "target": "C15",
+      "restores": "sync retried after EIO",
+      "result": "CAUGHT",
+      "assertion": "[ack-durable] sync EIO at record 1: record 1 acknowledged before it was durable",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC16",
+      "target": "C16",
+      "restores": "a visible RunEnded taken as resolution",
+      "result": "CAUGHT",
+      "assertion": "[no-false-resolution] T7 {'lazy': False} at native+i1 (F1): restart permitted with ['i1'] outstanding as UnsealedAction",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC17",
+      "target": "C17",
+      "restores": "claim counter unbounded",
+      "result": "CAUGHT",
+      "assertion": "[arith-bounds] claim after 2^63 gave Ready",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18a",
+      "target": "C18",
+      "restores": "no store admission gate: admission continues after a fatal condition (R1)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] A/D worker loss: admission after the fatal condition was not refused",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18b",
+      "target": "C18",
+      "restores": "R1 failure targeting: the cause's own sequence, delivered only at that position",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] B conflict on an acknowledged record: failure delivered at None (None), expected 4",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18c",
+      "target": "C18",
+      "restores": "a submission for an unissued future sequence accepted silently (R1)",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] C future: admission after the fatal condition was not refused",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18d",
+      "target": "C19",
+      "restores": "publication after the fatal latch (R1)",
+      "result": "CAUGHT",
+      "assertion": "[admission-fence] publication after the latch (schedule [0, 0, 1, 0])",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18e",
+      "target": "C18",
+      "restores": "an unexpected acknowledgement outcome ignored",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] unexpected ack: None",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC18f",
+      "target": "C18",
+      "restores": "record_failed for an unissued record counted as delivered",
+      "result": "CAUGHT",
+      "assertion": "[fatal-total] A/D worker loss: a failure was reported without a real record",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC19",
+      "target": "C19",
+      "restores": "a health check followed by an unprotected admission call",
+      "result": "CAUGHT",
+      "assertion": "[admission-fence] an admission linearized after the fatal latch (schedule [0, 1, 0, 0])",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20a",
+      "target": "C20",
+      "restores": "in-session verification requests a new shared lock (R1 workflow)",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] in-session verification did not run (Busy)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20b",
+      "target": "C20",
+      "restores": "in-session verification converts the session's lock to shared",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] a standalone verifier was not excluded during maintenance (Ready)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20c",
+      "target": "C20",
+      "restores": "the session releases its lock around verification",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] an owner started while the session released its lock",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20d",
+      "target": "C20",
+      "restores": "a Busy verification taken as success",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] in-session verification did not run (Ready)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20e",
+      "target": "C20",
+      "restores": "maintenance authority asserted by a flag instead of the retained lock",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] verification without the retained lock was not refused",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC20f",
+      "target": "C20",
+      "restores": "in-session verification skipped: an earlier report reused",
+      "result": "CAUGHT",
+      "assertion": "[session-verify] verify-after inside the same session: Ready",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC21a",
+      "target": "C21",
+      "restores": "no post-lock revalidation of the PROVISION selection (R1)",
+      "result": "CAUGHT",
+      "assertion": "[provision-selection] a stale selection regained authority: Ready 10111213",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC21b",
+      "target": "C21",
+      "restores": "revalidation through the descriptor kept from selection",
+      "result": "CAUGHT",
+      "assertion": "[provision-selection] a stale selection regained authority: Ready 10111213",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC22a",
+      "target": "C22",
+      "restores": "directory entries durable only through fsync_dir (R1 model)",
+      "result": "CAUGHT",
+      "assertion": "[metadata-schedules] a link durable before the directory sync is not represented: {'F1': {'published'}, 'ordered': {'blocks'}, 'perdir': {'blocks'}}",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC22b",
+      "target": "C22",
+      "restores": "no page reclaim while a descriptor is open (R1 model)",
+      "result": "CAUGHT",
+      "assertion": "[metadata-schedules] clean pages must be reclaimable while a descriptor is open",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC23",
+      "target": "C23",
+      "restores": "an undocumented directory sync in recycling (a hidden model-only step)",
+      "result": "CAUGHT",
+      "assertion": "[step-parity] P-RECYCLE: modelled operations differ from the protocol: [('13.8/3', 'fsync_dir', 'provdir')]",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC24a",
+      "target": "C24",
+      "restores": "enumeration bounds checked only after examining the entries",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] dispositions: 4097 entries gave Invalid disposition 0000000000000000000000000000000000000000000000000000000000000000.disposition type",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC24b",
+      "target": "C24",
+      "restores": "a startup authorized from the truncated report",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] a startup decided from the truncated report: Ready partial=True",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC24c",
+      "target": "C24",
+      "restores": "retirement preconditions evaluated on the truncated report",
+      "result": "CAUGHT",
+      "assertion": "[aggregate-bounds] retirement from a partial report hid an incident (Ready)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-VISIBLE",
+      "target": "C25",
+      "restores": "a freshly revalidated, visible selection treated as activated",
+      "result": "CAUGHT",
+      "assertion": "[durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-ORDER",
+      "target": "C25",
+      "restores": "claim, acknowledgement and admission before the activation",
+      "result": "CAUGHT",
+      "assertion": "[durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-ERROR",
+      "target": "C25",
+      "restores": "a failed or uncertain activation sync treated as success",
+      "result": "CAUGHT",
+      "assertion": "[durable-activation] EIO at the PROVISION directory, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-PROBE",
+      "target": "C25",
+      "restores": "no certification probe: a sync returning 0 after a silent commit failure trusted",
+      "result": "CAUGHT",
+      "assertion": "[durable-activation] silent journal abort, F2 ('ordered', 23) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-REVALIDATE",
+      "target": "C25",
+      "restores": "the identity and selection revalidation around activation omitted",
+      "result": "CAUGHT",
+      "assertion": "[durable-activation] replacement during activation, F1: Ready on store-c with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-COMPOSE",
+      "target": "C26",
+      "restores": "the R2 protocol: no activation, and a fresh root provisioned after Unprovisioned",
+      "result": "CAUGHT",
+      "assertion": "[composed-recovery] P-PROV prefix 25, first F1, second F2 ('ordered', 10) old: Ready on store-fresh with the acknowledged, unsealed generation of store-a outside the selected history",
+      "snapshot_checks_under_mutant": [
+        [
+          "C12",
+          "PASS"
+        ],
+        [
+          "C20",
+          "PASS"
+        ],
+        [
+          "C21",
+          "PASS"
+        ],
+        [
+          "C22",
+          "PASS"
+        ]
+      ]
+    },
+    {
+      "id": "NC-PROF-JOURNAL",
+      "target": "C27",
+      "restores": "an external journal accepted: the journal's location never checked",
+      "result": "CAUGHT",
+      "assertion": "[supported-profile] an external journal: the owner got Ready, not a refusal before the claim",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-PROF-MODE",
+      "target": "C27",
+      "restores": "an excluded mode in the effective listing accepted (data=writeback, nobarrier, journal_async_commit, norecovery)",
+      "result": "CAUGHT",
+      "assertion": "[supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ACT-UNQUALIFIED",
+      "target": "C27",
+      "restores": "an unqualified profile authorizes: the profile taken from the pinned mountinfo strings and the attestation, the kernel never compared (R3)",
+      "result": "CAUGHT",
+      "assertion": "[supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-PROF-GUARD",
+      "target": "C27",
+      "restores": "the effective profile not checked again after the syncs (A4)",
+      "result": "CAUGHT",
+      "assertion": "[supported-profile] a profile changed during activation was certified (Ready)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-PROOF-ORDER",
+      "target": "C28",
+      "restores": "the probe before the directory syncs",
+      "result": "CAUGHT",
+      "assertion": "[activation-proof] initial ('d1', 'd2'), gaps (None, None, 'bg-ok', None), abort in the probe's handle True, waits ok: certified with a dependency in a failed transaction ([0, 0, 0, 0])",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-FSYNC-COMPLETED",
+      "target": "C29",
+      "restores": "R3's fsync model: every aborted, unnoticed journal reported as EIO, whatever the state of the inode's transaction",
+      "result": "CAUGHT",
+      "assertion": "[journal-conformance] fsync of a completed transaction after an abort returned EIO; jbd2_complete_transaction returns 0 untested (journal.c:800-805)",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-ERR-DETECTED",
+      "target": "C29",
+      "restores": "a discarded flush status treated as detected: an invented abort at an unchecked flush site",
+      "result": "CAUGHT",
+      "assertion": "[journal-conformance] checkpoint.c:338-339: a discarded flush status became an abort",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-VOLATILE",
+      "target": "C30",
+      "restores": "a volatile-completion profile admitted as stable: queue/write_cache alone decides, so a write to it hides a volatile cache",
+      "result": "CAUGHT",
+      "assertion": "[storage-qualification] a volatile cache hidden by a write to queue/write_cache (write through, fua 1): the owner got Ready, not a refusal before the claim with no admission",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-CLAIM",
+      "target": "C30",
+      "restores": "an unverified storage claim or a stale qualification treated as authority: the identity PROVISION claims taken in place of the one observed, and any admission object accepted at the claim",
+      "result": "CAUGHT",
+      "assertion": "[storage-qualification] another controller (serial): the owner got Ready, not a refusal before the claim with no admission",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-COMPLETION",
+      "target": "C31",
+      "restores": "durability published before the operation completes: a home write still in flight counted as complete, so the tail passes it",
+      "result": "CAUGHT",
+      "assertion": "[stable-completion] admitted storage: a home write still in flight: a certified dependency lost at power loss on admitted storage",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-ERROR",
+      "target": "C31",
+      "restores": "a reported write error converted into success: the sync returns 0 for a write the device reported failed, and the record is acknowledged",
+      "result": "CAUGHT",
+      "assertion": "[stable-completion] record 1 acknowledged although the device reported the write of record 1 failed",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-TAIL",
+      "target": "C31",
+      "restores": "required journal history discarded without durable home data or a retained log copy: the tail moves past a failed home write",
+      "result": "CAUGHT",
+      "assertion": "[stable-completion] admitted storage: a home write fails: a certified dependency lost at power loss on admitted storage",
+      "snapshot_checks_under_mutant": []
+    },
+    {
+      "id": "NC-STORAGE-COMPOSED",
+      "target": "C32",
+      "restores": "the unsafe path restored: storage admitted on the Owner's attestation (A-S5, R4's domain), a volatile write-back cache included",
+      "result": "CAUGHT",
+      "assertion": "[storage-composed] P-SUCCESSOR prefix 31, a volatile write-back cache, a checkpoint; any flush sent fails, second F2 ('ordered', 35) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "snapshot_checks_under_mutant": [
+        [
+          "C25",
+          "PASS"
+        ],
+        [
+          "C26",
+          "PASS"
+        ],
+        [
+          "C27",
+          "PASS"
+        ],
+        [
+          "C28",
+          "PASS"
+        ]
+      ]
+    }
+  ],
+  "crash_matrix": {
+    "P-PROV": [
+      [
+        0,
+        21,
+        [
+          "unprovisioned"
+        ],
+        [
+          "unprovisioned"
+        ],
+        []
+      ],
+      [
+        22,
+        22,
+        [
+          "fresh"
+        ],
+        [
+          "fresh",
+          "unprovisioned"
+        ],
+        []
+      ],
+      [
+        23,
+        23,
+        [
+          "fresh"
+        ],
+        [
+          "fresh"
+        ],
+        []
+      ]
+    ],
+    "P-DISP": [
+      [
+        0,
+        0,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        []
+      ],
+      [
+        1,
+        4,
+        [
+          "maintenance"
+        ],
+        [
+          "blocks",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "published"
+        ],
+        [
+          "blocks",
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        6,
+        6,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ]
+    ],
+    "P-REVOKE": [
+      [
+        0,
+        0,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ],
+      [
+        1,
+        1,
+        [
+          "blocks"
+        ],
+        [
+          "blocks",
+          "published"
+        ],
+        [
+          "invalid"
+        ]
+      ],
+      [
+        2,
+        2,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        [
+          "invalid"
+        ]
+      ],
+      [
+        3,
+        3,
+        [
+          "blocks"
+        ],
+        [
+          "blocks"
+        ],
+        []
+      ]
+    ],
+    "P-ARCH": [
+      [
+        0,
+        0,
+        [
+          "published"
+        ],
+        [
+          "published"
+        ],
+        []
+      ],
+      [
+        1,
+        4,
+        [
+          "maintenance"
+        ],
+        [
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "archived"
+        ],
+        [
+          "archived",
+          "maintenance",
+          "published"
+        ],
+        []
+      ],
+      [
+        6,
+        6,
+        [
+          "archived"
+        ],
+        [
+          "archived"
+        ],
+        []
+      ]
+    ],
+    "P-RECYCLE": [
+      [
+        0,
+        0,
+        [
+          "archived"
+        ],
+        [
+          "archived"
+        ],
+        []
+      ],
+      [
+        1,
+        3,
+        [
+          "maintenance"
+        ],
+        [
+          "archived",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "lost"
+        ],
+        [
+          "archived",
+          "lost",
+          "maintenance"
+        ],
+        []
+      ],
+      [
+        5,
+        8,
+        [
+          "lost"
+        ],
+        [
+          "lost"
+        ],
+        []
+      ],
+      [
+        9,
+        9,
+        [
+          "recycled"
+        ],
+        [
+          "lost",
+          "recycled"
+        ],
+        []
+      ],
+      [
+        10,
+        10,
+        [
+          "recycled"
+        ],
+        [
+          "recycled"
+        ],
+        []
+      ]
+    ],
+    "P-RETIRE": [
+      [
+        0,
+        3,
+        [
+          "bound 0"
+        ],
+        [
+          "bound 0"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "bound 1"
+        ],
+        [
+          "bound 0",
+          "bound 1"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "bound 1"
+        ],
+        [
+          "bound 1"
+        ],
+        []
+      ]
+    ],
+    "P-REQUALIFY": [
+      [
+        0,
+        3,
+        [
+          "unsupported"
+        ],
+        [
+          "unsupported"
+        ],
+        []
+      ],
+      [
+        4,
+        4,
+        [
+          "revision 2"
+        ],
+        [
+          "revision 2",
+          "unsupported"
+        ],
+        []
+      ],
+      [
+        5,
+        5,
+        [
+          "revision 2"
+        ],
+        [
+          "revision 2"
+        ],
+        []
+      ]
+    ],
+    "P-SUCCESSOR": [
+      [
+        0,
+        27,
+        [
+          "predecessor"
+        ],
+        [
+          "predecessor"
+        ],
+        []
+      ],
+      [
+        28,
+        28,
+        [
+          "successor"
+        ],
+        [
+          "predecessor",
+          "successor"
+        ],
+        []
+      ],
+      [
+        29,
+        29,
+        [
+          "successor"
+        ],
+        [
+          "successor"
+        ],
+        []
+      ]
+    ]
+  },
+  "composed_recovery": {
+    "prefixes": 101,
+    "first crashes": 1135,
+    "refused before dependent work: Unprovisioned": 359,
+    "runs with dependent work": 566,
+    "runs with dependent work: P-PROV": 8,
+    "second crashes": 1860,
+    "after the second crash: PriorUnresolved": 1860,
+    "refused before dependent work: PriorUnresolved": 38,
+    "refused before dependent work: MaintenanceIncomplete": 83,
+    "runs with dependent work: P-DISP": 8,
+    "runs with dependent work: P-REVOKE": 7,
+    "refused before dependent work: Invalid": 4,
+    "runs with dependent work: P-ARCH": 31,
+    "runs with dependent work: P-RECYCLE": 29,
+    "refused before dependent work: Lost": 45,
+    "runs with dependent work: P-RETIRE": 48,
+    "refused before dependent work: Unsupported": 40,
+    "runs with dependent work: P-REQUALIFY": 8,
+    "runs with dependent work: P-SUCCESSOR": 427,
+    "chained administration: crashes": 21,
+    "chained administration: claim 1 still decided": 15,
+    "chained administration: retired with the archive copy": 6,
+    "unpublished root recovered": 1,
+    "dispositioned generation: Ready": 3
+  },
+  "composed_traces": {
+    "P-PROV": [
+      "P-PROV prefix 25, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-PROV prefix 25, first F1, second F2 ('ordered', 12) old: PriorUnresolved on store-a, generation in the decision",
+      "P-PROV prefix 25, first F1, second F2 ('ordered', 12) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-DISP": [
+      "P-DISP prefix 5, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-DISP prefix 5, first F1, second F2 ('ordered', 15) old: PriorUnresolved on store-a, generation in the decision",
+      "P-DISP prefix 5, first F1, second F2 ('ordered', 15) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-ARCH": [
+      "P-ARCH prefix 5, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-ARCH prefix 5, first F1, second F2 ('ordered', 18) old: PriorUnresolved on store-a, generation in the decision",
+      "P-ARCH prefix 5, first F1, second F2 ('ordered', 18) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-RECYCLE": [
+      "P-RECYCLE prefix 9, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-RECYCLE prefix 9, first F1, second F2 ('ordered', 22) old: PriorUnresolved on store-a, generation in the decision",
+      "P-RECYCLE prefix 9, first F1, second F2 ('ordered', 22) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-RETIRE": [
+      "P-RETIRE prefix 4, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-RETIRE prefix 4, first F1, second F2 ('ordered', 24) old: PriorUnresolved on store-a, generation in the decision",
+      "P-RETIRE prefix 4, first F1, second F2 ('ordered', 24) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-REQUALIFY": [
+      "P-REQUALIFY prefix 4, first F1, second F1: PriorUnresolved on store-a, generation in the decision",
+      "P-REQUALIFY prefix 4, first F1, second F2 ('ordered', 14) old: PriorUnresolved on store-a, generation in the decision",
+      "P-REQUALIFY prefix 4, first F1, second F2 ('ordered', 14) new: PriorUnresolved on store-a, generation in the decision"
+    ],
+    "P-SUCCESSOR": [
+      "P-SUCCESSOR prefix 31, first F1, second F1: PriorUnresolved on store-b, generation in the decision",
+      "P-SUCCESSOR prefix 31, first F1, second F2 ('ordered', 35) old: PriorUnresolved on store-b, generation in the decision",
+      "P-SUCCESSOR prefix 31, first F1, second F2 ('ordered', 35) new: PriorUnresolved on store-b, generation in the decision"
+    ]
+  },
+  "activation_protocol": [
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "journals"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "dispositions/revoked"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "dispositions"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "archive"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "root"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "parent"
+    ],
+    [
+      "10.6/A2",
+      "fsync_dir",
+      "provdir"
+    ],
+    [
+      "10.6/A2",
+      "fdatasync",
+      "PROVISION"
+    ],
+    [
+      "10.6/A3",
+      "futimens",
+      "LOCK"
+    ],
+    [
+      "10.6/A3",
+      "fsync",
+      "LOCK"
+    ]
+  ],
+  "activation_proof": {
+    "initial states": 50,
+    "runs": 259200,
+    "window: the probe's transaction running at its fsync: certified": 9300,
+    "certified": 51820,
+    "continuations, then power loss": 621840,
+    "refused": 207380,
+    "window: an abort inside the probe's handle start: certified": 27050,
+    "window: the probe's transaction completed before its fsync: certified": 37870,
+    "window: an error after the directory syncs returned: certified": 32460,
+    "certified, the journal aborted by then": 32460,
+    "certified through the completed branch with the journal aborted": 32460,
+    "window: the probe's transaction committing at its fsync: certified": 4650,
+    "window: an abort inside the probe's handle start: refused": 5410,
+    "window: an error after the directory syncs returned: refused": 26084,
+    "window: emergency read-only at a sync or the probe: refused": 77722,
+    "refused, the dependencies committed (a conservative refusal)": 48404,
+    "window: the probe's transaction running at its fsync: refused": 6930,
+    "window: an abort before the probe's handle test: refused": 54024,
+    "window: the probe's transaction committing at its fsync: refused": 760,
+    "whole model: an abort between the probe's two handle tests: Ready, 3 second crashes": 1,
+    "whole model: the probe's transaction committed, then a later commit failed: Ready, 3 second crashes": 1,
+    "whole model: the probe's own commit failed in the background: Ready, 3 second crashes": 1,
+    "whole model: a commit failed while the probe's transaction ran: Unreliable, 3 second crashes": 1
+  },
+  "profile": {
+    "required": [
+      "data=ordered",
+      "barrier"
+    ],
+    "excluded": [
+      "nobarrier",
+      "data=journal",
+      "data=writeback",
+      "journal_async_commit",
+      "norecovery",
+      "noload",
+      "fc_debug_force",
+      "emergency_ro",
+      "shutdown"
+    ],
+    "journal_inode": 8,
+    "refused_cases": [
+      "nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation",
+      "a kernel other than the qualified one, same release prefix",
+      "an external journal",
+      "data=writeback, the superblock's default, absent from mountinfo",
+      "data=journal",
+      "journal_async_commit",
+      "norecovery: no journal loaded",
+      "fc_debug_force",
+      "emergency read-only shown in the listing",
+      "a read-only superblock in the listing",
+      "the device name unresolved",
+      "the effective options unreadable",
+      "contradictory: mountinfo shows barrier, the listing nobarrier"
+    ]
+  },
+  "storage": {
+    "class": "nvme-pcie",
+    "cache_admitted": {
+      "write_cache": "write through\n",
+      "fua": "0\n"
+    },
+    "identity_attributes": [
+      "model",
+      "serial",
+      "firmware_rev",
+      "wwid"
+    ],
+    "refused_cases": [
+      [
+        "a volatile cache hidden by a write to queue/write_cache (write through, fua 1)",
+        "volatile write cache, flushes disabled in the kernel's view only"
+      ],
+      [
+        "a volatile write-back cache (write back, fua 1)",
+        "volatile write cache"
+      ],
+      [
+        "contradictory cache attributes (write back, fua 0)",
+        "contradictory storage information"
+      ],
+      [
+        "the cache attributes unreadable",
+        "storage unreadable"
+      ],
+      [
+        "a device-mapper device (LVM, dm-crypt, dm-cache)",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "an NVMe multipath disk",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "NVMe over fabrics",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "a SATA or SAS disk",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "a loop device",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "a virtual machine's virtio disk",
+        "storage not a direct NVMe namespace on PCI Express"
+      ],
+      [
+        "a transport attribute other than pcie",
+        "storage transport"
+      ],
+      [
+        "another controller (serial)",
+        "storage not qualified"
+      ],
+      [
+        "a firmware update",
+        "storage not qualified"
+      ],
+      [
+        "another namespace (wwid)",
+        "storage not qualified"
+      ],
+      [
+        "another PCI function",
+        "storage not qualified"
+      ],
+      [
+        "another partition",
+        "storage not qualified"
+      ]
+    ],
+    "paths": [
+      [
+        "(a) volatile cache: the checkpoint flush fails, its status discarded; native FUA",
+        "volatile",
+        "native",
+        [
+          "flushfail",
+          "ckpt"
+        ],
+        false,
+        false
+      ],
+      [
+        "(b) volatile cache: a failed flush, then the tail's superblock write fails; the abort rewrites the new tail",
+        "volatile",
+        "native",
+        [
+          "flushfail",
+          "sbfail",
+          "ckpt"
+        ],
+        true,
+        false
+      ],
+      [
+        "(b) volatile cache: a failed flush, then both superblock writes fail",
+        "volatile",
+        "native",
+        [
+          "flushfail",
+          "sbfail2",
+          "ckpt"
+        ],
+        true,
+        false
+      ],
+      [
+        "(c) volatile cache: native FUA after a flush that succeeded",
+        "volatile",
+        "native",
+        [
+          "ckpt"
+        ],
+        false,
+        true
+      ],
+      [
+        "(d) volatile cache, emulated FUA: the checkpoint flush fails, the flush after the superblock succeeds",
+        "volatile",
+        "emulated",
+        [
+          "flushfail",
+          "ckpt"
+        ],
+        false,
+        true
+      ],
+      [
+        "(d) volatile cache, emulated FUA: that flush fails too; the abort's rewrite and its flush succeed",
+        "volatile",
+        "emulated",
+        [
+          "flush2fail",
+          "ckpt"
+        ],
+        true,
+        true
+      ],
+      [
+        "(d) volatile cache, emulated FUA: every flush fails",
+        "volatile",
+        "emulated",
+        [
+          "flush3fail",
+          "ckpt"
+        ],
+        true,
+        false
+      ],
+      [
+        "(e) volatile cache: a failed flush, then a later successful flush before the power loss",
+        "volatile",
+        "native",
+        [
+          "flushfail",
+          "ckpt",
+          "u2",
+          "bg-ok"
+        ],
+        false,
+        true
+      ],
+      [
+        "admitted storage: R4's witness sequence; the flush is never sent",
+        "stable",
+        "native",
+        [
+          "flushfail",
+          "ckpt"
+        ],
+        false,
+        true
+      ],
+      [
+        "admitted storage: a home write fails",
+        "stable",
+        "native",
+        [
+          "wbfail",
+          "ckpt"
+        ],
+        true,
+        true
+      ],
+      [
+        "admitted storage: the tail's superblock write fails, the abort's rewrite succeeds",
+        "stable",
+        "native",
+        [
+          "sbfail",
+          "ckpt"
+        ],
+        true,
+        true
+      ],
+      [
+        "admitted storage: both superblock writes fail",
+        "stable",
+        "native",
+        [
+          "sbfail2",
+          "ckpt"
+        ],
+        true,
+        true
+      ],
+      [
+        "admitted storage: a home write still in flight",
+        "stable",
+        "native",
+        [
+          "inflight",
+          "ckpt"
+        ],
+        false,
+        true
+      ],
+      [
+        "admitted storage: the write in flight completes, then a checkpoint",
+        "stable",
+        "native",
+        [
+          "inflight",
+          "ckpt",
+          "complete",
+          "ckpt"
+        ],
+        false,
+        true
+      ]
+    ],
+    "composed_hosts": [
+      "admitted storage",
+      "a volatile write-back cache",
+      "a volatile cache hidden by queue/write_cache",
+      "a device-mapper device over a volatile cache"
+    ],
+    "composed_events": [
+      "a checkpoint; any flush sent fails",
+      "a home write fails",
+      "the tail's superblock write fails, the abort's rewrite succeeds",
+      "both superblock writes fail, the new tail on the medium",
+      "a home write in flight"
+    ],
+    "composed": {
+      "prefixes": 60,
+      "openings": 240,
+      "no dependent work: admitted storage: Unprovisioned": 25,
+      "no dependent work: a volatile write-back cache: Unprovisioned": 25,
+      "no dependent work: a volatile cache hidden by queue/write_cache: Unprovisioned": 25,
+      "no dependent work: a device-mapper device over a volatile cache: Unprovisioned": 25,
+      "runs with dependent work: admitted storage": 35,
+      "second crashes": 849,
+      "after the second crash: PriorUnresolved": 744,
+      "after the second crash: Unreliable": 105,
+      "recovery: terminal Unreliable": 105,
+      "no dependent work: a volatile write-back cache: Unsupported": 35,
+      "no dependent work: a volatile cache hidden by queue/write_cache: Unsupported": 35,
+      "no dependent work: a device-mapper device over a volatile cache: Unsupported": 35,
+      "loss of qualification: second crashes refused with the history kept": 261
+    }
+  },
+  "assertion_changes": [
+    "C05: recorder loss is read from the exchange's latched fatal cause (WorkerLost) instead of R1's separate 'lost' flag; the requirement (loss is latched while locks stay held) is unchanged.",
+    "C08: R1 asserted that, without the drop guard, an apply step saw no signal until a separate join-handle call. R2 makes the join-handle check part of every apply step, so the first apply latches WorkerVanished and delivers the failure: the requirement is preserved and the timing strengthened.",
+    "C11 and C12: procedures run inside a maintenance session (R1's modelled procedures held no lock). C12 now runs under ordered and per-directory persistence schedules instead of fsync_dir-only durability; its safety assertions are unchanged; re-qualification and a valid retirement series were added.",
+    "C15: the INV-4 assertion 'acknowledged before the failed sequence' became 'acknowledged no further than P, the durable position at the latch', which covers every fatal cause.",
+    "C03 and C05: R1's evict (pages and inode, only with no open descriptor) became evict_inode in the same scenarios; page reclaim with open descriptors is now separate (C22).",
+    "C10: the PROVISION grammar has a revision field; two non-canonical variants were added.",
+    "C03: the writer's EIO is read from the exchange's latched fatal cause (Sync) instead of R1's 'failed' field; the requirement (the writer observes EIO; a new description's sync certifies nothing) is unchanged.",
+    "C09 and C16: every restart image set now also includes page reclaim while descriptors are open (F1+page-reclaim), so their counts grew (C09 17 to 18 images, C16 25787 to 26078 images); every R1 assertion is applied to every image.",
+    "C12: its summary counts outcomes (one per crash point after F1, and one per schedule and data choice after F2) instead of R1's crash points, and adds recovery counts.",
+    "R3, owner startups and maintenance sessions activate before they read the store (design section 10.6). Every retained control's assertion and every retained check's detail line is identical to the R2 output, except C23's, which now also checks the R3 re-publication recovery (11 procedures and recoveries instead of 10).",
+    "R3 model correction: the Worker's identity recheck (W5) resolved the journals directory through the world's first root; it now uses the root the owner opened, as design W5 and section 8.1 specify. Without it no owner could run on a successor root.",
+    "R3 model correction: flock ownership was keyed by Python object identity, so a lock held when a world was cloned could never be released in the clone (a spurious Busy after F1). It is keyed by a serial of the open file description. No retained check cloned a world with a lock held.",
+    "R4 model correction (F4): fsync_file returned EIO for every aborted, unnoticed journal. It now follows jbd2_complete_transaction: a running transaction is waited for and the abort flag tested; a completed one returns 0 untested. R3 assumed the probe's fsync always waited for the probe's transaction. No R3 check took the old branch (R3-F4-REACH), the safety requirement is unchanged (no claim on a selection whose dependencies are not durable), and the refusals it gave are now derived from the probe's handle start (C28, C29).",
+    "R4: touch() models an abort landing between ext4's and jbd2's handle tests, and activation's hook sees the two probe windows; no retained check uses either.",
+    "R4: every opening checks the effective profile (design section 6.4, steps 9-11) and PROVISION has a kernel field. The model's host is the qualified profile, so every retained check's result, every retained control's assertion and every retained detail line is identical to R3's output.",
+    "R5, C28, a domain change. Old assumption: A-S5, every cache flush succeeds; the later continuations ran on a volatile cache with every flush honoured. New domain: admitted storage (stable completion, design section 5.5), to which no flush is sent; the continuations add reported home and superblock write failures, a write in flight and the R4 witness's failed flush (12 instead of 6). Retained historical counterexample: R4's checkpoint witness, re-run on the unchanged R4 model (R4-F2-WITNESS) and kept in C29 on a volatile cache. Replacement assertion: every certified dependency survives every continuation and a power loss on admitted storage. Unchanged safety requirement: no certified activation's dependency is lost in domain H. The activation runs and their counts are unchanged.",
+    "R5, C29: R4's 'necessity of A-S5' witness is kept, with the same events, on a volatile write-back cache, and relabelled as R4's counterexample, retained (such storage is not admitted, C30); the three discarded-status cases run on a volatile cache, which is where those flushes are sent; the storage paths of design section 5.8 and the admitted-storage conformance were added. No R4 assertion was removed or weakened.",
+    "R5 model: the fixture host's device changed from a device-mapper device (253:1, dm-1) to an NVMe partition (259:3, nvme0n1p2), because R5 refuses stacked storage (R4-FIXTURE). The profile cases edit the listing under the new name. MountEnv keeps the whole /sys/dev/block link instead of the name, and adds the storage attributes and the root-only facts. Every retained check's detail line and every retained control's assertion is identical to R4's output except C28's and C29's (above).",
+    "R5 model: SimFS has a device, stable by default, and a checkpoint that follows JournalSim's transitions (C31 checks the two agree); on stable storage nothing a retained check reads changes.",
+    "R5 model: JournalSim has a device (stable by default; R4's semantics are the volatile cache with native FUA), home-write outcomes, the device's errseq, the in-memory and on-medium tails and the abort's rewrite of the superblock. Its tail is the oldest transaction whose home writes have not all completed, as jbd2_journal_get_log_tail computes it; on every R4 run that gives R4's result.",
+    "R5: PROVISION has the storage fields of design section 7.5; every opening, A4 and the claim check the storage and the opening's own admission. The model's fixture is admitted storage, so every retained check runs on it."
+  ],
+  "tool_failures": [],
+  "assumptions_not_established": [
+    "A-S1 stable completion (R5; R2's flush honesty restated for admitted storage), A-S2 4096-byte containment, A-S3 no silent loss after a successful completion, A-S4 read stability (design section 5): assumed by the model, never established by it. C31 shows A-S1 necessary.",
+    "A-M1: on the supported ext4 profile, metadata operations become durable atomically and in issue order. The 'ordered' schedules use it and are themselves a superset of ext4 outcomes; the 'per-directory' schedules are a conservative over-approximation, not ext4 behaviour.",
+    "Kernel semantics as documented: errseq sampling at open and reporting per open file description; flock per open file description; fifo(7) non-blocking open; clean-page reclaim regardless of open descriptors. Modelled, not tested.",
+    "ext4 overwrite of written, unshared extents needs no allocation (qualification, D-6).",
+    "SHA-256 collision resistance (bindings, digests, the storage identity).",
+    "Domain A (store-uid rewriting) is outside the model's guarantees: gate G-AUTH stays open.",
+    "CoreSim and the fixtures T1-T15 are derived by reading the source; they are not the Rust core. Conformance of the real core's journals (I9) and of the implementation's mutex linearization are left to the implementation mission.",
+    "Interleavings are enumerated over the model's atomic steps; a step stands for one critical section of the design.",
+    "The maintenance session is a specified future interface; no executable exists or is authorized.",
+    "A-M2 (design section 5.1, corrected in R4): on the supported ext4 profile, as read from the Linux v6.17 sources, a directory fsync waits for the running or committing transaction and then tests the abort flag, and returns 0 untested when there is neither; a regular file's fsync waits for its inode's transaction only while it runs or commits, and otherwise returns 0 untested after its own checked cache flush; an abort lasts until the journal is closed; the next handle start turns it into emergency read-only, which every fsync returns first; a timestamp update by the file's owner starts a handle. Read from the sources, not tested; the runtime kernel must be qualified (G-HOST).",
+    "A-S5 (R4: the device completes every cache flush the kernel issues) is withdrawn: the Architect did not accept it as the supported-runtime contract. R5 admits only storage to which the kernel sends no cache flush (design section 5.5); C29 keeps R4's counterexample on a volatile write-back cache, which every opening refuses (C30).",
+    "Hardware truthfulness (A-S1): the controller's report that it has no volatile write cache is true, and nothing below the completion (controller, firmware, any bridge or hypervisor) holds acknowledged data only in volatile memory. The store observes the kernel's registration of the device, never the device (design section 5.9).",
+    "The supported profile's superblock facts (a journal at inode 8, no external journal device, no fast_commit feature) are read by root at qualification; the store uid cannot read them at runtime, and the Owner keeps them by re-qualifying after any change (design section 13.2).",
+    "R5: the storage qualification's root-only facts (the controller's Identify data, that the host is not a virtual machine guest, the Owner's evidence for stable completion) are established by the Owner (G-HOST); the model holds them as fixture values that only the qualification reads.",
+    "The effective option listing, the jbd2 entry names, the kernel identity and (R5) the storage attributes, identities and controller report of the model's host are fixtures in the form Linux v6.17 prints them, not host observations. They qualify no device and no host.",
+    "JournalSim is the smallest state of the cited jbd2, ext4 and block-layer branches, not a kernel: one journal, commits one at a time in order, background commits and aborts at chosen points. R5: on admitted storage no flush is sent; on a volatile cache every flush is honoured unless a scenario fails it; on a cache the kernel registered as absent, a superblock write is taken to reach the medium before the home writes (the worst order). Its enumeration is bounded (initial states of at most four events, one background event before each activation step) and is not an exhaustive proof.",
+    "Write-error detection rests on the device's errseq (design section 5.6): its counter has 19 bits, and a collision would need 2^19 further errors on the device, each observed through the device's own mapping by another reader, before the next tail update or metadata change. Not modelled; outside the supported failure model.",
+    "The whole model's checkpoint covers the directory metadata durable when it runs; on a cache other than admitted storage, file data are not modelled as volatile (such storage is refused, or outside A-S1).",
+    "One filesystem: the profile requires the PROVISION directory, the state root's parent and the state root on one filesystem, verified by st_dev. The model has one journal per world; the per-directory family over-approximates independent directories, and so independent filesystems.",
+    "Composed scenarios are bounded: one pool file claimed, one generation of dependent work, every procedure prefix, a first crash F1 or F2 under every schedule, and a second crash F1 or F2 under every schedule. R5's C32: every prefix of first provisioning and of succession followed by F1, four hosts, five storage events and every second crash. They are not an exhaustive proof.",
+    "The Python model is not the Rust implementation; no Cargo command or Rust test ran.",
+    "A-S2 is load-bearing: with a 16 KiB failure unit, losing a durable ActionStarted block while the next block stays zero yields a valid shorter prefix (UnsealedAction -> UnsealedNoAction). Outside every guarantee; attested by the Owner, qualified empirically."
+  ],
+  "result": "PASS"
+}

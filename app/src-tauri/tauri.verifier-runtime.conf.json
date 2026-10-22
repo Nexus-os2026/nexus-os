@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": {
+      "verifier-toolchain": "verifier-toolchain"
+    },
+    "externalBin": [
+      "binaries/nexus-verifier-sandbox"
+    ]
+  }
+}

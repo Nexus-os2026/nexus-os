@@ -1,0 +1,10 @@
+P2-V1-R3B-I4-Q1 changed paths relative to the base ea475eac8c2a9b527bd1b6e1f6e7b47beede7203 (worktree status before the commit):
+ M .github/workflows/ci-phase2-linux-sandbox.yml
+ M app/src-tauri/src/phase2_tests.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+ M crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs
+ M docs/security/phase2-governed-verification.md
+ M scripts/ci/test_phase2_cleanup_check.py
+?? crates/nexus-verifier-sandbox/tests/support/host_qualification.rs
+and the new evidence directory docs/evidence/p2-v1-r3b-i4-q1-host-live-qualification/ (its files: SHA256SUMS).

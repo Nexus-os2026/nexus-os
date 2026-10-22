@@ -1,0 +1,3 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.40s
+  Executable tests/phase2_live_sandbox.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation/debug/deps/phase2_live_sandbox-54a4964f6371dd7e)

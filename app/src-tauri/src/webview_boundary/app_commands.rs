@@ -18,7 +18,7 @@
 //! `phase0_surface/fg_webview/tests.rs`) fail on any drift between the
 //! registry, this list and the capability, so neither can drift silently.
 
-/// Every registered application command, sorted and unique (813).
+/// Every registered application command, sorted and unique (829).
 pub const APP_COMMANDS: &[&str] = &[
     "a2a_cancel_task",
     "a2a_crate_discover_agent",
@@ -231,9 +231,12 @@ pub const APP_COMMANDS: &[&str] = &[
     "coding_list_projects",
     "coding_list_runs",
     "coding_restore_run",
+    "coding_retry_verification_cleanup",
     "coding_select_project",
     "coding_start_run",
+    "coding_start_verification",
     "coding_status",
+    "coding_verification_profiles",
     "cogfs_get_context",
     "cogfs_get_entities",
     "cogfs_get_graph",
@@ -601,6 +604,19 @@ pub const APP_COMMANDS: &[&str] = &[
     "oracle_status",
     "oracle_verify_token",
     "override_security_block",
+    "p3_approve",
+    "p3_cancel_run",
+    "p3_deny",
+    "p3_display_start",
+    "p3_display_stop",
+    "p3_emergency_stop",
+    "p3_evidence",
+    "p3_import_attachment",
+    "p3_request_grant",
+    "p3_resume",
+    "p3_revoke_grant",
+    "p3_status",
+    "p3_submit",
     "pause_agent",
     "pause_simulation",
     "payment_create_invoice",

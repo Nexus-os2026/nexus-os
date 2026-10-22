@@ -216,6 +216,26 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("builder_backend_connect", Closure::SecretStorage),
     ("email_start_oauth", Closure::SecretStorage),
     ("integration_start_oauth", Closure::SecretStorage),
+    // Phase Three G-INV-1..4: legacy direct real-world routes. Their effects
+    // run only through Phase Three governed control (connector operations,
+    // governed browser sessions, the agent display's own status).
+    ("email_fetch_messages", Closure::GovernedRoute),
+    ("email_send_message", Closure::GovernedRoute),
+    ("email_search_messages", Closure::GovernedRoute),
+    ("messaging_connect_platform", Closure::GovernedRoute),
+    ("messaging_send", Closure::GovernedRoute),
+    ("messaging_poll_messages", Closure::GovernedRoute),
+    ("browser_create_session", Closure::GovernedRoute),
+    ("browser_execute_task", Closure::GovernedRoute),
+    ("browser_navigate", Closure::GovernedRoute),
+    ("browser_get_content", Closure::GovernedRoute),
+    ("browser_close_session", Closure::GovernedRoute),
+    ("browser_get_policy", Closure::GovernedRoute),
+    ("browser_session_count", Closure::GovernedRoute),
+    ("nx_computer_use_status", Closure::GovernedRoute),
+    // Phase Three G-INV-5: a status probe that ran a helper found on `PATH`
+    // (and a local service probe) only to report on closed generators.
+    ("builder_image_gen_status", Closure::HelperLaunch),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -374,7 +394,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_collab_get_comments, builder_collab_resolve_comment,
             builder_import_design, builder_generate_variants,
             builder_generate_section_variants, builder_theme_apply, builder_theme_get_current,
-            builder_theme_export, builder_generate_image, builder_generate_all_images,
+            builder_theme_export, builder_image_gen_status, builder_generate_image,
+            builder_generate_all_images,
             builder_generate_trust_pack, builder_get_audit_trail, builder_export_audit_trail,
             builder_deploy_history, builder_deploy_diff, builder_deploy_rollback_to,
             builder_deploy_share_info, builder_deploy_drift, terminal_execute,
@@ -396,6 +417,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
             integration_start_oauth, self_rewrite_apply_patch, time_machine_what_if,
             time_machine_undo, time_machine_redo, time_machine_undo_checkpoint,
+            email_fetch_messages, email_send_message, email_search_messages,
+            messaging_connect_platform, messaging_send, messaging_poll_messages,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -407,6 +430,9 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
             mcp2_server_handle, browser_screenshot, a2a_crate_send_task, a2a_crate_get_task,
             a2a_crate_discover_agent, perception_init, cm_run_ab_validation,
+            browser_create_session, browser_execute_task, browser_navigate,
+            browser_get_content, browser_close_session, browser_get_policy,
+            browser_session_count,
         ],
         crate::nx_bridge::commands => [
             nx_agent_run, nx_chat, nx_tool, nx_consent_respond, nx_agent_approve,
@@ -419,6 +445,13 @@ fn closed_handlers() -> Vec<ClosedHandler> {
         "nx_computer_use_screenshot",
         (|| {
             tauri::async_runtime::block_on(crate::nx_bridge::commands::nx_computer_use_screenshot())
+                .map(|_| ())
+        }) as fn() -> Result<(), String>,
+    ));
+    handlers.push((
+        "nx_computer_use_status",
+        (|| {
+            tauri::async_runtime::block_on(crate::nx_bridge::commands::nx_computer_use_status())
                 .map(|_| ())
         }) as fn() -> Result<(), String>,
     ));
@@ -523,7 +556,11 @@ fn production_agent_executor_refuses_filesystem_and_process_actions() {
             db: state.db.clone(),
         },
     )));
-    let executor = crate::phase0_agent_executor(&state, memory);
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory,
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let mut audit = state.audit.clone();
     let agent = uuid::Uuid::new_v4().to_string();
     let base = std::env::temp_dir().join(format!("nexus-c5a-agent-{}", uuid::Uuid::new_v4()));
@@ -583,8 +620,12 @@ fn p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor() {
 
     struct FixedPlan(String);
     impl PlannerLlm for FixedPlan {
-        fn plan_query(&self, _: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-            Ok(self.0.clone())
+        fn plan_query(
+            &self,
+            ctx: &mut nexus_kernel::hm::DispatchContext,
+            _: &mut nexus_kernel::hm::PromptSource<'_>,
+        ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+            Ok(ctx.produce(self.0.clone()))
         }
     }
 
@@ -610,7 +651,11 @@ autonomy_level = 5
     let memory = std::sync::Arc::new(AgentMemoryManager::new(Box::new(crate::DbMemoryStore {
         db: state.db.clone(),
     })));
-    let executor = crate::phase0_agent_executor(&state, memory.clone());
+    let executor = crate::phase0_agent_executor(
+        &state,
+        memory.clone(),
+        crate::hm_dispatch::GatewayPlannerLlm::new(&state),
+    );
     let run = |action: &serde_json::Value| {
         let plan = serde_json::json!([{"action": action, "description": "step"}]);
         state
@@ -1808,9 +1853,99 @@ fn item_end(b: &[u8], mut i: usize) -> usize {
     b.len()
 }
 
-/// Production text of a Rust source: comments removed, and every item under
-/// `#[cfg(test)]` or `#[cfg(any(test, ..))]` removed. Literals are kept and
-/// are never read as delimiters or attributes.
+/// If a `#[cfg(...)]` attribute starts at `i` and its predicate holds only
+/// in test builds (`test`, an `all(..)` with such a member, or an `any(..)`
+/// whose members all are), the end of the attribute. An item shipped in
+/// some build (`any(test, target_os = "linux")`) is not test-only.
+fn test_only_cfg(b: &[u8], i: usize) -> Option<usize> {
+    if !b[i..].starts_with(b"#[cfg(") {
+        return None;
+    }
+    let open = i + b"#[cfg(".len();
+    let mut depth = 1usize;
+    let mut j = open;
+    while j < b.len() {
+        match b[j] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            b'"' => j = literal_end(b, j)? - 1,
+            _ => {}
+        }
+        j += 1;
+    }
+    if b.get(j + 1) != Some(&b']') {
+        return None;
+    }
+    let predicate = std::str::from_utf8(&b[open..j]).ok()?;
+    cfg_requires_test(predicate).then_some(j + 2)
+}
+
+/// Whether a `cfg` predicate holds only when `test` is set, or one of the
+/// features only test builds enable (on dev-dependency edges, or by the
+/// workspace's integration-test crate; `p3_g6_12` pins that).
+fn cfg_requires_test(predicate: &str) -> bool {
+    const TEST_ONLY_FEATURES: [&str; 5] = [
+        "test-support",
+        "test-utils",
+        "testing",
+        "live-sandbox-harness",
+        "development-toolchain",
+    ];
+    let predicate = predicate.trim();
+    if TEST_ONLY_FEATURES
+        .iter()
+        .any(|feature| predicate == format!("feature = \"{feature}\""))
+    {
+        return true;
+    }
+    let members = |inner: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let (mut depth, mut start, mut quoted) = (0i32, 0usize, false);
+        for (at, c) in inner.char_indices() {
+            match c {
+                '"' => quoted = !quoted,
+                '(' if !quoted => depth += 1,
+                ')' if !quoted => depth -= 1,
+                ',' if !quoted && depth == 0 => {
+                    out.push(inner[start..at].trim().to_string());
+                    start = at + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(inner[start..].trim().to_string());
+        out.retain(|member| !member.is_empty());
+        out
+    };
+    if predicate == "test" {
+        true
+    } else if let Some(inner) = predicate
+        .strip_prefix("all(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        members(inner)
+            .iter()
+            .any(|member| cfg_requires_test(member))
+    } else if let Some(inner) = predicate
+        .strip_prefix("any(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        let members = members(inner);
+        !members.is_empty() && members.iter().all(|member| cfg_requires_test(member))
+    } else {
+        false
+    }
+}
+
+/// Production text of a Rust source: comments removed, and every item that
+/// only a test build compiles removed (its `cfg` requires `test` or a
+/// test-only feature; see `cfg_requires_test`). Literals are kept and are
+/// never read as delimiters or attributes.
 fn production_text(src: &str) -> String {
     let b = src.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -1822,8 +1957,7 @@ fn production_text(src: &str) -> String {
         } else if let Some(end) = comment_end(b, i) {
             out.push(b' ');
             i = end;
-        } else if b[i..].starts_with(b"#[cfg(test)]") || b[i..].starts_with(b"#[cfg(any(test") {
-            let attribute = i + b[i..].windows(2).position(|w| w == b")]").unwrap() + 2;
+        } else if let Some(attribute) = test_only_cfg(b, i) {
             i = item_end(b, attribute);
         } else {
             out.push(b[i]);
@@ -1840,6 +1974,9 @@ fn production_text_drops_comments_and_test_items_but_keeps_literals() {
         "/* block /* nested */ */ fn b<'a>(x: &'a str) -> char { '}' }\n",
         "#[cfg(test)]\nmod tests { fn t() { let _ = \"}\"; } }\n",
         "#[cfg(any(test, feature = \"x\"))]\npub fn helper() -> [u8; 2] { [1, 2] }\n",
+        "#[cfg(any(test, target_os = \"linux\"))]\nfn shipped() {}\n",
+        "#[cfg(all(test, unix))]\nfn only_in_tests() {}\n",
+        "#[cfg(any(test, all(test, feature = \"x\")))]\nfn also_only_in_tests() {}\n",
         "#[cfg(test)]\nuse std::fmt;\n",
         "fn c() -> &'static str { r#\"raw \" // kept\"# }\n",
         "fn d() -> S { S { #[cfg(test)] probe: 1, kept_field: 2 } }\n",
@@ -1852,8 +1989,15 @@ fn production_text_drops_comments_and_test_items_but_keeps_literals() {
         text.contains("fn b<'a>(x: &'a str) -> char { '}' }"),
         "{text}"
     );
+    assert!(!text.contains("mod tests"), "{text}");
+    // An item some build ships is production (it only also compiles in
+    // tests); an item no build but a test build compiles is not.
     assert!(
-        !text.contains("mod tests") && !text.contains("helper"),
+        text.contains("pub fn helper()") && text.contains("fn shipped()"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("only_in_tests") && !text.contains("also_only_in_tests"),
         "{text}"
     );
     assert!(!text.contains("std::fmt"), "{text}");
@@ -2270,6 +2414,18 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "the nexus CLI, outside the desktop",
     ),
     (
+        "crates/nexus-governed-control/src/browser/mod.rs",
+        "\"/tmp",
+        1,
+        "one governed browser session's private temporary directory (Chrome's singleton socket path must stay short): created exclusively, 0700, random name, removed when the session ends; not a state root",
+    ),
+    (
+        "crates/nexus-governed-control/src/display/server.rs",
+        "\"/tmp",
+        2,
+        "the X11 socket directory of the agent display and its ownership check (a fixed protocol path, not a state root); Nexus writes nothing there",
+    ),
+    (
         "crates/nexus-ui-repair/src/driver/loop_.rs",
         "var(\"HOME\")",
         1,
@@ -2339,17 +2495,19 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
             0,
         ),
         ("app/src-tauri/src/commands/apps.rs", "dir.join(name)", 1),
-        // read_messaging_token: an allowlisted &'static str platform.
+        // Phase Three: the messaging token reader is gone with the closed
+        // messaging transport.
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{platform}.json\"))",
-            1,
+            0,
         ),
-        // gmail/outlook only: an allowlist match or a &'static str.
+        // gmail/outlook only: an allowlist match (the status and disconnect
+        // readers; the closed email transport's reader is gone).
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{provider}_tokens.json\"))",
-            2,
+            1,
         ),
         // nx_session_file: the name's storage stem, never the raw name, and
         // never a stored file that differs only by case (C5C).
@@ -2771,8 +2929,17 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
         .expect("run_cycle_with_evolution");
     let open = run_cycle + runtime[run_cycle..].find('{').unwrap();
     let body = &runtime[open..block_end(&runtime, open)];
-    assert_eq!(body.matches(".execute(").count(), 1, "one dispatch site");
-    assert!(body.contains("executor.execute(agent_id, &action_clone, audit, requires_hitl)"));
+    // Ported (mission R12, P3-HM-CONTRACT-02 §11.3): the cycle runs each
+    // step in its goal's unit (`execute_in`); still one dispatch site.
+    assert_eq!(
+        body.matches(".execute(").count(),
+        0,
+        "no dispatch outside the unit"
+    );
+    assert_eq!(body.matches(".execute_in(").count(), 1, "one dispatch site");
+    assert!(body.contains(
+        "executor.execute_in(&mut scope, agent_id, &action_clone, audit, requires_hitl)"
+    ));
     for forbidden in [
         "execute_action(",
         "registry.",
@@ -3319,6 +3486,17 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             &[
                 "p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database",
                 "p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api",
+                "p0_fg_dep_wasmtime_items_do_not_escape_their_file",
+            ][..],
+        ),
+        // XA-R4-FINAL (XA-L-02): the resource limiter's process
+        // construction and termination, resolved structurally.
+        (
+            "a governed process constructed outside the limiter's spawn functions, or ended by a shell tool, a name or an identifier instead of its owned group or job",
+            fg_reliability,
+            &[
+                "p0_fg_k_the_resource_limiter_ends_trees_only_through_its_owned_group_or_job",
+                "p0_fg_rust_paths_resolve_every_import_spelling",
             ][..],
         ),
     ] {
@@ -3990,6 +4168,9 @@ fn p0_002c5c_no_desktop_route_observes_the_screen() {
             "{command} must stay closed as screen observation"
         );
     }
+    // Phase Three G-INV-2: the PATH-probing readiness check is closed; the
+    // agent display's own status replaces it.
+    assert!(CLOSED_COMMANDS.contains(&("nx_computer_use_status", Closure::GovernedRoute)));
     let handlers = registered_handlers();
     for available in [
         "computer_control_toggle",
@@ -3997,7 +4178,6 @@ fn p0_002c5c_no_desktop_route_observes_the_screen() {
         "computer_control_get_history",
         "stop_computer_action",
         "get_input_control_status",
-        "nx_computer_use_status",
     ] {
         let registered = handlers
             .iter()

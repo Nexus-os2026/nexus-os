@@ -1,0 +1,22 @@
+
+running 1 test
+test execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused ... FAILED
+
+failures:
+
+---- execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused stdout ----
+
+thread 'execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused' (1219773) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1571:9:
+Uncertain(Timeout): an unavailable or malformed control group was accepted: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.53s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

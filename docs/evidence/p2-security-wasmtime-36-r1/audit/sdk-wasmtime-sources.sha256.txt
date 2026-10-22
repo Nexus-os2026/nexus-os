@@ -1,0 +1,5 @@
+269adc725cd25e59e480fb8a39ff2a5375fa9322cd358f9bd0850f85cdb18e35  sdk/src/module_cache.rs  (base: 269adc725cd25e59)
+8a569e05ea70da7c6fb53a96020ceb1d605047a8e15118a4e5aafca6467ecf13  sdk/src/shadow_sandbox.rs  (base: 8a569e05ea70da7c)
+1ed55ddab816b8ca6b1d24a4d17d236a55d36b61799ce2f7755a5c3eb4a07045  sdk/src/wasm_agent.rs  (base: 1ed55ddab816b8ca)
+c9963fd43bc233865423ed6397f68f254de8b9ee6145fd8025c769ab1ab8f49c  sdk/src/wasmtime_host_functions.rs  (base: c9963fd43bc23386)
+5d069dc61f1a4a3480cc6892bf22489302765ec05fd391f79a27831471879933  sdk/src/wasmtime_sandbox.rs  (base: 5d069dc61f1a4a34)

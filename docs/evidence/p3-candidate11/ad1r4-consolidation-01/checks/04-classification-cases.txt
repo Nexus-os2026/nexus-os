@@ -1,0 +1,147 @@
+AD-1-R4 K.2 CLASSIFICATION CASES (synthetic descriptors; no Nexus execution)
+OK   case   1: unchanged-core exploration PASS (e1)
+        raw: PASS
+        outer: PASS
+        kill evidence: —
+        draft row 1: agrees ('PASS' / kill '—')
+OK   case   2: PASS text plus external kill
+        raw: PASS
+        outer: INCOMPLETE: a run killed from outside (line 855); never PASS
+        kill evidence: no
+        draft row 2: agrees ('never PASS' / kill 'no')
+OK   case   3: C1/C25 mutant witness, positive line
+        raw: witness FAIL; NAMED PROPERTY P7: OBSERVED on the world after step 1
+        outer: admissible witness receipt: G.3(b) holds
+        kill evidence: a part only: with G.3(a) and G.3(d)
+        draft row 3: agrees ('G.3(b) holds' / kill 'a part only')
+OK   case   4: unrelated panic / nonzero exit
+        raw: (none)
+        outer: NOT ADMISSIBLE (unrelated failure)
+        kill evidence: no
+        draft row 4: agrees ('NOT ADMISSIBLE' / kill 'no')
+OK   case   5: original-explorer FAIL without a witness marker
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+        draft row 5: agrees ('FAIL, admissible (F.1 type (a))' / kill 'yes')
+OK   case   6: C22 with no mutant executable
+        raw: build exit 101; diagnostics [('E0283', 1089)]
+        outer: admissible build-failure receipt (F.1 type (d)); mutant executable and test-run fields NOT PRODUCED BY DESIGN
+        kill evidence: yes, for C22 only
+        draft row 6: agrees ('NOT PRODUCED BY DESIGN' / kill 'yes, for C22 only')
+OK   case   7: raw FAIL discovered after the authorised cardinality is exceeded
+        raw: FAIL
+        outer: INCOMPLETE — BUDGET EXCEEDED
+        kill evidence: no
+        draft row 7: agrees ('INCOMPLETE — BUDGET EXCEEDED' / kill 'no')
+OK   case   8: C4 mutant witness: P4 and P8 both observed
+        raw: witness FAIL; P4 and P8 OBSERVED
+        outer: admissible witness receipt: G.5(B) holds
+        kill evidence: a part only: with G.5(A), (C), (D) and (E)
+        draft row 8: agrees ('G.5(B) holds' / kill 'a part only')
+OK   case   9: C4 mutant witness: only P4 observed
+        raw: witness FAIL; P4 OBSERVED; P8 NOT OBSERVED
+        outer: NOT ADMISSIBLE for G.5(B): both properties are required
+        kill evidence: no
+        draft row 9: agrees ('both properties are required' / kill 'no')
+OK   case  10: healthy witness PASS (e3) on the baseline executable
+        raw: witness PASS; no violation
+        outer: PASS (type (e3))
+        kill evidence: a part only: G.3(d) or G.5(C)
+        draft row 10: agrees ('PASS (type (e3))' / kill 'a part only')
+OK   case  11: healthy witness run on a mutant executable
+        raw: witness PASS; no violation
+        outer: NOT ADMISSIBLE (role identity, F.2)
+        kill evidence: no
+        draft row 11: agrees ('NOT ADMISSIBLE (role identity, F.2)' / kill 'no')
+OK   case  12: healthy build success (e4), every artifact recorded
+        raw: build exit 0; diagnostics []
+        outer: PASS (type (e4)); no artifact marked NOT PRODUCED BY DESIGN
+        kill evidence: —
+        draft row 12: agrees ('PASS (type (e4))' / kill '—')
+OK   case  13: restored named unit test PASS (e2)
+        raw: test t_bind ... ok
+        outer: PASS (type (e2)); explorer fields NOT PRODUCED BY DESIGN
+        kill evidence: —
+        draft row 13: agrees ('PASS (type (e2))' / kill '—')
+OK   case  14: C4 witness step consuming beyond its offered stream
+        raw: witness FAIL; consumed 7 choices, beyond the 6 offered
+        outer: NOT ADMISSIBLE (G.6)
+        kill evidence: no
+        draft row 14: agrees ('NOT ADMISSIBLE (G.6)' / kill 'no')
+OK   case  x1: PASS text, identity mismatch
+        raw: PASS
+        outer: NOT ADMISSIBLE (identity mismatch)
+        kill evidence: no
+OK   case  x2: PASS text, no completion evidence
+        raw: PASS
+        outer: INCOMPLETE (no completion evidence); never PASS
+        kill evidence: no
+OK   case  x3: PASS text, two tests selected
+        raw: PASS
+        outer: NOT ADMISSIBLE (selection)
+        kill evidence: no
+OK   case  x4: quotient precondition refusal
+        raw: (refusal: symmetry inapplicable)
+        outer: INCOMPLETE — VERIFICATION INVALID
+        kill evidence: no
+OK   case  x5: C22 with an internal compiler error
+        raw: build exit 101; diagnostics [('ICE', 0)]
+        outer: NOT ADMISSIBLE (compiler crash or resource failure)
+        kill evidence: no
+OK   case  x6: C22 with E0283 at another line
+        raw: build exit 101; diagnostics [('E0283', 1090)]
+        outer: NOT ADMISSIBLE (unrelated or misplaced diagnostic)
+        kill evidence: no
+OK   case  x7: explorer FAIL of a property other than the named one
+        raw: FAIL
+        outer: FAIL, admissible, of another property: not killed (7.5 stop rule)
+        kill evidence: no
+OK   case  x8: C25 primary receipt: FAIL E4 (not the named P7)
+        raw: FAIL
+        outer: FAIL, admissible (G.3(a) primary receipt)
+        kill evidence: part only: G.3(a)
+OK   case  x9: witness NOT OBSERVED
+        raw: witness FAIL; NAMED PROPERTY P7: NOT OBSERVED
+        outer: NOT ADMISSIBLE (witness rejection, G.3(c) or G.5)
+        kill evidence: no
+OK   case x10: unit test fails in shared setup
+        raw: (panic in open_core)
+        outer: NOT ADMISSIBLE (failure outside the named test's own checks)
+        kill evidence: no
+OK   case x11: C3a FAIL of either named property
+        raw: FAIL
+        outer: FAIL, admissible (F.1 type (a)); no witness marker is required
+        kill evidence: yes
+OK   case x12: FAIL text but process timed out
+        raw: FAIL
+        outer: INCOMPLETE: a run killed from outside (line 855); never PASS
+        kill evidence: no
+OK   case x13: C4 primary receipt: FAIL P4, recorded as printed, a part only
+        raw: FAIL
+        outer: FAIL, admissible (G.5(A) primary receipt; property recorded as printed)
+        kill evidence: part only: G.5(A)
+OK   case x14: mutant witness run on the baseline executable
+        raw: witness FAIL
+        outer: NOT ADMISSIBLE (role identity, F.2)
+        kill evidence: no
+OK   case x15: healthy witness printing a positive marker
+        raw: witness PASS; NAMED PROPERTY P1: OBSERVED
+        outer: NOT ADMISSIBLE (role identity, F.2)
+        kill evidence: no
+OK   case x16: healthy build leaving an executable unrecorded
+        raw: build exit 0; diagnostics []
+        outer: NOT ADMISSIBLE (a produced artifact unrecorded or marked NOT PRODUCED BY DESIGN)
+        kill evidence: no
+OK   case x17: healthy build marking its executable NOT PRODUCED BY DESIGN
+        raw: build exit 0; diagnostics []
+        outer: NOT ADMISSIBLE (a produced artifact unrecorded or marked NOT PRODUCED BY DESIGN)
+        kill evidence: no
+OK   case x18: C22 mutant build leaving an artifact that goes unrecorded
+        raw: build exit 101; diagnostics [('E0283', 1089)]
+        outer: NOT ADMISSIBLE (an artifact the mutant build left is unrecorded)
+        kill evidence: no
+
+draft K.2 table rows ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']; unmatched []
+
+CASES: 32 as expected, 0 not

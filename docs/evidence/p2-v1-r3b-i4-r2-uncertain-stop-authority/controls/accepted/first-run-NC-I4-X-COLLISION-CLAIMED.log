@@ -1,0 +1,22 @@
+
+running 1 test
+test execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit ... FAILED
+
+failures:
+
+---- execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit stdout ----
+
+thread 'execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit' (2220491) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:835:5:
+assertion failed: matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_))))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.30s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.20s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/i4r1-scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

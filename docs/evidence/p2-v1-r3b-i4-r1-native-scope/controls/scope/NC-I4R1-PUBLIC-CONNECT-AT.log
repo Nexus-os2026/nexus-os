@@ -1,0 +1,24 @@
+
+running 1 test
+test scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect ... FAILED
+
+failures:
+
+---- scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect stdout ----
+
+thread 'scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect' (1213839) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1084:5:
+assertion `left == right` failed: a normal build exposes a caller-selected manager socket
+  left: ["fn connect", "fn connect_at"]
+ right: ["fn connect"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.32s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

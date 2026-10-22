@@ -1,0 +1,37 @@
+P2-V1-R3B-I3-I1-R2 publication preflight and ref readback, 2026-10-02T16:08:01Z
+remote github: git@github.com:Nexus-os2026/nexus-os.git
+
+ref                                           expected                                  local                                     remote                                    result
+main                                          4b36f60694148b60029733bc7b3d26e5a215d460  4b36f60694148b60029733bc7b3d26e5a215d460  4b36f60694148b60029733bc7b3d26e5a215d460  OK
+repair/p2-validation-workflow-bootstrap       4b36f60694148b60029733bc7b3d26e5a215d460  4b36f60694148b60029733bc7b3d26e5a215d460  4b36f60694148b60029733bc7b3d26e5a215d460  OK
+implement/phase2-governed-verification        4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f  4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f  4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f  OK
+rebuild/phase0-trust-boundary                 f727f5c39fab8d5c729a55eb28ad576d3d56ce47  f727f5c39fab8d5c729a55eb28ad576d3d56ce47  f727f5c39fab8d5c729a55eb28ad576d3d56ce47  OK
+evidence/phase0-closure                       e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1  e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1  e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1  OK
+rebuild/phase1-governed-coding                14270a9a38770ac84456c1f812042d2967edec42  14270a9a38770ac84456c1f812042d2967edec42  14270a9a38770ac84456c1f812042d2967edec42  OK
+evidence/phase1-closure                       c237937189b5977eaad01acad6a4c52bcce796cc  c237937189b5977eaad01acad6a4c52bcce796cc  c237937189b5977eaad01acad6a4c52bcce796cc  OK
+review/p2-v1-cleanup-observers                45898e05178a56efaadeb1f8f9ee7a0a521c72c9  45898e05178a56efaadeb1f8f9ee7a0a521c72c9  45898e05178a56efaadeb1f8f9ee7a0a521c72c9  OK
+evidence/p2-v1-r3b-i2-r1                      8e2c46c00cd4071bbae41815d1d1cd0c4814655f  8e2c46c00cd4071bbae41815d1d1cd0c4814655f  8e2c46c00cd4071bbae41815d1d1cd0c4814655f  OK
+review/p2-v1-custody-recorder-design          7689e599ed8fc89ec7720d13869ef58cab767ecb  7689e599ed8fc89ec7720d13869ef58cab767ecb  7689e599ed8fc89ec7720d13869ef58cab767ecb  OK
+review/p2-v1-custody-store-implementation     66a245c183b04ff1e2ae30fbbd065a57381df09c  66a245c183b04ff1e2ae30fbbd065a57381df09c  66a245c183b04ff1e2ae30fbbd065a57381df09c  OK
+
+worktree HEAD: 66a245c183b04ff1e2ae30fbbd065a57381df09c on review/p2-v1-custody-store-implementation
+
+Push target: refs/heads/review/p2-v1-custody-store-implementation on github
+Workflow push triggers:
+  .github/workflows/audit.yml: push trigger: branches: - main
+  .github/workflows/ci-fast-local.yml: push trigger: branches: - "implement/**" - "repair/**"
+  .github/workflows/ci-phase2-linux-sandbox.yml: push trigger: none
+  .github/workflows/ci-portability.yml: push trigger: none
+  .github/workflows/ci.yml: push trigger: branches: - main
+  .github/workflows/local-runner-smoke.yml: push trigger: branches: - rebuild/phase0-trust-boundary paths: - ".github/workflows/local-runner-smoke.yml"
+  .github/workflows/pages.yml: push trigger: branches: - main paths: - "website/**" - ".github/workflows/pages.yml"
+  .github/workflows/release.yml: push trigger: tags: - "v*"
+Workflows whose push trigger could match review/p2-v1-custody-store-implementation: none
+
+Local hooks: core.hooksPath=/home/nexus/NEXUS/nexus-os/.git/hooks
+  active (non-sample) hooks there: 0
+  worktree git dir hooks (/home/nexus/NEXUS/nexus-os/.git/hooks): 0
+
+Commit identity (repository config): Suresh Karicheti <nexaiceo@gmail.com>
+
+RESULT: PASS

@@ -1,0 +1,4 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/base-probe (the base tree 72ffc4fcc0141e2e5ae77a927481017ca711ab7c plus tests/r1_base_probes.rs; see provenance.txt)
+CARGO_TARGET_DIR: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/target
+probe-build exit=0 started=2026-10-02T12:59:27Z :: cargo test --locked -p nexus-verifier-sandbox --test r1_base_probes --no-run
+probe-run exit=0 started=2026-10-02T12:59:28Z :: cargo test --locked -p nexus-verifier-sandbox --test r1_base_probes -- --nocapture --test-threads=1

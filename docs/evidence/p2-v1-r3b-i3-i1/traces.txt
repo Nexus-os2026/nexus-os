@@ -1,0 +1,15 @@
+Real-core traces and composed-recovery figures, extracted from validation/store-tests-nocapture.txt
+(cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store -- --nocapture --test-threads=1).
+
+activation windows: (50, 259200, 51820, 207380, 48404, 32460, 621840)
+real-core trace every kind: ["RunStarted", "CaseStarted", "ActionStarted", "ActionFailed", "AdmissionClosed Failed(UnexpectedCleanup)", "CaseEnded", "RecoveryRequired", "ActionSettled", "RecoveryAttempt", "RunEnded", "IncidentOpened", "ShutdownRefused", "IncidentSettled", "RecoveryAttempt"]
+real-core trace T1: ["RunStarted", "CaseStarted", "ActionStarted", "ActionSettled", "CaseEnded", "RunEnded"]
+real-core trace T3: ["RunStarted", "CaseStarted", "ActionStarted", "AdmissionClosed Cancelled(Requested)", "ActionSettled", "CaseEnded", "RunEnded"]
+real-core trace T14: ["RunStarted", "CaseStarted", "ActionStarted", "AdmissionClosed Cancelled(Requested)", "ActionSettled", "CaseEnded", "RunEnded"]
+real-core trace T8 (never submitted): ["RunStarted", "CaseStarted", "ActionStarted", "ActionSettled", "CaseEnded", "RunEnded"], UnsealedAction, refused true
+real-core trace T8 (taken, not written): ["RunStarted", "CaseStarted", "ActionStarted", "ActionSettled", "CaseEnded", "RunEnded"], UnsealedAction, refused true
+real-core trace T8 (durable, not published): ["RunStarted", "CaseStarted", "ActionStarted", "ActionSettled", "CaseEnded", "RunEnded", "IncidentOpened"], UnsealedAction, refused true
+crash matrix coverage: [("P-PROV", 23, 24, 54, 103, 338, 0), ("P-DISP", 6, 7, 15, 15, 67, 32), ("P-REVOKE", 3, 4, 5, 8, 30, 0), ("P-ARCH", 6, 7, 15, 15, 67, 32), ("P-RECYCLE", 10, 11, 21, 23, 99, 66), ("P-RETIRE", 5, 6, 11, 12, 52, 0), ("P-REQUALIFY", 5, 6, 11, 12, 52, 0), ("P-SUCCESSOR", 29, 30, 68, 117, 400, 0)]
+composed: 883 first crashes, 459 runs with dependent work, 2425 second crashes; refused before work: {"MaintenanceIncomplete": 32, "PriorUnresolved": 25, "Unprovisioned": 367}
+composed outcome "in the decision": 2425, for example P-PROV prefix 25, F1, then F1
+storage composed: 240 openings, 35 runs on admitted storage, 1117 second crashes, 180 openings on storage that is not admitted, 33 losses of qualification

@@ -3803,6 +3803,127 @@ export function ccGetScreenContext(agentId: string): Promise<any> {
   return invokeDesktop("cc_get_screen_context", { agentId, agent_id: agentId });
 }
 
+// ── Governed Real-World Control (Phase Three) ────────────────────────────────
+//
+// The interface sends data only: a command's text, an opaque commitment, run
+// or grant id, or a grant request. It never sends an approval: grants, R2
+// approvals and resuming after an emergency stop are confirmed by the owner
+// in native dialogs the backend shows.
+
+export interface P3Commitment {
+  id: string;
+  agent: string;
+  run: string;
+  kind: string;
+  class: "R0" | "R1" | "R2";
+  operation: string;
+  target: string;
+  summary: string[];
+  state: string;
+  requires_approval: boolean;
+  binding: string;
+}
+
+export interface P3Grant {
+  id: string;
+  kind: string;
+  lines: string[];
+  live: boolean;
+}
+
+export interface P3Status {
+  status: {
+    platform_supported: boolean;
+    emergency_stopped: boolean;
+    policy_generation: number;
+    display: [number, number, number, number] | null;
+    tools: [string, string, string][];
+    connector_operations: [string, string, string, string][];
+  };
+  commitments: P3Commitment[];
+  grants: P3Grant[];
+  runs: { id: string; agent: string; cancelled: boolean; finished: boolean }[];
+}
+
+export interface P3Output {
+  text: string | null;
+  bytes: number | null;
+  meta: [string, string][];
+}
+
+export interface P3Submitted {
+  understood: boolean;
+  reason?: string;
+  commitment?: P3Commitment;
+}
+
+export interface P3Attachment {
+  id: string;
+  name: string;
+  bytes: number;
+  sha256: string;
+}
+
+export type P3GrantRequest =
+  | { kind: "egress"; origin: string; methods: string[]; allow_private?: boolean }
+  | { kind: "tool"; tool: string }
+  | { kind: "connector"; connector: string; account: string; operations: string[] }
+  | { kind: "browser"; origins: string[]; downloads?: boolean }
+  | { kind: "perception" }
+  | { kind: "input"; max_steps: number; session_r1?: boolean };
+
+export function p3Status(): Promise<P3Status> {
+  return invokeDesktop<P3Status>("p3_status");
+}
+
+export function p3Evidence(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop<Record<string, unknown>[]>("p3_evidence");
+}
+
+export function p3Submit(text: string): Promise<P3Submitted> {
+  return invokeDesktop<P3Submitted>("p3_submit", { envelope: { text } });
+}
+
+export function p3Approve(commitment: string): Promise<P3Output> {
+  return invokeDesktop<P3Output>("p3_approve", { commitment });
+}
+
+export function p3Deny(commitment: string): Promise<void> {
+  return invokeDesktop<void>("p3_deny", { commitment });
+}
+
+export function p3CancelRun(run: string): Promise<void> {
+  return invokeDesktop<void>("p3_cancel_run", { run });
+}
+
+export function p3EmergencyStop(): Promise<number> {
+  return invokeDesktop<number>("p3_emergency_stop");
+}
+
+export function p3Resume(): Promise<void> {
+  return invokeDesktop<void>("p3_resume");
+}
+
+export function p3RequestGrant(request: P3GrantRequest, ttlSecs: number): Promise<string> {
+  return invokeDesktop<string>("p3_request_grant", { request, ttlSecs, ttl_secs: ttlSecs });
+}
+
+export function p3RevokeGrant(grant: string): Promise<void> {
+  return invokeDesktop<void>("p3_revoke_grant", { grant });
+}
+
+export function p3ImportAttachment(): Promise<P3Attachment | null> {
+  return invokeDesktop<P3Attachment | null>("p3_import_attachment");
+}
+
+export function p3DisplayStart(): Promise<{ generation: number; number: number; width: number; height: number }> {
+  return invokeDesktop("p3_display_start");
+}
+
+export function p3DisplayStop(): Promise<void> {
+  return invokeDesktop<void>("p3_display_stop");
+}
+
 // ── World Simulation ──────────────────────────────────────────────────────────
 
 export function simSubmit(agentId: string, description: string, actionsJson: string): Promise<string> {
@@ -5560,6 +5681,40 @@ export interface CodingChange {
 export interface CodingReview {
   binding_short: string;
   changes: CodingChange[];
+  /** The sandboxed verification result this review binds, if any. */
+  verification_short: string | null;
+}
+
+/** A finalized sandboxed verification (advisory). Output tails are untrusted, pre-escaped text. */
+export interface CodingSandboxResult {
+  generation: number;
+  profile: string | null;
+  exit: string;
+  passed: boolean;
+  exit_code: number | null;
+  signal: number | null;
+  duration_ms: number;
+  stdout_bytes: number;
+  stdout_truncated: boolean;
+  stderr_bytes: number;
+  stderr_truncated: boolean;
+  cleanup: "confirmed" | "failed";
+  result_short: string;
+  stdout_excerpt: string | null;
+  stderr_excerpt: string | null;
+}
+
+export interface CodingSandboxVerification {
+  phase: string;
+  result: CodingSandboxResult | null;
+}
+
+/** A compiled-in verifier profile; its name only selects, it grants nothing. */
+export interface CodingVerifierProfile {
+  name: string;
+  display_name: string;
+  applicable: boolean;
+  reason: string | null;
 }
 
 export interface CodingRunStatus {
@@ -5574,9 +5729,12 @@ export interface CodingRunStatus {
   worker: CodingWorkerSummary | null;
   verification: CodingVerification | null;
   review: CodingReview | null;
+  sandbox_verification: CodingSandboxVerification | null;
   can_apply: boolean;
   can_restore: boolean;
   can_discard: boolean;
+  can_verify: boolean;
+  can_retry_verification_cleanup: boolean;
 }
 
 export interface CodingStartRunRequest {
@@ -5637,4 +5795,20 @@ export function codingRestoreRun(runId: string): Promise<CodingRunStatus> {
 
 export function codingDiscardRun(runId: string): Promise<CodingRunStatus> {
   return invokeDesktop<CodingRunStatus>("coding_discard_run", codingRunArgs(runId));
+}
+
+export function codingVerificationProfiles(runId: string): Promise<CodingVerifierProfile[]> {
+  return invokeDesktop<CodingVerifierProfile[]>("coding_verification_profiles", codingRunArgs(runId));
+}
+
+/**
+ * Starts sandboxed verification of the run's candidate with a compiled-in profile. The backend
+ * asks the owner via a native OS confirmation dialog; only the run id and profile name are sent.
+ */
+export function codingStartVerification(runId: string, profile: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_start_verification", { ...codingRunArgs(runId), profile });
+}
+
+export function codingRetryVerificationCleanup(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_retry_verification_cleanup", codingRunArgs(runId));
 }

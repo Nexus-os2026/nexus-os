@@ -1,0 +1,1034 @@
+P2-V1-R3B-I4-R3-R1 primary-source excerpts, 2026-10-03T12:35:14Z
+host: systemd 255 (255.4-1ubuntu8.17); dbus-daemon 1.14.10-4ubuntu4.1
+ubuntu source: git.launchpad.net/ubuntu/+source/systemd tag import/255.4-1ubuntu8.17 commit 080f998fadef77df1f9c6814c721b0b5de824537
+  debian/patches/series sha256 289465fde53e9587f1e9b87a7a95a2dd0ef3ca343216a572e09ad69e71486873; 84 patches applied in order, none failed
+upstream: github.com/systemd/systemd-stable tag v255.4 commit 387a14a7b67b8b76adaed4175e14bb7e39b2f738
+
+== cited files: applied-tree sha256, and whether Ubuntu's patches change them against upstream v255.4
+b743da9a7511066758ff15c487992baca80d0df3d95f5957fbbee78aaf6ec788  src/core/scope.c  identical to upstream v255.4
+424d429e714bb8c79d06c9da804b81696eea6144b78b03ee36abb394e3177093  src/core/unit.c  identical to upstream v255.4
+530fc6a8c508ea8e167f554ac0c5e13cbd9d22f3b897ea5f4717b96a04dc66d4  src/core/job.c  identical to upstream v255.4
+e713f9bc2401bcf6ef7e3c0feb0a24838f129f4e658bd2a80aa294a3236c5e7c  src/core/dbus-job.c  identical to upstream v255.4
+ba098985cf47ee4e02b33dabb15326ba2fc1573f4caa1f4c90de81066d08664a  src/core/dbus-unit.c  patched by Ubuntu (see the diff summary below)
+27bad6cc70e747b210ca2234646cd9f1ccb8c0190e3e1fb1d9116abbd0627d18  src/core/dbus-manager.c  patched by Ubuntu (see the diff summary below)
+37221f740005c4d344d1c70d3a2d345b8f371891bb740735f90381eb05b49e2b  src/core/dbus.c  identical to upstream v255.4
+3aecf223805665219e6ee7c81019b83e5905d2166bedc651204f2688e3303ba6  src/core/cgroup.c  patched by Ubuntu (see the diff summary below)
+19c52104ec05d9c0404dea9c046b9f4badc8436c05dc8e59d2968075b2ae10ce  src/core/manager.c  patched by Ubuntu (see the diff summary below)
+c7f70e316a306643e99309639949330767c437992d642d822f6177dbad2a99cb  src/core/unit-serialize.c  identical to upstream v255.4
+1eddc77cf95274478524f379b2ced4a2459f251f9af756eaaefcd7581e817d2e  src/libsystemd/sd-id128/sd-id128.c  identical to upstream v255.4
+919ee3b6e6f0b7ee17a908fbc6095b51f325a3c35f2bfc90f77fdb0b4e9a0c18  src/libsystemd/sd-bus/sd-bus.c  identical to upstream v255.4
+c2e841e6965c03f726c19751f2568051e5997be4c50987a600b422d0f8beebb8  src/libsystemd/sd-bus/bus-objects.c  identical to upstream v255.4
+53cb1619e81a6c060e8557e69e36a91bb9497562863c1c7aa91cde2c1643054d  src/shared/bus-get-properties.c  identical to upstream v255.4
+fb8330f9e198533ad5c17fc2d8733044110d9509caf7397d4ce3405d44ff79ed  src/basic/cgroup-util.c  patched by Ubuntu (see the diff summary below)
+675238d084c864121f3ea84dd11c6cc251577a4dbe9b9365d7fdbce33cb7beb4  src/run/run.c  identical to upstream v255.4
+0b62d200ae242b3ef7df278995eed71216357959024dbb10b822b1652f6dd2c3  src/basic/unit-def.c  identical to upstream v255.4
+a54aa060f7c87699ae3d9a0592790da819ada033342ecf0a526482cf52f02cbb  src/basic/bus-label.c  identical to upstream v255.4
+7bcb8b4e0477855e290221df772a0d55d36938bf7aaa9e252b8a00ae4d6719e7  src/libsystemd/sd-bus/bus-common-errors.h  identical to upstream v255.4
+
+== scope start: the invocation ID is acquired, then the PIDs attached: src/core/scope.c lines 415-444
+  415          int r;
+  416
+  417          assert(s);
+  418
+  419          (void) bus_scope_track_controller(s);
+  420
+  421          r = unit_acquire_invocation_id(u);
+  422          if (r < 0)
+  423                  return r;
+  424
+  425          unit_export_state_files(u);
+  426
+  427          r = unit_attach_pids_to_cgroup(u, u->pids, NULL);
+  428          if (r < 0) {
+  429                  log_unit_warning_errno(u, r, "Failed to add PIDs to scope's control group: %m");
+  430                  goto fail;
+  431          }
+  432          if (r == 0) {
+  433                  r = log_unit_warning_errno(u, SYNTHETIC_ERRNO(ECHILD), "No PIDs left to attach to the scope's control group, refusing.");
+  434                  goto fail;
+  435          }
+  436          log_unit_debug(u, "%i %s added to scope's control group.", r, r == 1 ? "process" : "processes");
+  437
+  438          s->result = SCOPE_SUCCESS;
+  439
+  440          scope_set_state(s, SCOPE_RUNNING);
+  441
+  442          /* Set the maximum runtime timeout. */
+  443          scope_arm_timer(s, /* relative= */ false, scope_running_timeout(s));
+  444
+
+== scope_start: src/core/scope.c lines 460-487
+  460  static int scope_start(Unit *u) {
+  461          Scope *s = SCOPE(u);
+  462
+  463          assert(s);
+  464
+  465          if (unit_has_name(u, SPECIAL_INIT_SCOPE))
+  466                  return -EPERM;
+  467
+  468          if (s->state == SCOPE_FAILED)
+  469                  return -EPERM;
+  470
+  471          /* We can't fulfill this right now, please try again later */
+  472          if (IN_SET(s->state, SCOPE_STOP_SIGTERM, SCOPE_STOP_SIGKILL))
+  473                  return -EAGAIN;
+  474
+  475          assert(s->state == SCOPE_DEAD);
+  476
+  477          if (!u->transient && !MANAGER_IS_RELOADING(u->manager))
+  478                  return -ENOENT;
+  479
+  480          (void) unit_realize_cgroup(u);
+  481          (void) unit_reset_accounting(u);
+  482
+  483          /* We check only for User= option to keep behavior consistent with logic for service units,
+  484           * i.e. having 'Delegate=true Group=foo' w/o specifying User= has no effect. */
+  485          if (s->user && unit_cgroup_delegate(u))
+  486                  return scope_enter_start_chown(s);
+  487
+
+== unit_set_invocation_id: src/core/unit.c lines 3465-3500
+ 3465  int unit_set_invocation_id(Unit *u, sd_id128_t id) {
+ 3466          int r;
+ 3467
+ 3468          assert(u);
+ 3469
+ 3470          /* Set the invocation ID for this unit. If we cannot, this will not roll back, but reset the whole thing. */
+ 3471
+ 3472          if (sd_id128_equal(u->invocation_id, id))
+ 3473                  return 0;
+ 3474
+ 3475          if (!sd_id128_is_null(u->invocation_id))
+ 3476                  (void) hashmap_remove_value(u->manager->units_by_invocation_id, &u->invocation_id, u);
+ 3477
+ 3478          if (sd_id128_is_null(id)) {
+ 3479                  r = 0;
+ 3480                  goto reset;
+ 3481          }
+ 3482
+ 3483          r = hashmap_ensure_allocated(&u->manager->units_by_invocation_id, &id128_hash_ops);
+ 3484          if (r < 0)
+ 3485                  goto reset;
+ 3486
+ 3487          u->invocation_id = id;
+ 3488          sd_id128_to_string(id, u->invocation_id_string);
+ 3489
+ 3490          r = hashmap_put(u->manager->units_by_invocation_id, &u->invocation_id, u);
+ 3491          if (r < 0)
+ 3492                  goto reset;
+ 3493
+ 3494          return 0;
+ 3495
+ 3496  reset:
+ 3497          u->invocation_id = SD_ID128_NULL;
+ 3498          u->invocation_id_string[0] = 0;
+ 3499          return r;
+ 3500  }
+
+== unit_acquire_invocation_id: a fresh random ID on every start: src/core/unit.c lines 5377-5391
+ 5377  int unit_acquire_invocation_id(Unit *u) {
+ 5378          sd_id128_t id;
+ 5379          int r;
+ 5380
+ 5381          assert(u);
+ 5382
+ 5383          r = sd_id128_randomize(&id);
+ 5384          if (r < 0)
+ 5385                  return log_unit_error_errno(u, r, "Failed to generate invocation ID for unit: %m");
+ 5386
+ 5387          r = unit_set_invocation_id(u, id);
+ 5388          if (r < 0)
+ 5389                  return log_unit_error_errno(u, r, "Failed to set invocation ID for unit: %m");
+ 5390
+ 5391          unit_add_to_dbus_queue(u);
+
+== sd_id128_randomize: src/libsystemd/sd-id128/sd-id128.c lines 326-339
+  326  _public_ int sd_id128_randomize(sd_id128_t *ret) {
+  327          sd_id128_t t;
+  328
+  329          assert_return(ret, -EINVAL);
+  330
+  331          random_bytes(&t, sizeof(t));
+  332
+  333          /* Turn this into a valid v4 UUID, to be nice. Note that we
+  334           * only guarantee this for newly generated UUIDs, not for
+  335           * pre-existing ones. */
+  336
+  337          *ret = id128_make_v4_uuid(t);
+  338          return 0;
+  339  }
+
+== deserialization restores the same ID (daemon-reload, reexec): src/core/unit-serialize.c lines 478-490
+  478                  } else if (streq(l, "invocation-id")) {
+  479                          sd_id128_t id;
+  480
+  481                          r = sd_id128_from_string(v, &id);
+  482                          if (r < 0)
+  483                                  log_unit_debug(u, "Failed to parse \"%s=%s\", ignoring.", l, v);
+  484                          else {
+  485                                  r = unit_set_invocation_id(u, id);
+  486                                  if (r < 0)
+  487                                          log_unit_warning_errno(u, r, "Failed to set invocation ID for unit: %m");
+  488                          }
+  489
+  490                          continue;
+
+== the InvocationID property: ay, EMITS_CHANGE: src/core/dbus-unit.c lines 940-940
+  940          SD_BUS_PROPERTY("InvocationID", "ay", bus_property_get_id128, offsetof(Unit, invocation_id), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+
+== the property's encoding: an empty array while null, else 16 bytes: src/shared/bus-get-properties.c lines 57-72
+   57  int bus_property_get_id128(
+   58                  sd_bus *bus,
+   59                  const char *path,
+   60                  const char *interface,
+   61                  const char *property,
+   62                  sd_bus_message *reply,
+   63                  void *userdata,
+   64                  sd_bus_error *error) {
+   65
+   66          sd_id128_t *id = userdata;
+   67
+   68          if (sd_id128_is_null(*id)) /* Add an empty array if the ID is zero */
+   69                  return sd_bus_message_append(reply, "ay", 0);
+   70          else
+   71                  return sd_bus_message_append_array(reply, 'y', id->bytes, 16);
+   72  }
+
+== the ControlGroup and ControlGroupId properties (the cgroup vtable): src/core/dbus-unit.c lines 1557-1558
+ 1557          SD_BUS_PROPERTY("ControlGroup", "s", property_get_cgroup, 0, 0),
+ 1558          SD_BUS_PROPERTY("ControlGroupId", "t", NULL, offsetof(Unit, cgroup_id), 0),
+
+== that vtable is on the unit type's interface: org.freedesktop.systemd1.Scope: src/core/dbus.c lines 512-519
+  512          "/org/freedesktop/systemd1/unit",
+  513          "org.freedesktop.systemd1.Scope",
+  514          .fallback_vtables = BUS_FALLBACK_VTABLES(
+  515                  { bus_scope_vtable,       bus_unit_interface_find },
+  516                  { bus_unit_cgroup_vtable, bus_unit_cgroup_find },
+  517                  { bus_cgroup_vtable,      bus_cgroup_context_find },
+  518                  { bus_kill_vtable,        bus_kill_context_find }),
+  519  };
+
+== ControlGroupId: the kernel cgroup ID of the unit's directory, read by file handle at realization: src/core/cgroup.c lines 2495-2510
+ 2495          created = r;
+ 2496
+ 2497          if (cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER) > 0) {
+ 2498                  uint64_t cgroup_id = 0;
+ 2499
+ 2500                  r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, NULL, &cgroup_full_path);
+ 2501                  if (r == 0) {
+ 2502                          r = cg_path_get_cgroupid(cgroup_full_path, &cgroup_id);
+ 2503                          if (r < 0)
+ 2504                                  log_unit_full_errno(u, ERRNO_IS_NOT_SUPPORTED(r) ? LOG_DEBUG : LOG_WARNING, r,
+ 2505                                                      "Failed to get cgroup ID of cgroup %s, ignoring: %m", cgroup_full_path);
+ 2506                  } else
+ 2507                          log_unit_warning_errno(u, r, "Failed to get full cgroup path on cgroup %s, ignoring: %m", empty_to_root(u->cgroup_path));
+ 2508
+ 2509                  u->cgroup_id = cgroup_id;
+ 2510          }
+
+== cg_path_get_cgroupid: name_to_handle_at: src/basic/cgroup-util.c lines 1441-1455
+ 1441  int cg_path_get_cgroupid(const char *path, uint64_t *ret) {
+ 1442          cg_file_handle fh = CG_FILE_HANDLE_INIT;
+ 1443          int mnt_id = -1;
+ 1444
+ 1445          assert(path);
+ 1446          assert(ret);
+ 1447
+ 1448          /* This is cgroupfs so we know the size of the handle, thus no need to loop around like
+ 1449           * name_to_handle_at_loop() does in mountpoint-util.c */
+ 1450          if (name_to_handle_at(AT_FDCWD, path, &fh.file_handle, &mnt_id, 0) < 0)
+ 1451                  return -errno;
+ 1452
+ 1453          *ret = CG_FILE_HANDLE_CGROUPID(fh);
+ 1454          return 0;
+ 1455  }
+
+== a user manager writes no invocation-ID xattr on its cgroups: src/core/cgroup.c lines 1043-1057
+ 1043  static void cgroup_xattr_apply(Unit *u) {
+ 1044          assert(u);
+ 1045
+ 1046          /* The 'user.*' xattrs can be set from a user manager. */
+ 1047          cgroup_oomd_xattr_apply(u);
+ 1048          cgroup_log_xattr_apply(u);
+ 1049          cgroup_coredump_xattr_apply(u);
+ 1050
+ 1051          if (!MANAGER_IS_SYSTEM(u->manager))
+ 1052                  return;
+ 1053
+ 1054          cgroup_invocation_id_xattr_apply(u);
+ 1055          cgroup_delegate_xattr_apply(u);
+ 1056          cgroup_survive_xattr_apply(u);
+ 1057  }
+
+== an unknown property (InvocationID) cannot be set by a caller: src/core/dbus-unit.c lines 2490-2497
+ 2490                          r = bus_unit_set_live_property(u, name, message, f, error);
+ 2491                  if (r < 0)
+ 2492                          goto error;
+ 2493
+ 2494                  if (r == 0)
+ 2495                          return sd_bus_error_setf(error, SD_BUS_ERROR_PROPERTY_READ_ONLY,
+ 2496                                                   "Cannot set property %s, or unknown property.", name);
+ 2497
+
+== StartTransientUnit: the unit must be pristine, and is made transient by this request: src/core/dbus-manager.c lines 997-1055
+  997  static int transient_unit_from_message(
+  998                  Manager *m,
+  999                  sd_bus_message *message,
+ 1000                  const char *name,
+ 1001                  Unit **unit,
+ 1002                  sd_bus_error *error) {
+ 1003
+ 1004          UnitType t;
+ 1005          Unit *u;
+ 1006          int r;
+ 1007
+ 1008          assert(m);
+ 1009          assert(message);
+ 1010          assert(name);
+ 1011
+ 1012          t = unit_name_to_type(name);
+ 1013          if (t < 0)
+ 1014                  return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+ 1015                                           "Invalid unit name or type.");
+ 1016
+ 1017          if (!unit_vtable[t]->can_transient)
+ 1018                  return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+ 1019                                           "Unit type %s does not support transient units.",
+ 1020                                           unit_type_to_string(t));
+ 1021
+ 1022          r = manager_load_unit(m, name, NULL, error, &u);
+ 1023          if (r < 0)
+ 1024                  return r;
+ 1025
+ 1026          if (!unit_is_pristine(u))
+ 1027                  return sd_bus_error_setf(error, BUS_ERROR_UNIT_EXISTS,
+ 1028                                           "Unit %s was already loaded or has a fragment file.", name);
+ 1029
+ 1030          /* OK, the unit failed to load and is unreferenced, now let's
+ 1031           * fill in the transient data instead */
+ 1032          r = unit_make_transient(u);
+ 1033          if (r < 0)
+ 1034                  return r;
+ 1035
+ 1036          /* Set our properties */
+ 1037          r = bus_unit_set_properties(u, message, UNIT_RUNTIME, false, error);
+ 1038          if (r < 0)
+ 1039                  return r;
+ 1040
+ 1041          /* If the client asked for it, automatically add a reference to this unit. */
+ 1042          if (u->bus_track_add) {
+ 1043                  r = bus_unit_track_add_sender(u, message);
+ 1044                  if (r < 0)
+ 1045                          return log_error_errno(r, "Failed to watch sender: %m");
+ 1046          }
+ 1047
+ 1048          /* Now load the missing bits of the unit we just created */
+ 1049          unit_add_to_load_queue(u);
+ 1050          manager_dispatch_load_queue(m);
+ 1051
+ 1052          *unit = u;
+ 1053
+ 1054          return 0;
+ 1055  }
+
+== unit_is_pristine: no job, no fragment: src/core/unit.c lines 5153-5170
+ 5153  bool unit_is_pristine(Unit *u) {
+ 5154          assert(u);
+ 5155
+ 5156          /* Check if the unit already exists or is already around, in a number of different ways. Note that to
+ 5157           * cater for unit types such as slice, we are generally fine with units that are marked UNIT_LOADED
+ 5158           * even though nothing was actually loaded, as those unit types don't require a file on disk.
+ 5159           *
+ 5160           * Note that we don't check for drop-ins here, because we allow drop-ins for transient units
+ 5161           * identically to non-transient units, both unit-specific and hierarchical. E.g. for a-b-c.service:
+ 5162           * service.d/….conf, a-.service.d/….conf, a-b-.service.d/….conf, a-b-c.service.d/….conf.
+ 5163           */
+ 5164
+ 5165          return IN_SET(u->load_state, UNIT_NOT_FOUND, UNIT_LOADED) &&
+ 5166                 !u->fragment_path &&
+ 5167                 !u->source_path &&
+ 5168                 !u->job &&
+ 5169                 !u->merged_into;
+ 5170  }
+
+== method_start_transient_unit: src/core/dbus-manager.c lines 1097-1134
+ 1097  static int method_start_transient_unit(sd_bus_message *message, void *userdata, sd_bus_error *error) {
+ 1098          const char *name, *smode;
+ 1099          Manager *m = ASSERT_PTR(userdata);
+ 1100          JobMode mode;
+ 1101          Unit *u;
+ 1102          int r;
+ 1103
+ 1104          assert(message);
+ 1105
+ 1106          r = mac_selinux_access_check(message, "start", error);
+ 1107          if (r < 0)
+ 1108                  return r;
+ 1109
+ 1110          r = sd_bus_message_read(message, "ss", &name, &smode);
+ 1111          if (r < 0)
+ 1112                  return r;
+ 1113
+ 1114          mode = job_mode_from_string(smode);
+ 1115          if (mode < 0)
+ 1116                  return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Job mode %s is invalid.", smode);
+ 1117
+ 1118          r = bus_verify_manage_units_async(m, message, error);
+ 1119          if (r < 0)
+ 1120                  return r;
+ 1121          if (r == 0)
+ 1122                  return 1; /* No authorization for now, but the async polkit stuff will call us again when it has it */
+ 1123
+ 1124          r = transient_unit_from_message(m, message, name, &u, error);
+ 1125          if (r < 0)
+ 1126                  return r;
+ 1127
+ 1128          r = transient_aux_units_from_message(m, message, error);
+ 1129          if (r < 0)
+ 1130                  return r;
+ 1131
+ 1132          /* Finally, start it */
+ 1133          return bus_unit_queue_job(message, u, JOB_START, mode, 0, error);
+ 1134  }
+
+== the reply: the job path, after the requester is tracked and JobNew is forced out: src/core/dbus-unit.c lines 1825-1841
+ 1825          r = manager_add_job(u->manager, type, u, mode, affected, error, &j);
+ 1826          if (r < 0)
+ 1827                  return r;
+ 1828
+ 1829          r = bus_job_track_sender(j, message);
+ 1830          if (r < 0)
+ 1831                  return r;
+ 1832
+ 1833          /* Before we send the method reply, force out the announcement JobNew for this job */
+ 1834          bus_job_send_pending_change_signal(j, true);
+ 1835
+ 1836          job_path = job_dbus_path(j);
+ 1837          if (!job_path)
+ 1838                  return -ENOMEM;
+ 1839
+ 1840          /* The classic response is just a job object path */
+ 1841          if (!FLAGS_SET(flags, BUS_UNIT_QUEUE_VERBOSE_REPLY))
+
+== the reply is sent before the handler returns: src/core/dbus-unit.c lines 1915-1919
+ 1915          r = bus_unit_queue_job_one(message, u, type, mode, flags, reply, error);
+ 1916          if (r < 0)
+ 1917                  return r;
+ 1918
+ 1919          return sd_bus_send(NULL, reply, NULL);
+
+== jobs run from a defer event source at idle priority: src/core/manager.c lines 736-742
+  736          r = sd_event_add_defer(m->event, &m->run_queue_event_source, manager_dispatch_run_queue, m);
+  737          if (r < 0)
+  738                  return r;
+  739
+  740          r = sd_event_source_set_priority(m->run_queue_event_source, SD_EVENT_PRIORITY_IDLE);
+  741          if (r < 0)
+  742                  return r;
+
+== manager_dispatch_run_queue: src/core/manager.c lines 2421-2441
+ 2421  static int manager_dispatch_run_queue(sd_event_source *source, void *userdata) {
+ 2422          Manager *m = ASSERT_PTR(userdata);
+ 2423          Job *j;
+ 2424
+ 2425          assert(source);
+ 2426
+ 2427          while ((j = prioq_peek(m->run_queue))) {
+ 2428                  assert(j->installed);
+ 2429                  assert(j->in_run_queue);
+ 2430
+ 2431                  (void) job_run_and_invalidate(j);
+ 2432          }
+ 2433
+ 2434          if (m->n_running_jobs > 0)
+ 2435                  manager_watch_jobs_in_progress(m);
+ 2436
+ 2437          if (m->n_on_console > 0)
+ 2438                  manager_watch_idle_pipe(m);
+ 2439
+ 2440          return 1;
+ 2441  }
+
+== unit_may_gc: never while a job is installed or change signals are pending: src/core/unit.c lines 433-464
+  433  bool unit_may_gc(Unit *u) {
+  434          UnitActiveState state;
+  435          int r;
+  436
+  437          assert(u);
+  438
+  439          /* Checks whether the unit is ready to be unloaded for garbage collection.  Returns true when the
+  440           * unit may be collected, and false if there's some reason to keep it loaded.
+  441           *
+  442           * References from other units are *not* checked here. Instead, this is done in unit_gc_sweep(), but
+  443           * using markers to properly collect dependency loops.
+  444           */
+  445
+  446          if (u->job || u->nop_job)
+  447                  return false;
+  448
+  449          if (u->perpetual)
+  450                  return false;
+  451
+  452          /* if we saw a cgroup empty event for this unit, stay around until we processed it so that we remove
+  453           * the empty cgroup if possible. Similar, process any pending OOM events if they are already queued
+  454           * before we release the unit. */
+  455          if (u->in_cgroup_empty_queue || u->in_cgroup_oom_queue)
+  456                  return false;
+  457
+  458          /* Make sure to send out D-Bus events before we unload the unit */
+  459          if (u->in_dbus_queue)
+  460                  return false;
+  461
+  462          if (sd_bus_track_count(u->bus_track) > 0)
+  463                  return false;
+  464
+
+== a start job finishes when the unit becomes active: src/core/unit.c lines 2636-2670
+ 2636  static bool unit_process_job(Job *j, UnitActiveState ns, bool reload_success) {
+ 2637          bool unexpected = false;
+ 2638          JobResult result;
+ 2639
+ 2640          assert(j);
+ 2641
+ 2642          if (j->state == JOB_WAITING)
+ 2643                  /* So we reached a different state for this job. Let's see if we can run it now if it failed previously
+ 2644                   * due to EAGAIN. */
+ 2645                  job_add_to_run_queue(j);
+ 2646
+ 2647          /* Let's check whether the unit's new state constitutes a finished job, or maybe contradicts a running job and
+ 2648           * hence needs to invalidate jobs. */
+ 2649
+ 2650          switch (j->type) {
+ 2651
+ 2652          case JOB_START:
+ 2653          case JOB_VERIFY_ACTIVE:
+ 2654
+ 2655                  if (UNIT_IS_ACTIVE_OR_RELOADING(ns))
+ 2656                          job_finish_and_invalidate(j, JOB_DONE, true, false);
+ 2657                  else if (j->state == JOB_RUNNING && ns != UNIT_ACTIVATING) {
+ 2658                          unexpected = true;
+ 2659
+ 2660                          if (UNIT_IS_INACTIVE_OR_FAILED(ns)) {
+ 2661                                  if (ns == UNIT_FAILED)
+ 2662                                          result = JOB_FAILED;
+ 2663                                  else
+ 2664                                          result = JOB_DONE;
+ 2665
+ 2666                                  job_finish_and_invalidate(j, result, true, false);
+ 2667                          }
+ 2668                  }
+ 2669
+ 2670                  break;
+
+== job_uninstall: JobRemoved is sent before the job is detached from the unit: src/core/job.c lines 160-183
+  160  void job_uninstall(Job *j) {
+  161          Job **pj;
+  162
+  163          assert(j->installed);
+  164
+  165          job_set_state(j, JOB_WAITING);
+  166
+  167          pj = j->type == JOB_NOP ? &j->unit->nop_job : &j->unit->job;
+  168          assert(*pj == j);
+  169
+  170          /* Detach from next 'bigger' objects */
+  171
+  172          /* daemon-reload should be transparent to job observers */
+  173          if (!MANAGER_IS_RELOADING(j->manager))
+  174                  bus_job_send_removed_signal(j);
+  175
+  176          *pj = NULL;
+  177
+  178          unit_add_to_gc_queue(j->unit);
+  179
+  180          unit_add_to_dbus_queue(j->unit); /* The Job property of the unit has changed now */
+  181
+  182          hashmap_remove_value(j->manager->jobs, UINT32_TO_PTR(j->id), j);
+  183          j->installed = false;
+
+== JobRemoved: the unit's pending change signal is sent first, to the requester's tracking: src/core/dbus-job.c lines 271-311
+  271  static int send_removed_signal(sd_bus *bus, void *userdata) {
+  272          _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
+  273          _cleanup_free_ char *p = NULL;
+  274          Job *j = ASSERT_PTR(userdata);
+  275          int r;
+  276
+  277          assert(bus);
+  278
+  279          p = job_dbus_path(j);
+  280          if (!p)
+  281                  return -ENOMEM;
+  282
+  283          r = sd_bus_message_new_signal(
+  284                          bus,
+  285                          &m,
+  286                          "/org/freedesktop/systemd1",
+  287                          "org.freedesktop.systemd1.Manager",
+  288                          "JobRemoved");
+  289          if (r < 0)
+  290                  return r;
+  291
+  292          r = sd_bus_message_append(m, "uoss", j->id, p, j->unit->id, job_result_to_string(j->result));
+  293          if (r < 0)
+  294                  return r;
+  295
+  296          return sd_bus_send(bus, m, NULL);
+  297  }
+  298
+  299  void bus_job_send_removed_signal(Job *j) {
+  300          int r;
+  301
+  302          assert(j);
+  303
+  304          if (!j->sent_dbus_new_signal)
+  305                  bus_job_send_change_signal(j);
+  306
+  307          /* Make sure that any change signal on the unit is reflected before we send out the change signal on the job */
+  308          bus_unit_send_pending_change_signal(j->unit, true);
+  309
+  310          r = bus_foreach_bus(j->manager, j->bus_track, send_removed_signal, j);
+  311          if (r < 0)
+
+== the unit change signal: the type's interface, then org.freedesktop.systemd1.Unit: src/core/dbus-unit.c lines 1621-1669
+ 1621  static int send_changed_signal(sd_bus *bus, void *userdata) {
+ 1622          _cleanup_free_ char *p = NULL;
+ 1623          Unit *u = ASSERT_PTR(userdata);
+ 1624          int r;
+ 1625
+ 1626          assert(bus);
+ 1627
+ 1628          p = unit_dbus_path(u);
+ 1629          if (!p)
+ 1630                  return -ENOMEM;
+ 1631
+ 1632          /* Send a properties changed signal. First for the specific
+ 1633           * type, then for the generic unit. The clients may rely on
+ 1634           * this order to get atomic behavior if needed. */
+ 1635
+ 1636          r = sd_bus_emit_properties_changed_strv(
+ 1637                          bus, p,
+ 1638                          unit_dbus_interface_from_type(u->type),
+ 1639                          NULL);
+ 1640          if (r < 0)
+ 1641                  return r;
+ 1642
+ 1643          return sd_bus_emit_properties_changed_strv(
+ 1644                          bus, p,
+ 1645                          "org.freedesktop.systemd1.Unit",
+ 1646                          NULL);
+ 1647  }
+ 1648
+ 1649  void bus_unit_send_change_signal(Unit *u) {
+ 1650          int r;
+ 1651          assert(u);
+ 1652
+ 1653          if (u->in_dbus_queue) {
+ 1654                  LIST_REMOVE(dbus_queue, u->manager->dbus_unit_queue, u);
+ 1655                  u->in_dbus_queue = false;
+ 1656
+ 1657                  /* The unit might be good to be GC once its pending signals have been sent */
+ 1658                  unit_add_to_gc_queue(u);
+ 1659          }
+ 1660
+ 1661          if (!u->id)
+ 1662                  return;
+ 1663
+ 1664          r = bus_foreach_bus(u->manager, u->bus_track, u->sent_dbus_new_signal ? send_changed_signal : send_new_signal, u);
+ 1665          if (r < 0)
+ 1666                  log_unit_debug_errno(u, r, "Failed to send unit change signal for %s: %m", u->id);
+ 1667
+ 1668          u->sent_dbus_new_signal = true;
+ 1669  }
+
+== bus_unit_send_pending_change_signal: src/core/dbus-unit.c lines 1671-1693
+ 1671  void bus_unit_send_pending_change_signal(Unit *u, bool including_new) {
+ 1672
+ 1673          /* Sends out any pending change signals, but only if they really are pending. This call is used when we are
+ 1674           * about to change state in order to force out a PropertiesChanged signal beforehand if there was one pending
+ 1675           * so that clients can follow the full state transition */
+ 1676
+ 1677          if (!u->in_dbus_queue) /* If not enqueued, don't bother */
+ 1678                  return;
+ 1679
+ 1680          if (!u->sent_dbus_new_signal && !including_new) /* If the unit was never announced, don't bother, it's fine if
+ 1681                                                           * the unit appears in the new state right-away (except if the
+ 1682                                                           * caller explicitly asked us to send it anyway) */
+ 1683                  return;
+ 1684
+ 1685          if (MANAGER_IS_RELOADING(u->manager)) /* Don't generate unnecessary PropertiesChanged signals for the same unit
+ 1686                                                 * when we are reloading. */
+ 1687                  return;
+ 1688
+ 1689          bus_unit_send_change_signal(u);
+ 1690  }
+ 1691
+ 1692  int bus_unit_send_pending_freezer_message(Unit *u, bool cancelled) {
+ 1693          _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
+
+== a unit never announced gets UnitNew (no properties) instead of PropertiesChanged: src/core/dbus-unit.c lines 1593-1620
+ 1593  static int send_new_signal(sd_bus *bus, void *userdata) {
+ 1594          _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
+ 1595          _cleanup_free_ char *p = NULL;
+ 1596          Unit *u = ASSERT_PTR(userdata);
+ 1597          int r;
+ 1598
+ 1599          assert(bus);
+ 1600
+ 1601          p = unit_dbus_path(u);
+ 1602          if (!p)
+ 1603                  return -ENOMEM;
+ 1604
+ 1605          r = sd_bus_message_new_signal(
+ 1606                          bus,
+ 1607                          &m,
+ 1608                          "/org/freedesktop/systemd1",
+ 1609                          "org.freedesktop.systemd1.Manager",
+ 1610                          "UnitNew");
+ 1611          if (r < 0)
+ 1612                  return r;
+ 1613
+ 1614          r = sd_bus_message_append(m, "so", u->id, p);
+ 1615          if (r < 0)
+ 1616                  return r;
+ 1617
+ 1618          return sd_bus_send(bus, m, NULL);
+ 1619  }
+ 1620
+
+== the main loop: the D-Bus queue (UnitNew of a new unit) is dispatched before the next event, the run queue's: src/core/manager.c lines 3268-3290
+ 3268                  if (manager_dispatch_cgroup_realize_queue(m) > 0)
+ 3269                          continue;
+ 3270
+ 3271                  if (manager_dispatch_start_when_upheld_queue(m) > 0)
+ 3272                          continue;
+ 3273
+ 3274                  if (manager_dispatch_stop_when_bound_queue(m) > 0)
+ 3275                          continue;
+ 3276
+ 3277                  if (manager_dispatch_stop_when_unneeded_queue(m) > 0)
+ 3278                          continue;
+ 3279
+ 3280                  if (manager_dispatch_release_resources_queue(m) > 0)
+ 3281                          continue;
+ 3282
+ 3283                  if (manager_dispatch_dbus_queue(m) > 0)
+ 3284                          continue;
+ 3285
+ 3286                  /* Sleep for watchdog runtime wait time */
+ 3287                  r = sd_event_run(m->event, watchdog_runtime_wait());
+ 3288                  if (r < 0)
+ 3289                          return log_error_errno(r, "Failed to run event loop: %m");
+ 3290          }
+
+== manager_dispatch_dbus_queue: skipped while more than MANAGER_BUS_BUSY_THRESHOLD messages are queued: src/core/manager.c lines 2453-2475
+ 2453  }
+ 2454
+ 2455  static unsigned manager_dispatch_dbus_queue(Manager *m) {
+ 2456          unsigned n = 0, budget;
+ 2457          Unit *u;
+ 2458          Job *j;
+ 2459
+ 2460          assert(m);
+ 2461
+ 2462          /* When we are reloading, let's not wait with generating signals, since we need to exit the manager as quickly
+ 2463           * as we can. There's no point in throttling generation of signals in that case. */
+ 2464          if (MANAGER_IS_RELOADING(m) || m->send_reloading_done || m->pending_reload_message)
+ 2465                  budget = UINT_MAX; /* infinite budget in this case */
+ 2466          else {
+ 2467                  /* Anything to do at all? */
+ 2468                  if (!m->dbus_unit_queue && !m->dbus_job_queue)
+ 2469                          return 0;
+ 2470
+ 2471                  /* Do we have overly many messages queued at the moment? If so, let's not enqueue more on top, let's
+ 2472                   * sit this cycle out, and process things in a later cycle when the queues got a bit emptier. */
+ 2473                  if (manager_bus_n_queued_write(m) > MANAGER_BUS_BUSY_THRESHOLD)
+ 2474                          return 0;
+ 2475
+
+== MANAGER_BUS_BUSY_THRESHOLD, MANAGER_BUS_MESSAGE_BUDGET: src/core/manager.c lines 113-116
+  113  #define MANAGER_BUS_BUSY_THRESHOLD 1024LU
+  114
+  115  /* How many units and jobs to process of the bus queue before returning to the event loop. */
+  116  #define MANAGER_BUS_MESSAGE_BUDGET 100U
+
+== bus_foreach_bus: the API bus only for subscribed or tracking clients: src/core/dbus.c lines 1118-1149
+ 1118  int bus_foreach_bus(
+ 1119                  Manager *m,
+ 1120                  sd_bus_track *subscribed2,
+ 1121                  int (*send_message)(sd_bus *bus, void *userdata),
+ 1122                  void *userdata) {
+ 1123
+ 1124          sd_bus *b;
+ 1125          int r, ret = 0;
+ 1126
+ 1127          /* Send to all direct buses, unconditionally */
+ 1128          SET_FOREACH(b, m->private_buses) {
+ 1129
+ 1130                  /* Don't bother with enqueuing these messages to clients that haven't started yet */
+ 1131                  if (sd_bus_is_ready(b) <= 0)
+ 1132                          continue;
+ 1133
+ 1134                  r = send_message(b, userdata);
+ 1135                  if (r < 0)
+ 1136                          ret = r;
+ 1137          }
+ 1138
+ 1139          /* Send to API bus, but only if somebody is subscribed */
+ 1140          if (m->api_bus &&
+ 1141              (sd_bus_track_count(m->subscribed) > 0 ||
+ 1142               sd_bus_track_count(subscribed2) > 0)) {
+ 1143                  r = send_message(m->api_bus, userdata);
+ 1144                  if (r < 0)
+ 1145                          ret = r;
+ 1146          }
+ 1147
+ 1148          return ret;
+ 1149  }
+
+== Subscribe: src/core/dbus-manager.c lines 1367-1398
+ 1367  static int method_subscribe(sd_bus_message *message, void *userdata, sd_bus_error *error) {
+ 1368          Manager *m = ASSERT_PTR(userdata);
+ 1369          int r;
+ 1370
+ 1371          assert(message);
+ 1372
+ 1373          /* Anyone can call this method */
+ 1374
+ 1375          r = mac_selinux_access_check(message, "status", error);
+ 1376          if (r < 0)
+ 1377                  return r;
+ 1378
+ 1379          if (sd_bus_message_get_bus(message) == m->api_bus) {
+ 1380
+ 1381                  /* Note that direct bus connection subscribe by
+ 1382                   * default, we only track peers on the API bus here */
+ 1383
+ 1384                  if (!m->subscribed) {
+ 1385                          r = sd_bus_track_new(sd_bus_message_get_bus(message), &m->subscribed, NULL, NULL);
+ 1386                          if (r < 0)
+ 1387                                  return r;
+ 1388                  }
+ 1389
+ 1390                  r = sd_bus_track_add_sender(m->subscribed, message);
+ 1391                  if (r < 0)
+ 1392                          return r;
+ 1393                  if (r == 0)
+ 1394                          return sd_bus_error_set(error, BUS_ERROR_ALREADY_SUBSCRIBED, "Client is already subscribed.");
+ 1395          }
+ 1396
+ 1397          return sd_bus_reply_method_return(message, NULL);
+ 1398  }
+
+== NotSubscribed, AlreadySubscribed: src/libsystemd/sd-bus/bus-common-errors.h lines 14-15
+   14  #define BUS_ERROR_NOT_SUBSCRIBED               "org.freedesktop.systemd1.NotSubscribed"
+   15  #define BUS_ERROR_ALREADY_SUBSCRIBED           "org.freedesktop.systemd1.AlreadySubscribed"
+
+== unit_dbus_path_from_name: the unit's object path: src/basic/unit-def.c lines 9-19
+    9  char *unit_dbus_path_from_name(const char *name) {
+   10          _cleanup_free_ char *e = NULL;
+   11
+   12          assert(name);
+   13
+   14          e = bus_label_escape(name);
+   15          if (!e)
+   16                  return NULL;
+   17
+   18          return strjoin("/org/freedesktop/systemd1/unit/", e);
+   19  }
+
+== bus_label_escape: every byte but a letter, or a digit after the first, as _ and two hex digits: src/basic/bus-label.c lines 10-40
+   10  char *bus_label_escape(const char *s) {
+   11          char *r, *t;
+   12          const char *f;
+   13
+   14          assert_return(s, NULL);
+   15
+   16          /* Escapes all chars that D-Bus' object path cannot deal
+   17           * with. Can be reversed with bus_path_unescape(). We special
+   18           * case the empty string. */
+   19
+   20          if (*s == 0)
+   21                  return strdup("_");
+   22
+   23          r = new(char, strlen(s)*3 + 1);
+   24          if (!r)
+   25                  return NULL;
+   26
+   27          for (f = s, t = r; *f; f++) {
+   28
+   29                  /* Escape everything that is not a-zA-Z0-9. We also escape 0-9 if it's the first character */
+   30
+   31                  if (!ascii_isalpha(*f) &&
+   32                      !(f > s && ascii_isdigit(*f))) {
+   33                          *(t++) = '_';
+   34                          *(t++) = hexchar(*f >> 4);
+   35                          *(t++) = hexchar(*f);
+   36                  } else
+   37                          *(t++) = *f;
+   38          }
+   39
+   40          *t = 0;
+
+== PropertiesChanged with no names: every EMITS_CHANGE property, by value: src/libsystemd/sd-bus/bus-objects.c lines 2161-2189
+ 2161
+ 2162                          /* If the caller specified no properties list
+ 2163                           * we include all properties that are marked
+ 2164                           * as changing in the message. */
+ 2165
+ 2166                          v = c->vtable;
+ 2167                          for (v = bus_vtable_next(c->vtable, v); v->type != _SD_BUS_VTABLE_END; v = bus_vtable_next(c->vtable, v)) {
+ 2168                                  if (!IN_SET(v->type, _SD_BUS_VTABLE_PROPERTY, _SD_BUS_VTABLE_WRITABLE_PROPERTY))
+ 2169                                          continue;
+ 2170
+ 2171                                  if (v->flags & SD_BUS_VTABLE_HIDDEN)
+ 2172                                          continue;
+ 2173
+ 2174                                  if (v->flags & SD_BUS_VTABLE_PROPERTY_EMITS_INVALIDATION) {
+ 2175                                          has_invalidating = true;
+ 2176                                          continue;
+ 2177                                  }
+ 2178
+ 2179                                  if (!(v->flags & SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE))
+ 2180                                          continue;
+ 2181
+ 2182                                  has_changing = true;
+ 2183
+ 2184                                  r = vtable_append_one_property(bus, m, m->path, c, v, u, &error);
+ 2185                                  if (r < 0)
+ 2186                                          return r;
+ 2187                                  if (bus->nodes_modified)
+ 2188                                          return 0;
+ 2189                          }
+
+== message serials (cookies): incremented in send order, cycled flag past 2^32: src/libsystemd/sd-bus/sd-bus.c lines 1901-1940
+ 1901  #define COOKIE_CYCLED (UINT32_C(1) << 31)
+ 1902
+ 1903  static uint64_t cookie_inc(uint64_t cookie) {
+ 1904
+ 1905          /* Stay within the 32-bit range, since classic D-Bus can't deal with more */
+ 1906          if (cookie >= UINT32_MAX)
+ 1907                  return COOKIE_CYCLED; /* Don't go back to zero, but use the highest bit for checking
+ 1908                                         * whether we are looping. */
+ 1909
+ 1910          return cookie + 1;
+ 1911  }
+ 1912
+ 1913  static int next_cookie(sd_bus *b) {
+ 1914          uint64_t new_cookie;
+ 1915
+ 1916          assert(b);
+ 1917
+ 1918          new_cookie = cookie_inc(b->cookie);
+ 1919
+ 1920          /* Small optimization: don't bother with checking for cookie reuse until we overran cookiespace at
+ 1921           * least once, but then do it thorougly. */
+ 1922          if (FLAGS_SET(new_cookie, COOKIE_CYCLED)) {
+ 1923                  uint32_t i;
+ 1924
+ 1925                  /* Check if the cookie is currently in use. If so, pick the next one */
+ 1926                  for (i = 0; i < COOKIE_CYCLED; i++) {
+ 1927                          if (!ordered_hashmap_contains(b->reply_callbacks, &new_cookie))
+ 1928                                  goto good;
+ 1929
+ 1930                          new_cookie = cookie_inc(new_cookie);
+ 1931                  }
+ 1932
+ 1933                  /* Can't fulfill request */
+ 1934                  return -EBUSY;
+ 1935          }
+ 1936
+ 1937  good:
+ 1938          b->cookie = new_cookie;
+ 1939          return 0;
+ 1940  }
+
+== systemd-run reads InvocationID by unit name after the job: an unbound later read: src/run/run.c lines 1242-1283
+ 1242  static int acquire_invocation_id(sd_bus *bus, const char *unit, sd_id128_t *ret) {
+ 1243          _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+ 1244          _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
+ 1245          _cleanup_free_ char *object = NULL;
+ 1246          const void *p;
+ 1247          size_t l;
+ 1248          int r;
+ 1249
+ 1250          assert(bus);
+ 1251          assert(ret);
+ 1252
+ 1253          if (unit) {
+ 1254                  object = unit_dbus_path_from_name(unit);
+ 1255                  if (!object)
+ 1256                          return log_oom();
+ 1257          }
+ 1258
+ 1259          r = sd_bus_get_property(bus,
+ 1260                                  "org.freedesktop.systemd1",
+ 1261                                  object ?: "/org/freedesktop/systemd1/unit/self",
+ 1262                                  "org.freedesktop.systemd1.Unit",
+ 1263                                  "InvocationID",
+ 1264                                  &error,
+ 1265                                  &reply,
+ 1266                                  "ay");
+ 1267          if (r < 0)
+ 1268                  return log_error_errno(r, "Failed to request invocation ID for unit: %s", bus_error_message(&error, r));
+ 1269
+ 1270          r = sd_bus_message_read_array(reply, 'y', &p, &l);
+ 1271          if (r < 0)
+ 1272                  return bus_log_parse_error(r);
+ 1273
+ 1274          if (l == 0) {
+ 1275                  *ret = SD_ID128_NULL;
+ 1276                  return 0; /* no uuid set */
+ 1277          }
+ 1278
+ 1279          if (l != sizeof(sd_id128_t))
+ 1280                  return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Invalid UUID size, %zu != %zu.", l, sizeof(sd_id128_t));
+ 1281
+ 1282          memcpy(ret, p, l);
+ 1283          return !sd_id128_is_null(*ret);
+
+== Ubuntu's patches to the cited core files (only these change; none concerns invocation IDs, jobs, transient units or scope start):
+-- src/core/dbus-unit.c: 2 changed lines
+-- src/core/dbus-manager.c: 68 changed lines
+-- src/core/cgroup.c: 30 changed lines
+-- src/core/manager.c: 7 changed lines
+
+== D-Bus specification 1.14.10: the serial and SENDER header fields
+              <row>
+                <entry>2nd <literal>UINT32</literal></entry>
+                <entry>The serial of this message, used as a cookie
+                  by the sender to identify the reply corresponding
+                  to this request. This must not be zero.
+                </entry>
+                  <entry><literal>SENDER</literal></entry>
+                  <entry>7</entry>
+                  <entry><literal>STRING</literal></entry>
+                  <entry>optional</entry>
+                  <entry>Unique name of the sending connection.
+                    This field is usually only meaningful in combination with
+                    the message bus, but other servers may define their own
+                    meanings for it.
+                    On a message bus, this header field is controlled by
+                    the message bus, so it is as reliable and trustworthy
+                    as the message bus itself.
+                    Otherwise, this header field is controlled by the message
+
+== dbus-daemon 1.14.10 bus/dispatch.c: the bus assigns the sender, nothing else
+  350        BUS_SET_OOM (&error);
+  351        goto out;
+  352      }
+  353
+  354    /* Assign a sender to the message */
+  355    if (bus_connection_is_active (connection))
+  356      {
+  357        sender = bus_connection_get_name (connection);
+  358        _dbus_assert (sender != NULL);
+  359
+  360        if (!dbus_message_set_sender (message, sender))
+  361          {
+  362            BUS_SET_OOM (&error);
+  363            goto out;
+  364          }
+  365      }
+  366    else
+sha256 dbus-specification-1.14.10.xml a84933df0e498c962518b3c93780d6a229e3a019d1c1251531f04395dac3fdd3
+sha256 dbus-1.14.10-bus-dispatch.c 437cddc6ca29bf85527cf44b7824e0e56c548c9039b699025c5d5f5937593c4a

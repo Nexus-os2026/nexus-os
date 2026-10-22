@@ -7,12 +7,13 @@ license.workspace = true
 
 [features]
 default = ["tauri-runtime"]
-tauri-runtime = ["dep:tauri"]
+tauri-runtime = ["dep:tauri", "dep:gtk"]
 real-claude = []
 real-llama = ["nexus-flash-infer/real-llama"]
 test-support = []
 
 [dependencies]
+nexus-governed-control = { path = "../../crates/nexus-governed-control" }
 nexus-kernel = { path = "../../kernel" }
 nexus-connectors-core = { path = "../../connectors/core" }
 nexus-connectors-web = { path = "../../connectors/web" }
@@ -61,7 +62,6 @@ nexus-self-improve = { path = "../../crates/nexus-self-improve" }
 nexus-code = { path = "../../nexus-code" }
 nexus-computer-use = { path = "../../crates/nexus-computer-use" }
 dirs = "5"
-zip = { version = "1.1", default-features = false, features = ["deflate"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"
@@ -99,6 +99,14 @@ tauri-plugin-global-shortcut = "2.3.1"
 # Phase One (decision D1/D2): backend-invoked native folder selection and
 # owner confirmation. The webview is granted no dialog permission.
 tauri-plugin-dialog = "=2.7.0"
+# Phase Two: governed sandboxed verification (profiles, packaged toolchain,
+# workspace, cgroup scope and the backend side of the separate helper).
+nexus-verifier-sandbox = { path = "../../crates/nexus-verifier-sandbox" }
+# Phase Three: the owner's own confirmation window (a monospace view that
+# never wraps, and an answer armed only once all of it was reached). The
+# version tao and wry already lock: no new package; Cargo.lock gains this
+# crate's dependency edge on gtk.
+gtk = { version = "=0.18.2", optional = true }
 
 # P0 item D native boundary harness (tests/webview_boundary_live.rs): it drives
 # the real Wry runtime with the production context and build_main_window, so it

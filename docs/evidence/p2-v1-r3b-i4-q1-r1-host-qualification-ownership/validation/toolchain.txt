@@ -1,0 +1,10 @@
+rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+clippy: clippy 0.1.94 (4a4ef493e3 2026-03-02)
+rustfmt: rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+python3: Python 3.12.3
+host kernel (uname -sr): Linux 6.17.0-35-generic
+HEAD: d235b1f1c624d1455315eedc58f8ebc1c1197c71
+HEAD tree: 7008c9dd074160fbb8118b3469413e25280e14c7
+status entries: 0
+CARGO_TARGET_DIR: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/targets-validate

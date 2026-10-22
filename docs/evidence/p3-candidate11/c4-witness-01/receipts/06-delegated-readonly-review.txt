@@ -1,0 +1,92 @@
+DELEGATED READ-ONLY REVIEW — P3-C11-DR01-D2A1-C4-WITNESS-01 (preflight, before the freeze)
+
+Provenance: a sub-agent of the executor (Claude Code), model "opus", instructed to read only and to run nothing
+(no cargo, rustc, rustfmt, build, test or program from the files). It is NOT an independent review in the
+Architect's sense: same executor, same model family. It is kept as a preflight record only.
+Inputs it read: the scratch copy of model_tests.rs with the appended block (lines 8522-9199 at that time; the
+same code and constants as the frozen source, before the doc-comment edit recorded in
+tools/revisions/README-c4-append.txt), protocol.rs at 42dd1bd1, and patches/C4-test1-removed.patch.
+A first attempt failed before doing any work: the harness reported "model_not_found" for the configured default
+sub-agent model; it was relaunched with model "opus". That attempt produced nothing.
+
+Report, as returned (its own words):
+
+  Bottom line: every frozen constant matches what I derived from the source. I found no compile error and no new
+  rustc warning in the appended block or in the patched protocol.rs.
+
+  A. Per-step derivation (consumed = (choice, options); branches; faults left)
+  Shared steps 1-7 (P4 and P8):
+   1. Fw(0) Start: health.arm() gives an Armed ticket (live 0 < 8). Consumes nothing, no branch, 2 faults. C4_ARM.
+   2. Fw(0) Armed: expires (0,2) not expired; open (0,4); facts (0,4). Holder at seq 2, so constraint returns
+      DuplicateRole; classify (protocol.rs 1179-1226) inserts a refusal and places X=Explanation(F1), occupancy 1;
+      rollback (0,3) Undone. NotApplied{NotWritten, conflict_member Some(0)}. Label "append_facts: NotApplied
+      NotWritten Conflict(new or retained cause DuplicateRole)". 2 faults. C4_CONFLICT.
+   3. Wk Idle: agenda allows exactly [AppendX]; branch(1) consumes nothing. C4_WK_QUIET.
+   4. Wk Seen -> Act: A = 0. Nothing consumed.
+   5. Wk Act(AppendX) (protocol.rs 1859): open (0,3), present (0,3) None, insert (0,2) Inserted(4), commit (0,2)
+      Durable, branch(1). settle gives X Committed(4) and removes the refusal; x_original pushed to obs.explained,
+      so E11 holds. "append_cell X: Committed (inserted)". 2 faults. C4_APPEND_X.
+   6. Ack(0) Idle: survey (0,4) {frontier 0, head 4, top 4, count 1, digest bytes(1,0,0)}; Taken, nonce [1,0,..].
+      "snapshot: Taken". 2 faults.
+   7. Ack(0) Holding: branch(2) (0,2), Confirmed, no branch. C4_CONFIRM.
+  P4 step 8 (offered [0,0,0,1,0,0]):
+   healthy: phase Healthy, x Some -> Refused(NotNow(CellsBusy)) before any verb; consumes nothing; 2 faults.
+   patched: place(U, Ack); open (0,4); recheck (0,4), no refusal; insert (0,4) Inserted(5); commit (1,3) Unknown
+   (faults 2 -> 1); undecided (0,2) absent; rollback (0,3) Undone; keep = true. NotApplied(Uncertain). Consumes
+   [(0,4),(0,4),(0,4),(1,3),(0,2),(0,3)]. 1 fault.
+  P8 steps 8-12:
+   8. Wk Idle: X Committed(4); agenda allows only [EmptyX(t,4)]. Nothing consumed.
+   9. Wk Seen -> Act: A = 0, H = 4.
+  10. Wk Act(EmptyX): empty (1949) Done; no verbs; "empty: Done"; 2 faults. C4_EMPTY_X.
+  11. Gc(0) (protocol.rs 1413): entry passes, Gating placed in U; open (0,4), facts (0,4) Insert, insert (0,4)
+      Inserted(5); commit (1,3) Unknown (2 -> 1); undecided (1,2) present, Gating(0) written; rollback (0,3) Undone;
+      keep = true. Refused{Uncertain, Storage}. Phase NeedBarrier, U = Gating(ReturnedUncertain). 1 fault. C4_GATING.
+  12. Ack(0) append (offered [0,0,0,0]):
+      healthy: session Open, no latch, phase NeedBarrier -> Refused(NotNow(NotHealthy)); nothing consumed; 1 fault.
+      patched: place(U, Ack) overwrites the Gating occupant silently (place has no assert), occupancy 2; open (0,4),
+      recheck (0,4) {frontier 0, head 5, top 4, count 1, same digest} passes; insert (0,4) Inserted(6); commit (0,3)
+      Durable, branch(1). frontier 4; Committed(4); keep = false, the guard empties U. Consumes
+      [(0,4),(0,4),(0,4),(0,3)]. "append_acknowledgement: Committed". 1 fault.
+  c4_frozen holds for both scenarios.
+
+  B. Violations
+   E2: loads 0 = views 0 at every step; exchanges 1 per arm or Publish drop, else 0; within bounds.
+   E5, E4: every log ordered; no rows change where NotWritten is claimed.
+   E11, E9: E11 holds at step 5; E9 never fires.
+   E1: word flags equal expected_flags in every world (0x4, 0x84, 0xA5 for patched P4, 0x25, 0x5 for patched P8).
+   E3: live 1 and unapplied 1 with one Counted ticket from step 2 on.
+   P2: debt 0 throughout. P13: 0 <= 0 <= 0 <= head; in patched P8, 0 <= 4 <= 4 <= 6.
+   KEY round trip: symmetric for every world; no reachable assert or panic in encode, decode or Oracle.
+   Healthy core: no violation anywhere in either scenario; c4_p4_kept and c4_p8_kept true; the test passes.
+   Patched P4: only "P4" after step 8; c4_p4_lost true. Patched P8: only "P8" after step 12; c4_p8_lost true.
+   Both named properties OBSERVED, "others" empty; the test panics as intended.
+
+  C. Compile review: all comparisons have valid impls (Vec<u8> vs &[u8]; Vec<u8> vs [u8], PartialEq<[U]> for
+   Vec, stable since 1.48; &[(u8,u8)] vs &[(u8,u8)]; Vec<String> vs &[&str] and vs [&str; 1]). The ends_as
+   closure borrows only record's fields; its last use precedes run.steps.push(record). let-else with continue;
+   fn items coerce to fn pointers in const context; &[CONST, ...] get 'static as in the existing Witness consts;
+   unwrap_or(&[]) coerces; partial moves out of Obs (no Drop). Every format!/println!/panic! has matching
+   placeholder and argument counts; every inline capture names a local in scope. Privacy: reachable. No name
+   collisions. Struct literals complete. No unused field, variable or mut.
+  D. Patched protocol.rs: removes exactly lines 1627-1642; `core` still used by core.place; not_now still used;
+   Entry::NotOpen, NotHealthy, CellsBusy and LatchCause::CellInvariant still used elsewhere. No new warning.
+
+  MISMATCHES/ERRORS: none found. WARNINGS: none expected.
+  RESIDUAL RISKS:
+   1. A fixture failure also fails the test; a pass/fail-only harness would count it as a kill. The harness should
+      require "NAMED PROPERTY P4: OBSERVED" and "NAMED PROPERTY P8: OBSERVED".
+   2. On the healthy core the changed end's offered choices are never consumed; only the patched run checks them.
+   3. Everything comes from reading, not running; weakest points: PartialEq<[U]> for Vec and const lifetime
+      extension of the nested &[...] (mirrors existing code).
+   4. Doc nit: C4_P4's "(C and X empty)" describes test 1's condition, not the state. Cosmetic.
+   5. The P8 loss depends on Core::place silently overwriting an occupied U (protocol.rs:1139), true of this source.
+   6. Counts use a thread-local hook; libtest runs each test in its own thread; counts reset before each step.
+
+Executor's dispositions:
+   1. Already met: classify.py requires both exact OBSERVED lines at their loci, the witness's own verdict panic,
+      no "WITNESS FIXTURE FAILURE", exit 101 by a normal exit (synthetic cases 14-19, 24).
+   2. Inherent to the design (the healthy refusal consumes none by definition); the mutant receipt checks them.
+   3. Accepted as residual; the one authorised build is the test.
+   4. Fixed before the freeze: doc comments of C4_P4 and C4_P8 (tools/revisions/README-c4-append.txt).
+   5. Recorded as a property of the source under test, not of the witness.
+   6. Recorded; the test is selected alone with --test-threads=1.

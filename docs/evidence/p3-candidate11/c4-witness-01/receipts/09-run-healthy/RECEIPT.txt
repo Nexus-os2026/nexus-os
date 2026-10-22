@@ -1,0 +1,26 @@
+SUPERVISED WITNESS INVOCATION (baseline) — P3-C11-DR01-D2A1-C4-WITNESS-01
+started: 2026-10-14T08:10:06+0100
+source identity: {"head": "04e42a7ddf0d0a2af17b6506c51997006e7a08dc", "tree_head": "fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3", "branch": "experiment/p3-c11-d2a1-c4-witness-01", "porcelain": [], "source": {"crates/nexus-governed-control/src/ledger/protocol.rs": "a2df2841b99cad5d452008a6d4150e9369d07e66", "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "28085ce232827301104b5d757af042ec933976f8"}, "file_sha256": {"Cargo.lock": "6ed84a9aeba4a542b1820c53d4ba0f4899cdfa819380aaa8649c3b5d31add979", "rust-toolchain.toml": "fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298", ".cargo/config.toml": "379a150667985722540bd30f737cfb363dc5bc2dc8a5edae3db3725e3cd0b234", "Cargo.toml": "7f09c3dbe16a37bba215eeaa5f028614f3f6eafdf3419a5b79472f6b7cebf795", "crates/nexus-governed-control/Cargo.toml": "30b2bb495434e85fc5b1e1476949711d55e8bb55cb9e0e6783bbc71ce0a3564f", "crates/nexus-governed-control/src/ledger/protocol.rs": "a5454944368df70fa4ce1c7cc4191d283e0a54b371137338fb999e59960aa296", "crates/nexus-governed-control/src/ledger/protocol/model_tests.rs": "2e93834f795f50842d5b124612895c4a150946130d2c789dac816ac36f6b6972"}}
+executable /home/nexus/NEXUS/nexus-os-p3-c11-c4-witness-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3: sha256 before f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e (8984464 bytes); pinned f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e
+pre-flight 2026-10-14T08:10:06+0100:
+  MemTotal 65077588 KiB; MemAvailable 54255296 KiB (needed 18874368 KiB = 16 GiB cap + 2 GiB margin)
+  SwapTotal 16777212 KiB; SwapFree 7662152 KiB (the scope has swap disabled)
+  load average ['2.24', '1.58', '1.18']; online CPUs 16
+  largest resident processes (comm only; none is stopped by this launcher):
+    832784 brave
+    791596 python
+    729516 2.1.281
+    680588 chrome
+    642296 brave
+    525684 claude
+    506756 chrome
+    468652 chrome
+test environment (env -i; only these): PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0
+selection: exactly one test by --exact; verified from the harness's own output (no separate listing invocation is made)
+scope unit: c4w01-run-baseline-1791961806.scope; cwd: /home/nexus/NEXUS/nexus-os-p3-c11-c4-witness-01/crates/nexus-governed-control
+command: systemd-run --user --scope --unit=c4w01-run-baseline-1791961806 -p MemoryMax=16G -p MemorySwapMax=0 -p RuntimeMaxSec=190 --quiet /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/tools/scope-wrap.sh /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/receipts/09-run-healthy/scope-record.txt /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 RUST_BACKTRACE=0 /usr/bin/time -v -o /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/receipts/09-run-healthy/time-v.txt timeout -s KILL 180 /home/nexus/NEXUS/nexus-os-p3-c11-c4-witness-01/target/release/deps/nexus_governed_control-2faa0b9718d3e6a3 ledger::protocol::model_tests::c4_witness_p4_and_p8_on_f8 --exact --nocapture --test-threads=1
+supervisor return code 0; /usr/bin/time: exit status 0, signal None, wall 0.0 s, max RSS (largest single process) 5132 KiB
+scope (scope-wrap.sh record): memory.max 17179869184, memory.swap.max 0, memory.peak 3825664 B, memory.swap.peak 0 B, oom 0, oom_kill 0, completed True; systemctl after: {'Result': 'success', 'LoadState': 'not-found', 'ActiveState': 'inactive'}
+executable sha256 after: f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e MATCH
+raw output: /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/receipts/09-run-healthy/raw-output.txt sha256 15ec6132bf25eacac418f0b661bffe53985fe20506f95725b8c40ec23cbc9918 bytes 24303
+finished: 2026-10-14T08:10:06+0100

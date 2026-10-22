@@ -1,0 +1,42 @@
+
+running 1 test
+test v02_succession_verifies_the_selected_successor_after_publication ... FAILED
+
+failures:
+
+---- v02_succession_verifies_the_selected_successor_after_publication stdout ----
+
+thread 'v02_succession_verifies_the_selected_successor_after_publication' (61713) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:8911:5:
+[succession-verify-after] re-selection, then verify-after: [Begin("uid-1001-101112131415161718191a1b1c1d1e1f"), Verify(Ok(())), Adopt("uid-1001-202122232425262728292a2b2c2d2e2f"), Reselect(2)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v02_succession_verifies_the_selected_successor_after_publication
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.03s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+warning: unnecessary parentheses around assigned value
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:2591:19
+     |
+2591 |     let _unused = (move || -> Result<(), String> {
+     |                   ^
+...
+2622 |     });
+     |      ^
+     |
+     = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+     |
+2591 ~     let _unused = move || -> Result<(), String> {
+2592 |         let mut s = finish_session.borrow_mut();
+ ...
+2621 |         Ok(())
+2622 ~     };
+     |
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning (run `cargo fix --test "phase2_custody_store" -p nexus-verifier-sandbox` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.43s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

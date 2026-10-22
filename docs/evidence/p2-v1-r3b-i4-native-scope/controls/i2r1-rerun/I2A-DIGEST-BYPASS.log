@@ -1,0 +1,24 @@
+
+running 1 test
+test c07_digest_and_payload_mutations_are_detected ... FAILED
+
+failures:
+
+---- c07_digest_and_payload_mutations_are_detected stdout ----
+
+thread 'c07_digest_and_payload_mutations_are_detected' (627005) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1465:21:
+assertion `left == right` failed: [digest-bound] byte 8 of 45 covered changed
+  left: Ok(())
+ right: Err(DigestMismatch)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c07_digest_and_payload_mutations_are_detected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.95s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/i2r1/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

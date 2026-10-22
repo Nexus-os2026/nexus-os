@@ -1,0 +1,42 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run
+exit 0
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let _ = (
+        opened.report(),
+        opened.decision().clone(),
+        opened.scan().clone(),
+        opened.selection().clone(),
+        opened.opening(),
+        opened.admission().opening(),
+    );
+    let _ = opened.validator();
+    drop(opened);
+    let mut owner = owner(fixture, config);
+    owner.run_worker_until_idle();
+    let _ = (owner.header(), owner.claim(), owner.index(), owner.generation());
+    let _ = (owner.retained().len(), owner.status(), owner.latched());
+    let now = Tick(2);
+    let _ = owner.start_run(now);
+    let _ = owner.flush(now);
+    match owner.close(Tick(3)) {
+        Ok(mut closed) => {
+            let _ = (closed.closed().records, closed.seal_request().clone());
+            closed.run_worker_until_idle();
+            let _ = closed.seal_state();
+        }
+        Err(owner) => {
+            let _ = owner.shutdown_decision();
+        }
+    }
+    let mut session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    let _ = session.verify(config);
+    let _ = maint::archive(&mut session, 0);
+    session.end();
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.22s
+  Executable tests/r1_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/r1_api_probe-91fb36aa8b09324e)
+--- stdout ---

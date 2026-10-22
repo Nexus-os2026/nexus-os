@@ -1,0 +1,31 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let edited = opened.scan().clone();
+    let validator = custody::store::disposition::StoreValidator::of(
+        &[0; 16],
+        &edited.level.incidents,
+        &edited.dispositions,
+    );
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+error[E0624]: associated function `of` is private
+  --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:60:66
+   |
+60 |       let validator = custody::store::disposition::StoreValidator::of(
+   |                                                                    ^^ private associated function
+   |
+  ::: crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs:65:5
+   |
+65 | /     pub(super) fn of(
+66 | |         root_id: &[u8; 16],
+67 | |         incidents: &'a BTreeMap<[u8; 32], Incident>,
+68 | |         dispositions: &'a BTreeMap<[u8; 32], Disposition>,
+69 | |     ) -> StoreValidator<'a> {
+   | |___________________________- private associated function defined here
+
+For more information about this error, try `rustc --explain E0624`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

@@ -5,6 +5,14 @@ mod builder_workspace;
 // the coding-run primitive.
 mod coding_flow;
 mod commands;
+// Phase Three: governed real-world control (the one front door to every
+// governed process, network, browser, display, input and connector effect).
+mod governed_real_world;
+mod hm_dispatch;
+// P3-C11-HM-M4 N2: the governed route-policy changes (tighten store first;
+// loosen only through the Owner's native confirmation).
+mod hm_policy;
+mod hm_wiring;
 mod nx_bridge;
 pub mod oracle_runtime;
 mod phase0_surface;
@@ -127,7 +135,6 @@ use nexus_capability_measurement::tauri_commands::MeasurementState;
 use nexus_predictive_router::tauri_commands::RouterState;
 
 // Browser agent imports
-use nexus_browser_agent::BrowserState;
 
 // Token economy imports
 use nexus_token_economy::tauri_commands as token_cmds;
@@ -173,31 +180,139 @@ pub(crate) const SYSTEM_UUID: Uuid = Uuid::from_bytes([
     0x4e, 0x58, 0x53, 0x59, 0x53, 0x2d, 0x00, 0x01, 0x80, 0x00, 0x4e, 0x45, 0x58, 0x55, 0x53, 0x00,
 ]);
 
-struct GatewayHivemindLlm;
+/// Wires the process's dispatch issuer (P3-HM-CONTRACT-02 §11.0) into a
+/// cognitive runtime; without one, no goal unit starts.
+trait WithOptionalIssuer {
+    fn with_optional_issuer(
+        self,
+        issuer: &std::result::Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
+    ) -> Self;
+}
 
-impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
+impl WithOptionalIssuer for nexus_kernel::cognitive::CognitiveRuntime {
+    fn with_optional_issuer(
+        self,
+        issuer: &std::result::Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
+    ) -> Self {
+        match issuer {
+            Ok(issuer) => self.with_dispatch_issuer(issuer.clone()),
+            Err(_) => self,
+        }
+    }
+}
+
+/// The model of the shared HiveMind coordinator outside a session: it
+/// dispatches nothing. A session runs its decomposition and merge through
+/// its own adapter, which carries the session's admission
+/// (`HivemindCoordinator::execute_with_executor_via`).
+struct NoSessionHivemindLlm;
+
+impl nexus_kernel::cognitive::HivemindLlm for NoSessionHivemindLlm {
     fn decompose(
         &self,
-        prompt: &str,
-    ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+        _ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> std::result::Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "hivemind: refused: no session adapter".to_string(),
+        ))
     }
 
-    fn merge(&self, prompt: &str) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+    fn merge(
+        &self,
+        _ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> std::result::Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "hivemind: refused: no session adapter".to_string(),
+        ))
     }
 }
 
 #[derive(Clone, Debug)]
-struct AgentLlmRoute {
-    model: String,
+pub(crate) struct AgentLlmRoute {
+    pub(crate) model: String,
 }
 
-thread_local! {
-    static ACTIVE_AGENT_LLM_ROUTE: RefCell<Option<AgentLlmRoute>> = const { RefCell::new(None) };
-    /// Cached Flash provider for the current agent's cognitive loop.
-    /// Set by `with_agent_llm_route` when a `flash:*` route is active.
-    static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
+/// Which providers an agent's prompt may reach (P3 D-2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AgentLlmPolicy {
+    /// No agent's work, or an agent whose configuration allows any provider.
+    Unrestricted,
+    /// The agent's configuration is local-only: a verified local model only.
+    LocalOnly,
+    /// An agent's work whose policy could not be established: nothing is
+    /// dispatched. The default (A-C1): no policy is ever assumed. Units carry
+    /// their policy in their context (P3-HM-CONTRACT-02 §11.1); this enum only
+    /// feeds the D-2 provider selection, whose tests pass this value.
+    #[default]
+    #[cfg_attr(not(test), allow(dead_code))]
+    Unresolved,
+}
+
+/// The policy the configuration sets for an agent known by `keys`:
+/// local-only when the assignment under any of them is.
+pub(crate) fn agent_llm_policy_in(
+    config: &nexus_kernel::config::NexusConfig,
+    keys: &[String],
+) -> AgentLlmPolicy {
+    let local_only = keys.iter().any(|key| {
+        config
+            .agent_llm_assignments
+            .get(key)
+            .is_some_and(|assignment| assignment.local_only)
+    });
+    if local_only {
+        AgentLlmPolicy::LocalOnly
+    } else {
+        AgentLlmPolicy::Unrestricted
+    }
+}
+
+/// The registered agents a chat routed by `name` reaches (P3 D-2 R2). The
+/// name is not an identity: it only selects the registered agents of that
+/// name (after normalization), in the supervisor or in the desktop's
+/// metadata, in id order.
+pub(crate) fn agents_named(state: &AppState, name: &str) -> Vec<Uuid> {
+    let normalized = normalize_agent_config_key(name);
+    let mut ids: Vec<Uuid> = state
+        .meta
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .filter(|(_, entry)| normalize_agent_config_key(&entry.name) == normalized)
+        .map(|(id, _)| *id)
+        .collect();
+    {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        for status in supervisor.health_check() {
+            let named = supervisor.get_agent(status.id).is_some_and(|handle| {
+                normalize_agent_config_key(&handle.manifest.name) == normalized
+            });
+            if named && !ids.contains(&status.id) {
+                ids.push(status.id);
+            }
+        }
+    }
+    ids.sort();
+    ids
+}
+
+/// How strongly agent reasoning prefers an Ollama model, by its name: the
+/// larger and coding models first.
+fn ollama_model_preference(name: &str) -> u8 {
+    let name = name.to_lowercase();
+    if name.contains("35b") || name.contains("32b") || name.contains("70b") {
+        3
+    } else if name.contains("14b")
+        || name.contains("13b")
+        || name.contains("9b")
+        || name.contains("coder")
+    {
+        2 // Prefer medium and coder models
+    } else {
+        1
+    }
 }
 
 fn normalize_agent_config_key(value: &str) -> String {
@@ -265,11 +380,22 @@ fn route_from_model_mapping(value: &Value) -> Option<String> {
     })
 }
 
-fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmRoute> {
+/// The model route of the agent unit `ctx` (which provider and model; the
+/// unit's route class alone decides whether it must be local, R4). `local`
+/// is that decision. Read without the `loops` guard: the goal override comes
+/// from the published status snapshot, and the agent's `model_mapping` rows
+/// are read route-first through its context (P3-HM-CONTRACT-02 §12.3: a
+/// row a non-local unit may not disclose never selects its route).
+pub(crate) fn resolve_agent_llm_route(
+    state: &AppState,
+    ctx: &nexus_kernel::hm::DispatchContext,
+    agent_id: &str,
+    local: bool,
+) -> Option<AgentLlmRoute> {
     // 0. BUG-DROP: per-goal override set by the Chat page model dropdown.
     //    Takes priority over memory mappings and config assignments so the UI
     //    selection is authoritative for the lifetime of the active goal.
-    if let Some(status) = state.cognitive_runtime.get_agent_status(agent_id) {
+    if let Some(status) = state.cognitive_runtime.get_agent_status_fast(agent_id) {
         if let Some(goal) = status.active_goal {
             if let Some(model) = goal.model_override {
                 if !model.trim().is_empty() {
@@ -283,12 +409,21 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
     let config = load_config().ok()?;
     let _agent_short = &agent_id[..agent_id.len().min(8)];
 
-    // 1. Check agent memory for explicit model mapping (user override)
-    if let Ok(memories) = state.db.load_memories(agent_id, Some("model_mapping"), 10) {
-        for row in memories {
-            if let Ok(parsed) = serde_json::from_str::<Value>(&row.value_json) {
-                if let Some(model) = route_from_model_mapping(&parsed) {
-                    return Some(AgentLlmRoute { model });
+    // 1. Check agent memory for explicit model mapping (user override),
+    //    route-first (§12.3 item 4).
+    if let Ok(issuer) = state.hm_issuer() {
+        let spec = nexus_kernel::hm::RecallSpec {
+            column_eq: Some(("memory_type", "model_mapping")),
+            ..nexus_kernel::hm::RecallSpec::table(nexus_kernel::hm::RecordTable::AgentMemory, 10)
+        };
+        if let Ok(rows) = issuer.control_records(ctx, &spec) {
+            for row in rows {
+                if let Ok(parsed) =
+                    serde_json::from_str::<Value>(row.field("value_json").unwrap_or_default())
+                {
+                    if let Some(model) = route_from_model_mapping(&parsed) {
+                        return Some(AgentLlmRoute { model });
+                    }
                 }
             }
         }
@@ -368,7 +503,7 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
     // 3. Smart auto-routing: pick the best available model.
     //    Priority: Flash Inference (local GGUF) → Ollama → Cloud providers.
     //    Returns None if nothing is available (GatewayPlannerLlm handles fallback).
-    auto_select_best_model(state, &config)
+    auto_select_best_model(state, &config, local)
 }
 
 /// Smart model selection: pick the best available LLM provider and model.
@@ -382,6 +517,7 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
 fn auto_select_best_model(
     state: &AppState,
     config: &nexus_kernel::config::NexusConfig,
+    local: bool,
 ) -> Option<AgentLlmRoute> {
     // --- Tier 0: Check Flash Inference sessions (best: local, fast, free, smart) ---
     // If a Flash Inference model is loaded, use it — these are larger/smarter models
@@ -404,6 +540,13 @@ fn auto_select_best_model(
     // --- Tier 1 (P0-002C5A): no environment variable selects a model file. ---
 
     // --- Tier 2: Check Ollama for available models ---
+    // P3 D-2 R2: only for a non-local unit. This probe asks the operator's
+    // Ollama address with the environment's proxy settings; a local unit's
+    // model is chosen by `local_only_target` over the direct loopback
+    // connection.
+    if local {
+        return None;
+    }
     // Fast TCP probe first — if Ollama isn't running, skip the slow list_models() call
     let prov_config = build_provider_config(config);
     let ollama = OllamaProvider::from_env();
@@ -413,20 +556,7 @@ fn auto_select_best_model(
                 // Prefer larger models for agent reasoning (35b > 9b > 4b)
                 let best = models
                     .iter()
-                    .max_by_key(|m| {
-                        let name = m.name.to_lowercase();
-                        if name.contains("35b") || name.contains("32b") || name.contains("70b") {
-                            3
-                        } else if name.contains("14b")
-                            || name.contains("13b")
-                            || name.contains("9b")
-                            || name.contains("coder")
-                        {
-                            2 // Prefer medium and coder models
-                        } else {
-                            1
-                        }
-                    })
+                    .max_by_key(|m| ollama_model_preference(&m.name))
                     .map(|m| m.name.clone())
                     .unwrap_or_else(|| models[0].name.clone());
 
@@ -441,65 +571,6 @@ fn auto_select_best_model(
     }
 
     None
-}
-
-fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
-    let route = resolve_agent_llm_route(state, agent_id);
-
-    // If the route points to Flash, resolve the cached provider now
-    // so GatewayPlannerLlm can use it without needing AppState access.
-    // Handles both "flash:{session_id}" and "flash/{model_name}" formats.
-    let flash_prov = route.as_ref().and_then(|r| {
-        let wants_flash =
-            r.model.starts_with("flash:") || r.model.starts_with("flash/") || r.model == "flash";
-        if !wants_flash {
-            return None;
-        }
-
-        // Try the provider cache first
-        let cache = state
-            .flash_providers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        let cache_keys: Vec<_> = cache.keys().cloned().collect();
-        eprintln!(
-            "[flash-route] route='{}', cache has {} entries: {:?}",
-            r.model,
-            cache.len(),
-            cache_keys
-        );
-
-        // Try exact session ID match for "flash:{id}" routes
-        if let Some(session_id) = r.model.strip_prefix("flash:") {
-            if let Some(prov) = cache.get(session_id) {
-                eprintln!("[flash-route] found provider by session ID '{session_id}'");
-                return Some(prov.clone());
-            }
-        }
-        // For any flash route, use whatever provider is cached
-        if let Some((key, prov)) = cache.iter().next() {
-            eprintln!("[flash-route] using cached provider '{key}'");
-            return Some(prov.clone());
-        }
-        drop(cache);
-
-        eprintln!(
-            "[flash-route] provider cache empty for route '{}' — model not loaded",
-            r.model
-        );
-        None
-    });
-
-    ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
-        ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
-            let prev_route = route_slot.replace(route);
-            let prev_flash = flash_slot.replace(flash_prov);
-            let output = op();
-            route_slot.replace(prev_route);
-            flash_slot.replace(prev_flash);
-            output
-        })
-    })
 }
 
 #[derive(Clone)]
@@ -578,6 +649,10 @@ fn load_fuel_report_from_row(
         })
 }
 
+/// The refusal of a context-free write to an in-scope store (R7).
+pub(crate) const UNLABELLED_WRITE_REFUSED: &str =
+    "refused: a write to an in-scope store needs the unit's context (P3-HM-CONTRACT-02 §6.1)";
+
 /// Bridges `NexusDatabase` (persistence) to the kernel `StrategyStore` trait.
 struct DbStrategyStore {
     db: Arc<NexusDatabase>,
@@ -593,9 +668,11 @@ impl nexus_kernel::cognitive::StrategyStore for DbStrategyStore {
         fuel: f64,
         duration: f64,
     ) -> std::result::Result<(), String> {
-        self.db
-            .upsert_strategy_score(agent_id, strategy_hash, goal_type, success, fuel, duration)
-            .map_err(|e| e.to_string())
+        // P3-HM-CONTRACT-02 §6.1, §6.5 `strategy_score` (R7): an in-scope
+        // write goes only through the labelled API, under the unit's
+        // context; this context-free write is refused.
+        let _ = (agent_id, strategy_hash, goal_type, success, fuel, duration);
+        Err(UNLABELLED_WRITE_REFUSED.to_string())
     }
 
     fn load_top_strategies(
@@ -661,8 +738,11 @@ impl nexus_kernel::cognitive::MemoryStore for DbMemoryStore {
         key: &str,
         value_json: &str,
     ) -> std::result::Result<(), String> {
-        StateStore::save_memory(&*self.db, agent_id, memory_type, key, value_json)
-            .map_err(|e| e.to_string())
+        // P3-HM-CONTRACT-02 §6.1, §6.5 `db_memory_store` (R7): an in-scope
+        // write goes only through the labelled API, under the unit's
+        // context; this context-free write is refused.
+        let _ = (agent_id, memory_type, key, value_json);
+        Err(UNLABELLED_WRITE_REFUSED.to_string())
     }
 
     fn load_memories(
@@ -785,6 +865,8 @@ struct VoiceProcess {
 #[derive(Clone)]
 struct BlockedConsentWait {
     consent_id: String,
+    /// The goal whose loop waits: a goal's own cleanup wakes only its wait.
+    goal_id: String,
     notify: Arc<Notify>,
 }
 
@@ -901,6 +983,8 @@ pub struct AppState {
     /// runs of this process). Shares the backend authority registry.
     #[cfg(target_os = "linux")]
     coding: Result<Arc<coding_flow::CodingFlow>, String>,
+    /// Phase Three governed real-world control (the one front door).
+    real_world: Result<Arc<governed_real_world::RealWorld>, String>,
     /// Lock invariant: audit and supervisor guards must never overlap. Do not
     /// hold audit across routing, secrets, Warden, models, tools or callbacks.
     /// Execution passes an AuditWriter; readers snapshot before downstream work.
@@ -940,6 +1024,8 @@ pub struct AppState {
     /// the top of each cycle and exits cleanly when set.
     pub cognitive_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
+    /// The HiveMind sessions under way: bounded, each cancellable.
+    hive_sessions: Arc<commands::cognitive::hive::HiveSessions>,
     message_gateway: Arc<Mutex<MessageGateway>>,
     pub evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
     auto_evolution: Arc<AutoEvolutionManager>,
@@ -991,11 +1077,13 @@ pub struct AppState {
         Arc<Mutex<HashMap<String, std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>>>,
     /// Speculative decoding engine — pairs a fast draft model with the loaded target.
     flash_speculative: Arc<Mutex<Option<nexus_flash_infer::SpeculativeEngine>>>,
+    /// P3-HM-CONTRACT-02 §11.0: the process's single dispatch issuer, over
+    /// `db`. Without it no agent-scoped dispatch happens on any route.
+    hm_issuer: Result<Arc<nexus_kernel::hm::DispatchIssuer>, String>,
     adversarial_arena:
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
     capability_measurement: Arc<MeasurementState>,
     predictive_router: Arc<RouterState>,
-    browser_agent: Arc<BrowserState>,
     token_economy: Arc<token_cmds::EconomyState>,
     governed_control: Arc<cc_cmds::ControlState>,
     world_simulation: Arc<sim_cmds::SimulationState>,
@@ -1061,13 +1149,28 @@ fn append_audit_event(
     event_type: EventType,
     payload: serde_json::Value,
 ) {
+    if let Err(e) = append_audit_event_checked(audit, db, agent_id, event_type, payload) {
+        eprintln!("{e}");
+    }
+}
+
+/// [`append_audit_event`], reporting failure: Phase Three evidence must be
+/// recorded before its effect, so its sink needs to know.
+fn append_audit_event_checked(
+    audit: &Mutex<AuditTrail>,
+    db: &NexusDatabase,
+    agent_id: AgentId,
+    event_type: EventType,
+    payload: serde_json::Value,
+) -> Result<(), String> {
     let event_type_str = format!("{event_type:?}");
+    let mut failures = Vec::new();
     let mut guard = match audit.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     if let Err(e) = guard.append_event(agent_id, event_type, payload.clone()) {
-        eprintln!("audit append failed: {e}");
+        failures.push(format!("audit append failed: {e}"));
     }
 
     // Leaf critical section: serialize the DB chain's read/count/append as
@@ -1090,7 +1193,12 @@ fn append_audit_event(
         &current_hash,
         sequence,
     ) {
-        eprintln!("persistence: audit append failed: {e}");
+        failures.push(format!("persistence: audit append failed: {e}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
     }
 }
 
@@ -1149,6 +1257,21 @@ impl AppState {
                         std::process::exit(1);
                     })
                 }),
+        );
+        // P3-HM-CONTRACT-02 §9 (mission R6): after the legacy cleanup and the
+        // database open (or its in-memory fallback), and before any work is
+        // accepted: T₀, the ledger checks, the event back-fill; then the
+        // single dispatch issuer.
+        let meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>> = Arc::new(Mutex::new(HashMap::new()));
+        let hm_registry = Arc::new(hm_wiring::DesktopAgentRegistry::new(
+            supervisor.clone(),
+            meta.clone(),
+        ));
+        hm_wiring::start_historical_memory(&db, &hm_registry);
+        let hm_issuer = hm_wiring::build_dispatch_issuer(
+            db.clone(),
+            hm_registry,
+            Arc::new(hm_wiring::DesktopConfigInput::live()),
         );
         // Bug AK Commit 2: run the one-shot credential-vault
         // migration before any consumer reads `config.social.x_*`
@@ -1210,7 +1333,8 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                 build_provider_registry(),
             )
-            .with_state_database(db.clone()),
+            .with_state_database(db.clone())
+            .with_optional_issuer(&hm_issuer),
         );
         let agent_scheduler = Arc::new(nexus_kernel::cognitive::AgentScheduler::new(
             cognitive_runtime.clone(),
@@ -1263,6 +1387,10 @@ impl AppState {
         }
         #[cfg(target_os = "linux")]
         let coding = coding_flow::CodingFlow::new(Arc::clone(&workspace_authority)).map(Arc::new);
+        let real_world = governed_real_world::RealWorld::setup(audit.clone(), db.clone());
+        if let Err(error) = &real_world {
+            eprintln!("{error}; governed real-world control is unavailable");
+        }
 
         let state = Self {
             supervisor: supervisor.clone(),
@@ -1270,8 +1398,9 @@ impl AppState {
             builder_workspace,
             #[cfg(target_os = "linux")]
             coding,
+            real_world,
             audit,
-            meta: Arc::new(Mutex::new(HashMap::new())),
+            meta,
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
@@ -1320,10 +1449,11 @@ impl AppState {
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(GatewayHivemindLlm),
+                Box::new(NoSessionHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new({
                 let mut gw = MessageGateway::new();
                 // Register enabled platforms from environment
@@ -1475,6 +1605,7 @@ impl AppState {
                 nexus_flash_infer::detect_hardware(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            hm_issuer,
             flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
@@ -1483,7 +1614,6 @@ impl AppState {
             // process working directory.
             capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
-            browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
@@ -1533,6 +1663,12 @@ impl AppState {
     fn load_agents_deferred(&self) {
         restore_persisted_agents(self);
         self.load_prebuilt_agents();
+    }
+
+    /// The process's single dispatch issuer (P3-HM-CONTRACT-02 §11.0), or
+    /// why there is none: then no agent-scoped dispatch happens.
+    pub(crate) fn hm_issuer(&self) -> Result<&Arc<nexus_kernel::hm::DispatchIssuer>, String> {
+        self.hm_issuer.as_ref().map_err(Clone::clone)
     }
 
     /// Clone a `Sender<OracleRequest>` for submitting governance capability
@@ -1602,6 +1738,19 @@ impl AppState {
             eprintln!("in-memory DB must succeed: {e}");
             std::process::exit(1)
         }));
+        // The start-up sequence of `new` (mission R6), over the in-memory
+        // database.
+        let meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>> = Arc::new(Mutex::new(HashMap::new()));
+        let hm_registry = Arc::new(hm_wiring::DesktopAgentRegistry::new(
+            supervisor.clone(),
+            meta.clone(),
+        ));
+        hm_wiring::start_historical_memory(&test_db, &hm_registry);
+        let hm_issuer = hm_wiring::build_dispatch_issuer(
+            test_db.clone(),
+            hm_registry,
+            Arc::new(hm_wiring::DesktopConfigInput::live()),
+        );
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore {
                 db: test_db.clone(),
@@ -1622,8 +1771,11 @@ impl AppState {
             ),
             #[cfg(target_os = "linux")]
             coding: Err("governed coding is not configured for this test AppState".into()),
+            real_world: Err(
+                "governed real-world control is not configured for this test AppState".into(),
+            ),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
-            meta: Arc::new(Mutex::new(HashMap::new())),
+            meta,
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
@@ -1674,16 +1826,18 @@ impl AppState {
                     Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                     build_provider_registry(),
                 )
-                .with_state_database(test_db.clone()),
+                .with_state_database(test_db.clone())
+                .with_optional_issuer(&hm_issuer),
             ),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(GatewayHivemindLlm),
+                Box::new(NoSessionHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new(MessageGateway::new())),
             evolution_tracker,
             auto_evolution: Arc::new(AutoEvolutionManager::new()),
@@ -1785,6 +1939,7 @@ impl AppState {
                 nexus_flash_infer::HardwareInfo::default(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            hm_issuer,
             flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
@@ -1793,7 +1948,6 @@ impl AppState {
             // process working directory.
             capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
-            browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
@@ -1859,7 +2013,12 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    pub fn register_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> Arc<Notify> {
+    pub fn register_blocked_consent_wait(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+        consent_id: &str,
+    ) -> Arc<Notify> {
         let notify = Arc::new(Notify::new());
         self.blocked_consent_waits
             .lock()
@@ -1868,6 +2027,7 @@ impl AppState {
                 agent_id.to_string(),
                 BlockedConsentWait {
                     consent_id: consent_id.to_string(),
+                    goal_id: goal_id.to_string(),
                     notify: notify.clone(),
                 },
             );
@@ -1915,6 +2075,36 @@ impl AppState {
         } else {
             false
         }
+    }
+
+    /// Wake the agent's consent wait only if `goal_id`'s loop is the one
+    /// waiting: a newer goal's wait is left alone.
+    fn wake_and_clear_goal_consent_wait(&self, agent_id: &str, goal_id: &str) -> bool {
+        let wait = {
+            let mut waits = self
+                .blocked_consent_waits
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if waits
+                .get(agent_id)
+                .is_some_and(|wait| wait.goal_id == goal_id)
+            {
+                waits.remove(agent_id)
+            } else {
+                None
+            }
+        };
+        if let Some(wait) = wait {
+            wait.notify.notify_one();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Phase Three governed real-world control.
+    pub(crate) fn real_world(&self) -> Result<Arc<governed_real_world::RealWorld>, String> {
+        self.real_world.clone()
     }
 
     /// The governed coding session (Phase One).
@@ -2070,32 +2260,21 @@ pub mod runtime {
         Ok(())
     }
 
+    // On the IPC thread, at once: the part of a stop that never waits (no
+    // runtime worker is needed, so a busy runtime cannot delay it); the
+    // agent's loop is removed on a thread of its own (`stop_agents`).
     #[tauri::command]
     fn stop_agent(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         agent_id: String,
     ) -> Result<(), String> {
-        // G1b: the Chat bubble Stop button invokes this command. Previously
-        // it only transitioned the supervisor state and left the cognitive
-        // loop running in the background. Now it also signals the cancel
-        // flag and calls stop_agent_goal to drop the loop entry + wake any
-        // blocked consent waits. Order is deliberate:
-        //   1. Set cancel flag FIRST so the next cycle poll sees it.
-        //   2. stop_agent_goal clears the loop entry and wakes notifiers.
-        //   3. Supervisor state transition (through D2 chokepoint).
-        //   4. UI emit.
-        if let Some(flag) = state
-            .inner()
-            .cognitive_cancellations
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .get(&agent_id)
-        {
-            flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        let _ = crate::commands::cognitive::stop_agent_goal(state.inner(), agent_id.clone());
-        super::stop_agent(state.inner(), agent_id.clone())?;
+        // G1b: the Chat bubble Stop button invokes this command. It stops
+        // the agent everywhere (schedule, loop cancel flag, Phase Three,
+        // supervisor, then its loop; see `stop_agents`), then tells the UI.
+        let agent_id = super::canonical_agent_id(&agent_id);
+        let mut results = super::stop_agents(state.inner(), std::slice::from_ref(&agent_id));
+        results.pop().unwrap_or(Ok(()))?;
         emit_agent_status(&window, state.inner(), &agent_id);
         Ok(())
     }
@@ -2242,10 +2421,47 @@ pub mod runtime {
         super::get_config()
     }
 
+    /// The interface's whole-configuration save. A `local_only` change it
+    /// carries is governed first (P3-C11-HM-M4 N2): the Owner's native
+    /// confirmation may be shown, so the work runs on the blocking pool,
+    /// never on the GUI event loop thread.
     #[tauri::command]
-    fn save_config(state: tauri::State<'_, AppState>, config: NexusConfig) -> Result<(), String> {
+    async fn save_config(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        config: NexusConfig,
+    ) -> Result<(), String> {
         state.check_rate(nexus_kernel::rate_limit::RateCategory::AdminOperation)?;
-        super::save_config(state.inner(), config)
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let confirmer = route_policy_confirmer(app);
+            crate::hm_policy::save_config(
+                &state,
+                confirmer.as_deref(),
+                &crate::hm_policy::LiveConfigFile,
+                config,
+            )
+        })
+        .await
+        .map_err(|_| "save_config: the operation did not complete".to_string())?
+    }
+
+    /// The Owner's native confirmation of a route-policy loosening
+    /// (P3-HM-CONTRACT-02 §2.10, §4.4): the desktop's native dialogs on
+    /// Linux. Elsewhere (Windows and macOS are on hold, OD-PLAT-1) there is
+    /// none, so a loosening is refused.
+    fn route_policy_confirmer(
+        app: tauri::AppHandle,
+    ) -> Option<Box<dyn nexus_kernel::hm::RoutePolicyConfirmer>> {
+        #[cfg(target_os = "linux")]
+        {
+            Some(Box::new(crate::hm_policy::NativeRoutePolicyDialog(app)))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = app;
+            None
+        }
     }
 
     #[tauri::command]
@@ -2518,21 +2734,35 @@ pub mod runtime {
         super::get_llm_recommendations()
     }
 
+    /// The provider and budgets are saved; `local_only` is governed
+    /// (P3-C11-HM-M4 N2). The Owner's native confirmation may be shown, so
+    /// the work runs on the blocking pool, never on the GUI event loop
+    /// thread.
     #[tauri::command]
-    fn set_agent_llm_provider(
+    async fn set_agent_llm_provider(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
         agent_id: String,
         provider_id: String,
         local_only: bool,
         budget_dollars: u32,
         budget_tokens: u64,
     ) -> Result<(), String> {
-        super::set_agent_llm_provider(
-            agent_id,
-            provider_id,
-            local_only,
-            budget_dollars,
-            budget_tokens,
-        )
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let confirmer = route_policy_confirmer(app);
+            super::set_agent_llm_provider(
+                &state,
+                confirmer.as_deref(),
+                agent_id,
+                provider_id,
+                local_only,
+                budget_dollars,
+                budget_tokens,
+            )
+        })
+        .await
+        .map_err(|_| "set_agent_llm_provider: the operation did not complete".to_string())?
     }
 
     #[tauri::command]
@@ -2544,11 +2774,13 @@ pub mod runtime {
 
     #[tauri::command]
     async fn test_llm_connection(
+        state: tauri::State<'_, AppState>,
         provider_name: String,
     ) -> Result<super::TestConnectionResult, String> {
+        let state = state.inner().clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let result = super::test_llm_connection(provider_name);
+            let result = super::test_llm_connection(&state, provider_name);
             let _ = tx.send(result);
         });
         rx.recv().unwrap_or(Err(
@@ -3297,6 +3529,38 @@ pub mod runtime {
         run_id: String,
     ) -> Result<crate::coding_flow::RunView, String> {
         crate::coding_flow::ipc::discard(state.inner().clone(), run_id).await
+    }
+
+    // ── Governed verification (Phase Two) ───────────────────────────────
+    // Only the opaque run id and a compiled-in profile name cross IPC: no
+    // command, argument, executable, path, environment, sandbox setting or
+    // approval. The backend invokes the native launch confirmation itself.
+
+    #[tauri::command]
+    async fn coding_verification_profiles(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<Vec<crate::coding_flow::VerifierProfileView>, String> {
+        crate::coding_flow::ipc::verification_profiles(state.inner().clone(), run_id).await
+    }
+
+    #[tauri::command]
+    async fn coding_start_verification(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+        profile: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::start_verification(app, state.inner().clone(), run_id, profile)
+            .await
+    }
+
+    #[tauri::command]
+    async fn coding_retry_verification_cleanup(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::retry_verification_cleanup(state.inner().clone(), run_id).await
     }
 
     // ── Nexus Link commands ─────────────────────────────────────────────
@@ -4419,6 +4683,7 @@ pub mod runtime {
 
     #[tauri::command]
     fn builder_backend_generate(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         description: String,
     ) -> Result<serde_json::Value, String> {
@@ -4462,6 +4727,13 @@ pub mod runtime {
                 }
             });
 
+        // P3-HM-CONTRACT-02 §12.1 (XS), A2.4 I1: every model call of the
+        // builder is a `System("builder")` dispatch through the issuer.
+        let rls_provider = rls_provider.map(|inner| {
+            Box::new(crate::hm_dispatch::IssuedProvider::new(
+                &state, "builder", inner,
+            )) as Box<dyn nexus_connectors_llm::providers::LlmProvider>
+        });
         let result = web_builder_agent::backend::generate_backend(&schema, rls_provider.as_deref())
             .map_err(|e| format!("backend generation failed: {e}"))?;
 
@@ -4495,6 +4767,7 @@ pub mod runtime {
 
     #[tauri::command]
     fn builder_backend_generate_v2(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         provider: String,
         description: String,
@@ -4550,6 +4823,13 @@ pub mod runtime {
                 }
             });
 
+        // P3-HM-CONTRACT-02 §12.1 (XS), A2.4 I1: every model call of the
+        // builder is a `System("builder")` dispatch through the issuer.
+        let rls_provider = rls_provider.map(|inner| {
+            Box::new(crate::hm_dispatch::IssuedProvider::new(
+                &state, "builder", inner,
+            )) as Box<dyn nexus_connectors_llm::providers::LlmProvider>
+        });
         let result = web_builder_agent::backend::generate_backend_v2(
             &schema,
             &provider,
@@ -4916,12 +5196,16 @@ pub mod runtime {
 
     // ── Phase 13: Image Generation Commands ────────────────────────────
 
-    /// Check which image generation tiers are available.
+    /// Phase Three G-INV-5: answering this sent a request to an unowned local
+    /// service (following any redirect it answered) and ran `which` from
+    /// `PATH`, only to report on image generators that are stubs behind
+    /// closed commands. Nexus runs no helper for it (`Closure::HelperLaunch`).
     #[tauri::command]
-    async fn builder_image_gen_status() -> Result<String, String> {
-        let config = web_builder_agent::image_gen::ImageGenConfig::default();
-        let status = web_builder_agent::image_gen::check_status(&config).await;
-        serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_image_gen_status() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_image_gen_status",
+            crate::phase0_surface::Closure::HelperLaunch,
+        ))
     }
 
     #[tauri::command]
@@ -6072,34 +6356,33 @@ pub mod runtime {
         super::email_oauth_status(state.inner())
     }
 
+    /// Phase Three G-INV-4: Gmail and Outlook reads run only as governed
+    /// connector operations (R1, under a connector grant, vault credentials).
     #[tauri::command]
-    fn email_fetch_messages(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        folder: String,
-        page: u32,
-    ) -> Result<String, String> {
-        super::email_fetch_messages(state.inner(), provider, folder, page)
+    pub(crate) fn email_fetch_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_fetch_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-1: an email send is R2: a governed connector operation
+    /// with the exact recipient, subject and body approved natively.
     #[tauri::command]
-    fn email_send_message(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        to: String,
-        subject: String,
-        body: String,
-    ) -> Result<String, String> {
-        super::email_send_message(state.inner(), provider, to, subject, body)
+    pub(crate) fn email_send_message() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_send_message",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-4: a governed connector operation (R1).
     #[tauri::command]
-    fn email_search_messages(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        query: String,
-    ) -> Result<String, String> {
-        super::email_search_messages(state.inner(), provider, query)
+    pub(crate) fn email_search_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_search_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
     #[tauri::command]
@@ -6111,33 +6394,34 @@ pub mod runtime {
     }
 
     // ── Messaging Platform commands ──
+    /// Phase Three G-INV-4: connection checks are governed connector
+    /// operations (Slack and Discord); Telegram stays closed (its token is in
+    /// the URL).
     #[tauri::command]
-    fn messaging_connect_platform(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        token_value: String,
-    ) -> Result<String, String> {
-        super::messaging_connect_platform(state.inner(), platform, token_value)
+    pub(crate) fn messaging_connect_platform() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_connect_platform",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-1: a message send is R2: a governed connector
+    /// operation approved natively.
     #[tauri::command]
-    fn messaging_send(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        channel: String,
-        text: String,
-    ) -> Result<String, String> {
-        super::messaging_send(state.inner(), platform, channel, text)
+    pub(crate) fn messaging_send() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_send",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-4: a governed connector operation (R1).
     #[tauri::command]
-    fn messaging_poll_messages(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        channel: String,
-        last_id: String,
-    ) -> Result<String, String> {
-        super::messaging_poll_messages(state.inner(), platform, channel, last_id)
+    pub(crate) fn messaging_poll_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_poll_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
     // ── Integration OAuth commands ──
@@ -6224,7 +6508,9 @@ pub mod runtime {
 
     // ── Cognitive Runtime commands ──
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn assign_agent_goal(
         state: tauri::State<'_, AppState>,
         agent_id: String,
@@ -6319,9 +6605,45 @@ pub mod runtime {
         Ok(())
     }
 
+    // On the IPC thread, at once: Phase Three is cancelled without waiting;
+    // the loop is removed on a thread of its own.
     #[tauri::command]
     fn stop_agent_goal(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::stop_agent_goal(state.inner(), agent_id)
+        let agent_id = super::canonical_agent_id(&agent_id);
+        if let Ok(world) = state.real_world() {
+            world.cancel_agent(&agent_id);
+        }
+        // Its loop, under every spelling it may be kept under.
+        let loops = super::spellings(state.inner(), &agent_id);
+        let remover = state.inner().clone();
+        let removing = loops.clone();
+        let spawned = std::thread::Builder::new()
+            .name("nexus-goal-stop".into())
+            .spawn(move || {
+                for spelling in &removing {
+                    let _ = super::end_agent_loop(&remover, spelling);
+                }
+            });
+        if spawned.is_err() {
+            // No thread to remove the loops: their cancel flags end them at
+            // their next cycle instead.
+            for spelling in &loops {
+                if let Some(flag) = state
+                    .cognitive_cancellations
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(spelling)
+                {
+                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+            state.log_event(
+                Uuid::parse_str(&agent_id).unwrap_or_default(),
+                EventType::StateChange,
+                json!({"event": "stop_agent_goal", "loop_removal": "not started"}),
+            );
+        }
+        Ok(())
     }
 
     #[tauri::command]
@@ -6382,12 +6704,19 @@ pub mod runtime {
     // consent functions they call: each resolution is recorded with the fixed
     // DESKTOP_UI_RESOLVER label inside the consent module.
 
-    #[tauri::command]
+    /// Consent decisions are made one at a time, as they were on the
+    /// interface thread: two answers to one request never both count.
+    static CONSENT_DECISIONS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn approve_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::approve_consent_request(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
@@ -6402,13 +6731,16 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn deny_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
         reason: Option<String>,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::deny_consent_request(state.inner(), consent_id.clone(), reason)?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
@@ -6423,7 +6755,9 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn set_agent_review_mode(
         state: tauri::State<'_, AppState>,
         agent_id: String,
@@ -6435,12 +6769,15 @@ pub mod runtime {
             .map_err(|e| e.to_string())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn batch_approve_consents(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let (consent_ids, meta) = super::batch_approve_consents(state.inner(), goal_id)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
@@ -6457,12 +6794,15 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn review_consent_batch(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::review_consent_batch(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent entered review-each mode
         let _ = window.emit(
@@ -6477,13 +6817,16 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn batch_deny_consents(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
         reason: Option<String>,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let (consent_ids, meta) = super::batch_deny_consents(state.inner(), goal_id, reason)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
@@ -6629,13 +6972,31 @@ pub mod runtime {
 
     // ── Hivemind commands ──
 
+    // Off the interface thread and off the runtime's workers: a session
+    // plans with a model and runs its sub-tasks one after another, each
+    // waiting on the agent loops' lock and for a loop the runtime must be
+    // free to run. It runs on a thread of its own.
     #[tauri::command]
-    fn start_hivemind(
+    async fn start_hivemind(
         state: tauri::State<'_, AppState>,
         goal: String,
         agent_ids: Vec<String>,
     ) -> Result<serde_json::Value, String> {
-        super::start_hivemind(state.inner(), goal, agent_ids)
+        let state = state.inner().clone();
+        // Admitted (or refused) before any thread starts. The thread owns
+        // the session: its place is given back when the thread ends, or
+        // here if the thread cannot start.
+        let session = super::admit_hivemind(&state)?;
+        let (done, result) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name("nexus-hivemind".into())
+            .spawn(move || {
+                let _ = done.send(super::start_hivemind(&state, &session, goal, agent_ids));
+            })
+            .map_err(|e| format!("hivemind: {e}"))?;
+        result
+            .await
+            .map_err(|_| "hivemind: the session ended without a result".to_string())?
     }
 
     #[tauri::command]
@@ -7515,6 +7876,8 @@ pub mod runtime {
         super::admin_fleet_status(state.inner())
     }
 
+    // On the IPC thread, at once: every agent stops before anything waits
+    // (their loops are removed on a thread of their own).
     #[tauri::command]
     fn admin_agent_stop_all(
         state: tauri::State<'_, AppState>,
@@ -7817,6 +8180,15 @@ pub mod runtime {
                                 .unwrap_or_else(|p| p.into_inner());
                             engine.disable();
                         }
+                        // Phase Three stops with the same key: every run and
+                        // unconsumed commitment ends, the agent display
+                        // stops, until the owner resumes natively.
+                        if let Ok(world) = state.real_world() {
+                            world.emergency_stop();
+                        }
+                        // HiveMind sessions too: none assigns another
+                        // sub-task, and the ones they wait on end.
+                        state.hive_sessions.cancel_all();
 
                         state.log_event(
                             SYSTEM_UUID,
@@ -8110,6 +8482,9 @@ pub mod runtime {
                 coding_approve_apply,
                 coding_restore_run,
                 coding_discard_run,
+                coding_verification_profiles,
+                coding_start_verification,
+                coding_retry_verification_cleanup,
                 nexus_link_status,
                 nexus_link_toggle_sharing,
                 nexus_link_add_peer,
@@ -8820,6 +9195,19 @@ pub mod runtime {
                 commands::swarm::swarm_refresh_provider_health,
                 commands::swarm::swarm_audit_tail,
                 commands::oracle_runtime::oracle_runtime_status,
+                crate::governed_real_world::ipc::p3_approve,
+                crate::governed_real_world::ipc::p3_cancel_run,
+                crate::governed_real_world::ipc::p3_deny,
+                crate::governed_real_world::ipc::p3_display_start,
+                crate::governed_real_world::ipc::p3_display_stop,
+                crate::governed_real_world::ipc::p3_emergency_stop,
+                crate::governed_real_world::ipc::p3_evidence,
+                crate::governed_real_world::ipc::p3_import_attachment,
+                crate::governed_real_world::ipc::p3_request_grant,
+                crate::governed_real_world::ipc::p3_resume,
+                crate::governed_real_world::ipc::p3_revoke_grant,
+                crate::governed_real_world::ipc::p3_status,
+                crate::governed_real_world::ipc::p3_submit,
             ])
             .build(tauri::generate_context!())
             .unwrap_or_else(|e| {
@@ -8838,6 +9226,14 @@ pub mod runtime {
                     {
                         eprintln!("[shutdown] {error}");
                     }
+                    // No HiveMind session starts any more, and every one
+                    // under way is told to stop.
+                    app.state::<AppState>().hive_sessions.close();
+                    // Phase Three: every run cancelled, the agent display
+                    // stopped gracefully (its lock and socket removed).
+                    if let Ok(world) = app.state::<AppState>().real_world() {
+                        world.shutdown();
+                    }
                 }
             });
     }
@@ -8852,5 +9248,16 @@ mod tests;
 mod phase1_tests;
 
 #[cfg(test)]
+#[path = "phase2_tests.rs"]
+mod phase2_tests;
+
+#[cfg(test)]
 #[path = "p2_entry_tests.rs"]
 mod p2_entry_tests;
+
+#[cfg(test)]
+#[path = "phase3_tests.rs"]
+mod phase3_tests;
+
+#[cfg(test)]
+mod hm_m3_tests;

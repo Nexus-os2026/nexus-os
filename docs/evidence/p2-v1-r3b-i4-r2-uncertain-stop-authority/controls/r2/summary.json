@@ -1,0 +1,224 @@
+{
+  "summary": {
+    "original": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "c472d455bdcc4f014909e7c520cb2fc0b4ea05cae7e85feb7603df997b64b4d4",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "4b07490bccbc9549cd22a4d903f0022ba62d3fb65ff5b3089710df8e5a30d23a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "a4acc7fe4a7ce2e1539ce628661f4b788f38f59505db38b7d7047228410b5929",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "c0a87800c4be399f88cc0e6951482ac961c158fb5a3d2e87fd39b9094c2e7bc6",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "1e19f8e82f33b01e2a7779583f67f7bd51582ef706a701936b89ecb20193fce0"
+    },
+    "final": {
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "c472d455bdcc4f014909e7c520cb2fc0b4ea05cae7e85feb7603df997b64b4d4",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "4b07490bccbc9549cd22a4d903f0022ba62d3fb65ff5b3089710df8e5a30d23a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "a4acc7fe4a7ce2e1539ce628661f4b788f38f59505db38b7d7047228410b5929",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "c0a87800c4be399f88cc0e6951482ac961c158fb5a3d2e87fd39b9094c2e7bc6",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "1e19f8e82f33b01e2a7779583f67f7bd51582ef706a701936b89ecb20193fce0"
+    },
+    "identical": true,
+    "status": [],
+    "expected_status": [],
+    "counted": 10,
+    "by_category": {
+      "additional": 2,
+      "required": 8
+    },
+    "baseline_all_pass": true,
+    "all_required": true,
+    "failures": []
+  },
+  "baseline": {
+    "execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit": true,
+    "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name": true,
+    "execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name": true,
+    "execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name": true,
+    "scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name": true
+  },
+  "counted": [
+    {
+      "id": "NC-R2-01-UNCONDITIONAL-STOP",
+      "category": "required",
+      "what": "the unconditional StopUnit by the unit's name is restored (the name authority check removed)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit",
+      "marker": "the foreign unit was stopped by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: the foreign unit was stopped by its name\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-R2-02-STOP-FOR-UNACCEPTED",
+      "category": "required",
+      "what": "StopUnit by name is allowed for an operation that is not accepted",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name",
+      "marker": "an uncertain start was stopped by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: an uncertain start was stopped by its name\n  left: 4\n right: 0"
+    },
+    {
+      "id": "NC-R2-03-LOST-COLLISION-CONVERTED",
+      "category": "required",
+      "what": "an uncertain start is converted into a collision by a later GetUnit presence of its name",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit",
+      "marker": "an uncertain start was resolved by its unit name or presence",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: an uncertain start was resolved by its unit name or presence\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R2-04-REAPED-WHILE-UNCERTAIN",
+      "category": "required",
+      "what": "the helper is reaped while its uncertain operation without a candidate is unresolved",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "test": "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name",
+      "marker": "the helper of an unresolved uncertain start was reaped",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Timeout: the helper of an unresolved uncertain start was reaped"
+    },
+    {
+      "id": "NC-R2-05-NO-SUCH-UNIT-SETTLES",
+      "category": "required",
+      "what": "GetUnit NoSuchUnit (with the helper outside) settles an uncertain start without a candidate",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name",
+      "marker": "an uncertain start was resolved by its unit name or presence",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: an uncertain start was resolved by its unit name or presence\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R2-06-STOP-REPLY-CONFIRMS",
+      "category": "required",
+      "what": "a delivered StopUnit reply is taken as the operation's confirmation",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name",
+      "marker": "a StopUnit reply confirmed the operation",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a StopUnit reply confirmed the operation\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-R2-07-CANDIDATE-NAME-AUTHORITY",
+      "category": "required",
+      "what": "an uncertain operation's candidate path grants a stop by the unit's name",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name",
+      "marker": "an uncertain start's candidate was stopped by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: an uncertain start's candidate was stopped by its name\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-R2-08-ACCEPTED-BY-PRESENCE",
+      "category": "required",
+      "what": "the accepted state is forged from the manager's presence of the name, not the start reply",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit",
+      "marker": "the foreign unit was stopped by its name",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: the foreign unit was stopped by its name\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-R2-X-STOP-OUTSIDE-SETTLING",
+      "category": "additional",
+      "what": "a stop by the unit's name outside settling (the drop backstop)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name",
+      "marker": "a stop by name outside settling",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a stop by name outside settling\n  left: 2\n right: 1"
+    },
+    {
+      "id": "NC-R2-X-ACCEPTED-ELSEWHERE",
+      "category": "additional",
+      "what": "the accepted state is set where a candidate is retained, not in the start reply's arm",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "test": "scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name",
+      "marker": "a start is accepted other than in the delivered reply's arm",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a start is accepted other than in the delivered reply's arm\n  left: 2\n right: 1"
+    }
+  ]
+}

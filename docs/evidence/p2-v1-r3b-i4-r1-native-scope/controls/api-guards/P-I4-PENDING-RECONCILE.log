@@ -1,0 +1,28 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:60
+   |
+21 |     fn settle(pending: &mut nexus_verifier_sandbox::scope::PendingScope) {
+   |                                                            ^^^^^^^^^^^^ private struct
+   |
+note: the struct `PendingScope` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:65:26
+   |
+65 | pub(crate) use pending::{PendingScope, ScopeBoundary};
+   |                          ^^^^^^^^^^^^
+
+error[E0624]: method `reconcile` is private
+   --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:25
+    |
+ 22 |         let _ = pending.reconcile(None, None);
+    |                         ^^^^^^^^^ private method
+    |
+   ::: crates/nexus-verifier-sandbox/src/scope/pending.rs:164:5
+    |
+164 |     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+    |     ----------------------------------------------------------------------------------------- private method defined here
+
+Some errors have detailed explanations: E0603, E0624.
+For more information about an error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

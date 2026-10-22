@@ -1,0 +1,12 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3
+HEAD: aeaba0868144c098e4345ddb05976ada4f96b8d6
+HEAD tree: ad142aaf3b861879524dd1b1531d84a273c93c2b
+before status entries: 0
+validation exit=0 started=2026-10-02T17:36:22Z :: bash /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/validate.sh /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3 /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r3-work/candidate-runs/validation
+after validation status entries: 0
+store-controls exit=1 started=2026-10-02T17:39:43Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3 /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r3-work/candidate-runs/controls/store
+after store-controls status entries: 0
+i2r1-rerun exit=0 started=2026-10-02T17:47:14Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3 /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r3-work/candidate-runs/controls/i2r1-rerun
+after i2r1-rerun status entries: 0
+api-probes exit=1 started=2026-10-02T17:47:58Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3 /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r3-work/candidate-runs/api-probes
+after api-probes status entries: 0

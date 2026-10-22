@@ -101,6 +101,27 @@ pub(crate) fn assign_agent_goal(
     priority: u8,
     model_override: Option<String>,
 ) -> Result<String, String> {
+    assign_agent_goal_in(
+        state,
+        agent_id,
+        goal_description,
+        priority,
+        model_override,
+        None,
+    )
+}
+
+/// [`assign_agent_goal`], with the goal's unit given (a HiveMind sub-task's
+/// context, derived from its session's) or, with `None`, a goal unit of its
+/// own started by the runtime (P3-HM-CONTRACT-02 §4.6 O1).
+pub(crate) fn assign_agent_goal_in(
+    state: &AppState,
+    agent_id: String,
+    goal_description: String,
+    priority: u8,
+    model_override: Option<String>,
+    unit: Option<nexus_kernel::hm::DispatchContext>,
+) -> Result<String, String> {
     // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
     // approval the backend cannot verify, so a goal for one is refused before
     // the rate limit, the input check, the assignment or the audit event.
@@ -122,10 +143,11 @@ pub(crate) fn assign_agent_goal(
     goal.user_goal = goal_description.clone();
     goal.model_override = normalize_model_override(model_override);
     let goal_id = goal.id.clone();
-    state
-        .cognitive_runtime
-        .assign_goal(&agent_id, goal)
-        .map_err(|e| e.to_string())?;
+    match unit {
+        Some(ctx) => state.cognitive_runtime.assign_goal_in(&agent_id, goal, ctx),
+        None => state.cognitive_runtime.assign_goal(&agent_id, goal),
+    }
+    .map_err(|e| e.to_string())?;
     state.log_event(
         Uuid::parse_str(&agent_id).unwrap_or_default(),
         EventType::UserAction,
@@ -200,6 +222,9 @@ pub(crate) fn normalize_model_override(raw: Option<String>) -> Option<String> {
     Some(trimmed)
 }
 
+/// The `task_history` row of a goal at its start (`goal_record`,
+/// P3-HM-CONTRACT-02 §6.5): a labelled write in the goal's unit, then its
+/// fuel budget as bookkeeping. A goal without a unit writes nothing.
 pub(crate) fn persist_task_start(state: &AppState, agent_id: &str, goal_id: &str) {
     let goal = state
         .cognitive_runtime
@@ -215,24 +240,46 @@ pub(crate) fn persist_task_start(state: &AppState, agent_id: &str, goal_id: &str
                 .map(|handle| handle.remaining_fuel as f64)
         })
     };
-    let task = nexus_persistence::TaskRow {
-        id: goal_id.to_string(),
-        agent_id: agent_id.to_string(),
-        goal,
-        status: "running".to_string(),
-        steps_json: "[]".to_string(),
-        result_json: None,
-        fuel_consumed: 0.0,
-        fuel_budget,
-        estimated_time_secs: None,
-        actual_time_secs: None,
-        quality_score: None,
-        started_at: chrono::Utc::now().to_rfc3339(),
-        completed_at: None,
-        success: false,
+    let Ok(task_id) = Uuid::parse_str(goal_id) else {
+        eprintln!("persistence: save_task start refused: the goal id is not a UUID");
+        return;
     };
-    if let Err(error) = state.db.save_task(&task) {
-        eprintln!("persistence: save_task start failed: {error}");
+    let written = state
+        .cognitive_runtime
+        .with_goal_context(agent_id, goal_id, |issuer, ctx| {
+            issuer
+                .save_task(
+                    ctx,
+                    &nexus_kernel::hm::TaskWrite {
+                        task_id,
+                        goal: &goal,
+                        status: "running",
+                        steps_json: "[]",
+                        result_json: None,
+                        completed: false,
+                        success: false,
+                    },
+                    &[],
+                )
+                .map(|_| issuer)
+                .map_err(|e| e.to_string())
+                .and_then(|issuer| {
+                    issuer
+                        .task_bookkeeping(
+                            goal_id,
+                            &nexus_kernel::hm::TaskBookkeeping {
+                                fuel_consumed: Some(0.0),
+                                fuel_budget,
+                                ..Default::default()
+                            },
+                        )
+                        .map_err(|e| e.to_string())
+                })
+        });
+    match written {
+        Some(Ok(())) => {}
+        Some(Err(error)) => eprintln!("persistence: save_task start failed: {error}"),
+        None => eprintln!("persistence: save_task start refused: the goal has no unit"),
     }
 }
 
@@ -268,13 +315,40 @@ pub fn persist_task_completion(
         })
         .unwrap_or(fallback_fuel_consumed);
     let result_json = json!({ "summary": result_summary }).to_string();
-    if let Err(error) =
+    // P3-HM-CONTRACT-02 §6.7: the completion is a content update labelled
+    // in the goal's unit; the fuel is bookkeeping. A goal whose unit has
+    // ended (its loop was removed) records only its bookkeeping columns.
+    let completed = Uuid::parse_str(goal_id).ok().and_then(|task_id| {
         state
-            .db
-            .update_task_status(goal_id, status, Some(&result_json), fuel_consumed, success)
-    {
-        eprintln!("persistence: update_task_status failed: {error}");
+            .cognitive_runtime
+            .with_goal_context(agent_id, goal_id, |issuer, ctx| {
+                issuer
+                    .complete_task(ctx, task_id, status, Some(&result_json), success, &[])
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            })
+    });
+    let now = chrono::Utc::now().to_rfc3339();
+    let bookkeeping = nexus_kernel::hm::TaskBookkeeping {
+        status: Some(status),
+        fuel_consumed: Some(fuel_consumed),
+        completed_at: completed.is_none().then_some(now.as_str()),
+        success: Some(success),
+        ..Default::default()
+    };
+    if let Some(Err(error)) = &completed {
+        eprintln!("persistence: complete_task failed: {error}");
     }
+    match state.hm_issuer() {
+        Err(error) => eprintln!("persistence: task bookkeeping refused: {error}"),
+        Ok(issuer) => {
+            if let Err(error) = issuer.task_bookkeeping(goal_id, &bookkeeping) {
+                eprintln!("persistence: task bookkeeping failed: {error}");
+            }
+        }
+    }
+    // P3-HM-CONTRACT-02 §15.2 D3: the goal id, its status and its success,
+    // never the result summary.
     state.log_event(
         Uuid::parse_str(agent_id).unwrap_or_default(),
         EventType::StateChange,
@@ -283,7 +357,6 @@ pub fn persist_task_completion(
             "goal_id": goal_id,
             "status": status,
             "success": success,
-            "result_summary": result_summary,
         }),
     );
 }
@@ -472,6 +545,10 @@ pub(crate) fn recent_task_outcomes(
         .collect()
 }
 
+/// Evolution after a goal (P3-HM-CONTRACT-02 §11.3): it runs in the goal's
+/// post-goal context (the goal's own policy snapshot, taint and working
+/// set; never a freshly resolved policy), and every row it writes is
+/// labelled in that context (§6.5).
 pub(crate) fn run_post_goal_evolution(
     bridge: &BackendEventBridge,
     state: &AppState,
@@ -479,6 +556,7 @@ pub(crate) fn run_post_goal_evolution(
     goal_id: &str,
     success: bool,
     fallback_fuel_consumed: f64,
+    hive: Option<Arc<HivemindAdmission>>,
 ) {
     let (autonomy_level, agent_name) = {
         let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
@@ -495,11 +573,14 @@ pub(crate) fn run_post_goal_evolution(
     if autonomy_level < 4 {
         return;
     }
-
-    let mem_store = DbMemoryStore {
-        db: state.db.clone(),
+    let Ok(issuer) = state.hm_issuer() else {
+        return;
     };
-    let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
+    // The goal's unit, derived for evolution; without one nothing runs.
+    let Ok(mut post_goal) = state.cognitive_runtime.derive_post_goal(agent_id, goal_id) else {
+        return;
+    };
+
     let (duration_secs, fuel_budget) =
         task_timing_for_goal(state, agent_id, goal_id).unwrap_or((0.0, fallback_fuel_consumed));
     let fuel_consumed = state
@@ -509,19 +590,22 @@ pub(crate) fn run_post_goal_evolution(
         .and_then(|tasks| tasks.into_iter().find(|task| task.id == goal_id))
         .map(|task| task.fuel_consumed)
         .unwrap_or(fallback_fuel_consumed);
+    // The goal type is the goal's own text, from its unit (never re-read
+    // from a stored row).
     let goal_type = state
-        .db
-        .load_tasks_by_agent(agent_id, 200)
-        .ok()
-        .and_then(|tasks| tasks.into_iter().find(|task| task.id == goal_id))
-        .map(|task| task.goal)
+        .cognitive_runtime
+        .get_agent_status_fast(agent_id)
+        .and_then(|status| status.active_goal)
+        .filter(|goal| goal.id == goal_id)
+        .map(|goal| goal.description)
         .unwrap_or_else(|| "scheduled_goal".to_string())
         .to_lowercase();
     let strategy_hash = nexus_kernel::cognitive::hash_strategy(&goal_type);
 
     // Best-effort: evolution tracking is supplementary; failure does not affect task completion
     let _ = state.evolution_tracker.record_task_result(
-        agent_id,
+        issuer,
+        &post_goal,
         goal_id,
         &strategy_hash,
         &goal_type,
@@ -530,7 +614,6 @@ pub(crate) fn run_post_goal_evolution(
         duration_secs,
         fuel_budget,
         60.0,
-        &memory_mgr,
     );
 
     let completed_count = state
@@ -542,15 +625,20 @@ pub(crate) fn run_post_goal_evolution(
         .count();
 
     if completed_count > 0 && completed_count % 5 == 0 {
-        if let Ok(Some(best_strategy)) = state
+        if let Ok(Some(best)) = state
             .evolution_tracker
-            .select_best_strategy(agent_id, &goal_type)
+            .select_best_strategy(issuer, &post_goal, &goal_type)
         {
-            // Best-effort: inject best strategy into agent memory for future planning
-            let _ = memory_mgr.store_procedural(
-                agent_id,
+            let best_strategy = best.field("strategy_hash").unwrap_or_default().to_string();
+            // Best-effort: inject best strategy into agent memory for future
+            // planning; derived from the strategy record (its parent).
+            let _ = nexus_kernel::cognitive::AgentMemoryManager::record_procedural(
+                issuer,
+                &post_goal,
+                nexus_kernel::hm::SourceKind::PlannerStrategyInjection,
                 &format!("planner_strategy_injection:{best_strategy}"),
                 1.0,
+                &[nexus_kernel::hm::Parent::Record(best.record_ref())],
             );
             if let Ok(strategies) = state.evolution_tracker.get_agent_strategies(agent_id) {
                 if let Some(strategy) = strategies
@@ -559,6 +647,8 @@ pub(crate) fn run_post_goal_evolution(
                 {
                     let score = strategy.composite_score;
                     let generation = (completed_count / 5) as u64;
+                    // P3-HM-CONTRACT-02 §15.2 D4: no strategy hash in the audit
+                    // payload (the frontend emit below is local UI delivery).
                     state.log_event(
                         Uuid::parse_str(agent_id).unwrap_or_default(),
                         EventType::StateChange,
@@ -567,7 +657,6 @@ pub(crate) fn run_post_goal_evolution(
                             "message": format!("Agent {} evolved strategy. New composite score: {:.3}", agent_name, score),
                             "new_score": score,
                             "generation": generation,
-                            "strategy_hash": best_strategy,
                         }),
                     );
                     bridge.emit(
@@ -590,176 +679,255 @@ pub(crate) fn run_post_goal_evolution(
             "Plan safe, governed work for agent {} while respecting its capabilities and audit trail.",
             agent_name
         );
-        let llm = GatewayPlannerLlm;
+        let llm = GatewayPlannerLlm::for_session(state, hive);
+        // P3-HM-CONTRACT-02 §11.3: the goal's context, not a freshly
+        // resolved current policy.
         // Best-effort: prompt optimization is a background improvement; failure is non-fatal
         let _ = state.evolution_tracker.optimize_planning_prompt(
-            agent_id,
+            issuer,
+            &mut post_goal,
             &current_prompt,
             &outcomes,
             &llm,
-            &memory_mgr,
         );
     }
 }
 
-/// Bridges the configured LLM provider to the cognitive planner's `PlannerLlm` trait.
-pub(crate) struct GatewayPlannerLlm;
+/// The desktop's model of agent units (P3-HM-CONTRACT-02 §11.0, §12.4).
+pub(crate) use crate::hm_dispatch::GatewayPlannerLlm;
 
-/// Bridges the cognitive loop's LlmQuery actions to the configured LLM provider.
-///
-/// When an agent's plan includes a step like "analyze these file contents" or
-/// "summarize this data", the RegistryExecutor delegates to this handler which
-/// routes through the same LLM provider infrastructure as the planner.
-pub(crate) struct BridgeLlmQueryHandler;
+/// A provider dispatch: sends a prompt to a provider for a model.
+#[cfg(test)]
+pub(crate) type PlannerDispatch<'a> =
+    &'a dyn Fn(
+        &dyn LlmProvider,
+        &str,
+        &str,
+    ) -> Result<nexus_connectors_llm::providers::LlmResponse, AgentError>;
 
-impl nexus_kernel::cognitive::LlmQueryHandler for BridgeLlmQueryHandler {
-    fn query(&self, prompt: &str) -> Result<String, String> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+/// Chooses the planner's provider under `policy` and sends `prompt` to it
+/// through `dispatch`, once. A failed dispatch is the result: no other
+/// provider is tried. (Tests: production dispatch goes through
+/// `hm_dispatch::select_transport`, which uses the same `planner_provider`
+/// and `local_only_target`.)
+#[cfg(test)]
+pub(crate) fn planner_dispatch(
+    policy: AgentLlmPolicy,
+    route_model: Option<String>,
+    prov_config: &ProviderSelectionConfig,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+    prompt: &str,
+    dispatch: PlannerDispatch<'_>,
+) -> Result<String, AgentError> {
+    let (provider, model) =
+        planner_provider(policy, route_model, prov_config, ollama_base, runtime)?;
+    let response = dispatch(provider.as_ref(), prompt, &model)?;
+    let pre_strip_len = response.output_text.len();
+    let starts_with_think = response.output_text.trim_start().starts_with("<think>");
+    let has_closing_think = response.output_text.contains("</think>");
+    let stripped = strip_think_tags(&response.output_text);
+    let post_strip_len = stripped.len();
+    eprintln!(
+        "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
+        prompt.len(),
+        pre_strip_len,
+        post_strip_len
+    );
+    if pre_strip_len > 0 && post_strip_len == 0 {
+        eprintln!(
+            "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
+            pre_strip_len, starts_with_think, has_closing_think
+        );
+    }
+    Ok(stripped)
+}
+
+/// The planner's provider and model for `route_model` under `policy`. A
+/// local-only policy is decided by [`local_only_provider`] and never reaches
+/// the route resolution or default model below. `ollama_base` is the
+/// authorized Ollama address.
+pub(crate) fn planner_provider(
+    policy: AgentLlmPolicy,
+    route_model: Option<String>,
+    prov_config: &ProviderSelectionConfig,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<(Box<dyn LlmProvider>, String), AgentError> {
+    // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
+    // If we reach here, Flash was requested but couldn't be resolved.
+    if let Some(route_model) = route_model.as_deref() {
+        if route_model.starts_with("flash:")
+            || route_model.starts_with("flash/")
+            || route_model == "flash"
+        {
+            // Flash provider wasn't available — return clear error instead of
+            // silently falling back to Ollama (which causes confusing 404 errors).
+            return Err(AgentError::SupervisorError(
+                "Flash Inference is selected but no model is loaded. \
+                 Go to the Agents page and click 'Load Model' to start a Flash session."
+                    .to_string(),
+            ));
+        }
+    }
+    if let Some(local) = local_only_provider(policy, route_model.as_deref(), ollama_base, runtime)
+        .map_err(AgentError::SupervisorError)?
+    {
+        return Ok(local);
+    }
+    let (provider, model) = if let Some(route_model) = route_model {
+        provider_from_prefixed_model(&route_model, prov_config).map_err(|e| {
+            AgentError::SupervisorError(format!(
+                "Cannot resolve model '{}': {}. Please select a different model.",
+                route_model, e
+            ))
+        })?
+    } else {
+        // Use smart default model detection (checks API keys in priority order)
+        let default_model = crate::commands::chat_llm::get_default_model();
+        if default_model.contains('/') {
+            // Prefixed model (e.g. "anthropic/claude-sonnet-4-6") — resolve provider from it
+            provider_from_prefixed_model(&default_model, prov_config).map_err(|e| {
+                AgentError::SupervisorError(format!(
+                    "Cannot resolve default model '{}': {}. Add an API key in Settings.",
+                    default_model, e
+                ))
+            })?
+        } else if default_model == "mock-1" {
+            // No provider configured at all — fail with clear message
+            return Err(AgentError::SupervisorError(
+                "No LLM provider configured. Add an API key in Settings (Anthropic, OpenAI, etc.) \
+                 or install Ollama for local models."
+                    .to_string(),
+            ));
+        } else {
+            let provider = select_provider(prov_config)?;
+            (provider, default_model)
+        }
+    };
+    Ok((provider, model))
+}
+
+// ── Local-only routing (P3 D-2) ──────────────────────────────────────────
+
+/// The refusal for an agent's work whose routing policy is unknown.
+pub(crate) fn unresolved_policy_error() -> AgentError {
+    AgentError::SupervisorError(
+        "local-only: the agent's routing policy could not be established, so no model is used"
+            .to_string(),
+    )
+}
+
+/// A local Ollama runtime, as a local-only request consults it before any
+/// prompt is sent.
+pub(crate) trait LocalOllamaRuntime {
+    /// The names of the models installed at `base`.
+    fn installed_models(&self, base: &str) -> Result<Vec<String>, String>;
+    /// Whether `model` is installed at `base` and runs there.
+    fn verify_local_model(&self, base: &str, model: &str) -> Result<(), String>;
+}
+
+/// The Ollama runtime at the authorized loopback address.
+pub(crate) struct OllamaLocalRuntime;
+
+impl LocalOllamaRuntime for OllamaLocalRuntime {
+    fn installed_models(&self, base: &str) -> Result<Vec<String>, String> {
+        // P3 D-2 R2: listed over the direct loopback connection, as the
+        // prompt is sent.
+        nexus_connectors_llm::providers::OllamaProvider::local_only(base)
+            .map_err(|e| e.to_string())?
+            .list_models()
+            .map(|models| models.into_iter().map(|model| model.name).collect())
+            .map_err(|e| e.to_string())
+    }
+
+    fn verify_local_model(&self, base: &str, model: &str) -> Result<(), String> {
+        nexus_connectors_llm::gateway::verify_local_ollama_model(base, model)
             .map_err(|e| e.to_string())
     }
 }
 
-impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
-    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-        // If a Flash Inference provider is loaded, use it. The agent WAITS for Flash
-        // (blocking lock) rather than falling back to Ollama, because Ollama may be dead
-        // and Flash is the primary local provider. llama.cpp is single-threaded, so queries
-        // are serialized — the agent simply waits its turn behind the UI.
-        let flash = ACTIVE_FLASH_PROVIDER.with(|slot| slot.borrow().clone());
-        if let Some(flash_provider) = flash {
-            let prompt_chars = prompt.len();
-            eprintln!("[planner] using Flash Inference, prompt len={prompt_chars} chars");
+/// Where a local-only agent's prompt goes: a model of the Ollama runtime at
+/// a loopback address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocalOnlyTarget {
+    pub(crate) base: String,
+    pub(crate) model: String,
+}
 
-            // Run Flash query in a dedicated OS thread. This isolates the main
-            // app from llama.cpp crashes (segfaults in FFI). If the thread dies,
-            // we get an error instead of the whole app crashing.
-            let prompt_owned = prompt.to_string();
-            let handle = std::thread::spawn(move || {
-                // Allow up to 2048 tokens for planner — multi-step plans from small
-                // models can exceed 1024 tokens, causing truncated JSON parse failures.
-                flash_provider.query(&prompt_owned, 2048, "flash")
-            });
+/// The verified local target for a local-only agent's `route` (P3 D-2).
+///
+/// The address is the authorized Ollama address, and only when it is a
+/// loopback address. The model is the one the route names (`ollama/<model>`
+/// or an Ollama `name:tag`), or, with no model named (`auto`, `ollama`, no
+/// route), the runtime's preferred installed model. Any other route, a cloud
+/// provider, a CLI provider, a bare provider id, is refused, never
+/// substituted. A cloud model of the runtime is refused by its name, and
+/// the runtime must then confirm the model runs locally.
+pub(crate) fn local_only_target(
+    route: Option<&str>,
+    authorized_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<LocalOnlyTarget, String> {
+    let base = authorized_base.map_err(|reason| format!("local-only: {reason}"))?;
+    let base =
+        nexus_connectors_llm::gateway::local_only_ollama_base(&base).map_err(|e| e.to_string())?;
+    let route = route.map(str::trim).unwrap_or_default();
+    let model = if route.is_empty() || route == "auto" || route == "ollama" {
+        let mut installed: Vec<String> = runtime
+            .installed_models(&base)
+            .map_err(|reason| format!("local-only: no local model is available: {reason}"))?
+            .into_iter()
+            .filter(|model| !nexus_connectors_llm::gateway::ollama_model_name_is_cloud(model))
+            .collect();
+        installed.sort_by_key(|model| std::cmp::Reverse(ollama_model_preference(model)));
+        installed
+            .into_iter()
+            .next()
+            .ok_or_else(|| "local-only: no local model is installed".to_string())?
+    } else if let Some(model) = route.strip_prefix("ollama/") {
+        model.to_string()
+    } else if !route.contains('/') && route.contains(':') {
+        route.to_string()
+    } else {
+        return Err(format!(
+            "local-only: the route '{route}' is not a local model, and the agent may use only local models"
+        ));
+    };
+    if nexus_connectors_llm::gateway::ollama_model_name_is_cloud(&model) {
+        return Err(format!(
+            "local-only: '{model}' is a cloud model of the Ollama runtime, which relays it to a remote service"
+        ));
+    }
+    runtime.verify_local_model(&base, &model)?;
+    Ok(LocalOnlyTarget { base, model })
+}
 
-            match handle.join() {
-                Ok(Ok(response)) => {
-                    let pre_strip_len = response.output_text.len();
-                    let starts_with_think =
-                        response.output_text.trim_start().starts_with("<think>");
-                    let has_closing_think = response.output_text.contains("</think>");
-                    let stripped = strip_think_tags(&response.output_text);
-                    let post_strip_len = stripped.len();
-                    eprintln!(
-                        "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
-                        prompt.len(),
-                        pre_strip_len,
-                        post_strip_len
-                    );
-                    if pre_strip_len > 0 && post_strip_len == 0 {
-                        eprintln!(
-                            "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
-                            pre_strip_len, starts_with_think, has_closing_think
-                        );
-                    }
-                    return Ok(stripped);
-                }
-                Ok(Err(e)) => {
-                    eprintln!("[planner] Flash Inference error: {e}");
-                    return Err(e);
-                }
-                Err(_) => {
-                    eprintln!(
-                        "[planner] Flash Inference thread crashed (segfault or panic in llama.cpp)"
-                    );
-                    return Err(nexus_kernel::errors::AgentError::SupervisorError(
-                        "Flash Inference crashed during query — the model may be corrupted or out of memory. \
-                         Try reloading the model from the Flash Inference page."
-                            .to_string(),
-                    ));
-                }
-            }
-        }
+/// A provider and the model it is asked for.
+pub(crate) type ChosenProvider = (Box<dyn LlmProvider>, String);
 
-        let config = nexus_kernel::config::load_config().unwrap_or_default();
-        let prov_config = build_provider_config(&config);
-        let route_model = ACTIVE_AGENT_LLM_ROUTE
-            .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
-        let (provider, model) = if let Some(route_model) = route_model {
-            // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
-            // If we reach here, Flash was requested but couldn't be resolved.
-            if route_model.starts_with("flash:")
-                || route_model.starts_with("flash/")
-                || route_model == "flash"
-            {
-                // Flash provider wasn't available — return clear error instead of
-                // silently falling back to Ollama (which causes confusing 404 errors).
-                return Err(nexus_kernel::errors::AgentError::SupervisorError(
-                    "Flash Inference is selected but no model is loaded. \
-                     Go to the Agents page and click 'Load Model' to start a Flash session."
-                        .to_string(),
-                ));
-            } else {
-                provider_from_prefixed_model(&route_model, &prov_config).map_err(|e| {
-                    nexus_kernel::errors::AgentError::SupervisorError(format!(
-                        "Cannot resolve model '{}': {}. Please select a different model.",
-                        route_model, e
-                    ))
-                })?
-            }
-        } else {
-            // Use smart default model detection (checks API keys in priority order)
-            let default_model = crate::commands::chat_llm::get_default_model();
-            if default_model.contains('/') {
-                // Prefixed model (e.g. "anthropic/claude-sonnet-4-6") — resolve provider from it
-                provider_from_prefixed_model(&default_model, &prov_config).map_err(|e| {
-                    nexus_kernel::errors::AgentError::SupervisorError(format!(
-                        "Cannot resolve default model '{}': {}. Add an API key in Settings.",
-                        default_model, e
-                    ))
-                })?
-            } else if default_model == "mock-1" {
-                // No provider configured at all — fail with clear message
-                return Err(nexus_kernel::errors::AgentError::SupervisorError(
-                    "No LLM provider configured. Add an API key in Settings (Anthropic, OpenAI, etc.) \
-                     or install Ollama for local models."
-                        .to_string(),
-                ));
-            } else {
-                let provider = select_provider(&prov_config)?;
-                (provider, default_model)
-            }
-        };
-        // Wrap the LLM query in catch_unwind as a last resort — if the provider
-        // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
-        // we return an error instead of killing the app.
-        let query_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            provider.query(prompt, 2048, &model)
-        }));
-        match query_result {
-            Ok(Ok(response)) => {
-                let pre_strip_len = response.output_text.len();
-                let starts_with_think = response.output_text.trim_start().starts_with("<think>");
-                let has_closing_think = response.output_text.contains("</think>");
-                let stripped = strip_think_tags(&response.output_text);
-                let post_strip_len = stripped.len();
-                eprintln!(
-                    "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
-                    prompt.len(),
-                    pre_strip_len,
-                    post_strip_len
-                );
-                if pre_strip_len > 0 && post_strip_len == 0 {
-                    eprintln!(
-                        "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
-                        pre_strip_len, starts_with_think, has_closing_think
-                    );
-                }
-                Ok(stripped)
-            }
-            Ok(Err(e)) => Err(e),
-            Err(_panic) => Err(nexus_kernel::errors::AgentError::SupervisorError(
-                "LLM provider panicked during query — model may be corrupted or out of memory"
-                    .to_string(),
-            )),
+/// The provider a prompt goes to under `policy`, when the policy decides it
+/// (P3 D-2): `None` for an unrestricted policy, the verified local Ollama
+/// model for a local-only one, and a refusal when the policy is unknown.
+/// `ollama_base` is the authorized Ollama address.
+pub(crate) fn local_only_provider(
+    policy: AgentLlmPolicy,
+    route: Option<&str>,
+    ollama_base: Result<String, String>,
+    runtime: &dyn LocalOllamaRuntime,
+) -> Result<Option<ChosenProvider>, String> {
+    match policy {
+        AgentLlmPolicy::Unrestricted => Ok(None),
+        AgentLlmPolicy::Unresolved => Err(unresolved_policy_error().to_string()),
+        AgentLlmPolicy::LocalOnly => {
+            let target = local_only_target(route, ollama_base, runtime)?;
+            // P3 D-2 R2: the prompt goes to the verified runtime directly,
+            // over the same route the verification used: no proxy setting
+            // applies and no redirect is followed.
+            let provider =
+                nexus_connectors_llm::providers::OllamaProvider::local_only(&target.base)
+                    .map_err(|e| e.to_string())?;
+            Ok(Some((Box::new(provider), target.model)))
         }
     }
 }
@@ -781,100 +949,122 @@ pub(crate) fn strip_think_tags(input: &str) -> String {
     result
 }
 
-impl nexus_kernel::cognitive::EvolutionLlm for GatewayPlannerLlm {
-    fn optimize_prompt(&self, prompt: &str) -> Result<String, String> {
-        nexus_kernel::cognitive::PlannerLlm::plan_query(self, prompt)
-            .map_err(|error| error.to_string())
-    }
-}
-
-impl nexus_kernel::genome::AutoEvolveLlm for GatewayPlannerLlm {
-    fn score_response(&self, user_message: &str, agent_response: &str) -> Result<f64, String> {
-        let prompt = format!(
-            "Rate this AI agent response on a scale of 1-10.\n\
-             User asked: {user_message}\n\
-             Agent responded: {agent_response}\n\n\
-             Score based on: relevance, accuracy, helpfulness, conciseness.\n\
-             Return ONLY a number 1-10, nothing else."
-        );
-        let text = nexus_kernel::cognitive::PlannerLlm::plan_query(self, &prompt)
-            .map_err(|e| e.to_string())?;
-        // Parse the first number found in the response
-        let score = text
-            .trim()
-            .split(|c: char| !c.is_ascii_digit() && c != '.')
-            .find(|s| !s.is_empty())
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(7.0);
-        Ok(score.clamp(1.0, 10.0))
-    }
-
-    fn mutate_prompt(
-        &self,
-        current_prompt: &str,
-        weak_responses: &[(String, String, f64)],
-    ) -> Result<String, String> {
-        let mut weak_desc = String::new();
-        for (i, (user_msg, agent_resp, score)) in weak_responses.iter().enumerate() {
-            weak_desc.push_str(&format!(
-                "Task {}: User asked: {user_msg}\n  Agent said: {agent_resp}\n  Score: {score}/10\n\n",
-                i + 1
-            ));
-        }
-        let prompt = format!(
-            "Here is an AI agent's system prompt:\n{current_prompt}\n\n\
-             It performed poorly on these tasks:\n{weak_desc}\n\
-             Analyze WHY the responses were weak and rewrite the system prompt \
-             to address these specific weaknesses. Keep the core personality \
-             and capabilities, but add targeted instructions to improve.\n\n\
-             Return ONLY the improved system prompt."
-        );
-        nexus_kernel::cognitive::PlannerLlm::plan_query(self, &prompt).map_err(|e| e.to_string())
-    }
-
-    fn generate_with_prompt(
-        &self,
-        system_prompt: &str,
-        user_message: &str,
-    ) -> Result<String, String> {
-        let prompt =
-            format!("[System prompt: {system_prompt}]\n\nUser: {user_message}\n\nAssistant:");
-        nexus_kernel::cognitive::PlannerLlm::plan_query(self, &prompt).map_err(|e| e.to_string())
-    }
-}
-
+/// The simulation's model (class XS, P3-HM-CONTRACT-02 §12.2): every call
+/// runs under the explicit `System` context the simulation mints for it
+/// (`nexus_kernel::simulation::SimulationLlm`), through the issuer; a reply
+/// unusable for the simulation is an error.
 #[cfg(not(test))]
-pub(crate) struct SimulationPlannerLlm;
+pub(crate) struct SimulationPlannerLlm {
+    pub(crate) state: AppState,
+}
 
 #[cfg(not(test))]
 impl nexus_kernel::cognitive::PlannerLlm for SimulationPlannerLlm {
-    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-        let gateway = GatewayPlannerLlm;
-        match gateway.plan_query(prompt) {
-            Ok(response) if simulation_response_is_usable(prompt, &response) => Ok(response),
-            Ok(response) => {
-                Err(nexus_kernel::errors::AgentError::SupervisorError(format!(
-                    "LLM response unusable for simulation ({} chars). Configure a capable LLM provider.",
-                    response.len()
-                )))
-            }
-            Err(e) => {
-                Err(nexus_kernel::errors::AgentError::SupervisorError(format!(
-                    "World Simulation requires a running LLM. Error: {e}"
-                )))
-            }
-        }
+    fn plan_query(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        crate::hm_dispatch::dispatch_unit_with(
+            &self.state,
+            ctx,
+            prompt,
+            crate::hm_dispatch::DispatchOptions {
+                hive: None,
+                model: crate::hm_dispatch::ModelChoice::Default,
+                max_tokens: 2048,
+                text: crate::hm_dispatch::ReplyText::StripThink,
+            },
+            &|admitted: &str, response: String| {
+                if simulation_response_is_usable(admitted, &response) {
+                    Ok(response)
+                } else {
+                    Err(format!(
+                        "LLM response unusable for simulation ({} chars). Configure a capable LLM provider.",
+                        response.len()
+                    ))
+                }
+            },
+        )
+        .map(|(reply, _)| reply)
+        .map_err(|e| {
+            nexus_kernel::errors::AgentError::SupervisorError(format!(
+                "World Simulation requires a running LLM. Error: {e}"
+            ))
+        })
     }
 }
 
+/// The simulation's test model: dispatched through the issuer like the
+/// production adapter, on a test transport attested non-local, answering
+/// [`simulation_mock_response`].
 #[cfg(test)]
-pub(crate) struct TestSimulationPlannerLlm;
+pub(crate) struct TestSimulationPlannerLlm {
+    pub(crate) issuer: Arc<nexus_kernel::hm::DispatchIssuer>,
+}
 
 #[cfg(test)]
 impl nexus_kernel::cognitive::PlannerLlm for TestSimulationPlannerLlm {
-    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-        Ok(simulation_mock_response(prompt))
+    fn plan_query(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        // `attest_route` of a value that is no provider: non-local.
+        let attestation = nexus_connectors_llm::attest::attest_route(&());
+        self.issuer
+            .dispatch(
+                ctx,
+                &mut |c: &mut nexus_kernel::hm::DispatchContext| {
+                    prompt(c).map(|envelope| (envelope, (), attestation))
+                },
+                &mut |(), admitted: &str| Ok(simulation_mock_response(admitted)),
+            )
+            .map_err(|e| nexus_kernel::errors::AgentError::SupervisorError(e.to_string()))
     }
+}
+
+/// A simulation model that dispatches nothing (no issuer).
+#[cfg(test)]
+pub(crate) struct SimulationRefused;
+
+#[cfg(test)]
+impl nexus_kernel::cognitive::PlannerLlm for SimulationRefused {
+    fn plan_query(
+        &self,
+        _ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "simulation: refused: no dispatch issuer".to_string(),
+        ))
+    }
+}
+
+/// The simulation's model with its context source: every call mints an
+/// explicit `System("simulation")` request context from the process's
+/// issuer (class XS); with no issuer, nothing is dispatched.
+pub(crate) fn simulation_llm(
+    state: &AppState,
+    planner: Arc<dyn nexus_kernel::cognitive::PlannerLlm>,
+) -> nexus_kernel::simulation::SimulationLlm {
+    let issuer = state.hm_issuer().ok().cloned();
+    nexus_kernel::simulation::SimulationLlm::new(
+        planner,
+        Arc::new(move || {
+            let issuer = issuer.as_ref().ok_or_else(|| {
+                AgentError::SupervisorError("simulation: refused: no dispatch issuer".to_string())
+            })?;
+            issuer
+                .begin_unit(
+                    nexus_kernel::hm::Principal::System("simulation"),
+                    nexus_kernel::hm::Unit::Request {
+                        request_id: Uuid::new_v4(),
+                    },
+                )
+                .map_err(|e| AgentError::SupervisorError(format!("simulation: {e}")))
+        }),
+    )
 }
 
 #[cfg(not(test))]
@@ -1119,6 +1309,24 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
         /// Returned (and audited by the scheduler) for a skipped tick.
         const LOOP_ACTIVE: &str =
             "scheduled run skipped: the agent's cognitive loop is still running";
+        /// A tick already under way when the owner stopped the agent (an
+        /// owner's stop removes the schedule first).
+        const UNSCHEDULED: &str = "scheduled run skipped: the agent's schedule was removed";
+        /// A tick whose agent was stopped while its goal was assigned.
+        const STOPPED: &str = "scheduled run skipped: the agent was stopped as it started";
+
+        // Whether this tick's schedule exists as it begins, before anything
+        // else: an owner's stop removes it first, so a tick that loses it
+        // meanwhile was overtaken by a stop (checked again before any
+        // restart, under the supervisor's lock).
+        let scheduled = || {
+            self.state
+                .agent_scheduler
+                .list()
+                .iter()
+                .any(|scheduled| scheduled.agent_id == agent_id)
+        };
+        let was_scheduled = scheduled();
 
         // P0-FINAL-GATE (item G): a scheduled tick for a transcendent (L6)
         // agent is refused before anything is audited, restarted or assigned,
@@ -1172,6 +1380,17 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
                 .unwrap_or_else(|p| p.into_inner());
             if let Some(handle) = supervisor.get_agent(agent_uuid) {
                 if handle.state == AgentState::Stopped {
+                    // Checked under the lock the owner's stop takes after it
+                    // removed the schedule: an agent the owner stopped (Phase
+                    // Three was told), or one whose schedule this tick saw
+                    // vanish, is not brought back by a tick.
+                    let owner_stopped = self
+                        .state
+                        .real_world()
+                        .is_ok_and(|world| world.was_stopped(agent_id));
+                    if !scheduled() && (was_scheduled || owner_stopped) {
+                        return Err(UNSCHEDULED.to_string());
+                    }
                     supervisor.restart_agent(agent_uuid).map_err(agent_error)?;
                 }
             }
@@ -1195,6 +1414,46 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
             }),
         );
 
+        // A stop that came while this tick assigned the goal: no loop starts
+        // for it. Checked, and the loop registered, under the supervisor's
+        // lock, which the owner's stop takes (a loop that starts before the
+        // stop ends at its next cycle, once the agent is stopped). A paused
+        // agent's tick runs, as pausing keeps schedules.
+        let supervisor = self
+            .state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let stopped = supervisor.get_agent(agent_uuid).is_none_or(|handle| {
+            matches!(
+                handle.state,
+                AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
+            )
+        });
+        let refusal = if stopped {
+            Some(STOPPED)
+        } else if was_scheduled && !scheduled() {
+            Some(UNSCHEDULED)
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
+            drop(supervisor);
+            // Only this tick's goal ends (not one the owner gave since), as
+            // the scheduler's decision, recorded as skipped.
+            end_goal_loop(&self.state, agent_id, &goal_id);
+            persist_task_completion(
+                &self.state,
+                agent_id,
+                &goal_id,
+                "failed",
+                refusal,
+                false,
+                0.0,
+            );
+            return Err(refusal.to_string());
+        }
+
         #[cfg(all(
             feature = "tauri-runtime",
             any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1209,6 +1468,7 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
                 );
             }
         }
+        drop(supervisor);
 
         Ok(())
     }
@@ -1286,14 +1546,34 @@ pub fn execute_agent_goal(
     priority: u8,
     model_override: Option<String>,
 ) -> Result<String, String> {
+    execute_agent_goal_in(
+        state,
+        agent_id,
+        goal_description,
+        priority,
+        model_override,
+        None,
+    )
+}
+
+/// [`execute_agent_goal`] with the goal's unit given (a HiveMind sub-task's).
+pub(crate) fn execute_agent_goal_in(
+    state: &AppState,
+    agent_id: String,
+    goal_description: String,
+    priority: u8,
+    model_override: Option<String>,
+    unit: Option<nexus_kernel::hm::DispatchContext>,
+) -> Result<String, String> {
     let before_snapshot = capture_agent_snapshot(state, &agent_id);
     // Assign the goal to the cognitive runtime
-    let goal_id = assign_agent_goal(
+    let goal_id = assign_agent_goal_in(
         state,
         agent_id.clone(),
         goal_description,
         priority,
         model_override,
+        unit,
     )?;
     persist_task_start(state, &agent_id, &goal_id);
     let after_snapshot = capture_agent_snapshot(state, &agent_id);
@@ -1441,17 +1721,16 @@ pub(crate) fn run_cognitive_cycle(
     executor: &dyn nexus_kernel::cognitive::loop_runtime::ActionExecutor,
 ) -> Result<nexus_kernel::cognitive::CycleResult, AgentError> {
     // Pass the shared writer, never a guard, through routing and execution.
+    // The route of each dispatch comes from the goal's unit (R4).
     let mut audit = state.audit.clone();
-    with_agent_llm_route(state, agent_id, || {
-        state.cognitive_runtime.run_cycle_with_evolution(
-            agent_id,
-            planner,
-            memory_mgr,
-            executor,
-            &mut audit,
-            Some(&state.evolution_tracker),
-        )
-    })
+    state.cognitive_runtime.run_cycle_with_evolution(
+        agent_id,
+        planner,
+        memory_mgr,
+        executor,
+        &mut audit,
+        Some(&state.evolution_tracker),
+    )
 }
 
 /// Why `Phase0AgentExecutor` refuses an agent action, or `None` when it runs.
@@ -1495,16 +1774,19 @@ pub(crate) fn phase0_agent_action_closure(
     }
 }
 
-/// P0-002C5A: the production agent executor.
+/// P0-002C5A, Phase Three: the production agent executor.
 ///
-/// Agents hold no approved filesystem, process or OS-input authority in Phase
-/// Zero. The process working directory is not a workspace; a WorkspaceGrant
-/// would not contain shell, code or Docker execution; and the file, image,
-/// speech, browser, computer-control and cognitive actuators kept their state
-/// under that directory. Those actions fail closed before reaching the kernel
-/// registry, which is given no workspace root at all.
+/// Every action is classified by the Phase Three classification first.
+/// Inert actions keep their Phase Zero route: the closure above, then the
+/// kernel registry, which is given no workspace root at all. Governed
+/// actions (network, browser, observation and input on the agent display,
+/// governed tools) go only to the Phase Three pipeline, never to the
+/// registry: they are committed, authorized by the owner's standing grants
+/// (R2 waits for the owner's native approval) and executed once. Everything
+/// else stays closed. A kernel approval allowance is not authority here.
 pub(crate) struct Phase0AgentExecutor<E> {
     inner: E,
+    governed: Option<crate::governed_real_world::AgentBridge>,
 }
 
 impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
@@ -1517,17 +1799,190 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
         audit: &mut dyn nexus_kernel::audit::AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String> {
-        if let Some(closure) = phase0_agent_action_closure(action) {
-            return Err(crate::phase0_surface::closed(action.action_type(), closure));
+        match executor_route(self.governed.as_ref(), agent_id, action) {
+            ExecutorRoute::Inner => self.inner.execute(agent_id, action, audit, hitl_approved),
+            ExecutorRoute::Decided(result) => result,
         }
-        self.inner.execute(agent_id, action, audit, hitl_approved)
+    }
+
+    /// The same decision for a step of a unit (P3-HM-CONTRACT-02 §11.3):
+    /// what the inner executor runs, it runs in the unit; what is decided
+    /// here (a governed action's outcome) is a product of the unit.
+    fn execute_in(
+        &self,
+        scope: &mut nexus_kernel::cognitive::StepScope<'_>,
+        agent_id: &str,
+        action: &nexus_kernel::cognitive::PlannedAction,
+        audit: &mut dyn nexus_kernel::audit::AuditWriter,
+        hitl_approved: bool,
+    ) -> Result<nexus_kernel::cognitive::StepOutput, String> {
+        match executor_route(self.governed.as_ref(), agent_id, action) {
+            ExecutorRoute::Inner => {
+                self.inner
+                    .execute_in(scope, agent_id, action, audit, hitl_approved)
+            }
+            ExecutorRoute::Decided(result) => result.map(|text| {
+                let item =
+                    nexus_kernel::cognitive::StepItem::Derived(scope.ctx.produce(text.clone()));
+                nexus_kernel::cognitive::StepOutput { text, item }
+            }),
+        }
+    }
+
+    /// P3-HM-CONTRACT-02 §13.2: the step kind of `action`, from the same
+    /// classification `executor_route` decides by. An `LlmQuery` is a model
+    /// step. A governed action reaching the Phase Three pipeline (committed,
+    /// authorised and executed once there) is external, so external steps
+    /// stay globally serialised. Everything else is internal: an inert
+    /// action (the Phase Zero closure's permitted list, run by the inner
+    /// executor on Nexus state), an orchestration answer, or a refusal.
+    fn step_kind(
+        &self,
+        action: &nexus_kernel::cognitive::PlannedAction,
+    ) -> nexus_kernel::cognitive::loop_runtime::StepKind {
+        use nexus_governed_control::planned::{classify, Disposition};
+        use nexus_kernel::cognitive::loop_runtime::StepKind;
+        if matches!(
+            action,
+            nexus_kernel::cognitive::PlannedAction::LlmQuery { .. }
+        ) {
+            return StepKind::Model;
+        }
+        match (classify(action), &self.governed) {
+            (Disposition::Governed(_), Some(_)) => StepKind::External,
+            _ => StepKind::Internal,
+        }
+    }
+
+    /// P3-HM-CONTRACT-02 §13.2 LK-3: the effect of an external step, from
+    /// the Phase Three pipeline's own record as `AgentBridge::act` returns
+    /// it. Done: executed. An R2 commitment left for the Owner's approval
+    /// (the answer with the top-level `awaiting_owner_approval` key, which a
+    /// done action's answer never has): not executed, so unknown. An error
+    /// (refused before it started, or its effect failed or was cancelled):
+    /// failed.
+    fn step_effect(
+        &self,
+        _action: &nexus_kernel::cognitive::PlannedAction,
+        output: Result<&str, &str>,
+    ) -> nexus_kernel::cognitive::loop_runtime::StepEffect {
+        use nexus_kernel::cognitive::loop_runtime::StepEffect;
+        match output {
+            Ok(text)
+                if serde_json::from_str::<serde_json::Value>(text)
+                    .is_ok_and(|answer| answer.get("awaiting_owner_approval").is_some()) =>
+            {
+                StepEffect::Unknown
+            }
+            Ok(_) => StepEffect::Executed,
+            Err(_) => StepEffect::Failed,
+        }
     }
 }
 
-/// The executor every production cognitive loop runs with.
+/// Where the production executor sends an action.
+enum ExecutorRoute {
+    /// To the inner (Phase Zero) executor.
+    Inner,
+    /// Decided here: a refusal, or the Phase Three outcome.
+    Decided(Result<String, String>),
+}
+
+/// The production executor's one decision, for both of its entry points.
+/// Without Phase Three it is the Phase Zero executor (closure first, then
+/// the inner executor). With it, the Phase Three classification decides:
+/// only inert actions reach the closure and then the inner executor,
+/// governed actions reach only the Phase Three bridge, and closed actions
+/// keep their Phase Zero refusal.
+fn executor_route(
+    governed: Option<&crate::governed_real_world::AgentBridge>,
+    agent_id: &str,
+    action: &nexus_kernel::cognitive::PlannedAction,
+) -> ExecutorRoute {
+    use nexus_governed_control::planned::{classify, Disposition};
+    let Some(bridge) = governed else {
+        // Without Phase Three, the Phase Zero closure stands.
+        if let Some(closure) = phase0_agent_action_closure(action) {
+            return ExecutorRoute::Decided(Err(crate::phase0_surface::closed(
+                action.action_type(),
+                closure,
+            )));
+        }
+        return ExecutorRoute::Inner;
+    };
+    match classify(action) {
+        Disposition::Inert => {
+            if let Some(closure) = phase0_agent_action_closure(action) {
+                return ExecutorRoute::Decided(Err(crate::phase0_surface::closed(
+                    action.action_type(),
+                    closure,
+                )));
+            }
+            ExecutorRoute::Inner
+        }
+        Disposition::Governed(intent) => {
+            ExecutorRoute::Decided(bridge.act(agent_id, &intent, warden_reviews(action)))
+        }
+        Disposition::Orchestrated { max_steps } => {
+            ExecutorRoute::Decided(Ok(orchestration_guidance(max_steps)))
+        }
+        Disposition::Closed(_) => ExecutorRoute::Decided(Err(crate::phase0_surface::closed(
+            action.action_type(),
+            phase0_agent_action_closure(action)
+                .unwrap_or(crate::phase0_surface::Closure::AgentExecution),
+        ))),
+    }
+}
+
+/// Whether the Warden review covers `action`: every action but the reads
+/// the kernel registry exempts (`should_apply_governance_review`), of which
+/// only `WebFetch` is governed.
+fn warden_reviews(action: &nexus_kernel::cognitive::PlannedAction) -> bool {
+    !matches!(
+        action,
+        nexus_kernel::cognitive::PlannedAction::FileRead { .. }
+            | nexus_kernel::cognitive::PlannedAction::WebSearch { .. }
+            | nexus_kernel::cognitive::PlannedAction::WebFetch { .. }
+            | nexus_kernel::cognitive::PlannedAction::MemoryRecall { .. }
+            | nexus_kernel::cognitive::PlannedAction::KnowledgeGraphQuery { .. }
+            | nexus_kernel::cognitive::PlannedAction::Noop
+    )
+}
+
+/// Tests: the production executor with an isolated Phase Three control and
+/// a fixed Warden setting.
+#[cfg(test)]
+#[cfg(target_os = "linux")]
+impl<E> Phase0AgentExecutor<E> {
+    pub(crate) fn with_real_world(
+        mut self,
+        world: Arc<crate::governed_real_world::RealWorld>,
+    ) -> Self {
+        self.governed = Some(crate::governed_real_world::AgentBridge::with_warden(
+            world,
+            || false,
+        ));
+        self
+    }
+}
+
+/// What a `ComputerAction` returns: the agent takes it one governed step at
+/// a time.
+fn orchestration_guidance(max_steps: u32) -> String {
+    format!(
+        "computer actions are taken one governed step at a time on the agent display: \
+         observe it, then issue at most {max_steps} single input actions, each \
+         committed and authorized on its own"
+    )
+}
+
+/// The executor every production cognitive loop runs with. Its LlmQuery
+/// steps dispatch through `llm` (the loop's adapter, which carries a
+/// HiveMind session's admission when the goal is a sub-task).
 pub(crate) fn phase0_agent_executor(
     state: &AppState,
     memory: Arc<nexus_kernel::cognitive::AgentMemoryManager>,
+    llm: GatewayPlannerLlm,
 ) -> Phase0AgentExecutor<nexus_kernel::cognitive::RegistryExecutor> {
     Phase0AgentExecutor {
         inner: nexus_kernel::cognitive::RegistryExecutor::new(
@@ -1539,8 +1994,25 @@ pub(crate) fn phase0_agent_executor(
                 state: state.clone(),
             })),
         )
-        .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
+        .with_llm_handler(Arc::new(llm))
         .with_memory_manager(memory),
+        governed: state.real_world().ok().map(|world| {
+            // A paused or stopped agent acts in the real world no more,
+            // whichever way it was paused or stopped.
+            let supervisor = state.supervisor.clone();
+            crate::governed_real_world::AgentBridge::new(
+                world,
+                Arc::new(move |agent: &str| {
+                    Uuid::parse_str(agent).ok().is_some_and(|id| {
+                        supervisor
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .get_agent(id)
+                            .is_some_and(|handle| handle.state == AgentState::Running)
+                    })
+                }),
+            )
+        }),
     }
 }
 
@@ -1597,6 +2069,20 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     agent_id: String,
     goal_id: String,
 ) {
+    spawn_cognitive_loop_in(bridge, state, agent_id, goal_id, None);
+}
+
+/// [`spawn_cognitive_loop_with_bridge`] for a HiveMind session's sub-task:
+/// its goal's unit was derived from the session's (P3-HM-CONTRACT-02
+/// §11.3), and each of its model calls first requalifies the session's
+/// admission (P3 HiveMind INFOFLOW).
+pub(crate) fn spawn_cognitive_loop_in(
+    bridge: BackendEventBridge,
+    state: AppState,
+    agent_id: String,
+    goal_id: String,
+    hivemind_admission: Option<Arc<HivemindAdmission>>,
+) {
     // G1b: register a cancellation flag so the Chat Stop button can break the
     // loop cleanly. Flag handle is stored in AppState keyed by agent_id so the
     // Tauri `stop_agent` command can look it up and set it.
@@ -1612,7 +2098,8 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         // inside a hook can cause a double-panic (which aborts the entire process).
         // The catch_unwind below is sufficient for recovery.
 
-        let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(GatewayPlannerLlm));
+        let llm = GatewayPlannerLlm::for_loop(&state, hivemind_admission.clone());
+        let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(llm.clone()));
         let mem_store = DbMemoryStore {
             db: state.db.clone(),
         };
@@ -1621,10 +2108,34 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         // P0-002C5A: the process working directory is not an agent workspace
         // ("Option B" is withdrawn). See `phase0_agent_executor`.
         let memory_mgr = Arc::new(memory_mgr);
-        let executor = phase0_agent_executor(&state, memory_mgr.clone());
+        let executor = phase0_agent_executor(&state, memory_mgr.clone(), llm);
 
         let max_cycles = 500u32;
         'cycle_loop: for _cycle in 0..max_cycles {
+            // A stopped agent runs no cycle: an owner's stop reaches a loop
+            // whose cancel flag it could not set (its start was under way).
+            if agent_stopped(&state, &agent_id) {
+                bridge.emit(
+                    "agent-goal-completed",
+                    json!({
+                        "agent_id": &agent_id,
+                        "goal_id": &goal_id,
+                        "success": false,
+                        "reason": "the agent is stopped",
+                        "result_summary": "Goal ended: the agent is stopped.",
+                    }),
+                );
+                persist_task_completion(
+                    &state,
+                    &agent_id,
+                    &goal_id,
+                    "failed",
+                    "Goal ended: the agent is stopped.",
+                    false,
+                    0.0,
+                );
+                return;
+            }
             // G1b: check cancellation flag before starting a new cycle. If the
             // user hit Stop while we were sleeping between cycles, exit cleanly
             // and emit a Failed goal-completed event.
@@ -1851,7 +2362,8 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                         };
 
                         let consent_id = Uuid::new_v4().to_string();
-                        let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
+                        let notify =
+                            state.register_blocked_consent_wait(&agent_id, &goal_id, &consent_id);
                         let now = {
                             use chrono::Utc;
                             Utc::now().to_rfc3339()
@@ -2038,6 +2550,7 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                             &goal_id,
                             success,
                             cycle_result.fuel_consumed,
+                            hivemind_admission.clone(),
                         );
                         return;
                     }
@@ -2097,68 +2610,192 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     });
 }
 
-pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), String> {
+/// Whether the agent has no authority to run: the supervisor records it as
+/// stopped (or destroyed), or holds no record of it at all (an id that is
+/// not one, or an agent cleared or never registered). Its loop runs no
+/// further cycle and a HiveMind session gives it no sub-task. A missing
+/// agent counts as stopped, as at the scheduler's tick and Phase Three's
+/// bridge (which also refuses a paused one).
+pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
+    Uuid::parse_str(agent_id).ok().is_none_or(|id| {
+        state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_agent(id)
+            .is_none_or(|handle| {
+                matches!(
+                    handle.state,
+                    AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
+                )
+            })
+    })
+}
+
+/// End the agent's loop only while it still drives `goal_id` (a goal given
+/// since is left alone: compared and removed under the loops' one guard),
+/// and wake only that goal's consent wait, for the scheduler's or a
+/// session's own reasons: not an owner's action, so none is recorded.
+/// Waits while any agent's cycle holds the loop lock.
+fn end_goal_loop(state: &AppState, agent_id: &str, goal_id: &str) {
+    if state
+        .cognitive_runtime
+        .stop_agent_loop_if(agent_id, goal_id)
+    {
+        state.wake_and_clear_goal_consent_wait(agent_id, goal_id);
+    }
+}
+
+/// Remove the agent's loop (this waits while any agent's cycle holds the
+/// loop lock), wake a consent wait it sleeps in, and record it.
+pub(crate) fn end_agent_loop(state: &AppState, agent_id: &str) -> Result<(), String> {
     state
         .cognitive_runtime
-        .stop_agent_loop(&agent_id)
+        .stop_agent_loop(agent_id)
         .map_err(|e| e.to_string())?;
-    state.wake_and_clear_blocked_consent_wait(&agent_id);
+    state.wake_and_clear_blocked_consent_wait(agent_id);
     state.log_event(
-        Uuid::parse_str(&agent_id).unwrap_or_default(),
+        Uuid::parse_str(agent_id).unwrap_or_default(),
         EventType::UserAction,
         json!({"action": "stop_agent_goal", "agent_id": agent_id}),
     );
     Ok(())
 }
 
+/// The longest a HiveMind sub-task's goal may run.
+const SUBTASK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Run one sub-task of `session` on `agent_id`: assign its goal, start its
+/// loop, and wait for the goal to end. A cancelled session assigns no
+/// further sub-task, and a stopped agent takes none.
 pub(crate) fn execute_hivemind_subtask(
     state: &AppState,
+    session: &hive::HiveSession,
+    admission: &Arc<HivemindAdmission>,
+    session_ctx: &nexus_kernel::hm::DispatchContext,
+    subtask_id: u32,
     agent_id: &str,
     description: &str,
-) -> Result<String, String> {
-    let goal_id = execute_agent_goal(
+) -> nexus_kernel::cognitive::SubtaskRun {
+    use nexus_kernel::cognitive::SubtaskRun;
+    if session.cancelled() {
+        return SubtaskRun::refused(hive::SESSION_CANCELLED);
+    }
+    // A stopped agent takes no sub-task: an owner's stop ends its part in a
+    // session (which reassigns the sub-task, or fails it).
+    if agent_stopped(state, agent_id) {
+        return SubtaskRun::refused(format!("sub-task refused: agent '{agent_id}' is stopped"));
+    }
+    // P3 HiveMind INFOFLOW: a sub-task is started (and stored) only while
+    // its session still qualifies as admitted.
+    if let Err(reason) = admission.requalify() {
+        return SubtaskRun::refused(format!("sub-task refused: {reason}"));
+    }
+    // P3-HM-CONTRACT-02 §11.3: the sub-task's unit derives from the
+    // session's: the participant's own policy ⊔ the session floor, the
+    // session's taint inherited.
+    let sub_ctx = match (state.hm_issuer(), Uuid::parse_str(agent_id)) {
+        (Ok(issuer), Ok(participant)) => {
+            session_ctx.derive_subtask(issuer, participant, subtask_id)
+        }
+        (Err(e), _) => return SubtaskRun::refused(format!("sub-task refused: {e}")),
+        (_, Err(e)) => return SubtaskRun::refused(format!("sub-task refused: {e}")),
+    };
+    let sub_ctx = match sub_ctx {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return SubtaskRun::refused(format!(
+                "sub-task refused: {}: {e}",
+                unresolved_policy_error()
+            ))
+        }
+    };
+    let goal_id = match execute_agent_goal_in(
         state,
         agent_id.to_string(),
         description.to_string(),
         5,
         None,
-    )?;
-    spawn_cognitive_loop_with_bridge(
+        Some(sub_ctx),
+    ) {
+        Ok(goal_id) => goal_id,
+        Err(e) => return SubtaskRun::refused(e),
+    };
+    // A cancellation that came while the goal was assigned: it ends before
+    // its loop starts.
+    if session.cancelled() {
+        end_goal_loop(state, agent_id, &goal_id);
+        return SubtaskRun::refused(hive::SESSION_CANCELLED);
+    }
+    spawn_cognitive_loop_in(
         BackendEventBridge::default(),
         state.clone(),
         agent_id.to_string(),
         goal_id.clone(),
+        Some(admission.clone()),
     );
+    let finished = await_subtask(
+        state,
+        session,
+        agent_id,
+        &goal_id,
+        description,
+        SUBTASK_TIMEOUT,
+    );
+    // The sub-task's unit and its final output come from its loop, never
+    // from the stored row (§11.3): the session joins the unit before the
+    // merge carries the output.
+    let (context, output) = match state.cognitive_runtime.goal_outcome(agent_id, &goal_id) {
+        Some((ctx, output)) => (Some(ctx), output),
+        None => (None, None),
+    };
+    let outcome = match finished {
+        Ok(()) => output.ok_or_else(|| format!("Sub-task '{description}' produced no output")),
+        Err(reason) => Err(reason),
+    };
+    SubtaskRun { outcome, context }
+}
 
+/// Wait (polling, within `timeout`) for a sub-task's goal to end. The
+/// session's cancellation or its time limit ends only this goal; the
+/// owner's stop of the agent has ended its loop already. Only the goal's
+/// bookkeeping is read (completion and success, never its content).
+fn await_subtask(
+    state: &AppState,
+    session: &hive::HiveSession,
+    agent_id: &str,
+    goal_id: &str,
+    description: &str,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
     let started = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(300);
     loop {
+        if session.cancelled() {
+            end_goal_loop(state, agent_id, goal_id);
+            return Err(hive::SESSION_CANCELLED.to_string());
+        }
         if started.elapsed() >= timeout {
-            // Best-effort: attempt to stop the timed-out goal before returning error
-            let _ = stop_agent_goal(state, agent_id.to_string());
+            // The session's own limit, not an owner's stop: only this
+            // sub-task's goal ends.
+            end_goal_loop(state, agent_id, goal_id);
             return Err(format!("sub-task timed out after {}s", timeout.as_secs()));
+        }
+        // The owner stopped the agent: its loop has ended, and the sub-task
+        // with it.
+        if agent_stopped(state, agent_id) {
+            return Err(format!("sub-task ended: agent '{agent_id}' was stopped"));
         }
 
         if let Ok(tasks) = state.db.load_tasks_by_agent(agent_id, 100) {
             if let Some(task) = tasks.into_iter().find(|task| task.id == goal_id) {
                 if let Some(completed_at) = task.completed_at {
-                    let summary = task
-                        .result_json
-                        .as_deref()
-                        // Optional: result JSON may be absent or malformed; fall back to default summary
-                        .and_then(|json| serde_json::from_str::<Value>(json).ok())
-                        .and_then(|json| {
-                            json.get("summary")
-                                .and_then(|value| value.as_str())
-                                .map(str::to_string)
-                        })
-                        .unwrap_or_else(|| {
-                            format!("Sub-task '{}' completed at {}", description, completed_at)
-                        });
                     return if task.success {
-                        Ok(summary)
+                        Ok(())
                     } else {
-                        Err(summary)
+                        Err(format!(
+                            "Sub-task '{}' failed at {}",
+                            description, completed_at
+                        ))
                     };
                 }
             }
@@ -2230,7 +2867,7 @@ pub(crate) fn get_self_evolution_metrics(
     let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
     let metrics = state
         .evolution_tracker
-        .get_evolution_metrics(&agent_id, &memory_mgr)
+        .get_evolution_metrics(&agent_id, &memory_mgr, &state.db)
         .map_err(|e| e.to_string())?;
     serde_json::to_value(&metrics).map_err(|e| e.to_string())
 }
@@ -2264,22 +2901,34 @@ pub(crate) fn trigger_cross_agent_learning(state: &AppState) -> Result<u32, Stri
         .discover_shareable_strategies(&agent_id_refs, 0.8)
         .map_err(|e| e.to_string())?;
 
-    let mem_store = DbMemoryStore {
-        db: state.db.clone(),
-    };
-    let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
-
+    // P3-HM-CONTRACT-02 §14 rule 3: each copy is written in a unit of its
+    // target (a goal-kind unit started for the learning, O1), labelled with
+    // the source's label ⊔ the target's, and refused when restricted for a
+    // target that is not local-only. A target whose policy cannot be
+    // established receives nothing.
+    let issuer = state.hm_issuer()?;
     let mut count: u32 = 0;
     for (from_agent, strategy, score) in &shareable {
         for target_id in &agent_ids {
             if target_id != from_agent {
+                let Ok(target) = Uuid::parse_str(target_id) else {
+                    continue;
+                };
+                let Ok(target_ctx) = issuer.begin_unit(
+                    nexus_kernel::hm::Principal::Agent(target),
+                    nexus_kernel::hm::Unit::Goal {
+                        goal_id: Uuid::new_v4(),
+                    },
+                ) else {
+                    continue;
+                };
                 // Best-effort: cross-pollination of strategies is supplementary; skip failures
                 let _ = state.evolution_tracker.share_learning(
+                    issuer,
+                    &target_ctx,
                     from_agent,
-                    target_id,
                     strategy,
                     *score,
-                    &memory_mgr,
                 );
                 count += 1;
             }
@@ -2291,49 +2940,92 @@ pub(crate) fn trigger_cross_agent_learning(state: &AppState) -> Result<u32, Stri
 
 // ── Hivemind Orchestration Commands ──
 
+/// Admit a HiveMind session before any thread is started for it: within
+/// the cap on sessions at once, then the agent-execution rate limit (a
+/// refusal there gives the place back). The owner cancels it by the
+/// identity recorded here.
+pub(crate) fn admit_hivemind(state: &AppState) -> Result<hive::HiveSession, String> {
+    let session = state.hive_sessions.admit()?;
+    state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
+    state.log_event(
+        SYSTEM_UUID,
+        EventType::StateChange,
+        json!({"action": "hivemind_session_admitted", "session": session.id()}),
+    );
+    Ok(session)
+}
+
 pub(crate) fn start_hivemind(
     state: &AppState,
+    session: &hive::HiveSession,
     goal: String,
     agent_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
-    // Build AgentInfo from supervisor state
-    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let agents: Vec<nexus_kernel::cognitive::AgentInfo> = agent_ids
-        .iter()
-        .filter_map(|id| {
-            // Optional: skip agent IDs that are not valid UUIDs
-            let uuid = Uuid::parse_str(id).ok()?;
-            supervisor
-                .get_agent(uuid)
-                .map(|handle| nexus_kernel::cognitive::AgentInfo {
-                    id: id.clone(),
-                    capabilities: handle.manifest.capabilities.clone(),
-                    available_fuel: handle.remaining_fuel as f64,
-                })
-        })
-        .collect();
-    drop(supervisor);
+    start_hivemind_with(state, session, goal, agent_ids, |admission| {
+        Box::new(GatewayPlannerLlm::for_session(state, Some(admission)))
+    })
+}
 
-    let session = state
+/// [`start_hivemind`] whose decomposition and merge model is made by
+/// `planner` from the session's admission (production: the session's
+/// adapter, which requalifies the admission before each dispatch).
+pub(crate) fn start_hivemind_with(
+    state: &AppState,
+    session: &hive::HiveSession,
+    goal: String,
+    agent_ids: Vec<String>,
+    planner: impl FnOnce(Arc<HivemindAdmission>) -> Box<dyn nexus_kernel::cognitive::HivemindLlm>,
+) -> Result<serde_json::Value, String> {
+    let (agents, policy) = hivemind_participants(state, &agent_ids)?;
+    // P3 HiveMind INFOFLOW: the session's admission, requalified before each
+    // sub-task it starts and each model call of its work.
+    let admission = Arc::new(HivemindAdmission {
+        state: state.clone(),
+        participants: agents.iter().map(|agent| agent.id.clone()).collect(),
+        policy,
+    });
+    let mut session_ctx = hivemind_session_context(state, &agents, policy)?;
+    let llm = planner(admission.clone());
+    let mut next_subtask = 0u32;
+
+    // P3-HM-CONTRACT-02 §11.3: the decomposition and the merge run under the
+    // session's context; every sub-task's context derives from it and joins
+    // it before the merge.
+    let outcome = state
         .hivemind
-        .execute_with_executor(&goal, agents, |_task_id, assigned_agent_id, task_desc| {
-            execute_hivemind_subtask(state, assigned_agent_id, task_desc)
-        })
+        .execute_with_executor_via(
+            llm.as_ref(),
+            &mut session_ctx,
+            &goal,
+            agents,
+            |session_ctx, _task_id, assigned_agent_id, task_desc| {
+                next_subtask += 1;
+                execute_hivemind_subtask(
+                    state,
+                    session,
+                    &admission,
+                    session_ctx,
+                    next_subtask,
+                    assigned_agent_id,
+                    task_desc,
+                )
+            },
+        )
         .map_err(|e| e.to_string())?;
 
     // Persist session
     let row = nexus_persistence::HivemindSessionRow {
-        id: session.id.clone(),
-        goal: session.master_goal.clone(),
-        status: format!("{:?}", session.status),
-        sub_tasks_json: serde_json::to_string(&session.sub_tasks)
+        id: outcome.id.clone(),
+        goal: outcome.master_goal.clone(),
+        status: format!("{:?}", outcome.status),
+        sub_tasks_json: serde_json::to_string(&outcome.sub_tasks)
             .unwrap_or_else(|_| "[]".to_string()),
-        assignments_json: serde_json::to_string(&session.assignments)
+        assignments_json: serde_json::to_string(&outcome.assignments)
             .unwrap_or_else(|_| "{}".to_string()),
-        results_json: serde_json::to_string(&session.results).unwrap_or_else(|_| "{}".to_string()),
-        fuel_consumed: session.total_fuel_consumed,
-        started_at: session.started_at.clone(),
-        completed_at: session.completed_at.clone(),
+        results_json: serde_json::to_string(&outcome.results).unwrap_or_else(|_| "{}".to_string()),
+        fuel_consumed: outcome.total_fuel_consumed,
+        started_at: outcome.started_at.clone(),
+        completed_at: outcome.completed_at.clone(),
     };
     // Best-effort: persist hivemind session for history; in-memory state is authoritative
     let _ = state.db.save_hivemind_session(&row);
@@ -2341,10 +3033,174 @@ pub(crate) fn start_hivemind(
     state.log_event(
         SYSTEM_UUID,
         EventType::StateChange,
-        json!({"action": "start_hivemind", "session_id": session.id, "goal": goal}),
+        // P3-HM-CONTRACT-02 §15.2 D6: the session id, never the goal.
+        json!({
+            "action": "start_hivemind",
+            "session_id": outcome.id,
+            "session": session.id(),
+        }),
     );
 
-    serde_json::to_value(&session).map_err(|e| format!("serialize error: {e}"))
+    serde_json::to_value(&outcome).map_err(|e| format!("serialize error: {e}"))
+}
+
+/// The participants of a HiveMind session and the session's routing policy
+/// (P3 HiveMind), established before any model call. Every requested id must
+/// be an agent the supervisor registers, named once; an invalid, unknown or
+/// repeated id, or no participant, refuses the session (none is skipped).
+/// The session's policy is its participants' common policy
+/// ([`hivemind_session_policy`]): a mix of local-only and unrestricted
+/// participants, or a participant whose policy cannot be established,
+/// refuses it.
+pub(crate) fn hivemind_participants(
+    state: &AppState,
+    agent_ids: &[String],
+) -> Result<(Vec<nexus_kernel::cognitive::AgentInfo>, AgentLlmPolicy), String> {
+    let refused = |reason: String| format!("hivemind session refused: {reason}");
+    if agent_ids.is_empty() {
+        return Err(refused("no participant was named".to_string()));
+    }
+    let mut agents: Vec<nexus_kernel::cognitive::AgentInfo> = Vec::new();
+    {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        for id in agent_ids {
+            let uuid =
+                Uuid::parse_str(id).map_err(|_| refused(format!("'{id}' is not an agent id")))?;
+            let canonical = uuid.to_string();
+            if agents.iter().any(|agent| agent.id == canonical) {
+                return Err(refused(format!("'{id}' is named more than once")));
+            }
+            let handle = supervisor
+                .get_agent(uuid)
+                .ok_or_else(|| refused(format!("'{id}' is not a registered agent")))?;
+            agents.push(nexus_kernel::cognitive::AgentInfo {
+                id: canonical,
+                capabilities: handle.manifest.capabilities.clone(),
+                available_fuel: handle.remaining_fuel as f64,
+            });
+        }
+    }
+    let ids: Vec<String> = agents.iter().map(|agent| agent.id.clone()).collect();
+    let policy = hivemind_session_policy(state, &ids).map_err(refused)?;
+    Ok((agents, policy))
+}
+
+/// The context of a HiveMind session (P3-HM-CONTRACT-02 §11.3): a unit of
+/// its first participant; a local-only session (all its participants
+/// local-only) is local throughout. Every sub-task's context derives from
+/// it.
+fn hivemind_session_context(
+    state: &AppState,
+    agents: &[nexus_kernel::cognitive::AgentInfo],
+    policy: AgentLlmPolicy,
+) -> Result<nexus_kernel::hm::DispatchContext, String> {
+    let refused = |reason: String| format!("hivemind session refused: {reason}");
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| refused(format!("no dispatch issuer: {e}")))?;
+    let lead = agents
+        .first()
+        .and_then(|agent| Uuid::parse_str(&agent.id).ok())
+        .ok_or_else(|| refused("no participant was named".to_string()))?;
+    let mut ctx = issuer
+        .begin_unit(
+            nexus_kernel::hm::Principal::Agent(lead),
+            nexus_kernel::hm::Unit::HiveSubtask {
+                session_id: Uuid::new_v4(),
+                subtask_id: 0,
+            },
+        )
+        .map_err(|e| refused(format!("{}: {e}", unresolved_policy_error())))?;
+    if policy == AgentLlmPolicy::LocalOnly {
+        ctx.tighten_local_only();
+    }
+    Ok(ctx)
+}
+
+/// A HiveMind session's admission and context for `agent_ids`, made as
+/// [`start_hivemind_with`] makes them (tests that drive a sub-task
+/// directly).
+#[cfg(test)]
+pub(crate) fn hivemind_test_session(
+    state: &AppState,
+    agent_ids: &[String],
+) -> (Arc<HivemindAdmission>, nexus_kernel::hm::DispatchContext) {
+    let (agents, policy) = hivemind_participants(state, agent_ids).unwrap();
+    let admission = Arc::new(HivemindAdmission {
+        state: state.clone(),
+        participants: agents.iter().map(|agent| agent.id.clone()).collect(),
+        policy,
+    });
+    let ctx = hivemind_session_context(state, &agents, policy).unwrap();
+    (admission, ctx)
+}
+
+/// The routing policy of a HiveMind session of the registered agents `ids`
+/// (P3 HiveMind INFOFLOW): every participant's own route policy as the
+/// backend store holds it (P3-HM-CONTRACT-02 §4.2), which must be the same
+/// for all. A sub-task's loop stores what it did under the participant that
+/// ran it, and an unrestricted participant's later work is bound by no
+/// session, so a session with a local-only participant admits only
+/// local-only ones. A mix, or a participant whose policy cannot be
+/// established, is refused.
+fn hivemind_session_policy(state: &AppState, ids: &[String]) -> Result<AgentLlmPolicy, String> {
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| format!("no dispatch issuer: {e}"))?;
+    let (mut local_only, mut unrestricted) = (false, false);
+    for id in ids {
+        let policy = Uuid::parse_str(id)
+            .map_err(|e| e.to_string())
+            .and_then(|uuid| {
+                issuer
+                    .resolve_agent_route_policy(uuid)
+                    .map_err(|e| e.to_string())
+            })
+            .map_err(|e| format!("'{id}': {}: {e}", unresolved_policy_error()))?;
+        if policy.local_only() {
+            local_only = true;
+        } else {
+            unrestricted = true;
+        }
+    }
+    if local_only && unrestricted {
+        return Err(
+            "the session mixes local-only and unrestricted participants; \
+                    with a local-only participant every participant must be local-only"
+                .to_string(),
+        );
+    }
+    Ok(if local_only {
+        AgentLlmPolicy::LocalOnly
+    } else {
+        AgentLlmPolicy::Unrestricted
+    })
+}
+
+/// A HiveMind session's admission, kept for the session's work (P3 HiveMind
+/// INFOFLOW): its participants and the policy it was admitted under. Each
+/// sub-task the session starts and each model call of its work first
+/// requalifies it; the admission is handed to that work explicitly.
+pub(crate) struct HivemindAdmission {
+    state: AppState,
+    participants: Vec<String>,
+    policy: AgentLlmPolicy,
+}
+
+impl HivemindAdmission {
+    /// The session still qualifies as it was admitted: its participants'
+    /// current policies give the same session policy. A participant's
+    /// policy changed either way, a mix, or a policy that can no longer be
+    /// established ends the session's work.
+    pub(crate) fn requalify(&self) -> Result<(), String> {
+        let changed =
+            "hivemind session ended: a participant's routing policy changed during the session";
+        match hivemind_session_policy(&self.state, &self.participants) {
+            Ok(policy) if policy == self.policy => Ok(()),
+            Ok(_) => Err(changed.to_string()),
+            Err(reason) => Err(format!("{changed}: {reason}")),
+        }
+    }
 }
 
 pub(crate) fn get_hivemind_status(
@@ -2365,6 +3221,16 @@ pub(crate) fn get_hivemind_status(
 }
 
 pub(crate) fn cancel_hivemind(state: &AppState, session_id: String) -> Result<(), String> {
+    // A session under way (by the identity its admission recorded) is told
+    // to stop: it assigns no further sub-task, and the one it waits on ends.
+    if state.hive_sessions.cancel(&session_id) {
+        state.log_event(
+            SYSTEM_UUID,
+            EventType::UserAction,
+            json!({"action": "cancel_hivemind", "session": session_id}),
+        );
+        return Ok(());
+    }
     state
         .hivemind
         .cancel_session(&session_id)
@@ -2422,7 +3288,15 @@ pub(crate) fn set_default_agent(
     Ok(())
 }
 
+pub(crate) mod hive;
+
+#[cfg(test)]
+mod hive_tests;
+#[cfg(test)]
+mod local_only_tests;
 #[cfg(test)]
 mod lock_tests;
 #[cfg(test)]
 mod scheduled_tests;
+#[cfg(test)]
+mod stop_tests;

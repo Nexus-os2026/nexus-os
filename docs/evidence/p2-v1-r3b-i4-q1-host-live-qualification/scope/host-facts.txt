@@ -1,0 +1,13 @@
+taken at: 2026-10-03T02:28:57Z by nexus (1000)
+kernel: Linux 6.17.0-35-generic x86_64
+os: Ubuntu 24.04.5 LTS
+systemd: systemd 255 (255.4-1ubuntu8.17)
+dbus: D-Bus Message Bus Daemon 1.14.10
+packages: dbus 1.14.10-4ubuntu4.1;systemd 255.4-1ubuntu8.17;
+/sys/fs/cgroup type: cgroup2fs
+this process's cgroup: 0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-5bb701d5-435b-454a-8602-dd1152c8913d.scope
+runtime directories: 1000
+lingering users (/var/lib/systemd/linger): (none if empty)
+runner service user: User=github-runner
+runner user entry: github-runner:x:1001:1001::/home/github-runner:/bin/bash
+runner process: github-runner    /home/github-runner/actions-runner/bin/Runner.Listener run --startuptype service

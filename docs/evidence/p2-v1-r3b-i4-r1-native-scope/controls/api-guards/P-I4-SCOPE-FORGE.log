@@ -1,0 +1,18 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0451]: fields `unit` and `dir` of struct `nexus_verifier_sandbox::scope::Scope` are private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:21
+   |
+21 |     let _ = Scope { unit: String::from("nexus-verifier-0.scope"), dir: todo!() };
+   |                     ^^^^ private field                            ^^^ private field
+
+error: trait `nexus_verifier_sandbox::scope::native::CgroupDir` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:72
+   |
+21 |     let _ = Scope { unit: String::from("nexus-verifier-0.scope"), dir: todo!() };
+   |                                                                        ^^^^^^^ private trait
+   |
+   = note: this error originates in the macro `todo` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0451`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

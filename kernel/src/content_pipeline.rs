@@ -8,6 +8,7 @@ use crate::actuators::{ActuatorContext, ActuatorRegistry};
 use crate::audit::{AuditWriter, EventType};
 use crate::cognitive::loop_runtime::LlmQueryHandler;
 use crate::cognitive::types::PlannedAction;
+use crate::hm::{DispatchContext, PromptBuilder};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -49,8 +50,26 @@ impl ContentPipeline {
         }
     }
 
-    /// Run the full 5-phase pipeline.
-    pub fn run(&self, context: &ActuatorContext, audit: &mut dyn AuditWriter) -> PipelineResult {
+    /// One model call under `ctx` (P3-HM-CONTRACT-02 §11.4). The pipeline
+    /// has no production caller (latent, §12.2): a caller must be
+    /// classified first and supply the context of its class.
+    fn ask(&self, ctx: &mut DispatchContext, prompt: &str) -> Result<String, String> {
+        self.llm_handler
+            .query(ctx, &mut |c: &mut DispatchContext| {
+                let mut b = PromptBuilder::new(c);
+                b.text(prompt);
+                Some(b.build())
+            })
+            .map(|reply| reply.text().to_string())
+    }
+
+    /// Run the full 5-phase pipeline; every model call runs under `ctx`.
+    pub fn run(
+        &self,
+        ctx: &mut DispatchContext,
+        context: &ActuatorContext,
+        audit: &mut dyn AuditWriter,
+    ) -> PipelineResult {
         let mut phases = Vec::new();
         let mut total_fuel = 0.0;
 
@@ -75,17 +94,17 @@ impl ContentPipeline {
         };
 
         // Extract the top topic from trends using LLM
-        let topic = self.extract_top_topic(&trend_output);
+        let topic = self.extract_top_topic(ctx, &trend_output);
         eprintln!("[content-pipeline] selected topic: {topic}");
 
         // ── PHASE 2: RESEARCH ──
-        let research = self.phase_research(&topic, context, audit);
+        let research = self.phase_research(ctx, &topic, context, audit);
         total_fuel += research.fuel_cost;
         let research_output = research.output_preview.clone();
         phases.push(research);
 
         // ── PHASE 3: CONTENT WRITING ──
-        let article = self.phase_write_article(&topic, &research_output, context, audit);
+        let article = self.phase_write_article(ctx, &topic, &research_output, context, audit);
         total_fuel += article.fuel_cost;
         let article_content = article.output_preview.clone();
         phases.push(article);
@@ -175,7 +194,7 @@ impl ContentPipeline {
         }
     }
 
-    fn extract_top_topic(&self, trend_data: &str) -> String {
+    fn extract_top_topic(&self, ctx: &mut DispatchContext, trend_data: &str) -> String {
         let prompt = format!(
             "You are a content strategist. Based on these search results about trending topics, \
              identify the SINGLE best topic for a tech article. Choose the topic with: \
@@ -185,7 +204,7 @@ impl ContentPipeline {
              Respond with ONLY the topic title (5-10 words). Nothing else.",
             &trend_data[..trend_data.len().min(3000)]
         );
-        match self.llm_handler.query(&prompt) {
+        match self.ask(ctx, &prompt) {
             Ok(topic) => topic.trim().to_string(),
             Err(_) => "The Latest Advances in AI Development Tools".to_string(),
         }
@@ -195,6 +214,7 @@ impl ContentPipeline {
 
     fn phase_research(
         &self,
+        ctx: &mut DispatchContext,
         topic: &str,
         context: &ActuatorContext,
         audit: &mut dyn AuditWriter,
@@ -260,7 +280,7 @@ impl ContentPipeline {
             research_notes.join("\n\n---\n\n")
         );
 
-        let synthesized = match self.llm_handler.query(&research_prompt) {
+        let synthesized = match self.ask(ctx, &research_prompt) {
             Ok(r) => {
                 fuel += 10.0; // LLM query fuel
                 r
@@ -283,6 +303,7 @@ impl ContentPipeline {
 
     fn phase_write_article(
         &self,
+        ctx: &mut DispatchContext,
         topic: &str,
         research: &str,
         _context: &ActuatorContext,
@@ -312,7 +333,7 @@ impl ContentPipeline {
             research_truncated = &research[..research.len().min(4000)]
         );
 
-        let article = match self.llm_handler.query(&prompt) {
+        let article = match self.ask(ctx, &prompt) {
             Ok(content) => content,
             Err(e) => {
                 return PhaseResult {
@@ -800,11 +821,17 @@ mod tests {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    /// Mock LLM that returns realistic content for each phase.
-    struct MockContentLlm;
+    use crate::hm::testing::{ScriptedLlm, TestHm};
+    use crate::hm::RouteClass;
 
-    impl LlmQueryHandler for MockContentLlm {
-        fn query(&self, prompt: &str) -> Result<String, String> {
+    /// Mock LLM that returns realistic content for each phase, through the
+    /// issuer on an attested local transport.
+    fn mock_content_llm(hm: &TestHm) -> ScriptedLlm {
+        ScriptedLlm::answering_or_failing(&hm.issuer, RouteClass::Local, mock_content_reply)
+    }
+
+    fn mock_content_reply(prompt: &str) -> Result<String, String> {
+        {
             let lower = prompt.to_lowercase();
 
             // Topic extraction
@@ -925,11 +952,14 @@ mod tests {
     fn test_full_content_pipeline() {
         let tmp = tempfile::TempDir::new().unwrap();
         let context = make_pipeline_context(tmp.path());
-        let llm: Arc<dyn LlmQueryHandler> = Arc::new(MockContentLlm);
+        let hm = TestHm::new();
+        let llm: Arc<dyn LlmQueryHandler> = Arc::new(mock_content_llm(&hm));
         let pipeline = ContentPipeline::new(llm);
+        // A latent path (§12.2): the test supplies a unit's context.
+        let mut unit = hm.goal(hm.agent("content-agent"));
         let mut audit = AuditTrail::new();
 
-        let result = pipeline.run(&context, &mut audit);
+        let result = pipeline.run(&mut unit, &context, &mut audit);
 
         // Pipeline should succeed
         assert!(result.success, "pipeline failed: {:?}", result.error);

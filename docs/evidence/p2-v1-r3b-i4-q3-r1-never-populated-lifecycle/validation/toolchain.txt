@@ -1,0 +1,10 @@
+rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+clippy: clippy 0.1.94 (4a4ef493e3 2026-03-02)
+rustfmt: rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+python3: Python 3.12.3
+host kernel (uname -sr): Linux 6.17.0-35-generic
+HEAD: 74f1ab82a01c0b1bfd5895d042c11e4278c2a32a
+HEAD tree: 992fdeb2c36287ed78fa6ee32be7e8b6064f0284
+status entries: 0
+CARGO_TARGET_DIR: /home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/targets/validate

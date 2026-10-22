@@ -1,0 +1,2 @@
+{"script": "docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/source_guards.py", "script_sha256": "b3c90101178be7c508236fddb12904fc163b9b071dc92031764759afc280db84", "r3_adapted_guard": "SG-I4-DESTINATION", "r3_added_guard": "SG-I4R3-NO-NAME-ACTUATION", "r3_replaced_self_test": ["SG-I4-DESTINATION", "scope/manager.rs", "    fn stop_unit(&self, unit: &str) -> Remote<()>;", "    fn stop_unit(&self, destination: &str, unit: &str) -> Remote<()>;"]}
+self-test anchor missing in scope/pending.rs: 'Remote::Answered(Some(group)) if group == path => {}'

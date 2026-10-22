@@ -105,7 +105,9 @@ pub(crate) fn search_documents(
         rag.config.top_k = k as usize;
     }
 
-    let provider = get_configured_provider();
+    // P3-HM-CONTRACT-02 §12.1 (XS): every model call of the RAG pipeline is
+    // a `System("rag")` dispatch through the issuer.
+    let provider = crate::hm_dispatch::IssuedProvider::new(state, "rag", get_configured_provider());
     let results = rag
         .query(&query, &provider)
         .map_err(|e| format!("search failed: {e}"))?;
@@ -129,7 +131,9 @@ pub(crate) fn search_documents(
 
 pub(crate) fn chat_with_documents(state: &AppState, question: String) -> Result<String, String> {
     let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
-    let provider = get_configured_provider();
+    // P3-HM-CONTRACT-02 §12.1 (XS): every model call of the RAG pipeline is
+    // a `System("rag")` dispatch through the issuer.
+    let provider = crate::hm_dispatch::IssuedProvider::new(state, "rag", get_configured_provider());
 
     let results = rag
         .query(&question, &provider)

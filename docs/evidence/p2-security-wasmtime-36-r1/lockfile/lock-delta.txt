@@ -1,0 +1,93 @@
+before 1092 packages, after 1092; removed 46, added 46, other 0
+removed  addr2line@0.26.0  <- wasmtime@43.0.2
+added    addr2line@0.25.1  <- wasmtime@36.0.17
+removed  bitmaps@2.1.0  <- im-rc@15.1.0, sized-chunks@0.6.5
+removed  cranelift-assembler-x64@0.130.2  <- cranelift-codegen@0.130.2, winch-codegen@43.0.2
+added    cranelift-assembler-x64@0.123.17  <- cranelift-codegen@0.123.17, winch-codegen@36.0.17
+removed  cranelift-assembler-x64-meta@0.130.2  <- cranelift-assembler-x64@0.130.2, cranelift-codegen-meta@0.130.2
+added    cranelift-assembler-x64-meta@0.123.17  <- cranelift-assembler-x64@0.123.17, cranelift-codegen-meta@0.123.17
+removed  cranelift-bforest@0.130.2  <- cranelift-codegen@0.130.2, wasmtime-environ@43.0.2
+added    cranelift-bforest@0.123.17  <- cranelift-codegen@0.123.17
+removed  cranelift-bitset@0.130.2  <- cranelift-codegen@0.130.2, cranelift-entity@0.130.2, pulley-interpreter@43.0.2, wasmtime-environ@43.0.2
+added    cranelift-bitset@0.123.17  <- cranelift-codegen@0.123.17, cranelift-entity@0.123.17, pulley-interpreter@36.0.17, wasmtime-environ@36.0.17
+removed  cranelift-codegen@0.130.2  <- cranelift-frontend@0.130.2, cranelift-native@0.130.2, wasmtime-internal-cranelift@43.0.2, wasmtime-internal-unwinder@43.0.2, wasmtime-internal-winch@43.0.2, winch-codegen@43.0.2
+added    cranelift-codegen@0.123.17  <- cranelift-frontend@0.123.17, cranelift-native@0.123.17, wasmtime-internal-cranelift@36.0.17, wasmtime-internal-unwinder@36.0.17, wasmtime-internal-winch@36.0.17, winch-codegen@36.0.17
+removed  cranelift-codegen-meta@0.130.2  <- cranelift-codegen@0.130.2
+added    cranelift-codegen-meta@0.123.17  <- cranelift-codegen@0.123.17
+removed  cranelift-codegen-shared@0.130.2  <- cranelift-codegen-meta@0.130.2, cranelift-codegen@0.130.2
+added    cranelift-codegen-shared@0.123.17  <- cranelift-codegen-meta@0.123.17, cranelift-codegen@0.123.17
+removed  cranelift-control@0.130.2  <- cranelift-codegen@0.130.2, wasmtime-internal-cranelift@43.0.2
+added    cranelift-control@0.123.17  <- cranelift-codegen@0.123.17, wasmtime-internal-cranelift@36.0.17
+removed  cranelift-entity@0.130.2  <- cranelift-bforest@0.130.2, cranelift-codegen@0.130.2, wasmtime-environ@43.0.2, wasmtime-internal-cranelift@43.0.2
+added    cranelift-entity@0.123.17  <- cranelift-bforest@0.123.17, cranelift-codegen@0.123.17, wasmtime-environ@36.0.17, wasmtime-internal-cranelift@36.0.17
+removed  cranelift-frontend@0.130.2  <- wasmtime-internal-cranelift@43.0.2
+added    cranelift-frontend@0.123.17  <- wasmtime-internal-cranelift@36.0.17
+removed  cranelift-isle@0.130.2  <- cranelift-codegen@0.130.2
+added    cranelift-isle@0.123.17  <- cranelift-codegen@0.123.17
+removed  cranelift-native@0.130.2  <- wasmtime-internal-cranelift@43.0.2
+added    cranelift-native@0.123.17  <- wasmtime-internal-cranelift@36.0.17
+removed  cranelift-srcgen@0.130.2  <- cranelift-assembler-x64-meta@0.130.2, cranelift-codegen-meta@0.130.2
+added    cranelift-srcgen@0.123.17  <- cranelift-assembler-x64-meta@0.123.17, cranelift-codegen-meta@0.123.17
+removed  fxprof-processed-profile@0.8.1  <- wasmtime@43.0.2
+added    fxprof-processed-profile@0.6.0  <- wasmtime@36.0.17
+removed  gimli@0.33.0  <- addr2line@0.26.0, cranelift-codegen@0.130.2, wasmtime-environ@43.0.2, wasmtime-internal-cranelift@43.0.2, wasmtime-internal-winch@43.0.2, wasmtime@43.0.2, winch-codegen@43.0.2
+added    gimli@0.32.3  <- addr2line@0.25.1, cranelift-codegen@0.123.17, wasmtime-environ@36.0.17, wasmtime-internal-cranelift@36.0.17, wasmtime-internal-winch@36.0.17, wasmtime@36.0.17, winch-codegen@36.0.17
+removed  hashbrown@0.17.1  <- regalloc2@0.15.1
+removed  im-rc@15.1.0  <- wasm-compose@0.245.1
+removed  object@0.38.1  <- wasmtime-environ@43.0.2, wasmtime-internal-cranelift@43.0.2, wasmtime-internal-jit-debug@43.0.2, wasmtime-internal-unwinder@43.0.2, wasmtime-internal-winch@43.0.2, wasmtime@43.0.2
+added    object@0.37.3  <- wasmtime-environ@36.0.17, wasmtime-internal-cranelift@36.0.17, wasmtime-internal-jit-debug@36.0.17, wasmtime-internal-unwinder@36.0.17, wasmtime-internal-winch@36.0.17, wasmtime@36.0.17
+removed  proc-macro-crate@2.0.2  <- glib-macros@0.18.5
+added    proc-macro-crate@2.0.0  <- glib-macros@0.18.5
+removed  pulley-interpreter@43.0.2  <- cranelift-codegen-meta@0.130.2, cranelift-codegen@0.130.2, wasmtime-internal-cranelift@43.0.2, wasmtime@43.0.2
+added    pulley-interpreter@36.0.17  <- cranelift-codegen-meta@0.123.17, cranelift-codegen@0.123.17, wasmtime-internal-cranelift@36.0.17, wasmtime@36.0.17
+removed  pulley-macros@43.0.2  <- pulley-interpreter@43.0.2
+added    pulley-macros@36.0.17  <- pulley-interpreter@36.0.17
+removed  rand_xoshiro@0.6.0  <- im-rc@15.1.0
+removed  regalloc2@0.15.1  <- cranelift-codegen@0.130.2, winch-codegen@43.0.2
+added    regalloc2@0.12.2  <- cranelift-codegen@0.123.17, winch-codegen@36.0.17
+removed  sized-chunks@0.6.5  <- im-rc@15.1.0
+removed  toml@0.8.2  <- coding-agent@10.6.0, nexus-cli@10.6.0, nexus-code@0.1.0, nexus-desktop-backend@10.6.0, nexus-factory@10.6.0, nexus-integration@10.6.0, nexus-kernel@10.6.0, nexus-swarm@10.6.0, social-poster-agent@10.6.0, system-deps@6.2.2
+added    toml@0.8.23  <- coding-agent@10.6.0, nexus-cli@10.6.0, nexus-code@0.1.0, nexus-desktop-backend@10.6.0, nexus-factory@10.6.0, nexus-integration@10.6.0, nexus-kernel@10.6.0, nexus-swarm@10.6.0, social-poster-agent@10.6.0, system-deps@6.2.2, wasmtim
+removed  toml_datetime@0.6.3  <- proc-macro-crate@2.0.2, toml@0.8.2, toml_edit@0.19.15, toml_edit@0.20.2
+added    toml_datetime@0.6.11  <- toml@0.8.23, toml_edit@0.19.15, toml_edit@0.20.2, toml_edit@0.22.27
+added    toml_edit@0.22.27  <- toml@0.8.23
+added    toml_write@0.1.2  <- toml_edit@0.22.27
+removed  wasm-compose@0.245.1  <- wasmtime@43.0.2
+added    wasm-encoder@0.236.1  <- wasmtime-environ@36.0.17, wasmtime@36.0.17
+added    wasmparser@0.236.1  <- wasm-encoder@0.236.1, wasmprinter@0.236.1, wasmtime-environ@36.0.17, wasmtime-internal-cranelift@36.0.17, wasmtime-internal-winch@36.0.17, wasmtime@36.0.17, winch-codegen@36.0.17, wit-parser@0.236.1
+removed  wasmprinter@0.245.1  <- wasmtime-environ@43.0.2
+added    wasmprinter@0.236.1  <- wasmtime-environ@36.0.17
+removed  wasmtime@43.0.2  <- nexus-benchmarks@10.6.0, nexus-protocols@10.6.0, nexus-sdk@10.6.0
+added    wasmtime@36.0.17  <- nexus-benchmarks@10.6.0, nexus-protocols@10.6.0, nexus-sdk@10.6.0
+removed  wasmtime-environ@43.0.2  <- wasmtime-internal-cache@43.0.2, wasmtime-internal-cranelift@43.0.2, wasmtime-internal-fiber@43.0.2, wasmtime-internal-unwinder@43.0.2, wasmtime-internal-winch@43.0.2, wasmtime@43.0.2, winch-codegen@43.0.2
+added    wasmtime-environ@36.0.17  <- wasmtime-internal-cranelift@36.0.17, wasmtime-internal-winch@36.0.17, wasmtime@36.0.17, winch-codegen@36.0.17
+added    wasmtime-internal-asm-macros@36.0.17  <- wasmtime-internal-fiber@36.0.17, wasmtime@36.0.17
+removed  wasmtime-internal-cache@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-cache@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-component-macro@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-component-macro@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-component-util@43.0.2  <- wasmtime-environ@43.0.2, wasmtime-internal-component-macro@43.0.2, wasmtime@43.0.2
+added    wasmtime-internal-component-util@36.0.17  <- wasmtime-environ@36.0.17, wasmtime-internal-component-macro@36.0.17, wasmtime@36.0.17
+removed  wasmtime-internal-core@43.0.2  <- cranelift-bforest@0.130.2, cranelift-bitset@0.130.2, cranelift-codegen@0.130.2, cranelift-entity@0.130.2, pulley-interpreter@43.0.2, wasmtime-environ@43.0.2, wasmtime-internal-cranelift@43.0.2, wasmtime-internal-jit-icache-coheren
+removed  wasmtime-internal-cranelift@43.0.2  <- wasmtime-internal-winch@43.0.2, wasmtime@43.0.2, winch-codegen@43.0.2
+added    wasmtime-internal-cranelift@36.0.17  <- wasmtime-internal-winch@36.0.17, wasmtime@36.0.17, winch-codegen@36.0.17
+removed  wasmtime-internal-fiber@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-fiber@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-jit-debug@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-jit-debug@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-jit-icache-coherence@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-jit-icache-coherence@36.0.17  <- wasmtime@36.0.17
+added    wasmtime-internal-math@36.0.17  <- cranelift-codegen@0.123.17, pulley-interpreter@36.0.17, wasmtime-internal-cranelift@36.0.17, wasmtime@36.0.17, winch-codegen@36.0.17
+added    wasmtime-internal-slab@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-unwinder@43.0.2  <- wasmtime-internal-cranelift@43.0.2, wasmtime@43.0.2
+added    wasmtime-internal-unwinder@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-versioned-export-macros@43.0.2  <- wasmtime-internal-cranelift@43.0.2, wasmtime-internal-fiber@43.0.2, wasmtime-internal-jit-debug@43.0.2, wasmtime@43.0.2
+added    wasmtime-internal-versioned-export-macros@36.0.17  <- wasmtime-internal-cranelift@36.0.17, wasmtime-internal-fiber@36.0.17, wasmtime-internal-jit-debug@36.0.17, wasmtime@36.0.17
+removed  wasmtime-internal-winch@43.0.2  <- wasmtime@43.0.2
+added    wasmtime-internal-winch@36.0.17  <- wasmtime@36.0.17
+removed  wasmtime-internal-wit-bindgen@43.0.2  <- wasmtime-internal-component-macro@43.0.2
+added    wasmtime-internal-wit-bindgen@36.0.17  <- wasmtime-internal-component-macro@36.0.17
+removed  winch-codegen@43.0.2  <- wasmtime-internal-winch@43.0.2
+added    winch-codegen@36.0.17  <- wasmtime-internal-winch@36.0.17
+removed  wit-parser@0.245.1  <- wasmtime-internal-component-macro@43.0.2, wasmtime-internal-wit-bindgen@43.0.2
+added    wit-parser@0.236.1  <- wasmtime-internal-component-macro@36.0.17, wasmtime-internal-wit-bindgen@36.0.17

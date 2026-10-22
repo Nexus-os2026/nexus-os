@@ -1,0 +1,40 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:44
+   |
+22 |     saved::<nexus_verifier_sandbox::scope::PendingScope>();
+   |                                            ^^^^^^^^^^^^ private struct
+   |
+note: the struct `PendingScope` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:65:26
+   |
+65 | pub(crate) use pending::{PendingScope, ScopeBoundary};
+   |                          ^^^^^^^^^^^^
+
+error[E0277]: the trait bound `nexus_verifier_sandbox::scope::pending::PendingScope: serde::Serialize` is not satisfied
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:13
+   |
+22 |     saved::<nexus_verifier_sandbox::scope::PendingScope>();
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Serialize` is not implemented for `nexus_verifier_sandbox::scope::pending::PendingScope`
+   |
+   = note: for local types consider adding `#[derive(serde::Serialize)]` to your `nexus_verifier_sandbox::scope::pending::PendingScope` type
+   = note: for types from other crates check whether the crate offers a `serde` feature flag
+   = help: the following other types implement trait `Serialize`:
+             &'a T
+             &'a mut T
+             ()
+             (T,)
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0, T1, T2, T3, T4)
+           and 185 others
+note: required by a bound in `saved`
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:17
+   |
+21 |     fn saved<T: serde::Serialize>() {}
+   |                 ^^^^^^^^^^^^^^^^ required by this bound in `saved`
+
+Some errors have detailed explanations: E0277, E0603.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors

@@ -272,44 +272,34 @@ pub fn router_get_feedback(
 }
 
 // ── Browser Agent Commands ────────────────────────────────────────────────────
+//
+// Phase Three G-INV-3: the legacy direct browser bridge is closed. Browsing
+// runs only as governed browser sessions (Phase Three P3-C): committed,
+// confined to granted origins below egress, natively approved when it
+// interacts, and evidenced.
 
 #[tauri::command]
-pub fn browser_create_session(
-    state: tauri::State<'_, AppState>,
-    agent_id: String,
-    autonomy_level: u8,
-) -> Result<String, String> {
-    nexus_browser_agent::tauri_commands::create_session(
-        &state.browser_agent,
-        &agent_id,
-        autonomy_level,
-    )
+pub fn browser_create_session() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_create_session",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[tauri::command]
-pub fn browser_execute_task(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-    task: String,
-    max_steps: Option<u32>,
-    model_id: Option<String>,
-) -> Result<nexus_browser_agent::BrowserActionResult, String> {
-    nexus_browser_agent::tauri_commands::execute_task(
-        &state.browser_agent,
-        &session_id,
-        &task,
-        max_steps,
-        &model_id.unwrap_or_else(|| "ollama-7b".into()),
-    )
+pub fn browser_execute_task() -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_execute_task",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[tauri::command]
-pub fn browser_navigate(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-    url: String,
-) -> Result<nexus_browser_agent::BrowserActionResult, String> {
-    nexus_browser_agent::tauri_commands::navigate(&state.browser_agent, &session_id, &url)
+pub fn browser_navigate() -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_navigate",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 /// P0-002C5C: the command took a raw output path from the interface for the
@@ -323,31 +313,35 @@ pub fn browser_screenshot() -> Result<nexus_browser_agent::BrowserActionResult, 
 }
 
 #[tauri::command]
-pub fn browser_get_content(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-) -> Result<nexus_browser_agent::BrowserActionResult, String> {
-    nexus_browser_agent::tauri_commands::get_content(&state.browser_agent, &session_id)
+pub fn browser_get_content() -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_get_content",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[tauri::command]
-pub fn browser_close_session(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-) -> Result<(), String> {
-    nexus_browser_agent::tauri_commands::close_session(&state.browser_agent, &session_id)
+pub fn browser_close_session() -> Result<(), String> {
+    Err(crate::phase0_surface::closed(
+        "browser_close_session",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[tauri::command]
-pub fn browser_get_policy(
-    state: tauri::State<'_, AppState>,
-) -> Result<nexus_browser_agent::BrowserPolicy, String> {
-    nexus_browser_agent::tauri_commands::get_policy(&state.browser_agent)
+pub fn browser_get_policy() -> Result<nexus_browser_agent::BrowserPolicy, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_get_policy",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 #[tauri::command]
-pub fn browser_session_count(state: tauri::State<'_, AppState>) -> Result<usize, String> {
-    nexus_browser_agent::tauri_commands::session_count(&state.browser_agent)
+pub fn browser_session_count() -> Result<usize, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_session_count",
+        crate::phase0_surface::Closure::GovernedRoute,
+    ))
 }
 
 // ── Governance Oracle Commands ────────────────────────────────────────────────

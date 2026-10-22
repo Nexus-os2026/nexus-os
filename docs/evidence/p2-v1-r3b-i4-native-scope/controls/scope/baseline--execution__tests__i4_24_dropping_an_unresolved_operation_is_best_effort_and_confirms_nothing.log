@@ -1,0 +1,8 @@
+
+running 1 test
+test execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.15s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)

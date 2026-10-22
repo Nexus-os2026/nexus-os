@@ -1,5 +1,5 @@
 use super::world::WorldEnvironment;
-use crate::cognitive::PlannerLlm;
+use super::SimulationLlm;
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -117,12 +117,12 @@ impl Persona {
 pub fn generate_personas(
     seed: &str,
     count: usize,
-    llm: &dyn PlannerLlm,
+    llm: &SimulationLlm,
 ) -> Result<Vec<Persona>, AgentError> {
     let prompt = format!(
         "Given this context: {seed}. Generate {count} diverse personas that would exist in this scenario. Each persona needs: id, name, role, personality traits (Big Five 0-1), initial beliefs on key topics (-1 to 1), goals, behavior rules, and influence_score. Return as JSON array."
     );
-    let response = llm.plan_query(&prompt)?;
+    let response = llm.ask(&prompt)?;
     let personas = serde_json::from_value::<Vec<Persona>>(crate::simulation::extract_json_value(
         &response,
     )?)
@@ -140,7 +140,7 @@ pub fn persona_decide(
     persona: &Persona,
     environment: &WorldEnvironment,
     nearby_personas: &[&Persona],
-    llm: &dyn PlannerLlm,
+    llm: &SimulationLlm,
 ) -> Result<PersonaActionEnvelope, AgentError> {
     let recent_memories = persona
         .memories
@@ -163,7 +163,7 @@ pub fn persona_decide(
         global_state = environment.global_state,
         nearby = nearby,
     );
-    let response = llm.plan_query(&prompt)?;
+    let response = llm.ask(&prompt)?;
     let parsed = serde_json::from_value::<PersonaDecisionResponse>(
         crate::simulation::extract_json_value(&response)?,
     )
@@ -177,7 +177,7 @@ pub fn persona_decide_batch(
     personas: &[Persona],
     environment: &WorldEnvironment,
     world_personas: &[Persona],
-    llm: &dyn PlannerLlm,
+    llm: &SimulationLlm,
 ) -> Result<HashMap<String, PersonaActionEnvelope>, AgentError> {
     if personas.is_empty() {
         return Ok(HashMap::new());
@@ -216,7 +216,7 @@ pub fn persona_decide_batch(
         environment = environment.global_state,
         personas_json = serde_json::to_string(&batch_payload).unwrap_or_else(|_| "[]".to_string()),
     );
-    let response = llm.plan_query(&prompt)?;
+    let response = llm.ask(&prompt)?;
     let parsed = serde_json::from_value::<Vec<PersonaBatchDecisionResponse>>(
         crate::simulation::extract_json_value(&response)?,
     )

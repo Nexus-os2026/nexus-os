@@ -1,0 +1,22 @@
+
+running 1 test
+test o05_safe_open_refuses_before_opening ... FAILED
+
+failures:
+
+---- o05_safe_open_refuses_before_opening stdout ----
+
+thread 'o05_safe_open_refuses_before_opening' (578676) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3480:14:
+[safe-open] a replaced pool file: Opened { opening: OpeningId(6), revision: 1, decision: Decision { current: [], dispositioned: [], blocking: [] }, .. }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o05_safe_open_refuses_before_opening
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.06s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

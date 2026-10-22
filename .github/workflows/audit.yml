@@ -38,3 +38,23 @@ jobs:
       # exception or any scanner failure fails the job.
       - name: Security gate (cargo-audit and cargo-deny)
         run: scripts/security-audit.sh --install
+
+  # XA-R4C: the npm advisory gate beside the Rust audit, on the same pushes
+  # and schedule (new advisories appear without code changes); ci.yml's
+  # test-frontend job runs the same gate on candidates.
+  npm-advisory-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: npm advisory gate (audited npm roots)
+        run: node scripts/ci/npm-advisory-gate.mjs

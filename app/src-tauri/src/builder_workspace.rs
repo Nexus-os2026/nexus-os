@@ -1239,7 +1239,7 @@ pub(super) fn generate_plan(
     let authority = state.builder_workspace.as_ref().map_err(Clone::clone)?;
     let audit = audit_for(state);
     let completed = run_plan(authority, Arc::clone(&audit), prompt, |fallback| {
-        generate_with_provider(prompt, fallback)
+        generate_with_provider(state, prompt, fallback)
     })
     .map_err(|e| e.to_string())?;
     // Existing global budget store is separate from project authority.
@@ -1286,6 +1286,7 @@ fn provision_planned_workspace(
 }
 
 fn generate_with_provider(
+    state: &crate::AppState,
     prompt: &str,
     fallback: bool,
 ) -> std::result::Result<GeneratedPlan, String> {
@@ -1335,11 +1336,11 @@ fn generate_with_provider(
         };
         (provider, selection)
     };
-    let result = web_builder_agent::plan::generate_plan_with_model(
-        provider.as_ref(),
-        prompt,
-        &selection.model_id,
-    )?;
+    // P3-HM-CONTRACT-02 §12.1 (XS), A2.4 I1: every model call of the
+    // builder's planner is a `System("builder")` dispatch through the issuer.
+    let provider = crate::hm_dispatch::IssuedProvider::new(state, "builder", provider);
+    let result =
+        web_builder_agent::plan::generate_plan_with_model(&provider, prompt, &selection.model_id)?;
     Ok(GeneratedPlan { result, selection })
 }
 

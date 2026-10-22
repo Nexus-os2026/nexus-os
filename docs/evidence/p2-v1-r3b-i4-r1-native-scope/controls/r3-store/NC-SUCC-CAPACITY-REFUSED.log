@@ -1,0 +1,22 @@
+
+running 1 test
+test v06_over_capacity_a_complete_proof_authorizes_succession ... FAILED
+
+failures:
+
+---- v06_over_capacity_a_complete_proof_authorizes_succession stdout ----
+
+thread 'v06_over_capacity_a_complete_proof_authorizes_succession' (1278549) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9201:10:
+[succession-complete-set] Capacity with every incident dispositioned: "the predecessor is over capacity"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v06_over_capacity_a_complete_proof_authorizes_succession
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.07s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.16s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

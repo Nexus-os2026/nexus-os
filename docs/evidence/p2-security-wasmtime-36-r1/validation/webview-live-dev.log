@@ -1,0 +1,54 @@
+   Compiling nexus-protocols v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/protocols)
+   Compiling nexus-desktop-backend v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app/src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 51.49s
+     Running tests/webview_boundary_live.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/webview_boundary_live-d88bbb6504686556)
+[live] tauri profile: dev (tauri without custom-protocol)
+[live] phase: build
+[live] phase: setup: build_main_window
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
+[live] phase: app document load
+[live] phase: 1 main-frame invoke (positive control)
+[live] dev-origin 1: the app document at http://localhost:1420 invoked list_agents (Origin::Local) [positive control]
+[live] phase: 2/3 subframes
+[live] dev-origin 2: sandboxed srcdoc subframe: no governed command ran; its bridge was absent; rejection: none reported [regression check]
+[live] dev-origin 3: cross-origin subframe: navigation cancelled by the guard (no request) [regression check on this platform]
+[live] dev-origin observation: a same-origin, non-sandboxed srcdoc frame REACHED a governed command (documented limitation: the ACL is per origin and window, not per frame; every in-app iframe carries sandbox="")
+[live] phase: 4 new-window attempts
+[live] dev-origin 4: window.open: no window, target never fetched; it reached the engine create signal and no window was created [regression check]
+[live] dev-origin 4: anchor target=_blank: no window, target never fetched; it reached the engine create signal and no window was created [regression check]
+[live] phase: 5 script navigations to non-app origins
+[live] dev-origin 5: navigation to the non-app origin (http://[::1]:1421/?role=navigated) cancelled: no request, no page load [discriminating]
+[live] dev-origin 5: navigation to another host, same port (http://127.0.0.1:1420/?nav=host) cancelled: no request, no page load [discriminating]
+[live] dev-origin 5: navigation to another port, same host (http://localhost:1421/?nav=port) cancelled: no request, no page load [discriminating]
+[live] dev-origin settle (after the check-5 targets): no refused target requested or loaded, app document unchanged and live [refusals re-asserted]
+[live] phase: 6 redirect to the non-app origin
+[live] dev-origin 6: redirect CANCELLED by the navigation guard before the target was requested [discriminating]
+[live] phase: settle
+[live] dev-origin settle (end of run): no refused target requested or loaded, app document unchanged and live [refusals re-asserted]
+[live] phase: done
+[live] dev-origin: all boundary checks passed
+[live] dev-origin: all checks passed
+[live] phase: build
+[live] phase: setup: build_main_window
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
+[live] phase: app document load
+[live] phase: 1 main-frame invoke (positive control)
+[live] app-origin 1: the app document at tauri://localhost invoked list_agents (Origin::Local) [positive control]
+[live] phase: 4 new-window attempts
+[live] app-origin 4: window.open: no window, target never fetched; it reached the engine create signal and no window was created [regression check]
+[live] app-origin 4: anchor target=_blank: no window, target never fetched; it reached the engine create signal and no window was created [regression check]
+[live] phase: 5 script navigations to non-app origins
+[live] app-origin 5: navigation to the non-app origin (http://[::1]:1421/?role=navigated) cancelled: no request, no page load [discriminating]
+[live] app-origin 5: navigation to the dev-server origin (http://localhost:1420/?nav=devurl) cancelled: no request, no page load [discriminating]
+[live] app-origin 5: navigation to a loopback host (http://127.0.0.1:1420/?nav=host) cancelled: no request, no page load [discriminating]
+[live] app-origin 5: navigation to the app scheme on another port (tauri://localhost:1421/?nav=port) cancelled: no request, no page load [discriminating]
+[live] app-origin 5: navigation to the app scheme on another host (tauri://nexus/?nav=host) cancelled: no request, no page load [discriminating]
+[live] app-origin settle (after the check-5 targets): no refused target requested or loaded, app document unchanged and live [refusals re-asserted]
+[live] phase: settle
+[live] app-origin settle (end of run): no refused target requested or loaded, app document unchanged and live [refusals re-asserted]
+[live] phase: done
+[live] app-origin: all boundary checks passed
+[live] app-origin: all checks passed
+test webview_boundary_live ... ok

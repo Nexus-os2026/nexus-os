@@ -1,0 +1,28 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen
+HEAD: cca9cb7ad351b50da18774c63fa0fe1ed0df31bc
+HEAD tree: e7a631270803a566ae0a175e3fc70bd452257774
+targets: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets (each step's own, empty before it)
+base for the normal-build self-checks: bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9, archived to /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/base-checkout
+before status entries: 0
+validation exit=0 started=2026-10-03T00:06:25Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation bash /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/validate.sh /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/validation
+after validation status entries: 0
+scope-controls exit=0 started=2026-10-03T00:08:09Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/scope_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/scope --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls
+after scope-controls status entries: 0
+api-guards exit=0 started=2026-10-03T00:09:45Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/api_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/api-guards --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/api-guards
+after api-guards status entries: 0
+normal-api-probes exit=0 started=2026-10-03T00:10:40Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/normal_api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/base-checkout /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/normal-api-probes-scratch /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/normal-api-probes --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/normal-api-probes
+after normal-api-probes status entries: 0
+source-guards exit=0 started=2026-10-03T00:11:14Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/source_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/source-guards.json
+after source-guards status entries: 0
+r3-store-controls exit=0 started=2026-10-03T00:11:14Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/r3-store
+after r3-store-controls status entries: 0
+i2r1-rerun exit=0 started=2026-10-03T00:19:17Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/i2r1 python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/i2r1-rerun
+after i2r1-rerun status entries: 0
+r3-api-probes exit=0 started=2026-10-03T00:20:17Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-api python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/controls/r3-api-probes
+after r3-api-probes status entries: 0
+stability exit=0 started=2026-10-03T00:21:29Z :: bash /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/stability.sh /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/stability 25
+after stability status entries: 0
+no-live exit=0 started=2026-10-03T00:30:26Z :: bash /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/no_live.sh /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/validation /home/nexus/NEXUS/p2-v1-r3b-i4-r1-work/candidate-runs/no-live
+after no-live status entries: 0
+desktop-callers exit=0 started=2026-10-03T00:30:42Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/desktop bash -c cd '/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen' &&   cargo check --locked -p nexus-desktop-backend --lib --tests &&   cargo test --locked -p nexus-desktop-backend --lib phase2_tests::
+after desktop-callers status entries: 0

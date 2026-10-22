@@ -1,0 +1,24 @@
+
+running 1 test
+test c13_request_receipts_bind_the_full_payload ... FAILED
+
+failures:
+
+---- c13_request_receipts_bind_the_full_payload stdout ----
+
+thread 'c13_request_receipts_bind_the_full_payload' (3646805) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1923:9:
+assertion `left == right` failed: [request-conflict] Retry { epoch: 1 } under the same number
+  left: Duplicate(Retried { attempt: 1, resolved: false, epoch: 1 })
+ right: Conflict
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c13_request_receipts_bind_the_full_payload
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.90s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

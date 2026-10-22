@@ -1,0 +1,730 @@
+P2-V1-R3B-I4-Q3-R1 primary-source excerpts, 2026-10-04T01:39:27Z
+host: systemd 255 (255.4-1ubuntu8.17); kernel 6.17.0-35-generic
+systemd (built from): git.launchpad.net/ubuntu/+source/systemd tag import/255.4-1ubuntu8.17 commit 080f998fadef77df1f9c6814c721b0b5de824537, debian/patches applied
+systemd (compared): github.com/systemd/systemd-stable tag v255.4 commit 387a14a7b67b8b76adaed4175e14bb7e39b2f738
+linux: github.com/torvalds/linux tag v6.17 kernel/cgroup/cgroup.c sha256 296c1faa1ab3a5ef915c91f465327f036d9631bdee46e211672f6bebf6c0fd5b
+
+== cited systemd files: applied-tree sha256, and whether Ubuntu's patches change them
+b743da9a7511066758ff15c487992baca80d0df3d95f5957fbbee78aaf6ec788  src/core/scope.c  identical to upstream v255.4
+3aecf223805665219e6ee7c81019b83e5905d2166bedc651204f2688e3303ba6  src/core/cgroup.c  patched by Ubuntu: excerpts compared below
+087c79760becc4784d78a146cdb60c7101fa1b3f4afde4b1429ca70880772de1  src/core/dbus-scope.c  identical to upstream v255.4
+81296cf1048e534e2069ef6df29893bc9095e6f258fe88eae81c83546fb03ab3  src/basic/pidref.c  identical to upstream v255.4
+65aadaa18b2f32cca9dcecf2cd436861d96a2471ce0e0025c675e516edc763d8  src/basic/process-util.c  identical to upstream v255.4
+
+== StartTransientUnit's PIDs: each resolved to a pidref (pidfd) when the request is handled: src/core/dbus-scope.c lines 86-125
+   86          if (streq(name, "PIDs")) {
+   87                  _cleanup_(sd_bus_creds_unrefp) sd_bus_creds *creds = NULL;
+   88                  unsigned n = 0;
+   89
+   90                  r = sd_bus_message_enter_container(message, 'a', "u");
+   91                  if (r < 0)
+   92                          return r;
+   93
+   94                  for (;;) {
+   95                          _cleanup_(pidref_done) PidRef pidref = PIDREF_NULL;
+   96                          uint32_t upid;
+   97                          pid_t pid;
+   98
+   99                          r = sd_bus_message_read(message, "u", &upid);
+  100                          if (r < 0)
+  101                                  return r;
+  102                          if (r == 0)
+  103                                  break;
+  104
+  105                          if (upid == 0) {
+  106                                  if (!creds) {
+  107                                          r = sd_bus_query_sender_creds(message, SD_BUS_CREDS_PID, &creds);
+  108                                          if (r < 0)
+  109                                                  return r;
+  110                                  }
+  111
+  112                                  r = sd_bus_creds_get_pid(creds, &pid);
+  113                                  if (r < 0)
+  114                                          return r;
+  115                          } else
+  116                                  pid = (uid_t) upid;
+  117
+  118                          r = pidref_set_pid(&pidref, pid);
+  119                          if (r < 0)
+  120                                  return r;
+  121
+  122                          r = unit_pid_attachable(u, &pidref, error);
+  123                          if (r < 0)
+  124                                  return r;
+  125
+
+== pidfd_get_pid: -ESRCH only once the process is reaped: src/basic/process-util.c lines 1740-1753
+ 1740  int pidfd_get_pid(int fd, pid_t *ret) {
+ 1741          char path[STRLEN("/proc/self/fdinfo/") + DECIMAL_STR_MAX(int)];
+ 1742          _cleanup_free_ char *fdinfo = NULL;
+ 1743          char *p;
+ 1744          int r;
+ 1745
+ 1746          /* Converts a pidfd into a pid. Well known errors:
+ 1747           *
+ 1748           *    -EBADF   → fd invalid
+ 1749           *    -ENOSYS  → /proc/ not mounted
+ 1750           *    -ENOTTY  → fd valid, but not a pidfd
+ 1751           *    -EREMOTE → fd valid, but pid is in another namespace we cannot translate to the local one
+ 1752           *    -ESRCH   → fd valid, but process is already reaped
+ 1753           */
+
+== pidref_verify: an exited, unreaped process still verifies: src/basic/pidref.c lines 243-264
+  243  int pidref_verify(const PidRef *pidref) {
+  244          int r;
+  245
+  246          /* This is a helper that is supposed to be called after reading information from procfs via a
+  247           * PidRef. It ensures that the PID we track still matches the PIDFD we pin. If this value differs
+  248           * after a procfs read, we might have read the data from a recycled PID. */
+  249
+  250          if (!pidref_is_set(pidref))
+  251                  return -ESRCH;
+  252
+  253          if (pidref->pid == 1)
+  254                  return 1; /* PID 1 can never go away, hence never be recycled to a different process → return 1 */
+  255
+  256          if (pidref->fd < 0)
+  257                  return 0; /* If we don't have a pidfd we cannot validate it, hence we assume it's all OK → return 0 */
+  258
+  259          r = pidfd_verify_pid(pidref->fd, pidref->pid);
+  260          if (r < 0)
+  261                  return r;
+  262
+  263          return 1; /* We have a pidfd and it still points to the PID we have, hence all is *really* OK → return 1 */
+  264  }
+
+== scope_enter_running: the PIDs attached once; refused only if none was attached: src/core/scope.c lines 413-457
+  413  static int scope_enter_running(Scope *s) {
+  414          Unit *u = UNIT(s);
+  415          int r;
+  416
+  417          assert(s);
+  418
+  419          (void) bus_scope_track_controller(s);
+  420
+  421          r = unit_acquire_invocation_id(u);
+  422          if (r < 0)
+  423                  return r;
+  424
+  425          unit_export_state_files(u);
+  426
+  427          r = unit_attach_pids_to_cgroup(u, u->pids, NULL);
+  428          if (r < 0) {
+  429                  log_unit_warning_errno(u, r, "Failed to add PIDs to scope's control group: %m");
+  430                  goto fail;
+  431          }
+  432          if (r == 0) {
+  433                  r = log_unit_warning_errno(u, SYNTHETIC_ERRNO(ECHILD), "No PIDs left to attach to the scope's control group, refusing.");
+  434                  goto fail;
+  435          }
+  436          log_unit_debug(u, "%i %s added to scope's control group.", r, r == 1 ? "process" : "processes");
+  437
+  438          s->result = SCOPE_SUCCESS;
+  439
+  440          scope_set_state(s, SCOPE_RUNNING);
+  441
+  442          /* Set the maximum runtime timeout. */
+  443          scope_arm_timer(s, /* relative= */ false, scope_running_timeout(s));
+  444
+  445          /* On unified we use proper notifications hence we can unwatch the PIDs
+  446           * we just attached to the scope. This can also be done on legacy as
+  447           * we're going to update the list of the processes we watch with the
+  448           * PIDs currently in the scope anyway. */
+  449          unit_unwatch_all_pids(u);
+  450
+  451          /* Start watching the PIDs currently in the scope (legacy hierarchy only) */
+  452          (void) unit_enqueue_rewatch_pids(u);
+  453          return 1;
+  454
+  455  fail:
+  456          scope_enter_dead(s, SCOPE_FAILURE_RESOURCES);
+  457          return r;
+
+== unit_attach_pids_to_cgroup: a successful cgroup.procs write counts as attached: src/core/cgroup.c lines 2601-2680
+ 2601  int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
+ 2602          _cleanup_free_ char *joined = NULL;
+ 2603          CGroupMask delegated_mask;
+ 2604          const char *p;
+ 2605          PidRef *pid;
+ 2606          int ret, r;
+ 2607
+ 2608          assert(u);
+ 2609
+ 2610          if (!UNIT_HAS_CGROUP_CONTEXT(u))
+ 2611                  return -EINVAL;
+ 2612
+ 2613          if (set_isempty(pids))
+ 2614                  return 0;
+ 2615
+ 2616          /* Load any custom firewall BPF programs here once to test if they are existing and actually loadable.
+ 2617           * Fail here early since later errors in the call chain unit_realize_cgroup to cgroup_context_apply are ignored. */
+ 2618          r = bpf_firewall_load_custom(u);
+ 2619          if (r < 0)
+ 2620                  return r;
+ 2621
+ 2622          r = unit_realize_cgroup(u);
+ 2623          if (r < 0)
+ 2624                  return r;
+ 2625
+ 2626          if (isempty(suffix_path))
+ 2627                  p = empty_to_root(u->cgroup_path);
+ 2628          else {
+ 2629                  assert(path_is_absolute(suffix_path));
+ 2630
+ 2631                  joined = path_join(u->cgroup_path, suffix_path);
+ 2632                  if (!joined)
+ 2633                          return -ENOMEM;
+ 2634
+ 2635                  p = joined;
+ 2636          }
+ 2637
+ 2638          delegated_mask = unit_get_delegate_mask(u);
+ 2639
+ 2640          ret = 0;
+ 2641          SET_FOREACH(pid, pids) {
+ 2642
+ 2643                  /* Unfortunately we cannot add pids by pidfd to a cgroup. Hence we have to use PIDs instead,
+ 2644                   * which of course is racy. Let's shorten the race a bit though, and re-validate the PID
+ 2645                   * before we use it */
+ 2646                  r = pidref_verify(pid);
+ 2647                  if (r < 0) {
+ 2648                          log_unit_info_errno(u, r, "PID " PID_FMT " vanished before we could move it to target cgroup '%s', skipping: %m", pid->pid, p);
+ 2649                          continue;
+ 2650                  }
+ 2651
+ 2652                  /* First, attach the PID to the main cgroup hierarchy */
+ 2653                  r = cg_attach(SYSTEMD_CGROUP_CONTROLLER, p, pid->pid);
+ 2654                  if (r < 0) {
+ 2655                          bool again = MANAGER_IS_USER(u->manager) && ERRNO_IS_PRIVILEGE(r);
+ 2656
+ 2657                          log_unit_full_errno(u, again ? LOG_DEBUG : LOG_INFO,  r,
+ 2658                                              "Couldn't move process "PID_FMT" to%s requested cgroup '%s': %m",
+ 2659                                              pid->pid, again ? " directly" : "", p);
+ 2660
+ 2661                          if (again) {
+ 2662                                  int z;
+ 2663
+ 2664                                  /* If we are in a user instance, and we can't move the process ourselves due
+ 2665                                   * to permission problems, let's ask the system instance about it instead.
+ 2666                                   * Since it's more privileged it might be able to move the process across the
+ 2667                                   * leaves of a subtree whose top node is not owned by us. */
+ 2668
+ 2669                                  z = unit_attach_pid_to_cgroup_via_bus(u, p, pid->pid);
+ 2670                                  if (z < 0)
+ 2671                                          log_unit_info_errno(u, z, "Couldn't move process "PID_FMT" to requested cgroup '%s' (directly or via the system bus): %m", pid->pid, p);
+ 2672                                  else {
+ 2673                                          if (ret >= 0)
+ 2674                                                  ret++; /* Count successful additions */
+ 2675                                          continue; /* When the bus thing worked via the bus we are fully done for this PID. */
+ 2676                                  }
+ 2677                          }
+ 2678
+ 2679                          if (ret >= 0)
+ 2680                                  ret = r; /* Remember first error */
+
+== unit_watch_cgroup: emptiness only from IN_MODIFY on cgroup.events: src/core/cgroup.c lines 2331-2380
+ 2331  int unit_watch_cgroup(Unit *u) {
+ 2332          _cleanup_free_ char *events = NULL;
+ 2333          int r;
+ 2334
+ 2335          assert(u);
+ 2336
+ 2337          /* Watches the "cgroups.events" attribute of this unit's cgroup for "empty" events, but only if
+ 2338           * cgroupv2 is available. */
+ 2339
+ 2340          if (!u->cgroup_path)
+ 2341                  return 0;
+ 2342
+ 2343          if (u->cgroup_control_inotify_wd >= 0)
+ 2344                  return 0;
+ 2345
+ 2346          /* Only applies to the unified hierarchy */
+ 2347          r = cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER);
+ 2348          if (r < 0)
+ 2349                  return log_error_errno(r, "Failed to determine whether the name=systemd hierarchy is unified: %m");
+ 2350          if (r == 0)
+ 2351                  return 0;
+ 2352
+ 2353          /* No point in watch the top-level slice, it's never going to run empty. */
+ 2354          if (unit_has_name(u, SPECIAL_ROOT_SLICE))
+ 2355                  return 0;
+ 2356
+ 2357          r = hashmap_ensure_allocated(&u->manager->cgroup_control_inotify_wd_unit, &trivial_hash_ops);
+ 2358          if (r < 0)
+ 2359                  return log_oom();
+ 2360
+ 2361          r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events", &events);
+ 2362          if (r < 0)
+ 2363                  return log_oom();
+ 2364
+ 2365          u->cgroup_control_inotify_wd = inotify_add_watch(u->manager->cgroup_inotify_fd, events, IN_MODIFY);
+ 2366          if (u->cgroup_control_inotify_wd < 0) {
+ 2367
+ 2368                  if (errno == ENOENT) /* If the directory is already gone we don't need to track it, so this
+ 2369                                        * is not an error */
+ 2370                          return 0;
+ 2371
+ 2372                  return log_unit_error_errno(u, errno, "Failed to add control inotify watch descriptor for control group %s: %m", empty_to_root(u->cgroup_path));
+ 2373          }
+ 2374
+ 2375          r = hashmap_put(u->manager->cgroup_control_inotify_wd_unit, INT_TO_PTR(u->cgroup_control_inotify_wd), u);
+ 2376          if (r < 0)
+ 2377                  return log_unit_error_errno(u, r, "Failed to add control inotify watch descriptor for control group %s to hash map: %m", empty_to_root(u->cgroup_path));
+ 2378
+ 2379          return 0;
+ 2380  }
+
+== no synthesized empty event on the unified hierarchy: src/core/cgroup.c lines 3265-3288
+ 3265  int unit_synthesize_cgroup_empty_event(Unit *u) {
+ 3266          int r;
+ 3267
+ 3268          assert(u);
+ 3269
+ 3270          /* Enqueue a synthetic cgroup empty event if this unit doesn't watch any PIDs anymore. This is compatibility
+ 3271           * support for non-unified systems where notifications aren't reliable, and hence need to take whatever we can
+ 3272           * get as notification source as soon as we stopped having any useful PIDs to watch for. */
+ 3273
+ 3274          if (!u->cgroup_path)
+ 3275                  return -ENOENT;
+ 3276
+ 3277          r = cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER);
+ 3278          if (r < 0)
+ 3279                  return r;
+ 3280          if (r > 0) /* On unified we have reliable notifications, and don't need this */
+ 3281                  return 0;
+ 3282
+ 3283          if (!set_isempty(u->pids))
+ 3284                  return 0;
+ 3285
+ 3286          unit_add_to_cgroup_empty_queue(u);
+ 3287          return 0;
+ 3288  }
+
+== unit_check_cgroup_events: read on a cgroup.events notification: src/core/cgroup.c lines 3560-3599
+ 3560  static int unit_check_cgroup_events(Unit *u) {
+ 3561          char *values[2] = {};
+ 3562          int r;
+ 3563
+ 3564          assert(u);
+ 3565
+ 3566          if (!u->cgroup_path)
+ 3567                  return 0;
+ 3568
+ 3569          r = cg_get_keyed_attribute_graceful(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events",
+ 3570                                              STRV_MAKE("populated", "frozen"), values);
+ 3571          if (r < 0)
+ 3572                  return r;
+ 3573
+ 3574          /* The cgroup.events notifications can be merged together so act as we saw the given state for the
+ 3575           * first time. The functions we call to handle given state are idempotent, which makes them
+ 3576           * effectively remember the previous state. */
+ 3577          if (values[0]) {
+ 3578                  if (streq(values[0], "1"))
+ 3579                          unit_remove_from_cgroup_empty_queue(u);
+ 3580                  else
+ 3581                          unit_add_to_cgroup_empty_queue(u);
+ 3582          }
+ 3583
+ 3584          /* Disregard freezer state changes due to operations not initiated by us */
+ 3585          if (values[1] && IN_SET(u->freezer_state, FREEZER_FREEZING, FREEZER_THAWING)) {
+ 3586                  if (streq(values[1], "0"))
+ 3587                          unit_thawed(u);
+ 3588                  else
+ 3589                          unit_frozen(u);
+ 3590          }
+ 3591
+ 3592          free(values[0]);
+ 3593          free(values[1]);
+ 3594
+ 3595          return 0;
+ 3596  }
+ 3597
+ 3598  static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
+ 3599          Manager *m = ASSERT_PTR(userdata);
+
+== a running scope ends for emptiness only on that notification: src/core/scope.c lines 600-608
+  600  static void scope_notify_cgroup_empty_event(Unit *u) {
+  601          Scope *s = SCOPE(u);
+  602          assert(u);
+  603
+  604          log_unit_debug(u, "cgroup is empty");
+  605
+  606          if (IN_SET(s->state, SCOPE_RUNNING, SCOPE_ABANDONED, SCOPE_STOP_SIGTERM, SCOPE_STOP_SIGKILL))
+  607                  scope_enter_dead(s, SCOPE_SUCCESS);
+  608  }
+
+== the runtime backstop (RuntimeMaxUSec): stopping, failed 'timeout': src/core/scope.c lines 662-676
+  662  static int scope_dispatch_timer(sd_event_source *source, usec_t usec, void *userdata) {
+  663          Scope *s = SCOPE(userdata);
+  664
+  665          assert(s);
+  666          assert(s->timer_event_source == source);
+  667
+  668          switch (s->state) {
+  669
+  670          case SCOPE_RUNNING:
+  671                  log_unit_warning(UNIT(s), "Scope reached runtime time limit. Stopping.");
+  672                  scope_enter_signal(s, SCOPE_STOP_SIGTERM, SCOPE_FAILURE_TIMEOUT);
+  673                  break;
+  674
+  675          case SCOPE_STOP_SIGTERM:
+  676                  if (s->kill_context.send_sigkill) {
+
+== Ubuntu's patches to the cited files, against upstream v255.4 (only files the table marks patched); the attach logic (pidref_verify, then cg_attach, a successful write counted) is the same in both
+-- src/core/cgroup.c: 30 changed lines; the cited functions:
+   int unit_attach_pids_to_cgroup( ... differs; the function's diff (upstream -> applied), then the patches touching it:
+      27c27
+      <                 p = u->cgroup_path;
+      ---
+      >                 p = empty_to_root(u->cgroup_path);
+      28a29,30
+      >                 assert(path_is_absolute(suffix_path));
+      >
+      46c48
+      <                         log_unit_info_errno(u, r, "PID " PID_FMT " vanished before we could move it to target cgroup '%s', skipping: %m", pid->pid, empty_to_root(p));
+      ---
+      >                         log_unit_info_errno(u, r, "PID " PID_FMT " vanished before we could move it to target cgroup '%s', skipping: %m", pid->pid, p);
+      57c59
+      <                                             pid->pid, again ? " directly" : "", empty_to_root(p));
+      ---
+      >                                             pid->pid, again ? " directly" : "", p);
+      67c69
+      <                                 z = unit_attach_pid_to_cgroup_via_bus(u, pid->pid, suffix_path);
+      ---
+      >                                 z = unit_attach_pid_to_cgroup_via_bus(u, p, pid->pid);
+      69c71
+      <                                         log_unit_info_errno(u, z, "Couldn't move process "PID_FMT" to requested cgroup '%s' (directly or via the system bus): %m", pid->pid, empty_to_root(p));
+      ---
+      >                                         log_unit_info_errno(u, z, "Couldn't move process "PID_FMT" to requested cgroup '%s' (directly or via the system bus): %m", pid->pid, p);
+      patch: CVE-2026-29111-3.patch
+   int unit_watch_cgroup( ... identical
+   int unit_synthesize_cgroup_empty_event( ... identical
+   static int unit_check_cgroup_events( ... identical
+
+== Linux: a cgroup.procs write finds the task; -ESRCH only when none (a reaped one): linux-v6.17-cgroup.c lines 2993-3037
+ 2993  struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
+ 2994  					     bool *threadgroup_locked)
+ 2995  {
+ 2996  	struct task_struct *tsk;
+ 2997  	pid_t pid;
+ 2998
+ 2999  	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
+ 3000  		return ERR_PTR(-EINVAL);
+ 3001
+ 3002  	/*
+ 3003  	 * If we migrate a single thread, we don't care about threadgroup
+ 3004  	 * stability. If the thread is `current`, it won't exit(2) under our
+ 3005  	 * hands or change PID through exec(2). We exclude
+ 3006  	 * cgroup_update_dfl_csses and other cgroup_{proc,thread}s_write
+ 3007  	 * callers by cgroup_mutex.
+ 3008  	 * Therefore, we can skip the global lock.
+ 3009  	 */
+ 3010  	lockdep_assert_held(&cgroup_mutex);
+ 3011  	*threadgroup_locked = pid || threadgroup;
+ 3012  	cgroup_attach_lock(*threadgroup_locked);
+ 3013
+ 3014  	rcu_read_lock();
+ 3015  	if (pid) {
+ 3016  		tsk = find_task_by_vpid(pid);
+ 3017  		if (!tsk) {
+ 3018  			tsk = ERR_PTR(-ESRCH);
+ 3019  			goto out_unlock_threadgroup;
+ 3020  		}
+ 3021  	} else {
+ 3022  		tsk = current;
+ 3023  	}
+ 3024
+ 3025  	if (threadgroup)
+ 3026  		tsk = tsk->group_leader;
+ 3027
+ 3028  	/*
+ 3029  	 * kthreads may acquire PF_NO_SETAFFINITY during initialization.
+ 3030  	 * If userland migrates such a kthread to a non-root cgroup, it can
+ 3031  	 * become trapped in a cpuset, or RT kthread may be born in a
+ 3032  	 * cgroup with no rt_runtime allocated.  Just say no.
+ 3033  	 */
+ 3034  	if (tsk->no_cgroup_migration || (tsk->flags & PF_NO_SETAFFINITY)) {
+ 3035  		tsk = ERR_PTR(-EINVAL);
+ 3036  		goto out_unlock_threadgroup;
+ 3037  	}
+
+== Linux: an exiting task (PF_EXITING) is skipped, silently: linux-v6.17-cgroup.c lines 2534-2561
+ 2534  static void cgroup_migrate_add_task(struct task_struct *task,
+ 2535  				    struct cgroup_mgctx *mgctx)
+ 2536  {
+ 2537  	struct css_set *cset;
+ 2538
+ 2539  	lockdep_assert_held(&css_set_lock);
+ 2540
+ 2541  	/* @task either already exited or can't exit until the end */
+ 2542  	if (task->flags & PF_EXITING)
+ 2543  		return;
+ 2544
+ 2545  	/* cgroup_threadgroup_rwsem protects racing against forks */
+ 2546  	WARN_ON_ONCE(list_empty(&task->cg_list));
+ 2547
+ 2548  	cset = task_css_set(task);
+ 2549  	if (!cset->mg_src_cgrp)
+ 2550  		return;
+ 2551
+ 2552  	mgctx->tset.nr_tasks++;
+ 2553
+ 2554  	list_move_tail(&task->cg_list, &cset->mg_tasks);
+ 2555  	if (list_empty(&cset->mg_node))
+ 2556  		list_add_tail(&cset->mg_node,
+ 2557  			      &mgctx->tset.src_csets);
+ 2558  	if (list_empty(&cset->mg_dst_cset->mg_node))
+ 2559  		list_add_tail(&cset->mg_dst_cset->mg_node,
+ 2560  			      &mgctx->tset.dst_csets);
+ 2561  }
+
+== Linux: a migration of no task succeeds: linux-v6.17-cgroup.c lines 2634-2703
+ 2634  static int cgroup_migrate_execute(struct cgroup_mgctx *mgctx)
+ 2635  {
+ 2636  	struct cgroup_taskset *tset = &mgctx->tset;
+ 2637  	struct cgroup_subsys *ss;
+ 2638  	struct task_struct *task, *tmp_task;
+ 2639  	struct css_set *cset, *tmp_cset;
+ 2640  	int ssid, failed_ssid, ret;
+ 2641
+ 2642  	/* check that we can legitimately attach to the cgroup */
+ 2643  	if (tset->nr_tasks) {
+ 2644  		do_each_subsys_mask(ss, ssid, mgctx->ss_mask) {
+ 2645  			if (ss->can_attach) {
+ 2646  				tset->ssid = ssid;
+ 2647  				ret = ss->can_attach(tset);
+ 2648  				if (ret) {
+ 2649  					failed_ssid = ssid;
+ 2650  					goto out_cancel_attach;
+ 2651  				}
+ 2652  			}
+ 2653  		} while_each_subsys_mask();
+ 2654  	}
+ 2655
+ 2656  	/*
+ 2657  	 * Now that we're guaranteed success, proceed to move all tasks to
+ 2658  	 * the new cgroup.  There are no failure cases after here, so this
+ 2659  	 * is the commit point.
+ 2660  	 */
+ 2661  	spin_lock_irq(&css_set_lock);
+ 2662  	list_for_each_entry(cset, &tset->src_csets, mg_node) {
+ 2663  		list_for_each_entry_safe(task, tmp_task, &cset->mg_tasks, cg_list) {
+ 2664  			struct css_set *from_cset = task_css_set(task);
+ 2665  			struct css_set *to_cset = cset->mg_dst_cset;
+ 2666
+ 2667  			get_css_set(to_cset);
+ 2668  			to_cset->nr_tasks++;
+ 2669  			css_set_move_task(task, from_cset, to_cset, true);
+ 2670  			from_cset->nr_tasks--;
+ 2671  			/*
+ 2672  			 * If the source or destination cgroup is frozen,
+ 2673  			 * the task might require to change its state.
+ 2674  			 */
+ 2675  			cgroup_freezer_migrate_task(task, from_cset->dfl_cgrp,
+ 2676  						    to_cset->dfl_cgrp);
+ 2677  			put_css_set_locked(from_cset);
+ 2678
+ 2679  		}
+ 2680  	}
+ 2681  	spin_unlock_irq(&css_set_lock);
+ 2682
+ 2683  	/*
+ 2684  	 * Migration is committed, all target tasks are now on dst_csets.
+ 2685  	 * Nothing is sensitive to fork() after this point.  Notify
+ 2686  	 * controllers that migration is complete.
+ 2687  	 */
+ 2688  	tset->csets = &tset->dst_csets;
+ 2689
+ 2690  	if (tset->nr_tasks) {
+ 2691  		do_each_subsys_mask(ss, ssid, mgctx->ss_mask) {
+ 2692  			if (ss->attach) {
+ 2693  				tset->ssid = ssid;
+ 2694  				ss->attach(tset);
+ 2695  			}
+ 2696  		} while_each_subsys_mask();
+ 2697  	}
+ 2698
+ 2699  	ret = 0;
+ 2700  	goto out_release_tset;
+ 2701
+ 2702  out_cancel_attach:
+ 2703  	if (tset->nr_tasks) {
+
+== Linux: an exiting task leaves its css_set's tasks (never counted as populated): linux-v6.17-cgroup.c lines 6857-6872
+ 6857  void cgroup_exit(struct task_struct *tsk)
+ 6858  {
+ 6859  	struct cgroup_subsys *ss;
+ 6860  	struct css_set *cset;
+ 6861  	int i;
+ 6862
+ 6863  	spin_lock_irq(&css_set_lock);
+ 6864
+ 6865  	WARN_ON_ONCE(list_empty(&tsk->cg_list));
+ 6866  	cset = task_css_set(tsk);
+ 6867  	css_set_move_task(tsk, cset, NULL, false);
+ 6868  	cset->nr_tasks--;
+ 6869  	/* matches the signal->live check in css_task_iter_advance() */
+ 6870  	if (thread_group_leader(tsk) && atomic_read(&tsk->signal->live))
+ 6871  		list_add_tail(&tsk->cg_list, &cset->dying_tasks);
+ 6872
+
+== Linux: populated is updated as tasks leave: linux-v6.17-cgroup.c lines 913-952
+  913  static void css_set_move_task(struct task_struct *task,
+  914  			      struct css_set *from_cset, struct css_set *to_cset,
+  915  			      bool use_mg_tasks)
+  916  {
+  917  	lockdep_assert_held(&css_set_lock);
+  918
+  919  	if (to_cset && !css_set_populated(to_cset))
+  920  		css_set_update_populated(to_cset, true);
+  921
+  922  	if (from_cset) {
+  923  		WARN_ON_ONCE(list_empty(&task->cg_list));
+  924
+  925  		css_set_skip_task_iters(from_cset, task);
+  926  		list_del_init(&task->cg_list);
+  927  		if (!css_set_populated(from_cset))
+  928  			css_set_update_populated(from_cset, false);
+  929  	} else {
+  930  		WARN_ON_ONCE(!list_empty(&task->cg_list));
+  931  	}
+  932
+  933  	if (to_cset) {
+  934  		/*
+  935  		 * We are synchronized through cgroup_threadgroup_rwsem
+  936  		 * against PF_EXITING setting such that we can't race
+  937  		 * against cgroup_exit()/cgroup_free() dropping the css_set.
+  938  		 */
+  939  		WARN_ON_ONCE(task->flags & PF_EXITING);
+  940
+  941  		cgroup_move_task(task, to_cset);
+  942  		list_add_tail(&task->cg_list, use_mg_tasks ? &to_cset->mg_tasks :
+  943  							     &to_cset->tasks);
+  944  	}
+  945  }
+  946
+  947  /*
+  948   * hash table for cgroup groups. This improves the performance to find
+  949   * an existing css_set. This hash doesn't (currently) take into
+  950   * account cgroups in empty hierarchies.
+  951   */
+  952  #define CSS_SET_HASH_BITS	7
+
+== Linux: cgroup.events is notified only when populated changes: linux-v6.17-cgroup.c lines 833-872
+  833  static void cgroup_update_populated(struct cgroup *cgrp, bool populated)
+  834  {
+  835  	struct cgroup *child = NULL;
+  836  	int adj = populated ? 1 : -1;
+  837
+  838  	lockdep_assert_held(&css_set_lock);
+  839
+  840  	do {
+  841  		bool was_populated = cgroup_is_populated(cgrp);
+  842
+  843  		if (!child) {
+  844  			cgrp->nr_populated_csets += adj;
+  845  		} else {
+  846  			if (cgroup_is_threaded(child))
+  847  				cgrp->nr_populated_threaded_children += adj;
+  848  			else
+  849  				cgrp->nr_populated_domain_children += adj;
+  850  		}
+  851
+  852  		if (was_populated == cgroup_is_populated(cgrp))
+  853  			break;
+  854
+  855  		cgroup1_check_for_release(cgrp);
+  856  		TRACE_CGROUP_PATH(notify_populated, cgrp,
+  857  				  cgroup_is_populated(cgrp));
+  858  		cgroup_file_notify(&cgrp->events_file);
+  859
+  860  		child = cgrp;
+  861  		cgrp = cgroup_parent(cgrp);
+  862  	} while (cgrp);
+  863  }
+  864
+  865  /**
+  866   * css_set_update_populated - update populated state of a css_set
+  867   * @cset: target css_set
+  868   * @populated: whether @cset is populated or depopulated
+  869   *
+  870   * @cset is either getting the first task or losing the last.  Update the
+  871   * populated counters of all associated cgroups accordingly.
+  872   */
+
+== Linux: /proc/<pid>/cgroup of an exiting task names its (original) cgroup on cgroup v2: linux-v6.17-cgroup.c lines 6422-6496
+ 6422  int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
+ 6423  		     struct pid *pid, struct task_struct *tsk)
+ 6424  {
+ 6425  	char *buf;
+ 6426  	int retval;
+ 6427  	struct cgroup_root *root;
+ 6428
+ 6429  	retval = -ENOMEM;
+ 6430  	buf = kmalloc(PATH_MAX, GFP_KERNEL);
+ 6431  	if (!buf)
+ 6432  		goto out;
+ 6433
+ 6434  	rcu_read_lock();
+ 6435  	spin_lock_irq(&css_set_lock);
+ 6436
+ 6437  	for_each_root(root) {
+ 6438  		struct cgroup_subsys *ss;
+ 6439  		struct cgroup *cgrp;
+ 6440  		int ssid, count = 0;
+ 6441
+ 6442  		if (root == &cgrp_dfl_root && !READ_ONCE(cgrp_dfl_visible))
+ 6443  			continue;
+ 6444
+ 6445  		cgrp = task_cgroup_from_root(tsk, root);
+ 6446  		/* The root has already been unmounted. */
+ 6447  		if (!cgrp)
+ 6448  			continue;
+ 6449
+ 6450  		seq_printf(m, "%d:", root->hierarchy_id);
+ 6451  		if (root != &cgrp_dfl_root)
+ 6452  			for_each_subsys(ss, ssid)
+ 6453  				if (root->subsys_mask & (1 << ssid))
+ 6454  					seq_printf(m, "%s%s", count++ ? "," : "",
+ 6455  						   ss->legacy_name);
+ 6456  		if (strlen(root->name))
+ 6457  			seq_printf(m, "%sname=%s", count ? "," : "",
+ 6458  				   root->name);
+ 6459  		seq_putc(m, ':');
+ 6460  		/*
+ 6461  		 * On traditional hierarchies, all zombie tasks show up as
+ 6462  		 * belonging to the root cgroup.  On the default hierarchy,
+ 6463  		 * while a zombie doesn't show up in "cgroup.procs" and
+ 6464  		 * thus can't be migrated, its /proc/PID/cgroup keeps
+ 6465  		 * reporting the cgroup it belonged to before exiting.  If
+ 6466  		 * the cgroup is removed before the zombie is reaped,
+ 6467  		 * " (deleted)" is appended to the cgroup path.
+ 6468  		 */
+ 6469  		if (cgroup_on_dfl(cgrp) || !(tsk->flags & PF_EXITING)) {
+ 6470  			retval = cgroup_path_ns_locked(cgrp, buf, PATH_MAX,
+ 6471  						current->nsproxy->cgroup_ns);
+ 6472  			if (retval == -E2BIG)
+ 6473  				retval = -ENAMETOOLONG;
+ 6474  			if (retval < 0)
+ 6475  				goto out_unlock;
+ 6476
+ 6477  			seq_puts(m, buf);
+ 6478  		} else {
+ 6479  			seq_puts(m, "/");
+ 6480  		}
+ 6481
+ 6482  		if (cgroup_on_dfl(cgrp) && cgroup_is_dead(cgrp))
+ 6483  			seq_puts(m, " (deleted)\n");
+ 6484  		else
+ 6485  			seq_putc(m, '\n');
+ 6486  	}
+ 6487
+ 6488  	retval = 0;
+ 6489  out_unlock:
+ 6490  	spin_unlock_irq(&css_set_lock);
+ 6491  	rcu_read_unlock();
+ 6492  	kfree(buf);
+ 6493  out:
+ 6494  	return retval;
+ 6495  }
+ 6496

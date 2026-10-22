@@ -1,0 +1,31 @@
+
+running 1 test
+test o11_activation_refuses_on_failure_and_certifies_late_errors ... FAILED
+
+failures:
+
+---- o11_activation_refuses_on_failure_and_certifies_late_errors stdout ----
+
+thread 'o11_activation_refuses_on_failure_and_certifies_late_errors' (40145) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4122:5:
+[durable-activation] identity: SelectionChanged("after activation: archive")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o11_activation_refuses_on_failure_and_certifies_late_errors
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.05s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+warning: unused variable: `expected`
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs:1194:26
+     |
+1194 |         let (base, name, expected) = resolve_activation(io, path, selection, which)?;
+     |                          ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expected`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning (run `cargo fix --test "phase2_custody_store" -p nexus-verifier-sandbox` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.10s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

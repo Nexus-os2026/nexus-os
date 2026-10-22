@@ -1,0 +1,14 @@
+error[E0599]: no method named `holds_scope` found for struct `RetainedBoundary` in the current scope
+  --> src/main.rs:11:23
+   |
+11 |     let _ = (boundary.holds_scope(), boundary.holds_helper());
+   |                       ^^^^^^^^^^^ method not found in `RetainedBoundary`
+
+error[E0599]: no method named `holds_helper` found for struct `RetainedBoundary` in the current scope
+  --> src/main.rs:11:47
+   |
+11 |     let _ = (boundary.holds_scope(), boundary.holds_helper());
+   |                                               ^^^^^^^^^^^^ method not found in `RetainedBoundary`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `i4r1-normal-caller` (bin "i4r1-normal-caller") due to 2 previous errors

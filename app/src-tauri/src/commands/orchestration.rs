@@ -1,6 +1,7 @@
 //! Scheduler, team orchestration, and content pipeline commands.
 
-use crate::{agent_error, AppState, BridgeLlmQueryHandler};
+use crate::hm_dispatch::GatewayPlannerLlm;
+use crate::{agent_error, AppState};
 use serde_json::json;
 use std::sync::Arc;
 #[cfg(all(
@@ -128,42 +129,63 @@ pub async fn execute_team_workflow(
     goal: String,
     member_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
+    run_team_workflow(&state, &director_id, &goal, &member_ids)
+}
+
+/// Runs a team workflow for registered agents (P3 D-2 R2). The director and
+/// every member must be registered agents; one that is not refuses the
+/// workflow (no participant is skipped, no name is assumed).
+///
+/// P3-HM-CONTRACT-02 §11.3: the director's context is minted at workflow
+/// start ([`team_director_context`]); every member task runs under its own
+/// derived context and every dispatch is admitted (§12.4).
+pub(crate) fn run_team_workflow(
+    state: &AppState,
+    director_id: &str,
+    goal: &str,
+    member_ids: &[String],
+) -> Result<serde_json::Value, String> {
     let supervisor = state.supervisor.clone();
+    let unregistered =
+        |id: &str| format!("team workflow refused: '{id}' is not a registered agent");
 
     // Build team config from registered agents
     let config = {
         let sup = supervisor.lock().unwrap_or_else(|p| p.into_inner());
 
         let director_uuid =
-            Uuid::parse_str(&director_id).map_err(|e| format!("invalid director id: {e}"))?;
+            Uuid::parse_str(director_id).map_err(|e| format!("invalid director id: {e}"))?;
         let director_name = sup
             .get_agent(director_uuid)
             .map(|h| h.manifest.name.clone())
-            .unwrap_or_else(|| "director".into());
+            .ok_or_else(|| unregistered(director_id))?;
 
         let mut members = Vec::new();
-        for mid in &member_ids {
+        for mid in member_ids {
             let uuid = Uuid::parse_str(mid).map_err(|e| format!("invalid member id: {e}"))?;
-            if let Some(handle) = sup.get_agent(uuid) {
-                members.push(nexus_kernel::team_orchestrator::TeamMember {
-                    agent_id: mid.clone(),
-                    name: handle.manifest.name.clone(),
-                    role: infer_team_role(&handle.manifest.name),
-                    capabilities: handle.manifest.capabilities.clone(),
-                    fuel_budget: handle.remaining_fuel,
-                });
-            }
+            let handle = sup.get_agent(uuid).ok_or_else(|| unregistered(mid))?;
+            members.push(nexus_kernel::team_orchestrator::TeamMember {
+                agent_id: mid.clone(),
+                name: handle.manifest.name.clone(),
+                role: infer_team_role(&handle.manifest.name),
+                capabilities: handle.manifest.capabilities.clone(),
+                fuel_budget: handle.remaining_fuel,
+            });
         }
 
         nexus_kernel::team_orchestrator::TeamConfig {
-            director_id: director_id.clone(),
+            director_id: director_id.to_string(),
             director_name,
             members,
         }
     };
 
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| format!("team workflow refused: no dispatch issuer: {e}"))?;
+    let mut director = team_director_context(state, director_id, member_ids)?;
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(BridgeLlmQueryHandler);
+        Arc::new(GatewayPlannerLlm::new(state));
 
     let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
         supervisor,
@@ -172,10 +194,60 @@ pub async fn execute_team_workflow(
     );
 
     let result = orchestrator
-        .execute_team_workflow(&config, &goal)
+        .execute_team_workflow(issuer, &mut director, &config, goal)
         .map_err(agent_error)?;
 
     serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+}
+
+/// The director's context of a team workflow (P3-HM-CONTRACT-02 §11.3),
+/// minted at workflow start. Every participant's route policy is resolved
+/// first (§4.2, O1): one that cannot be established refuses the workflow
+/// before any model call. A local-only participant makes the whole workflow
+/// local (P3 D-2 R2, kept: any model call can carry a participant's data):
+/// the director's context is tightened, and every member's context derives
+/// from it.
+pub(crate) fn team_director_context(
+    state: &AppState,
+    director_id: &str,
+    member_ids: &[String],
+) -> Result<nexus_kernel::hm::DispatchContext, String> {
+    let issuer = state
+        .hm_issuer()
+        .map_err(|e| format!("team workflow refused: no dispatch issuer: {e}"))?;
+    let mut any_local = false;
+    for id in std::iter::once(director_id).chain(member_ids.iter().map(String::as_str)) {
+        let refused = |reason: String| {
+            format!(
+                "team workflow refused for '{id}': {}: {reason}",
+                crate::commands::cognitive::unresolved_policy_error()
+            )
+        };
+        let uuid = Uuid::parse_str(id).map_err(|e| refused(e.to_string()))?;
+        let policy = issuer
+            .resolve_agent_route_policy(uuid)
+            .map_err(|e| refused(e.to_string()))?;
+        any_local |= policy.local_only();
+    }
+    let director = Uuid::parse_str(director_id).map_err(|e| format!("invalid director id: {e}"))?;
+    let mut ctx = issuer
+        .begin_unit(
+            nexus_kernel::hm::Principal::Agent(director),
+            nexus_kernel::hm::Unit::TeamTask {
+                workflow_id: Uuid::new_v4(),
+                task_index: 0,
+            },
+        )
+        .map_err(|e| {
+            format!(
+                "team workflow refused for '{director_id}': {}: {e}",
+                crate::commands::cognitive::unresolved_policy_error()
+            )
+        })?;
+    if any_local {
+        ctx.tighten_local_only();
+    }
+    Ok(ctx)
 }
 
 /// Transfer fuel from one agent to another (Director privilege).
@@ -187,7 +259,7 @@ pub async fn transfer_agent_fuel(
     amount: u64,
 ) -> Result<(), String> {
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(BridgeLlmQueryHandler);
+        Arc::new(GatewayPlannerLlm::new(&state));
     let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
         state.supervisor.clone(),
         state.audit.clone(),

@@ -1,0 +1,168 @@
+P2-V1-R3B-I4-R3: excerpts of the host's systemd manual, org.freedesktop.systemd1(5), captured 2026-10-03T09:49:42Z
+host: systemd 255 (255.4-1ubuntu8.17); manual: /usr/share/man/man5/org.freedesktop.systemd1.5.gz
+rendered with: MANWIDTH=120 man org.freedesktop.systemd1 (line numbers of that rendering)
+
+--- lines 25,40 ---
+   25
+   26             node /org/freedesktop/systemd1 {
+   27               interface org.freedesktop.systemd1.Manager {
+   28                 methods:
+   29                   GetUnit(in  s name,
+   30                           out o unit);
+   31                   GetUnitByPID(in  u pid,
+   32                                out o unit);
+   33                   GetUnitByInvocationID(in  ay invocation_id,
+   34                                         out o unit);
+   35                   GetUnitByControlGroup(in  s cgroup,
+   36                                         out o unit);
+   37                   GetUnitByPIDFD(in  h pidfd,
+   38                                  out o unit,
+   39                                  out s unit_id,
+   40                                  out ay invocation_id);
+
+--- lines 50,62 ---
+   50                   StartUnitReplace(in  s old_unit,
+   51                                    in  s new_unit,
+   52                                    in  s mode,
+   53                                    out o job);
+   54                   StopUnit(in  s name,
+   55                            in  s mode,
+   56                            out o job);
+   57                   ReloadUnit(in  s name,
+   58                              in  s mode,
+   59                              out o job);
+   60                   RestartUnit(in  s name,
+   61                               in  s mode,
+   62                               out o job);
+
+--- lines 78,94 ---
+   78                                  out o unit_path,
+   79                                  out s job_type,
+   80                                  out a(uosos) affected_jobs);
+   81                   KillUnit(in  s name,
+   82                            in  s whom,
+   83                            in  i signal);
+   84                   QueueSignalUnit(in  s name,
+   85                                   in  s whom,
+   86                                   in  i signal,
+   87                                   in  i value);
+   88                   CleanUnit(in  s name,
+   89                             in  as mask);
+   90                   FreezeUnit(in  s name);
+   91                   ThawUnit(in  s name);
+   92                   ResetFailedUnit(in  s name);
+   93                   SetUnitProperties(in  s name,
+   94                                     in  b runtime,
+
+--- lines 104,120 ---
+  104                                  in  b read_only,
+  105                                  in  b mkdir,
+  106                                  in  a(ss) options);
+  107                   RefUnit(in  s name);
+  108                   UnrefUnit(in  s name);
+  109                   StartTransientUnit(in  s name,
+  110                                      in  s mode,
+  111                                      in  a(sv) properties,
+  112                                      in  a(sa(sv)) aux,
+  113                                      out o job);
+  114                   GetUnitProcesses(in  s name,
+  115                                    out a(sus) processes);
+  116                   AttachProcessesToUnit(in  s unit_name,
+  117                                         in  s subcgroup,
+  118                                         in  au pids);
+  119                   AbandonScope(in  s name);
+  120                   GetJob(in  u id,
+
+--- lines 530,545 ---
+  530         Note that many of the methods exist twice: once on the Manager object and once on the respective unit objects.
+  531         This is to optimize access times so that methods that belong to unit objects do not have to be called with a
+  532         resolved unit path, but can be called with only the unit id, too.
+  533
+  534         GetUnit() may be used to get the unit object path for a unit name. It takes the unit name and returns the
+  535         object path. If a unit has not been loaded yet by this name this method will fail.
+  536
+  537         GetUnitByPID() may be used to get the unit object path of the unit a process ID belongs to. It takes a UNIX
+  538         PID and returns the object path. The PID must refer to an existing system process.  GetUnitByPIDFD() may be
+  539         used to query with a Linux PIDFD (see: pidfd_open(2)) instead of a PID, which is safer as UNIX PIDs can be
+  540         recycled. The latter method returns the unit id and the invocation id together with the unit object path.
+  541
+  542         LoadUnit() is similar to GetUnit() but will load the unit from disk if possible.
+  543
+  544         StartUnit() enqueues a start job and possibly depending jobs. It takes the unit to activate and a mode string
+  545         as arguments. The mode needs to be one of "replace", "fail", "isolate", "ignore-dependencies", or
+
+--- lines 562,567 ---
+  562         does not support any flags for now, and is reserved for future extensions.
+  563
+  564         StopUnit() is similar to StartUnit() but stops the specified unit rather than starting it. Note that the
+  565         "isolate" mode is invalid for this method.
+  566
+  567         ReloadUnit(), RestartUnit(), TryRestartUnit(), ReloadOrRestartUnit(), or ReloadOrTryRestartUnit() may be used
+
+--- lines 583,594 ---
+  583         mount will be over-mounted, but remain pinned and inaccessible.
+  584
+  585         KillUnit() may be used to kill (i.e. send a signal to) all processes of a unit. It takes the unit name, an
+  586         enum who and a UNIX signal number to send. The who enum is one of "main", "control" or "all". If "main", only
+  587         the main process of the unit is killed. If "control", only the control process of the unit is killed. If
+  588         "all", all processes are killed. A "control" process is for example a process that is configured via ExecStop=
+  589         and is spawned in parallel to the main daemon process in order to shut it down.
+  590
+  591         QueueSignalUnit() is similar to KillUnit() but may be used to enqueue a POSIX Realtime Signal (i.e.
+  592         SIGRTMIN+...  and SIGRTMAX-...) to the selected process(es). Takes the same parameters as KillUnit() with one
+  593         additional argument: an integer that is passed in the sival_int value accompanying the queued signal. See
+  594         sigqueue(3) for details.
+
+--- lines 604,607 ---
+  604         execution.
+  605
+  606         ResetFailedUnit() resets the "failed" state of a specific unit.
+  607
+
+--- lines 766,773 ---
+  766         append to it.
+  767
+  768         StartTransientUnit() may be used to create and start a transient unit which will be released as soon as it is
+  769         not running or referenced anymore or the system is rebooted.  name is the unit name including its suffix and
+  770         must be unique.  mode is the same as in StartUnit(), properties contains properties of the unit, specified
+  771         like in SetUnitProperties().  aux is currently unused and should be passed as an empty array. See the New
+  772         Control Group Interface[2] for more information how to make use of this functionality for resource control
+  773         purposes.
+
+--- lines 966,973 ---
+  966  UNIT OBJECTS
+  967             node /org/freedesktop/systemd1/unit/avahi_2ddaemon_2eservice {
+  968               interface org.freedesktop.systemd1.Unit {
+  969                 methods:
+  970                   Start(in  s mode,
+  971                         out o job);
+  972                   Stop(in  s mode,
+  973                        out o job);
+
+--- lines 990,1005 ---
+  990                              out s job_type,
+  991                              out a(uosos) affected_jobs);
+  992                   Kill(in  s whom,
+  993                        in  i signal);
+  994                   QueueSignal(in  s whom,
+  995                               in  i signal,
+  996                               in  i value);
+  997                   ResetFailed();
+  998                   SetProperties(in  b runtime,
+  999                                 in  a(sv) properties);
+ 1000                   Ref();
+ 1001                   Unref();
+ 1002                   Clean(in  as mask);
+ 1003                   Freeze();
+ 1004                   Thaw();
+ 1005                 properties:
+
+--- lines 1185,1192 ---
+ 1185               interface org.freedesktop.DBus.Properties { ... };
+ 1186             };
+ 1187
+ 1188     Methods
+ 1189         Start(), Stop(), Reload(), Restart(), TryRestart(), ReloadOrRestart(), ReloadOrTryRestart(), Kill(),
+ 1190         QueueSignal(), ResetFailed(), and SetProperties() implement the same operation as the respective methods on
+ 1191         the Manager object (see above). However, these methods operate on the unit object and hence do not take a unit
+ 1192         name parameter. Invoking the methods directly on the Manager object has the advantage of not requiring a

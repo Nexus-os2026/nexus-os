@@ -1,0 +1,24 @@
+
+running 1 test
+test g01_grammar_fixtures_prefixes_and_mutations ... FAILED
+
+failures:
+
+---- g01_grammar_fixtures_prefixes_and_mutations stdout ----
+
+thread 'g01_grammar_fixtures_prefixes_and_mutations' (3885206) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1650:9:
+assertion `left == right` failed: [grammar-conformance] mutation 'Failed verdict without a closure'
+  left: None
+ right: Some(G16)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    g01_grammar_fixtures_prefixes_and_mutations
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 110 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.95s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

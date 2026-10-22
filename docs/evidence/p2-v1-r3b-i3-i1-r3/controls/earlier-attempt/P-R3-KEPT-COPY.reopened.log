@@ -1,0 +1,14 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let decided = maint::kept_copy(&fixture.root, &fixture.path, &[0; 16], &[]);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/crates/nexus-verifier-sandbox)
+error: type `KeptCopy` is private
+  --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:57:19
+   |
+57 |     let decided = maint::kept_copy(&fixture.root, &fixture.path, &[0; 16], &[]);
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private type
+
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

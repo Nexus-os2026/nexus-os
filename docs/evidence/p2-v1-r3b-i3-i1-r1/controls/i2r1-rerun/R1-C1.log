@@ -1,0 +1,24 @@
+
+running 1 test
+test r04_finalized_verdict_matches_acknowledged_terminal_evidence ... FAILED
+
+failures:
+
+---- r04_finalized_verdict_matches_acknowledged_terminal_evidence stdout ----
+
+thread 'r04_finalized_verdict_matches_acknowledged_terminal_evidence' (3650686) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:1023:5:
+assertion `left == right` failed: [finalized-verdict] a fault after the terminal record changed the run's outcome
+  left: (Failed, Finalized)
+ right: (Passed, Finalized)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r04_finalized_verdict_matches_acknowledged_terminal_evidence
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.15s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

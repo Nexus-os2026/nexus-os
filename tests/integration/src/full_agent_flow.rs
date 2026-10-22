@@ -34,11 +34,14 @@ impl Drop for HomeVarGuard {
 struct FixedPlannerLlm;
 
 impl PlannerLlm for FixedPlannerLlm {
-    fn plan_query(&self, _prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
-        Ok(
-            r#"[{"action":{"type":"FileWrite","path":"test.txt","content":"Hello World"},"description":"Create the requested file"}]"#
-                .to_string(),
-        )
+    fn plan_query(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        _prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, nexus_kernel::errors::AgentError> {
+        Ok(ctx.produce(
+            r#"[{"action":{"type":"FileWrite","path":"test.txt","content":"Hello World"},"description":"Create the requested file"}]"#,
+        ))
     }
 }
 
@@ -108,7 +111,7 @@ async fn run_headless_goal_loop(
                 })
                 .unwrap_or_else(|| serde_json::json!({ "summary": action_desc }));
             let consent_id = uuid::Uuid::new_v4().to_string();
-            let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
+            let notify = state.register_blocked_consent_wait(&agent_id, &goal_id, &consent_id);
             let consent_row = ConsentRow {
                 id: consent_id.clone(),
                 agent_id: agent_id.clone(),

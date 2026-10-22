@@ -1,0 +1,24 @@
+
+running 1 test
+test v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement ... FAILED
+
+failures:
+
+---- v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement stdout ----
+
+thread 'v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement' (65011) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9321:5:
+assertion `left == right` failed: [maintenance-verify] every condition, in the order met
+  left: ["unexpected journals/notes.txt"]
+ right: ["unexpected journals/notes.txt", "disposition-root 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition", "duplicate-generation 31313131313131313131313131313131"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.03s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

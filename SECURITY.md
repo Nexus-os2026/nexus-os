@@ -45,8 +45,9 @@ grant, for example:
 - That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
   completion evidence is the `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
-  it: status documentation, a generated ACL schema and test hygiene commit,
-  and then the entry hardening described in
+  it: status documentation and the generated ACL schema and test hygiene
+  commit `6f3d64360dd21aa8d717c3995c46e48f396148b9` (`main` after Phase One
+  completion), then the entry hardening described in
   [Hardening since the Phase One checkpoint](#hardening-since-the-phase-one-checkpoint).
 - Phase Two, governed verification execution, is complete for the same Linux
   support profile ("PHASE TWO COMPLETE — LINUX SUPPORT PROFILE", declared by
@@ -54,17 +55,26 @@ grant, for example:
   `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc`). That checkpoint stays frozen
   on `rebuild/phase2-governed-verification`. Its completion evidence is the
   `evidence/phase2-closure` branch at
-  `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` does not contain the
-  Phase Two implementation. Phase Three is not current and is not
-  integrated.
-- Linux is the active validation target for all three phases. Windows and
-  macOS portability validation is deferred, and no Phase Zero, Phase One or
-  Phase Two security claim is made for them.
+  `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` contains the Phase Two
+  implementation; see
+  [Governed verification (Phase Two)](#governed-verification-phase-two).
+- Phase Three, governed real-world control for the Linux support profile, is
+  integrated into `main` as an implementation: Phase Three Candidate 11
+  (candidate commit `7f48a407155f250bb09e109dfcb4f736fe363cc5`),
+  which contains the work developed on
+  `implement/p3-governed-real-world-control` for the pull-request-governed
+  `phase3/governed-real-world-control` line. Phase Three is not complete:
+  checked activation and the Owner's completion declaration remain. It makes
+  no production, deployment, installer or release claim, and no claim beyond
+  its candidate evidence; see
+  [Governed real-world control (Phase Three)](#governed-real-world-control-phase-three).
+- Linux is the active validation target for all three completed phases.
+  Windows and macOS portability validation is deferred, and no Phase Zero,
+  Phase One or Phase Two security claim is made for them.
 - No Phase Zero production release, and no security-supported release, has
   been declared yet. This policy therefore lists no supported versions.
   Releases, tags and version numbers published before the rebuild predate
-  Phase Zero and are not a statement of current support; they do not become
-  supported releases merely because they exist.
+  Phase Zero and are not a statement of current support.
 - The current engineering evidence, including explicit non-claims, is in the
   [Phase Zero Final-Gate dossier](docs/security/phase0-final-gate-dossier.md),
   the
@@ -79,20 +89,56 @@ grant, for example:
   checkpoints remain complete historical engineering checkpoints. Neither is
   reopened, and their completion, evidence and recorded claims stand as
   recorded for the bytes validated at each declaration.
-- **Current dependency support.** The frozen Phase Zero and Phase One bytes
+- **Historical dependency state.** The frozen Phase Zero and Phase One bytes
   are not current shippable bytes and are not a current release candidate.
-  Their lockfiles resolve Wasmtime 43.0.2, which RUSTSEC-2026-0327
-  (GHSA-32h6-97mm-8q3c), disclosed after both checkpoints were frozen,
-  affects. Release or deployment work must not ship directly from those
-  historical snapshots.
-- **Remediation.** The frozen Phase Two checkpoint and current `main`
-  resolve Wasmtime 36.0.17, which RUSTSEC-2026-0327 does not affect (its
-  affected range starts at 39.0.0). This is the current forward dependency
-  remediation. It does not reopen or redefine the frozen Phase Zero and
-  Phase One checkpoints, which stay unchanged.
-- The Linux security gate passes on current `main` with its reviewed set of
-  accepted advisories (see [Dependencies](#dependencies)). A passing gate is
-  not proof that there are no vulnerabilities.
+  Their lockfiles resolve Wasmtime 43.0.2, which RUSTSEC-2026-0327 affects.
+  Release or deployment work must not ship directly from those historical
+  snapshots. The frozen Phase Two checkpoint resolves Wasmtime 36.0.17; the
+  later same-line updates, to 36.0.18 and then 36.0.19, were made after it on
+  the Phase Three line.
+- **Current Wasmtime.** `main` resolves Wasmtime 36.0.19 through the single
+  workspace pin in `Cargo.toml`. As that pin's comment records,
+  RUSTSEC-2026-0327 (component async-lifted callbacks) affects 39.0.0 and
+  later only; 36.0.19 carries the 36.x fixes for RUSTSEC-2026-0114, -0222,
+  -0269, -0316, -0363, -0379 and -0380, and predates the 43.0.0 Linker
+  use-after-free (RUSTSEC-2026-0090). Nexus uses core Wasm only (no component
+  model, async or WASI). This does not reopen or redefine any frozen
+  checkpoint.
+
+## Governed verification (Phase Two)
+
+Phase Two's design record is
+[docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md),
+with its authority inventory and non-claims. In short: project test code runs
+only in a dedicated trusted helper's sandbox (new user, PID, network, IPC,
+UTS and cgroup namespaces; strict Landlock at ABI ≥ 6; a seccomp allow-list;
+no network; a backend-owned cgroup v2 scope with memory, swap, process, CPU
+and wall limits; sealed descriptors and environment), from a verified
+materialized candidate and a verified packaged toolchain, after the owner's
+native approval of that exact launch. The result is advisory and bound into
+the owner's review. If any required layer is missing, verification is
+unavailable; there is no fallback. It does not claim a private mount view,
+metadata confidentiality, a private `/proc`, or protection against kernel
+vulnerabilities, root, or malicious same-uid processes.
+
+## Governed real-world control (Phase Three)
+
+The candidate's design record, bypass-closure inventory and non-claims are in
+[docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
+In short: every real-world effect a Phase Three route can cause (contained
+tool processes, network requests, browser sessions, observation of and input
+to an isolated agent display, connector operations with brokered vault
+credentials) is an action commitment bound to its agent, run, target and
+exact parameters. It needs the owner's natively confirmed grant, and an R2
+(sensitive or irreversible) effect also needs the owner's native approval of
+that exact commitment. It is revalidated immediately before it happens, runs
+once, is cancellable, and is recorded in the hash-chained audit trail before
+and after. Credentials stay in the vault and reach a request only through a
+lease bound to that commitment and origin. Every production real-world
+mechanism in the workspace is pinned by a structural guard to one of four
+classes (Phase Three governed, existing stronger governed, intentionally
+closed, non-production). Microphone capture, the owner's own desktop,
+Windows and macOS stay outside it.
 
 ## Security model (as far as Phase Zero establishes it)
 
@@ -169,8 +215,8 @@ Not claimed for governed coding:
 
 ### Hardening since the Phase One checkpoint
 
-These changes follow the frozen Phase One checkpoint and are on `main`. They
-do not redefine it.
+These changes follow the frozen Phase One checkpoint and precede the Phase
+Two mission. They do not redefine the checkpoint.
 
 - **Run read grant revoked when no longer needed.** A run revokes its
   read-only project grant as soon as it no longer needs project read
@@ -182,6 +228,31 @@ do not redefine it.
   restore agent state, fuel, memories or Warden review configuration. Like
   "what if", they only deny, and no Time Machine path can force an agent's
   state past the lifecycle state machine.
+
+### Hardening after the Phase Two checkpoint (XA-R4)
+
+These changes are on the post-Phase-Two forward line. They do not redefine
+the frozen checkpoints.
+
+- **Verifier workspaces reserved.** A folder that contains or lies within
+  the verifier's workspaces (`/run/user/<uid>/nexus-verifier`) cannot be
+  selected as a project, just as the Nexus state directory cannot, so an
+  approved apply can never write into a live verification workspace.
+- **Approval names the reviewed identity.** The native confirmation names
+  the review identity the app shows beside the reviewed changes, with the
+  candidate and base identities, and the approval binds that exact review.
+  The native confirmation is a bounded summary the backend computes: the
+  counts, up to twelve paths, and those identities. The diff itself is
+  display data, rendered in the app's privileged webview. Approval binds the
+  exact candidate; reviewing the diff's content relies on that webview.
+- **Release authority.** No one can create, move or delete a `v*` release
+  tag: a server-side ruleset blocks it, with no bypass. The release workflow
+  is disabled, every workflow run must use actions pinned by full commit SHA,
+  and a published release is immutable. A release needs a governed release
+  mission in which the Owner re-enables the release workflow and permits that
+  one tag through a recorded ruleset change, read back before and after. The
+  tag is then pushed on the approved commit, and both changes are reverted
+  afterwards.
 
 ### Dependencies
 

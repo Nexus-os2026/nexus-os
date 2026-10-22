@@ -1,0 +1,24 @@
+
+running 1 test
+test c06_invalid_tags_booleans_and_presence_bytes_are_refused ... FAILED
+
+failures:
+
+---- c06_invalid_tags_booleans_and_presence_bytes_are_refused stdout ----
+
+thread 'c06_invalid_tags_booleans_and_presence_bytes_are_refused' (1299432) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1369:13:
+assertion `left == right` failed: [unknown-tag] action slot kind 0x00
+  left: Ok(RecordEvidence { id: RecordId { generation: Generation([17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]), seq: 3 }, at: Tick(4), kind: ActionStarted { action: ActionId { generation: Generation([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), seq: 0 }, kind: Process }, digest: [232, 234, 122, 43, 150, 227, 182, 189, 180, 39, 115, 81, 71, 164, 25, 94, 33, 48, 163, 125, 46, 38, 161, 63, 91, 199, 114, 172, 115, 190, 126, 112] })
+ right: Err(UnknownTag { field: "slot kind", tag: 0 })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c06_invalid_tags_booleans_and_presence_bytes_are_refused
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.91s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/i2r1/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

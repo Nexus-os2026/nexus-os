@@ -1,0 +1,17 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: type `PendingScope` is more private than the item `ScopeBoundary::Pending::0`
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:476:13
+    |
+476 |     Pending(Box<PendingScope>),
+    |             ^^^^^^^^^^^^^^^^^ field `ScopeBoundary::Pending::0` is reachable at visibility `pub`
+    |
+note: but type `PendingScope` is only usable at visibility `pub(crate)`
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:90:1
+    |
+ 90 | pub(crate) struct PendingScope {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: `nexus-verifier-sandbox` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.93s
+  Executable tests/i4r1_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/api-guards/debug/deps/i4r1_api_probe-d71022ea4b4345c7)

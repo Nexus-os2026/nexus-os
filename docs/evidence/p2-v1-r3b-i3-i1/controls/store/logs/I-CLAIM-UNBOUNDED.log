@@ -1,0 +1,33 @@
+
+running 1 test
+test c04_the_claim_counter_never_wraps ... FAILED
+
+failures:
+
+---- c04_the_claim_counter_never_wraps stdout ----
+
+thread 'c04_the_claim_counter_never_wraps' (3456918) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1956:5:
+assertion `left == right` failed: [arith-bounds] the claim after 2^63
+  left: ClaimFailed("header: claim range")
+ right: ClaimExhausted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c04_the_claim_counter_never_wraps
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+warning: unused import: `MAX_CLAIM`
+  --> crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs:32:5
+   |
+32 |     MAX_CLAIM, PROVISION_LIMIT, REVOKED_ENTRY_LIMIT, ROOT_ENTRIES, STORAGE_READ_LIMIT, TMP_PREFIX,
+   |     ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning (run `cargo fix --test "phase2_custody_store" -p nexus-verifier-sandbox` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.75s
+     Running tests/phase2_custody_store.rs (target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

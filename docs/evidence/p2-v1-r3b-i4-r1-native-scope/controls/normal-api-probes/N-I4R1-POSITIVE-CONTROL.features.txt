@@ -1,0 +1,4 @@
+nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+└── nexus-verifier-sandbox feature "default"
+    └── i4r1-normal-caller v0.0.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/normal-api-probes-scratch/positive)
+        └── i4r1-normal-caller feature "default" (command-line)

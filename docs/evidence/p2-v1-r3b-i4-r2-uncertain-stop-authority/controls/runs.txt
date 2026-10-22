@@ -1,0 +1,7 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-c
+HEAD: b018ab93994f9ed2a7ac50b0ba63b3f4b70eab5d
+HEAD tree: ef085a1723f7add9b1ae34f5fe5a482897739409
+status entries before: 0
+r2 exit=0 status entries after: 0
+q1r1 exit=0 status entries after: 0
+q1 exit=0 status entries after: 0

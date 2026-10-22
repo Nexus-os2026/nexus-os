@@ -16,6 +16,6 @@ pub use checkpoints::TemporalCheckpointManager;
 pub use dilation::TimeDilator;
 pub use engine::TemporalEngine;
 pub use types::{
-    Artifact, EvalStrategy, ForkStatus, TemporalCheckpoint, TemporalConfig, TemporalDecision,
-    TemporalError, TimeDilatedSession, TimelineFork, TimelineStep,
+    Artifact, DriveProjection, EvalStrategy, ForkStatus, TemporalCheckpoint, TemporalConfig,
+    TemporalDecision, TemporalError, TimeDilatedSession, TimelineFork, TimelineStep,
 };

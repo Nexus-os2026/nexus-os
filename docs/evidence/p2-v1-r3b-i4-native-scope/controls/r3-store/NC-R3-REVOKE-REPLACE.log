@@ -1,0 +1,31 @@
+
+running 1 test
+test r317_a_revocation_never_replaces_revoked_evidence ... FAILED
+
+failures:
+
+---- r317_a_revocation_never_replaces_revoked_evidence stdout ----
+
+thread 'r317_a_revocation_never_replaces_revoked_evidence' (618769) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:12136:18:
+[revocation-replace] the name exists
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r317_a_revocation_never_replaces_revoked_evidence
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+warning: unused variable: `revoked_name`
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:2798:5
+     |
+2798 |     revoked_name: &str,
+     |     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_revoked_name`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning (run `cargo fix --test "phase2_custody_store" -p nexus-verifier-sandbox` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.00s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

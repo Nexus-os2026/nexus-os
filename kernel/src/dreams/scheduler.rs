@@ -178,6 +178,7 @@ mod tests {
             outcome: crate::dreams::types::DreamOutcome::NoResult {
                 reason: "test".into(),
             },
+            label: None,
         };
         s.record_result(result);
         assert_eq!(s.queue_len(), 1);
@@ -225,6 +226,7 @@ mod tests {
                 outcome: crate::dreams::types::DreamOutcome::NoResult {
                     reason: "test".into(),
                 },
+                label: None,
             });
         }
         let recent = s.recent_dreams(3);

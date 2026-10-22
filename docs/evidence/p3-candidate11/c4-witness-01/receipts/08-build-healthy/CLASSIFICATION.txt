@@ -1,0 +1,2 @@
+receipt 08-build-healthy type build role baseline: BUILD OK
+exit 0

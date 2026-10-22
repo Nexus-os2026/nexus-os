@@ -1,0 +1,17 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run
+exit 101
+--- probe body ---
+    let value: u8 = "not a byte";
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+error[E0308]: mismatched types
+  --> crates/nexus-verifier-sandbox/tests/r1_api_probe.rs:57:21
+   |
+57 |     let value: u8 = "not a byte";
+   |                --   ^^^^^^^^^^^^ expected `u8`, found `&str`
+   |                |
+   |                expected due to this
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `nexus-verifier-sandbox` (test "r1_api_probe") due to 1 previous error
+--- stdout ---

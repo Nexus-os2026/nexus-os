@@ -57,12 +57,24 @@ test("p1_g_governed_coding_sends_no_path_grant_or_approval", () => {
     "coding_list_projects",
     "coding_list_runs",
     "coding_restore_run",
+    // Phase Two: governed sandboxed verification (reviewed).
+    "coding_retry_verification_cleanup",
     "coding_select_project",
     "coding_start_run",
+    "coding_start_verification",
     "coding_status",
+    "coding_verification_profiles",
   ]);
   for (const [, name, , args = ""] of calls) {
     assert.doesNotMatch(args, /path|approv|confirm|grant|allow/i, `${name} sends ${args}`);
+  }
+  // Verification sends only the run id and a compiled-in profile name: never
+  // a command, argument, executable, environment, sandbox or network setting.
+  for (const [, name, , args = ""] of calls) {
+    if (!/verification/.test(name)) continue;
+    const sent = args.replace(/\.\.\.codingRunArgs\(runId\)/, "").split(",").map((a) => a.trim()).filter(Boolean);
+    assert.ok(sent.every((a) => a === "profile"), `${name} sends ${args}`);
+    assert.doesNotMatch(args, /cmd|command|argv|exec|env|sandbox|network|path/i, `${name} sends ${args}`);
   }
   // Every argument object in the Governed Coding API section, including
   // helpers, carries no path, approval or grant key.
