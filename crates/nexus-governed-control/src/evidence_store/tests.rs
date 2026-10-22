@@ -82,15 +82,89 @@ fn trigger_sql(name: &str) -> &'static str {
         .expect("a trigger")
 }
 
+/// The rows `query` returns, each serialized from all its column values,
+/// every value tagged with its type and length-prefixed (fixtures only).
+fn serialized_rows(conn: &Connection, query: &str) -> Vec<Vec<u8>> {
+    use rusqlite::types::ValueRef;
+    let mut statement = conn.prepare(query).expect("a fixture query");
+    let columns = statement.column_count();
+    let mut rows = statement.query([]).expect("a fixture query");
+    let mut serialized = Vec::new();
+    while let Some(row) = rows.next().expect("a fixture row") {
+        let mut bytes = Vec::new();
+        for column in 0..columns {
+            let (kind, value) = match row.get_ref(column).expect("a fixture value") {
+                ValueRef::Null => (0u8, Vec::new()),
+                ValueRef::Integer(n) => (1, n.to_be_bytes().to_vec()),
+                ValueRef::Real(x) => (2, x.to_bits().to_be_bytes().to_vec()),
+                ValueRef::Text(text) => (3, text.to_vec()),
+                ValueRef::Blob(blob) => (4, blob.to_vec()),
+            };
+            bytes.push(kind);
+            bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(&value);
+        }
+        serialized.push(bytes);
+    }
+    serialized
+}
+
+/// The whole file's content, as one SHA-256 (fixtures only): every table by
+/// name, each with its rows sorted, then the schema (`type`, `name`,
+/// `tbl_name`, `sql`, ordered).
+fn content_digest(conn: &Connection) -> Vec<u8> {
+    use sha2::Digest as _;
+    let mut hash = Sha256::new();
+    let mut field = |bytes: &[u8]| {
+        hash.update((bytes.len() as u64).to_be_bytes());
+        hash.update(bytes);
+    };
+    let tables: Vec<String> = conn
+        .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
+        .expect("a fixture query")
+        .query_map([], |row| row.get(0))
+        .expect("a fixture query")
+        .collect::<rusqlite::Result<_>>()
+        .expect("the table names");
+    field(&(tables.len() as u64).to_be_bytes());
+    for table in &tables {
+        field(table.as_bytes());
+        let quoted = table.replace('"', "\"\"");
+        let mut rows = serialized_rows(conn, &format!("SELECT * FROM \"{quoted}\""));
+        rows.sort();
+        field(&(rows.len() as u64).to_be_bytes());
+        for row in &rows {
+            field(row);
+        }
+    }
+    let schema = serialized_rows(
+        conn,
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema \
+         ORDER BY type, name, tbl_name, sql",
+    );
+    field(&(schema.len() as u64).to_be_bytes());
+    for row in &schema {
+        field(row);
+    }
+    hash.finalize().to_vec()
+}
+
 /// TEST FIXTURE: change the file behind the store's back: the trigger is
-/// dropped, `sql` runs, the trigger is created again exactly.
+/// dropped, `sql` runs, the trigger is created again exactly. A statement
+/// that leaves the file's content as it was is no tamper: the fixture
+/// refuses it rather than let the store be tested on an unchanged file.
 fn tamper(path: &Path, trigger: &str, sql: &str) {
     let conn = raw(path);
+    let before = content_digest(&conn);
     conn.execute_batch(&format!(
         "BEGIN; DROP TRIGGER {trigger}; {sql}; {}; COMMIT;",
         trigger_sql(trigger)
     ))
     .expect("the fixture applies");
+    assert!(
+        content_digest(&conn) != before,
+        "harness precondition: tamper statement changed nothing: {sql}"
+    );
 }
 
 const BODY: &str = r#"{"event_kind":"p3.action.evidence","phase":"finished"}"#;
@@ -240,7 +314,7 @@ fn el1_n2_a_tampered_chain_is_unqualified() {
         ),
         (
             "record_no_update",
-            "UPDATE record SET tag = '00' || substr(tag, 3) WHERE seq = 3",
+            "UPDATE record SET tag = CASE WHEN substr(tag, 1, 2) = '00' THEN 'ff' ELSE '00' END || substr(tag, 3) WHERE seq = 3",
         ),
         (
             "record_no_update",
