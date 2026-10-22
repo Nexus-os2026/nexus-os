@@ -29,7 +29,7 @@ grant, for example:
 
 ---
 
-## Current status: Phases Zero, One and Two complete — Linux support profile
+## Current status: Phases Zero, One, Two and Three complete — Linux support profile
 
 - The Phase Zero trust-boundary rebuild is complete for the validated Linux
   support profile ("PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE", declared
@@ -58,19 +58,24 @@ grant, for example:
   `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` contains the Phase Two
   implementation; see
   [Governed verification (Phase Two)](#governed-verification-phase-two).
-- Phase Three, governed real-world control for the Linux support profile, is
-  integrated into `main` as an implementation: Phase Three Candidate 11
-  (candidate commit `7f48a407155f250bb09e109dfcb4f736fe363cc5`),
-  which contains the work developed on
-  `implement/p3-governed-real-world-control` for the pull-request-governed
-  `phase3/governed-real-world-control` line. Phase Three is not complete:
-  checked activation and the Owner's completion declaration remain. It makes
-  no production, deployment, installer or release claim, and no claim beyond
-  its candidate evidence; see
+- Phase Three, governed real-world control, is complete for the same Linux
+  support profile ("PHASE THREE COMPLETE — LINUX SUPPORT PROFILE", declared
+  by the Owner on 2026-10-22 for the frozen commit
+  `51af45efc70dfe2551db29991f074c4a00d836de`, N2, with all recorded
+  limitations; see the
+  [Phase Three Owner completion record](docs/phase3/c11/PHASE-THREE-OWNER-COMPLETION-2026-10-22.md)).
+  Its implementation is Phase Three Candidate 11 (candidate commit
+  `7f48a407155f250bb09e109dfcb4f736fe363cc5`), which contains the work
+  developed on `implement/p3-governed-real-world-control` for the
+  pull-request-governed `phase3/governed-real-world-control` line. Phase
+  Three is not production-ready: there is no supported release, installer,
+  deployment or unrestricted operation, and no claim beyond its recorded
+  evidence; see
   [Governed real-world control (Phase Three)](#governed-real-world-control-phase-three).
-- Linux is the active validation target for all three completed phases.
+- Linux is the active validation target for all four completed phases.
   Windows and macOS portability validation is deferred, and no Phase Zero,
-  Phase One or Phase Two security claim is made for them.
+  Phase One, Phase Two or Phase Three security or phase-completion claim is
+  made for them.
 - No Phase Zero production release, and no security-supported release, has
   been declared yet. This policy therefore lists no supported versions.
   Releases, tags and version numbers published before the rebuild predate

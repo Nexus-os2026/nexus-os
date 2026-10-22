@@ -1,8 +1,8 @@
 # Deployment Status
 
-> **The Phase Zero, Phase One and Phase Two engineering checkpoints are
-> complete and frozen for the Linux support profile, and there is still no
-> supported server deployment.** None of these phase closures by itself
+> **The Phase Zero, Phase One, Phase Two and Phase Three engineering
+> checkpoints are complete and frozen for the Linux support profile, and there
+> is still no supported server deployment.** None of these phase closures by itself
 > authorizes a general production deployment of Nexus. This page records what
 > is and is not supported. It is not an installation guide.
 >
@@ -12,16 +12,21 @@
 > withdrawn during Phase Zero remain withdrawn unless a later approved phase
 > explicitly reopens them.
 >
-> The Phase Three implementation (governed real-world control, Linux only) is
-> integrated into `main`, but Phase Three is not complete: checked activation
-> and the Owner's completion declaration remain. It makes no production,
-> deployment, installer or release claim, and the withdrawals on this page
-> are unchanged.
+> Phase Three (governed real-world control, Linux only) is complete for the
+> Linux support profile: the Owner declared it complete on 2026-10-22 at the
+> frozen commit `51af45efc70dfe2551db29991f074c4a00d836de`, with all recorded
+> limitations (see the
+> [Phase Three Owner completion record](phase3/c11/PHASE-THREE-OWNER-COMPLETION-2026-10-22.md)).
+> The declaration does not authorize production release or unrestricted
+> operation. Phase Three makes no production, deployment, installer or release
+> claim, and the withdrawals on this page are unchanged. The one Debian
+> package that was built locally, installed manually and receipted for its
+> checked activation is not a published or supported distribution.
 
 ## Platform scope
 
-- Linux is the active validation profile for Phase Zero, Phase One and Phase
-  Two.
+- Linux is the active validation profile for Phase Zero, Phase One, Phase
+  Two and Phase Three.
 - Windows and macOS portability validation is deferred. No support or
   validation claim for any phase is made for them here.
 - This document claims no production installer or release asset for any
