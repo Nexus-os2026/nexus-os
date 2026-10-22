@@ -6,18 +6,18 @@ through backend-owned, explicitly granted authority.
 
 It is not production-ready.
 
-## Status: Phases Zero, One and Two complete — Linux support profile
+## Status: Phases Zero, One, Two and Three complete — Linux support profile
 
 | Phase | Status | Frozen checkpoint |
 |---|---|---|
 | Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
 | Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
 | Phase Two — governed verification execution | **PHASE TWO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-10-04 | `rebuild/phase2-governed-verification` at `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc` |
-| Phase Three — governed real-world control | Implementation integrated into `main`; not complete: checked activation and the Owner's completion declaration remain | — |
+| Phase Three — governed real-world control | **PHASE THREE COMPLETE — LINUX SUPPORT PROFILE**, declared by the Owner on 2026-10-22, with all recorded limitations | commit `51af45efc70dfe2551db29991f074c4a00d836de` (N2, the PR #25 merge into `main`) |
 
-- Phase Zero, Phase One and Phase Two are complete and frozen, for the Linux
-  support profile only. Windows and macOS portability validation remains
-  deferred.
+- Phase Zero, Phase One, Phase Two and Phase Three are complete and frozen,
+  for the Linux support profile only. Windows and macOS portability
+  validation remains deferred.
 - This is not a production-readiness declaration.
 - This is not an external certification or audit.
 - The frozen checkpoints are the validated bytes. Later commits on `main` do
@@ -40,14 +40,20 @@ It is not production-ready.
 - Phase Two (governed verification execution, Linux support profile) is
   complete on its frozen checkpoint, and `main` contains its implementation;
   see [Governed verification](#governed-verification-phase-two).
-- Phase Three (governed real-world control, Linux support profile): its
-  implementation, Phase Three Candidate 11 (candidate commit
-  `7f48a407155f250bb09e109dfcb4f736fe363cc5`, which contains the
-  `implement/p3-governed-real-world-control` and
+- Phase Three (governed real-world control, Linux support profile) is
+  complete: the Owner declared it complete on 2026-10-22 at the frozen
+  commit `51af45efc70dfe2551db29991f074c4a00d836de` (N2), with all recorded
+  limitations. The declaration does not authorize production release or
+  unrestricted operation. Its implementation, Phase Three Candidate 11
+  (candidate commit `7f48a407155f250bb09e109dfcb4f736fe363cc5`, which
+  contains the `implement/p3-governed-real-world-control` and
   `phase3/governed-real-world-control` work), is integrated into `main`.
-  Phase Three is not complete: checked activation and the Owner's completion
-  declaration remain. No production, deployment, installer or release claim
-  is made; see
+  Later commits, including the documentation commit that records the
+  declaration, do not redefine N2. No production, deployment, installer or
+  release claim is made. The declaration, its evidence and its limitations
+  are in the
+  [Phase Three Owner completion record](docs/phase3/c11/PHASE-THREE-OWNER-COMPLETION-2026-10-22.md);
+  see also
   [Governed real-world control](#governed-real-world-control-phase-three).
 - The frozen Phase Zero and Phase One checkpoints remain valid historical
   engineering checkpoints, but they are not current release candidates:
@@ -72,10 +78,10 @@ rebuild. They remain historical and are explicitly labelled as such.
 
 ## Platform scope
 
-- Linux is the active validation profile for Phase Zero, Phase One and Phase
-  Two.
-- Windows and macOS portability validation is deferred. Governed coding is
-  not available on them.
+- Linux is the active validation profile for Phase Zero, Phase One, Phase
+  Two and Phase Three.
+- Windows and macOS portability validation is deferred, and no phase is
+  complete for them. Governed coding is not available on them.
 - Linux security claims do not automatically apply to Windows or macOS.
 
 ## Governed coding (Phase One)
@@ -161,9 +167,12 @@ exact commitment. Every step is recorded in the audit trail, and the owner's
 emergency stop ends everything until the owner resumes. The design and its
 explicit non-claims are in
 [docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
-The implementation is integrated into `main`, but Phase Three is not
-complete: checked activation and the Owner's completion declaration remain.
-No production, deployment, installer or release claim is made.
+The implementation is integrated into `main`. The Owner declared Phase Three
+complete for the Linux support profile on 2026-10-22 at the frozen commit N2,
+with all recorded limitations (see the Status section above). Checked
+activation was accepted with limits: it executed no live governed effect, and
+the GovernanceOracle runs in stub mode. No production, deployment, installer
+or release claim is made.
 
 ## Local-first is not local-only
 
