@@ -24,6 +24,7 @@ use crate::display::{AgentDisplay, DisplayStatus, InputIntent, PerceptionIntent}
 use crate::egress::{Egress, EgressIntent};
 use crate::evidence_store::PrimaryEvidence;
 use crate::runtime_root::RuntimeRoot;
+use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -47,6 +48,8 @@ pub enum Intent {
     Browse(BrowserIntent),
     Observe(PerceptionIntent),
     Input(InputIntent),
+    /// P4-UAT05: the owner's synthetic approval probe (owner runs only).
+    Synthetic(SyntheticIntent),
 }
 
 /// What the owner may grant, as data. Each becomes a canonical scope built
@@ -80,6 +83,10 @@ pub enum GrantRequest {
         #[serde(default)]
         session_r1: bool,
     },
+    /// P4-UAT05: synthetic test receipts (no external effect). A struct
+    /// variant with no fields, so that a request carrying any field is
+    /// refused (a unit variant here would ignore one).
+    Synthetic {},
 }
 
 /// What the interface shows about the control.
@@ -231,7 +238,7 @@ impl GovernedControl {
 
     fn prepare(&self, run: RunId, intent: &Intent) -> Result<Preparation, AuthorityError> {
         let authority = self.authority();
-        match intent {
+        let preparation = match intent {
             Intent::Request(intent) => self.egress.prepare(authority, intent),
             Intent::Tool(intent) => self.tools.prepare(authority, intent),
             Intent::Connector(_) => Err(AuthorityError::InvalidAction(
@@ -240,7 +247,12 @@ impl GovernedControl {
             Intent::Browse(intent) => self.browser.prepare(authority, intent),
             Intent::Observe(intent) => self.display.prepare_observation(authority, run, intent),
             Intent::Input(intent) => self.display.prepare_input(authority, run, intent),
-        }
+            Intent::Synthetic(intent) => synthetic::prepare(authority, run, intent),
+        }?;
+        // P4-UAT05: a synthetic action is R2 or nothing, refused before any
+        // commitment exists.
+        synthetic::admit(&preparation.action)?;
+        Ok(preparation)
     }
 
     /// Prepare and commit to an intent for `agent` in `run`. Nothing
@@ -383,10 +395,12 @@ impl GovernedControl {
                 max_steps,
                 session_r1,
             } => AgentDisplay::input_scope(*max_steps, *session_r1),
+            GrantRequest::Synthetic {} => Ok(synthetic::grant_scope()),
         }
     }
 
-    /// Ask the owner, natively, for a grant.
+    /// Ask the owner, natively, for a grant (a synthetic one lasts at most
+    /// `synthetic::GRANT_TTL`).
     pub fn request_grant(
         &self,
         request: &GrantRequest,
@@ -394,9 +408,8 @@ impl GovernedControl {
         confirmer: &dyn ControlConfirmer,
     ) -> Result<GrantId, AuthorityError> {
         let scope = self.grant_scope(request)?;
-        self.authority()
-            .grants()
-            .request(scope, ttl.min(MAX_GRANT), confirmer)
+        let ttl = synthetic::capped(&scope, ttl.min(MAX_GRANT));
+        self.authority().grants().request(scope, ttl, confirmer)
     }
 
     pub fn revoke_grant(&self, id: GrantId) -> Result<(), AuthorityError> {

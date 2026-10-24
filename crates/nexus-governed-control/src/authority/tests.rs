@@ -5556,3 +5556,310 @@ sample 2 busy: stop return not observed; participant report not requested (open-
     }
 }
 // ---- RS-01 T10 END ----
+
+// ---- P4-UAT05 BEGIN ----
+// The owner's synthetic approval probe (a Phase Four amendment): the native
+// windows' wording per kind (N-1 to N-4), and the two reachable conditions
+// of the post-dialog re-check in `request_approval` (T-B1, T-B2).
+
+/// The six kinds that existed before the probe.
+const EXISTING_KINDS: [CapabilityKind; 6] = [
+    CapabilityKind::Tool,
+    CapabilityKind::Egress,
+    CapabilityKind::Browser,
+    CapabilityKind::Perception,
+    CapabilityKind::Input,
+    CapabilityKind::Connector,
+];
+
+fn action_shown(kind: CapabilityKind, class: EffectClass) -> ActionConfirmation {
+    ActionConfirmation {
+        commitment: "cmt-00000000000000000000000000000000".into(),
+        class,
+        kind,
+        operation: "test.operation".into(),
+        target: "test target".into(),
+        agent: "owner-session".into(),
+        run: "run-00000000000000000000000000000000".into(),
+        summary: vec!["a line".into()],
+        expires_in_secs: 60,
+        binding_short: "000000000000".into(),
+    }
+}
+
+fn header_value(text: &super::approval::ConfirmationText, label: &str) -> String {
+    text.header
+        .iter()
+        .find(|(l, _)| *l == label)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_else(|| panic!("no header row {label}"))
+}
+
+/// N-1: the synthetic R2 request's window says what it is; nothing in it
+/// calls it sensitive or irreversible. The rows and their order are as
+/// before.
+#[test]
+fn p4_uat05_n1_the_synthetic_r2_window_says_it_has_no_external_effect() {
+    use super::approval::SYNTHETIC_EFFECT;
+    assert_eq!(
+        SYNTHETIC_EFFECT,
+        "Synthetic R2-approval test: no external effect"
+    );
+    let shown = action_shown(CapabilityKind::Synthetic, EffectClass::R2);
+    let text = shown.text();
+    assert_eq!(header_value(&text, "Effect"), SYNTHETIC_EFFECT);
+    let labels: Vec<&str> = text.header.iter().map(|(label, _)| *label).collect();
+    assert_eq!(
+        labels,
+        [
+            "Effect",
+            "Operation",
+            "Target",
+            "Acting for",
+            "Run",
+            "Commitment",
+            "Binding",
+            "Expires in"
+        ]
+    );
+    let message = shown.message();
+    assert!(!message.contains("sensitive"), "{message}");
+    assert!(!message.contains("irreversible"), "{message}");
+    assert_eq!(shown.title(), "Allow this action?");
+}
+
+/// N-2: every existing kind keeps its exact Effect wording, for every class
+/// (the harmless wording is the synthetic R2 pair's alone).
+#[test]
+fn p4_uat05_n2_every_existing_kind_keeps_its_effect_wording() {
+    for kind in EXISTING_KINDS {
+        for (class, expected) in [
+            (EffectClass::R0, "R0 (local observation or computation)"),
+            (
+                EffectClass::R1,
+                "R1 (a bounded external or reversible effect)",
+            ),
+            (EffectClass::R2, "R2 (a sensitive or irreversible effect)"),
+        ] {
+            assert_eq!(
+                header_value(&action_shown(kind, class).text(), "Effect"),
+                expected,
+                "{kind:?} {class:?}"
+            );
+        }
+    }
+}
+
+/// N-3: the synthetic grant's window names owner-session commands only,
+/// never "any agent".
+#[test]
+fn p4_uat05_n3_the_synthetic_grant_window_names_owner_session_commands_only() {
+    use super::approval::OWNER_ONLY_USE;
+    assert_eq!(
+        OWNER_ONLY_USE,
+        "Owner-session commands only; agent runs are refused; every use requires separate native approval."
+    );
+    let grant = GrantConfirmation {
+        kind: CapabilityKind::Synthetic,
+        lines: GrantScope::Synthetic.describe(),
+        expires_in_secs: 900,
+    };
+    let text = grant.text();
+    let labels: Vec<&str> = text.header.iter().map(|(label, _)| *label).collect();
+    assert_eq!(labels, ["Capability", "Who may use it", "Expires in"]);
+    assert_eq!(header_value(&text, "Capability"), "synthetic");
+    assert_eq!(header_value(&text, "Who may use it"), OWNER_ONLY_USE);
+    assert!(!grant.message().contains("any agent"));
+    assert_eq!(GrantScope::Synthetic.kind(), CapabilityKind::Synthetic);
+}
+
+/// N-4: every existing kind's grant window keeps its exact wording.
+#[test]
+fn p4_uat05_n4_every_existing_kind_keeps_any_agent_use() {
+    use super::approval::ANY_AGENT_USE;
+    assert_eq!(
+        ANY_AGENT_USE,
+        "any agent, until it expires or you revoke it"
+    );
+    for kind in EXISTING_KINDS {
+        let grant = GrantConfirmation {
+            kind,
+            lines: vec!["a line".into()],
+            expires_in_secs: 60,
+        };
+        assert_eq!(
+            header_value(&grant.text(), "Who may use it"),
+            ANY_AGENT_USE,
+            "{kind:?}"
+        );
+    }
+}
+
+/// T-B1: the window is answered while the same commitment's approval,
+/// asked for in another request, is being recorded. The commitment is still
+/// prepared, with the same binding, but reserved: the answer approves
+/// nothing (`reserved.is_some()`); the other approval is the only one.
+#[test]
+fn p4_uat05_t_b1_an_answer_while_another_approval_is_recorded_approves_nothing() {
+    type Inner = std::thread::JoinHandle<Result<super::approval::R2Approval, AuthorityError>>;
+    struct Outer {
+        f: Arc<Scripted>,
+        id: CommitmentId,
+        inner: Mutex<Option<Inner>>,
+    }
+    impl ControlConfirmer for Outer {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            self.f.sink.hold_next(EvidencePhase::Approved);
+            let (f, id) = (self.f.clone(), self.id);
+            let inner = std::thread::spawn(move || {
+                f.auth
+                    .commitments()
+                    .request_approval(id, &f.agent, f.run, &f.yes)
+            });
+            self.f.sink.wait_held();
+            *self.inner.lock().unwrap() = Some(inner);
+            true
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(
+            &self,
+            _: &crate::authority::approval::AcknowledgementConfirmation,
+        ) -> bool {
+            false
+        }
+    }
+    let f = Arc::new(scripted());
+    let id = f.prepare(EffectClass::R2);
+    let outer = Outer {
+        f: f.clone(),
+        id,
+        inner: Mutex::new(None),
+    };
+    let answered = f
+        .auth
+        .commitments()
+        .request_approval(id, &f.agent, f.run, &outer);
+    // Released first, so that a failure never leaves the other request held.
+    f.sink.release();
+    let inner = outer
+        .inner
+        .lock()
+        .unwrap()
+        .take()
+        .expect("the other request");
+    let other = inner.join().unwrap();
+    assert_eq!(answered.unwrap_err(), AuthorityError::NotPending);
+    let approval = other.expect("the other request's approval");
+    let approved = f
+        .sink
+        .memory
+        .records()
+        .iter()
+        .filter(|r| {
+            r.phase == EvidencePhase::Approved
+                && r.commitment.as_deref() == Some(id.to_string().as_str())
+        })
+        .count();
+    assert_eq!(approved, 1);
+    f.auth
+        .commitments()
+        .authorize(id, &f.agent, f.run, Some(approval))
+        .unwrap();
+    assert_eq!(f.state(id), CommitmentState::Authorized);
+}
+
+/// T-B2: a commitment that is no longer prepared when the window is
+/// answered (its run stopped, it was denied, every run stopped) gives
+/// exactly `NotPending`; one still prepared whose policy moved (a grant
+/// revoked) gives `Stale`. In no case is an approval recorded.
+#[test]
+fn p4_uat05_t_b2_a_commitment_ended_or_stale_during_the_window_is_not_approved() {
+    struct During<'a>(&'a dyn Fn());
+    impl ControlConfirmer for During<'_> {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            (self.0)();
+            true
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(
+            &self,
+            _: &crate::authority::approval::AcknowledgementConfirmation,
+        ) -> bool {
+            false
+        }
+    }
+    let approvals = |f: &Fixture, id: CommitmentId| {
+        f.evidence
+            .records()
+            .iter()
+            .filter(|r| {
+                r.phase == EvidencePhase::Approved
+                    && r.commitment.as_deref() == Some(id.to_string().as_str())
+            })
+            .count()
+    };
+    let answer = |f: &Fixture, id: CommitmentId, work: &dyn Fn()| {
+        f.auth
+            .commitments()
+            .request_approval(id, &f.agent, f.run, &During(work))
+            .map(|_| ())
+    };
+
+    // The run stopped while the window was shown.
+    let f = fixture();
+    let id = f.prepare(EffectClass::R2);
+    let stop_run = || f.auth.cancel_run(f.run).unwrap();
+    assert_eq!(answer(&f, id, &stop_run), Err(AuthorityError::NotPending));
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(approvals(&f, id), 0);
+
+    // Denied while it was shown.
+    let f = fixture();
+    let id = f.prepare(EffectClass::R2);
+    let deny = || f.auth.commitments().deny(id, &f.agent, f.run).unwrap();
+    assert_eq!(answer(&f, id, &deny), Err(AuthorityError::NotPending));
+    assert_eq!(f.state(id), CommitmentState::Denied);
+    assert_eq!(approvals(&f, id), 0);
+
+    // Every run stopped while it was shown.
+    let f = fixture();
+    let id = f.prepare(EffectClass::R2);
+    let emergency = || {
+        f.auth.emergency_stop();
+    };
+    assert_eq!(answer(&f, id, &emergency), Err(AuthorityError::NotPending));
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(approvals(&f, id), 0);
+
+    // Another grant revoked while it was shown: still prepared, but stale.
+    let f = fixture();
+    let id = f.prepare(EffectClass::R2);
+    let other = f
+        .auth
+        .grants()
+        .request(egress_scope(), TTL, &f.yes)
+        .unwrap();
+    let revoke_other = || f.auth.grants().revoke(other).unwrap();
+    assert_eq!(answer(&f, id, &revoke_other), Err(AuthorityError::Stale));
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(approvals(&f, id), 0);
+
+    // Its own grant revoked while it was shown: stale (the generation moved).
+    let f = fixture();
+    let id = f.prepare(EffectClass::R2);
+    let revoke_own = || f.auth.grants().revoke(f.grant).unwrap();
+    assert_eq!(answer(&f, id, &revoke_own), Err(AuthorityError::Stale));
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(approvals(&f, id), 0);
+}
+// ---- P4-UAT05 END ----

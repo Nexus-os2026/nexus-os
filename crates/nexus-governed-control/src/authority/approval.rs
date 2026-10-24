@@ -55,6 +55,55 @@ impl ConfirmationText {
     }
 }
 
+/// The Effect row of the owner's synthetic approval probe (P4-UAT05): it
+/// takes the R2 approval path, has no external effect, and says so. Only the
+/// exact pair `(CapabilityKind::Synthetic, EffectClass::R2)` reads so.
+pub const SYNTHETIC_EFFECT: &str = "Synthetic R2-approval test: no external effect";
+
+/// Who may use a grant. Only the synthetic probe's is narrower: it refuses
+/// every run the backend did not open as an owner-session command's.
+pub const ANY_AGENT_USE: &str = "any agent, until it expires or you revoke it";
+pub const OWNER_ONLY_USE: &str =
+    "Owner-session commands only; agent runs are refused; every use requires separate native approval.";
+
+/// The Effect row: the class and what it means, except for the synthetic
+/// probe. A synthetic request of any class but R2 is refused before it is
+/// committed (`synthetic::admit`), so no window shows one; were one ever
+/// shown, it would not read as harmless. Exhaustive on purpose: a new kind
+/// or class must choose its text.
+fn effect_row(class: EffectClass, kind: CapabilityKind) -> String {
+    match (kind, class) {
+        (CapabilityKind::Synthetic, EffectClass::R2) => SYNTHETIC_EFFECT.to_string(),
+        (CapabilityKind::Synthetic, EffectClass::R0 | EffectClass::R1) => format!(
+            "{} ({}); not a valid synthetic test: refuse it",
+            class,
+            class.meaning()
+        ),
+        (
+            CapabilityKind::Tool
+            | CapabilityKind::Egress
+            | CapabilityKind::Browser
+            | CapabilityKind::Perception
+            | CapabilityKind::Input
+            | CapabilityKind::Connector,
+            EffectClass::R0 | EffectClass::R1 | EffectClass::R2,
+        ) => format!("{} ({})", class, class.meaning()),
+    }
+}
+
+/// Who may use a grant of `kind`. Exhaustive on purpose.
+fn who_may_use(kind: CapabilityKind) -> &'static str {
+    match kind {
+        CapabilityKind::Synthetic => OWNER_ONLY_USE,
+        CapabilityKind::Tool
+        | CapabilityKind::Egress
+        | CapabilityKind::Browser
+        | CapabilityKind::Perception
+        | CapabilityKind::Input
+        | CapabilityKind::Connector => ANY_AGENT_USE,
+    }
+}
+
 /// What the owner is asked to approve: one R2 commitment. Every line is
 /// computed by the backend from the commitment it approves; nothing here is
 /// a secret.
@@ -85,10 +134,7 @@ impl ActionConfirmation {
     pub fn text(&self) -> ConfirmationText {
         ConfirmationText {
             header: vec![
-                (
-                    "Effect",
-                    format!("{} ({})", self.class, self.class.meaning()),
-                ),
+                ("Effect", effect_row(self.class, self.kind)),
                 ("Operation", self.operation.clone()),
                 ("Target", self.target.clone()),
                 ("Acting for", self.agent.clone()),
@@ -126,10 +172,7 @@ impl GrantConfirmation {
         ConfirmationText {
             header: vec![
                 ("Capability", self.kind.as_str().to_string()),
-                (
-                    "Who may use it",
-                    "any agent, until it expires or you revoke it".to_string(),
-                ),
+                ("Who may use it", who_may_use(self.kind).to_string()),
                 ("Expires in", format!("{} s", self.expires_in_secs)),
             ],
             details: fitted_lines(&self.lines),

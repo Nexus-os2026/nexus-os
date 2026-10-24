@@ -95,6 +95,15 @@ exactly once.
 | R0 | local observation or computation | a live grant |
 | R1 | bounded external or reversible effect | a live grant, commitment, revalidation, bounds, evidence |
 | R2 | sensitive, irreversible or privileged effect | all of R1, plus the owner's exact, one-shot native approval |
+| R2, kind `synthetic` (Phase Four amendment P4-UAT05, adopted by the Owner) | one owner-only synthetic approval probe that takes the R2 approval path with no external effect; its records are labelled `synthetic` and are never evidence of a real-world effect | all of R2; prepared only in a run the backend opened for an owner-session command (never an agent's run), under a live, natively granted `synthetic` grant of at most 15 minutes, each commitment (at most 180 s) natively approved |
+
+Phase Four amendment P4-UAT05 (not part of the Phase Three record above): the
+native approval window's Effect row reads "Synthetic R2-approval test: no
+external effect" for the exact pair (kind `synthetic`, R2) only, and that
+kind's grant window says "Owner-session commands only; agent runs are
+refused; every use requires separate native approval." Every other kind's
+wording is unchanged. A synthetic action of any other class is refused before
+it is committed.
 
 ### Grants, generation, cancellation
 

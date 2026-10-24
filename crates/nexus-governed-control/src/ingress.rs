@@ -18,6 +18,7 @@ use crate::connector::ConnectorIntent;
 use crate::display::PerceptionIntent;
 use crate::egress::EgressIntent;
 use crate::governed::Intent;
+use crate::synthetic::SyntheticIntent;
 use crate::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -134,6 +135,8 @@ pub enum Understood {
 /// - `hash <text>` or `hash attachment <id>`: the SHA-256 tool
 /// - `say <text>`: speech synthesis
 /// - `connector <operation> <json input>`: a connector operation
+/// - `synthetic-receipt`: the owner's synthetic approval test (P4-UAT05; R2,
+///   no external effect; it takes nothing)
 pub fn understand(
     envelope: &CommandEnvelope,
     attachments: &Attachments,
@@ -231,8 +234,12 @@ pub fn understand(
             })),
             None => Understood::NotUnderstood("connector takes an operation"),
         },
+        "synthetic-receipt" if rest.is_empty() => {
+            Understood::Intent(Intent::Synthetic(SyntheticIntent {}))
+        }
+        "synthetic-receipt" => Understood::NotUnderstood("synthetic-receipt takes nothing"),
         _ => Understood::NotUnderstood(
-            "not a governed command: fetch, browse, observe, hash, say or connector",
+            "not a governed command: fetch, browse, observe, hash, say, connector or synthetic-receipt",
         ),
     })
 }

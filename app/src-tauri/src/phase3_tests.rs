@@ -4272,6 +4272,10 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
 /// Every governed effect is a pending effect held by the one pipeline and
 /// executed only by it, once, after `begin`; the commitment lifecycle is
 /// crate-private.
+///
+/// Re-pinned (P4-UAT05, the Owner-adopted Phase Four amendment): exactly one
+/// more pending effect, the synthetic approval probe's `SyntheticReceipt`
+/// (`p3_g6_19` confines it); none other.
 #[test]
 fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
     let mut effects = trait_impls("PendingEffect");
@@ -4298,6 +4302,10 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
             (
                 "crates/nexus-governed-control/src/egress/mod.rs",
                 "EgressEffect".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/synthetic.rs",
+                "SyntheticReceipt".to_string()
             ),
             (
                 "crates/nexus-governed-control/src/tool/mod.rs",
@@ -9898,4 +9906,459 @@ fn p3_el1_m6_the_front_door_names_the_state_directory_by_its_exact_path() {
         without_whitespace(one_fn(front, "RealWorld::setup").body_text(front))
             .starts_with("letstate=nexus_kernel::identity_home::nexus_state_dir().map_err(")
     );
+}
+
+// ---------------------------------------------------------------------------
+// P4-UAT05 (the Owner-adopted Phase Four amendment): the owner's synthetic
+// approval probe is confined, and an entry's binding never changes. These
+// are textual guards over production text: each claim is the static one it
+// states, not a semantic or mathematical proof.
+// ---------------------------------------------------------------------------
+
+/// T-G3 and N-5: the synthetic probe lives in `synthetic.rs` alone and
+/// reaches nothing but the authority and the pipeline. Its imports are
+/// exactly these; its one effect's body is pinned whole; it refuses every
+/// run but an owner-session command's before any grant is looked at; the
+/// front door admits a synthetic action only as R2, after every domain's
+/// preparation; the synthetic kind is named, in the crate and the desktop,
+/// exactly where listed (so no other domain makes synthetic-kind records and
+/// the agent classifier never names it); and only it says
+/// `external_effect`. With `p3_g6_04`'s mechanism map unchanged, the one
+/// synthetic-kind action has a mechanism-free effect.
+#[test]
+fn p3_g6_19_the_synthetic_probe_is_confined() {
+    use nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;
+    use nexus_governed_control::governed::MAX_GRANT;
+    use nexus_governed_control::synthetic::{COMMITMENT_TTL, GRANT_TTL};
+    const SYNTHETIC: &str = "crates/nexus-governed-control/src/synthetic.rs";
+    let synthetic = production_source(SYNTHETIC);
+    let m = masked(synthetic);
+    // 1. Its imports, exactly; outside them no path leaves the module.
+    let spans = use_spans(&m);
+    let imports: Vec<String> = spans
+        .iter()
+        .map(|&(start, end)| without_whitespace(&synthetic[start..end]))
+        .collect();
+    assert_eq!(
+        imports,
+        [
+            "usecrate::authority::commitment::{ExecutionGuard,FailureClass,PreparedAction,TargetIdentity}",
+            "usecrate::authority::effect::{CapabilityKind,EffectClass}",
+            "usecrate::authority::ids::{Digest,RunId}",
+            "usecrate::authority::policy::GrantScope",
+            "usecrate::authority::run::RunClass",
+            "usecrate::authority::{Authority,AuthorityError}",
+            "usecrate::control::{EffectOutput,PendingEffect,Preparation}",
+            "usegetrandom::getrandom",
+            "usehex::encode",
+            "useserde::{Deserialize,Serialize}",
+            "usestd::time::Duration",
+        ]
+    );
+    for root in [
+        "crate",
+        "super",
+        "self",
+        "std",
+        "core",
+        "alloc",
+        "getrandom",
+        "hex",
+        "serde",
+    ] {
+        for at in words(&m, root) {
+            // A path through it (`root::`), not the receiver `self` or the
+            // imported `getrandom` called by name.
+            if !m[skip_ws(&m, at + root.len())..].starts_with(b"::") {
+                continue;
+            }
+            assert!(
+                spans.iter().any(|&(start, end)| start < at && at < end),
+                "synthetic.rs names a path through `{root}` outside its imports"
+            );
+        }
+    }
+    for absent in [
+        "unsafe",
+        "extern",
+        "static",
+        "macro_rules",
+        "mod",
+        "include",
+        "include_str",
+        "include_bytes",
+        "cfg",
+        "env",
+        "fs",
+        "io",
+        "os",
+        "net",
+        "process",
+        "thread",
+        "Command",
+        "File",
+        "spawn",
+        "tokio",
+        "reqwest",
+        "x11rb",
+        "libc",
+        "nexus_kernel",
+        "tauri",
+        "gtk",
+        "Vault",
+        "RuntimeRoot",
+        "Scratch",
+        "launcher",
+    ] {
+        assert!(
+            words(&m, absent).is_empty(),
+            "synthetic.rs names `{absent}`"
+        );
+    }
+    // 2. Its one effect, pinned whole: a cancelled or lapsed commitment
+    //    issues nothing; otherwise one text receipt and its labels.
+    assert_eq!(
+        compact(one_fn(synthetic, "SyntheticReceipt::execute").body_text(synthetic)),
+        "ifguard.is_cancelled(){returnErr((FailureClass::Refused,\"cancelled before the receipt was issued\".to_string()));}ifletSome(why)=guard.lapse(){returnErr((FailureClass::Refused,why.to_string()));}Ok(EffectOutput{text:Some(format!(\"SYNTHETIC TEST RECEIPT {} for {}: no external effect was performed.\",self.receipt,guard.commitment())),bytes:None,meta:vec![(\"synthetic\".to_string(),\"true\".to_string()),(\"external_effect\".to_string(),\"none\".to_string()),(\"receipt\".to_string(),self.receipt)],evidence:None})"
+    );
+    let effect: Vec<String> = fn_items(synthetic)
+        .into_iter()
+        .filter(|item| item.path.starts_with("SyntheticReceipt::"))
+        .map(|item| item.path)
+        .collect();
+    assert_eq!(
+        effect,
+        [
+            "SyntheticReceipt::revalidate",
+            "SyntheticReceipt::parameters",
+            "SyntheticReceipt::execute"
+        ]
+    );
+    // 3. `prepare`: the run's class first (never a name), then the one
+    //    grant lookup; the class is R2; the target is the constant; the
+    //    receipt is a fresh nonce bound into the parameters.
+    let prepare = without_whitespace(one_fn(synthetic, "prepare").body_text(synthetic));
+    assert_in_order(
+        &prepare,
+        &[
+            "ifauthority.runs().class(run)!=Some(RunClass::Owner){returnErr(AuthorityError::Closed(",
+            ".grants().live_of(CapabilityKind::Synthetic)",
+            "getrandom(&mutnonce)",
+            "Digest::of(\"nexus.p3.synthetic.receipt.v1\",&[OPERATION.as_bytes(),&nonce],)",
+            "kind:CapabilityKind::Synthetic,class:EffectClass::R2,operation:OPERATION,target:TargetIdentity{display:TARGET_TEXT.to_string(),digest:target,},",
+            "effect:Box::new(SyntheticReceipt{receipt,target,parameters,}),ttl:COMMITMENT_TTL,",
+        ],
+        "synthetic::prepare",
+    );
+    assert_eq!(prepare.matches("grants()").count(), 1, "{prepare}");
+    assert!(!prepare.contains("agent"), "never judged from a name");
+    // 4. The front door admits a synthetic action only as R2, after every
+    //    domain's preparation and before any commitment; a synthetic grant
+    //    is capped there.
+    assert_eq!(
+        without_whitespace(one_fn(synthetic, "admit").body_text(synthetic)),
+        "ifaction.kind==CapabilityKind::Synthetic&&action.class!=EffectClass::R2{returnErr(AuthorityError::InvalidAction(\"asyntheticapprovaltestisclassedR2only\",));}Ok(())"
+    );
+    let governed = production_source("crates/nexus-governed-control/src/governed.rs");
+    let front =
+        without_whitespace(one_fn(governed, "GovernedControl::prepare").body_text(governed));
+    assert!(
+        front.contains("Intent::Synthetic(intent)=>synthetic::prepare(authority,run,intent),"),
+        "{front}"
+    );
+    assert!(
+        front.ends_with("}?;synthetic::admit(&preparation.action)?;Ok(preparation)"),
+        "{front}"
+    );
+    let propose =
+        without_whitespace(one_fn(governed, "GovernedControl::propose").body_text(governed));
+    assert!(
+        propose.ends_with(
+            "letpreparation=self.prepare(run,intent)?;self.control.propose(agent,run,preparation)"
+        ),
+        "{propose}"
+    );
+    assert_eq!(
+        without_whitespace(one_fn(governed, "GovernedControl::request_grant").body_text(governed)),
+        "letscope=self.grant_scope(request)?;letttl=synthetic::capped(&scope,ttl.min(MAX_GRANT));self.authority().grants().request(scope,ttl,confirmer)"
+    );
+    assert_eq!(
+        without_whitespace(one_fn(synthetic, "capped").body_text(synthetic)),
+        "ifscope.kind()==CapabilityKind::Synthetic{ttl.min(GRANT_TTL)}else{ttl}"
+    );
+    assert!(COMMITMENT_TTL <= MAX_COMMITMENT_TTL && COMMITMENT_TTL.as_secs() == 180);
+    assert!(GRANT_TTL <= MAX_GRANT && GRANT_TTL.as_secs() == 900);
+    // 5. N-5: every production mention of the synthetic kind, request and
+    //    intent variants (the word `Synthetic`), in the crate and the
+    //    desktop, with the function it is in.
+    let expected: Vec<(&str, String)> = [
+        (
+            "crates/nexus-governed-control/src/authority/approval.rs",
+            "effect_row",
+        ),
+        (
+            "crates/nexus-governed-control/src/authority/approval.rs",
+            "effect_row",
+        ),
+        (
+            "crates/nexus-governed-control/src/authority/approval.rs",
+            "who_may_use",
+        ),
+        ("crates/nexus-governed-control/src/authority/effect.rs", ""),
+        (
+            "crates/nexus-governed-control/src/authority/effect.rs",
+            "CapabilityKind::as_str",
+        ),
+        ("crates/nexus-governed-control/src/authority/policy.rs", ""),
+        (
+            "crates/nexus-governed-control/src/authority/policy.rs",
+            "GrantScope::describe",
+        ),
+        (
+            "crates/nexus-governed-control/src/authority/policy.rs",
+            "GrantScope::kind",
+        ),
+        (
+            "crates/nexus-governed-control/src/authority/policy.rs",
+            "GrantScope::kind",
+        ),
+        ("crates/nexus-governed-control/src/governed.rs", ""),
+        ("crates/nexus-governed-control/src/governed.rs", ""),
+        (
+            "crates/nexus-governed-control/src/governed.rs",
+            "GovernedControl::grant_scope",
+        ),
+        (
+            "crates/nexus-governed-control/src/governed.rs",
+            "GovernedControl::prepare",
+        ),
+        ("crates/nexus-governed-control/src/ingress.rs", "understand"),
+        ("crates/nexus-governed-control/src/synthetic.rs", "admit"),
+        ("crates/nexus-governed-control/src/synthetic.rs", "capped"),
+        (
+            "crates/nexus-governed-control/src/synthetic.rs",
+            "grant_scope",
+        ),
+        ("crates/nexus-governed-control/src/synthetic.rs", "prepare"),
+        ("crates/nexus-governed-control/src/synthetic.rs", "prepare"),
+    ]
+    .into_iter()
+    .map(|(file, function)| (file, function.to_string()))
+    .collect();
+    assert_eq!(mentions(P3_CRATE, "Synthetic"), expected);
+    assert_eq!(mentions(DESKTOP_SRC, "Synthetic"), []);
+    // `SyntheticReceipt` is built only by `prepare` (besides its own
+    // definition and impl).
+    assert_eq!(
+        mentions(P3_CRATE, "SyntheticReceipt"),
+        [
+            (SYNTHETIC, String::new()),
+            (SYNTHETIC, String::new()),
+            (SYNTHETIC, "prepare".to_string()),
+        ]
+    );
+    assert_eq!(mentions(DESKTOP_SRC, "SyntheticReceipt"), []);
+    // The agent classifier never names it.
+    let planned = production_source("crates/nexus-governed-control/src/planned.rs");
+    assert!(!planned.to_ascii_lowercase().contains("synthetic"));
+    // 6. Only the probe says `external_effect`, or issues a synthetic test
+    //    receipt (literals included).
+    for (path, text) in workspace_sources() {
+        if !(path.starts_with(P3_CRATE) || path.starts_with(DESKTOP_SRC)) {
+            continue;
+        }
+        let expected = usize::from(path == SYNTHETIC);
+        assert_eq!(text.matches("external_effect").count(), expected, "{path}");
+        assert_eq!(
+            text.matches("SYNTHETIC TEST RECEIPT").count(),
+            expected,
+            "{path}"
+        );
+    }
+}
+
+/// §4.3 of the corrected addendum (T-B3, strengthened): no production code
+/// in `commitment.rs`, the only module that can name an `Entry` (it and the
+/// map are private there; the module declares no child module or macro and
+/// the crate denies unsafe code), writes an existing entry's binding.
+/// Exactly one `Entry` literal, whose binding is `binding_of(..)`, with no
+/// struct update; no `.binding =`; no whole-entry replacement or map surgery
+/// (`mem::swap`/`replace`/`take`, `*entry =`, `*entries =`, the entry API);
+/// the one deref-assignment, the one `extend` and the one `retain` are the
+/// ones listed, none of which touches a binding; exactly one insertion, of
+/// a fresh id made just before. The post-dialog re-check keeps all three of
+/// its conditions (defense in depth). Static and textual: executed coverage
+/// of the binding condition would need a test seam, which is not added.
+#[test]
+fn p3_g6_20_an_entrys_binding_never_changes() {
+    const COMMITMENT: &str = "crates/nexus-governed-control/src/authority/commitment.rs";
+    let text = production_source(COMMITMENT);
+    let m = masked(text);
+    let flat = without_whitespace(&String::from_utf8(m.clone()).expect("masking keeps UTF-8"));
+    // Private, here only.
+    assert!(flat.contains("structEntry{agent:AgentId,"));
+    assert!(flat.contains("entries:Mutex<HashMap<CommitmentId,Entry>>,"));
+    for exposed in [
+        "pubstructEntry",
+        "pub(crate)structEntry",
+        "pub(super)structEntry",
+        "pubentries:",
+        "pub(crate)entries:",
+        "pub(super)entries:",
+    ] {
+        assert!(!flat.contains(exposed), "{exposed}");
+    }
+    for word in ["mod", "macro_rules", "unsafe", "extern", "include"] {
+        assert!(words(&m, word).is_empty(), "commitment.rs names `{word}`");
+    }
+    assert!(!flat.contains("allow(unsafe_code)"));
+    // No attribute on `Entry`: no derive gives it Clone, Default or serde.
+    let at = flat.find("structEntry{").expect("the Entry struct");
+    let head = &flat[flat[..at].rfind(['}', ';']).expect("an item before") + 1..at];
+    assert_eq!(head, "", "attributes on Entry");
+    // Exactly one literal, its binding computed from what it binds, no
+    // struct update.
+    let literals: Vec<usize> = flat
+        .match_indices("Entry{")
+        .map(|(at, _)| at)
+        .filter(|&at| !flat[..at].ends_with("struct") && !flat[..at].ends_with("impl"))
+        .collect();
+    assert_eq!(literals.len(), 1, "Entry literals");
+    let open = literals[0] + "Entry".len();
+    let mut depth = 0usize;
+    let mut close = open;
+    for (offset, c) in flat[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    close = open + offset;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let literal = &flat[open..=close];
+    assert!(
+        literal
+            .contains("binding:binding_of(id,agent,run,&prepared,&salted,generation,deadline_ms),"),
+        "{literal}"
+    );
+    assert!(!literal.contains(".."), "a struct update: {literal}");
+    assert_eq!(
+        flat.matches("binding:").count(),
+        2,
+        "the field and the one literal"
+    );
+    // Nothing assigns a binding.
+    let assigned = flat
+        .match_indices(".binding=")
+        .filter(|(at, _)| !flat[at + ".binding=".len()..].starts_with('='))
+        .count();
+    assert_eq!(assigned, 0, "a binding is assigned");
+    // Every deref-assignment (a statement, match arm or closure body that
+    // begins `*<place> =`): only the lease-end table's.
+    let bytes = flat.as_bytes();
+    let mut derefs = Vec::new();
+    for (at, _) in flat.match_indices('*') {
+        if at == 0 || !matches!(bytes[at - 1], b';' | b'{' | b'}' | b'>' | b'|' | b',') {
+            continue;
+        }
+        let end = flat[at..]
+            .find([';', ',', '}'])
+            .map_or(flat.len(), |e| at + e);
+        let statement = &flat[at..end];
+        let mut depth = 0i32;
+        let sb = statement.as_bytes();
+        let assigns = (0..sb.len()).any(|i| match sb[i] {
+            b'(' | b'[' => {
+                depth += 1;
+                false
+            }
+            b')' | b']' => {
+                depth -= 1;
+                false
+            }
+            b'=' => {
+                depth == 0
+                    && sb.get(i + 1) != Some(&b'=')
+                    && sb.get(i + 1) != Some(&b'>')
+                    && !matches!(sb.get(i.wrapping_sub(1)), Some(b'=' | b'!' | b'<' | b'>'))
+            }
+            _ => false,
+        });
+        if assigns {
+            derefs.push(statement.to_string());
+        }
+    }
+    assert_eq!(derefs, ["*self.0.leases.lock().expect(\"\")=leases"]);
+    assert_eq!(
+        references(COMMITMENT, "lock")
+            .into_iter()
+            .filter(|(_, function)| function == "CommitmentRegistry::set_lease_end")
+            .count(),
+        1
+    );
+    // No whole-entry replacement, no map surgery.
+    for absent in [
+        "mem::swap",
+        "mem::replace",
+        "mem::take",
+        "swap(",
+        "replace(",
+        ".entry(",
+        "*entry=",
+        "*entries=",
+        ".entries=",
+        "entries=HashMap",
+        "insert_entry",
+        "get_or_insert",
+        "extend_from",
+        "append(",
+    ] {
+        assert!(!flat.contains(absent), "commitment.rs: {absent}");
+    }
+    // The one `extend`: the owed lease ends of an entry that ended.
+    assert_eq!(
+        references(COMMITMENT, "extend"),
+        [(COMMITMENT, "CommitmentRegistry::end_entry".to_string())]
+    );
+    assert_eq!(
+        flat.matches("deferred.leases.extend(entry.prepared.leases.iter().copied());")
+            .count(),
+        1
+    );
+    // The one `retain`: pruning ended entries at capacity.
+    assert_eq!(
+        references(COMMITMENT, "retain"),
+        [(COMMITMENT, "CommitmentRegistry::prepare_leased".to_string())]
+    );
+    assert_eq!(
+        flat.matches("entries.retain(|_,e|!e.state.is_final());")
+            .count(),
+        1
+    );
+    // Exactly one insertion, of a fresh id made just before.
+    assert_eq!(flat.matches("entries.insert(").count(), 1);
+    assert_eq!(flat.matches("CommitmentId::fresh()").count(), 1);
+    let prepare =
+        without_whitespace(one_fn(text, "CommitmentRegistry::prepare_leased").body_text(text));
+    assert_in_order(
+        &prepare,
+        &[
+            "letid=CommitmentId::fresh();",
+            "letentry=Entry{",
+            "binding:binding_of(id,agent,run,&prepared,&salted,generation,deadline_ms),",
+            "entries.insert(id,entry);",
+        ],
+        "CommitmentRegistry::prepare_leased",
+    );
+    // The post-dialog re-check keeps all three conditions.
+    let request =
+        without_whitespace(one_fn(text, "CommitmentRegistry::request_approval").body_text(text));
+    assert!(request.contains(
+        "Some(entry)ifentry.state!=CommitmentState::Prepared||entry.binding!=binding||entry.reserved.is_some()=>{Err(AuthorityError::NotPending)}"
+    ));
 }

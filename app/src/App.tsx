@@ -41,6 +41,7 @@ import { PulseRing } from "./components/viz/PulseRing";
 import LivingBackground from "./components/LivingBackground";
 import { InlineApprovalBanner } from "./components/InlineApprovalBanner";
 import { GlobalGovernedApprovals } from "./components/ContextualApprovalCard";
+import { SyntheticApprovalTest } from "./components/SyntheticApprovalTest";
 import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
@@ -2034,6 +2035,11 @@ export default function App(): JSX.Element {
       {/* Phase Three R2 commitments waiting for the owner, on every work page
           (one global slot). Review asks the backend for its native window. */}
       <GlobalGovernedApprovals currentPage={page} />
+
+      {/* P4-UAT05: the owner's synthetic approval test, on Chat and Agents
+          only while a synthetic grant is live; a click sends one constant
+          command, and the card above and the native window do the rest. */}
+      <SyntheticApprovalTest currentPage={page} />
 
       {showSetupWizard && (
         <SetupWizard

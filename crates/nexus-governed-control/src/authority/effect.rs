@@ -11,7 +11,11 @@ use std::fmt;
 ///   covers it, a commitment, revalidation at execution, a bound and
 ///   evidence.
 /// - `R2`: a sensitive, irreversible or privileged effect. Additionally needs
-///   the owner's exact, one-shot native approval of the commitment.
+///   the owner's exact, one-shot native approval of the commitment. One
+///   exception takes this approval path with no effect at all: the owner's
+///   synthetic approval probe (`CapabilityKind::Synthetic`, a Phase Four
+///   amendment, P4-UAT05). It is never a real-world action, and its records
+///   are never evidence of one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EffectClass {
     R0,
@@ -63,6 +67,9 @@ pub enum CapabilityKind {
     Input,
     /// P3-F: a typed connector operation.
     Connector,
+    /// P4-UAT05: the owner's synthetic approval probe: the R2 approval path
+    /// with no external effect.
+    Synthetic,
 }
 
 impl CapabilityKind {
@@ -74,6 +81,7 @@ impl CapabilityKind {
             CapabilityKind::Perception => "perception",
             CapabilityKind::Input => "input",
             CapabilityKind::Connector => "connector",
+            CapabilityKind::Synthetic => "synthetic",
         }
     }
 }

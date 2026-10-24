@@ -1567,6 +1567,88 @@ fn live_confirmation_window() {
     );
     dialog.response(gtk::ResponseType::Cancel);
     spin(100);
+
+    // 3. P4-UAT05 (T-D10): the owner's synthetic approval probe, exactly as
+    //    the backend asks for it, in the real window (driven here, with no
+    //    person's action, and answered Cancel): its header says it has no
+    //    external effect and its five lines are the request's content. They
+    //    fit the window whole, so its end and right edge are reached as it
+    //    is shown, and its answer arms only once the delay has passed (part
+    //    2 shows the end and the edge holding the answer for content that
+    //    does not fit).
+    struct Capture(std::sync::Mutex<Option<ActionConfirmation>>);
+    impl ControlConfirmer for Capture {
+        fn confirm_action(&self, request: &ActionConfirmation) -> bool {
+            *self.0.lock().unwrap() = Some(request.clone());
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(
+            &self,
+            _: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
+        ) -> bool {
+            false
+        }
+    }
+    let t = isolated();
+    let commitment = granted_probe(&t.world);
+    let id = commitment["id"].as_str().unwrap().to_string();
+    let capture = Capture(std::sync::Mutex::new(None));
+    let declined = t.world.approve(&id, &capture).unwrap_err();
+    assert!(declined.contains("declined"), "{declined}");
+    let shown = capture
+        .0
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the backend asked");
+    let text = shown.text();
+    let (dialog, allow) = super::owner_window(shown.title(), &text, "Allow");
+    spin(300);
+    assert!(!allow.is_sensitive(), "armed before the delay");
+    let p = parts(&dialog);
+    for (label, value) in [
+        ("Effect", "Synthetic R2-approval test: no external effect"),
+        ("Operation", "synthetic.receipt"),
+        (
+            "Target",
+            "none (synthetic test receipt; no external target)",
+        ),
+        ("Acting for", "owner-session"),
+        ("Commitment", id.as_str()),
+    ] {
+        assert_eq!(
+            header_value(&p.header, label).text(),
+            format!("\u{200E}{value}"),
+            "{label}"
+        );
+    }
+    let details = p.details.text();
+    let lines: Vec<String> = details.split('\n').map(str::to_string).collect();
+    let summary: Vec<String> = commitment["summary"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|line| format!("\u{200E}{}", line.as_str().unwrap()))
+        .collect();
+    assert_eq!(lines.len(), 5);
+    assert_eq!(lines, summary);
+    // Whole in view: its end and right edge are where it is shown.
+    let (down, across) = (p.scroll.vadjustment(), p.scroll.hadjustment());
+    assert!(down.value() + down.page_size() >= down.upper() - 1.0);
+    assert!(across.value() + across.page_size() >= across.upper() - 1.0);
+    assert!(!allow.is_sensitive(), "armed before the delay");
+    spin(1200);
+    assert!(allow.is_sensitive(), "armed after the delay");
+    shot(&dialog, "synthetic-armed");
+    dialog.response(gtk::ResponseType::Cancel);
+    spin(100);
+    assert_eq!(commitment_state(&t.world, &id), "denied");
 }
 
 /// P3-HM-CONTRACT-02 §13.2 LK-3 (mission P3-C11-HM-M4 N5): the effect the
@@ -2250,4 +2332,638 @@ fn p3_el1_m6_mb5_a_latched_store_is_shown_latched() {
         t.world.status()["evidence"],
         super::evidence_status(t.world.evidence.health())
     );
+}
+
+// ── P4-UAT05: the owner's synthetic approval probe, through the desktop ──
+//
+// The Owner-adopted Phase Four amendment, end to end through `RealWorld`
+// (T-D1 to T-D11, N-6). The owner's answers are scripted here (the live
+// window is driven in `live_confirmation_window`, with no person's action):
+// these are probe-execution (PX) and window-content proofs only, never a
+// physical owner's approval, a real agent's request or a real-world effect.
+
+use nexus_governed_control::authority::approval::{OWNER_ONLY_USE, SYNTHETIC_EFFECT};
+use nexus_governed_control::synthetic::{SyntheticIntent, TARGET_TEXT};
+
+/// The owner's answer, keeping every window shown.
+struct Shown {
+    answer: bool,
+    actions: Mutex<Vec<ActionConfirmation>>,
+    grants: Mutex<Vec<GrantConfirmation>>,
+}
+
+impl Shown {
+    fn new(answer: bool) -> Self {
+        Self {
+            answer,
+            actions: Mutex::new(Vec::new()),
+            grants: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn actions(&self) -> Vec<ActionConfirmation> {
+        self.actions.lock().unwrap().clone()
+    }
+}
+
+impl ControlConfirmer for Shown {
+    fn confirm_action(&self, request: &ActionConfirmation) -> bool {
+        self.actions.lock().unwrap().push(request.clone());
+        self.answer
+    }
+    fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
+        self.grants.lock().unwrap().push(request.clone());
+        self.answer
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        self.answer
+    }
+    fn confirm_acknowledgement(
+        &self,
+        _: &nexus_governed_control::authority::approval::AcknowledgementConfirmation,
+    ) -> bool {
+        false
+    }
+}
+
+/// The owner's one test command, as the launcher sends it.
+fn synthetic_command() -> CommandEnvelope {
+    CommandEnvelope {
+        text: Some("synthetic-receipt".into()),
+        ..Default::default()
+    }
+}
+
+/// A synthetic grant the owner gave natively, and one probe submitted: the
+/// commitment as the interface lists it.
+fn granted_probe(world: &RealWorld) -> Value {
+    world
+        .request_grant(
+            &GrantRequest::Synthetic {},
+            3600,
+            &Owner(true, AtomicU32::new(0)),
+        )
+        .unwrap();
+    let submitted = world.submit(synthetic_command()).unwrap();
+    assert_eq!(submitted["understood"], true, "{submitted}");
+    submitted["commitment"].clone()
+}
+
+/// The audit trail's evidence entries of one commitment, in order.
+fn audited(audit: &Arc<Mutex<AuditTrail>>, commitment: &str) -> Vec<Value> {
+    audit
+        .lock()
+        .unwrap()
+        .events()
+        .iter()
+        .filter(|e| {
+            e.payload["event_kind"] == "p3.action.evidence" && e.payload["commitment"] == commitment
+        })
+        .map(|e| e.payload.clone())
+        .collect()
+}
+
+fn phases(rows: &[Value]) -> Vec<String> {
+    rows.iter()
+        .map(|row| row["phase"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The receipt a listed commitment's summary shows.
+fn receipt_of(commitment: &Value) -> String {
+    let line = commitment["summary"][3].as_str().unwrap();
+    let receipt = line.strip_prefix("Receipt: ").expect("the receipt line");
+    let hex = receipt.strip_prefix("rcpt-").expect("rcpt-");
+    assert!(
+        hex.len() == 32
+            && hex
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
+        "{line}"
+    );
+    receipt.to_string()
+}
+
+const GRANT_LINES: [&str; 4] = [
+    "Synthetic test receipts only: Nexus performs no external effect",
+    "Usable only by your own commands, never by an agent",
+    "Each receipt also needs your approval in a separate Nexus approval window",
+    "A receipt is never evidence that a real-world action happened",
+];
+
+/// T-D1 and N-6: `p3_submit` commits an authenticated, prepared synthetic R2
+/// request of an owner-session command; `p3_status` lists it as it is; the
+/// native windows show its exact fields and wording; the native Allow
+/// issues exactly one receipt, the one shown; nothing decides it twice;
+/// every audit entry and evidence row of it says `synthetic`, and the
+/// finished one says no external effect was performed.
+#[test]
+fn p4_uat05_t_d1_n6_the_probe_is_approved_natively_once_and_audited_as_synthetic() {
+    let t = isolated();
+    let granting = Shown::new(true);
+    let grant = t
+        .world
+        .request_grant(&GrantRequest::Synthetic {}, 3600, &granting)
+        .unwrap();
+    // The native grant window.
+    let window = granting.grants.lock().unwrap()[0].clone();
+    assert_eq!(window.title(), "Grant this capability?");
+    assert_eq!(
+        window.text().header,
+        vec![
+            ("Capability", "synthetic".to_string()),
+            ("Who may use it", OWNER_ONLY_USE.to_string()),
+            ("Expires in", "900 s".to_string()),
+        ]
+    );
+    assert_eq!(window.text().details, GRANT_LINES);
+    assert_eq!(
+        OWNER_ONLY_USE,
+        "Owner-session commands only; agent runs are refused; every use requires separate native approval."
+    );
+    let status = t.world.status();
+    let listed = status["grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["id"] == grant.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(listed["kind"], "synthetic");
+    assert_eq!(listed["live"], true);
+    assert_eq!(listed["lines"], json!(GRANT_LINES));
+
+    // p3_submit.
+    let submitted = t.world.submit(synthetic_command()).unwrap();
+    assert_eq!(submitted["understood"], true);
+    let c = submitted["commitment"].clone();
+    let id = c["id"].as_str().unwrap().to_string();
+    assert_eq!(c["agent"], "owner-session");
+    assert_eq!(c["kind"], "synthetic");
+    assert_eq!(c["class"], "R2");
+    assert_eq!(c["operation"], "synthetic.receipt");
+    assert_eq!(c["target"], TARGET_TEXT);
+    assert_eq!(c["state"], "prepared");
+    assert_eq!(c["requires_approval"], true);
+    let receipt = receipt_of(&c);
+    assert_eq!(
+        c["summary"],
+        json!([
+            "SYNTHETIC TEST: Nexus performs no external effect",
+            "Allow issues one test receipt; nothing is written outside Nexus's own records",
+            "No network, process, browser, connector, display or input action",
+            format!("Receipt: {receipt}"),
+            "A receipt is never evidence that a real-world action happened",
+        ])
+    );
+    // p3_status lists exactly that.
+    let listed = t.world.status()["commitments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == id.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(listed, c);
+
+    // The native approval window, and the native Allow.
+    let owner = Shown::new(true);
+    let output = t.world.approve(&id, &owner).unwrap();
+    let windows = owner.actions();
+    assert_eq!(windows.len(), 1);
+    let window = &windows[0];
+    assert_eq!(window.title(), "Allow this action?");
+    assert!(window.expires_in_secs <= 180);
+    let text = window.text();
+    assert_eq!(
+        text.header,
+        vec![
+            ("Effect", SYNTHETIC_EFFECT.to_string()),
+            ("Operation", "synthetic.receipt".to_string()),
+            ("Target", TARGET_TEXT.to_string()),
+            ("Acting for", "owner-session".to_string()),
+            ("Run", c["run"].as_str().unwrap().to_string()),
+            ("Commitment", id.clone()),
+            ("Binding", c["binding"].as_str().unwrap().to_string()),
+            ("Expires in", format!("{} s", window.expires_in_secs)),
+        ]
+    );
+    assert_eq!(json!(text.details), c["summary"]);
+    assert_eq!(
+        output["text"],
+        format!("SYNTHETIC TEST RECEIPT {receipt} for {id}: no external effect was performed.")
+    );
+    assert_eq!(output["bytes"], Value::Null);
+    assert_eq!(
+        output["meta"],
+        json!([
+            ["synthetic", "true"],
+            ["external_effect", "none"],
+            ["receipt", receipt]
+        ])
+    );
+    assert_eq!(output["evidence"]["start"]["status"], "recorded");
+    assert_eq!(output["evidence"]["end"]["status"], "recorded");
+    assert_eq!(commitment_state(&t.world, &id), "succeeded");
+    // No second decision, and no second window.
+    let again = t.world.approve(&id, &owner).unwrap_err();
+    assert!(again.contains("not_pending"), "{again}");
+    assert_eq!(owner.actions().len(), 1);
+
+    // N-6: the audit trail.
+    let rows = audited(&t.audit, &id);
+    assert_eq!(
+        phases(&rows),
+        ["prepared", "approved", "authorized", "started", "finished"]
+    );
+    for row in &rows {
+        assert_eq!(row["kind"], "synthetic", "{row}");
+        assert_eq!(row["operation"], "synthetic.receipt", "{row}");
+        assert_eq!(row["class"], "R2", "{row}");
+        assert_eq!(row["target"], TARGET_TEXT, "{row}");
+        assert_eq!(row["agent"], "owner-session", "{row}");
+    }
+    let finished = rows.last().unwrap();
+    assert_eq!(finished["outcome"], "succeeded");
+    assert_eq!(
+        finished["detail"],
+        json!({ "synthetic": "true", "external_effect": "none", "receipt": receipt })
+    );
+    // N-6: the interface's evidence list (p3_evidence).
+    let evidence: Vec<Value> = t
+        .world
+        .evidence()
+        .into_iter()
+        .filter(|row| row["commitment"] == id.as_str())
+        .collect();
+    assert_eq!(evidence.len(), 5);
+    for row in &evidence {
+        assert_eq!(row["kind"], "synthetic", "{row}");
+        assert_eq!(row["operation"], "synthetic.receipt", "{row}");
+    }
+    assert!(t
+        .audit
+        .lock()
+        .unwrap()
+        .events()
+        .iter()
+        .any(|e| { e.payload["phase"] == "grant_issued" && e.payload["kind"] == "synthetic" }));
+    // The existing kinds' R2 windows keep their wording.
+    use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
+    for kind in [
+        CapabilityKind::Tool,
+        CapabilityKind::Egress,
+        CapabilityKind::Browser,
+        CapabilityKind::Perception,
+        CapabilityKind::Input,
+        CapabilityKind::Connector,
+    ] {
+        let real = ActionConfirmation {
+            kind,
+            class: EffectClass::R2,
+            ..window.clone()
+        };
+        assert_eq!(
+            real.text().header[0],
+            (
+                "Effect",
+                "R2 (a sensitive or irreversible effect)".to_string()
+            )
+        );
+    }
+}
+
+/// T-D2: issuing the receipt creates, changes or removes nothing under the
+/// runtime root but the evidence store's own records (which do change).
+#[test]
+fn p4_uat05_t_d2_a_receipt_writes_nothing_outside_nexus_records() {
+    fn listing(root: &std::path::Path) -> Vec<(String, bool, u64)> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let path = entry.unwrap().path();
+                let relative = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                if relative == "p3-evidence" {
+                    continue;
+                }
+                let meta = std::fs::symlink_metadata(&path).unwrap();
+                if meta.is_dir() {
+                    stack.push(path);
+                }
+                out.push((
+                    relative,
+                    meta.is_dir(),
+                    if meta.is_dir() { 0 } else { meta.len() },
+                ));
+            }
+        }
+        out.sort();
+        out
+    }
+    let t = isolated();
+    let c = granted_probe(&t.world);
+    let before = listing(&t.root);
+    let output = t
+        .world
+        .approve(c["id"].as_str().unwrap(), &Owner(true, AtomicU32::new(0)))
+        .unwrap();
+    assert!(output["text"]
+        .as_str()
+        .unwrap()
+        .starts_with("SYNTHETIC TEST RECEIPT rcpt-"));
+    assert_eq!(listing(&t.root), before);
+    assert!(t
+        .root
+        .join("p3-evidence")
+        .join("evidence.sqlite3")
+        .is_file());
+}
+
+/// T-D3: Cancel (or any answer but Allow) in the native window: declined,
+/// truthfully refused, no receipt.
+#[test]
+fn p4_uat05_t_d3_cancel_in_the_window_issues_no_receipt() {
+    let t = isolated();
+    let c = granted_probe(&t.world);
+    let id = c["id"].as_str().unwrap();
+    let owner = Owner(false, AtomicU32::new(0));
+    let refused = t.world.approve(id, &owner).unwrap_err();
+    assert!(refused.contains("declined"), "{refused}");
+    assert_eq!(owner.1.load(Ordering::SeqCst), 1);
+    assert_eq!(commitment_state(&t.world, id), "denied");
+    assert_eq!(
+        phases(&audited(&t.audit, id)),
+        ["prepared", "approval_declined"]
+    );
+}
+
+/// T-D4: Deny: refused before any window, no receipt.
+#[test]
+fn p4_uat05_t_d4_deny_issues_no_receipt() {
+    let t = isolated();
+    let c = granted_probe(&t.world);
+    let id = c["id"].as_str().unwrap();
+    t.world.deny(id).unwrap();
+    assert_eq!(commitment_state(&t.world, id), "denied");
+    let owner = Owner(true, AtomicU32::new(0));
+    let refused = t.world.approve(id, &owner).unwrap_err();
+    assert!(refused.contains("not_pending"), "{refused}");
+    assert_eq!(owner.1.load(Ordering::SeqCst), 0);
+    assert_eq!(phases(&audited(&t.audit, id)), ["prepared", "denied"]);
+}
+
+/// T-D5: Stop this run: revoked, no receipt.
+#[test]
+fn p4_uat05_t_d5_stopping_the_run_issues_no_receipt() {
+    let t = isolated();
+    let c = granted_probe(&t.world);
+    let id = c["id"].as_str().unwrap();
+    t.world.cancel_run(c["run"].as_str().unwrap()).unwrap();
+    assert_eq!(commitment_state(&t.world, id), "revoked");
+    let owner = Owner(true, AtomicU32::new(0));
+    assert!(t.world.approve(id, &owner).is_err());
+    assert_eq!(owner.1.load(Ordering::SeqCst), 0);
+    assert!(!phases(&audited(&t.audit, id)).contains(&"started".to_string()));
+}
+
+/// T-D6: the emergency stop revokes it and refuses new commands until the
+/// owner's native Resume.
+#[test]
+fn p4_uat05_t_d6_the_emergency_stop_refuses_until_a_native_resume() {
+    let t = isolated();
+    let c = granted_probe(&t.world);
+    let id = c["id"].as_str().unwrap();
+    t.world.emergency_stop();
+    assert_eq!(commitment_state(&t.world, id), "revoked");
+    let refused = t.world.submit(synthetic_command()).unwrap_err();
+    assert!(refused.contains("emergency_stopped"), "{refused}");
+    assert!(t.world.resume(&Owner(false, AtomicU32::new(0))).is_err());
+    assert!(t.world.submit(synthetic_command()).is_err());
+    t.world.resume(&Owner(true, AtomicU32::new(0))).unwrap();
+    let submitted = t.world.submit(synthetic_command()).unwrap();
+    assert_eq!(submitted["commitment"]["state"], "prepared");
+    assert!(!phases(&audited(&t.audit, id)).contains(&"started".to_string()));
+}
+
+/// T-D7: an agent's path never reaches the probe, whatever the agent is
+/// called (`owner-session` included): nothing is committed for it.
+#[test]
+fn p4_uat05_t_d7_an_agent_cannot_reach_the_probe() {
+    let t = isolated();
+    t.world
+        .request_grant(
+            &GrantRequest::Synthetic {},
+            3600,
+            &Owner(true, AtomicU32::new(0)),
+        )
+        .unwrap();
+    for agent in [
+        uuid::Uuid::new_v4().to_string(),
+        "owner-session".to_string(),
+    ] {
+        let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+        let refused = bridge
+            .act(&agent, &Intent::Synthetic(SyntheticIntent {}), false)
+            .unwrap_err();
+        assert!(
+            refused.contains("a synthetic approval test is an owner-session command only"),
+            "{refused}"
+        );
+    }
+    let status = t.world.status();
+    assert!(status["commitments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|c| c["kind"] != "synthetic"));
+    assert!(!t
+        .audit
+        .lock()
+        .unwrap()
+        .events()
+        .iter()
+        .any(|e| { e.payload["phase"] == "prepared" && e.payload["kind"] == "synthetic" }));
+}
+
+/// T-D8: through the owner's one front door, the structured form of the
+/// command is the same owner-session command; nothing the caller adds to
+/// it is accepted; the IPC surface is unchanged (`p3_g6_06`).
+#[test]
+fn p4_uat05_t_d8_the_front_door_takes_the_command_as_data_only() {
+    let t = isolated();
+    t.world
+        .request_grant(
+            &GrantRequest::Synthetic {},
+            3600,
+            &Owner(true, AtomicU32::new(0)),
+        )
+        .unwrap();
+    let submitted = t
+        .world
+        .submit(CommandEnvelope {
+            intent: Some(Intent::Synthetic(SyntheticIntent {})),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(submitted["commitment"]["agent"], "owner-session");
+    assert_eq!(submitted["commitment"]["kind"], "synthetic");
+    assert_eq!(submitted["commitment"]["class"], "R2");
+    for forged in [
+        json!({ "intent": { "domain": "synthetic", "intent": { "x": 1 } } }),
+        json!({ "intent": { "domain": "synthetic", "intent": { "class": "R1" } } }),
+        json!({ "text": "synthetic-receipt", "class": "R1" }),
+    ] {
+        assert!(
+            serde_json::from_value::<CommandEnvelope>(forged.clone()).is_err(),
+            "{forged}"
+        );
+    }
+    let before = evidence_events(&t.audit);
+    let answer = t
+        .world
+        .submit(CommandEnvelope {
+            text: Some("synthetic-receipt R1".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(answer["understood"], false);
+    assert_eq!(answer["reason"], "synthetic-receipt takes nothing");
+    assert!(t
+        .world
+        .submit(CommandEnvelope {
+            text: Some("synthetic-receipt".into()),
+            intent: Some(Intent::Synthetic(SyntheticIntent {})),
+            ..Default::default()
+        })
+        .is_err());
+    assert_eq!(evidence_events(&t.audit), before);
+}
+
+const SYNTHETIC_RESTART_CHILD: &str = "NEXUS_P4_UAT05_RESTART_CHILD";
+
+/// The child of `p4_uat05_t_d9_a_restart_resurrects_nothing`: over the
+/// root it is given, it grants, submits one probe, reports its commitment
+/// and exits without approving it or closing its session. Without its task
+/// it does nothing.
+#[test]
+#[ignore = "run by p4_uat05_t_d9_a_restart_resurrects_nothing"]
+fn p4_uat05_t_d9_restart_child() {
+    let Ok(root) = std::env::var(SYNTHETIC_RESTART_CHILD) else {
+        return;
+    };
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(std::path::Path::new(&root), audit, db);
+    let c = granted_probe(&world);
+    println!("SUBMITTED {}", c["id"].as_str().unwrap());
+}
+
+/// T-D9: after a restart, nothing of the probe survives: the commitment is
+/// unknown (no window, no receipt) and no synthetic grant is live.
+#[test]
+fn p4_uat05_t_d9_a_restart_resurrects_nothing() {
+    let root = private_home();
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "governed_real_world::tests::p4_uat05_t_d9_restart_child",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(SYNTHETIC_RESTART_CHILD, &root)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(out.status.success(), "{text}");
+    let id = text
+        .lines()
+        .find_map(|l| {
+            l.find("SUBMITTED ")
+                .map(|at| l[at + "SUBMITTED ".len()..].trim().to_string())
+        })
+        .unwrap_or_else(|| panic!("the child reported nothing: {text}"));
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let db = Arc::new(NexusDatabase::in_memory().unwrap());
+    let world = RealWorld::for_tests(&root, audit, db);
+    let owner = Owner(true, AtomicU32::new(0));
+    let refused = world.approve(&id, &owner).unwrap_err();
+    assert!(refused.contains("unknown commitment"), "{refused}");
+    assert_eq!(owner.1.load(Ordering::SeqCst), 0);
+    let status = world.status();
+    assert!(status["grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|g| !(g["kind"] == "synthetic" && g["live"] == true)));
+    assert!(status["commitments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|c| c["id"] != id.as_str()));
+    drop(world);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// T-D11: two approvals of one request at once (direct calls; the card
+/// sends one review at a time): never two receipts. The desktop ends an
+/// owner command's run when any approval of it returns, so the one that
+/// is refused first may end the other's run too (an existing behaviour of
+/// `RealWorld::approve`, outside this amendment): then neither issues a
+/// receipt. Whatever the interleaving, every refusal is the backend's,
+/// at most one effect starts, and every start is finished and recorded.
+#[test]
+fn p4_uat05_t_d11_concurrent_approvals_never_issue_two_receipts() {
+    for _ in 0..8 {
+        let t = isolated();
+        let c = granted_probe(&t.world);
+        let id = c["id"].as_str().unwrap().to_string();
+        let owner = Arc::new(Owner(true, AtomicU32::new(0)));
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let (world, owner, id) = (t.world.clone(), owner.clone(), id.clone());
+                std::thread::spawn(move || world.approve(&id, owner.as_ref()))
+            })
+            .collect();
+        let results: Vec<Result<Value, String>> =
+            handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let receipts: Vec<&Value> = results.iter().filter_map(|r| r.as_ref().ok()).collect();
+        assert!(receipts.len() <= 1, "{results:?}");
+        for refused in results.iter().filter_map(|r| r.as_ref().err()) {
+            assert!(
+                ["not_pending", "run_not_active", "run_cancelled"]
+                    .iter()
+                    .any(|class| refused.contains(class)),
+                "{refused}"
+            );
+        }
+        let rows = audited(&t.audit, &id);
+        let started = phases(&rows).iter().filter(|p| *p == "started").count();
+        let finished: Vec<&Value> = rows.iter().filter(|r| r["phase"] == "finished").collect();
+        assert!(started <= 1, "{rows:?}");
+        assert_eq!(finished.len(), started, "{rows:?}");
+        let succeeded = finished
+            .iter()
+            .filter(|r| r["outcome"] == "succeeded")
+            .count();
+        assert_eq!(succeeded, receipts.len(), "{rows:?}");
+        let state = commitment_state(&t.world, &id);
+        if let Some(receipt) = receipts.first() {
+            assert_eq!(state, "succeeded");
+            assert!(receipt["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("SYNTHETIC TEST RECEIPT rcpt-"));
+        } else {
+            assert!(
+                ["revoked", "cancelled", "failed"].contains(&state.as_str()),
+                "{state}"
+            );
+        }
+    }
 }
