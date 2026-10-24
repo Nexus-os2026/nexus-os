@@ -8,6 +8,7 @@ import {
   listPendingConsents,
 } from "../api/backend";
 import type { ConsentNotification } from "../types";
+import { LegacyConsentLabel } from "./ContextualApprovalCard";
 
 const RISK_COLORS: Record<string, string> = {
   Critical: "#ef4444",
@@ -233,6 +234,7 @@ export function InlineApprovalBanner({
                 >
                   {c.agent_name}: {c.operation_summary}
                 </div>
+                <LegacyConsentLabel />
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 <button type="button"
@@ -360,6 +362,7 @@ export function InlineApprovalBanner({
             >
               {top.operation_summary}
             </div>
+            <LegacyConsentLabel style={{ marginTop: 2 }} />
             {top.fuel_cost_estimate > 0 && (
               <span
                 style={{

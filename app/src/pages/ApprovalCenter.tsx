@@ -19,10 +19,13 @@ import {
   hasDesktopRuntime,
   hitlStats,
   listPendingConsents,
+  p3Evidence,
   reviewConsentBatch,
 } from "../api/backend";
 import type { HitlStats } from "../api/backend";
 import type { ConsentNotification } from "../types";
+import { GovernedApprovalsInbox, LegacyConsentLabel } from "../components/ContextualApprovalCard";
+import { useOwnerActions, usePendingOwnerApprovals } from "../hooks/usePendingOwnerApprovals";
 
 // ── Icon mapping by operation type ──
 
@@ -169,6 +172,8 @@ function PendingCard({
           {item.risk_level}
         </span>
       </div>
+
+      <LegacyConsentLabel style={{ marginBottom: "0.4rem" }} />
 
       {/* Operation summary */}
       <div style={{ color: "var(--text-primary, #e2e8f0)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
@@ -387,6 +392,99 @@ function StatsBar({ stats }: { stats: HitlStats | null }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Governed approvals (Phase Three) ──
+//
+// A secondary inbox for R2 commitments, separate from the legacy consent
+// queue below. Review asks the backend for its native window; the evidence
+// list is the backend's bounded recent records, not the whole ledger.
+
+const EVIDENCE_SHOWN = 50;
+
+type EvidenceRead = { ok: true; records: Record<string, unknown>[] } | { ok: false; reason: string };
+
+function GovernedApprovalsSection() {
+  const approvals = usePendingOwnerApprovals();
+  const { results } = useOwnerActions();
+  const [evidence, setEvidence] = useState<EvidenceRead | null>(null);
+  const latestResult = results[0]?.key ?? 0;
+
+  useEffect(() => {
+    let current = true;
+    p3Evidence()
+      .then((records) => {
+        if (!current) return;
+        setEvidence(
+          Array.isArray(records)
+            ? { ok: true, records: records.filter((r): r is Record<string, unknown> => !!r && typeof r === "object") }
+            : { ok: false, reason: "Nexus returned evidence this page cannot read" },
+        );
+      })
+      .catch((e) => {
+        if (current) setEvidence({ ok: false, reason: e instanceof Error ? e.message : String(e) });
+      });
+    return () => {
+      current = false;
+    };
+  }, [latestResult]);
+
+  return (
+    <div
+      data-testid="governed-approvals-section"
+      style={{
+        border: "1px solid rgba(239, 68, 68, 0.35)",
+        borderRadius: 10,
+        padding: "1rem 1.2rem",
+        marginBottom: "2rem",
+      }}
+    >
+      <h3
+        style={{
+          fontFamily: "var(--font-display, monospace)",
+          color: "var(--text-primary, #e2e8f0)",
+          fontSize: "1rem",
+          margin: "0 0 0.4rem",
+        }}
+      >
+        Governed approvals — Phase Three
+      </h3>
+      <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", color: "var(--text-secondary, #94a3b8)" }}>
+        Sensitive (R2) effects wait here and in the card shown on every page. This is a secondary inbox: you allow or
+        refuse an effect only in the Nexus native approval window.
+      </p>
+      <GovernedApprovalsInbox approvals={approvals} variant="page" />
+      <div style={{ marginTop: "0.75rem" }}>
+        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-primary, #e2e8f0)" }}>
+          Recent governed evidence
+        </div>
+        <div style={{ fontSize: "0.72rem", color: "var(--text-secondary, #94a3b8)", marginBottom: "0.3rem" }}>
+          Only the most recent records Nexus returns (a bounded window); this is not the complete historical ledger.
+        </div>
+        {evidence === null && <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Reading evidence…</div>}
+        {evidence !== null && !evidence.ok && (
+          <div data-testid="governed-evidence-unavailable" style={{ fontSize: "0.75rem", color: "#fbbf24" }}>
+            Evidence UNAVAILABLE ({evidence.reason})
+          </div>
+        )}
+        {evidence !== null && evidence.ok && (
+          <div data-testid="governed-evidence">
+            <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+              Showing {Math.min(EVIDENCE_SHOWN, evidence.records.length)} of the {evidence.records.length} records
+              returned.
+            </div>
+            {evidence.records.slice(0, EVIDENCE_SHOWN).map((record, index) => (
+              <div key={index} style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "#d1d5db" }}>
+                {typeof record.at_ms === "number" ? new Date(record.at_ms).toLocaleTimeString() : "—"}{" "}
+                {String(record.phase ?? "")} {String(record.class ?? "")} {String(record.operation ?? "")}{" "}
+                {String(record.outcome ?? "")} {String(record.target ?? "")}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -646,6 +744,20 @@ export default function ApprovalCenter(): JSX.Element {
           <AlertTriangle size={14} /> {error}
         </div>
       )}
+
+      <GovernedApprovalsSection />
+
+      <h3
+        style={{
+          fontFamily: "var(--font-display, monospace)",
+          color: "var(--text-primary, #e2e8f0)",
+          fontSize: "1rem",
+          margin: "0 0 0.3rem",
+        }}
+      >
+        Desktop consent
+      </h3>
+      <LegacyConsentLabel style={{ fontSize: "0.8rem", marginBottom: "1rem" }} />
 
       {!isDesktop && (
         <div
