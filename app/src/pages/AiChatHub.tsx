@@ -1,6 +1,7 @@
 import * as eventMod from "@tauri-apps/api/event";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import RequiresLlm from "../components/RequiresLlm";
+import { LegacyConsentLabel } from "../components/ContextualApprovalCard";
 import { Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw, Paperclip } from "lucide-react";
 import {
   sendChat, chatWithOllama, conductBuild, hasDesktopRuntime,
@@ -1917,6 +1918,7 @@ export default function AiChatHub() {
                           </span>
                         </div>
                         <div className="ch-approval-body">
+                          <LegacyConsentLabel style={{ marginBottom: 4 }} />
                           <div className="ch-approval-row">
                             <span className="ch-approval-label">Action</span>
                             <span className="ch-approval-value">{msg.approval.operation_type}: {msg.approval.operation_summary}</span>

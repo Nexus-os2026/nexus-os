@@ -455,19 +455,19 @@ test('the policy schema is strict: no wildcard, severity-wide or package-wide ex
   }
 });
 
-test('the committed policy is valid and excepts exactly the braces advisory', () => {
+// GHSA-vfj7-8cjw-p6xm was withdrawn on 2026-10-23, so the committed policy no
+// longer excepts it, or anything. The fixture policy above keeps its braces
+// exception only to exercise the exception rules.
+test('the committed policy is valid and excepts nothing', () => {
   const committed = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'security', 'npm-advisory-policy.json'), 'utf8'));
   assert.deepEqual(validatePolicy(committed), []);
   assert.deepEqual(committed.auditedRoots, ['app', 'packaging/builder-toolchain']);
   assert.deepEqual(committed.excludedRoots.map((e) => e.path), ['nexus-website', 'scripts/page-audit', 'sdk/typescript']);
-  assert.deepEqual(
-    committed.exceptions.map(({ id, package: name, version, severity, range, roots, reviewBy }) => ({ id, name, version, severity, range, roots, reviewBy })),
-    [{ id: BRACES, name: 'braces', version: '3.0.3', severity: 'high', range: '<=3.0.3', roots: ['app', 'packaging/builder-toolchain'], reviewBy: '2026-11-30' }],
-  );
-  assert.deepEqual(committed.exceptions[0].npmFixAvailable, [
-    { root: 'app', value: REVIEWED_FIX },
-    { root: 'packaging/builder-toolchain', value: REVIEWED_FIX },
-  ]);
+  assert.deepEqual(committed.exceptions, []);
+  // Under the committed policy any reported advisory fails, braces included.
+  const tracked = (t) => [...t, 'scripts/page-audit/package.json'];
+  passes(gate({ pol: committed, tracked, audits: { app: ok(report({})), 'packaging/builder-toolchain': ok(report({})) } }));
+  fails(gate({ pol: committed, tracked }), new RegExp(`unexcepted advisory ${BRACES} on braces@3\\.0\\.3 \\(high, affected <=3\\.0\\.3\\)`));
 });
 
 test('credentials never reach the output', () => {
