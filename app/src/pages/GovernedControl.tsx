@@ -86,6 +86,9 @@ export function grantRequest(kind: string, value: string, extra: string): P3Gran
       const [connector, account] = items;
       return connector && account && details.length ? { kind: "connector", connector, account, operations: details } : null;
     }
+    case "synthetic":
+      // The owner's synthetic approval test: nothing to choose; at most 15 minutes.
+      return { kind: "synthetic" };
     default:
       return null;
   }
@@ -246,7 +249,8 @@ export default function GovernedControl() {
         Every real-world effect is a commitment under governance: prepared from your command, covered by a grant you
         gave natively, approved natively when it is sensitive (R2), run once, and recorded in the audit trail.
         Commands are data: fetch &lt;url&gt;, browse &lt;url&gt; [read &lt;selector&gt;], observe, hash &lt;text&gt;,
-        say &lt;text&gt;, connector &lt;operation&gt; &lt;json&gt;.
+        say &lt;text&gt;, connector &lt;operation&gt; &lt;json&gt;, synthetic-receipt (a test of the R2 approval window; no
+        external effect).
       </p>
 
       {error && <div style={{ ...cardStyle, borderColor: alpha(RED, 0.5), color: RED }}>{error}</div>}
@@ -321,6 +325,7 @@ export default function GovernedControl() {
           <option value="connector">connector</option>
           <option value="perception">observe the agent display</option>
           <option value="input">input on the agent display</option>
+          <option value="synthetic">synthetic test receipts (no external effect)</option>
         </select>
         <input
           style={inputStyle}

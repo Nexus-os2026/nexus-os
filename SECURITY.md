@@ -136,7 +136,10 @@ to an isolated agent display, connector operations with brokered vault
 credentials) is an action commitment bound to its agent, run, target and
 exact parameters. It needs the owner's natively confirmed grant, and an R2
 (sensitive or irreversible) effect also needs the owner's native approval of
-that exact commitment. It is revalidated immediately before it happens, runs
+that exact commitment. (Phase Four amendment P4-UAT05, adopted by the Owner:
+one owner-only synthetic approval probe takes the R2 approval path with no
+external effect; its records are labelled `synthetic` and are never evidence
+of a real-world effect.) It is revalidated immediately before it happens, runs
 once, is cancellable, and is recorded in the hash-chained audit trail before
 and after. Credentials stay in the vault and reach a request only through a
 lease bound to that commitment and origin. Every production real-world

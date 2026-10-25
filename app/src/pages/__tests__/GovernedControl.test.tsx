@@ -128,3 +128,22 @@ describe("GovernedControl (Phase Three)", () => {
     expect(grantRequest("connector", "gmail", "")).toBeNull();
   });
 });
+
+describe("GovernedControl: the synthetic approval test's grant (P4-UAT05, T-F5)", () => {
+  it("asks for the synthetic grant only as data, through p3_request_grant, with its plain wording", async () => {
+    expect(grantRequest("synthetic", "", "")).toEqual({ kind: "synthetic" });
+    expect(grantRequest("synthetic", "R0 tool egress", "86400")).toEqual({ kind: "synthetic" });
+    mockCommands({ ...MOCKS, p3_request_grant: "grant-1" });
+    render(<GovernedControl />);
+    await waitFor(() => expectInvoked("p3_status"));
+    const option = screen.getByRole("option", { name: "synthetic test receipts (no external effect)" }) as HTMLOptionElement;
+    expect(option.value).toBe("synthetic");
+    expect(document.body.textContent).toContain("synthetic-receipt (a test of the R2 approval window; no external effect)");
+    fireEvent.change(screen.getByLabelText("grant kind"), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByText("Request grant…"));
+    await waitFor(() => expectInvoked("p3_request_grant"));
+    expect(argsOf("p3_request_grant")).toEqual([{ request: { kind: "synthetic" }, ttlSecs: 3600, ttl_secs: 3600 }]);
+    const sent = mockInvoke.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(sent.filter((cmd: string) => !["p3_status", "p3_evidence", "p3_request_grant"].includes(cmd))).toEqual([]);
+  });
+});

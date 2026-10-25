@@ -880,3 +880,140 @@ describe("Integration prep 01: strict status", () => {
     expect(argsOf("p3_approve")).toHaveLength(0);
   });
 });
+
+// ── P4-UAT05: the owner's synthetic approval test on the card ──────────────
+//
+// The card is kind-agnostic: a synthetic request (R2, kind "synthetic") is
+// shown, reviewed and refused exactly as any R2 request, from the backend's
+// listing only. Scripted backend: no native window, no real effect.
+
+const SYNTHETIC: P3Commitment = {
+  id: "cmt-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+  agent: "owner-session",
+  run: "run-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+  kind: "synthetic",
+  class: "R2",
+  operation: "synthetic.receipt",
+  target: "none (synthetic test receipt; no external target)",
+  summary: [
+    "SYNTHETIC TEST: Nexus performs no external effect",
+    "Allow issues one test receipt; nothing is written outside Nexus's own records",
+    "No network, process, browser, connector, display or input action",
+    "Receipt: rcpt-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "A receipt is never evidence that a real-world action happened",
+  ],
+  state: "prepared",
+  requires_approval: true,
+  binding: "5a5a5a5a5a5a",
+};
+
+const SYNTHETIC_RECEIPT = `SYNTHETIC TEST RECEIPT rcpt-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a for ${SYNTHETIC.id}: no external effect was performed.`;
+
+describe("P4-UAT05: the synthetic approval test on the card", () => {
+  beforeEach(() => {
+    resetOwnerActions();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("T-F1: a waiting synthetic request shows on Chat, Agents and Files with all five lines, not on Governed Control or Approvals", async () => {
+    install([SYNTHETIC]);
+    const { rerender } = render(<GlobalGovernedApprovals currentPage="ai-chat-hub" />);
+    await waitFor(() => card(SYNTHETIC.id));
+    for (const page of ["ai-chat-hub", "agents", "file-manager"]) {
+      rerender(<GlobalGovernedApprovals currentPage={page} />);
+      await waitFor(() => card(SYNTHETIC.id));
+      const text = card(SYNTHETIC.id).textContent ?? "";
+      for (const value of [...SYNTHETIC.summary, "R2 · synthetic", "owner-session", SYNTHETIC.target, SYNTHETIC.binding]) {
+        expect(text).toContain(value);
+      }
+      expect(screen.getByText(PREVIEW_CAPTION)).toBeTruthy();
+    }
+    for (const page of GLOBAL_CARD_SUPPRESSED_PAGES) {
+      rerender(<GlobalGovernedApprovals currentPage={page} />);
+      expect(document.querySelector('[data-testid="governed-approval-card"]')).toBeNull();
+    }
+    expect(argsOf("p3_approve")).toHaveLength(0);
+  });
+
+  it("T-F2: Review sends exactly the synthetic request's id and nothing else", async () => {
+    install([SYNTHETIC]);
+    render(<GlobalGovernedApprovals currentPage="agents" />);
+    await waitFor(() => card(SYNTHETIC.id));
+    fireEvent.click(button(card(SYNTHETIC.id), REVIEW));
+    await waitFor(() => expect(argsOf("p3_approve")).toHaveLength(1));
+    expect(argsOf("p3_approve")).toEqual([{ commitment: SYNTHETIC.id }]);
+    expect(Object.keys(argsOf("p3_approve")[0])).toEqual(["commitment"]);
+  });
+
+  it("T-F3: nothing reviews a synthetic request on mount, polling, focus or route changes", async () => {
+    vi.useFakeTimers();
+    install([SYNTHETIC]);
+    const { rerender } = render(<GlobalGovernedApprovals currentPage="ai-chat-hub" />);
+    await tick();
+    expect(cards()).toHaveLength(1);
+    for (const page of ["agents", "file-manager", "ai-chat-hub", "agents"]) {
+      rerender(<GlobalGovernedApprovals currentPage={page} />);
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new CustomEvent("p3-approval-pending", { detail: { commitment: SYNTHETIC.id } }));
+      await tick(9_000);
+    }
+    expect(argsOf("p3_approve")).toHaveLength(0);
+    expect(argsOf("p3_deny")).toHaveLength(0);
+    expect(argsOf("p3_cancel_run")).toHaveLength(0);
+  });
+
+  it("T-F4: a malformed synthetic entry makes the whole status unreadable: no card, no review", async () => {
+    vi.useFakeTimers();
+    for (const bad of [
+      [{ ...SYNTHETIC, requires_approval: false }],
+      [{ ...SYNTHETIC, class: "R1" as const, requires_approval: true }],
+      [SYNTHETIC, { ...SYNTHETIC }],
+    ]) {
+      install([]);
+      backend.statusOverride = () =>
+        Promise.resolve({
+          ...statusReply(),
+          commitments: bad,
+          runs: [listRun(SYNTHETIC)],
+        });
+      const { unmount } = render(<GlobalGovernedApprovals currentPage="ai-chat-hub" />);
+      await tick();
+      expect(screen.getByTestId("governed-approvals-unavailable")).toBeTruthy();
+      expect(cards()).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: REVIEW })).toBeNull();
+      unmount();
+    }
+    expect(argsOf("p3_approve")).toHaveLength(0);
+  });
+
+  it("T-F6: after the native window, the card shows Nexus's own re-read state and receipt, or its refusal", async () => {
+    install([SYNTHETIC]);
+    backend.approve = async () => {
+      setState(SYNTHETIC.id, "succeeded");
+      return { text: SYNTHETIC_RECEIPT, bytes: null, meta: [["synthetic", "true"]] };
+    };
+    const { unmount } = render(<GlobalGovernedApprovals currentPage="ai-chat-hub" />);
+    await waitFor(() => card(SYNTHETIC.id));
+    fireEvent.click(button(card(SYNTHETIC.id), REVIEW));
+    await waitFor(() => expect(screen.getByTestId("governed-approval-result").textContent).toContain("Nexus now reports: Succeeded."));
+    expect(screen.getByTestId("governed-approval-result").textContent).toContain(SYNTHETIC_RECEIPT);
+    unmount();
+    resetOwnerActions();
+    install([SYNTHETIC]);
+    backend.approve = async () => {
+      setState(SYNTHETIC.id, "denied");
+      throw new Error("governed control: refused: declined");
+    };
+    render(<GlobalGovernedApprovals currentPage="agents" />);
+    await waitFor(() => card(SYNTHETIC.id));
+    fireEvent.click(button(card(SYNTHETIC.id), REVIEW));
+    await waitFor(() => expect(screen.getByTestId("governed-approval-result")).toBeTruthy());
+    const notice = screen.getByTestId("governed-approval-result").textContent ?? "";
+    expect(notice).toContain("Nexus refused: Declined in the Nexus approval window (governed control: refused: declined)");
+    expect(notice).toContain("Nexus now reports: Denied.");
+    expect(notice).not.toContain("SYNTHETIC TEST RECEIPT");
+  });
+});

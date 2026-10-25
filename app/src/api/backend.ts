@@ -3870,7 +3870,9 @@ export type P3GrantRequest =
   | { kind: "connector"; connector: string; account: string; operations: string[] }
   | { kind: "browser"; origins: string[]; downloads?: boolean }
   | { kind: "perception" }
-  | { kind: "input"; max_steps: number; session_r1?: boolean };
+  | { kind: "input"; max_steps: number; session_r1?: boolean }
+  // P4-UAT05: the owner's synthetic approval test (no external effect).
+  | { kind: "synthetic" };
 
 export function p3Status(): Promise<P3Status> {
   return invokeDesktop<P3Status>("p3_status");

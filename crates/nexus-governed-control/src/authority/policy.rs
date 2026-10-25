@@ -82,6 +82,9 @@ pub enum GrantScope {
         account: String,
         operations: Vec<String>,
     },
+    /// P4-UAT05: the owner's synthetic approval probe (no external effect);
+    /// built only by `crate::synthetic`.
+    Synthetic,
 }
 
 impl GrantScope {
@@ -93,6 +96,7 @@ impl GrantScope {
             GrantScope::Perception { .. } => CapabilityKind::Perception,
             GrantScope::Input { .. } => CapabilityKind::Input,
             GrantScope::Connector { .. } => CapabilityKind::Connector,
+            GrantScope::Synthetic => CapabilityKind::Synthetic,
         }
     }
 
@@ -165,6 +169,13 @@ impl GrantScope {
                     "Connector \"{connector}\" (your label \"{account}\"), with its one stored credential"
                 ),
                 format!("Operations: {}", operations.join(", ")),
+            ],
+            GrantScope::Synthetic => vec![
+                "Synthetic test receipts only: Nexus performs no external effect".to_string(),
+                "Usable only by your own commands, never by an agent".to_string(),
+                "Each receipt also needs your approval in a separate Nexus approval window"
+                    .to_string(),
+                "A receipt is never evidence that a real-world action happened".to_string(),
             ],
         }
     }

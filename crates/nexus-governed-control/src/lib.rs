@@ -113,6 +113,7 @@ mod launcher;
 pub(crate) mod ledger;
 pub mod planned;
 pub mod runtime_root;
+pub mod synthetic;
 pub mod tool;
 
 #[cfg(test)]
