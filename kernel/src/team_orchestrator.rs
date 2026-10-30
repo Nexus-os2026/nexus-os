@@ -845,52 +845,60 @@ mod tests {
     }
 
     /// P4-S1-H1: a stopped member is given no team task: no context is
-    /// derived for it and no model is asked in its name; its task is failed
-    /// (and goes to another member, as a failed task does).
+    /// derived for it and no model is asked in its name; its tasks fail. The
+    /// control: running, the same member is asked for the same tasks. (The
+    /// researcher is the first capability match of two tasks.)
     #[test]
     fn p4_s1_h1_a_stopped_member_is_given_no_team_task() {
-        let mut sup = Supervisor::new();
-        let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
-        sup.stop_agent(uuid::Uuid::parse_str(&writer_id).unwrap())
-            .unwrap();
-        let hm = TestHm::new().register_every_agent();
-        let llm = team_mock(&hm);
-        let prompts = llm.prompts.clone();
-        let orchestrator = TeamOrchestrator::new(
-            Arc::new(Mutex::new(sup)),
-            Arc::new(Mutex::new(AuditTrail::new())),
-            Arc::new(llm),
-        );
-        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+        for stopped in [false, true] {
+            let mut sup = Supervisor::new();
+            let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
+            if stopped {
+                sup.stop_agent(uuid::Uuid::parse_str(&researcher_id).unwrap())
+                    .unwrap();
+            }
+            let hm = TestHm::new().register_every_agent();
+            let llm = team_mock(&hm);
+            let prompts = llm.prompts.clone();
+            let orchestrator = TeamOrchestrator::new(
+                Arc::new(Mutex::new(sup)),
+                Arc::new(Mutex::new(AuditTrail::new())),
+                Arc::new(llm),
+            );
+            let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
 
-        let mut director = director(&hm, &director_id);
-        let result = orchestrator
-            .execute_team_workflow(
-                &hm.issuer,
-                &mut director,
-                &config,
-                "Research, write and publish",
-            )
-            .unwrap();
+            let mut director = director(&hm, &director_id);
+            let result = orchestrator
+                .execute_team_workflow(
+                    &hm.issuer,
+                    &mut director,
+                    &config,
+                    "Research, write and publish",
+                )
+                .unwrap();
 
-        let prompts = prompts.lock().unwrap();
-        assert!(
-            prompts
+            let asked = prompts
+                .lock()
+                .unwrap()
                 .iter()
-                .any(|p| p.contains("You are nexus-researcher")),
-            "the running members were not asked: {prompts:?}"
-        );
-        assert!(
-            !prompts.iter().any(|p| p.contains("You are nexus-writer")),
-            "the stopped writer was asked: {prompts:?}"
-        );
-        for task in result
-            .task_results
-            .iter()
-            .filter(|t| t.agent_id == writer_id)
-        {
-            assert!(!task.success, "{task:?}");
-            assert!(task.output.contains("is Stopped"), "{task:?}");
+                .filter(|p| p.contains("You are nexus-researcher"))
+                .count();
+            let tasks: Vec<_> = result
+                .task_results
+                .iter()
+                .filter(|t| t.agent_id == researcher_id)
+                .collect();
+            assert!(!tasks.is_empty(), "stopped={stopped}: no task for it");
+            if stopped {
+                assert_eq!(asked, 0, "the stopped researcher was asked");
+                for task in tasks {
+                    assert!(!task.success, "{task:?}");
+                    assert!(task.output.contains("is Stopped"), "{task:?}");
+                }
+            } else {
+                assert_eq!(asked, tasks.len(), "{tasks:?}");
+                assert!(tasks.iter().all(|t| t.success), "{tasks:?}");
+            }
         }
     }
 
