@@ -1893,11 +1893,10 @@ impl CognitiveRuntime {
             let (step_executed, step_fuel, step_error) = match executed {
                 Ok(StepOutput { text: result, item }) => {
                     eprintln!(
-                        "[agent:{}] actuator result for {}: {} chars — {}",
+                        "[agent:{}] actuator result for {}: {} bytes",
                         agent_id,
                         action_clone.action_type(),
-                        result.len(),
-                        &result[..result.floor_char_boundary(200)]
+                        result.len()
                     );
                     state.results.insert(step.id.clone(), item);
                     step.status = StepStatus::Succeeded;
@@ -1955,10 +1954,9 @@ impl CognitiveRuntime {
                 }
                 Err(error) => {
                     eprintln!(
-                        "[agent:{}] executor FAILED for {}: {}",
+                        "[agent:{}] executor FAILED for {}",
                         agent_id,
-                        action_clone.action_type(),
-                        &error[..error.floor_char_boundary(300)]
+                        action_clone.action_type()
                     );
                     if error.starts_with("human approval required:")
                         || error.starts_with("Warden blocked action:")
