@@ -3393,6 +3393,90 @@ mod tests {
         }
     }
 
+    /// P4-S1-H1, concurrency: the supervisor stays held from the decision
+    /// until the loop, its flag and its snapshot are all published, so no
+    /// stop lands in between. The test holds the snapshot map (published
+    /// last): once the flag is in place, the assignment must still hold the
+    /// supervisor and `loops`, and a stop made then finds the snapshot.
+    #[test]
+    fn p4_s1_h1_no_stop_lands_between_the_decision_and_the_publication() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup.clone());
+        let runtime = Arc::new(runtime);
+        let goal = AgentGoal::new("published whole".into(), 5);
+        let goal_id = goal.id.clone();
+        let unit = goal_unit(&agent_id, &goal);
+        let snapshots = runtime.status_snapshots.lock().unwrap();
+        let assigning = {
+            let (runtime, agent_id) = (runtime.clone(), agent_id.clone());
+            thread::spawn(move || runtime.assign_goal_in(&agent_id, goal, unit))
+        };
+        wait_until("the assignment installed its flag", || {
+            runtime
+                .shutdown_flags
+                .lock()
+                .unwrap()
+                .contains_key(&agent_id)
+        });
+        assert!(
+            matches!(sup.try_lock(), Err(std::sync::TryLockError::WouldBlock)),
+            "the supervisor was let go before the snapshot was published"
+        );
+        assert!(
+            matches!(
+                runtime.loops.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ),
+            "loops was let go before the snapshot was published"
+        );
+        let stopping = {
+            let (sup, runtime, agent_id) = (sup.clone(), runtime.clone(), agent_id.clone());
+            thread::spawn(move || {
+                let mut sup = sup.lock().unwrap();
+                sup.stop_agent(uuid(&agent_id)).unwrap();
+                runtime
+                    .get_agent_status_fast(&agent_id)
+                    .and_then(|s| s.active_goal)
+                    .map(|g| g.id)
+            })
+        };
+        drop(snapshots);
+        assigning.join().unwrap().unwrap();
+        assert_eq!(stopping.join().unwrap(), Some(goal_id));
+        assert_eq!(published(&runtime, &agent_id), [true; 3]);
+    }
+
+    /// P4-S1-H1 control: the unit check kept its meaning under the guards. A
+    /// unit of another agent, or of another issuer, is refused for a running
+    /// agent, and nothing is published.
+    #[test]
+    fn p4_s1_h1_a_unit_of_another_agent_or_issuer_is_refused() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("not its unit".into(), 5);
+        let another_agent = goal_unit(&uuid::Uuid::new_v4().to_string(), &goal);
+        let another_issuer = TestHm::new()
+            .register_every_agent()
+            .issuer
+            .begin_unit(
+                Principal::Agent(uuid(&agent_id)),
+                Unit::Goal {
+                    goal_id: uuid(&goal.id),
+                },
+            )
+            .unwrap();
+        for unit in [another_agent, another_issuer] {
+            let refused = runtime.assign_goal_in(&agent_id, goal.clone(), unit);
+            assert!(
+                refused
+                    .as_ref()
+                    .is_err_and(|e| e.to_string().contains("another issuer or agent")),
+                "{refused:?}"
+            );
+            assert_eq!(published(&runtime, &agent_id), [false; 3]);
+        }
+    }
+
     /// Records every prompt the planner sends (the admitted prompt, through
     /// the issuer).
     fn prompt_recorder() -> ScriptedLlm {
