@@ -3418,17 +3418,27 @@ mod tests {
                 .unwrap()
                 .contains_key(&agent_id)
         });
-        assert!(
-            matches!(sup.try_lock(), Err(std::sync::TryLockError::WouldBlock)),
-            "the supervisor was let go before the snapshot was published"
-        );
-        assert!(
-            matches!(
-                runtime.loops.try_lock(),
-                Err(std::sync::TryLockError::WouldBlock)
-            ),
-            "loops was let go before the snapshot was published"
-        );
+        // Both stay held while the snapshot is unpublished, which the test
+        // keeps it, so they are watched for a while rather than looked at
+        // once: an assignment that let either go before publishing is caught
+        // as soon as its thread runs, not only if it loses a race. The window
+        // bounds how long the watch waits; the held guards, not the window,
+        // are what is proven.
+        let watched = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < watched {
+            assert!(
+                matches!(sup.try_lock(), Err(std::sync::TryLockError::WouldBlock)),
+                "the supervisor was let go before the snapshot was published"
+            );
+            assert!(
+                matches!(
+                    runtime.loops.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                ),
+                "loops was let go before the snapshot was published"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
         let stopping = {
             let (sup, runtime, agent_id) = (sup.clone(), runtime.clone(), agent_id.clone());
             thread::spawn(move || {
