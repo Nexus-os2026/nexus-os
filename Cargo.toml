@@ -92,7 +92,32 @@ scraper = "0.20"
 # workspace pins 1.94). Nexus uses core Wasm only (no component
 # model, async or WASI). Re-bump via this single workspace pin
 # going forward.
-wasmtime = "36.0.20"
+# Features: Wasmtime's `default` set minus `cache` only. No Nexus
+# source enables Wasmtime's on-disk compilation cache (`Config::cache`),
+# and Wasmtime's cache crate, through 50.0.1, requires zstd ^0.13,
+# which carries RUSTSEC-2026-0391, -0398, -0403 and -0410 with no
+# 0.13.x or zstd-safe 7.x fix. When re-bumping, keep this list equal
+# to the pinned release's `default` set minus `cache`.
+wasmtime = { version = "36.0.20", default-features = false, features = [
+    "async",
+    "gc",
+    "gc-drc",
+    "gc-null",
+    "wat",
+    "profiling",
+    "parallel-compilation",
+    "cranelift",
+    "pooling-allocator",
+    "demangle",
+    "addr2line",
+    "coredump",
+    "debug-builtins",
+    "runtime",
+    "component-model",
+    "threads",
+    "stack-switching",
+    "std",
+] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
