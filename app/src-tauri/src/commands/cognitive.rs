@@ -2649,10 +2649,19 @@ fn lifecycle_of(state: &AppState, agent_id: &str) -> Option<AgentState> {
 /// P4-S1-H1: why an agent in `lifecycle` takes no new work (a goal, a
 /// sub-task, a session to lead), or `None` when it does: only a Running or
 /// Paused agent does, as the kernel's goal admission (`admit_new_work`)
-/// decides.
+/// decides, in the same words. Every state is named, so a new one must be
+/// placed here.
 fn refuses_new_work(agent_id: &str, lifecycle: AgentState) -> Option<String> {
-    (!matches!(lifecycle, AgentState::Running | AgentState::Paused))
-        .then(|| format!("agent '{agent_id}' is {lifecycle}: it takes no new goal or task"))
+    match lifecycle {
+        AgentState::Running | AgentState::Paused => None,
+        AgentState::Created
+        | AgentState::Starting
+        | AgentState::Stopping
+        | AgentState::Stopped
+        | AgentState::Destroyed => Some(format!(
+            "agent '{agent_id}' is {lifecycle}: it takes no new goal or task"
+        )),
+    }
 }
 
 /// End the agent's loop only while it still drives `goal_id` (a goal given
@@ -3254,7 +3263,10 @@ impl HivemindAdmission {
     /// participant's policy changed either way, a mix, or a policy that can
     /// no longer be established ends the session's work. A participant
     /// other than the lead that takes no new work is refused only its own
-    /// sub-tasks.
+    /// sub-tasks. The lead's state is read as it is now: a lead stopped and
+    /// started again between two requalifications is not seen, and what a
+    /// sub-task's loop does without a model call (and the session's wait on
+    /// it) is not requalified.
     pub(crate) fn requalify(&self) -> Result<(), String> {
         let held = match lifecycle_of(&self.state, &self.lead) {
             Some(lifecycle) => refuses_new_work(&self.lead, lifecycle),
