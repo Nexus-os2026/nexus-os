@@ -19,6 +19,7 @@ use crate::hm::{
     DerivedItem, DispatchContext, DispatchIssuer, Parent, Principal, PromptBuilder, PromptEnvelope,
     PromptSource, RecallSpec, RecalledRecord, RecordTable, SourceKind, Unit,
 };
+use crate::lifecycle::AgentState;
 use crate::supervisor::Supervisor;
 use arc_swap::ArcSwap;
 use nexus_persistence::{NexusDatabase, StateStore};
@@ -830,6 +831,27 @@ struct InFlight {
     results: HashMap<String, StepItem>,
 }
 
+/// Whether the supervisor lets `agent_id` take new work (P4-S1-H1): a goal,
+/// with its own unit or one handed in (a HiveMind sub-task's), or a team
+/// task. Only a registered agent that is Running or Paused does (a paused
+/// agent's scheduled tick runs, as pausing keeps schedules); one not yet
+/// started (Created, Starting) or stopping, stopped or destroyed takes none.
+/// Decided under the caller's supervisor guard, which an assignment holds
+/// until its loop is published.
+pub(crate) fn admit_new_work(sup: &Supervisor, agent_id: &str) -> Result<uuid::Uuid, AgentError> {
+    let agent = uuid::Uuid::parse_str(agent_id)
+        .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
+    match sup.get_agent(agent).map(|handle| handle.state) {
+        Some(AgentState::Running | AgentState::Paused) => Ok(agent),
+        Some(state) => Err(AgentError::SupervisorError(format!(
+            "agent '{agent_id}' is {state}: it takes no new goal or task"
+        ))),
+        None => Err(AgentError::SupervisorError(format!(
+            "agent '{agent_id}' not found in supervisor"
+        ))),
+    }
+}
+
 /// The cognitive runtime manages agent loops.
 pub struct CognitiveRuntime {
     supervisor: Arc<Mutex<Supervisor>>,
@@ -841,6 +863,9 @@ pub struct CognitiveRuntime {
     /// guard. Cycle callbacks must use owned inputs or published snapshots,
     /// not locking status/consent methods. Snapshot-map guards are leaf guards:
     /// the only nested order is loops -> status_snapshots, never the reverse.
+    /// A cycle and a goal assignment take `supervisor` under `loops`, never
+    /// the reverse; an assignment publishes the shutdown flag and snapshot
+    /// (leaves) under both.
     loops: Mutex<HashMap<String, AgentLoopState>>,
     /// Shutdown flags keyed by agent_id.
     shutdown_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
@@ -955,6 +980,12 @@ impl CognitiveRuntime {
             .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
         let goal_uuid = uuid::Uuid::parse_str(&goal.id)
             .map_err(|e| AgentError::SupervisorError(format!("invalid goal id: {e}")))?;
+        // P4-S1-H1: an agent that takes no new work gets no goal unit
+        // either. `assign_goal_in` decides again, as it publishes the loop.
+        admit_new_work(
+            &self.supervisor.lock().unwrap_or_else(|p| p.into_inner()),
+            agent_id,
+        )?;
         let ctx = self
             .issuer()?
             .begin_unit(
@@ -974,21 +1005,6 @@ impl CognitiveRuntime {
         goal: AgentGoal,
         ctx: DispatchContext,
     ) -> Result<(), AgentError> {
-        // Verify agent exists in supervisor
-        {
-            let sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-            let agent_uuid = uuid::Uuid::parse_str(agent_id)
-                .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
-            sup.get_agent(agent_uuid).ok_or_else(|| {
-                AgentError::SupervisorError(format!("agent '{agent_id}' not found in supervisor"))
-            })?;
-            if !self.issuer()?.minted(&ctx) || ctx.principal() != Principal::Agent(agent_uuid) {
-                return Err(AgentError::SupervisorError(
-                    "the goal's unit belongs to another issuer or agent".to_string(),
-                ));
-            }
-        }
-
         let shutdown = Arc::new(AtomicBool::new(false));
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1017,11 +1033,26 @@ impl CognitiveRuntime {
             results: HashMap::new(),
         };
 
+        // P4-S1-H1: decided and published as one step. `loops` and then the
+        // supervisor (a cycle's order) are held until the loop, its flag and
+        // its snapshot are in place, so a stop or any other lifecycle change
+        // lands wholly before the decision (the goal is refused) or after the
+        // publication (and finds the loop). A refused goal changes nothing:
+        // the agent's existing loop and flag stay as they are.
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        let sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let agent_uuid = admit_new_work(&sup, agent_id)?;
+        if !self.issuer()?.minted(&state.ctx)
+            || state.ctx.principal() != Principal::Agent(agent_uuid)
+        {
+            return Err(AgentError::SupervisorError(
+                "the goal's unit belongs to another issuer or agent".to_string(),
+            ));
+        }
         self.shutdown_flags
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(agent_id.to_string(), shutdown);
-        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
         loops.insert(agent_id.to_string(), state);
 
         // Publish initial lock-free snapshot for status readers (Bug AB fix).
@@ -1042,6 +1073,7 @@ impl CognitiveRuntime {
                 agent_id.to_string(),
                 Arc::new(ArcSwap::new(Arc::new(initial_snapshot))),
             );
+        drop(sup);
         drop(loops);
 
         Ok(())

@@ -9,9 +9,11 @@ use crate::cognitive::hivemind::{
     AgentInfo, CollectingHivemindEmitter, HivemindCoordinator, HivemindEvent, HivemindEventEmitter,
     HivemindLlm, HivemindSession, HivemindStatus, SubTaskStatus, SubtaskRun,
 };
-use crate::cognitive::loop_runtime::LlmQueryHandler;
+use crate::cognitive::loop_runtime::{admit_new_work, LlmQueryHandler};
 use crate::errors::AgentError;
-use crate::hm::{DerivedItem, DispatchContext, DispatchIssuer, PromptBuilder, PromptSource};
+use crate::hm::{
+    DerivedItem, DispatchContext, DispatchIssuer, Principal, PromptBuilder, PromptSource,
+};
 use crate::supervisor::Supervisor;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -100,6 +102,18 @@ impl TeamOrchestrator {
     ) -> Result<TeamWorkflowResult, AgentError> {
         let start = std::time::Instant::now();
 
+        // P4-S1-H1: a director that takes no new work runs no workflow,
+        // refused before anything is recorded or any model is asked.
+        let Principal::Agent(director_agent) = director.principal() else {
+            return Err(AgentError::SupervisorError(
+                "a team workflow's director is not an agent".to_string(),
+            ));
+        };
+        admit_new_work(
+            &self.supervisor.lock().unwrap_or_else(|p| p.into_inner()),
+            &director_agent.to_string(),
+        )?;
+
         // Log the start
         {
             let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
@@ -179,11 +193,17 @@ impl TeamOrchestrator {
 
                 // The member's own context (§11.3): its policy ⊔ the
                 // director's floor; an agent whose policy cannot be
-                // established takes no task.
+                // established takes no task. P4-S1-H1: nor does one that
+                // takes no new work (no context is derived, no model asked).
                 task_index += 1;
                 let member = uuid::Uuid::parse_str(agent_id)
                     .map_err(|e| format!("Task execution failed: invalid agent id: {e}"))
                     .and_then(|id| {
+                        admit_new_work(
+                            &self.supervisor.lock().unwrap_or_else(|p| p.into_inner()),
+                            agent_id,
+                        )
+                        .map_err(|e| format!("Task execution failed: {e}"))?;
                         director
                             .derive_member(issuer, id, task_index)
                             .map_err(|e| format!("Task execution failed: {e}"))
