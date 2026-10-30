@@ -3122,14 +3122,8 @@ mod tests {
         ]
     }
 
-    /// Whether a unit was ever started for `agent_id`: its route policy is
-    /// resolved first, and the first resolution creates its row.
     fn unit_started(agent_id: &str) -> bool {
-        hm().db
-            .hm()
-            .read(|tx| tx.policy_row_raw(agent_id))
-            .unwrap()
-            .is_some()
+        hm().unit_started(agent_id)
     }
 
     /// The unit of `goal` for `agent_id`, as a HiveMind session or a team
