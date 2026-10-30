@@ -1900,6 +1900,74 @@ fn p3_hive_e2e_an_all_local_session_stays_local() {
     w.assert_hive_ran_locally("all-local session");
 }
 
+/// The goal of the session P4-S1-H1 refuses (its decomposition would carry
+/// it to the model).
+const H1_REFUSED_GOAL: &str = "P4-S1-H1 synthetic goal of a stopped lead";
+
+/// P4-S1-H1, on the desktop's own path (the session's adapter, real
+/// sub-task loops): a session whose lead is stopped is refused before any
+/// model call (nothing reaches the local runtime or the proxy, nothing is
+/// stored), while a session of the same participants led by the running
+/// one runs, planned and merged on the local runtime.
+#[test]
+fn p4_s1_h1_hive_e2e_a_stopped_lead_is_refused_before_any_model_call() {
+    let Some(w) = e2e(
+        "p4_s1_h1_hive_e2e_a_stopped_lead_is_refused_before_any_model_call",
+        FakeOllama::serving(&["qwen3:8b"]),
+        || {
+            let state = AppState::new_in_memory();
+            let lead = register_participant(&state, ("p4-h1-lead", true, ""));
+            let member = register_participant(&state, ("p4-h1-member", true, ""));
+            state
+                .supervisor
+                .lock()
+                .unwrap()
+                .stop_agent(Uuid::parse_str(&lead).unwrap())
+                .unwrap();
+            let before = stored_rows(&state, &[&lead, &member]);
+            let refused =
+                hive_session_on(&state, H1_REFUSED_GOAL, vec![lead.clone(), member.clone()]);
+            let after = stored_rows(&state, &[&lead, &member]);
+            let led_by_member = match hive_session(&state, vec![member.clone(), lead.clone()]) {
+                Ok(outcome) => {
+                    let outcome: serde_json::Value = serde_json::from_str(&outcome).unwrap();
+                    outcome["status"].to_string()
+                }
+                Err(error) => format!("Err({error})"),
+            };
+            Ok(format!(
+                "refused={refused:?} stored={before}->{after} led_by_member={led_by_member}"
+            ))
+        },
+    ) else {
+        return;
+    };
+    assert!(w.proxy.is_empty(), "remote invocation {:?}", w.proxy);
+    for part in [
+        "refused=Err(\"hivemind session refused: its lead agent '",
+        "' is Stopped: it takes no new goal or task\")",
+    ] {
+        assert!(w.result.contains(part), "{part}: {}", w.result);
+    }
+    let stored = w.result.split("stored=").nth(1).unwrap();
+    let (before, after) = stored.split_once(' ').unwrap().0.split_once("->").unwrap();
+    assert_eq!(before, after, "the refused session stored something");
+    let generates = w.generates();
+    assert!(
+        !generates.iter().any(|r| r.contains(H1_REFUSED_GOAL)),
+        "a model was asked for the stopped lead's session: {generates:?}"
+    );
+    // The control: the same participants, led by the running one.
+    assert!(
+        w.result.contains("led_by_member=\"Completed\""),
+        "{}",
+        w.result
+    );
+    let count = |kind: fn(&str) -> bool| generates.iter().filter(|r| kind(r.as_str())).count();
+    assert_eq!(count(is_decomposition), 1, "{generates:?}");
+    assert_eq!(count(is_merge), 1, "{generates:?}");
+}
+
 /// C and D. The local-only participant assigned every sub-task has a cloud
 /// model assigned: its loop is refused that model (no cloud call), and each
 /// sub-task is reassigned to the other local-only participant, which runs
