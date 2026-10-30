@@ -818,6 +818,113 @@ mod tests {
         assert!(result.summary.contains("PARTIAL"), "{}", result.summary);
     }
 
+    /// The director, researcher, writer and publisher of the mock team, all
+    /// running, in a supervisor.
+    fn running_team(sup: &mut Supervisor) -> [String; 4] {
+        [
+            create_agent(sup, "nexus-director", vec!["llm.query"], 50000),
+            create_agent(
+                sup,
+                "nexus-researcher",
+                vec!["web.search", "web.read", "llm.query", "fs.write"],
+                10000,
+            ),
+            create_agent(
+                sup,
+                "nexus-writer",
+                vec!["llm.query", "fs.read", "fs.write"],
+                10000,
+            ),
+            create_agent(
+                sup,
+                "nexus-publisher",
+                vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+                5000,
+            ),
+        ]
+    }
+
+    /// P4-S1-H1: a stopped member is given no team task: no context is
+    /// derived for it and no model is asked in its name; its task is failed
+    /// (and goes to another member, as a failed task does).
+    #[test]
+    fn p4_s1_h1_a_stopped_member_is_given_no_team_task() {
+        let mut sup = Supervisor::new();
+        let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
+        sup.stop_agent(uuid::Uuid::parse_str(&writer_id).unwrap())
+            .unwrap();
+        let hm = TestHm::new().register_every_agent();
+        let llm = team_mock(&hm);
+        let prompts = llm.prompts.clone();
+        let orchestrator = TeamOrchestrator::new(
+            Arc::new(Mutex::new(sup)),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            Arc::new(llm),
+        );
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+        let mut director = director(&hm, &director_id);
+        let result = orchestrator
+            .execute_team_workflow(
+                &hm.issuer,
+                &mut director,
+                &config,
+                "Research, write and publish",
+            )
+            .unwrap();
+
+        let prompts = prompts.lock().unwrap();
+        assert!(
+            prompts
+                .iter()
+                .any(|p| p.contains("You are nexus-researcher")),
+            "the running members were not asked: {prompts:?}"
+        );
+        assert!(
+            !prompts.iter().any(|p| p.contains("You are nexus-writer")),
+            "the stopped writer was asked: {prompts:?}"
+        );
+        for task in result
+            .task_results
+            .iter()
+            .filter(|t| t.agent_id == writer_id)
+        {
+            assert!(!task.success, "{task:?}");
+            assert!(task.output.contains("is Stopped"), "{task:?}");
+        }
+    }
+
+    /// P4-S1-H1: a stopped director runs no team workflow: it is refused
+    /// before anything is recorded and before any model is asked.
+    #[test]
+    fn p4_s1_h1_a_stopped_director_runs_no_team_workflow() {
+        let mut sup = Supervisor::new();
+        let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
+        sup.stop_agent(uuid::Uuid::parse_str(&director_id).unwrap())
+            .unwrap();
+        let hm = TestHm::new().register_every_agent();
+        let llm = team_mock(&hm);
+        let prompts = llm.prompts.clone();
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let orchestrator =
+            TeamOrchestrator::new(Arc::new(Mutex::new(sup)), audit.clone(), Arc::new(llm));
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+        let mut director = director(&hm, &director_id);
+        match orchestrator.execute_team_workflow(
+            &hm.issuer,
+            &mut director,
+            &config,
+            "Research, write and publish",
+        ) {
+            Ok(result) => panic!("a stopped director's workflow ran: {}", result.summary),
+            Err(e) => assert!(e.to_string().contains("is Stopped"), "{e}"),
+        }
+        assert!(prompts.lock().unwrap().is_empty(), "a model was asked");
+        assert!(audit.lock().unwrap().events().is_empty());
+        assert!(orchestrator.get_events().is_empty());
+    }
+
     /// P3: the summary preview keeps at most 100 bytes and never cuts a
     /// character, whatever its encoded width.
     #[test]

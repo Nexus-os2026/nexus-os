@@ -3061,6 +3061,312 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // ── P4-S1-H1: goal admission ──
+    //
+    // Only a Running or Paused agent is given a goal. A refused goal leaves
+    // nothing behind: no goal unit is started, and no loop, status snapshot
+    // or shutdown flag is published, so no cycle, model call or step follows.
+
+    fn uuid(agent_id: &str) -> uuid::Uuid {
+        uuid::Uuid::parse_str(agent_id).unwrap()
+    }
+
+    /// A supervisor with an agent in `state`, and that agent's id.
+    fn supervisor_with_agent_in(
+        state: crate::lifecycle::AgentState,
+    ) -> (Arc<Mutex<Supervisor>>, String) {
+        use crate::lifecycle::AgentState as S;
+        let (sup, running) = make_supervisor_with_agent();
+        let id = uuid(&running);
+        let agent_id = {
+            let mut s = sup.lock().unwrap();
+            match state {
+                S::Running => id,
+                S::Paused => s.pause_agent(id).map(|()| id).unwrap(),
+                S::Stopping => s
+                    .force_transition_agent_state(id, S::Stopping, "test")
+                    .map(|_| id)
+                    .unwrap(),
+                S::Stopped => s.stop_agent(id).map(|()| id).unwrap(),
+                S::Destroyed => {
+                    s.stop_agent(id).unwrap();
+                    s.transition_agent_state(id, S::Destroyed, "test")
+                        .map(|_| id)
+                        .unwrap()
+                }
+                S::Created | S::Starting => {
+                    let manifest = s.get_agent(id).unwrap().manifest.clone();
+                    s.register_agent(uuid::Uuid::new_v4(), manifest, state)
+                        .unwrap()
+                }
+            }
+        };
+        assert_eq!(
+            sup.lock().unwrap().get_agent(agent_id).map(|h| h.state),
+            Some(state)
+        );
+        (sup, agent_id.to_string())
+    }
+
+    /// What the runtime holds for `agent_id`: a loop, a status snapshot, a
+    /// shutdown flag.
+    fn published(runtime: &CognitiveRuntime, agent_id: &str) -> [bool; 3] {
+        [
+            runtime.has_active_loop(agent_id),
+            runtime.get_agent_status_fast(agent_id).is_some(),
+            runtime
+                .shutdown_flags
+                .lock()
+                .unwrap()
+                .contains_key(agent_id),
+        ]
+    }
+
+    /// Whether a unit was ever started for `agent_id`: its route policy is
+    /// resolved first, and the first resolution creates its row.
+    fn unit_started(agent_id: &str) -> bool {
+        hm().db
+            .hm()
+            .read(|tx| tx.policy_row_raw(agent_id))
+            .unwrap()
+            .is_some()
+    }
+
+    /// The unit of `goal` for `agent_id`, as a HiveMind session or a team
+    /// hands one in.
+    fn goal_unit(agent_id: &str, goal: &AgentGoal) -> DispatchContext {
+        hm().issuer
+            .begin_unit(
+                Principal::Agent(uuid(agent_id)),
+                Unit::Goal {
+                    goal_id: uuid(&goal.id),
+                },
+            )
+            .unwrap()
+    }
+
+    /// Spins, yielding and never sleeping, until `ready`. The deadline only
+    /// turns a hang into a failure: no outcome depends on timing.
+    fn wait_until(what: &str, ready: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while !ready() {
+            assert!(std::time::Instant::now() < deadline, "never: {what}");
+            thread::yield_now();
+        }
+    }
+
+    fn refused_as(result: &Result<(), AgentError>, state: crate::lifecycle::AgentState) -> bool {
+        result
+            .as_ref()
+            .is_err_and(|e| e.to_string().contains(&format!("is {state}")))
+    }
+
+    /// P4-S1-H1: a stopped agent is given no goal and nothing runs for it;
+    /// restarted, the same agent is given one and its cycle asks the model.
+    #[test]
+    fn p4_s1_h1_a_stopped_agent_is_given_no_goal_and_nothing_runs() {
+        let (sup, agent_id) = supervisor_with_agent_in(crate::lifecycle::AgentState::Stopped);
+        let (runtime, emitter) = make_runtime(sup.clone());
+        let refused = runtime.assign_goal(&agent_id, AgentGoal::new("summarize".into(), 5));
+        assert!(
+            refused_as(&refused, crate::lifecycle::AgentState::Stopped),
+            "{refused:?}"
+        );
+        assert_eq!(published(&runtime, &agent_id), [false; 3]);
+        assert!(!unit_started(&agent_id), "a goal unit was started");
+
+        let recorder = prompt_recorder();
+        let prompts = recorder.prompts.clone();
+        let planner = CognitivePlanner::new(Box::new(recorder));
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("done");
+        let mut audit = AuditTrail::new();
+        let cycle = runtime.run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit);
+        assert!(cycle.is_err(), "{cycle:?}");
+        assert!(prompts.lock().unwrap().is_empty(), "the model was asked");
+        assert_eq!(executor.results.lock().unwrap().len(), 100, "a step ran");
+        assert!(audit.events().is_empty());
+        assert!(emitter.events.lock().unwrap().is_empty());
+
+        // The control: restarted, it is given the goal and its cycle runs.
+        sup.lock().unwrap().restart_agent(uuid(&agent_id)).unwrap();
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("summarize".into(), 5))
+            .unwrap();
+        assert_eq!(published(&runtime, &agent_id), [true; 3]);
+        runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+        assert!(
+            !prompts.lock().unwrap().is_empty(),
+            "the model was not asked"
+        );
+    }
+
+    /// P4-S1-H1: an agent not yet started (Created, Starting) or stopping,
+    /// stopped or destroyed is refused by both routes (its own goal unit, or
+    /// one handed in), before anything is published.
+    #[test]
+    fn p4_s1_h1_no_agent_outside_running_or_paused_is_given_a_goal() {
+        use crate::lifecycle::AgentState as S;
+        for state in [
+            S::Created,
+            S::Starting,
+            S::Stopping,
+            S::Stopped,
+            S::Destroyed,
+        ] {
+            let (sup, agent_id) = supervisor_with_agent_in(state);
+            let (runtime, _) = make_runtime(sup);
+            let goal = AgentGoal::new("summarize".into(), 5);
+            let refused = runtime.assign_goal(&agent_id, goal.clone());
+            assert!(refused_as(&refused, state), "{state}: {refused:?}");
+            assert!(!unit_started(&agent_id), "{state}: a goal unit was started");
+            let unit = goal_unit(&agent_id, &goal);
+            let refused = runtime.assign_goal_in(&agent_id, goal, unit);
+            assert!(refused_as(&refused, state), "{state}: {refused:?}");
+            assert_eq!(published(&runtime, &agent_id), [false; 3], "{state}");
+        }
+    }
+
+    /// P4-S1-H1 control: a Running agent, and a Paused one (a paused agent's
+    /// scheduled tick runs, as pausing keeps schedules), are given goals by
+    /// both routes as before.
+    #[test]
+    fn p4_s1_h1_running_and_paused_agents_are_still_given_goals() {
+        use crate::lifecycle::AgentState as S;
+        for state in [S::Running, S::Paused] {
+            let (sup, agent_id) = supervisor_with_agent_in(state);
+            let (runtime, _) = make_runtime(sup);
+            runtime
+                .assign_goal(&agent_id, AgentGoal::new("own unit".into(), 5))
+                .unwrap();
+            assert_eq!(published(&runtime, &agent_id), [true; 3], "{state}");
+            let handed = AgentGoal::new("unit handed in".into(), 5);
+            let unit = goal_unit(&agent_id, &handed);
+            runtime
+                .assign_goal_in(&agent_id, handed.clone(), unit)
+                .unwrap();
+            let active = runtime
+                .get_agent_status_fast(&agent_id)
+                .and_then(|s| s.active_goal)
+                .map(|g| g.id);
+            assert_eq!(active, Some(handed.id), "{state}");
+        }
+    }
+
+    /// P4-S1-H1: a refused goal changes nothing the agent already has. The
+    /// loop of the goal it was given while running (an assigned goal's loop
+    /// stays until it is ended) keeps that goal, its snapshot and its own
+    /// shutdown flag.
+    #[test]
+    fn p4_s1_h1_a_refused_goal_leaves_the_agents_loop_as_it_was() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup.clone());
+        let first = AgentGoal::new("first".into(), 5);
+        runtime.assign_goal(&agent_id, first.clone()).unwrap();
+        sup.lock().unwrap().stop_agent(uuid(&agent_id)).unwrap();
+        let refused = runtime.assign_goal(&agent_id, AgentGoal::new("second".into(), 5));
+        assert!(refused.is_err(), "{refused:?}");
+        let third = AgentGoal::new("third".into(), 5);
+        let unit = goal_unit(&agent_id, &third);
+        let refused = runtime.assign_goal_in(&agent_id, third, unit);
+        assert!(refused.is_err(), "{refused:?}");
+        let goal_of = |status: Option<CognitiveStatusResponse>| {
+            status.and_then(|s| s.active_goal).map(|g| g.id)
+        };
+        assert_eq!(
+            goal_of(runtime.get_agent_status(&agent_id)),
+            Some(first.id.clone())
+        );
+        assert_eq!(
+            goal_of(runtime.get_agent_status_fast(&agent_id)),
+            Some(first.id.clone())
+        );
+        // The flag in place is still the first loop's: ending that loop
+        // removes it with the loop.
+        assert!(runtime.stop_agent_loop_if(&agent_id, &first.id));
+        assert_eq!(published(&runtime, &agent_id), [false; 3]);
+    }
+
+    /// P4-S1-H1, concurrency: an owner's stop that completes while a goal is
+    /// being assigned, before its loop is published, is not overtaken. The
+    /// test holds `loops`, so the assignment cannot publish; it lets go only
+    /// once the assignment has built its loop state and the stop is done.
+    #[test]
+    fn p4_s1_h1_a_stop_completed_before_publication_refuses_the_goal() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup.clone());
+        let runtime = Arc::new(runtime);
+        let goal = AgentGoal::new("raced".into(), 5);
+        let unit = goal_unit(&agent_id, &goal);
+        let epoch = runtime.next_epoch.load(Ordering::SeqCst);
+        let held = runtime.loops.lock().unwrap();
+        let assigning = {
+            let (runtime, agent_id) = (runtime.clone(), agent_id.clone());
+            thread::spawn(move || runtime.assign_goal_in(&agent_id, goal, unit))
+        };
+        wait_until("the assignment built its loop state", || {
+            runtime.next_epoch.load(Ordering::SeqCst) > epoch
+        });
+        sup.lock().unwrap().stop_agent(uuid(&agent_id)).unwrap();
+        drop(held);
+        let result = assigning.join().unwrap();
+        assert!(
+            refused_as(&result, crate::lifecycle::AgentState::Stopped),
+            "{result:?}"
+        );
+        assert_eq!(published(&runtime, &agent_id), [false; 3]);
+    }
+
+    /// P4-S1-H1, concurrency: the goal is decided on the supervisor's state
+    /// as it is once the assignment holds `loops`, and published before
+    /// either is let go. The test holds the supervisor and lets go only once
+    /// the assignment holds `loops` (and so waits for the supervisor): a stop
+    /// made then refuses the goal; with none, the goal is published.
+    #[test]
+    fn p4_s1_h1_the_goal_is_decided_on_the_state_at_publication() {
+        for stop in [true, false] {
+            let (sup, agent_id) = make_supervisor_with_agent();
+            let (runtime, _) = make_runtime(sup.clone());
+            let runtime = Arc::new(runtime);
+            let goal = AgentGoal::new("decided late".into(), 5);
+            let goal_id = goal.id.clone();
+            let unit = goal_unit(&agent_id, &goal);
+            let mut held = sup.lock().unwrap();
+            let assigning = {
+                let (runtime, agent_id) = (runtime.clone(), agent_id.clone());
+                thread::spawn(move || runtime.assign_goal_in(&agent_id, goal, unit))
+            };
+            wait_until("the assignment holds loops", || {
+                matches!(
+                    runtime.loops.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                )
+            });
+            if stop {
+                held.stop_agent(uuid(&agent_id)).unwrap();
+            }
+            drop(held);
+            let result = assigning.join().unwrap();
+            if stop {
+                assert!(
+                    refused_as(&result, crate::lifecycle::AgentState::Stopped),
+                    "{result:?}"
+                );
+                assert_eq!(published(&runtime, &agent_id), [false; 3]);
+            } else {
+                result.unwrap();
+                assert_eq!(published(&runtime, &agent_id), [true; 3]);
+                let active = runtime
+                    .get_agent_status_fast(&agent_id)
+                    .and_then(|s| s.active_goal)
+                    .map(|g| g.id);
+                assert_eq!(active, Some(goal_id));
+            }
+        }
+    }
+
     /// Records every prompt the planner sends (the admitted prompt, through
     /// the issuer).
     fn prompt_recorder() -> ScriptedLlm {
