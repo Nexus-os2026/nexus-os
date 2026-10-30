@@ -2632,6 +2632,29 @@ pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
     })
 }
 
+/// P4-S1-H1: the lifecycle state the supervisor records for `agent_id`
+/// (`None`: not a registered agent), read under its lock and let go at
+/// once: never held across a model call. A stop that lands after the read
+/// is seen at the next one.
+fn lifecycle_of(state: &AppState, agent_id: &str) -> Option<AgentState> {
+    let id = Uuid::parse_str(agent_id).ok()?;
+    state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get_agent(id)
+        .map(|handle| handle.state)
+}
+
+/// P4-S1-H1: why an agent in `lifecycle` takes no new work (a goal, a
+/// sub-task, a session to lead), or `None` when it does: only a Running or
+/// Paused agent does, as the kernel's goal admission (`admit_new_work`)
+/// decides.
+fn refuses_new_work(agent_id: &str, lifecycle: AgentState) -> Option<String> {
+    (!matches!(lifecycle, AgentState::Running | AgentState::Paused))
+        .then(|| format!("agent '{agent_id}' is {lifecycle}: it takes no new goal or task"))
+}
+
 /// End the agent's loop only while it still drives `goal_id` (a goal given
 /// since is left alone: compared and removed under the loops' one guard),
 /// and wake only that goal's consent wait, for the scheduler's or a
@@ -2686,8 +2709,16 @@ pub(crate) fn execute_hivemind_subtask(
     if agent_stopped(state, agent_id) {
         return SubtaskRun::refused(format!("sub-task refused: agent '{agent_id}' is stopped"));
     }
+    // P4-S1-H1: nor does one that takes no new work for another reason
+    // (Created or Starting: a start that has not finished), refused before
+    // its unit is derived or a rate token is spent.
+    if let Some(reason) =
+        lifecycle_of(state, agent_id).and_then(|lifecycle| refuses_new_work(agent_id, lifecycle))
+    {
+        return SubtaskRun::refused(format!("sub-task refused: {reason}"));
+    }
     // P3 HiveMind INFOFLOW: a sub-task is started (and stored) only while
-    // its session still qualifies as admitted.
+    // its session still qualifies as admitted (P4-S1-H1: its lead too).
     if let Err(reason) = admission.requalify() {
         return SubtaskRun::refused(format!("sub-task refused: {reason}"));
     }
@@ -2968,7 +2999,9 @@ pub(crate) fn start_hivemind(
 
 /// [`start_hivemind`] whose decomposition and merge model is made by
 /// `planner` from the session's admission (production: the session's
-/// adapter, which requalifies the admission before each dispatch).
+/// adapter, which requalifies the admission before each dispatch). Each
+/// decomposition and merge call requalifies it first, whatever `planner`
+/// made ([`SessionModel`]).
 pub(crate) fn start_hivemind_with(
     state: &AppState,
     session: &hive::HiveSession,
@@ -2976,16 +3009,30 @@ pub(crate) fn start_hivemind_with(
     agent_ids: Vec<String>,
     planner: impl FnOnce(Arc<HivemindAdmission>) -> Box<dyn nexus_kernel::cognitive::HivemindLlm>,
 ) -> Result<serde_json::Value, String> {
+    // P4-S1-H1: a session whose lead (its first participant, the principal
+    // of its context) takes no new work is refused before anything is
+    // resolved or made for it; an id that names no registered agent is
+    // refused as any participant's is.
+    if let Some(reason) = agent_ids
+        .first()
+        .and_then(|lead| refuses_new_work(lead, lifecycle_of(state, lead)?))
+    {
+        return Err(format!("hivemind session refused: its lead {reason}"));
+    }
     let (agents, policy) = hivemind_participants(state, &agent_ids)?;
     // P3 HiveMind INFOFLOW: the session's admission, requalified before each
     // sub-task it starts and each model call of its work.
     let admission = Arc::new(HivemindAdmission {
         state: state.clone(),
+        lead: session_lead(&agents),
         participants: agents.iter().map(|agent| agent.id.clone()).collect(),
         policy,
     });
     let mut session_ctx = hivemind_session_context(state, &agents, policy)?;
-    let llm = planner(admission.clone());
+    let llm: Box<dyn nexus_kernel::cognitive::HivemindLlm> = Box::new(SessionModel {
+        admission: admission.clone(),
+        model: planner(admission.clone()),
+    });
     let mut next_subtask = 0u32;
 
     // P3-HM-CONTRACT-02 §11.3: the decomposition and the merge run under the
@@ -3128,6 +3175,7 @@ pub(crate) fn hivemind_test_session(
     let (agents, policy) = hivemind_participants(state, agent_ids).unwrap();
     let admission = Arc::new(HivemindAdmission {
         state: state.clone(),
+        lead: session_lead(&agents),
         participants: agents.iter().map(|agent| agent.id.clone()).collect(),
         policy,
     });
@@ -3177,22 +3225,44 @@ fn hivemind_session_policy(state: &AppState, ids: &[String]) -> Result<AgentLlmP
     })
 }
 
+/// The lead of a HiveMind session of `agents` (P4-S1-H1): its first
+/// participant, the principal of the session's context
+/// ([`hivemind_session_context`]).
+fn session_lead(agents: &[nexus_kernel::cognitive::AgentInfo]) -> String {
+    agents
+        .first()
+        .map(|agent| agent.id.clone())
+        .unwrap_or_default()
+}
+
 /// A HiveMind session's admission, kept for the session's work (P3 HiveMind
-/// INFOFLOW): its participants and the policy it was admitted under. Each
-/// sub-task the session starts and each model call of its work first
-/// requalifies it; the admission is handed to that work explicitly.
+/// INFOFLOW): its lead, its participants and the policy it was admitted
+/// under. Each sub-task the session starts and each model call of its work
+/// first requalifies it; the admission is handed to that work explicitly.
 pub(crate) struct HivemindAdmission {
     state: AppState,
+    lead: String,
     participants: Vec<String>,
     policy: AgentLlmPolicy,
 }
 
 impl HivemindAdmission {
-    /// The session still qualifies as it was admitted: its participants'
-    /// current policies give the same session policy. A participant's
-    /// policy changed either way, a mix, or a policy that can no longer be
-    /// established ends the session's work.
+    /// The session still qualifies as it was admitted: its lead still takes
+    /// new work (P4-S1-H1: registered, Running or Paused), and its
+    /// participants' current policies give the same session policy. A lead
+    /// that takes no new work (an owner's stop, however it came), a
+    /// participant's policy changed either way, a mix, or a policy that can
+    /// no longer be established ends the session's work. A participant
+    /// other than the lead that takes no new work is refused only its own
+    /// sub-tasks.
     pub(crate) fn requalify(&self) -> Result<(), String> {
+        let held = match lifecycle_of(&self.state, &self.lead) {
+            Some(lifecycle) => refuses_new_work(&self.lead, lifecycle),
+            None => Some(format!("'{}' is not a registered agent", self.lead)),
+        };
+        if let Some(reason) = held {
+            return Err(format!("hivemind session ended: its lead {reason}"));
+        }
         let changed =
             "hivemind session ended: a participant's routing policy changed during the session";
         match hivemind_session_policy(&self.state, &self.participants) {
@@ -3200,6 +3270,41 @@ impl HivemindAdmission {
             Ok(_) => Err(changed.to_string()),
             Err(reason) => Err(format!("{changed}: {reason}")),
         }
+    }
+}
+
+/// A HiveMind session's decomposition and merge model (P4-S1-H1): the
+/// session's admission (its lead's included) is requalified before each
+/// call, whatever model the session was given; a session's own adapter
+/// requalifies again as it dispatches. No lock is held across the call, so
+/// a stop that lands while one is in flight ends the session's work at the
+/// next requalification, not that call.
+struct SessionModel {
+    admission: Arc<HivemindAdmission>,
+    model: Box<dyn nexus_kernel::cognitive::HivemindLlm>,
+}
+
+impl nexus_kernel::cognitive::HivemindLlm for SessionModel {
+    fn decompose(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, AgentError> {
+        self.admission
+            .requalify()
+            .map_err(AgentError::SupervisorError)?;
+        self.model.decompose(ctx, prompt)
+    }
+
+    fn merge(
+        &self,
+        ctx: &mut nexus_kernel::hm::DispatchContext,
+        prompt: &mut nexus_kernel::hm::PromptSource<'_>,
+    ) -> Result<nexus_kernel::hm::DerivedItem, AgentError> {
+        self.admission
+            .requalify()
+            .map_err(AgentError::SupervisorError)?;
+        self.model.merge(ctx, prompt)
     }
 }
 
