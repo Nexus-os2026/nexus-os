@@ -490,6 +490,15 @@ fn three_parts() -> serde_json::Value {
     ])
 }
 
+/// A decomposition whose one sub-task needs a capability no participant
+/// has: nothing is assigned or run, and the coordinator goes on to merge
+/// (a decomposition of no sub-task at all is refused as such).
+fn nobody_can_take() -> serde_json::Value {
+    json!([
+        {"id": "x", "description": "a part", "required_capabilities": ["p4.h1.no.such.capability"]},
+    ])
+}
+
 /// Nothing was started for `agents`: no task, loop or published goal.
 fn assert_nothing_started(state: &AppState, agents: &[&String], context: &str) {
     for agent in agents {
@@ -604,7 +613,7 @@ fn p4_s1_h1_a_running_or_paused_lead_still_plans_and_merges() {
             |_| {
                 Box::new(CountingPlanner {
                     calls: calls.clone(),
-                    plan: json!([]),
+                    plan: nobody_can_take(),
                     stop_while_planning: None,
                 })
             },
@@ -613,7 +622,51 @@ fn p4_s1_h1_a_running_or_paused_lead_still_plans_and_merges() {
         assert_eq!(outcome["status"], "Completed", "{lifecycle}: {outcome}");
         assert_eq!(calls.decompose.load(Ordering::SeqCst), 1, "{lifecycle}");
         assert_eq!(calls.merge.load(Ordering::SeqCst), 1, "{lifecycle}");
+        assert_nothing_started(&state, &[&lead, &member], &lifecycle.to_string());
     }
+}
+
+/// The owner's stop of the lead lands after the session was admitted and
+/// its context made, before it plans: no model is asked anything (the
+/// decomposition is refused at its requalification), nothing is started
+/// for any participant, and the session is not stored.
+#[test]
+fn p4_s1_h1_a_lead_stopped_before_its_session_plans_gets_no_decomposition() {
+    let state = AppState::new_in_memory();
+    let lead = register(&state, "h1-lead");
+    let member = register(&state, "h1-member");
+    let session = admit_hivemind(&state).unwrap();
+    let calls = Arc::new(Calls::default());
+    let ended = start_hivemind_with(
+        &state,
+        &session,
+        "the goal".into(),
+        vec![lead.clone(), member.clone()],
+        |_| {
+            state
+                .supervisor
+                .lock()
+                .unwrap()
+                .stop_agent(Uuid::parse_str(&lead).unwrap())
+                .unwrap();
+            Box::new(CountingPlanner {
+                calls: calls.clone(),
+                plan: three_parts(),
+                stop_while_planning: None,
+            })
+        },
+    );
+    assert!(
+        ended.as_ref().is_err_and(|e| e.contains(&format!(
+            "hivemind session ended: its lead agent '{lead}' is Stopped: \
+             it takes no new goal or task"
+        ))),
+        "{ended:?}"
+    );
+    assert_eq!(calls.decompose.load(Ordering::SeqCst), 0, "planned");
+    assert_eq!(calls.merge.load(Ordering::SeqCst), 0, "merged");
+    assert_nothing_started(&state, &[&lead, &member], "stopped before planning");
+    assert!(state.db.list_hivemind_sessions().unwrap().is_empty());
 }
 
 /// The owner's stop of the lead lands while the session plans: the
@@ -663,8 +716,9 @@ fn p4_s1_h1_a_lead_stopped_while_its_session_plans_gets_no_subtask_run_and_no_me
 }
 
 /// The owner's stop of the lead lands before the session merges (here a
-/// session with no sub-task, stopped as it plans): the merge is not asked
-/// for, the session ends with the reason, and it is not stored.
+/// session whose one sub-task no participant can take, stopped as it
+/// plans, so the coordinator goes straight on to merge): the merge is not
+/// asked for, the session ends with the reason, and it is not stored.
 #[test]
 fn p4_s1_h1_a_lead_stopped_before_its_session_merges_gets_no_merge() {
     let state = AppState::new_in_memory();
@@ -680,7 +734,7 @@ fn p4_s1_h1_a_lead_stopped_before_its_session_merges_gets_no_merge() {
         |_| {
             Box::new(CountingPlanner {
                 calls: calls.clone(),
-                plan: json!([]),
+                plan: nobody_can_take(),
                 stop_while_planning: Some((state.clone(), lead.clone())),
             })
         },
@@ -698,7 +752,32 @@ fn p4_s1_h1_a_lead_stopped_before_its_session_merges_gets_no_merge() {
         0,
         "merged after the stop"
     );
+    assert_nothing_started(&state, &[&lead, &member], "stopped before merging");
     assert!(state.db.list_hivemind_sessions().unwrap().is_empty());
+}
+
+/// The desktop's predicate is the kernel's: for every lifecycle state, a
+/// goal is admitted on the desktop's own route exactly when the desktop
+/// says the agent takes new work, and a refusal carries the desktop's
+/// reason.
+#[test]
+fn p4_s1_h1_the_desktop_admits_exactly_what_the_kernel_admits() {
+    for lifecycle in [AgentState::Running, AgentState::Paused]
+        .into_iter()
+        .chain(HELD)
+    {
+        let state = AppState::new_in_memory();
+        let agent = register_in(&state, "h1-parity", lifecycle);
+        assert_eq!(lifecycle_of(&state, &agent), Some(lifecycle));
+        let kernel = execute_agent_goal(&state, agent.clone(), "a goal".into(), 5, None);
+        match refuses_new_work(&agent, lifecycle) {
+            None => assert!(kernel.is_ok(), "{lifecycle}: {kernel:?}"),
+            Some(reason) => assert!(
+                kernel.as_ref().is_err_and(|e| e.contains(&reason)),
+                "{lifecycle}: {kernel:?} / {reason}"
+            ),
+        }
+    }
 }
 
 /// A session requalifies only while its lead takes new work: Running and
