@@ -29,6 +29,7 @@ use nexus_governed_control::authority::approval::{
     ControlConfirmer, MissionApproval, MissionConfirmation,
 };
 use nexus_governed_control::authority::clock::Clock;
+use nexus_governed_control::authority::ids::{CommitmentId, RunId};
 use nexus_governed_control::authority::AuthorityError;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -158,9 +159,10 @@ struct Mission {
     /// The effect last settled as awaiting approval, with no transition
     /// since (replay: a wait follows it).
     awaiting_settled: Option<u64>,
-    /// The journaled identity of that effect's action, until the wait
-    /// takes it.
-    parked: Option<PendingAction>,
+    /// The journaled identity of an action at the broker (with its
+    /// effect), from its record until its closure is journaled, whatever
+    /// becomes of the mission.
+    open_action: Option<(u64, PendingAction)>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -171,8 +173,6 @@ struct Waiting {
     effect: u64,
     rest: Vec<serde_json::Value>,
     roles_left: Vec<LaneRole>,
-    /// The action's identity at the broker, when it was journaled.
-    pending: Option<PendingAction>,
 }
 
 impl Mission {
@@ -196,7 +196,7 @@ impl Mission {
             asking: None,
             waiting: None,
             awaiting_settled: None,
-            parked: None,
+            open_action: None,
         }
     }
 
@@ -231,7 +231,6 @@ impl Mission {
                     effect: *effect,
                     rest: rest.clone(),
                     roles_left: roles_left.clone(),
-                    pending: self.parked.take(),
                 });
             }
             Trigger::ActionApproved { .. } => {
@@ -254,19 +253,6 @@ impl Mission {
         self.dispatched_in_phase = dispatched;
         self.asking = None;
         self.awaiting_settled = None;
-        self.parked = None;
-    }
-
-    /// The journaled action of a mission that has not ended: what it waits
-    /// on, or what it parked before the wait was journaled.
-    fn pending_action(&self) -> Option<&PendingAction> {
-        if self.state.is_terminal() {
-            return None;
-        }
-        self.waiting
-            .as_ref()
-            .and_then(|w| w.pending.as_ref())
-            .or(self.parked.as_ref())
     }
 
     fn consented(&self) -> bool {
@@ -497,26 +483,7 @@ impl<P: EffectPort> Coordinator<P> {
                 next_request: 1,
             }),
         };
-        // The port gets back every journaled action of a mission that has
-        // not ended, before anything is cancelled, so that it can withdraw
-        // it (a rebuilt port knows nothing of its own).
-        // An action that two missions name (a tampered journal) is handed
-        // back to neither.
-        let parked: Vec<(MissionId, PendingAction)> = coordinator
-            .lock()
-            .missions
-            .iter()
-            .filter_map(|(id, m)| m.pending_action().map(|p| (*id, p.clone())))
-            .collect();
-        for (id, pending) in &parked {
-            let claims = parked
-                .iter()
-                .filter(|(_, p)| p.run == pending.run || p.commitment == pending.commitment)
-                .count();
-            if claims == 1 {
-                coordinator.port.adopt(*id, pending);
-            }
-        }
+        coordinator.recover_actions()?;
         // A lane call left unanswered by the restart is abandoned.
         {
             let mut inner = coordinator.lock();
@@ -892,6 +859,13 @@ impl<P: EffectPort> Coordinator<P> {
             )?;
             inner.mission(id)?.generation
         };
+        // The approved action is final at the broker: its closure is
+        // journaled before anything more is sent.
+        if !self.close_action(id)? {
+            report.to = self.end(id, "approval_not_closed")?;
+            report.reason = self.reason(id);
+            return Ok(report);
+        }
         let rest: Option<Vec<EffectRequest>> = waiting
             .rest
             .iter()
@@ -1218,7 +1192,7 @@ impl<P: EffectPort> Coordinator<P> {
                 let _ = self.end(id, "awaiting_owner_approval");
                 return Err(e);
             }
-            inner.mission(id)?.parked = Some(pending);
+            inner.mission(id)?.open_action = Some((effect, pending));
         }
         let mono = self.clock.monotonic_ms();
         let waited = {
@@ -1274,7 +1248,65 @@ impl<P: EffectPort> Coordinator<P> {
         };
         // Whatever the journal said, nothing more of it may start.
         self.port.cancel(id);
+        // Best effort: an action not confirmed closed (or whose closure the
+        // journal could not take) is withdrawn again on every reopen.
+        let _ = self.close_action(id);
         result
+    }
+
+    /// Journal the mission's open action closed, once the port confirms
+    /// the broker no longer holds it open. `Ok(false)`: not confirmed.
+    fn close_action(&self, id: MissionId) -> Result<bool, CoordinatorError> {
+        let Some((effect, pending)) = self.lock().mission(id)?.open_action.clone() else {
+            return Ok(true);
+        };
+        if !self.port.settled(&pending) {
+            return Ok(false);
+        }
+        let mut inner = self.lock();
+        if inner.mission(id)?.open_action.as_ref().map(|(e, _)| *e) == Some(effect) {
+            inner.append(id, Event::ApprovalClosed { effect })?;
+            inner.mission(id)?.open_action = None;
+        }
+        Ok(true)
+    }
+
+    /// On open: every journaled action not journaled closed, whatever its
+    /// mission's state. A waiting mission's action is handed back to the
+    /// port; any other's is handed back, withdrawn (the mission's run is
+    /// cancelled) and, once the port confirms it, journaled closed. Claims
+    /// are compared by parsed identity: an action two missions name (a
+    /// tampered journal) is handed back to neither.
+    fn recover_actions(&self) -> Result<(), CoordinatorError> {
+        let open: Vec<(MissionId, MissionState, PendingAction)> = self
+            .lock()
+            .missions
+            .iter()
+            .filter_map(|(id, m)| {
+                m.open_action
+                    .as_ref()
+                    .map(|(_, p)| (*id, m.state, p.clone()))
+            })
+            .collect();
+        let key = |p: &PendingAction| (RunId::parse(&p.run), CommitmentId::parse(&p.commitment));
+        for (id, state, pending) in &open {
+            let (run, commitment) = key(pending);
+            let claims = open
+                .iter()
+                .filter(|(_, _, other)| {
+                    let (r, c) = key(other);
+                    (run.is_some() && r == run) || (commitment.is_some() && c == commitment)
+                })
+                .count();
+            if claims == 1 {
+                self.port.adopt(*id, pending);
+            }
+            if *state != MissionState::AwaitingApproval {
+                self.port.cancel(*id);
+                self.close_action(*id)?;
+            }
+        }
+        Ok(())
     }
 
     fn explain(&self, id: MissionId, mission: &Mission) -> String {
@@ -1324,6 +1356,7 @@ impl<P: EffectPort> Coordinator<P> {
         drop(inner);
         if may_have_dispatched {
             self.port.cancel(id);
+            let _ = self.close_action(id);
         }
         journaled
     }
@@ -1480,7 +1513,7 @@ fn replay(
             if !mission.state.is_working()
                 || mission.state == MissionState::Explaining
                 || mission.pending_lane.is_some()
-                || mission.parked.is_some()
+                || mission.open_action.is_some()
                 || invocation.mission != id
                 || invocation.seq != entry.seq
             {
@@ -1510,7 +1543,7 @@ fn replay(
             if !mission.state.is_working()
                 || *effect != mission.next_effect
                 || mission.unsettled.is_some()
-                || mission.parked.is_some()
+                || mission.open_action.is_some()
             {
                 return Err(format!("{id}: an effect dispatch out of place"));
             }
@@ -1531,11 +1564,17 @@ fn replay(
         Event::ApprovalPending { effect, pending } => {
             if !mission.state.may_wait()
                 || mission.awaiting_settled != Some(*effect)
-                || mission.parked.is_some()
+                || mission.open_action.is_some()
             {
                 return Err(format!("{id}: a pending action out of place"));
             }
-            mission.parked = Some(pending.clone());
+            mission.open_action = Some((*effect, pending.clone()));
+        }
+        Event::ApprovalClosed { effect } => {
+            if mission.open_action.as_ref().map(|(e, _)| *e) != Some(*effect) {
+                return Err(format!("{id}: a closure of no open action"));
+            }
+            mission.open_action = None;
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
     }

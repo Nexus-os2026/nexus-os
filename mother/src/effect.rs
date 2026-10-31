@@ -127,4 +127,8 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// and ask about it. The port uses it only if the broker's records
     /// agree: Mother's agent run, and that run's commitment.
     fn adopt(&self, mission: MissionId, pending: &PendingAction);
+    /// Whether the broker no longer holds `pending` open: it is Mother's
+    /// and in a final state, or the broker holds no such action. Only then
+    /// does Mother journal it closed.
+    fn settled(&self, pending: &PendingAction) -> bool;
 }

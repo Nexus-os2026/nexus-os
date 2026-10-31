@@ -233,6 +233,27 @@ impl EffectPort for GovernedPort {
         status
     }
 
+    /// Final at the broker, or not held there at all. An action that is
+    /// not Mother's, or that runs (approved, executing), is not settled.
+    fn settled(&self, pending: &PendingAction) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                RunId::parse(&pending.run) == Some(view.run)
+                    && view.agent == mother_agent()
+                    && !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
     fn pending(&self, mission: MissionId) -> Option<PendingAction> {
         let runs = self.lock();
         let run = runs.open.get(&mission)?;
@@ -247,9 +268,9 @@ impl EffectPort for GovernedPort {
     /// Take back a journaled action only if the broker's records agree: a
     /// live agent run of Mother's that no other mission of this port holds,
     /// and a commitment of that run of Mother's. The carried deadline is
-    /// trusted no further than the action's lifetime from now (the broker's
-    /// own deadline is earlier). A mission this port already knows, or has
-    /// ended, is left as it is.
+    /// trusted no further than the action's remaining lifetime by its
+    /// wall-clock expiry (`adopted_deadline`). A mission this port already
+    /// knows, or has ended, is left as it is.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
@@ -269,10 +290,13 @@ impl EffectPort for GovernedPort {
         else {
             return;
         };
-        let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
-        let deadline = pending
-            .deadline_mono_ms
-            .min(authority.clock().monotonic_ms().saturating_add(lifetime));
+        let clock = authority.clock();
+        let deadline = adopted_deadline(
+            pending.deadline_mono_ms,
+            clock.monotonic_ms(),
+            clock.wall_ms(),
+            view.expires_wall_ms,
+        );
         let mut runs = self.lock();
         if runs.ended.contains(&mission)
             || runs.open.contains_key(&mission)
@@ -283,6 +307,21 @@ impl EffectPort for GovernedPort {
         runs.open.insert(mission, run);
         runs.waiting.insert(mission, (commitment, deadline));
     }
+}
+
+/// The deadline a port takes for a handed-back action: what was journaled,
+/// but no later than the action's remaining lifetime by the broker's
+/// wall-clock expiry. The broker's own monotonic deadline is not in its
+/// public view, so this bound relies on the wall clock: set back since the
+/// action was created, it is looser (the journaled value, written by the
+/// port that asked, still never exceeds the broker's).
+pub(crate) fn adopted_deadline(
+    journaled: u64,
+    now_mono_ms: u64,
+    now_wall_ms: u64,
+    expires_wall_ms: u64,
+) -> u64 {
+    journaled.min(now_mono_ms.saturating_add(expires_wall_ms.saturating_sub(now_wall_ms)))
 }
 
 /// What the broker's record of a waiting action says. The broker ends an

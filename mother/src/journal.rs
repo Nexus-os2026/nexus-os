@@ -69,6 +69,10 @@ pub enum Event {
     /// M2a: the broker's identity of the action effect `effect` waits on,
     /// journaled before the wait so that a rebuilt port can withdraw it.
     ApprovalPending { effect: u64, pending: PendingAction },
+    /// M2a: the port confirmed that the broker no longer holds that action
+    /// open (final, or gone). Written only after the confirmation; until
+    /// it is, every reopen withdraws the action again.
+    ApprovalClosed { effect: u64 },
 }
 
 /// One journal entry.
