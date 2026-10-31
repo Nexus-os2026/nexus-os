@@ -18,18 +18,24 @@ const FUEL_COST_SHELL: f64 = 5.0;
 /// Includes basic shell utilities + system monitoring commands needed by
 /// agents like nexus-sysmon. Dangerous commands (rm, kill, shutdown, etc.)
 /// are NOT included — see `COMMAND_BLOCKLIST`.
+///
+/// No entry may start a shell or an arbitrary program named in its arguments
+/// (M0-FIX2 F9). Programs built for that (env, xargs, awk, sed, make, node,
+/// npx, interpreters, compilers and build tools) are absent; `find` and `sort`
+/// stay only under the argument rules in `TRAMPOLINE_ARGUMENTS`.
 const BASE_ALLOWLIST: &[&str] = &[
     // Basic shell utilities
     "ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "date", "pwd", "mkdir", "cp", "mv",
-    "sort", "cut", "tr", "awk", "sed", "tee", "xargs", "which", "file", "diff", "touch",
+    "sort", "cut", "tr", "tee", "which", "file", "diff", "touch",
     // System monitoring (read-only)
     "free", "df", "uptime", "top", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk",
-    "lscpu", "du", "stat", "env", "printenv", "vmstat", "iostat", "lsof", "ss", "ip",
-    // Development tools
-    "node", "npx", "rustc", "rustup", "make", "cmake", "gcc", "g++",
+    "lscpu", "du", "stat", "printenv", "vmstat", "iostat", "lsof", "ss",
 ];
 
 /// Commands with restricted subcommands: (command, &[allowed subcommands]).
+///
+/// npm subcommands that run package scripts and cargo subcommands that run
+/// build scripts or built programs are absent (M0-FIX2 F9).
 const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
     (
         "git",
@@ -37,8 +43,8 @@ const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
             "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
         ],
     ),
-    ("cargo", &["build", "test", "check", "fmt", "clippy", "run"]),
-    ("npm", &["install", "run", "build", "test", "ls"]),
+    ("cargo", &["fmt"]),
+    ("npm", &["ls"]),
     // systemctl: read-only status queries only — no start/stop/enable/disable
     (
         "systemctl",
@@ -54,6 +60,61 @@ const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
     ("docker", &["ps", "images", "logs", "inspect", "stats"]),
     ("journalctl", &["--no-pager", "-u", "-n", "--since"]),
 ];
+
+/// An argument that would make an allowlisted program start another program.
+enum TrampolineArgument {
+    /// Refused when the argument equals this token.
+    Exact(&'static str),
+    /// Refused when the argument starts with this text.
+    Prefix(&'static str),
+    /// Refused when the argument (up to `=`) is a long option that abbreviates
+    /// this option name: any prefix longer than `--` itself.
+    LongOption(&'static str),
+}
+
+/// Per-program arguments refused anywhere in the argument list (M0-FIX2 F9).
+const TRAMPOLINE_ARGUMENTS: &[(&str, &[TrampolineArgument])] = &[
+    (
+        "find",
+        &[
+            TrampolineArgument::Exact("-exec"),
+            TrampolineArgument::Exact("-execdir"),
+            TrampolineArgument::Exact("-ok"),
+            TrampolineArgument::Exact("-okdir"),
+        ],
+    ),
+    // `--compress-program`; `--co` is already its only unambiguous abbreviation.
+    ("sort", &[TrampolineArgument::Prefix("--co")]),
+    (
+        "git",
+        &[
+            TrampolineArgument::LongOption("--upload-pack"),
+            TrampolineArgument::LongOption("--receive-pack"),
+            TrampolineArgument::LongOption("--exec"),
+        ],
+    ),
+    // Command-line config can name a wrapper, linker or runner program.
+    (
+        "cargo",
+        &[
+            TrampolineArgument::Prefix("--config"),
+            TrampolineArgument::Prefix("-Z"),
+        ],
+    ),
+];
+
+impl TrampolineArgument {
+    fn matches(&self, arg: &str) -> bool {
+        match self {
+            Self::Exact(token) => arg == *token,
+            Self::Prefix(prefix) => arg.starts_with(prefix),
+            Self::LongOption(option) => {
+                let name = arg.split_once('=').map_or(arg, |(name, _)| name);
+                name.len() > 2 && name.starts_with("--") && option.starts_with(name)
+            }
+        }
+    }
+}
 
 /// Commands/patterns that are always rejected — destructive or privileged operations.
 const COMMAND_BLOCKLIST: &[&str] = &[
@@ -112,16 +173,6 @@ impl GovernedShell {
             )));
         }
 
-        // Check for python3 special case: only -c flag allowed
-        if cmd_lower == "python3" || cmd_lower == "python" {
-            if effective_args.first().map(|a| a.as_str()) != Some("-c") {
-                return Err(ActuatorError::CommandBlocked(
-                    "python3 only allowed with -c flag".into(),
-                ));
-            }
-            return Ok(());
-        }
-
         // Check dangerous patterns in full command string
         let full_cmd = format!("{} {}", binary, effective_args.join(" "));
         for pattern in DANGEROUS_PATTERNS {
@@ -129,6 +180,21 @@ impl GovernedShell {
                 return Err(ActuatorError::CommandBlocked(format!(
                     "dangerous pattern detected: '{pattern}'"
                 )));
+            }
+        }
+
+        // Refuse arguments that would start another program, whatever their
+        // position (option parsers permute and accept abbreviations).
+        for (program, refused) in TRAMPOLINE_ARGUMENTS {
+            if cmd_lower == *program {
+                if let Some(arg) = effective_args
+                    .iter()
+                    .find(|arg| refused.iter().any(|rule| rule.matches(arg)))
+                {
+                    return Err(ActuatorError::CommandBlocked(format!(
+                        "argument '{arg}' would let '{binary}' start another program"
+                    )));
+                }
             }
         }
 

@@ -1,5 +1,6 @@
-//! Sandboxed code execution actuator — runs Python, Node.js, or Bash code
-//! in an isolated subprocess with no network access and restricted filesystem.
+//! Code execution actuator — runs Python or Node.js code in a subprocess.
+//!
+//! Shell languages are refused (M0-FIX2 F9): this actuator is not a shell route.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
@@ -21,7 +22,7 @@ const MAX_OUTPUT_SIZE: usize = 100 * 1024;
 const FUEL_COST_CODE: f64 = 8.0;
 
 /// Allowed language runtimes.
-const ALLOWED_LANGUAGES: &[&str] = &["python3", "python", "node", "bash"];
+const ALLOWED_LANGUAGES: &[&str] = &["python3", "python", "node"];
 
 /// Sandboxed code execution actuator. Runs code in a subprocess with:
 /// - Working directory set to agent's sandbox
@@ -38,7 +39,6 @@ impl CodeExecuteActuator {
         match lower.as_str() {
             "python3" | "python" => Ok("python3"),
             "node" | "nodejs" | "javascript" | "js" => Ok("node"),
-            "bash" | "sh" => Ok("bash"),
             _ => Err(ActuatorError::CommandBlocked(format!(
                 "language '{language}' not allowed; use one of: {}",
                 ALLOWED_LANGUAGES.join(", ")
@@ -58,7 +58,7 @@ impl CodeExecuteActuator {
     }
 
     /// Scan code for dangerous patterns that should be blocked.
-    fn check_dangerous_patterns(code: &str, language: &str) -> Result<(), ActuatorError> {
+    fn check_dangerous_patterns(code: &str, _language: &str) -> Result<(), ActuatorError> {
         let lower = code.to_lowercase();
 
         // Block network access attempts
@@ -87,33 +87,19 @@ impl CodeExecuteActuator {
         }
 
         // Block shell escape attempts in Python/Node
-        if language != "bash" {
-            let escape_patterns = [
-                "os.system(",
-                "subprocess.",
-                "os.popen(",
-                "child_process",
-                "execSync(",
-                "spawnSync(",
-            ];
-            for pattern in &escape_patterns {
-                if lower.contains(pattern) {
-                    return Err(ActuatorError::CommandBlocked(format!(
-                        "shell escape not allowed in sandboxed code: found '{pattern}'"
-                    )));
-                }
-            }
-        }
-
-        // Block filesystem escape in bash
-        if language == "bash" {
-            let fs_escape = ["rm -rf /", "chmod 777", "dd if=", "mkfs.", "mount "];
-            for pattern in &fs_escape {
-                if lower.contains(pattern) {
-                    return Err(ActuatorError::CommandBlocked(format!(
-                        "dangerous command not allowed: found '{pattern}'"
-                    )));
-                }
+        let escape_patterns = [
+            "os.system(",
+            "subprocess.",
+            "os.popen(",
+            "child_process",
+            "execSync(",
+            "spawnSync(",
+        ];
+        for pattern in &escape_patterns {
+            if lower.contains(pattern) {
+                return Err(ActuatorError::CommandBlocked(format!(
+                    "shell escape not allowed in sandboxed code: found '{pattern}'"
+                )));
             }
         }
 
@@ -133,7 +119,6 @@ impl CodeExecuteActuator {
         let extension = match runtime {
             "python3" => "py",
             "node" => "js",
-            "bash" => "sh",
             _ => "txt",
         };
         let name = format!("_nexus_exec-{}.{extension}", uuid::Uuid::new_v4());
@@ -192,7 +177,6 @@ impl CodeExecuteActuator {
         let extension = match runtime {
             "python3" => "py",
             "node" => "js",
-            "bash" => "sh",
             _ => "txt",
         };
         let temp_path = working_dir.join(format!("_nexus_exec.{extension}"));
@@ -208,13 +192,15 @@ impl CodeExecuteActuator {
 
         // Build command with sandboxing environment
         // Resolve runtime to a full path. Tauri's process may have a minimal PATH
-        // that doesn't include /usr/bin, so Command::new("bash") fails.
+        // that doesn't include /usr/bin. Only validated runtimes reach here.
         let runtime_path = match runtime {
-            "bash" => "/bin/bash",
-            "sh" => "/bin/sh",
             "python3" => "/usr/bin/python3",
             "node" => "/usr/bin/node",
-            other => other,
+            other => {
+                return Err(ActuatorError::CommandBlocked(format!(
+                    "runtime '{other}' is not allowed"
+                )))
+            }
         };
 
         let mut cmd = Command::new(runtime_path);
@@ -397,10 +383,10 @@ mod tests {
         }
     }
 
-    fn assert_bash_stdout(result: &ActionResult, expected: &str) {
+    fn assert_stdout(result: &ActionResult, expected: &str) {
         assert!(result.success, "{}", result.output);
-        // ActionResult preserves runtime stderr alongside stdout. Optional Bash
-        // startup diagnostics do not change the script's exact stdout contract.
+        // ActionResult preserves runtime stderr alongside stdout. Optional
+        // runtime diagnostics do not change the script's exact stdout contract.
         let stdout = result
             .output
             .split_once("\n[stderr] ")
@@ -414,7 +400,9 @@ mod tests {
         assert!(CodeExecuteActuator::validate_language("Python").is_ok());
         assert!(CodeExecuteActuator::validate_language("node").is_ok());
         assert!(CodeExecuteActuator::validate_language("javascript").is_ok());
-        assert!(CodeExecuteActuator::validate_language("bash").is_ok());
+        // M0-FIX2 F9: shell languages are refused (previously asserted allowed).
+        assert!(CodeExecuteActuator::validate_language("bash").is_err());
+        assert!(CodeExecuteActuator::validate_language("sh").is_err());
         assert!(CodeExecuteActuator::validate_language("ruby").is_err());
         assert!(CodeExecuteActuator::validate_language("perl").is_err());
     }
@@ -492,8 +480,10 @@ mod tests {
         }
     }
 
+    /// M0-FIX2 F9: formerly `executes_bash_code`, which asserted that Bash
+    /// code runs. Bash is now refused before anything is written or spawned.
     #[test]
-    fn executes_bash_code() {
+    fn bash_code_is_refused() {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
         let exec = CodeExecuteActuator;
@@ -503,13 +493,14 @@ mod tests {
             code: "echo 'hello from bash'".into(),
             timeout_secs: Some(5),
         };
-        let result = exec.execute(&action, &ctx).unwrap();
-        assert!(result.success);
-        assert!(result.output.contains("hello from bash"));
+        let err = exec.execute(&action, &ctx).unwrap_err();
+        assert!(matches!(err, ActuatorError::CommandBlocked(_)), "{err:?}");
     }
 
+    /// M0-FIX2 F9: the workspace HOME/TMPDIR and stderr contract, formerly
+    /// exercised through Bash, now exercised through Python.
     #[test]
-    fn executes_bash_in_canonical_workspace_with_spaces() {
+    fn executes_python_in_canonical_workspace_with_spaces() {
         let tmp = tempfile::Builder::new()
             .prefix("nexus code space ")
             .tempdir()
@@ -518,18 +509,20 @@ mod tests {
         let result = CodeExecuteActuator
             .execute(
                 &PlannedAction::CodeExecute {
-                    language: "bash".into(),
-                    code: r#"[ "$HOME" -ef . ] && [ "$TMPDIR" -ef . ] || exit 91
-printf 'canonical workspace' > workspace-proof
-printf 'canonical workspace'
-printf 'workspace diagnostic' >&2"#
+                    language: "python3".into(),
+                    code: r#"import os, sys
+if not (os.path.samefile(os.environ["HOME"], ".") and os.path.samefile(os.environ["TMPDIR"], ".")):
+    sys.exit(91)
+open("workspace-proof", "w").write("canonical workspace")
+sys.stdout.write("canonical workspace")
+sys.stderr.write("workspace diagnostic")"#
                         .into(),
                     timeout_secs: Some(5),
                 },
                 &ctx,
             )
             .unwrap();
-        assert_bash_stdout(&result, "canonical workspace");
+        assert_stdout(&result, "canonical workspace");
         assert_eq!(
             std::fs::read_to_string(tmp.path().join("workspace-proof")).unwrap(),
             "canonical workspace"
@@ -578,19 +571,22 @@ printf 'workspace diagnostic' >&2"#
 
     #[cfg(windows)]
     #[test]
-    fn bash_receives_lowercase_proxy_restrictions() {
+    fn inline_code_receives_lowercase_proxy_restrictions() {
+        // M0-FIX2 F9: formerly exercised through Bash, now through Python.
         let tmp = TempDir::new().unwrap();
         let result = CodeExecuteActuator
             .execute(
                 &PlannedAction::CodeExecute {
-                    language: "bash".into(),
-                    code: r#"printf '%s|%s|%s' "$http_proxy" "$https_proxy" "$no_proxy""#.into(),
+                    language: "python3".into(),
+                    code: r#"import os, sys
+sys.stdout.write("|".join(os.environ.get(k, "") for k in ("http_proxy", "https_proxy", "no_proxy")))"#
+                        .into(),
                     timeout_secs: Some(10),
                 },
                 &make_context(tmp.path()),
             )
             .unwrap();
-        assert_bash_stdout(&result, "http://0.0.0.0:0|http://0.0.0.0:0|");
+        assert_stdout(&result, "http://0.0.0.0:0|http://0.0.0.0:0|");
     }
 
     #[test]

@@ -61,8 +61,6 @@ pub(super) fn runtime_name(runtime: &str) -> Result<&str, ActuatorError> {
     Ok(match runtime {
         "python3" => "python",
         "node" => "node",
-        // Bash is optional and only used for an explicit Bash code request.
-        "bash" => "bash",
         _ => return Err(ActuatorError::CommandBlocked("unsupported runtime".into())),
     })
 }

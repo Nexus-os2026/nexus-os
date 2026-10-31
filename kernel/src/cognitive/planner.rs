@@ -404,7 +404,7 @@ Each item must be:
                     .to_string(),
             );
             actions.push(
-                r#"- CodeExecute: {"type": "CodeExecute", "language": "python3|node|bash", "code": "...", "timeout_secs": 10}"#
+                r#"- CodeExecute: {"type": "CodeExecute", "language": "python3|node", "code": "...", "timeout_secs": 10}"#
                     .to_string(),
             );
         }
