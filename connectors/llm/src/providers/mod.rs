@@ -2021,6 +2021,7 @@ mod tests {
     fn m0_f5_in_process_providers_are_refused_while_stopped() {
         use nexus_kernel::emergency_stop::StopAuthority;
         let stop = StopAuthority::new();
+        let controller = stop.claim_controller().unwrap();
         stop.engage();
         let listeners: Vec<_> = (0..4).map(|_| quiet_listener()).collect();
         let bases: [String; 4] = std::array::from_fn(|i| listeners[i].1.clone());
@@ -2031,7 +2032,7 @@ mod tests {
             assert!(outcome.contains("emergency stop"), "{outcome}");
             assert_never_contacted(listener);
         }
-        stop.lift();
+        assert!(controller.lift_if(stop.stop_number()));
         let servers: Vec<_> = (0..4)
             .map(|_| {
                 serve_once(

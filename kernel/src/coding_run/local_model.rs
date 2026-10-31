@@ -332,7 +332,7 @@ where
             // The connection ends with the runtime.
             drop(runtime);
             if matches!(result, Err(ModelError::Stopped)) {
-                watch.authority().record_halt(
+                watch.record_halt(
                     crate::emergency_stop::HaltArea::ModelCall,
                     crate::emergency_stop::HaltOutcome::Ended,
                 );

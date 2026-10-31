@@ -8,10 +8,20 @@
 
 use nexus_connectors_llm::providers::ollama::OllamaProvider;
 use nexus_connectors_llm::providers::LlmProvider;
-use nexus_kernel::emergency_stop::{HaltArea, HaltOutcome, StopAuthority};
-use std::sync::{Arc, Mutex};
+use nexus_kernel::emergency_stop::{HaltArea, HaltOutcome, StopAuthority, StopController};
+use std::sync::{Arc, Mutex, OnceLock};
 
 static SERIAL: Mutex<()> = Mutex::new(());
+
+/// This binary stands in for the owner's Stop/Resume path (M0-FIX2 F10): it
+/// holds the process's stop controller, claimed once and shared by its
+/// serialized tests.
+fn owner_controller() -> &'static StopController {
+    static CONTROLLER: OnceLock<StopController> = OnceLock::new();
+    CONTROLLER.get_or_init(|| {
+        StopAuthority::claim_global_controller().expect("the process's stop controller")
+    })
+}
 
 /// A hermetic loopback HTTP server for the stop tests: each request is
 /// answered by `reply(path)`, or held open (`None`) until the client closes
@@ -162,8 +172,9 @@ fn stopped_in_flight(
     call: impl FnOnce(OllamaProvider) -> Result<String, String> + Send + 'static,
 ) {
     let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-    let stop = StopAuthority::global();
-    stop.lift();
+    let controller = owner_controller();
+    let stop = controller.authority().clone();
+    controller.lift_if(stop.stop_number());
     let server = Server::start(Arc::new(|_: &str| None));
     let provider = OllamaProvider::local_only(&server.base)
         .unwrap()
@@ -202,7 +213,7 @@ fn stopped_in_flight(
     assert_eq!(model_call_halts(&stop), halts_before + 1);
 
     // After the owner's resume, calls run again.
-    stop.lift();
+    assert!(controller.lift_if(stop.stop_number()));
     server.set_reply(Arc::new(|_: &str| {
         Some((200, r#"{"response":"resumed","done":true}"#.to_string()))
     }));

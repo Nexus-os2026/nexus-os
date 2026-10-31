@@ -1105,7 +1105,7 @@ impl CodingRun {
     pub(crate) fn halt_if_stopped(&mut self) -> Result<(), RunError> {
         let refusal = self.stop_refusal();
         if refusal.is_err() && self.stop_ends() {
-            self.stop.authority().record_halt(
+            self.stop.record_halt(
                 crate::emergency_stop::HaltArea::Coding,
                 crate::emergency_stop::HaltOutcome::Ended,
             );
@@ -1133,7 +1133,7 @@ impl CodingRun {
         if let Some(state) = terminal {
             if !self.state.is_terminal() {
                 if state == RunState::Revoked(RevocationReason::EmergencyStop) {
-                    self.stop.authority().record_halt(
+                    self.stop.record_halt(
                         crate::emergency_stop::HaltArea::Coding,
                         crate::emergency_stop::HaltOutcome::Ended,
                     );

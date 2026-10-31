@@ -7947,6 +7947,7 @@ mod tests {
     #[test]
     fn m0_f5_new_goals_are_refused_until_the_owner_resumes() {
         let stop = StopAuthority::new();
+        let controller = stop.claim_controller().unwrap();
         let (sup, agent_id) = make_supervisor_with_agent();
         let runtime = f5_runtime(sup, &stop);
         stop.engage();
@@ -7955,7 +7956,7 @@ mod tests {
             .unwrap_err();
         assert!(refused.to_string().contains("emergency stop"), "{refused}");
         assert!(!runtime.has_active_loop(&agent_id));
-        stop.lift();
+        assert!(controller.lift_if(stop.stop_number()));
         runtime
             .assign_goal(&agent_id, AgentGoal::new("after resume".into(), 5))
             .unwrap();

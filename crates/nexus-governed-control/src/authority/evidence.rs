@@ -36,6 +36,9 @@ pub enum EvidencePhase {
     CredentialReleased,
     DisplayStarted,
     DisplayStopped,
+    /// M0-FIX2 F10: kernel work (a model call) that the owner's emergency
+    /// stop ended: its area, the stop's number and the outcome only.
+    KernelHalt,
 }
 
 impl EvidencePhase {
@@ -61,6 +64,7 @@ impl EvidencePhase {
             EvidencePhase::DisplayStarted => "display_started",
             EvidencePhase::DisplayStopped => "display_stopped",
             EvidencePhase::CredentialReleased => "credential_released",
+            EvidencePhase::KernelHalt => "kernel_halt",
         }
     }
 }

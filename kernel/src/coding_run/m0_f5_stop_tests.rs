@@ -204,6 +204,7 @@ fn m0_f5_stop_refuses_verification() {
 #[test]
 fn m0_f5_new_runs_are_refused_until_the_owner_resumes() {
     let stop = StopAuthority::new();
+    let controller = stop.claim_controller().unwrap();
     let f = fixture();
     with_test_stop_authority(stop.clone(), || {
         let mut old = staged_run(&f);
@@ -219,7 +220,7 @@ fn m0_f5_new_runs_are_refused_until_the_owner_resumes() {
             .unwrap_err(),
             RunError::Revoked(RevocationReason::EmergencyStop)
         );
-        stop.lift();
+        assert!(controller.lift_if(stop.stop_number()));
         assert!(old.edit(replace("src/lib.rs", "x\n")).is_err());
         assert!(halted_by_stop(&old), "{:?}", old.state());
         let mut fresh = staged_run(&f);
