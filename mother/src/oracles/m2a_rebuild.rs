@@ -483,3 +483,116 @@ fn m2a_close_a_journal_failure_during_recovery_still_withdraws_every_action() {
     }
     assert!(w.journal.is_poisoned());
 }
+
+/// The journal of three missions that each left an action open: 1 stopped
+/// (its withdrawal never ran), 2 waiting, 3 interrupted after the Owner
+/// approved its action (journaled approved, not closed).
+fn three_open() -> Vec<String> {
+    let c = contract();
+    let action_of = |n: u8| PendingAction {
+        run: format!("run-{:032x}", n),
+        commitment: format!("cmt-{:032x}", n),
+        deadline_mono_ms: 600_000,
+    };
+    let mut lines = Vec::new();
+    let mut prev = GENESIS.to_string();
+    let mut seq = 0u64;
+    for n in 1..=3u8 {
+        let mission = MissionId(n as u64);
+        let mut events = settled("awaiting_approval");
+        events[0] = Event::Drafted {
+            contract: c.clone(),
+        };
+        events.push(Event::ApprovalPending {
+            effect: 0,
+            pending: action_of(n),
+        });
+        events.push(wait());
+        match n {
+            1 => events.push(Event::Transition {
+                trigger: Trigger::Stop {
+                    reason: "owner".into(),
+                },
+            }),
+            3 => events.push(Event::Transition {
+                trigger: Trigger::ActionApproved {
+                    effect: 0,
+                    phase: MissionState::Investigating,
+                },
+            }),
+            _ => {}
+        }
+        for event in events {
+            let entry = Entry::chained(seq, &prev, mission, event);
+            prev = entry.hash.clone();
+            lines.push(entry.to_line());
+            seq += 1;
+        }
+    }
+    lines
+}
+
+/// A port scripted for the Codex case: mission 3's approved action is
+/// still executing when recovery first asks, and final when it asks again.
+fn scripted(w: &World) {
+    w.port
+        .script_settled(&format!("cmt-{:032x}", 3), vec![false, true]);
+}
+
+/// Codex re-review #2 MAJOR (oracle first): recovery is fail-closed. For
+/// every N, a journal that fails the Nth append recovery makes (the
+/// closures, the interrupted mission's block and its late closure in
+/// end_with) makes open() fail, and every open request is withdrawn, the
+/// waiting one too. With no failure, open() succeeds and only the waiting
+/// request stays open.
+#[test]
+fn m2a_recovery_fails_closed_at_every_append() {
+    let clean = world();
+    clean.journal.set_lines(three_open());
+    scripted(&clean);
+    let mother = clean.reopen().unwrap();
+    let appends = clean.journal.lines().len() - three_open().len();
+    assert!(appends >= 3, "{appends}");
+    assert_eq!(
+        mother.state(MissionId(2)),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert!(clean.port.is_cancelled(MissionId(1)));
+    assert!(clean.port.is_cancelled(MissionId(3)));
+    assert!(
+        !clean.port.is_cancelled(MissionId(2)),
+        "a waiting request stays"
+    );
+    for n in 0..appends {
+        let w = world();
+        w.journal.set_lines(three_open());
+        scripted(&w);
+        w.journal.fail_after(n);
+        assert!(w.reopen().is_err(), "append {n} failed, yet open succeeded");
+        for m in 1..=3u64 {
+            assert!(
+                w.port.is_cancelled(MissionId(m)),
+                "append {n} failed: mission {m} not withdrawn"
+            );
+        }
+    }
+}
+
+/// Codex re-review #2: a withdrawal the port fails during recovery makes
+/// open() fail, and every open request is withdrawn.
+#[test]
+fn m2a_recovery_fails_closed_when_a_withdrawal_fails() {
+    let w = world();
+    w.journal.set_lines(three_open());
+    w.port.fail_withdrawal(MissionId(1));
+    assert!(matches!(
+        w.reopen(),
+        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+    ));
+    for m in 1..=3u64 {
+        assert!(
+            w.port.is_cancelled(MissionId(m)),
+            "mission {m} not withdrawn"
+        );
+    }
+}

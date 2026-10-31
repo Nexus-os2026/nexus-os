@@ -75,6 +75,10 @@ struct PortState {
     pending: Option<PendingAction>,
     /// Whether the broker is said to hold a request final (default yes).
     unsettled: bool,
+    /// Per commitment: what the next settled checks answer, in order.
+    settled_script: std::collections::BTreeMap<String, VecDeque<bool>>,
+    /// Missions whose withdrawal the port fails.
+    failing_withdrawals: BTreeSet<MissionId>,
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
@@ -191,6 +195,19 @@ impl RecordingPort {
         self.lock().unsettled = !settled;
     }
 
+    /// The next settled checks of `commitment` answer `answers`, in order
+    /// (then the default).
+    pub fn script_settled(&self, commitment: &str, answers: Vec<bool>) {
+        self.lock()
+            .settled_script
+            .insert(commitment.to_string(), answers.into());
+    }
+
+    /// Withdrawing `mission` fails at the port (it is still recorded).
+    pub fn fail_withdrawal(&self, mission: MissionId) {
+        self.lock().failing_withdrawals.insert(mission);
+    }
+
     pub fn adopted(&self) -> Vec<(MissionId, PendingAction, usize)> {
         self.lock().adopted.clone()
     }
@@ -269,8 +286,25 @@ impl EffectPort for RecordingPort {
         state.adopted.push((mission, pending.clone(), calls));
     }
 
-    fn settled(&self, _: &PendingAction) -> bool {
-        !self.lock().unsettled
+    fn settled(&self, pending: &PendingAction) -> bool {
+        let mut state = self.lock();
+        let default = !state.unsettled;
+        state
+            .settled_script
+            .get_mut(&pending.commitment)
+            .and_then(VecDeque::pop_front)
+            .unwrap_or(default)
+    }
+
+    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
+        let mut state = self.lock();
+        state.calls.push(PortCall::Cancel(mission));
+        state.cancelled.insert(mission);
+        self.changed.notify_all();
+        if state.failing_withdrawals.contains(&mission) {
+            return Err(refusal("withdrawal_failed"));
+        }
+        Ok(())
     }
 
     fn approval(&self, mission: MissionId) -> ApprovalStatus {

@@ -10,7 +10,7 @@ use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{ApprovalStatus, EffectPort, PendingAction};
 use crate::journal::MissionId;
-use crate::journal::{verify, Entry, Event, JournalStore};
+use crate::journal::{verify, Entry, Event, JournalStore, MemoryJournal};
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
 use crate::state::MissionState;
 use crate::state::Trigger;
@@ -428,19 +428,6 @@ fn m2a_a_port_adopts_only_live_unclaimed_actions(w: &World) {
     let now = control.authority().clock().monotonic_ms();
     let taken = port.pending(MissionId(9102)).unwrap();
     assert!(taken.deadline_mono_ms <= now + lifetime, "{taken:?}");
-    // Codex re-review MINOR (a): no later than the action's remaining
-    // lifetime by the broker's wall-clock expiry, read before the port
-    // took it (stronger than now + lifetime).
-    let port2 = GovernedPort::new(control.clone());
-    let wall_before = control.authority().clock().wall_ms();
-    port2.adopt(MissionId(9104), &action(live, &view, u64::MAX));
-    // Held by `port` for 9102: a second port takes it (ports do not share).
-    let mono_after = control.authority().clock().monotonic_ms();
-    let taken = port2.pending(MissionId(9104)).unwrap();
-    assert!(
-        taken.deadline_mono_ms <= mono_after + view.expires_wall_ms.saturating_sub(wall_before),
-        "{taken:?}"
-    );
     port.cancel(MissionId(9102));
     assert!(control.authority().runs().view(live).unwrap().cancelled);
     assert_eq!(w.unserved(), 0);
@@ -657,11 +644,16 @@ fn real_broker_m1_oracles() {
     // Second review MINOR and NIT: only a live, unclaimed run; a deadline
     // never later than the broker's.
     m2a_a_port_adopts_only_live_unclaimed_actions(&w);
+    // Codex re-review MINOR (a), as its own oracle (Codex re-review #2).
+    m2a_an_adopted_deadline_is_within_the_remaining_lifetime(&w);
     // Codex re-review MAJOR: every journaled crash point, recovered by a
     // brand-new port and coordinator over the same live broker.
     m2a_crash_points_on_the_real_broker(&w);
     // Added after mutation testing: the port's own settled check.
     m2a_the_port_settles_only_mother_s_final_actions(&w);
+    // Codex re-review #2 MAJOR: recovery is fail-closed for every failing
+    // append.
+    m2a_recovery_fails_closed_at_every_append_on_the_real_broker(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
@@ -747,6 +739,172 @@ fn closures(path: &std::path::Path, mission: MissionId) -> usize {
         .iter()
         .filter(|e| e.mission == mission && matches!(e.event, Event::ApprovalClosed { .. }))
         .count()
+}
+
+/// Codex re-review MINOR (a), moved out of the oracle above (which is
+/// restored as it was at d71cb3df): a handed-back action's deadline is no
+/// later than its remaining lifetime by the broker's wall-clock expiry,
+/// read before the port took it.
+fn m2a_an_adopted_deadline_is_within_the_remaining_lifetime(w: &World) {
+    let control = &w.home.control;
+    let agent = mother_agent();
+    let run = control
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let AgentOutcome::AwaitingApproval(view) = control
+        .agent_action(&agent, run, &post_to(&w.origin, "deadline"))
+        .unwrap()
+    else {
+        panic!("a POST waits for the Owner");
+    };
+    let port = GovernedPort::new(control.clone());
+    let wall_before = control.authority().clock().wall_ms();
+    port.adopt(
+        MissionId(9201),
+        &PendingAction {
+            run: run.to_string(),
+            commitment: view.id.to_string(),
+            deadline_mono_ms: u64::MAX,
+        },
+    );
+    let mono_after = control.authority().clock().monotonic_ms();
+    let taken = port.pending(MissionId(9201)).unwrap();
+    assert!(
+        taken.deadline_mono_ms <= mono_after + view.expires_wall_ms.saturating_sub(wall_before),
+        "{taken:?}"
+    );
+    port.cancel(MissionId(9201));
+    assert!(control.authority().runs().view(run).unwrap().cancelled);
+    assert_eq!(w.unserved(), 0);
+}
+
+/// Codex re-review #2 MAJOR (oracle first): recovery is fail-closed. Three
+/// requests are left open by a dead coordinator: a stopped mission's (its
+/// Stop journaled, never withdrawn), a waiting mission's, and an
+/// interrupted mission's (identity journaled, wait not). For every N, a
+/// journal that fails its Nth append during recovery makes `open` fail
+/// and leaves no request approvable or executable; with no failure,
+/// `open` succeeds and only the waiting request stays open.
+fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
+    let control = &w.home.control;
+    let agent = mother_agent();
+    let lanes = || Lanes::new(keyed_lanes()).unwrap();
+    let clock = || Arc::new(SystemClock::default());
+    // Leave three requests open in a fresh journal; returns the journal's
+    // lines and each request's run and commitment.
+    let scene = |round: usize| {
+        let journal = MemoryJournal::new();
+        let port = Arc::new(GovernedPort::new(control.clone()));
+        let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
+        let mut requests = Vec::new();
+        for n in 1..=3u64 {
+            let id = mother
+                .draft(contract_with(&format!(
+                    "POST-BUILDER:{}/fault-{round}-{n}",
+                    w.origin
+                )))
+                .unwrap();
+            assert_eq!(id, MissionId(n));
+            mother.submit(id).unwrap();
+            mother.request_consent(id, &Yes).unwrap();
+            for _ in 0..3 {
+                mother.advance(id).unwrap();
+            }
+            assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
+            let pending = port.pending(id).unwrap();
+            requests.push((
+                RunId::parse(&pending.run).unwrap(),
+                nexus_governed_control::authority::ids::CommitmentId::parse(&pending.commitment)
+                    .unwrap(),
+            ));
+        }
+        drop(mother);
+        drop(port);
+        // Mission 3 died before its wait was journaled; mission 1's Stop
+        // was journaled and never withdrawn.
+        let mut lines = journal.lines();
+        lines.pop();
+        let entries = verify(&lines).unwrap();
+        let last = entries.last().unwrap();
+        let stop = Entry::chained(
+            entries.len() as u64,
+            &last.hash,
+            MissionId(1),
+            Event::Transition {
+                trigger: Trigger::Stop {
+                    reason: "owner".into(),
+                },
+            },
+        );
+        lines.push(stop.to_line());
+        (lines, requests)
+    };
+    let unapprovable = |(run, commitment): (RunId, _), why: &str| {
+        let state = control
+            .authority()
+            .commitments()
+            .view(commitment)
+            .unwrap()
+            .state;
+        assert!(
+            !matches!(
+                state,
+                CommitmentState::Prepared | CommitmentState::Authorized
+            ),
+            "{why}: {state:?}"
+        );
+        assert!(
+            control
+                .authorize(commitment, &agent, run, &OwnerApproves)
+                .is_err(),
+            "{why}"
+        );
+        assert!(control.execute(commitment, &agent, run).is_err(), "{why}");
+    };
+
+    // How many appends a recovery that does not fail makes.
+    let (lines, requests) = scene(0);
+    let journal = MemoryJournal::new();
+    journal.set_lines(lines.clone());
+    let port = Arc::new(GovernedPort::new(control.clone()));
+    let mother = Coordinator::open(journal.clone(), port, lanes(), clock()).unwrap();
+    let appends = journal.lines().len() - lines.len();
+    assert!(appends >= 3, "{appends}");
+    assert_eq!(
+        mother.state(MissionId(2)),
+        Some(MissionState::AwaitingApproval)
+    );
+    unapprovable(requests[0], "no failure: the stopped mission's");
+    unapprovable(requests[2], "no failure: the interrupted mission's");
+    assert_eq!(
+        control
+            .authority()
+            .commitments()
+            .view(requests[1].1)
+            .unwrap()
+            .state,
+        CommitmentState::Prepared,
+        "no failure: the waiting request stays open"
+    );
+    mother.stop(MissionId(2)).unwrap();
+    unapprovable(requests[1], "no failure, then Stop");
+    drop(mother);
+
+    for n in 0..appends {
+        let (lines, requests) = scene(n + 1);
+        let journal = MemoryJournal::new();
+        journal.set_lines(lines);
+        journal.fail_after(n);
+        let port = Arc::new(GovernedPort::new(control.clone()));
+        assert!(
+            Coordinator::open(journal, port, lanes(), clock()).is_err(),
+            "append {n} failed, yet open succeeded"
+        );
+        for (i, request) in requests.into_iter().enumerate() {
+            unapprovable(request, &format!("append {n} failed: request {}", i + 1));
+        }
+    }
+    assert_eq!(w.unserved(), 0);
 }
 
 /// Added after mutation testing (two mutants of `settled` survived the
