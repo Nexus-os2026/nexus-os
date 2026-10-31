@@ -305,6 +305,25 @@ fn is_removed_legacy_action(action: &PlannedAction) -> bool {
     )
 }
 
+/// The refusal of the four agent-management actions with no handler (M0-FIX
+/// F11). Creating, destroying and messaging an agent, and a human-in-the-loop
+/// request, were served by the legacy supervisor stack (M0-FIX F7), which no
+/// longer exists; the executor's fallback used to report them as a success
+/// that did nothing. They are refused, so the loop records a failed step.
+const AGENT_ACTION_UNSERVED: &str = "refused: no handler serves this agent-management action \
+     since the legacy supervisor stack was removed (M0-FIX F7, F11); it did not run";
+
+/// Whether `action` is one of the four unserved agent-management actions.
+fn is_unserved_agent_action(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::CreateSubAgent { .. }
+            | PlannedAction::DestroySubAgent { .. }
+            | PlannedAction::AgentMessage { .. }
+            | PlannedAction::HitlRequest { .. }
+    )
+}
+
 /// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
 /// context come from the plan and are carried with its label; each earlier
 /// step's result is included verbatim or carried as derived.
@@ -561,6 +580,9 @@ impl RegistryExecutor {
                 }
                 Ok(format!("notification sent: {title}"))
             }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
+            }
             _ => Ok(format!(
                 "action '{}' not routed through actuators",
                 action.action_type()
@@ -583,6 +605,9 @@ impl ActionExecutor for RegistryExecutor {
             }
             _ if is_removed_legacy_action(action) => {
                 Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
             }
             // A model call, or a read or write of retained records, needs a
             // unit (§6.1, §11.4): never run without one.
@@ -627,6 +652,9 @@ impl ActionExecutor for RegistryExecutor {
             }
             _ if is_removed_legacy_action(action) => {
                 Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
             }
             PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
                 let handler = self.llm_handler.as_ref().expect("checked");
