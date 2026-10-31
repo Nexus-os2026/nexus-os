@@ -122,8 +122,8 @@ pub struct GovernedControl {
     /// The controller of the kernel's emergency-stop authority (M0-FIX F5,
     /// sealed by M0-FIX2 F10): the owner's emergency stop engages it and
     /// the owner's resume lifts it. In production it is the process's
-    /// controller, minted once and held here alone: no other code can lift
-    /// the kernel's stop.
+    /// controller, minted once (first claim wins) and claimed here; only
+    /// its holder can lift the kernel's stop.
     kernel_stop: StopController,
     /// Tests only: runs once inside the next stop, between its kernel
     /// engagement and its broker step (where a test interleaves a resume).
@@ -189,6 +189,16 @@ impl GovernedControl {
     /// Build the production control: `root` is the owned runtime directory,
     /// `vault` where credentials come from, `evidence` the evidence of
     /// record (the Phase Three evidence store, with its projections).
+    ///
+    /// Host contract (M0-FIX2 F10): this claims the process's kernel
+    /// stop controller, which is minted once and never returned. Build the
+    /// front door once, at startup, before any other code runs that could
+    /// claim the controller (if anything claimed it first, this refuses:
+    /// `AuthorityError::Unavailable`), and keep it for the life of the
+    /// process. Dropping it fails closed: a kernel stop then in force can
+    /// never be lifted in this process, later front doors are refused, and
+    /// later model-call halts are counted as unrecorded
+    /// (`StopAuthority::unrecorded_halts`).
     pub fn new(
         root: &Path,
         vault: Vault,
@@ -206,8 +216,9 @@ impl GovernedControl {
     ) -> Result<Self, AuthorityError> {
         let root = RuntimeRoot::open(root)?;
         // The owner's Stop/Resume path holds the kernel stop's controller
-        // (M0-FIX2 F10): the process's, which is minted once, so a second
-        // front door (or anything that claimed it first) is refused.
+        // (M0-FIX2 F10): the process's, which is minted once (first claim
+        // wins), so a second front door, or one built after anything else
+        // claimed it, is refused.
         let kernel_stop = if cfg!(test) {
             StopAuthority::new().claim_controller()
         } else {

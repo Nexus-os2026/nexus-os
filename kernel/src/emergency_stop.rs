@@ -27,7 +27,8 @@
 //!
 //! # Who may lift a stop (M0-FIX2 F10)
 //!
-//! Only the owner's Stop/Resume path. The authority itself cannot lift:
+//! Only the holder of the authority's [`StopController`]. The authority
+//! itself cannot lift:
 //!
 //! ```compile_fail
 //! nexus_kernel::emergency_stop::StopAuthority::global().lift();
@@ -45,6 +46,20 @@
 //!     controller.clone()
 //! }
 //! ```
+//!
+//! The process's authority mints its controller once, through
+//! [`StopAuthority::claim_global_controller`], which the governed-control
+//! front door (the owner's Stop/Resume path) calls when it is built. That
+//! function is `pub`, and Rust cannot restrict a `pub` item to one other
+//! crate, so this part is not a type-level seal: the first claim wins; the
+//! front door refuses to be built when the controller is already taken
+//! (fail closed); and a workspace-wide source scan
+//! (`kernel/tests/m0_fix2_f10_stop_seal.rs`) allows only the front door and
+//! named test binaries to name the function. There is no production host
+//! in this workspace yet: a host must build its front door at startup,
+//! before running any other code that could claim the controller, and keep
+//! it for the life of the process (dropping it never returns the
+//! controller, so a stop then in force stays in force).
 //!
 //! A private authority's controller is claimed once, by its creator; the
 //! process's authority never hands its controller out this way:
@@ -187,6 +202,9 @@ struct State {
     number: u64,
     halts: VecDeque<HaltRecord>,
     audit: Option<AttachedAudit>,
+    /// Model-call halts that never reached a durable audit: lost from the
+    /// bounded log before any audit was attached, or refused by the audit.
+    unrecorded: u64,
 }
 
 /// The emergency-stop authority.
@@ -196,8 +214,10 @@ struct State {
 /// may take, which the owner's resume undoes). Lifting a stop is not a
 /// method of the authority: it needs the authority's [`StopController`],
 /// which is minted once. The process's authority mints it only through
-/// [`StopAuthority::claim_global_controller`], which the owner's Stop/Resume
-/// path (the governed-control front door) claims when it is built.
+/// [`StopAuthority::claim_global_controller`]: first claim wins, and the
+/// owner's Stop/Resume path (the governed-control front door) claims it
+/// when it is built, refusing to be built when it is already taken (see
+/// the module documentation for what this does and does not seal).
 #[derive(Debug, Default)]
 pub struct StopAuthority {
     state: Mutex<State>,
@@ -241,10 +261,13 @@ impl StopAuthority {
         self.mint_controller()
     }
 
-    /// The controller of the process's authority, once per process. The
-    /// owner's Stop/Resume path claims it when it is built (and refuses to
-    /// be built without it); nothing else in production may name this
-    /// function (guarded by `kernel/tests/m0_fix2_f10_stop_seal.rs`).
+    /// The controller of the process's authority, once per process: the
+    /// first claim wins and every later one gets `None`. The owner's
+    /// Stop/Resume path (the governed-control front door) claims it when it
+    /// is built and refuses to be built without it. This is `pub` and so
+    /// callable by any crate: only the workspace-wide source scan
+    /// `kernel/tests/m0_fix2_f10_stop_seal.rs` keeps other code from naming
+    /// it, and a host must build its front door before any other code runs.
     pub fn claim_global_controller() -> Option<StopController> {
         Self::global().mint_controller()
     }
@@ -299,17 +322,40 @@ impl StopAuthority {
 
     /// Record what a stop ended (bounded; no content): in the halt log and,
     /// for a model call, in the attached durable audit (written after the
-    /// lock is released).
+    /// lock is released). Stamped with the current stop number; work that
+    /// holds a [`StopWatch`] records through [`StopWatch::record_halt`],
+    /// which names the stop that ended it.
     pub(crate) fn record_halt(&self, area: HaltArea, outcome: HaltOutcome) -> HaltAudited {
+        self.record(area, outcome, None)
+    }
+
+    /// Record a halt of work admitted at stop number `admitted_at` (if
+    /// known): it is attributed to the first stop engaged after that, the
+    /// one that ended it.
+    fn record(
+        &self,
+        area: HaltArea,
+        outcome: HaltOutcome,
+        admitted_at: Option<u64>,
+    ) -> HaltAudited {
         let (record, audit) = {
             let mut state = self.lock();
+            let stop_number = match admitted_at {
+                Some(admitted) if state.number != admitted => admitted.saturating_add(1),
+                _ => state.number,
+            };
             let record = HaltRecord {
                 area,
-                stop_number: state.number,
+                stop_number,
                 outcome,
             };
             if state.halts.len() == HALT_LOG_CAPACITY {
-                state.halts.pop_front();
+                let dropped = state.halts.pop_front();
+                // A model-call halt leaving the log before any audit was
+                // attached can no longer be written to one: it is lost.
+                if state.audit.is_none() && dropped.is_some_and(|halt| halt.area.durable()) {
+                    state.unrecorded = state.unrecorded.saturating_add(1);
+                }
             }
             state.halts.push_back(record.clone());
             let audit = state.audit.as_ref().map(|audit| Arc::clone(&audit.0));
@@ -319,9 +365,35 @@ impl StopAuthority {
             return HaltAudited::OwnAudit;
         }
         match audit {
-            Some(audit) => audit.record(&record),
+            Some(audit) => {
+                let audited = audit.record(&record);
+                if audited == HaltAudited::Unrecorded {
+                    self.count_unrecorded(1);
+                }
+                audited
+            }
             None => HaltAudited::NoAudit,
         }
+    }
+
+    fn count_unrecorded(&self, halts: u64) {
+        let mut state = self.lock();
+        state.unrecorded = state.unrecorded.saturating_add(halts);
+    }
+
+    /// How many model-call halts never reached a durable audit: lost from
+    /// the bounded log before an audit was attached, or refused by the
+    /// attached audit (its store could not take them, or its front door is
+    /// gone). A halt still takes effect whatever its record became; this
+    /// count is how a failed record stays observable.
+    pub fn unrecorded_halts(&self) -> u64 {
+        self.lock().unrecorded
+    }
+
+    /// Whether a durable halt audit is attached. Until one is, model-call
+    /// halts wait in the bounded log and are written on attachment.
+    pub fn halt_audit_attached(&self) -> bool {
+        self.lock().audit.is_some()
     }
 
     /// The halt log, oldest first.
@@ -339,7 +411,8 @@ impl StopAuthority {
 /// The right to lift one authority's stop: minted once per authority (see
 /// [`StopAuthority::claim_global_controller`]), never cloned, copied or
 /// built elsewhere. For the process's authority it is held by the owner's
-/// Stop/Resume path alone.
+/// Stop/Resume path. It is never handed back: once dropped, its authority
+/// can never be lifted again in this process (fail closed).
 #[must_use]
 pub struct StopController {
     authority: Arc<StopAuthority>,
@@ -400,8 +473,12 @@ impl StopController {
                 .cloned()
                 .collect()
         };
-        for halt in &backlog {
-            audit.record(halt);
+        let refused = backlog
+            .iter()
+            .filter(|halt| audit.record(halt) == HaltAudited::Unrecorded)
+            .count();
+        if refused > 0 {
+            self.authority.count_unrecorded(refused as u64);
         }
         Ok(())
     }
@@ -439,6 +516,12 @@ impl StopWatch {
 
     pub fn authority(&self) -> &Arc<StopAuthority> {
         &self.authority
+    }
+
+    /// Record that a stop ended this work, under the stop that ended it
+    /// (see [`StopAuthority::record_halt`]).
+    pub(crate) fn record_halt(&self, area: HaltArea, outcome: HaltOutcome) -> HaltAudited {
+        self.authority.record(area, outcome, Some(self.admitted_at))
     }
 
     /// Block until this watch is halted (true) or `done` is set (false).
@@ -634,7 +717,7 @@ impl GuardedChild {
                 Ok(_) => HaltOutcome::Ended,
                 Err(error) => HaltOutcome::CleanupFailed(error.clone()),
             };
-            self.watch.authority().record_halt(self.area, outcome);
+            self.watch.record_halt(self.area, outcome);
         }
         end
     }
