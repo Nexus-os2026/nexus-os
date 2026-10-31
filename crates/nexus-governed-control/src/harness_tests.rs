@@ -258,3 +258,57 @@ fn serve(stream: TcpStream, received: &Mutex<Vec<Received>>, handler: &Handler) 
     let _ = stream.write_all(&reply.body);
     let _ = stream.flush();
 }
+
+/// The canonical path of the system tool `name`, for a fixture.
+///
+/// The broker accepts an executable only by its canonical path, and hosts
+/// differ in how they install coreutils (regular files on GNU, symlinks into
+/// a multicall binary on rust-coreutils). A fixture therefore never hardcodes
+/// `/usr/bin/<tool>`: it resolves the tool in the standard system directories
+/// and canonicalizes it. It fails the test loudly if the tool is absent.
+pub fn canonical_tool(name: &str) -> &'static str {
+    let canonical = ["/usr/bin", "/bin"]
+        .iter()
+        .map(|dir| std::path::Path::new(dir).join(name))
+        .find(|candidate| candidate.exists())
+        .unwrap_or_else(|| panic!("the fixture tool `{name}` is not installed"));
+    let canonical = std::fs::canonicalize(&canonical)
+        .unwrap_or_else(|e| panic!("cannot canonicalize `{}`: {e}", canonical.display()));
+    assert!(
+        canonical.is_absolute() && canonical.is_file(),
+        "{canonical:?}"
+    );
+    Box::leak(canonical.to_string_lossy().into_owned().into_boxed_str())
+}
+
+/// `canonical_tool` for the tool a path names (`/usr/bin/sleep` -> `sleep`).
+pub fn canonical_tool_at(path: &str) -> &'static str {
+    let name = std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_else(|| panic!("`{path}` names no tool"));
+    canonical_tool(name)
+}
+
+/// `definitions` with each executable replaced by its canonical path. The
+/// definitions, their trust and their checks are otherwise untouched.
+pub fn canonical_definitions(
+    mut definitions: Vec<crate::tool::ToolDefinition>,
+) -> Vec<crate::tool::ToolDefinition> {
+    for definition in &mut definitions {
+        definition.executable = canonical_tool_at(definition.executable);
+    }
+    definitions
+}
+
+#[test]
+fn a_fixture_tool_is_named_by_its_own_canonical_path() {
+    for name in ["env", "sha256sum", "sleep", "yes", "false", "touch"] {
+        let path = canonical_tool(name);
+        assert_eq!(
+            std::fs::canonicalize(path).unwrap(),
+            std::path::Path::new(path),
+            "{name}"
+        );
+    }
+}
