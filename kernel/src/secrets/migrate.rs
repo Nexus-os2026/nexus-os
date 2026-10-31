@@ -66,17 +66,6 @@ pub enum UpgradeReport {
     Upgraded { rows: Vec<(String, String)> },
 }
 
-/// Explicit one-time upgrade of legacy (unbound) secret rows to the
-/// identity-bound format. Interface registered with the M0-FIX F4 oracle;
-/// not implemented yet, so it fails closed.
-pub fn upgrade_legacy_secrets(
-    _sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
-) -> Result<UpgradeReport, MigrationError> {
-    Err(MigrationError::Storage(
-        "secrets upgrade not implemented".into(),
-    ))
-}
-
 #[derive(Debug, Clone)]
 pub enum MigrationReport {
     AlreadyRun,
@@ -175,7 +164,7 @@ pub fn migrate_config_to_vault(
     for (scope, name, value) in &fields {
         let z = Zeroizing::new(value.clone());
         let (nonce, ciphertext) = sqlite
-            .encrypt_for_migration(z.as_bytes())
+            .encrypt_for_migration(scope, name, z.as_bytes())
             .map_err(|e| MigrationError::Crypto(format!("{e}")))?;
         prepared.push((scope.clone(), name.clone(), nonce, ciphertext));
     }
@@ -217,5 +206,94 @@ pub fn migrate_config_to_vault(
     Ok(MigrationReport::Migrated {
         fields_migrated: migrated,
         config_resave_failed: resave_failed,
+    })
+}
+
+/// `schema_versions` key recording that the one-time identity-binding
+/// upgrade of legacy secret rows completed.
+const AAD_SCHEMA_KEY: &str = "secrets_aad_v2";
+const AAD_SCHEMA_VERSION: i64 = 2;
+
+/// M0-FIX F4: explicit, one-time upgrade of legacy (unbound) secret rows
+/// to the identity-bound format.
+///
+/// Every legacy row is decrypted (without associated data, the only place
+/// that ever happens) and re-encrypted under its own `(scope, name)`.
+/// All replacements and the `secrets_aad_v2` completion marker are written
+/// in one transaction, each as a compare-and-swap on the bytes read:
+/// - any legacy row that does not decrypt (wrong key, damaged or foreign
+///   ciphertext) or opens to non-text fails the whole upgrade with an
+///   error naming the row, and nothing changes;
+/// - once the marker exists the upgrade never runs again; legacy rows
+///   that appear later (for example from an old backup) are reported as
+///   `LegacyAfterUpgrade` and stay refused by the read path.
+///
+/// Rows that are already bound, or malformed, are left untouched; the read
+/// path and the startup key check report them.
+pub fn upgrade_legacy_secrets(
+    sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
+) -> Result<UpgradeReport, MigrationError> {
+    use super::backend_sqlite::SqliteEnvelopeBackend;
+    use super::SecretError;
+    let db = sqlite.db();
+    let storage = |e: nexus_persistence::PersistenceError| MigrationError::Storage(format!("{e}"));
+    let completed = db
+        .schema_version(AAD_SCHEMA_KEY)
+        .map_err(storage)?
+        .is_some();
+    let legacy: Vec<_> = db
+        .list_secret_rows()
+        .map_err(storage)?
+        .into_iter()
+        .filter(|row| SqliteEnvelopeBackend::is_legacy_row(&row.nonce))
+        .collect();
+    if completed {
+        return if legacy.is_empty() {
+            Ok(UpgradeReport::AlreadyRun)
+        } else {
+            Err(MigrationError::LegacyAfterUpgrade {
+                count: legacy.len(),
+            })
+        };
+    }
+
+    let mut replacements = Vec::with_capacity(legacy.len());
+    for row in legacy {
+        let identity = || (row.scope.clone(), row.name.clone());
+        let plaintext = sqlite
+            .decrypt_legacy_for_upgrade(&row.nonce, &row.ciphertext)
+            .map_err(|e| {
+                let (scope, name) = identity();
+                match e {
+                    SecretError::DecryptionFailed => {
+                        MigrationError::LegacyUndecryptable { scope, name }
+                    }
+                    _ => MigrationError::LegacyDamaged { scope, name },
+                }
+            })?;
+        if std::str::from_utf8(&plaintext).is_err() {
+            let (scope, name) = identity();
+            return Err(MigrationError::LegacyDamaged { scope, name });
+        }
+        let (new_nonce, new_ciphertext) = sqlite
+            .encrypt_for_migration(&row.scope, &row.name, &plaintext)
+            .map_err(|e| MigrationError::Crypto(format!("{e}")))?;
+        drop(plaintext);
+        replacements.push(nexus_persistence::SecretRowReplacement {
+            scope: row.scope,
+            name: row.name,
+            old_nonce: row.nonce,
+            old_ciphertext: row.ciphertext,
+            new_nonce,
+            new_ciphertext,
+        });
+    }
+    db.replace_secret_rows_once(&replacements, AAD_SCHEMA_KEY, AAD_SCHEMA_VERSION)
+        .map_err(storage)?;
+    Ok(UpgradeReport::Upgraded {
+        rows: replacements
+            .into_iter()
+            .map(|row| (row.scope, row.name))
+            .collect(),
     })
 }

@@ -2286,6 +2286,97 @@ impl NexusDatabase {
         tx.commit()?;
         Ok(())
     }
+
+    /// M0-FIX F4: every secret row as `(scope, name, nonce, ciphertext)`,
+    /// ordered by scope then name. Read only by the kernel's explicit
+    /// secrets-format upgrade.
+    pub fn list_secret_rows(&self) -> Result<Vec<SecretRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT scope, name, nonce, ciphertext FROM secrets
+             ORDER BY scope, name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(SecretRow {
+                scope: row.get(0)?,
+                name: row.get(1)?,
+                nonce: row.get(2)?,
+                ciphertext: row.get(3)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// M0-FIX F4: replace secret rows and record the one-time
+    /// `schema_versions[schema_key]` marker in one SQLite transaction.
+    /// Each replacement is a compare-and-swap on the row's current
+    /// `(nonce, ciphertext)`. If any row changed or vanished since it was
+    /// read, or the marker already exists, everything rolls back.
+    pub fn replace_secret_rows_once(
+        &self,
+        rows: &[SecretRowReplacement],
+        schema_key: &str,
+        schema_version: i64,
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        for row in rows {
+            let changed = tx.execute(
+                "UPDATE secrets SET nonce = ?1, ciphertext = ?2, updated_at = ?3
+                 WHERE scope = ?4 AND name = ?5 AND nonce = ?6 AND ciphertext = ?7",
+                params![
+                    row.new_nonce,
+                    row.new_ciphertext,
+                    now,
+                    row.scope,
+                    row.name,
+                    row.old_nonce,
+                    row.old_ciphertext
+                ],
+            )?;
+            if changed != 1 {
+                return Err(PersistenceError::NotFound(format!(
+                    "secret row {}.{} changed before it was replaced",
+                    row.scope, row.name
+                )));
+            }
+        }
+        tx.execute(
+            "INSERT INTO schema_versions (key, version)
+             VALUES (?1, ?2)",
+            params![schema_key, schema_version],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+}
+
+/// M0-FIX F4: one stored secret row. The bytes are opaque to persistence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SecretRow {
+    pub scope: String,
+    pub name: String,
+    pub nonce: Vec<u8>,
+    pub ciphertext: Vec<u8>,
+}
+
+/// M0-FIX F4: a compare-and-swap replacement of one secret row.
+#[derive(Debug, Clone)]
+pub struct SecretRowReplacement {
+    pub scope: String,
+    pub name: String,
+    pub old_nonce: Vec<u8>,
+    pub old_ciphertext: Vec<u8>,
+    pub new_nonce: Vec<u8>,
+    pub new_ciphertext: Vec<u8>,
 }
 
 /// Genesis hash for the swarm-audit per-run chain. First row in a run
@@ -4946,6 +5037,44 @@ mod tests {
         });
         // The openai row must NOT have been committed.
         assert!(db.lookup_secret("llm", "openai_api_key").unwrap().is_none());
+    }
+
+    #[test]
+    fn replace_secret_rows_once_is_compare_and_swap_and_all_or_nothing() {
+        let db = test_db();
+        db.record_secret("llm", "a", b"n-a", b"c-a").unwrap();
+        db.record_secret("llm", "b", b"n-b", b"c-b").unwrap();
+        let rows = db.list_secret_rows().unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|r| (r.scope.as_str(), r.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("llm", "a"), ("llm", "b")]
+        );
+        let swap = |name: &str, old: &[u8]| SecretRowReplacement {
+            scope: "llm".into(),
+            name: name.into(),
+            old_nonce: format!("n-{name}").into_bytes(),
+            old_ciphertext: old.to_vec(),
+            new_nonce: b"new-n".to_vec(),
+            new_ciphertext: format!("new-{name}").into_bytes(),
+        };
+        // The second row no longer matches what was read: nothing changes.
+        let stale = [swap("a", b"c-a"), swap("b", b"stale")];
+        assert!(db.replace_secret_rows_once(&stale, "k", 2).is_err());
+        assert_eq!(db.list_secret_rows().unwrap(), rows);
+        assert_eq!(db.schema_version("k").unwrap(), None);
+        // Matching rows swap together with the marker, once.
+        let fresh = [swap("a", b"c-a"), swap("b", b"c-b")];
+        db.replace_secret_rows_once(&fresh, "k", 2).unwrap();
+        assert_eq!(db.schema_version("k").unwrap(), Some(2));
+        assert_eq!(
+            db.lookup_secret("llm", "b").unwrap(),
+            Some((b"new-n".to_vec(), b"new-b".to_vec()))
+        );
+        let after = db.list_secret_rows().unwrap();
+        assert!(db.replace_secret_rows_once(&[], "k", 2).is_err());
+        assert_eq!(db.list_secret_rows().unwrap(), after);
     }
 
     // ── Foreign-Key Enforcement (P3-C11-HM-FK01) ───────────────────────

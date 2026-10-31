@@ -34,7 +34,9 @@ use crate::secrets::backend_env::EnvBackend;
 use crate::secrets::backend_keyring::KeyringBackendAdapter;
 use crate::secrets::backend_memory::MemoryBackend;
 use crate::secrets::backend_sqlite::SqliteEnvelopeBackend;
-use crate::secrets::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
+use crate::secrets::migrate::{
+    migrate_config_to_vault, upgrade_legacy_secrets, MigrationError, MigrationReport,
+};
 use crate::secrets::{SecretBackend, SecretError, SecretsFacade};
 use std::sync::Arc;
 use thiserror::Error;
@@ -100,6 +102,20 @@ fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> 
     Ok(())
 }
 
+/// M0-FIX F4: the explicit one-time upgrade of legacy (unbound) vault rows
+/// to the identity-bound format, run before the key check. It writes
+/// nothing unless every legacy row opens under this key, so a legacy row
+/// this key does not open keeps the Final Gate item E outcome: the key is
+/// refused, and a row that opens to non-text is reported as damaged.
+fn upgrade_vault_rows(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> {
+    match upgrade_legacy_secrets(sqlite) {
+        Ok(_) => Ok(()),
+        Err(MigrationError::LegacyUndecryptable { .. }) => Err(StartupError::VaultKeyMismatch),
+        Err(MigrationError::LegacyDamaged { .. }) => Err(StartupError::VaultSecretDamaged),
+        Err(other) => Err(StartupError::Migration(other)),
+    }
+}
+
 /// Build the production facade, run the credential-vault
 /// migration, and install the global singleton.
 ///
@@ -118,6 +134,7 @@ pub fn run_migrations(
         .map_err(|e| StartupError::Crypto(format!("{e}")))?;
 
     let sqlite = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
+    upgrade_vault_rows(&sqlite)?;
     verify_vault_key(&sqlite)?;
 
     let env = Arc::new(EnvBackend::new());
@@ -312,7 +329,9 @@ mod tests {
         let not_text =
             Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
         let backend = SqliteEnvelopeBackend::new(Arc::clone(&not_text), &key());
-        let (nonce, ciphertext) = backend.encrypt_for_migration(&[0xff, 0xfe, 0x00]).unwrap();
+        let (nonce, ciphertext) = backend
+            .encrypt_for_migration("social", "x_consumer_key", &[0xff, 0xfe, 0x00])
+            .unwrap();
         not_text
             .record_secret("social", "x_consumer_key", &nonce, &ciphertext)
             .unwrap();
@@ -327,6 +346,52 @@ mod tests {
         ];
         assert_ne!(messages[0], messages[1]);
         assert!(messages[1].contains("damaged"), "{}", messages[1]);
+    }
+
+    /// M0-FIX F4: startup upgrades legacy rows only when every one opens
+    /// under the configured key; otherwise it refuses the key (or reports a
+    /// damaged row) and changes nothing.
+    #[test]
+    fn f4_startup_upgrades_legacy_vault_rows_only_under_their_key() {
+        use crate::secrets::tests::f4_write_legacy_row;
+        let key_a = || EncryptionKey::from_raw_for_test([0x11; 32]);
+        let key_b = || EncryptionKey::from_raw_for_test([0x22; 32]);
+        let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        f4_write_legacy_row(&db, &key_a(), "llm", "anthropic", b"synthetic-llm");
+        f4_write_legacy_row(
+            &db,
+            &key_a(),
+            "auth.oidc",
+            "client_secret",
+            b"synthetic-oidc",
+        );
+        let before = db.list_secret_rows().unwrap();
+        let wrong = SqliteEnvelopeBackend::new(Arc::clone(&db), &key_b());
+        assert!(matches!(
+            upgrade_vault_rows(&wrong),
+            Err(StartupError::VaultKeyMismatch)
+        ));
+        assert_eq!(db.list_secret_rows().unwrap(), before);
+
+        let right = SqliteEnvelopeBackend::new(Arc::clone(&db), &key_a());
+        upgrade_vault_rows(&right).unwrap();
+        verify_vault_key(&right).unwrap();
+        assert_eq!(
+            right.get("llm", "anthropic").unwrap().as_str(),
+            "synthetic-llm"
+        );
+        assert!(matches!(
+            verify_vault_key(&wrong),
+            Err(StartupError::VaultKeyMismatch)
+        ));
+
+        let damaged =
+            Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        f4_write_legacy_row(&damaged, &key_a(), "llm", "openai", &[0xff, 0xfe]);
+        assert!(matches!(
+            upgrade_vault_rows(&SqliteEnvelopeBackend::new(Arc::clone(&damaged), &key_a())),
+            Err(StartupError::VaultSecretDamaged)
+        ));
     }
 
     /// Final Gate item E: startup refuses a key file whose key does not open
