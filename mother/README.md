@@ -71,7 +71,17 @@ Coordinator rules the oracles pin:
 - Every lane call counts against the call budget. The time budget runs from
   consent, measured on both the wall and the monotonic clock.
 - An effect dispatched but not settled when Mother restarts blocks its
-  mission (`effect_outcome_unknown`): it may have happened.
+  mission (`effect_outcome_unknown`): it may have happened. A mission that
+  dispatched any effect in its current phase before a restart is blocked
+  too (`phase_interrupted`): re-running the phase could repeat it.
+- If a journal append fails, the mission ends (or stops) in memory, the
+  port is cancelled, and the journal is poisoned durably (a
+  `.poisoned` marker beside the file): it opens nothing until the Owner
+  reconciles it, so a Stop the journal could not record is never undone
+  by a restart.
+- Replay accepts records only in the order the live coordinator writes
+  them (lane answers after their calls, no transition but Stop while an
+  effect is unsettled, mission ids in sequence).
 
 ## Non-claims
 
@@ -83,8 +93,10 @@ Coordinator rules the oracles pin:
   when the desktop confirmer is rebuilt; that is a security-core change and
   needs Owner approval and a fresh review.**
 - Consent is an extra gate, not authority: every effect still needs the
-  Owner's broker grant, and an R2 effect needs the Owner's native approval
-  (M1 blocks the mission when one is pending).
+  Owner's broker grant, and an R2 effect needs the Owner's native approval.
+  M1 does not wait for that approval: the mission ends Blocked
+  (`awaiting_owner_approval`) and its broker run is cancelled, which
+  withdraws the pending action, so the Owner can no longer approve it.
 - The journal chain is unkeyed. It detects edits, removals, reordering,
   insertion and a torn last line. It does not detect someone with write
   access to Mother's home who rewrites the whole chain, or cuts entries off
@@ -94,6 +106,16 @@ Coordinator rules the oracles pin:
   state machine's.
 - The broker has no file or spend route: the adapter refuses both
   (`no_broker_route`). M1 writes no files for a mission.
+- The journal file takes no exclusive lock: two coordinators on one file
+  would interleave entries and the next open refuses the journal. A torn
+  last line after a crash, or a poisoned journal, refuses the journal with
+  no automatic recovery: both fail closed and need the Owner.
+- After a restart, the time budget is measured from the wall clock at
+  consent (a clock set earlier than the consent counts the budget as
+  spent; a clock set back but still later than it is trusted).
+- The source scans (`adapter/scan.rs`) are guards, not proofs: they match
+  text (for instance, the confirmer check looks for `MissionConfirmer for`,
+  `stdin` and a literal `true` body).
 - `GovernedPort::cancel` cannot report a failed run cancellation to its
   caller. The adapter counts each one (`cancel_failures`).
 - Lane calls are counted as model calls; no model is called in M1.

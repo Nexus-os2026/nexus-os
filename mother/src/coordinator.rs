@@ -129,6 +129,11 @@ struct Mission {
     model_calls: u32,
     next_effect: u64,
     unsettled: Option<u64>,
+    /// An effect was dispatched since the last transition: re-running the
+    /// phase after a restart could repeat it.
+    dispatched_in_phase: bool,
+    /// A lane call journaled as invoked and not yet answered (replay).
+    pending_lane: Option<InvocationId>,
     prior_outputs: Vec<String>,
     reason: Option<String>,
 }
@@ -147,6 +152,8 @@ impl Mission {
             model_calls: 0,
             next_effect: 0,
             unsettled: None,
+            dispatched_in_phase: false,
+            pending_lane: None,
             prior_outputs: Vec::new(),
             reason: None,
         }
@@ -175,6 +182,7 @@ impl Mission {
         }
         self.state = to;
         self.generation += 1;
+        self.dispatched_in_phase = false;
     }
 
     fn consented(&self) -> bool {
@@ -219,7 +227,10 @@ impl Inner {
         }
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
         if let Err(e) = self.store.append(&entry.to_line()) {
+            // Fail closed, durably: a journal that may have lost a
+            // transition (a Stop) must not be reopened as if it had not.
             self.broken = true;
+            let _ = self.store.poison();
             return Err(CoordinatorError::Journal(e));
         }
         self.head = entry.hash;
@@ -360,7 +371,13 @@ impl<P: EffectPort> Coordinator<P> {
         for mission in missions.values_mut() {
             if let Some(at) = mission.approved_wall_ms {
                 mission.mono_ref = mono_now;
-                mission.spent_at_ref = wall_now.saturating_sub(at);
+                // A wall clock now earlier than the consent cannot be
+                // trusted to measure the budget: count it as spent.
+                mission.spent_at_ref = if wall_now < at {
+                    u64::MAX
+                } else {
+                    wall_now - at
+                };
             }
         }
         let coordinator = Self {
@@ -378,17 +395,41 @@ impl<P: EffectPort> Coordinator<P> {
                 next_mission,
             }),
         };
-        let unsettled: Vec<MissionId> = {
+        // A lane call left unanswered by the restart is abandoned.
+        {
+            let mut inner = coordinator.lock();
+            let pending: Vec<(MissionId, InvocationId)> = inner
+                .missions
+                .iter()
+                .filter_map(|(id, m)| m.pending_lane.map(|inv| (*id, inv)))
+                .collect();
+            for (id, invocation) in pending {
+                inner.append(id, Event::LaneOvertaken { invocation })?;
+                inner.mission(id)?.pending_lane = None;
+            }
+        }
+        // A mission interrupted after dispatching an effect in its current
+        // phase is blocked: an unsettled effect may have happened, and
+        // re-running the phase would repeat a settled one.
+        let interrupted: Vec<(MissionId, &str)> = {
             let inner = coordinator.lock();
             inner
                 .missions
                 .iter()
-                .filter(|(_, m)| m.unsettled.is_some() && !m.state.is_terminal())
-                .map(|(id, _)| *id)
+                .filter(|(_, m)| !m.state.is_terminal())
+                .filter_map(|(id, m)| {
+                    if m.unsettled.is_some() {
+                        Some((*id, "effect_outcome_unknown"))
+                    } else if m.dispatched_in_phase {
+                        Some((*id, "phase_interrupted"))
+                    } else {
+                        None
+                    }
+                })
                 .collect()
         };
-        for id in unsettled {
-            coordinator.end(id, "effect_outcome_unknown")?;
+        for (id, reason) in interrupted {
+            coordinator.end(id, reason)?;
         }
         Ok(coordinator)
     }
@@ -770,6 +811,7 @@ impl<P: EffectPort> Coordinator<P> {
                     let mission = inner.mission(id)?;
                     mission.next_effect += 1;
                     mission.unsettled = Some(number);
+                    mission.dispatched_in_phase = true;
                     number
                 };
 
@@ -833,9 +875,22 @@ impl<P: EffectPort> Coordinator<P> {
     /// what it opened at the port.
     fn end_with(&self, id: MissionId, trigger: Trigger) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
-        let state = self.lock().fire(id, trigger, mono)?;
+        let result = {
+            let mut inner = self.lock();
+            let from = inner.mission(id)?.state;
+            let result = inner.fire(id, trigger.clone(), mono);
+            if let (Err(CoordinatorError::Journal(_)), Ok(to)) =
+                (&result, transition(from, &trigger))
+            {
+                // The journal failed: the mission ends in memory all the
+                // same (and the poisoned journal will not reopen).
+                inner.mission(id)?.apply(&trigger, to, mono);
+            }
+            result
+        };
+        // Whatever the journal said, nothing more of it may start.
         self.port.cancel(id);
-        Ok(state)
+        result
     }
 
     fn explain(&self, id: MissionId, mission: &Mission) -> String {
@@ -940,7 +995,8 @@ impl<P: EffectPort> Coordinator<P> {
 }
 
 /// Replay one verified entry. Each trigger goes through the same table as
-/// live; anything the live coordinator could not have written is refused.
+/// live, and records must come in the order the live coordinator writes
+/// them; anything else found is refused.
 fn replay(
     missions: &mut BTreeMap<MissionId, Mission>,
     next_mission: &mut u64,
@@ -948,8 +1004,11 @@ fn replay(
 ) -> Result<(), String> {
     let id = entry.mission;
     if let Event::Drafted { contract } = &entry.event {
-        if id.0 < *next_mission {
+        if id.0 != *next_mission {
             return Err(format!("{id} drafted twice or out of order"));
+        }
+        if missions.len() >= MAX_MISSIONS {
+            return Err(format!("{id}: more missions than a coordinator keeps"));
         }
         contract
             .validate()
@@ -966,6 +1025,13 @@ fn replay(
         Event::Transition { trigger } => {
             let to = transition(mission.state, trigger)
                 .map_err(|e| format!("{id}: {} from {:?}", e.trigger, e.from))?;
+            // While an effect is unsettled the live coordinator only stops,
+            // or blocks the mission on restart.
+            let while_unsettled = matches!(trigger, Trigger::Stop { .. })
+                || matches!(trigger, Trigger::Block { reason } if reason == "effect_outcome_unknown");
+            if mission.unsettled.is_some() && !while_unsettled {
+                return Err(format!("{id}: a transition while an effect is unsettled"));
+            }
             let hash = mission.contract.hash();
             match trigger {
                 Trigger::Revise { contract } => contract
@@ -992,15 +1058,31 @@ fn replay(
         }
         Event::LaneInvoked { invocation, .. } => {
             if !mission.state.is_working()
+                || mission.state == MissionState::Explaining
+                || mission.pending_lane.is_some()
                 || invocation.mission != id
                 || invocation.seq != entry.seq
             {
                 return Err(format!("{id}: a lane invocation out of place"));
             }
+            mission.pending_lane = Some(*invocation);
             mission.model_calls = mission.model_calls.saturating_add(1);
         }
-        Event::LaneReturned { output_hash, .. } => {
+        Event::LaneReturned {
+            invocation,
+            output_hash,
+        } => {
+            if mission.pending_lane != Some(*invocation) {
+                return Err(format!("{id}: a lane answer without its call"));
+            }
+            mission.pending_lane = None;
             mission.prior_outputs.push(output_hash.clone());
+        }
+        Event::LaneOvertaken { invocation } => {
+            if mission.pending_lane != Some(*invocation) {
+                return Err(format!("{id}: a lane answer without its call"));
+            }
+            mission.pending_lane = None;
         }
         Event::EffectDispatched { effect, .. } => {
             if !mission.state.is_working()
@@ -1011,6 +1093,7 @@ fn replay(
             }
             mission.next_effect += 1;
             mission.unsettled = Some(*effect);
+            mission.dispatched_in_phase = true;
         }
         Event::EffectSettled { effect, .. } => {
             if mission.unsettled != Some(*effect) {
@@ -1018,9 +1101,7 @@ fn replay(
             }
             mission.unsettled = None;
         }
-        Event::ConsentRefused { .. }
-        | Event::LaneOvertaken { .. }
-        | Event::EffectRefused { .. } => {}
+        Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
     }
     Ok(())
 }

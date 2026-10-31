@@ -65,3 +65,15 @@ fn file_journal_a_link_is_refused() {
     std::os::unix::fs::symlink(&target, &link).unwrap();
     assert!(FileJournal::open(&link).is_err());
 }
+
+#[test]
+fn file_journal_a_poisoned_journal_is_refused() {
+    let d = dir("file-poison");
+    let path = d.0.join("journal.jsonl");
+    let mut journal = FileJournal::open(&path).unwrap();
+    journal.append("{\"a\":1}").unwrap();
+    journal.poison().unwrap();
+    assert!(d.0.join("journal.jsonl.poisoned").exists());
+    let reopened = FileJournal::open(&path).unwrap();
+    assert_eq!(reopened.load(), Err(JournalError::Poisoned));
+}

@@ -91,6 +91,9 @@ pub enum JournalError {
     /// The entries verify but describe something the state machine
     /// forbids.
     Inconsistent { line: usize, reason: String },
+    /// An append failed earlier: the journal may lack a transition (a
+    /// Stop), so it opens nothing until the Owner reconciles it.
+    Poisoned,
 }
 
 impl Entry {
@@ -156,6 +159,9 @@ pub trait JournalStore: Send {
     fn load(&self) -> Result<Vec<String>, JournalError>;
     /// Append one line durably.
     fn append(&mut self, line: &str) -> Result<(), JournalError>;
+    /// Mark the journal unreliable, durably: every later load is refused
+    /// with [`JournalError::Poisoned`].
+    fn poison(&mut self) -> Result<(), JournalError>;
 }
 
 /// A journal kept in memory. Clones share the same lines, so a test can
@@ -164,6 +170,9 @@ pub trait JournalStore: Send {
 #[derive(Clone, Default)]
 pub struct MemoryJournal {
     lines: Arc<Mutex<Vec<String>>>,
+    poisoned: Arc<Mutex<bool>>,
+    /// Tests: appends fail once this many more have succeeded.
+    fail_after: Arc<Mutex<Option<usize>>>,
 }
 
 impl MemoryJournal {
@@ -179,15 +188,38 @@ impl MemoryJournal {
     pub fn set_lines(&self, lines: Vec<String>) {
         *self.lines.lock().expect("journal") = lines;
     }
+
+    /// Make appends fail after `n` more succeed (tests: a failing disk).
+    pub fn fail_after(&self, n: usize) {
+        *self.fail_after.lock().expect("journal") = Some(n);
+    }
+
+    pub fn is_poisoned(&self) -> bool {
+        *self.poisoned.lock().expect("journal")
+    }
 }
 
 impl JournalStore for MemoryJournal {
     fn load(&self) -> Result<Vec<String>, JournalError> {
+        if self.is_poisoned() {
+            return Err(JournalError::Poisoned);
+        }
         Ok(self.lines())
     }
 
     fn append(&mut self, line: &str) -> Result<(), JournalError> {
+        let mut fail_after = self.fail_after.lock().expect("journal");
+        match fail_after.as_mut() {
+            Some(0) => return Err(JournalError::Store("injected failure".into())),
+            Some(n) => *n -= 1,
+            None => {}
+        }
         self.lines.lock().expect("journal").push(line.to_string());
+        Ok(())
+    }
+
+    fn poison(&mut self) -> Result<(), JournalError> {
+        *self.poisoned.lock().expect("journal") = true;
         Ok(())
     }
 }

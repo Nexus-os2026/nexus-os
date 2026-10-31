@@ -214,10 +214,22 @@ impl FileJournal {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// The marker that poisons the journal: beside it, `<name>.poisoned`.
+    fn marker(&self) -> PathBuf {
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(".poisoned");
+        self.path.with_file_name(name)
+    }
 }
 
 impl JournalStore for FileJournal {
     fn load(&self) -> Result<Vec<String>, JournalError> {
+        match std::fs::symlink_metadata(self.marker()) {
+            Ok(_) => return Err(JournalError::Poisoned),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(store_error(e)),
+        }
         let text = std::fs::read_to_string(&self.path).map_err(store_error)?;
         if text.is_empty() {
             return Ok(Vec::new());
@@ -241,6 +253,24 @@ impl JournalStore for FileJournal {
         file.write_all(format!("{line}\n").as_bytes())
             .map_err(store_error)?;
         file.sync_data().map_err(store_error)
+    }
+
+    fn poison(&mut self) -> Result<(), JournalError> {
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.marker())
+            .map_err(store_error)?;
+        file.sync_all().map_err(store_error)?;
+        // The marker's directory entry must be durable too.
+        #[cfg(unix)]
+        if let Some(dir) = self.path.parent() {
+            std::fs::File::open(dir)
+                .and_then(|d| d.sync_all())
+                .map_err(store_error)?;
+        }
+        Ok(())
     }
 }
 
