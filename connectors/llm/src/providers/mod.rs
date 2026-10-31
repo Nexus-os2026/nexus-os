@@ -224,9 +224,38 @@ pub(crate) fn checked_route_endpoint(
 /// M0-FIX F5: a model call is work admitted under the process's
 /// emergency-stop authority: refused while a stop is in force.
 pub(crate) fn admit_model_call() -> Result<nexus_kernel::emergency_stop::StopWatch, AgentError> {
-    nexus_kernel::emergency_stop::StopAuthority::global()
+    model_stop_authority()
         .admit()
         .map_err(|error| AgentError::SupervisorError(error.to_string()))
+}
+
+/// The authority model calls are admitted under: the process's, or in a
+/// test the thread's own (tests must not engage the process's authority).
+fn model_stop_authority() -> std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority> {
+    #[cfg(test)]
+    if let Some(stop) = TEST_STOP.with(|slot| slot.borrow().clone()) {
+        return stop;
+    }
+    nexus_kernel::emergency_stop::StopAuthority::global()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_STOP: std::cell::RefCell<
+        Option<std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority>>,
+    > = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `body` with the model calls this thread makes admitted under `stop`.
+#[cfg(test)]
+pub(crate) fn with_test_stop<T>(
+    stop: std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority>,
+    body: impl FnOnce() -> T,
+) -> T {
+    TEST_STOP.with(|slot| *slot.borrow_mut() = Some(stop));
+    let out = body();
+    TEST_STOP.with(|slot| *slot.borrow_mut() = None);
+    out
 }
 
 /// The error of a guarded curl child: refused by, or ended by, the
@@ -1942,5 +1971,194 @@ mod tests {
             .read_to_end(&mut over)
             .unwrap_err();
         assert_eq!(error.to_string(), "the response is larger than 5 bytes");
+    }
+
+    // ── M0-FIX F5 review: every provider entry point is admitted ──────
+
+    /// The four in-process credentialed paths (Claude's query and stream,
+    /// Cohere, the OpenAI-compatible family) are refused while the stop is
+    /// in force, before anything reaches the server; after the owner's
+    /// resume they run again. Each test uses its own stop authority.
+    #[test]
+    fn m0_f5_in_process_providers_are_refused_while_stopped() {
+        use nexus_kernel::emergency_stop::StopAuthority;
+        let stop = StopAuthority::new();
+        stop.engage();
+        let listeners: Vec<_> = (0..4).map(|_| quiet_listener()).collect();
+        let bases: [String; 4] = std::array::from_fn(|i| listeners[i].1.clone());
+        let outcomes = super::with_test_stop(stop.clone(), || {
+            provider_outcomes(bases, Duration::from_secs(5), 4096)
+        });
+        for (outcome, (listener, _)) in outcomes.iter().zip(&listeners) {
+            assert!(outcome.contains("emergency stop"), "{outcome}");
+            assert_never_contacted(listener);
+        }
+        stop.lift();
+        let servers: Vec<_> = (0..4)
+            .map(|_| {
+                serve_once(
+                    b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_vec(),
+                )
+            })
+            .collect();
+        let bases: [String; 4] = std::array::from_fn(|i| servers[i].0.clone());
+        let outcomes = super::with_test_stop(stop.clone(), || {
+            provider_outcomes(bases, Duration::from_secs(5), 4096)
+        });
+        for (outcome, (_, server)) in outcomes.iter().zip(servers) {
+            assert!(!outcome.contains("emergency stop"), "{outcome}");
+            assert!(
+                server.join().unwrap().contains("POST"),
+                "no request after the resume"
+            );
+        }
+    }
+
+    /// Claude's retry loop does not open a new connection after the stop:
+    /// a stop engaged once the first (retryable) answer is sent ends the
+    /// call without a second request.
+    #[test]
+    fn m0_f5_claude_does_not_retry_after_the_stop() {
+        use nexus_kernel::emergency_stop::StopAuthority;
+        use std::io::{Read, Write};
+        let stop = StopAuthority::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut byte = [0u8; 1];
+                while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    request.push(byte[0]);
+                }
+                let head = String::from_utf8_lossy(&request).to_lowercase();
+                let length = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                let mut body = vec![0u8; length];
+                let _ = stream.read_exact(&mut body);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 529 Overloaded\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                drop(stream);
+                stop.engage();
+                listener.set_nonblocking(true).unwrap();
+                listener
+            })
+        };
+        let result = super::with_test_stop(stop.clone(), || {
+            super::claude::ClaudeProvider::new(Some("k".to_string())).query_bounded(
+                Some(&format!("{base}/v1/messages")),
+                "p",
+                1,
+                "m",
+                Duration::from_secs(30),
+                4096,
+            )
+        });
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("emergency stop"), "{error}");
+        let listener = server.join().unwrap();
+        assert_never_contacted(&listener);
+    }
+
+    /// Structural guard: no provider entry point reaches the network or a
+    /// model without admission under the stop authority.
+    /// - Every in-process HTTP client is built by `credential_client`
+    ///   (pinned by the Final Gate item C guard), which admits first.
+    /// - Every curl child goes through `guarded_curl` or a `GuardedChild`
+    ///   admitted in the same function (pinned by the item I guard), and no
+    ///   other provider file starts a process.
+    /// - `post_json_in_process` admits.
+    /// - Claude's retry waits on the stop watch, never a blind sleep, and
+    ///   re-checks before each retry.
+    /// - In-process inference (Flash, LocalSlm) admits before it runs.
+    #[test]
+    fn m0_f5_every_provider_path_is_admitted() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/providers");
+        let production = |name: &str| {
+            std::fs::read_to_string(dir.join(name))
+                .unwrap()
+                .replace("\r\n", "\n")
+                .split("#[cfg(test)]\nmod tests")
+                .next()
+                .unwrap()
+                .to_string()
+        };
+        let body_of = |source: &str, signature: &str| {
+            let start = source
+                .find(signature)
+                .unwrap_or_else(|| panic!("{signature}"));
+            let rest = &source[start..];
+            let end = rest
+                .find("\n}\n")
+                .or_else(|| rest.find("\n    }\n"))
+                .unwrap();
+            rest[..end].to_string()
+        };
+        let helpers = production("mod.rs");
+        let client = body_of(&helpers, "pub(crate) fn credential_client(");
+        let admit = client
+            .find("admit_model_call()")
+            .expect("credential_client admits");
+        assert!(
+            admit < client.find("Client::builder()").unwrap(),
+            "{client}"
+        );
+        for signature in [
+            "pub(crate) fn post_json_in_process(",
+            "pub(crate) fn guarded_curl(",
+        ] {
+            assert!(
+                body_of(&helpers, signature).contains("admit_model_call()?"),
+                "{signature}"
+            );
+        }
+        let ollama = production("ollama.rs");
+        for signature in ["pub fn chat_stream<", "pub fn pull_model<"] {
+            assert!(
+                body_of(&ollama, signature).contains("admit_model_call()?"),
+                "{signature}"
+            );
+        }
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            if !name.ends_with(".rs") || name == "mod.rs" || name == "ollama.rs" {
+                continue;
+            }
+            let source = production(&name);
+            for spawn in [
+                concat!("Command", "::new("),
+                concat!("process::", "Command"),
+            ] {
+                assert!(!source.contains(spawn), "{name} starts a process");
+            }
+        }
+        let claude = production("claude.rs");
+        assert!(
+            !claude.contains("thread::sleep"),
+            "Claude retries after a blind sleep"
+        );
+        assert!(
+            claude.contains("wait_halted_timeout"),
+            "Claude's retry ignores the stop"
+        );
+        let flash = production("flash.rs");
+        let query = body_of(&flash, "    fn query(&self, prompt: &str");
+        assert!(
+            query.contains("admit_model_call()?"),
+            "Flash inference is not admitted"
+        );
+        let local_slm = production("local_slm.rs");
+        let query = body_of(&local_slm, "    fn query(&self, prompt: &str");
+        assert!(
+            query.contains("admit_model_call()?"),
+            "LocalSlm inference is not admitted"
+        );
     }
 }

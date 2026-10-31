@@ -972,3 +972,43 @@ fn m0_f5_emergency_stop_engages_and_resume_lifts_the_kernel_stop() {
     assert!(admitted.halted(), "work the stop ended came back by itself");
     assert!(stop.admit().is_ok());
 }
+
+/// M0-FIX F5 review: a resume lifts only the kernel stop it confirmed. A
+/// Stop pressed from another door while the owner's resume is being
+/// confirmed has already engaged the kernel stop (its first step) when
+/// the resume completes; the resume must not lift that newer stop.
+#[test]
+fn m0_f5_a_resume_does_not_lift_a_newer_kernel_stop() {
+    use crate::authority::approval::{
+        AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
+        ResumeConfirmation,
+    };
+    use nexus_kernel::emergency_stop::StopAuthority;
+    /// Confirms the resume, and presses the other door's Stop (its kernel
+    /// engagement) while the confirmation is shown.
+    struct StopWhileConfirming(Arc<StopAuthority>);
+    impl ControlConfirmer for StopWhileConfirming {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            self.0.engage();
+            true
+        }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+            true
+        }
+    }
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    control.emergency_stop();
+    let _ = control.resume(&StopWhileConfirming(stop.clone()));
+    assert!(
+        stop.is_stopped(),
+        "the resume lifted a kernel stop pressed after it was confirmed"
+    );
+}
