@@ -47,6 +47,9 @@ pub enum ModelError {
     ResponseTooLarge,
     #[error("local model response is malformed")]
     Malformed,
+    /// The owner's emergency stop refused or ended the call (M0-FIX F5).
+    #[error("refused: the owner's emergency stop ended the model call")]
+    Stopped,
 }
 
 /// The provider, loopback endpoint and model a run is bound to.

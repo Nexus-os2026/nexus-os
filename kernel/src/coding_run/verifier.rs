@@ -410,6 +410,8 @@ pub enum VerificationError {
     Unrecorded,
     #[error("no execution generation remains")]
     Exhausted,
+    #[error("refused: the owner's emergency stop ended this run")]
+    EmergencyStopped,
 }
 
 /// A run's verification lifecycle state.

@@ -1796,3 +1796,8 @@ mod p2e_materialize;
 
 #[path = "p2h_verification_tests.rs"]
 mod p2h_verification;
+
+// ── M0-FIX F5: the owner's emergency stop halts coding runs ───────────────
+
+#[path = "m0_f5_stop_tests.rs"]
+mod m0_f5_stop;

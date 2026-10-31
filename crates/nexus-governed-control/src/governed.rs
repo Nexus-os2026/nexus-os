@@ -26,6 +26,7 @@ use crate::evidence_store::PrimaryEvidence;
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
+use nexus_kernel::emergency_stop::StopAuthority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
@@ -116,6 +117,9 @@ pub struct GovernedControl {
     detached: Mutex<HashSet<RunId>>,
     /// Display starts under way, each counted until its end is recorded.
     display_starts: AtomicUsize,
+    /// The kernel's emergency-stop authority (M0-FIX F5): the owner's
+    /// emergency stop engages it and the owner's resume lifts it.
+    kernel_stop: Arc<StopAuthority>,
 }
 
 /// One display start, counted while it lasts.
@@ -166,6 +170,11 @@ impl GovernedControl {
             egress,
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
+            kernel_stop: if cfg!(test) {
+                StopAuthority::new()
+            } else {
+                StopAuthority::global()
+            },
         };
         // An action may have happened unrecorded (EL-1 §7): governed control
         // starts emergency-stopped, through the stop itself, and resumes only
@@ -174,6 +183,12 @@ impl GovernedControl {
             governed.stop_for(Some("recovery_required"));
         }
         Ok(governed)
+    }
+
+    /// Engage and lift `stop` instead of the process's kernel authority.
+    pub fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
+        self.kernel_stop = stop;
+        self
     }
 
     /// End whatever can no longer start (expired, stale, its run or a grant

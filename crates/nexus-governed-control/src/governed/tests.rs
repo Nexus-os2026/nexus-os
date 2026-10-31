@@ -934,3 +934,41 @@ fn an_agent_action_never_runs_in_an_owner_run() {
         AgentOutcome::Done(_)
     ));
 }
+
+/// M0-FIX F5: the owner's emergency stop is the kernel's stop too. It
+/// engages the kernel's stop authority (halting the cognitive loop, coding
+/// runs and model calls that observe it), and only the owner's confirmed
+/// resume lifts it; a declined resume leaves it in force.
+#[test]
+fn m0_f5_emergency_stop_engages_and_resume_lifts_the_kernel_stop() {
+    use nexus_kernel::emergency_stop::StopAuthority;
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    let admitted = stop.admit().unwrap();
+    control.emergency_stop();
+    assert!(stop.is_stopped(), "the kernel stop was not engaged");
+    assert!(
+        admitted.halted(),
+        "kernel work admitted before the stop survived it"
+    );
+    assert!(
+        stop.admit().is_err(),
+        "new kernel work was admitted while stopped"
+    );
+    assert_eq!(
+        control.resume(&Yes::new(false)).unwrap_err(),
+        AuthorityError::Declined
+    );
+    assert!(
+        stop.is_stopped(),
+        "a declined resume lifted the kernel stop"
+    );
+    control.resume(&Yes::new(true)).unwrap();
+    assert!(
+        !stop.is_stopped(),
+        "the owner's resume did not lift the kernel stop"
+    );
+    assert!(admitted.halted(), "work the stop ended came back by itself");
+    assert!(stop.admit().is_ok());
+}

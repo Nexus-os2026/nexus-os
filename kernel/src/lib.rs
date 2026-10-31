@@ -19,6 +19,7 @@ pub mod consent;
 pub mod consent_display;
 pub mod crypto;
 pub mod drift_detector;
+pub mod emergency_stop;
 pub mod errors;
 pub mod firewall;
 pub mod fuel_hardening;

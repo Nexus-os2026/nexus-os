@@ -112,6 +112,26 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+thread_local! {
+    /// A test's own emergency-stop authority for the runs this thread
+    /// creates (tests must not engage the process's authority).
+    static TEST_STOP: std::cell::RefCell<Option<Arc<crate::emergency_stop::StopAuthority>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `body` with the runs this thread creates observing `stop`.
+#[cfg(test)]
+pub(crate) fn with_test_stop_authority<T>(
+    stop: Arc<crate::emergency_stop::StopAuthority>,
+    body: impl FnOnce() -> T,
+) -> T {
+    TEST_STOP.with(|slot| *slot.borrow_mut() = Some(stop));
+    let out = body();
+    TEST_STOP.with(|slot| *slot.borrow_mut() = None);
+    out
+}
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -200,6 +220,8 @@ pub enum RevocationReason {
     GrantRevoked,
     /// The project or staging grant (or an ancestor) expired.
     GrantExpired,
+    /// The owner's emergency stop ended the run (M0-FIX F5).
+    EmergencyStop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
