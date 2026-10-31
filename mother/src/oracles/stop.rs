@@ -66,8 +66,7 @@ fn stop_is_journaled_before_it_returns() {
         .journal()
         .unwrap()
         .into_iter()
-        .filter(|e| e.mission == id)
-        .last()
+        .rfind(|e| e.mission == id)
         .unwrap();
     assert!(
         matches!(
