@@ -1,4 +1,4 @@
-//! GovernedShell actuator — sandboxed command execution with strict allowlists.
+//! GovernedShell actuator — allowlisted argv command execution (not an OS sandbox).
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
@@ -20,9 +20,11 @@ const FUEL_COST_SHELL: f64 = 5.0;
 /// are NOT included — see `COMMAND_BLOCKLIST`.
 ///
 /// No entry may start a shell or an arbitrary program named in its arguments
-/// (M0-FIX2 F9). Programs built for that (env, xargs, awk, sed, make, node,
-/// npx, interpreters, compilers and build tools) are absent; `find` and `sort`
-/// stay only under the argument rules in `TRAMPOLINE_ARGUMENTS`.
+/// or in files it reads from the working directory or HOME (M0-FIX2 F9).
+/// Programs built for that (env, xargs, awk, sed, make, node, npx,
+/// interpreters, compilers and build tools) and programs that run what their
+/// config names (git, cargo, npm, docker) are absent; `find` and `sort` stay
+/// only under the argument rules in `TRAMPOLINE_ARGUMENTS`.
 const BASE_ALLOWLIST: &[&str] = &[
     // Basic shell utilities
     "ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "date", "pwd", "mkdir", "cp", "mv",
@@ -34,17 +36,11 @@ const BASE_ALLOWLIST: &[&str] = &[
 
 /// Commands with restricted subcommands: (command, &[allowed subcommands]).
 ///
-/// npm subcommands that run package scripts and cargo subcommands that run
-/// build scripts or built programs are absent (M0-FIX2 F9).
+/// git (hooks, config and attribute drivers), cargo (build scripts,
+/// toolchain and cargo config), npm (package scripts, npmrc) and docker (CLI
+/// plugin config) are absent: each runs programs named in files an allowed
+/// writer can plant (M0-FIX2 F9).
 const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
-    (
-        "git",
-        &[
-            "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
-        ],
-    ),
-    ("cargo", &["fmt"]),
-    ("npm", &["ls"]),
     // systemctl: read-only status queries only — no start/stop/enable/disable
     (
         "systemctl",
@@ -57,7 +53,6 @@ const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
             "show",
         ],
     ),
-    ("docker", &["ps", "images", "logs", "inspect", "stats"]),
     ("journalctl", &["--no-pager", "-u", "-n", "--since"]),
 ];
 
@@ -67,9 +62,6 @@ enum TrampolineArgument {
     Exact(&'static str),
     /// Refused when the argument starts with this text.
     Prefix(&'static str),
-    /// Refused when the argument (up to `=`) is a long option that abbreviates
-    /// this option name: any prefix longer than `--` itself.
-    LongOption(&'static str),
 }
 
 /// Per-program arguments refused anywhere in the argument list (M0-FIX2 F9).
@@ -77,30 +69,21 @@ const TRAMPOLINE_ARGUMENTS: &[(&str, &[TrampolineArgument])] = &[
     (
         "find",
         &[
+            // Run a program.
             TrampolineArgument::Exact("-exec"),
             TrampolineArgument::Exact("-execdir"),
             TrampolineArgument::Exact("-ok"),
             TrampolineArgument::Exact("-okdir"),
+            // Write or delete files.
+            TrampolineArgument::Exact("-delete"),
+            TrampolineArgument::Exact("-fprint"),
+            TrampolineArgument::Exact("-fprint0"),
+            TrampolineArgument::Exact("-fprintf"),
+            TrampolineArgument::Exact("-fls"),
         ],
     ),
     // `--compress-program`; `--co` is already its only unambiguous abbreviation.
     ("sort", &[TrampolineArgument::Prefix("--co")]),
-    (
-        "git",
-        &[
-            TrampolineArgument::LongOption("--upload-pack"),
-            TrampolineArgument::LongOption("--receive-pack"),
-            TrampolineArgument::LongOption("--exec"),
-        ],
-    ),
-    // Command-line config can name a wrapper, linker or runner program.
-    (
-        "cargo",
-        &[
-            TrampolineArgument::Prefix("--config"),
-            TrampolineArgument::Prefix("-Z"),
-        ],
-    ),
 ];
 
 impl TrampolineArgument {
@@ -108,10 +91,6 @@ impl TrampolineArgument {
         match self {
             Self::Exact(token) => arg == *token,
             Self::Prefix(prefix) => arg.starts_with(prefix),
-            Self::LongOption(option) => {
-                let name = arg.split_once('=').map_or(arg, |(name, _)| name);
-                name.len() > 2 && name.starts_with("--") && option.starts_with(name)
-            }
         }
     }
 }

@@ -1,6 +1,10 @@
 //! Code execution actuator — runs Python or Node.js code in a subprocess.
 //!
-//! Shell languages are refused (M0-FIX2 F9): this actuator is not a shell route.
+//! The `bash` and `sh` languages are refused (M0-FIX2 F9). This is not
+//! containment: Python and Node code can itself start any program, including
+//! a shell. The only gate is the `process.exec` capability; the pattern
+//! denylist below is a heuristic that indirection evades, not a boundary, and
+//! there is no OS-level confinement of the runtime.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
@@ -24,11 +28,13 @@ const FUEL_COST_CODE: f64 = 8.0;
 /// Allowed language runtimes.
 const ALLOWED_LANGUAGES: &[&str] = &["python3", "python", "node"];
 
-/// Sandboxed code execution actuator. Runs code in a subprocess with:
-/// - Working directory set to agent's sandbox
+/// Code execution actuator. Runs arbitrary Python or Node code, gated only by
+/// the `process.exec` capability, in a subprocess with:
+/// - Working directory set to the agent's workspace (not a filesystem sandbox)
 /// - Timeout enforcement
 /// - Output size limits
-/// - No network access (via environment neutering)
+/// - Proxy environment variables pointed at an unreachable address (a
+///   convention the runtime may ignore, not network isolation)
 #[derive(Debug, Clone)]
 pub struct CodeExecuteActuator;
 
@@ -57,8 +63,8 @@ impl CodeExecuteActuator {
         Ok(())
     }
 
-    /// Scan code for dangerous patterns that should be blocked.
-    fn check_dangerous_patterns(code: &str, _language: &str) -> Result<(), ActuatorError> {
+    /// Scan code for dangerous patterns. A heuristic, not a boundary.
+    fn check_dangerous_patterns(code: &str) -> Result<(), ActuatorError> {
         let lower = code.to_lowercase();
 
         // Block network access attempts
@@ -337,7 +343,7 @@ impl Actuator for CodeExecuteActuator {
         Self::check_code_size(code)?;
 
         // Check for dangerous patterns
-        Self::check_dangerous_patterns(code, runtime)?;
+        Self::check_dangerous_patterns(code)?;
 
         // Resolve timeout (capped at MAX_TIMEOUT_SECS)
         let timeout = Duration::from_secs(
@@ -409,26 +415,18 @@ mod tests {
 
     #[test]
     fn blocks_network_access_patterns() {
-        assert!(CodeExecuteActuator::check_dangerous_patterns("import socket", "python3").is_err());
-        assert!(
-            CodeExecuteActuator::check_dangerous_patterns("import requests", "python3").is_err()
-        );
-        assert!(CodeExecuteActuator::check_dangerous_patterns("require('http')", "node").is_err());
-        assert!(CodeExecuteActuator::check_dangerous_patterns("fetch(url)", "node").is_err());
-        assert!(CodeExecuteActuator::check_dangerous_patterns("print('hello')", "python3").is_ok());
-        assert!(CodeExecuteActuator::check_dangerous_patterns("console.log('hi')", "node").is_ok());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("import socket").is_err());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("import requests").is_err());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("require('http')").is_err());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("fetch(url)").is_err());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("print('hello')").is_ok());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("console.log('hi')").is_ok());
     }
 
     #[test]
     fn blocks_shell_escape() {
-        assert!(
-            CodeExecuteActuator::check_dangerous_patterns("os.system('rm -rf /')", "python3")
-                .is_err()
-        );
-        assert!(
-            CodeExecuteActuator::check_dangerous_patterns("require('child_process')", "node")
-                .is_err()
-        );
+        assert!(CodeExecuteActuator::check_dangerous_patterns("os.system('rm -rf /')").is_err());
+        assert!(CodeExecuteActuator::check_dangerous_patterns("require('child_process')").is_err());
     }
 
     #[test]
