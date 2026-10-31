@@ -10,8 +10,10 @@ use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::effect::{ApprovalStatus, EffectPort, PendingAction};
 use crate::journal::MissionId;
+use crate::journal::{verify, Entry, Event, JournalStore};
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
 use crate::state::MissionState;
+use crate::state::Trigger;
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
     ResumeConfirmation,
@@ -426,6 +428,19 @@ fn m2a_a_port_adopts_only_live_unclaimed_actions(w: &World) {
     let now = control.authority().clock().monotonic_ms();
     let taken = port.pending(MissionId(9102)).unwrap();
     assert!(taken.deadline_mono_ms <= now + lifetime, "{taken:?}");
+    // Codex re-review MINOR (a): no later than the action's remaining
+    // lifetime by the broker's wall-clock expiry, read before the port
+    // took it (stronger than now + lifetime).
+    let port2 = GovernedPort::new(control.clone());
+    let wall_before = control.authority().clock().wall_ms();
+    port2.adopt(MissionId(9104), &action(live, &view, u64::MAX));
+    // Held by `port` for 9102: a second port takes it (ports do not share).
+    let mono_after = control.authority().clock().monotonic_ms();
+    let taken = port2.pending(MissionId(9104)).unwrap();
+    assert!(
+        taken.deadline_mono_ms <= mono_after + view.expires_wall_ms.saturating_sub(wall_before),
+        "{taken:?}"
+    );
     port.cancel(MissionId(9102));
     assert!(control.authority().runs().view(live).unwrap().cancelled);
     assert_eq!(w.unserved(), 0);
@@ -642,14 +657,319 @@ fn real_broker_m1_oracles() {
     // Second review MINOR and NIT: only a live, unclaimed run; a deadline
     // never later than the broker's.
     m2a_a_port_adopts_only_live_unclaimed_actions(&w);
+    // Codex re-review MAJOR: every journaled crash point, recovered by a
+    // brand-new port and coordinator over the same live broker.
+    m2a_crash_points_on_the_real_broker(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
     w.advance_to(emergency, 2);
     let performed = w.port.performed();
+    // Codex re-review step 4: a request of Mother's agent that her journal
+    // never named (Mother died before journaling it). The Owner's
+    // emergency stop at the front door withdraws it.
+    let agent = mother_agent();
+    let orphan_run = w
+        .home
+        .control
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let AgentOutcome::AwaitingApproval(orphan) = w
+        .home
+        .control
+        .agent_action(&agent, orphan_run, &post_to(&w.origin, "orphan"))
+        .unwrap()
+    else {
+        panic!("a POST waits for the Owner");
+    };
     w.home.control.emergency_stop();
     assert_eq!(w.mother.advance(emergency), Err(CoordinatorError::Stopped));
     assert_eq!(w.mother.state(emergency), Some(MissionState::Stopped));
     assert_eq!(w.port.performed(), performed);
+    assert!(w
+        .home
+        .control
+        .authorize(orphan.id, &agent, orphan_run, &OwnerApproves)
+        .is_err());
+    assert!(w
+        .home
+        .control
+        .execute(orphan.id, &agent, orphan_run)
+        .is_err());
+    assert_ne!(
+        w.home
+            .control
+            .authority()
+            .commitments()
+            .view(orphan.id)
+            .unwrap()
+            .state,
+        CommitmentState::Prepared
+    );
     assert_eq!(w.unserved(), 0);
+}
+
+fn post_to(origin: &str, path: &str) -> Intent {
+    Intent::Request(EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/{path}"),
+        headers: vec![],
+        body: None,
+    })
+}
+
+/// Append one entry to the journal at `path`, chained after its last
+/// (an interruption simulated: what the coordinator journaled before it
+/// died).
+fn journal_append(path: &std::path::Path, mission: MissionId, event: Event) {
+    let mut store = FileJournal::open(path).unwrap();
+    let entries = verify(&store.load().unwrap()).unwrap();
+    let last = entries.last().unwrap();
+    let entry = Entry::chained(entries.len() as u64, &last.hash, mission, event);
+    store.append(&entry.to_line()).unwrap();
+}
+
+/// Drop the journal's last entry (the coordinator died before writing it).
+fn journal_drop_last(path: &std::path::Path) {
+    let store = FileJournal::open(path).unwrap();
+    let mut lines = store.load().unwrap();
+    lines.pop();
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(path, text).unwrap();
+}
+
+fn closures(path: &std::path::Path, mission: MissionId) -> usize {
+    let store = FileJournal::open(path).unwrap();
+    verify(&store.load().unwrap())
+        .unwrap()
+        .iter()
+        .filter(|e| e.mission == mission && matches!(e.event, Event::ApprovalClosed { .. }))
+        .count()
+}
+
+/// Codex re-review MAJOR (oracle first): each point at which Mother can be
+/// interrupted after a request's identity is journaled. Each runs on a
+/// journal of its own: a first port and coordinator park a request and
+/// die (dropped, nothing cancelled) after journaling what they had
+/// reached; a brand-new port and coordinator over the same live broker
+/// recover. Wherever the mission no longer waits, the request must end up
+/// unapprovable, with its closure journaled once, whatever the mission's
+/// state.
+fn m2a_crash_points_on_the_real_broker(w: &World) {
+    let control = &w.home.control;
+    let agent = mother_agent();
+    let open = |path: &std::path::Path, port: &Arc<GovernedPort>| {
+        Coordinator::open(
+            FileJournal::open(path).unwrap(),
+            port.clone(),
+            Lanes::new(keyed_lanes()).unwrap(),
+            Arc::new(SystemClock::default()),
+        )
+        .unwrap()
+    };
+    let id = MissionId(1);
+    // Park one request on a fresh journal; returns its run and commitment.
+    let park = |name: &str| {
+        let path = w.home.dir.join(format!("crash-{name}.jsonl"));
+        let port = Arc::new(GovernedPort::new(control.clone()));
+        let mother = open(&path, &port);
+        assert_eq!(
+            mother.draft(contract_with(&format!(
+                "POST-BUILDER:{}/crash-{name}",
+                w.origin
+            ))),
+            Ok(id)
+        );
+        mother.submit(id).unwrap();
+        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        for _ in 0..3 {
+            mother.advance(id).unwrap();
+        }
+        assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
+        let pending = port.pending(id).unwrap();
+        let run = RunId::parse(&pending.run).unwrap();
+        let commitment = control
+            .authority()
+            .commitments()
+            .views_of_run(run)
+            .into_iter()
+            .find(|v| v.id.to_string() == pending.commitment)
+            .unwrap();
+        assert_eq!(commitment.state, CommitmentState::Prepared);
+        (path, run, commitment.id)
+    };
+    let unapprovable = |run, commitment, point: &str| {
+        let state = control
+            .authority()
+            .commitments()
+            .view(commitment)
+            .unwrap()
+            .state;
+        assert!(
+            !matches!(
+                state,
+                CommitmentState::Prepared | CommitmentState::Authorized
+            ),
+            "{point}: {state:?}"
+        );
+        assert!(
+            control
+                .authorize(commitment, &agent, run, &OwnerApproves)
+                .is_err(),
+            "{point}"
+        );
+        assert!(control.execute(commitment, &agent, run).is_err(), "{point}");
+    };
+    // Recover with a brand-new port and coordinator; then once more, to
+    // see the closure is not repeated.
+    let recover = |path: &std::path::Path, expected: MissionState, run, commitment, point: &str| {
+        let mother = open(path, &Arc::new(GovernedPort::new(control.clone())));
+        assert_eq!(mother.state(id), Some(expected), "{point}");
+        drop(mother);
+        unapprovable(run, commitment, point);
+        assert_eq!(closures(path, id), 1, "{point}: closure journaled once");
+        let again = open(path, &Arc::new(GovernedPort::new(control.clone())));
+        assert_eq!(again.state(id), Some(expected), "{point}");
+        drop(again);
+        assert_eq!(closures(path, id), 1, "{point}: closure not repeated");
+    };
+
+    // A. The identity was journaled, the wait was not.
+    let (path, run, commitment) = park("a");
+    journal_drop_last(&path);
+    recover(
+        &path,
+        MissionState::Blocked,
+        run,
+        commitment,
+        "A: identity, no wait",
+    );
+
+    // B. The wait was journaled: the mission still waits and the Owner may
+    // still approve; a Stop through the rebuilt port withdraws it.
+    let (path, run, commitment) = park("b");
+    let port = Arc::new(GovernedPort::new(control.clone()));
+    let mother = open(&path, &port);
+    assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
+    assert_eq!(
+        control
+            .authority()
+            .commitments()
+            .view(commitment)
+            .unwrap()
+            .state,
+        CommitmentState::Prepared
+    );
+    assert_eq!(closures(&path, id), 0, "B: a waiting request is not closed");
+    assert_eq!(mother.stop(id), Ok(MissionState::Stopped));
+    drop(mother);
+    unapprovable(run, commitment, "B: Stop after rebuild");
+    assert_eq!(closures(&path, id), 1, "B");
+
+    // C. Stop was journaled; the port was never cancelled.
+    let (path, run, commitment) = park("c");
+    journal_append(
+        &path,
+        id,
+        Event::Transition {
+            trigger: Trigger::Stop {
+                reason: "owner".into(),
+            },
+        },
+    );
+    recover(
+        &path,
+        MissionState::Stopped,
+        run,
+        commitment,
+        "C: Stop, no cancel",
+    );
+
+    // D. The wait lapsed (Mother's budget) and was journaled; no cancel.
+    let (path, run, commitment) = park("d");
+    journal_append(
+        &path,
+        id,
+        Event::Transition {
+            trigger: Trigger::ApprovalLapsed {
+                effect: 0,
+                reason: "budget_time".into(),
+            },
+        },
+    );
+    recover(
+        &path,
+        MissionState::Blocked,
+        run,
+        commitment,
+        "D: lapse, no cancel",
+    );
+
+    // E. The Owner denied it and the denial was journaled; no cancel.
+    let (path, run, commitment) = park("e");
+    control.deny(commitment, &agent, run).unwrap();
+    journal_append(
+        &path,
+        id,
+        Event::Transition {
+            trigger: Trigger::ActionDenied { effect: 0 },
+        },
+    );
+    recover(
+        &path,
+        MissionState::Denied,
+        run,
+        commitment,
+        "E: deny, no cancel",
+    );
+
+    // F. Stop was journaled and the port cancelled, but the closure was
+    // not journaled.
+    let (path, run, commitment) = park("f");
+    journal_append(
+        &path,
+        id,
+        Event::Transition {
+            trigger: Trigger::Stop {
+                reason: "owner".into(),
+            },
+        },
+    );
+    control.cancel_run(run).unwrap();
+    recover(
+        &path,
+        MissionState::Stopped,
+        run,
+        commitment,
+        "F: cancelled, not closed",
+    );
+
+    // G. The Owner approved and ran it and the approval was journaled; the
+    // closure was not: the restart blocks the mission mid-phase, and the
+    // action ran once.
+    let (path, run, commitment) = park("g");
+    let served = w.serve_one();
+    control
+        .authorize(commitment, &agent, run, &OwnerApproves)
+        .unwrap();
+    control.execute(commitment, &agent, run).unwrap();
+    assert_eq!(served.join().unwrap(), "POST /crash-g HTTP/1.1");
+    journal_append(
+        &path,
+        id,
+        Event::Transition {
+            trigger: Trigger::ActionApproved {
+                effect: 0,
+                phase: MissionState::Building,
+            },
+        },
+    );
+    recover(
+        &path,
+        MissionState::Blocked,
+        run,
+        commitment,
+        "G: approved, not closed",
+    );
+    assert_eq!(w.unserved(), 0, "G: exactly once");
 }

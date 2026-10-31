@@ -102,3 +102,26 @@ fn expiry_the_other_states_map_as_the_broker_records_them() {
         );
     }
 }
+
+/// Codex re-review MINOR (a), oracle first: a journaled deadline is taken
+/// no later than the action's remaining lifetime by the broker's
+/// wall-clock expiry, and never later than what was journaled.
+#[test]
+fn expiry_an_adopted_deadline_is_clamped_to_the_remaining_lifetime() {
+    use super::adopted_deadline;
+    // Journaled honestly (earlier than the bound): kept.
+    assert_eq!(
+        adopted_deadline(5_000, 1_000, EXPIRES - 10_000, EXPIRES),
+        5_000
+    );
+    // Tampered: clamped to now + (expires - wall now).
+    assert_eq!(
+        adopted_deadline(u64::MAX, 1_000, EXPIRES - 10_000, EXPIRES),
+        11_000
+    );
+    // Past the wall-clock expiry: no later than now.
+    assert_eq!(
+        adopted_deadline(u64::MAX, 1_000, EXPIRES + 5, EXPIRES),
+        1_000
+    );
+}

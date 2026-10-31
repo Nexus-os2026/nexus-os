@@ -73,6 +73,8 @@ struct PortState {
     hold_approval: bool,
     approval_entered: bool,
     pending: Option<PendingAction>,
+    /// Whether the broker is said to hold a request final (default yes).
+    unsettled: bool,
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
@@ -184,6 +186,11 @@ impl RecordingPort {
         self.lock().pending = pending;
     }
 
+    /// Whether the port confirms a withdrawn request is final.
+    pub fn set_settled(&self, settled: bool) {
+        self.lock().unsettled = !settled;
+    }
+
     pub fn adopted(&self) -> Vec<(MissionId, PendingAction, usize)> {
         self.lock().adopted.clone()
     }
@@ -260,6 +267,10 @@ impl EffectPort for RecordingPort {
         let mut state = self.lock();
         let calls = state.calls.len();
         state.adopted.push((mission, pending.clone(), calls));
+    }
+
+    fn settled(&self, _: &PendingAction) -> bool {
+        !self.lock().unsettled
     }
 
     fn approval(&self, mission: MissionId) -> ApprovalStatus {

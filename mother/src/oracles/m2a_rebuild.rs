@@ -278,3 +278,155 @@ fn m2a_rebuild_an_action_claimed_by_two_missions_is_handed_back_to_neither() {
     );
     assert_eq!(w.port.adopted(), vec![]);
 }
+
+/// Codex re-review MINOR (b), oracle first: claims are compared by parsed
+/// identity, so a case-changed copy of the same action is a duplicate and
+/// is handed back to neither mission.
+#[test]
+fn m2a_rebuild_a_case_changed_duplicate_is_handed_back_to_neither() {
+    let w = world();
+    let c = contract();
+    let upper = PendingAction {
+        run: "run-0123456789ABCDEF0123456789ABCDEF".into(),
+        commitment: "cmt-0123456789ABCDEF0123456789ABCDEF".into(),
+        deadline_mono_ms: 600_000,
+    };
+    let mut lines = Vec::new();
+    let mut prev = GENESIS.to_string();
+    let mut seq = 0u64;
+    for (mission, action) in [(MissionId(1), action()), (MissionId(2), upper)] {
+        let mut events = settled("awaiting_approval");
+        events.push(Event::ApprovalPending {
+            effect: 0,
+            pending: action,
+        });
+        events.push(wait());
+        events[0] = Event::Drafted {
+            contract: c.clone(),
+        };
+        for event in events {
+            let entry = Entry::chained(seq, &prev, mission, event);
+            prev = entry.hash.clone();
+            lines.push(entry.to_line());
+            seq += 1;
+        }
+    }
+    w.journal.set_lines(lines);
+    let mother = w.reopen().unwrap();
+    assert_eq!(
+        mother.state(MissionId(2)),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert_eq!(w.port.adopted(), vec![]);
+}
+
+fn closed_entries(w: &World, id: MissionId) -> usize {
+    w.mother
+        .journal()
+        .unwrap()
+        .iter()
+        .filter(|e| e.mission == id && matches!(e.event, Event::ApprovalClosed { .. }))
+        .count()
+}
+
+/// Codex re-review MAJOR (oracle first): the closure is journaled only
+/// after the port confirms the broker no longer holds the request open.
+#[test]
+fn m2a_close_a_stop_journals_the_closure_once_the_port_confirms_it() {
+    let w = world();
+    let id = waiting_with_action(&w);
+    assert_eq!(closed_entries(&w, id), 0);
+    assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
+    assert!(w.port.is_cancelled(id));
+    assert_eq!(closed_entries(&w, id), 1);
+    let last = w.mother.journal().unwrap().into_iter().last().unwrap();
+    assert_eq!(last.event, Event::ApprovalClosed { effect: 0 });
+}
+
+#[test]
+fn m2a_close_an_unconfirmed_withdrawal_is_retried_on_every_reopen() {
+    let w = world();
+    let id = waiting_with_action(&w);
+    w.port.set_settled(false);
+    assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
+    assert_eq!(closed_entries(&w, id), 0, "not confirmed: not closed");
+    // Reopened while the broker still holds it: handed back and cancelled
+    // again, whatever the mission's state.
+    let w = w.restart();
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    let adopted = w.port.adopted();
+    assert_eq!(adopted.len(), 1);
+    let cancels = w
+        .port
+        .calls()
+        .iter()
+        .filter(|c| **c == PortCall::Cancel(id))
+        .count();
+    assert_eq!(cancels, 2, "cancelled again on reopen");
+    assert_eq!(closed_entries(&w, id), 0);
+    // Once the broker confirms, the closure is journaled, once.
+    w.port.set_settled(true);
+    let w = w.restart();
+    assert_eq!(closed_entries(&w, id), 1);
+    assert_eq!(w.port.adopted().len(), 2);
+    let w = w.restart();
+    assert_eq!(closed_entries(&w, id), 1);
+    assert_eq!(
+        w.port.adopted().len(),
+        2,
+        "a closed request is not handed back"
+    );
+}
+
+#[test]
+fn m2a_close_each_end_of_a_wait_closes_the_request() {
+    for (status, state) in [
+        (ApprovalStatus::Denied, MissionState::Denied),
+        (ApprovalStatus::Expired, MissionState::Blocked),
+        (ApprovalStatus::Approved, MissionState::Verifying),
+    ] {
+        let w = world();
+        let id = waiting_with_action(&w);
+        w.port.approval_reply(status.clone());
+        assert_eq!(w.mother.advance(id).unwrap().to, state, "{status:?}");
+        assert_eq!(closed_entries(&w, id), 1, "{status:?}");
+    }
+}
+
+#[test]
+fn m2a_close_replay_accepts_a_closure_only_of_the_open_request() {
+    let w = world();
+    let mut good = settled("awaiting_approval");
+    good.push(pending(0));
+    good.push(wait());
+    good.push(Event::Transition {
+        trigger: Trigger::Stop {
+            reason: "owner".into(),
+        },
+    });
+    good.push(Event::ApprovalClosed { effect: 0 });
+    w.journal.set_lines(chained(good));
+    assert_eq!(
+        w.reopen().unwrap().state(MissionId(1)),
+        Some(MissionState::Stopped)
+    );
+    let refused = |events: Vec<Event>| {
+        w.journal.set_lines(chained(events));
+        matches!(
+            w.reopen(),
+            Err(CoordinatorError::Journal(JournalError::Inconsistent { .. }))
+        )
+    };
+    let mut none = settled("awaiting_approval");
+    none.push(Event::ApprovalClosed { effect: 0 });
+    assert!(refused(none), "a closure with no request");
+    let mut other = settled("awaiting_approval");
+    other.push(pending(0));
+    other.push(Event::ApprovalClosed { effect: 1 });
+    assert!(refused(other), "a closure of another effect");
+    let mut twice = settled("awaiting_approval");
+    twice.push(pending(0));
+    twice.push(Event::ApprovalClosed { effect: 0 });
+    twice.push(Event::ApprovalClosed { effect: 0 });
+    assert!(refused(twice), "closed twice");
+}
