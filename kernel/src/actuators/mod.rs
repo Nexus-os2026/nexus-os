@@ -8,18 +8,15 @@ pub mod agent_lifecycle;
 pub mod api;
 pub mod browser;
 pub mod code_exec;
-pub mod cognitive_param;
 pub mod computer_use;
 pub mod docker;
 #[cfg(any(windows, test))]
 mod execution_platform;
 pub mod filesystem;
-pub mod governance_policy;
 pub mod image_gen;
 pub mod input;
 pub mod knowledge_graph;
 pub mod screen;
-pub mod self_evolution;
 pub mod shell;
 pub mod tts;
 pub mod types;
@@ -29,19 +26,13 @@ pub use agent_lifecycle::AgentLifecycleActuator;
 pub use api::GovernedApiClient;
 pub use browser::BrowserActuator;
 pub use code_exec::CodeExecuteActuator;
-pub use cognitive_param::{
-    AlgorithmSelectionActuator, CognitiveParamActuator, CounterfactualActuator,
-    EcosystemDesignActuator, ModelOrchestrationActuator, TemporalPlanActuator,
-};
 pub use computer_use::ComputerUseActuator;
 pub use docker::DockerActuator;
 pub use filesystem::GovernedFilesystem;
-pub use governance_policy::GovernancePolicyActuator;
 pub use image_gen::ImageGenActuator;
 pub use input::InputControlActuator;
 pub use knowledge_graph::KnowledgeGraphActuator;
 pub use screen::ScreenCaptureActuator;
-pub use self_evolution::SelfEvolutionActuator;
 pub use shell::GovernedShell;
 pub use tts::TtsActuator;
 pub use types::{
@@ -100,15 +91,7 @@ impl ActuatorRegistry {
         registry.register(Box::new(ScreenCaptureActuator));
         registry.register(Box::new(InputControlActuator));
         registry.register(Box::new(ComputerUseActuator));
-        registry.register(Box::new(SelfEvolutionActuator));
         registry.register(Box::new(AgentLifecycleActuator));
-        registry.register(Box::new(GovernancePolicyActuator));
-        registry.register(Box::new(CognitiveParamActuator));
-        registry.register(Box::new(ModelOrchestrationActuator));
-        registry.register(Box::new(AlgorithmSelectionActuator));
-        registry.register(Box::new(EcosystemDesignActuator));
-        registry.register(Box::new(CounterfactualActuator));
-        registry.register(Box::new(TemporalPlanActuator));
         registry.register(Box::new(CodeExecuteActuator));
         registry
     }
@@ -300,21 +283,13 @@ impl ActuatorRegistry {
             | PlannedAction::KeyboardShortcut { .. }
             | PlannedAction::ScrollWheel { .. } => "input_control_actuator",
             PlannedAction::ComputerAction { .. } => "computer_use_actuator",
-            PlannedAction::SelfModifyDescription { .. }
-            | PlannedAction::SelfModifyStrategy { .. }
-            | PlannedAction::RunEvolutionTournament { .. } => "self_evolution",
             PlannedAction::CreateSubAgent { .. } | PlannedAction::DestroySubAgent { .. } => {
                 "agent_lifecycle"
             }
-            PlannedAction::ModifyGovernancePolicy { .. }
-            | PlannedAction::AllocateEcosystemFuel { .. } => "governance_policy",
-            PlannedAction::ModifyCognitiveParams { .. } => "cognitive_param",
-            PlannedAction::SelectLlmProvider { .. } => "model_orchestration",
-            PlannedAction::SelectAlgorithm { .. } => "algorithm_selection",
-            PlannedAction::DesignAgentEcosystem { .. } => "ecosystem_design",
-            PlannedAction::RunCounterfactual { .. } => "counterfactual",
-            PlannedAction::TemporalPlan { .. } => "temporal_plan",
             PlannedAction::CodeExecute { .. } => "code_execute",
+            // The self-evolution, governance-policy and cognitive-parameter
+            // actions have no actuator (removed with the legacy supervisor
+            // stack, M0-FIX F7): they are not handled.
             _ => return Err(ActuatorError::ActionNotHandled),
         };
 
@@ -396,21 +371,8 @@ fn estimate_action_cost(action: &PlannedAction) -> f64 {
         PlannedAction::ScrollWheel { amount, .. } => 3.0 + *amount as f64 * 0.1,
         PlannedAction::ComputerAction { max_steps, .. } => 20.0 + *max_steps as f64,
         PlannedAction::LlmQuery { .. } => 10.0,
-        PlannedAction::SelfModifyDescription { .. } => 15.0,
-        PlannedAction::SelfModifyStrategy { .. } => 10.0,
         PlannedAction::CreateSubAgent { .. } => 20.0,
         PlannedAction::DestroySubAgent { .. } => 5.0,
-        PlannedAction::RunEvolutionTournament {
-            variants, rounds, ..
-        } => (variants.len() as f64) * (*rounds as f64) * 5.0,
-        PlannedAction::ModifyGovernancePolicy { .. } => 10.0,
-        PlannedAction::AllocateEcosystemFuel { .. } => 5.0,
-        PlannedAction::ModifyCognitiveParams { .. } => 8.0,
-        PlannedAction::SelectLlmProvider { .. } => 5.0,
-        PlannedAction::SelectAlgorithm { .. } => 4.0,
-        PlannedAction::DesignAgentEcosystem { .. } => 20.0,
-        PlannedAction::RunCounterfactual { alternatives, .. } => 2.0 + alternatives.len() as f64,
-        PlannedAction::TemporalPlan { .. } => 4.0,
         PlannedAction::CodeExecute { .. } => 8.0,
         _ => 0.0,
     }
@@ -454,7 +416,7 @@ mod tests {
     #[test]
     fn registry_with_defaults() {
         let registry = ActuatorRegistry::with_defaults();
-        assert_eq!(registry.actuators.len(), 22);
+        assert_eq!(registry.actuators.len(), 14);
         assert!(registry.actuators.contains_key("governed_filesystem"));
         assert!(registry.actuators.contains_key("governed_shell"));
         assert!(registry.actuators.contains_key("docker_actuator"));
@@ -467,16 +429,21 @@ mod tests {
         assert!(registry.actuators.contains_key("screen_capture_actuator"));
         assert!(registry.actuators.contains_key("input_control_actuator"));
         assert!(registry.actuators.contains_key("computer_use_actuator"));
-        assert!(registry.actuators.contains_key("self_evolution"));
         assert!(registry.actuators.contains_key("agent_lifecycle"));
-        assert!(registry.actuators.contains_key("governance_policy"));
-        assert!(registry.actuators.contains_key("cognitive_param"));
-        assert!(registry.actuators.contains_key("model_orchestration"));
-        assert!(registry.actuators.contains_key("algorithm_selection"));
-        assert!(registry.actuators.contains_key("ecosystem_design"));
-        assert!(registry.actuators.contains_key("counterfactual"));
-        assert!(registry.actuators.contains_key("temporal_plan"));
         assert!(registry.actuators.contains_key("code_execute"));
+        // Removed with the legacy supervisor stack (M0-FIX F7).
+        for name in [
+            "self_evolution",
+            "governance_policy",
+            "cognitive_param",
+            "model_orchestration",
+            "algorithm_selection",
+            "ecosystem_design",
+            "counterfactual",
+            "temporal_plan",
+        ] {
+            assert!(!registry.actuators.contains_key(name), "{name}");
+        }
     }
 
     #[test]

@@ -278,6 +278,33 @@ fn is_closed_model_actuator(action: &PlannedAction) -> bool {
     )
 }
 
+/// The refusal of the self-evolution, governance-policy and
+/// cognitive-parameter actions (M0-FIX F7). Their actuators existed only to
+/// drive the legacy supervisor stack (orchestration, delegation, speculative
+/// simulation and Time Machine checkpoints) and were removed with it, so the
+/// executor refuses them instead of reporting a stub success. The old
+/// surface stays closed; it is not degraded or emulated.
+const LEGACY_ACTION_REMOVED: &str = "refused: this action was removed from the cognitive \
+     loop with the legacy supervisor stack (M0-FIX F7); it is closed";
+
+/// Whether `action` is one of the removed legacy cognitive actions.
+fn is_removed_legacy_action(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::SelfModifyDescription { .. }
+            | PlannedAction::SelfModifyStrategy { .. }
+            | PlannedAction::RunEvolutionTournament { .. }
+            | PlannedAction::ModifyGovernancePolicy { .. }
+            | PlannedAction::AllocateEcosystemFuel { .. }
+            | PlannedAction::ModifyCognitiveParams { .. }
+            | PlannedAction::SelectLlmProvider { .. }
+            | PlannedAction::SelectAlgorithm { .. }
+            | PlannedAction::DesignAgentEcosystem { .. }
+            | PlannedAction::RunCounterfactual { .. }
+            | PlannedAction::TemporalPlan { .. }
+    )
+}
+
 /// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
 /// context come from the plan and are carried with its label; each earlier
 /// step's result is included verbatim or carried as derived.
@@ -457,12 +484,6 @@ fn is_actuator_action(action: &PlannedAction) -> bool {
             | PlannedAction::KeyboardShortcut { .. }
             | PlannedAction::ScrollWheel { .. }
             | PlannedAction::ComputerAction { .. }
-            | PlannedAction::ModifyCognitiveParams { .. }
-            | PlannedAction::SelectLlmProvider { .. }
-            | PlannedAction::SelectAlgorithm { .. }
-            | PlannedAction::DesignAgentEcosystem { .. }
-            | PlannedAction::RunCounterfactual { .. }
-            | PlannedAction::TemporalPlan { .. }
             | PlannedAction::A2aDelegation { .. }
     )
 }
@@ -559,6 +580,9 @@ impl ActionExecutor for RegistryExecutor {
             _ if is_closed_model_actuator(action) => {
                 Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
             }
+            _ if is_removed_legacy_action(action) => {
+                Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
             // A model call, or a read or write of retained records, needs a
             // unit (§6.1, §11.4): never run without one.
             PlannedAction::LlmQuery { .. } if self.llm_handler.is_some() => {
@@ -599,6 +623,9 @@ impl ActionExecutor for RegistryExecutor {
         match action {
             _ if is_closed_model_actuator(action) => {
                 Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
+            }
+            _ if is_removed_legacy_action(action) => {
+                Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
             }
             PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
                 let handler = self.llm_handler.as_ref().expect("checked");
@@ -2735,11 +2762,9 @@ fn compute_last_step_result(steps: &[AgentStep]) -> Option<String> {
 /// Determine if an action requires HITL approval based on autonomy level.
 fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
     match action {
-        // ApiCall to known free APIs (CoinGecko, Wikipedia, etc.) is safe at L2
-        PlannedAction::ApiCall { url, .. } if crate::free_api_registry::is_known_free_api(url) => {
-            autonomy_level < 2
-        }
-        // Other high-risk actions require L3+ or HITL
+        // High-risk actions require L3+ or HITL. (An ApiCall to an address
+        // the removed free-API registry listed was relaxed to L2 by a string
+        // prefix match; M0-FIX F7 removed that relaxation.)
         PlannedAction::FileWrite { .. }
         | PlannedAction::ShellCommand { .. }
         | PlannedAction::DockerCommand { .. }
@@ -5967,6 +5992,182 @@ mod tests {
             assert!(err.contains(MODEL_ACTUATOR_CLOSED), "{err}");
         }
         assert_eq!(reached.load(Ordering::SeqCst), 0, "a closed actuator ran");
+    }
+
+    /// M0-FIX F7 oracle: the self-evolution, governance-policy and
+    /// cognitive-parameter actions were removed from the cognitive loop with
+    /// the legacy supervisor stack. The executor refuses each one with an
+    /// honest error, outside a unit and as a step of one, even for an agent
+    /// that holds `self.modify` and with HITL approval, and never reaches an
+    /// actuator registered under one of the old names. Before the cut, four
+    /// of them returned a stub success and seven reached an actuator.
+    #[test]
+    fn m0_f7_registry_executor_refuses_removed_legacy_actions() {
+        use crate::actuators::{ActionResult, Actuator, ActuatorError};
+        use std::sync::atomic::AtomicUsize;
+        struct Counting(&'static str, Arc<AtomicUsize>);
+        impl Actuator for Counting {
+            fn name(&self) -> &str {
+                self.0
+            }
+            fn required_capabilities(&self) -> Vec<String> {
+                Vec::new()
+            }
+            fn execute(
+                &self,
+                _action: &PlannedAction,
+                _context: &ActuatorContext,
+            ) -> Result<ActionResult, ActuatorError> {
+                self.1.fetch_add(1, Ordering::SeqCst);
+                Ok(ActionResult {
+                    success: true,
+                    output: "reached".to_string(),
+                    fuel_cost: 0.0,
+                    side_effects: Vec::new(),
+                })
+            }
+        }
+        let mut sup = Supervisor::new();
+        let id = sup
+            .start_agent(AgentManifest {
+                name: "f7-agent".into(),
+                version: "1.0.0".into(),
+                capabilities: vec!["self.modify".into()],
+                fuel_budget: 10000,
+                autonomy_level: Some(3),
+                consent_policy_path: None,
+                requester_id: None,
+                schedule: None,
+                default_goal: None,
+                llm_model: None,
+                fuel_period_id: None,
+                monthly_fuel_cap: None,
+                allowed_endpoints: None,
+                domain_tags: vec![],
+                filesystem_permissions: vec![],
+            })
+            .unwrap();
+        let agent_id = id.to_string();
+        let reached = Arc::new(AtomicUsize::new(0));
+        let mut executor = RegistryExecutor::new(
+            std::env::temp_dir(),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            Arc::new(Mutex::new(sup)),
+            None,
+        );
+        for name in [
+            "self_evolution",
+            "governance_policy",
+            "cognitive_param",
+            "model_orchestration",
+            "algorithm_selection",
+            "ecosystem_design",
+            "counterfactual",
+            "temporal_plan",
+        ] {
+            executor
+                .registry
+                .register(Box::new(Counting(name, reached.clone())));
+        }
+        let actions = [
+            PlannedAction::SelfModifyDescription {
+                new_description: "x".into(),
+            },
+            PlannedAction::SelfModifyStrategy {
+                strategy_key: "k".into(),
+                new_strategy: "s".into(),
+            },
+            PlannedAction::RunEvolutionTournament {
+                variants: vec!["a".into(), "b".into()],
+                task: "t".into(),
+                rounds: 1,
+            },
+            PlannedAction::ModifyGovernancePolicy {
+                policy_key: "k".into(),
+                policy_value: "v".into(),
+            },
+            PlannedAction::AllocateEcosystemFuel {
+                agent_id: agent_id.clone(),
+                amount: 1.0,
+            },
+            PlannedAction::ModifyCognitiveParams {
+                param_key: "max_cycles".into(),
+                param_value: "500".into(),
+            },
+            PlannedAction::SelectLlmProvider {
+                phase: "plan".into(),
+                provider: "ollama".into(),
+                model: "m".into(),
+            },
+            PlannedAction::SelectAlgorithm {
+                algorithm: "world_model".into(),
+                config_json: "{}".into(),
+            },
+            PlannedAction::DesignAgentEcosystem {
+                ecosystem_json: "[]".into(),
+            },
+            PlannedAction::RunCounterfactual {
+                decision_id: "d".into(),
+                alternatives: vec!["a".into()],
+            },
+            PlannedAction::TemporalPlan {
+                immediate: "a".into(),
+                short_term: "b".into(),
+                medium_term: "c".into(),
+                long_term: "d".into(),
+            },
+        ];
+        let refused = |action: &PlannedAction, err: &str| {
+            assert!(
+                err.starts_with(action.action_type())
+                    && err.contains("refused: this action was removed from the cognitive loop"),
+                "{}: {err}",
+                action.action_type()
+            );
+        };
+        let mut audit = AuditTrail::new();
+        for action in &actions {
+            let err = executor
+                .execute(&agent_id, action, &mut audit, true)
+                .unwrap_err();
+            refused(action, &err);
+            let mut unit = hm().goal(id);
+            let plan = unit.produce("the plan");
+            let mut scope = StepScope {
+                issuer: &hm().issuer,
+                ctx: &mut unit,
+                plan: &plan,
+                prior: &[],
+            };
+            let err = executor
+                .execute_in(&mut scope, &agent_id, action, &mut audit, true)
+                .map(|o| o.text)
+                .unwrap_err();
+            refused(action, &err);
+        }
+        assert_eq!(reached.load(Ordering::SeqCst), 0, "a removed actuator ran");
+    }
+
+    /// M0-FIX F7 oracle: the free-API registry no longer relaxes HITL. An
+    /// `ApiCall` needs L3 like every other API call, including to an
+    /// address the registry used to list and to one that only shares a
+    /// listed address's string prefix (the registry matched by prefix).
+    #[test]
+    fn m0_f7_api_call_has_no_free_api_hitl_relaxation() {
+        for url in [
+            "https://en.wikipedia.org/api/rest_v1/page/summary/Rust",
+            "https://en.wikipedia.org/api/rest_v1.attacker.example/x",
+            "https://api.example.com/v1",
+        ] {
+            let call = PlannedAction::ApiCall {
+                method: "GET".into(),
+                url: url.into(),
+                body: None,
+                headers: None,
+            };
+            assert!(action_requires_hitl(&call, 2), "{url} at L2");
+            assert!(!action_requires_hitl(&call, 3), "{url} at L3");
+        }
     }
 
     /// P3-HM-CONTRACT-02 §12.3 item 4, the PREVIOUS OUTCOMES read site

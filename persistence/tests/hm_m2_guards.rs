@@ -394,19 +394,21 @@ const IDENTITY_DB_CALLERS: [&str; 2] = [
 /// Mother Nexus cleanup (2026-10-31): the desktop rows
 /// (`app/src-tauri/src/lib.rs`, `app/src-tauri/src/commands/swarm.rs`) and
 /// `agents/social-poster/src/lib.rs` named deleted code.
-const STATE_DB_OPENERS: [&str; 4] = [
+///
+/// M0-FIX F7: `kernel/src/actuators/self_evolution.rs` was deleted with the
+/// legacy supervisor stack; FK-2 still classifies every remaining raw open.
+const STATE_DB_OPENERS: [&str; 3] = [
     "kernel/src/persistence.rs",
-    "kernel/src/actuators/self_evolution.rs",
     "kernel/src/actuators/agent_lifecycle.rs",
     "kernel/src/cognitive/loop_runtime.rs",
 ];
 
 /// Former state-database openers that open no connection at all now
 /// (mission P3-C11-HM-M3 R9): no open of any kind, no identity-home path.
-const NO_OWN_CONNECTION: [&str; 2] = [
-    "kernel/src/actuators/cognitive_param.rs",
-    "kernel/src/actuators/knowledge_graph.rs",
-];
+///
+/// M0-FIX F7: `kernel/src/actuators/cognitive_param.rs` was deleted with the
+/// legacy supervisor stack.
+const NO_OWN_CONNECTION: [&str; 1] = ["kernel/src/actuators/knowledge_graph.rs"];
 
 #[test]
 fn hm_m2_n7_every_identity_home_connection_enables_foreign_keys() {
