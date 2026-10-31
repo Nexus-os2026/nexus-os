@@ -57,6 +57,12 @@ pub enum SecretError {
     Storage(String),
     #[error("crypto error: {0}")]
     Crypto(String),
+    /// The stored row predates identity binding (no associated data). It
+    /// is never decrypted on the read path; only the one-time startup
+    /// upgrade (`migrate::plan_legacy_upgrade`) re-encrypts such rows,
+    /// and never in a vault that has already been upgraded.
+    #[error("secret is stored in the legacy format without identity binding and is refused")]
+    LegacyUnbound,
 }
 
 /// Identity tag for the backend that resolved a `get_secret` call.

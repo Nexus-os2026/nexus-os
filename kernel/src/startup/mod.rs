@@ -34,7 +34,10 @@ use crate::secrets::backend_env::EnvBackend;
 use crate::secrets::backend_keyring::KeyringBackendAdapter;
 use crate::secrets::backend_memory::MemoryBackend;
 use crate::secrets::backend_sqlite::SqliteEnvelopeBackend;
-use crate::secrets::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
+use crate::secrets::migrate::{
+    migrate_config_to_vault, plan_legacy_upgrade, record_upgrade_audit, MigrationError,
+    MigrationReport,
+};
 use crate::secrets::{SecretBackend, SecretError, SecretsFacade};
 use std::sync::Arc;
 use thiserror::Error;
@@ -76,6 +79,16 @@ const VAULT_SCOPES: &[&str] = &[
 /// unreadable and writing new rows under another key. An empty vault has
 /// nothing to verify, so its first key is accepted.
 fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> {
+    check_vault_rows(sqlite, false)
+}
+
+/// The Final Gate item E check. With `legacy_checked_by_plan`, legacy
+/// (unbound) rows are skipped: the M0-FIX F4 upgrade plan has already
+/// proven, read-only, that every one of them opens under this key.
+fn check_vault_rows(
+    sqlite: &SqliteEnvelopeBackend,
+    legacy_checked_by_plan: bool,
+) -> Result<(), StartupError> {
     for scope in VAULT_SCOPES {
         let names = sqlite
             .db()
@@ -85,6 +98,7 @@ fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> 
             // The decrypted value is dropped (and zeroized) at once.
             match sqlite.get(scope, &name) {
                 Ok(_) => {}
+                Err(SecretError::LegacyUnbound) if legacy_checked_by_plan => {}
                 // The authenticated decryption failed: this key does not
                 // open the row.
                 Err(SecretError::DecryptionFailed) => {
@@ -97,6 +111,35 @@ fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> 
             }
         }
     }
+    Ok(())
+}
+
+/// M0-FIX F4: the one-time upgrade of legacy (unbound) vault rows to the
+/// identity-bound format, keeping Final Gate item E's "refuse a wrong key
+/// before writing anything":
+///   1. plan the upgrade (read-only): every legacy row must open under this
+///      key, else the key is refused (`VaultKeyMismatch`) or the row is
+///      reported as damaged (`VaultSecretDamaged`);
+///   2. check every bound row (read-only);
+///   3. only then write: all re-bound rows and the completion marker in one
+///      transaction, and record one audit event with the row count.
+///
+/// Legacy rows in a vault that is already upgraded fail startup closed
+/// (`StartupError::Migration(LegacyAfterUpgrade)`): the whole vault is
+/// refused, not only that secret.
+fn upgrade_vault_rows(
+    sqlite: &SqliteEnvelopeBackend,
+    audit: &std::sync::Mutex<crate::audit::AuditTrail>,
+) -> Result<(), StartupError> {
+    let upgrade_error = |e| match e {
+        MigrationError::LegacyUndecryptable { .. } => StartupError::VaultKeyMismatch,
+        MigrationError::LegacyDamaged { .. } => StartupError::VaultSecretDamaged,
+        other => StartupError::Migration(other),
+    };
+    let plan = plan_legacy_upgrade(sqlite).map_err(upgrade_error)?;
+    check_vault_rows(sqlite, true)?;
+    let report = plan.commit(sqlite).map_err(upgrade_error)?;
+    record_upgrade_audit(audit, &report);
     Ok(())
 }
 
@@ -118,6 +161,8 @@ pub fn run_migrations(
         .map_err(|e| StartupError::Crypto(format!("{e}")))?;
 
     let sqlite = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
+    upgrade_vault_rows(&sqlite, &audit)?;
+    // Every row is bound now; check them all again.
     verify_vault_key(&sqlite)?;
 
     let env = Arc::new(EnvBackend::new());
@@ -312,7 +357,9 @@ mod tests {
         let not_text =
             Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
         let backend = SqliteEnvelopeBackend::new(Arc::clone(&not_text), &key());
-        let (nonce, ciphertext) = backend.encrypt_for_migration(&[0xff, 0xfe, 0x00]).unwrap();
+        let (nonce, ciphertext) = backend
+            .encrypt_for_migration("social", "x_consumer_key", &[0xff, 0xfe, 0x00])
+            .unwrap();
         not_text
             .record_secret("social", "x_consumer_key", &nonce, &ciphertext)
             .unwrap();
@@ -327,6 +374,122 @@ mod tests {
         ];
         assert_ne!(messages[0], messages[1]);
         assert!(messages[1].contains("damaged"), "{}", messages[1]);
+    }
+
+    /// M0-FIX F4: startup upgrades legacy rows only when every one opens
+    /// under the configured key; otherwise it refuses the key (or reports a
+    /// damaged row) and changes nothing.
+    #[test]
+    fn f4_startup_upgrades_legacy_vault_rows_only_under_their_key() {
+        use crate::secrets::tests::f4_write_legacy_row;
+        let key_a = || EncryptionKey::from_raw_for_test([0x11; 32]);
+        let key_b = || EncryptionKey::from_raw_for_test([0x22; 32]);
+        let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        f4_write_legacy_row(&db, &key_a(), "llm", "anthropic", b"synthetic-llm");
+        f4_write_legacy_row(
+            &db,
+            &key_a(),
+            "auth.oidc",
+            "client_secret",
+            b"synthetic-oidc",
+        );
+        let before = db.list_secret_rows().unwrap();
+        let audit = std::sync::Mutex::new(crate::audit::AuditTrail::new());
+        let wrong = SqliteEnvelopeBackend::new(Arc::clone(&db), &key_b());
+        assert!(matches!(
+            upgrade_vault_rows(&wrong, &audit),
+            Err(StartupError::VaultKeyMismatch)
+        ));
+        assert_eq!(db.list_secret_rows().unwrap(), before);
+        assert_eq!(db.schema_version("secrets_aad_v2").unwrap(), None);
+        assert!(audit.lock().unwrap().events().is_empty());
+
+        let right = SqliteEnvelopeBackend::new(Arc::clone(&db), &key_a());
+        upgrade_vault_rows(&right, &audit).unwrap();
+        verify_vault_key(&right).unwrap();
+        // One audit event with the count only: no names, no values.
+        {
+            let trail = audit.lock().unwrap();
+            assert_eq!(trail.events().len(), 1);
+            let payload = &trail.events()[0].payload;
+            assert_eq!(payload["event"], "secrets_format_upgraded");
+            assert_eq!(payload["rows_upgraded"], 2);
+            let text = payload.to_string();
+            for leaked in ["synthetic", "anthropic", "client_secret", "llm", "oidc"] {
+                assert!(!text.contains(leaked), "{leaked} in {text}");
+            }
+        }
+        // A second start records nothing and writes nothing.
+        let upgraded = db.list_secret_rows().unwrap();
+        upgrade_vault_rows(&right, &audit).unwrap();
+        assert_eq!(audit.lock().unwrap().events().len(), 1);
+        assert_eq!(db.list_secret_rows().unwrap(), upgraded);
+
+        // Replay through startup: marker deleted, a legacy row for
+        // llm.anthropic planted into auth.oidc.client_secret. Startup fails
+        // closed and the planted row is neither re-bound nor opened.
+        let old = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        f4_write_legacy_row(&old, &key_a(), "llm", "anthropic", b"synthetic-llm");
+        let (nonce, ciphertext) = old.lookup_secret("llm", "anthropic").unwrap().unwrap();
+        db.with_transaction(|tx| {
+            tx.execute_batch("DELETE FROM schema_versions WHERE key = 'secrets_aad_v2'")?;
+            Ok(())
+        })
+        .unwrap();
+        db.record_secret("auth.oidc", "client_secret", &nonce, &ciphertext)
+            .unwrap();
+        let planted = db.list_secret_rows().unwrap();
+        assert!(matches!(
+            upgrade_vault_rows(&right, &audit),
+            Err(StartupError::Migration(
+                MigrationError::LegacyAfterUpgrade { count: 1 }
+            ))
+        ));
+        assert_eq!(db.list_secret_rows().unwrap(), planted);
+        assert!(matches!(
+            right.get("auth.oidc", "client_secret"),
+            Err(SecretError::LegacyUnbound)
+        ));
+        assert!(matches!(
+            verify_vault_key(&right),
+            Err(StartupError::VaultUnreadable)
+        ));
+        assert_eq!(audit.lock().unwrap().events().len(), 1);
+        assert_eq!(
+            right.get("llm", "anthropic").unwrap().as_str(),
+            "synthetic-llm"
+        );
+        assert!(matches!(
+            verify_vault_key(&wrong),
+            Err(StartupError::VaultKeyMismatch)
+        ));
+
+        let damaged =
+            Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        f4_write_legacy_row(&damaged, &key_a(), "llm", "openai", &[0xff, 0xfe]);
+        assert!(matches!(
+            upgrade_vault_rows(
+                &SqliteEnvelopeBackend::new(Arc::clone(&damaged), &key_a()),
+                &audit
+            ),
+            Err(StartupError::VaultSecretDamaged)
+        ));
+
+        // Nothing is written before the key check: a vault whose only row
+        // is malformed is refused as damaged without recording the marker.
+        let malformed =
+            Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        malformed
+            .record_secret("llm", "openai", &[0_u8; 5], b"synthetic-ciphertext")
+            .unwrap();
+        assert!(matches!(
+            upgrade_vault_rows(
+                &SqliteEnvelopeBackend::new(Arc::clone(&malformed), &key_a()),
+                &audit
+            ),
+            Err(StartupError::VaultSecretDamaged)
+        ));
+        assert_eq!(malformed.schema_version("secrets_aad_v2").unwrap(), None);
     }
 
     /// Final Gate item E: startup refuses a key file whose key does not open
@@ -345,6 +508,7 @@ mod tests {
         )
         .set("llm", "anthropic", Zeroizing::new("synthetic-llm".into()))
         .unwrap();
+        let rows_before = db.list_secret_rows().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let key_path = dir.path().join("vault.key");
         std::fs::OpenOptions::new()
@@ -366,6 +530,9 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(db.schema_version("credential_vault_v1").unwrap(), None);
+        // M0-FIX F4 review: nor the secrets-upgrade marker, nor any row.
+        assert_eq!(db.schema_version("secrets_aad_v2").unwrap(), None);
+        assert_eq!(db.list_secret_rows().unwrap(), rows_before);
         assert_eq!(config.social.x_api_key, "synthetic-social");
         assert!(db.list_secrets("social").unwrap().is_empty());
         assert_eq!(
