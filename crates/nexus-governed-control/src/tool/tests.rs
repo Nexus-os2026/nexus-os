@@ -42,7 +42,7 @@ fn fixture(
 ) -> ToolDefinition {
     ToolDefinition {
         key,
-        executable,
+        executables: crate::harness_tests::only(executable),
         class: EffectClass::R0,
         build,
         env: &[("LC_ALL", "C")],
@@ -470,13 +470,16 @@ fn the_production_catalog_has_no_shell_interpreter_or_runner() {
         "wget",
     ];
     for definition in catalog::production() {
-        let name = std::path::Path::new(definition.executable)
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
-        assert!(!NEVER.contains(&name.as_str()), "{}", definition.executable);
-        assert!(definition.executable.starts_with('/'));
+        assert!(!definition.executables.is_empty(), "{}", definition.key);
+        for executable in definition.executables {
+            let name = std::path::Path::new(executable)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            assert!(!NEVER.contains(&name.as_str()), "{executable}");
+            assert!(executable.starts_with('/'));
+        }
         assert_eq!(definition.trust, Trust::System);
         // No builder accepts a free-form command, script or argument list.
         for field in ["command", "script", "args", "argv", "program", "path"] {
@@ -529,13 +532,57 @@ fn speech_is_synthesized_when_the_local_engine_is_installed() {
 #[test]
 fn every_fixture_executable_is_named_by_its_canonical_path() {
     for definition in fixtures() {
-        let canonical = std::fs::canonicalize(definition.executable)
-            .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
-        assert_eq!(
-            canonical,
-            std::path::Path::new(definition.executable),
-            "{}: the fixture names a non-canonical executable",
-            definition.key
-        );
+        for executable in definition.executables {
+            let canonical = std::fs::canonicalize(executable)
+                .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
+            assert_eq!(
+                canonical,
+                std::path::Path::new(executable),
+                "{}: the fixture names a non-canonical executable",
+                definition.key
+            );
+        }
     }
+}
+
+/// M0-FIX2 F13 oracle (host): the production SHA-256 tool, as the catalog
+/// names it (no test substitution), resolves on this host to one of its own
+/// trusted locations, and runs end to end through the sealed launch. On a
+/// rust-coreutils host its `/usr/bin` entry is a link into the multicall
+/// binary; on a GNU host it is a regular file.
+#[test]
+fn m0_fix2_f13_the_production_sha256_tool_resolves_and_runs_on_this_host() {
+    let definition = catalog::production()
+        .into_iter()
+        .find(|d| d.key == "text.sha256")
+        .unwrap();
+    let identity = crate::executable::resolve(definition.executables, definition.trust).unwrap();
+    assert!(
+        definition
+            .executables
+            .iter()
+            .any(|listed| std::path::Path::new(listed) == identity.path),
+        "{} is not a listed location",
+        identity.path.display()
+    );
+    let h = harness();
+    let mut _roots = Vec::new();
+    let tools = Tools::new(catalog::production(), root_guard(&mut _roots));
+    let scope = tools.grant_scope("text.sha256").unwrap();
+    match &scope {
+        crate::authority::policy::GrantScope::Tool { executable, .. } => {
+            assert_eq!(
+                std::path::Path::new(executable),
+                identity.path,
+                "pinned path"
+            )
+        }
+        other => panic!("{other:?}"),
+    }
+    grant(&h, &tools, "text.sha256");
+    let out = run(&h, &tools, "text.sha256", json!({ "text": "abc" })).unwrap();
+    assert_eq!(
+        out.text.as_deref(),
+        Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  input.txt\n")
+    );
 }

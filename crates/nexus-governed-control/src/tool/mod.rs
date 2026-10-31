@@ -23,11 +23,11 @@ use crate::authority::ids::{Digest, GrantId};
 use crate::authority::policy::GrantScope;
 use crate::authority::{Authority, AuthorityError};
 use crate::control::{EffectOutput, PendingEffect, Preparation};
-use crate::executable::{inspect, Trust};
+use crate::executable::{inspect, resolve, Trust};
 use crate::runtime_root::RuntimeRoot;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// What a tool's builder produced from its typed input.
@@ -50,7 +50,11 @@ pub enum ToolOutput {
 /// One tool.
 pub struct ToolDefinition {
     pub key: &'static str,
-    pub executable: &'static str,
+    /// Its trusted absolute locations, in order (M0-FIX2 F13): the first
+    /// present one decides, and it runs only if that location's canonical
+    /// path is itself listed here and passes
+    /// [`crate::executable::inspect`]; see [`crate::executable::resolve`].
+    pub executables: &'static [&'static str],
     pub class: EffectClass,
     pub build: fn(&Value) -> Result<ToolInvocation, AuthorityError>,
     pub env: &'static [(&'static str, &'static str)],
@@ -92,11 +96,12 @@ impl Tools {
         Self::new(catalog::production(), root)
     }
 
-    /// Every tool key with its class and executable (display).
+    /// Every tool key with its class and its first trusted location
+    /// (display; the grant shows the canonical path it resolves to).
     pub fn tools(&self) -> Vec<(&'static str, EffectClass, &'static str)> {
         self.definitions
             .iter()
-            .map(|d| (d.key, d.class, d.executable))
+            .map(|d| (d.key, d.class, d.executables.first().copied().unwrap_or("")))
             .collect()
     }
 
@@ -110,7 +115,7 @@ impl Tools {
     /// Pin the tool's executable as it is now, for the owner to grant.
     pub fn grant_scope(&self, key: &str) -> Result<GrantScope, AuthorityError> {
         let definition = self.find(key)?;
-        let identity = inspect(Path::new(definition.executable), definition.trust)?;
+        let identity = resolve(definition.executables, definition.trust)?;
         Ok(GrantScope::Tool {
             tool: definition.key.to_string(),
             executable: identity.path.display().to_string(),
@@ -145,7 +150,7 @@ impl Tools {
         {
             return Err(AuthorityError::InvalidAction("tool input too large"));
         }
-        let identity = inspect(Path::new(definition.executable), definition.trust)?;
+        let identity = resolve(definition.executables, definition.trust)?;
         let grant = covering_grant(authority, definition.key, &identity.digest)?;
         let target = Digest::of(
             "nexus.p3.tool.target.v1",
@@ -165,7 +170,8 @@ impl Tools {
         let parameters = Digest::of("nexus.p3.tool.invocation.v1", &refs);
         let mut summary = vec![escaped(&format!(
             "Run the tool {} ({})",
-            definition.key, definition.executable
+            definition.key,
+            identity.path.display()
         ))];
         summary.extend(invocation.summary.iter().map(|line| escaped(line)));
         let action = PreparedAction {
@@ -173,7 +179,11 @@ impl Tools {
             class: definition.class,
             operation: definition.key,
             target: TargetIdentity {
-                display: escaped(&format!("{} at {}", definition.key, definition.executable)),
+                display: escaped(&format!(
+                    "{} at {}",
+                    definition.key,
+                    identity.path.display()
+                )),
                 digest: target,
             },
             parameters,
