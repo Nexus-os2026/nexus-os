@@ -18,6 +18,45 @@ use uuid::Uuid;
 /// a ciphertext sealed for another purpose is not accepted as an archive.
 const BACKUP_ARCHIVE_CONTEXT: &str = "nexus.backup.archive";
 
+/// Opens archive bytes for restore or verify (M0-FIX2 F14). An archive must
+/// be encrypted when a key is supplied, or when the sidecar beside it records
+/// it as encrypted, or when that sidecar exists but cannot be read: then a
+/// body without the encryption header is refused, never read as plaintext.
+/// An encrypted body needs the key and opens only as a backup archive.
+fn open_archive_bytes(
+    archive_path: &Path,
+    raw: Vec<u8>,
+    encryption_key: Option<&EncryptionKey>,
+    missing_key: &str,
+) -> Result<Vec<u8>, BackupError> {
+    if crypto::has_encryption_header(&raw) {
+        let key = encryption_key.ok_or_else(|| BackupError::Encryption(missing_key.into()))?;
+        return Ok(crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?);
+    }
+    if encryption_key.is_some() {
+        return Err(BackupError::Encryption(
+            "a key was supplied but the archive is not encrypted".into(),
+        ));
+    }
+    let meta_path = archive_path.with_extension("meta.json");
+    match std::fs::read_to_string(&meta_path) {
+        Ok(text) => match serde_json::from_str::<BackupMetadata>(&text) {
+            Ok(meta) if !meta.encrypted => Ok(raw),
+            Ok(_) => Err(BackupError::Encryption(
+                "the backup metadata records an encrypted archive but the archive is not encrypted"
+                    .into(),
+            )),
+            Err(_) => Err(BackupError::Encryption(
+                "the backup metadata cannot be read, so an unencrypted archive is refused".into(),
+            )),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(raw),
+        Err(_) => Err(BackupError::Encryption(
+            "the backup metadata cannot be read, so an unencrypted archive is refused".into(),
+        )),
+    }
+}
+
 // ── Error ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -594,13 +633,12 @@ fn restore_with_limits(
     // Read the archive (decrypt if needed).
     let raw = std::fs::read(archive_path)?;
 
-    let archive_bytes = if crypto::has_encryption_header(&raw) {
-        let key = encryption_key
-            .ok_or_else(|| BackupError::Encryption("encryption key required for restore".into()))?;
-        crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?
-    } else {
-        raw
-    };
+    let archive_bytes = open_archive_bytes(
+        archive_path,
+        raw,
+        encryption_key,
+        "encryption key required for restore",
+    )?;
 
     // First pass: validate every entry; nothing is written.
     let (backup_id, restored_files) = plan_restore(&archive_bytes, limits)?;
@@ -806,14 +844,12 @@ pub fn verify_backup(
 
     // Try to read the archive to verify it's not corrupted.
     let raw = std::fs::read(archive_path)?;
-    let archive_data = if crypto::has_encryption_header(&raw) {
-        let key = encryption_key.ok_or_else(|| {
-            BackupError::Encryption("key required to verify encrypted backup".into())
-        })?;
-        crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?
-    } else {
-        raw
-    };
+    let archive_data = open_archive_bytes(
+        archive_path,
+        raw,
+        encryption_key,
+        "key required to verify encrypted backup",
+    )?;
 
     let decoder = GzDecoder::new(archive_data.as_slice());
     let mut archive = tar::Archive::new(decoder);

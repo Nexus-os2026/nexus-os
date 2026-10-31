@@ -5,28 +5,29 @@
 //! for integrity verification. Supports optional AES-256-GCM encryption and
 //! HMAC-SHA256 challenge-response peer authentication.
 //!
-//! M0-FIX2 F14: an encrypted frame is bound to its direction (initiator to
-//! responder, or back) through AES-GCM associated data, so a frame cannot be
-//! reflected to its sender. The legacy unbound encrypted frame (flag 0x01)
+//! M0-FIX2 F14: every connection starts with a handshake in which each side
+//! contributes a fresh 32-byte random from the operating system. An encrypted
+//! frame is bound, through AES-GCM associated data, to that session (both
+//! randoms), its direction and its position (a per-direction sequence
+//! number). A frame replayed on another connection, reflected to its sender,
+//! reordered, skipped or repeated is refused. Nonces are random 96-bit values
+//! from the operating system. The legacy unbound encrypted frame (flag 0x01)
 //! is refused, and so is a plaintext frame while a key is configured. Frames
-//! are never persisted, so there is no legacy data to migrate. Frames are not
-//! bound to a session or a sequence number.
+//! are never persisted, so there is no legacy data to migrate. This is not
+//! mutual authentication: the initiator proves itself only by holding the
+//! shared encryption key.
 
-use aes_gcm::aead::{Aead, Payload};
+use aes_gcm::aead::rand_core::RngCore;
+use aes_gcm::aead::{Aead, OsRng, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
-
-/// Global nonce counter — ensures no two encryptions in the same process
-/// ever reuse a nonce, even if the system clock is coarse.
-static NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Wire-format flag: message payload is plaintext JSON.
 const FLAG_PLAINTEXT: u8 = 0x00;
@@ -34,15 +35,18 @@ const FLAG_PLAINTEXT: u8 = 0x00;
 /// data). Recognised only to be refused (M0-FIX2 F14).
 const FLAG_ENCRYPTED_UNBOUND_V1: u8 = 0x01;
 /// Wire-format flag: message payload is AES-256-GCM encrypted and bound to
-/// its direction (M0-FIX2 F14).
+/// its session, direction and position (M0-FIX2 F14).
 const FLAG_ENCRYPTED: u8 = 0x02;
 /// Domain label at the start of an encrypted frame's associated data.
 const LINK_AAD_LABEL: &[u8] = b"nexus.link.frame";
+/// Domain label of the session transcript hash.
+const LINK_SESSION_LABEL: &[u8] = b"nexus.link.session";
+/// Bytes each side contributes to a session in the handshake.
+const SESSION_RANDOM_LEN: usize = 32;
 
-/// Which way a frame travels on a Nexus Link connection. An encrypted frame
-/// opens only for the direction it was sealed for.
+/// Which way a frame travels on a Nexus Link connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinkDirection {
+enum LinkDirection {
     /// From the peer that connected (discovery or send) to the peer that
     /// accepted the connection.
     InitiatorToResponder,
@@ -50,18 +54,87 @@ pub enum LinkDirection {
     ResponderToInitiator,
 }
 
-impl LinkDirection {
+/// Which end of a connection this side is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinkRole {
+    Initiator,
+    Responder,
+}
+
+/// One connection's frame binding, established by
+/// [`NexusLink::authenticate_as_initiator`] or
+/// [`NexusLink::authenticate_as_responder`] (M0-FIX2 F14). An encrypted frame
+/// opens only in the session, direction and position it was sealed for.
+#[derive(Debug)]
+pub struct LinkSession {
+    /// SHA-256 over the session label and both sides' handshake randoms.
+    transcript: [u8; 32],
+    role: LinkRole,
+    /// Sequence number of the next frame this side sends.
+    sent: u64,
+    /// Sequence number of the next frame this side accepts.
+    received: u64,
+}
+
+impl LinkSession {
+    fn new(
+        role: LinkRole,
+        initiator_random: &[u8; SESSION_RANDOM_LEN],
+        responder_random: &[u8; SESSION_RANDOM_LEN],
+    ) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(LINK_SESSION_LABEL);
+        hasher.update([0]);
+        hasher.update(initiator_random);
+        hasher.update(responder_random);
+        Self {
+            transcript: hasher.finalize().into(),
+            role,
+            sent: 0,
+            received: 0,
+        }
+    }
+
+    fn outgoing(&self) -> LinkDirection {
+        match self.role {
+            LinkRole::Initiator => LinkDirection::InitiatorToResponder,
+            LinkRole::Responder => LinkDirection::ResponderToInitiator,
+        }
+    }
+
+    fn incoming(&self) -> LinkDirection {
+        match self.role {
+            LinkRole::Initiator => LinkDirection::ResponderToInitiator,
+            LinkRole::Responder => LinkDirection::InitiatorToResponder,
+        }
+    }
+
     /// Associated data of an encrypted frame: the domain label, a NUL, the
-    /// frame flag and the direction byte.
-    fn aad(self) -> [u8; LINK_AAD_LABEL.len() + 3] {
-        let mut aad = [0u8; LINK_AAD_LABEL.len() + 3];
-        aad[..LINK_AAD_LABEL.len()].copy_from_slice(LINK_AAD_LABEL);
-        aad[LINK_AAD_LABEL.len() + 1] = FLAG_ENCRYPTED;
-        aad[LINK_AAD_LABEL.len() + 2] = match self {
-            Self::InitiatorToResponder => 0x01,
-            Self::ResponderToInitiator => 0x02,
-        };
+    /// frame flag, the direction byte, the session transcript and the
+    /// sequence number (u64 big-endian).
+    fn frame_aad(&self, direction: LinkDirection, sequence: u64) -> Vec<u8> {
+        let mut aad = Vec::with_capacity(LINK_AAD_LABEL.len() + 3 + 32 + 8);
+        aad.extend_from_slice(LINK_AAD_LABEL);
+        aad.push(0);
+        aad.push(FLAG_ENCRYPTED);
+        aad.push(match direction {
+            LinkDirection::InitiatorToResponder => 0x01,
+            LinkDirection::ResponderToInitiator => 0x02,
+        });
+        aad.extend_from_slice(&self.transcript);
+        aad.extend_from_slice(&sequence.to_be_bytes());
         aad
+    }
+
+    /// A matched initiator and responder session, as one handshake makes.
+    #[cfg(test)]
+    pub(crate) fn pair_for_test() -> (Self, Self) {
+        let initiator_random = NexusLink::generate_random();
+        let responder_random = NexusLink::generate_random();
+        (
+            Self::new(LinkRole::Initiator, &initiator_random, &responder_random),
+            Self::new(LinkRole::Responder, &initiator_random, &responder_random),
+        )
     }
 }
 
@@ -250,119 +323,101 @@ impl NexusLink {
         self.shared_secret = Some(secret.to_string());
     }
 
-    /// Perform challenge-response authentication as the initiator (client side).
-    /// Sends a random 32-byte challenge, expects HMAC-SHA256(challenge, secret) back.
-    pub fn authenticate_as_initiator(&self, stream: &mut TcpStream) -> Result<(), String> {
-        let secret = match &self.shared_secret {
-            Some(s) => s,
-            None => return Ok(()), // No auth configured — skip
-        };
-
-        // Generate random 32-byte challenge using timestamp + counter + device_id
-        let challenge = Self::generate_challenge();
-
-        // Send the 32-byte challenge
+    /// Open a connection as the initiator (client side) and return its
+    /// session (M0-FIX2 F14). Sends a fresh 32-byte OS random. With a shared
+    /// secret configured, that random is also the authentication challenge
+    /// and HMAC-SHA256(challenge, secret) must come back. The responder's
+    /// fresh 32-byte random follows.
+    pub fn authenticate_as_initiator(&self, stream: &mut TcpStream) -> Result<LinkSession, String> {
+        let initiator_random = Self::generate_random();
         stream
-            .write_all(&challenge)
+            .write_all(&initiator_random)
             .map_err(|e| format!("Failed to send auth challenge: {e}"))?;
 
-        // Read 32-byte HMAC response
-        let mut response = [0u8; 32];
+        if let Some(secret) = &self.shared_secret {
+            // Read 32-byte HMAC response
+            let mut response = [0u8; 32];
+            stream
+                .read_exact(&mut response)
+                .map_err(|e| format!("Failed to read auth response: {e}"))?;
+
+            // Verify HMAC
+            let mut mac = <HmacSha256 as Mac>::new_from_slice(secret.as_bytes())
+                .map_err(|e| format!("HMAC error: {e}"))?;
+            mac.update(&initiator_random);
+            mac.verify_slice(&response)
+                .map_err(|_| "Peer authentication failed — HMAC mismatch".to_string())?;
+        }
+
+        let mut responder_random = [0u8; SESSION_RANDOM_LEN];
         stream
-            .read_exact(&mut response)
-            .map_err(|e| format!("Failed to read auth response: {e}"))?;
-
-        // Verify HMAC
-        let mut mac = <HmacSha256 as Mac>::new_from_slice(secret.as_bytes())
-            .map_err(|e| format!("HMAC error: {e}"))?;
-        mac.update(&challenge);
-        mac.verify_slice(&response)
-            .map_err(|_| "Peer authentication failed — HMAC mismatch".to_string())?;
-
-        Ok(())
+            .read_exact(&mut responder_random)
+            .map_err(|e| format!("Failed to read session random: {e}"))?;
+        Ok(LinkSession::new(
+            LinkRole::Initiator,
+            &initiator_random,
+            &responder_random,
+        ))
     }
 
-    /// Perform challenge-response authentication as the responder (server side).
-    /// Reads a 32-byte challenge, responds with HMAC-SHA256(challenge, secret).
-    pub fn authenticate_as_responder(&self, stream: &mut TcpStream) -> Result<(), String> {
-        let secret = match &self.shared_secret {
-            Some(s) => s,
-            None => return Ok(()), // No auth configured — skip
-        };
-
-        // Read 32-byte challenge
-        let mut challenge = [0u8; 32];
+    /// Accept a connection as the responder (server side) and return its
+    /// session (M0-FIX2 F14). Reads the initiator's 32-byte random; with a
+    /// shared secret configured, answers it with HMAC-SHA256(challenge,
+    /// secret). Then sends a fresh 32-byte OS random of its own, so frames
+    /// recorded on another connection never open in this one.
+    pub fn authenticate_as_responder(&self, stream: &mut TcpStream) -> Result<LinkSession, String> {
+        let mut initiator_random = [0u8; SESSION_RANDOM_LEN];
         stream
-            .read_exact(&mut challenge)
+            .read_exact(&mut initiator_random)
             .map_err(|e| format!("Failed to read auth challenge: {e}"))?;
 
-        // Compute HMAC-SHA256(challenge, secret)
-        let mut mac = <HmacSha256 as Mac>::new_from_slice(secret.as_bytes())
-            .map_err(|e| format!("HMAC error: {e}"))?;
-        mac.update(&challenge);
-        let result = mac.finalize().into_bytes();
+        if let Some(secret) = &self.shared_secret {
+            // Compute HMAC-SHA256(challenge, secret)
+            let mut mac = <HmacSha256 as Mac>::new_from_slice(secret.as_bytes())
+                .map_err(|e| format!("HMAC error: {e}"))?;
+            mac.update(&initiator_random);
+            let result = mac.finalize().into_bytes();
 
-        // Send 32-byte HMAC response
+            // Send 32-byte HMAC response
+            stream
+                .write_all(&result)
+                .map_err(|e| format!("Failed to send auth response: {e}"))?;
+        }
+
+        let responder_random = Self::generate_random();
         stream
-            .write_all(&result)
-            .map_err(|e| format!("Failed to send auth response: {e}"))?;
-
-        Ok(())
+            .write_all(&responder_random)
+            .map_err(|e| format!("Failed to send session random: {e}"))?;
+        Ok(LinkSession::new(
+            LinkRole::Responder,
+            &initiator_random,
+            &responder_random,
+        ))
     }
 
-    /// Generate a 32-byte challenge using timestamp + atomic counter.
-    fn generate_challenge() -> [u8; 32] {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let counter = NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-        let mut hasher = Sha256::new();
-        hasher.update(ts.to_le_bytes());
-        hasher.update(counter.to_le_bytes());
-        hasher.update(b"nexus-link-challenge");
-        hasher.finalize().into()
+    /// A fresh 32-byte handshake random from the operating system.
+    fn generate_random() -> [u8; SESSION_RANDOM_LEN] {
+        let mut random = [0u8; SESSION_RANDOM_LEN];
+        OsRng.fill_bytes(&mut random);
+        random
     }
 
-    /// Generate a unique 96-bit (12-byte) nonce for AES-256-GCM.
+    /// A random 96-bit (12-byte) AES-256-GCM nonce from the operating system.
     fn generate_nonce() -> [u8; 12] {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let counter = NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-        let mut hasher = Sha256::new();
-        hasher.update(ts.to_le_bytes());
-        hasher.update(counter.to_le_bytes());
-        let hash = hasher.finalize();
-
         let mut nonce = [0u8; 12];
-        nonce.copy_from_slice(&hash[..12]);
+        OsRng.fill_bytes(&mut nonce);
         nonce
     }
 
-    /// Encrypt data with AES-256-GCM, bound to `direction`. Returns nonce
-    /// (12 bytes) || ciphertext || tag.
-    fn encrypt_payload(
-        data: &[u8],
-        key: &[u8; 32],
-        direction: LinkDirection,
-    ) -> Result<Vec<u8>, String> {
+    /// Encrypt data with AES-256-GCM under associated data `aad`. Returns
+    /// nonce (12 bytes) || ciphertext || tag.
+    fn encrypt_payload(data: &[u8], key: &[u8; 32], aad: &[u8]) -> Result<Vec<u8>, String> {
         let cipher = Aes256Gcm::new(key.into());
         let nonce_bytes = Self::generate_nonce();
         let nonce = Nonce::from(nonce_bytes);
-        let aad = direction.aad();
 
         let ciphertext = cipher
-            .encrypt(
-                &nonce,
-                Payload {
-                    msg: data,
-                    aad: &aad,
-                },
-            )
+            .encrypt(&nonce, Payload { msg: data, aad })
             .map_err(|e| format!("AES-256-GCM encryption failed: {e}"))?;
 
         let mut out = Vec::with_capacity(12 + ciphertext.len());
@@ -371,13 +426,9 @@ impl NexusLink {
         Ok(out)
     }
 
-    /// Decrypt data (nonce || ciphertext || tag) with AES-256-GCM, sealed for
-    /// `direction`.
-    fn decrypt_payload(
-        encrypted: &[u8],
-        key: &[u8; 32],
-        direction: LinkDirection,
-    ) -> Result<Vec<u8>, String> {
+    /// Decrypt data (nonce || ciphertext || tag) with AES-256-GCM, sealed
+    /// under associated data `aad`.
+    fn decrypt_payload(encrypted: &[u8], key: &[u8; 32], aad: &[u8]) -> Result<Vec<u8>, String> {
         if encrypted.len() < 28 {
             return Err(
                 "Encrypted data too short — need at least nonce + tag (28 bytes)".to_string(),
@@ -390,18 +441,17 @@ impl NexusLink {
             .map_err(|_| "invalid nonce length".to_string())?;
         let nonce = Nonce::from(nonce_arr);
         let cipher = Aes256Gcm::new(key.into());
-        let aad = direction.aad();
 
         cipher
             .decrypt(
                 &nonce,
                 Payload {
                     msg: ciphertext,
-                    aad: &aad,
+                    aad,
                 },
             )
             .map_err(|_| {
-                "AES-256-GCM decryption failed — wrong key, wrong direction or tampered data"
+                "AES-256-GCM decryption failed — wrong key, session, direction or position, or tampered data"
                     .to_string()
             })
     }
@@ -575,17 +625,14 @@ impl NexusLink {
         let mut stream = connect_peer(address, std::time::Duration::from_secs(10))?;
 
         // Authenticate before exchanging messages
-        self.authenticate_as_initiator(&mut stream)?;
+        let mut session = self.authenticate_as_initiator(&mut stream)?;
 
-        let request = self.serialize_message(
-            &LinkMessage::ModelListRequest,
-            LinkDirection::InitiatorToResponder,
-        )?;
+        let request = self.serialize_message(&LinkMessage::ModelListRequest, &mut session)?;
         stream
             .write_all(&request)
             .map_err(|e| format!("Failed to send model list request: {e}"))?;
 
-        let response = self.read_message(&mut stream, LinkDirection::ResponderToInitiator)?;
+        let response = self.read_message(&mut stream, &mut session)?;
         match response {
             LinkMessage::ModelListResponse { models } => Ok(models),
             _ => Err("Unexpected response from peer".to_string()),
@@ -650,7 +697,7 @@ impl NexusLink {
         let mut stream = connect_peer(address, std::time::Duration::from_secs(30))?;
 
         // Authenticate before exchanging messages
-        self.authenticate_as_initiator(&mut stream)?;
+        let mut session = self.authenticate_as_initiator(&mut stream)?;
 
         // Send transfer request
         let request = self.serialize_message(
@@ -658,14 +705,14 @@ impl NexusLink {
                 model_id: model_id.to_string(),
                 filename: filename.to_string(),
             },
-            LinkDirection::InitiatorToResponder,
+            &mut session,
         )?;
         stream
             .write_all(&request)
             .map_err(|e| format!("Failed to send transfer request: {e}"))?;
 
         // Wait for acceptance
-        let response = self.read_message(&mut stream, LinkDirection::ResponderToInitiator)?;
+        let response = self.read_message(&mut stream, &mut session)?;
         match response {
             LinkMessage::TransferAccepted { .. } => {}
             LinkMessage::TransferRejected { reason } => {
@@ -693,7 +740,7 @@ impl NexusLink {
                     offset,
                     data: buffer[..bytes_read].to_vec(),
                 },
-                LinkDirection::InitiatorToResponder,
+                &mut session,
             )?;
             stream
                 .write_all(&chunk)
@@ -723,7 +770,7 @@ impl NexusLink {
             &LinkMessage::TransferComplete {
                 checksum: checksum.clone(),
             },
-            LinkDirection::InitiatorToResponder,
+            &mut session,
         )?;
         stream
             .write_all(&complete)
@@ -742,13 +789,15 @@ impl NexusLink {
         Ok(())
     }
 
-    /// Receive a model from a peer connection.
+    /// Receive a model from a peer connection, in the session that
+    /// [`NexusLink::authenticate_as_responder`] returned for it.
     pub fn receive_model(
         &self,
         connection: &mut TcpStream,
+        session: &mut LinkSession,
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<String, String> {
-        let request = self.read_message(connection, LinkDirection::InitiatorToResponder)?;
+        let request = self.read_message(connection, session)?;
         let (model_id, filename) = match request {
             LinkMessage::TransferRequest { model_id, filename } => (model_id, filename),
             _ => return Err("Expected TransferRequest message".to_string()),
@@ -760,7 +809,7 @@ impl NexusLink {
                 &LinkMessage::TransferRejected {
                     reason: "Filename contains path traversal characters".to_string(),
                 },
-                LinkDirection::ResponderToInitiator,
+                session,
             )?;
             connection
                 .write_all(&reject)
@@ -777,7 +826,7 @@ impl NexusLink {
                 &LinkMessage::TransferRejected {
                     reason: "Model already exists locally".to_string(),
                 },
-                LinkDirection::ResponderToInitiator,
+                session,
             )?;
             connection
                 .write_all(&reject)
@@ -786,10 +835,8 @@ impl NexusLink {
         }
 
         // We don't know total_bytes yet — accept and start receiving
-        let accept = self.serialize_message(
-            &LinkMessage::TransferAccepted { total_bytes: 0 },
-            LinkDirection::ResponderToInitiator,
-        )?;
+        let accept =
+            self.serialize_message(&LinkMessage::TransferAccepted { total_bytes: 0 }, session)?;
         connection
             .write_all(&accept)
             .map_err(|e| format!("Failed to send acceptance: {e}"))?;
@@ -806,7 +853,7 @@ impl NexusLink {
         let mut bytes_received: u64 = 0;
 
         let expected_checksum = loop {
-            let msg = self.read_message(connection, LinkDirection::InitiatorToResponder)?;
+            let msg = self.read_message(connection, session)?;
             match msg {
                 LinkMessage::TransferChunk { data, .. } => {
                     let chunk_len = data.len() as u64;
@@ -917,17 +964,24 @@ impl NexusLink {
     /// Wire format: `flag (1 byte) | length (4 bytes BE) | payload`.
     /// - flag 0x00: payload is plaintext JSON
     /// - flag 0x02: payload is AES-256-GCM encrypted (nonce || ciphertext ||
-    ///   tag), bound to `direction`
+    ///   tag), bound to `session`, this side's sending direction and the next
+    ///   sending sequence number
     pub fn serialize_message(
         &self,
         msg: &LinkMessage,
-        direction: LinkDirection,
+        session: &mut LinkSession,
     ) -> Result<Vec<u8>, String> {
         let json =
             serde_json::to_vec(msg).map_err(|e| format!("Failed to serialize message: {e}"))?;
 
         let (flag, payload) = if let Some(key) = &self.encryption_key {
-            let encrypted = Self::encrypt_payload(&json, key, direction)?;
+            let sequence = session.sent;
+            let next = sequence
+                .checked_add(1)
+                .ok_or_else(|| "Nexus Link session sequence exhausted".to_string())?;
+            let aad = session.frame_aad(session.outgoing(), sequence);
+            let encrypted = Self::encrypt_payload(&json, key, &aad)?;
+            session.sent = next;
             (FLAG_ENCRYPTED, encrypted)
         } else {
             (FLAG_PLAINTEXT, json)
@@ -953,21 +1007,29 @@ impl NexusLink {
         Ok(frame)
     }
 
-    /// Open a frame's payload. An encrypted frame must be bound to
-    /// `direction`; the legacy unbound encrypted frame, a plaintext frame
-    /// while a key is configured, and an unknown flag are refused.
+    /// Open a frame's payload. An encrypted frame must be bound to `session`,
+    /// this side's receiving direction and the next receiving sequence
+    /// number; the legacy unbound encrypted frame, a plaintext frame while a
+    /// key is configured, and an unknown flag are refused.
     fn decode_frame(
         &self,
         flag: u8,
         payload: &[u8],
-        direction: LinkDirection,
+        session: &mut LinkSession,
     ) -> Result<LinkMessage, String> {
         let json_bytes = match flag {
             FLAG_ENCRYPTED => {
                 let key = self.encryption_key.as_ref().ok_or_else(|| {
                     "Received encrypted message but no encryption key is set".to_string()
                 })?;
-                Self::decrypt_payload(payload, key, direction)?
+                let sequence = session.received;
+                let next = sequence
+                    .checked_add(1)
+                    .ok_or_else(|| "Nexus Link session sequence exhausted".to_string())?;
+                let aad = session.frame_aad(session.incoming(), sequence);
+                let plaintext = Self::decrypt_payload(payload, key, &aad)?;
+                session.received = next;
+                plaintext
             }
             FLAG_ENCRYPTED_UNBOUND_V1 => {
                 return Err("Legacy unbound encrypted frame refused".to_string());
@@ -985,12 +1047,12 @@ impl NexusLink {
             .map_err(|e| format!("Failed to deserialize message: {e}"))
     }
 
-    /// Deserialize a LinkMessage travelling in `direction` from a flag +
+    /// Deserialize a LinkMessage received in `session` from a flag +
     /// length-prefixed byte buffer.
     pub fn deserialize_message(
         &self,
         data: &[u8],
-        direction: LinkDirection,
+        session: &mut LinkSession,
     ) -> Result<LinkMessage, String> {
         if data.len() < 5 {
             return Err("Buffer too short for flag + length prefix".to_string());
@@ -1006,7 +1068,7 @@ impl NexusLink {
             ));
         }
 
-        self.decode_frame(flag, &data[5..5 + len], direction)
+        self.decode_frame(flag, &data[5..5 + len], session)
     }
 
     /// Deserialize a LinkMessage without encryption (static method for backward compatibility).
@@ -1035,12 +1097,12 @@ impl NexusLink {
             .map_err(|e| format!("Failed to deserialize message: {e}"))
     }
 
-    /// Read a flag + length-prefixed message travelling in `direction` from a
+    /// Read a flag + length-prefixed message received in `session` from a
     /// TCP stream.
     fn read_message(
         &self,
         stream: &mut TcpStream,
-        direction: LinkDirection,
+        session: &mut LinkSession,
     ) -> Result<LinkMessage, String> {
         // Read the 1-byte flag
         let mut flag_buf = [0u8; 1];
@@ -1067,7 +1129,7 @@ impl NexusLink {
             .read_exact(&mut payload)
             .map_err(|e| format!("Failed to read message body: {e}"))?;
 
-        self.decode_frame(flag, &payload, direction)
+        self.decode_frame(flag, &payload, session)
     }
 }
 
@@ -1148,6 +1210,7 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_message() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let link = NexusLink::new("dev", "/tmp/models");
         let variants: Vec<LinkMessage> = vec![
             LinkMessage::Ping,
@@ -1191,16 +1254,10 @@ mod tests {
         ];
 
         for msg in variants {
-            let serialized = link
-                .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-                .unwrap();
-            let deserialized = link
-                .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
-                .unwrap();
+            let serialized = link.serialize_message(&msg, &mut tx).unwrap();
+            let deserialized = link.deserialize_message(&serialized, &mut rx).unwrap();
             // Verify round-trip by re-serializing
-            let re_serialized = link
-                .serialize_message(&deserialized, LinkDirection::InitiatorToResponder)
-                .unwrap();
+            let re_serialized = link.serialize_message(&deserialized, &mut tx).unwrap();
             assert_eq!(serialized, re_serialized);
         }
     }
@@ -1300,29 +1357,22 @@ mod tests {
 
     #[test]
     fn test_encryption_roundtrip() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let mut link = NexusLink::new("dev", "/tmp/models");
         link.set_encryption_key("my-secret-passphrase");
 
         let msg = LinkMessage::Ping;
-        let serialized = link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let serialized = link.serialize_message(&msg, &mut tx).unwrap();
 
         // First byte should be the encrypted flag
         assert_eq!(serialized[0], FLAG_ENCRYPTED);
 
         // Deserialize with same key
-        let deserialized = link
-            .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let deserialized = link.deserialize_message(&serialized, &mut rx).unwrap();
         // Re-serialize plaintext to compare structure
         let plain_link = NexusLink::new("dev", "/tmp/models");
-        let plain_ser = plain_link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
-        let plain_deser = plain_link
-            .deserialize_message(&plain_ser, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let plain_ser = plain_link.serialize_message(&msg, &mut tx).unwrap();
+        let plain_deser = plain_link.deserialize_message(&plain_ser, &mut rx).unwrap();
 
         // Both should deserialize to equivalent messages
         let json1 = serde_json::to_string(&deserialized).unwrap();
@@ -1332,6 +1382,7 @@ mod tests {
 
     #[test]
     fn test_encrypted_serialize_deserialize_all_variants() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let mut link = NexusLink::new("dev", "/tmp/models");
         link.set_encryption_key("test-key-42");
 
@@ -1355,13 +1406,9 @@ mod tests {
         ];
 
         for msg in variants {
-            let serialized = link
-                .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-                .unwrap();
+            let serialized = link.serialize_message(&msg, &mut tx).unwrap();
             assert_eq!(serialized[0], FLAG_ENCRYPTED);
-            let deserialized = link
-                .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
-                .unwrap();
+            let deserialized = link.deserialize_message(&serialized, &mut rx).unwrap();
             // Verify round-trip
             let json_orig = serde_json::to_string(&msg).unwrap();
             let json_rt = serde_json::to_string(&deserialized).unwrap();
@@ -1371,6 +1418,7 @@ mod tests {
 
     #[test]
     fn test_encryption_wrong_key_fails() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let mut sender = NexusLink::new("sender", "/tmp/models");
         sender.set_encryption_key("correct-key");
 
@@ -1378,28 +1426,23 @@ mod tests {
         receiver.set_encryption_key("wrong-key");
 
         let msg = LinkMessage::Ping;
-        let serialized = sender
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let serialized = sender.serialize_message(&msg, &mut tx).unwrap();
 
         // Should fail to decrypt with wrong key
-        let result = receiver.deserialize_message(&serialized, LinkDirection::InitiatorToResponder);
+        let result = receiver.deserialize_message(&serialized, &mut rx);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_encrypted_message_differs_from_plaintext() {
+        let (mut tx, _rx) = LinkSession::pair_for_test();
         let plain_link = NexusLink::new("dev", "/tmp/models");
         let mut enc_link = NexusLink::new("dev", "/tmp/models");
         enc_link.set_encryption_key("secret");
 
         let msg = LinkMessage::Ping;
-        let plain = plain_link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
-        let encrypted = enc_link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let plain = plain_link.serialize_message(&msg, &mut tx).unwrap();
+        let encrypted = enc_link.serialize_message(&msg, &mut tx).unwrap();
 
         // Flags differ
         assert_eq!(plain[0], FLAG_PLAINTEXT);
@@ -1411,27 +1454,20 @@ mod tests {
 
     #[test]
     fn test_nonce_uniqueness() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let mut link = NexusLink::new("dev", "/tmp/models");
         link.set_encryption_key("nonce-test");
 
         let msg = LinkMessage::Ping;
-        let enc1 = link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
-        let enc2 = link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let enc1 = link.serialize_message(&msg, &mut tx).unwrap();
+        let enc2 = link.serialize_message(&msg, &mut tx).unwrap();
 
         // Different nonces should produce different ciphertext
         assert_ne!(enc1, enc2);
 
         // But both should decrypt to the same message
-        let d1 = link
-            .deserialize_message(&enc1, LinkDirection::InitiatorToResponder)
-            .unwrap();
-        let d2 = link
-            .deserialize_message(&enc2, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let d1 = link.deserialize_message(&enc1, &mut rx).unwrap();
+        let d2 = link.deserialize_message(&enc2, &mut rx).unwrap();
         assert_eq!(
             serde_json::to_string(&d1).unwrap(),
             serde_json::to_string(&d2).unwrap()
@@ -1440,6 +1476,7 @@ mod tests {
 
     #[test]
     fn test_no_encryption_key_receives_encrypted_message() {
+        let (mut tx, mut rx) = LinkSession::pair_for_test();
         let mut sender = NexusLink::new("sender", "/tmp/models");
         sender.set_encryption_key("secret");
 
@@ -1447,26 +1484,23 @@ mod tests {
         // receiver has no key
 
         let msg = LinkMessage::Ping;
-        let serialized = sender
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let serialized = sender.serialize_message(&msg, &mut tx).unwrap();
 
-        let result = receiver.deserialize_message(&serialized, LinkDirection::InitiatorToResponder);
+        let result = receiver.deserialize_message(&serialized, &mut rx);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("no encryption key"));
     }
 
     #[test]
     fn test_plaintext_backward_compatibility() {
+        let (_tx, mut rx) = LinkSession::pair_for_test();
         // Plaintext serialization uses the static method
         let msg = LinkMessage::Ping;
         let serialized = NexusLink::serialize_message_plaintext(&msg).unwrap();
 
         // Should be readable by any instance (no key needed)
         let link = NexusLink::new("dev", "/tmp/models");
-        let deserialized = link
-            .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
-            .unwrap();
+        let deserialized = link.deserialize_message(&serialized, &mut rx).unwrap();
 
         let json_orig = serde_json::to_string(&msg).unwrap();
         let json_rt = serde_json::to_string(&deserialized).unwrap();
@@ -1505,7 +1539,9 @@ mod tests {
             stream.write_timeout().unwrap(),
             Some(std::time::Duration::from_secs(5))
         );
-        let error = match link.read_message(&mut stream, LinkDirection::InitiatorToResponder) {
+        // The peer sends an oversized length prefix in place of a handshake.
+        let (mut session, _) = LinkSession::pair_for_test();
+        let error = match link.read_message(&mut stream, &mut session) {
             Ok(_) => panic!("an oversized message was accepted"),
             Err(error) => error,
         };
@@ -1628,7 +1664,8 @@ mod tests {
 
         let server_result = server_handle.join().unwrap();
 
-        // Both should succeed (no-op when no secret)
+        // Both should succeed: without a secret only the session randoms
+        // are exchanged (M0-FIX2 F14)
         assert!(client_result.is_ok());
         assert!(server_result.is_ok());
     }
@@ -1652,14 +1689,19 @@ mod tests {
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(5)))
                 .unwrap();
-            server_link.read_message(&mut stream, LinkDirection::InitiatorToResponder)
+            let mut session = server_link.authenticate_as_responder(&mut stream)?;
+            server_link.read_message(&mut stream, &mut session)
         });
 
         let mut client_stream = TcpStream::connect(addr).unwrap();
-        let msg = LinkMessage::ModelListRequest;
-        let serialized = client_link
-            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+        client_stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
             .unwrap();
+        let mut session = client_link
+            .authenticate_as_initiator(&mut client_stream)
+            .unwrap();
+        let msg = LinkMessage::ModelListRequest;
+        let serialized = client_link.serialize_message(&msg, &mut session).unwrap();
         client_stream.write_all(&serialized).unwrap();
 
         let server_result = server_handle.join().unwrap();
@@ -1874,16 +1916,14 @@ mod tests {
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(10)))
                 .unwrap();
-            responder.authenticate_as_responder(&mut stream).unwrap();
-            let request = responder
-                .read_message(&mut stream, LinkDirection::InitiatorToResponder)
-                .unwrap();
+            let mut session = responder.authenticate_as_responder(&mut stream).unwrap();
+            let request = responder.read_message(&mut stream, &mut session).unwrap();
             let reply = responder
                 .serialize_message(
                     &LinkMessage::TransferRejected {
                         reason: "test peer".into(),
                     },
-                    LinkDirection::ResponderToInitiator,
+                    &mut session,
                 )
                 .unwrap();
             stream.write_all(&reply).unwrap();
