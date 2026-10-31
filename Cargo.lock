@@ -5140,6 +5140,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-mother"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "nexus-governed-control",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "nexus-outcome-eval"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,14 @@
+[package]
+name = "nexus-mother"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+description = "Mother Nexus M1: the mission contract and coordinator core; every effect goes through the governed-control broker"
+
+[dependencies]
+nexus-governed-control = { path = "../crates/nexus-governed-control" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+hex = "0.4"

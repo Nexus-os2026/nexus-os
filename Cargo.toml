@@ -73,6 +73,7 @@ members = [
   "crates/nexus-verifier-sandbox",
   "crates/nexus-governed-control",
   "nexus-code",
+  "mother",
 ]
 
 [workspace.package]
