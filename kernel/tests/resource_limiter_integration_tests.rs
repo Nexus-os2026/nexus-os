@@ -396,53 +396,6 @@ fn handle_count() -> u32 {
     count
 }
 
-#[cfg(windows)]
-#[test]
-#[serial_test::serial]
-fn windows_shell_preserves_legacy_cmd_tail() {
-    // Compare with the previous production invocation, including quoted spaces
-    // and trailing backslashes. cmd is resolved from the system directory in
-    // the implementation; this baseline only compares argument behavior.
-    for command in [
-        "echo hello world",
-        "echo \"quoted text\"",
-        r"echo C:\some path\",
-        "exit /B 7",
-    ] {
-        let mut baseline = Sentinel(
-            Command::new("cmd")
-                .args(["/C", command])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap(),
-        );
-        let baseline_out = Capture::new(baseline.0.stdout.take().unwrap());
-        let baseline_err = Capture::new(baseline.0.stderr.take().unwrap());
-        let deadline = Instant::now() + STARTUP;
-        let baseline_status = loop {
-            if let Some(status) = baseline.0.try_wait().unwrap() {
-                break status;
-            }
-            assert!(Instant::now() < deadline, "legacy cmd deadline");
-            thread::sleep(Duration::from_millis(5));
-        };
-        let baseline_out = baseline_out.finish(deadline);
-        let baseline_err = baseline_err.finish(deadline);
-        let mut shell = spec("helper_exit");
-        shell.program = ResourceProgram::Shell(command.to_owned());
-        let mut child = ResourceLimiter::default().spawn(&shell).unwrap();
-        let stdout = Capture::new(child.take_stdout().unwrap());
-        let stderr = Capture::new(child.take_stderr().unwrap());
-        let status = exited(&mut child);
-        let deadline = Instant::now() + CLEANUP;
-        child.terminate_and_reap(deadline).unwrap();
-        assert_eq!(status, baseline_status);
-        assert_eq!(stdout.finish(deadline), baseline_out);
-        assert_eq!(stderr.finish(deadline), baseline_err);
-    }
-}
-
 // Each fixture is an ignored libtest entry invoked only by exact name. No
 // environment mutation or platform executable is needed. Even broken cleanup
 // leaves at most finite 15-second helpers, never hundreds of seconds.

@@ -311,7 +311,9 @@ pub struct SealedSpawnSpec {
     pub stderr: ResourceOutput,
 }
 
-/// Only the two execution forms required by the terminal and native helpers.
+/// An executable plus an argument vector. There is deliberately no shell
+/// form: no caller string is ever interpreted by `sh`, `cmd` or any other
+/// shell. Each argument reaches the program as one inert argv entry.
 #[derive(Debug, Clone)]
 pub enum ResourceProgram {
     /// Use an explicit executable path for portability (Windows does not search PATH).
@@ -319,8 +321,6 @@ pub enum ResourceProgram {
         program: OsString,
         args: Vec<OsString>,
     },
-    /// `sh -lc` on Unix; system-directory `cmd.exe /C` on Windows.
-    Shell(String),
 }
 
 #[derive(Debug, Clone, Copy)]

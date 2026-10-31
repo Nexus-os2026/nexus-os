@@ -200,16 +200,6 @@ impl Actuator for GovernedShell {
             .collect();
         effective_args.extend(args.iter().cloned());
 
-        // Run through `sh -c` so the shell resolves the command via its own PATH
-        // (which includes /usr/bin, /usr/sbin, etc.). Command::new("free") fails
-        // in Tauri because the parent process PATH is minimal — the binary isn't
-        // found before spawn. Using sh -c also enables pipes and redirects.
-        #[cfg(unix)]
-        let full_command = if effective_args.is_empty() {
-            binary.to_string()
-        } else {
-            format!("{} {}", binary, shell_escape_args(&effective_args))
-        };
         // Ensure working directory exists (it may not for newly created agents)
         #[cfg(unix)]
         if !context.working_dir.exists() {
@@ -233,10 +223,14 @@ impl Actuator for GovernedShell {
                 }],
             });
         }
+        // Argv only: the validated binary and each argument reach the program
+        // as separate entries and no shell interprets them. The fixed PATH
+        // set on the command (not the parent's minimal Tauri PATH) resolves
+        // the bare binary name.
         #[cfg(unix)]
         let output = {
-            let mut cmd = std::process::Command::new("/bin/sh");
-            cmd.arg("-c").arg(&full_command).env(
+            let mut cmd = std::process::Command::new(binary);
+            cmd.args(&effective_args).env(
                 "PATH",
                 "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             );
@@ -343,27 +337,6 @@ fn wait_with_timeout(
             }
         }
     }
-}
-
-/// Shell-escape each argument and join with spaces for use with `sh -c`.
-/// Wraps each arg in single quotes, escaping any embedded single quotes.
-#[cfg(unix)]
-fn shell_escape_args(args: &[String]) -> String {
-    args.iter()
-        .map(|arg| {
-            if arg
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "-_./=:@,+".contains(c))
-            {
-                // Safe characters — no quoting needed
-                arg.clone()
-            } else {
-                // Wrap in single quotes; escape embedded single quotes
-                format!("'{}'", arg.replace('\'', "'\\''"))
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 #[cfg(test)]
