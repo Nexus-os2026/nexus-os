@@ -1,19 +1,25 @@
-//! Mother M1, walked through in plain language.
+//! Mother M1 and M2a, walked through in plain language.
 //!
 //! Run 1 walks one sample mission through every state with deterministic
 //! test lanes. Run 2 shows Stop and Deny refusing effects. Mother acts
 //! through the real governed-control broker, in a fresh home under the
-//! system's temporary directory. You consent at the terminal by typing the
-//! first 8 characters of the contract's hash; anything else is a no.
+//! system's temporary directory. You consent through the broker's mission
+//! dialog, which this example stands in for at the terminal: you type the
+//! first 8 characters of the contract's hash; anything else is a no. The
+//! broker records your answer in its evidence store, and Mother's consent
+//! is made only from the broker's recorded yes.
 //!
 //! ```text
 //! cargo run -p nexus-mother --example walk
 //! ```
 
+use nexus_governed_control::authority::approval::{
+    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
+    MissionConfirmation, ResumeConfirmation,
+};
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_mother::adapter::{FileJournal, GovernedPort, Home, MOTHER_AGENT};
-use nexus_mother::consent::{MissionConfirmation, MissionConfirmer};
 use nexus_mother::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use nexus_mother::coordinator::{Advance, Coordinator, CoordinatorError, Lanes};
 use nexus_mother::effect::EffectRequest;
@@ -23,56 +29,51 @@ use std::collections::BTreeSet;
 use std::io::Write;
 use std::sync::Arc;
 
-/// The Owner, asked at this terminal.
+/// A stand-in for the broker's native dialogs, at this terminal (the walk
+/// only): it asks the Owner about a mission and declines everything else.
 struct OwnerAtTheTerminal;
 
-impl MissionConfirmer for OwnerAtTheTerminal {
+impl ControlConfirmer for OwnerAtTheTerminal {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
     fn confirm_mission(&self, request: &MissionConfirmation) -> bool {
         show_confirmation(request);
+        let short = request.contract_hash.get(..8).unwrap_or_default();
         print!(
             "  To consent, type the first 8 characters of the hash ({}…); anything else means no: ",
-            &request.hash.to_hex()[..4]
+            request.contract_hash.get(..4).unwrap_or_default()
         );
         let _ = std::io::stdout().flush();
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line).is_err() {
             return false;
         }
-        line.trim() == request.hash.short()
+        short.len() == 8 && line.trim() == short
     }
 }
 
+/// The broker's mission dialog, as text.
 fn show_confirmation(r: &MissionConfirmation) {
+    let text = r.text();
     println!();
-    println!("  ┌ {} ({})", r.title(), r.mission);
-    println!("  │ Your words, exactly: {:?}", r.owner_words);
-    println!("  │ What I understood:   {}", r.restatement);
-    if let Some(folder) = &r.requested_folder {
-        println!("  │ Folder you asked for (a request to the broker): {folder}");
+    println!("  ┌ {} (the broker asks)", r.title());
+    for (label, value) in &text.header {
+        println!("  │ {label}: {value}");
     }
-    println!(
-        "  │ Budget: {} minutes, {} lane calls, money {}",
-        r.max_duration_ms / 60_000,
-        r.max_model_calls,
-        r.max_money_minor
-    );
-    let forbidden: Vec<&str> = r.forbidden_effects.iter().map(|k| k.as_str()).collect();
-    println!("  │ Never allowed: {}", list(&forbidden));
-    for (question, answer) in &r.answers {
-        println!("  │ I asked: {question}  You said: {answer}");
+    for line in &text.details {
+        println!("  │   {line}");
     }
-    for criterion in &r.pass_criteria {
-        println!("  │ Pass criterion (fixed now): {criterion}");
-    }
-    println!("  └ Contract hash: {}", r.hash);
-}
-
-fn list(items: &[&str]) -> String {
-    if items.is_empty() {
-        "nothing".into()
-    } else {
-        items.join(", ")
-    }
+    println!("  └");
 }
 
 fn lanes(builder_asks: Vec<EffectRequest>) -> Lanes {

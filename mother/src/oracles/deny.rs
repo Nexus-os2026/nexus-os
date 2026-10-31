@@ -51,20 +51,23 @@ fn deny_a_broker_refusal_blocks_the_mission_and_nothing_more_is_dispatched() {
     assert_eq!(w.port.effects().len(), 1);
 }
 
+/// M2a (Owner decision): Mother waits for the broker's approval instead of
+/// blocking. This replaces M1's `..._blocks_the_mission`.
 #[test]
-fn deny_an_effect_awaiting_the_owner_s_native_approval_blocks_the_mission() {
+fn deny_an_effect_awaiting_the_owner_s_native_approval_waits_and_sends_nothing_more() {
     let w = world();
     let id = w.approved(contract_with("ASK-BUILDER-NETWORK ASK-BUILDER-PROCESS"));
     w.mother.advance(id).unwrap();
     w.mother.advance(id).unwrap();
     w.port.reply(Ok(EffectOutcome::AwaitingApproval));
     let built = w.mother.advance(id).unwrap();
-    assert_eq!(built.to, MissionState::Blocked);
-    assert_eq!(
-        w.mother.reason(id).as_deref(),
-        Some("awaiting_owner_approval")
-    );
+    assert_eq!(built.to, MissionState::AwaitingApproval);
+    assert_eq!(w.mother.reason(id), None);
     assert_eq!(w.port.effects().len(), 1);
+    assert!(
+        !w.port.is_cancelled(id),
+        "the pending action is not withdrawn"
+    );
 }
 
 #[test]

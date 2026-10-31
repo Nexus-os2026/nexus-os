@@ -6,9 +6,15 @@
 //! journals it, and only then hands it to the port. The trait is sealed:
 //! outside this crate only the adapter over the governed-control broker
 //! ([`crate::adapter::GovernedPort`]) is a port.
+//!
+//! The port also reaches the broker's authority, where the Owner is asked
+//! to consent to a mission (`Authority::confirm_mission`), and reports what
+//! became of an action that waits for the Owner's native approval. Mother
+//! never approves an action herself: the Owner does, at the broker.
 
 use crate::contract::EffectKind;
 use crate::journal::MissionId;
+use nexus_governed_control::authority::Authority;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::tool::ToolIntent;
@@ -51,6 +57,36 @@ pub enum EffectOutcome {
     AwaitingApproval,
 }
 
+/// What became of the action a mission waits on, as the broker says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ApprovalStatus {
+    /// The Owner has not answered yet (or the approved action is still
+    /// running at the broker).
+    Waiting,
+    /// The Owner approved it and it ran, once, at the broker.
+    Approved,
+    /// The Owner denied it: it never ran.
+    Denied,
+    /// Its approval expired: it never ran.
+    Expired,
+    /// It ended otherwise (revoked, failed, cancelled, or its outcome is
+    /// unknown): only a stable class name.
+    Lapsed { class: String },
+}
+
+/// The identity of an action a mission waits on at the broker: opaque
+/// names of its run and commitment (never authority: the port checks them
+/// against the broker's own records before using them), and the port's
+/// monotonic deadline for it, never later than the broker's. Mother
+/// journals it so that a rebuilt port can still withdraw the action.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PendingAction {
+    pub run: String,
+    pub commitment: String,
+    pub deadline_mono_ms: u64,
+}
+
 /// The port or the broker refused: only a stable class name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectRefusal {
@@ -79,4 +115,24 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     fn finish(&self, mission: MissionId);
     /// Whether the Owner's emergency stop holds.
     fn emergency_stopped(&self) -> bool;
+    /// The broker's authority, where the Owner consents to a mission.
+    fn broker(&self) -> &Authority;
+    /// What became of the action `mission` waits on (an effect that came
+    /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
+    fn approval(&self, mission: MissionId) -> ApprovalStatus;
+    /// The identity of the action `mission` waits on, if the port knows it.
+    fn pending(&self, mission: MissionId) -> Option<PendingAction>;
+    /// A reopened coordinator hands back the journaled action of a mission
+    /// that has not ended, so that this port can still withdraw it (cancel)
+    /// and ask about it. The port uses it only if the broker's records
+    /// agree: Mother's agent run, and that run's commitment.
+    fn adopt(&self, mission: MissionId, pending: &PendingAction);
+    /// Whether the broker no longer holds `pending` open: it is Mother's
+    /// and in a final state, or the broker holds no such action. Only then
+    /// does Mother journal it closed.
+    fn settled(&self, pending: &PendingAction) -> bool;
+    /// Cancel the mission at the port, as [`EffectPort::cancel`], and say
+    /// whether the broker took the cancellation. Recovery and every end of
+    /// a mission use it, so that a withdrawal that failed is an error.
+    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal>;
 }

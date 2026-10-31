@@ -17,7 +17,16 @@ fn consent_the_owner_is_shown_the_exact_contract_and_its_hash() {
     );
     let shown = owner.0.lock().unwrap().clone();
     assert_eq!(shown.len(), 1);
-    let shown = &shown[0];
+    // M2a: the Owner is asked through the broker's dialog, which carries
+    // the exact contract hash and Mother's plain-language summary.
+    let asked = &shown[0];
+    assert_eq!(asked.contract_hash, c.hash().to_hex());
+    let shown = w.mother.confirmation(id).unwrap();
+    assert_eq!(asked.summary, shown.lines());
+    assert!(asked
+        .summary
+        .contains(&"│   Make me a small website for my bakery, \"Rosa's\".".to_string()));
+    assert!(asked.summary.contains(&"│   Keep it simple!  ".to_string()));
     assert_eq!(shown.mission, id);
     assert_eq!(shown.hash, c.hash());
     assert_eq!(shown.owner_words, c.owner_words, "verbatim");

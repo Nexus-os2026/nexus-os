@@ -1,4 +1,4 @@
-//! Mother Nexus M1: the mission contract and the coordinator core.
+//! Mother Nexus M1 and M2a: the mission contract and the coordinator core.
 //!
 //! Mother turns an Owner's goal into a [`contract::MissionContract`] (the
 //! Owner's words verbatim, a restatement, the requested folder, a budget,
@@ -24,7 +24,30 @@
 //!     fn cancel(&self, _: MissionId) {}
 //!     fn finish(&self, _: MissionId) {}
 //!     fn emergency_stopped(&self) -> bool { false }
+//!     fn broker(&self) -> &nexus_governed_control::authority::Authority { todo!() }
+//!     fn approval(&self, _: MissionId) -> nexus_mother::effect::ApprovalStatus { todo!() }
+//!     fn pending(&self, _: MissionId) -> Option<nexus_mother::effect::PendingAction> { None }
+//!     fn adopt(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
+//!     fn settled(&self, _: &nexus_mother::effect::PendingAction) -> bool { false }
+//!     fn withdraw(&self, _: MissionId) -> Result<(), EffectRefusal> { Ok(()) }
 //! }
+//! ```
+//!
+//! M2a: a consent is made only from the broker's `MissionApproval`, which
+//! cannot be built or copied outside the broker; only this crate turns one
+//! into a consent.
+//!
+//! ```compile_fail
+//! use nexus_governed_control::authority::approval::MissionApproval;
+//! fn twice(a: MissionApproval) -> (MissionApproval, MissionApproval) { (a.clone(), a) }
+//! ```
+//!
+//! ```compile_fail
+//! let _ = nexus_governed_control::authority::approval::MissionApproval::confirmed;
+//! ```
+//!
+//! ```compile_fail
+//! let _ = nexus_mother::consent::Consent::from_broker;
 //! ```
 
 #![deny(unsafe_code)]

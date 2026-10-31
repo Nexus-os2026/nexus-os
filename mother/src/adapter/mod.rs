@@ -7,16 +7,26 @@
 //! revokes or resumes. The broker has no file or spend route, so those
 //! effects are refused here.
 //!
+//! M2a: an R2 action is left waiting at the broker; the port remembers it
+//! and reports what the broker's record of it says (the Owner approves and
+//! runs it from the interface; Mother never does). The Owner's mission
+//! consent is asked at the broker's authority (`broker`), by the
+//! coordinator.
+//!
 //! [`FileJournal`] keeps the mission journal in a file in Mother's home
 //! (Mother's own state, not an effect on the world). [`Home`] builds both
 //! from a directory the host chooses.
 
-use crate::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
+use crate::effect::{
+    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
+};
 use crate::journal::{JournalError, JournalStore, MissionId};
 use nexus_governed_control::authority::clock::{Clock, SystemClock};
+use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::evidence::MemoryEvidence;
-use nexus_governed_control::authority::ids::{AgentId, RunId};
-use nexus_governed_control::authority::run::RunOrigin;
+use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
+use nexus_governed_control::authority::run::{RunClass, RunOrigin};
+use nexus_governed_control::authority::Authority;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
@@ -27,6 +37,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+mod expiry_tests;
 #[cfg(test)]
 mod file_tests;
 #[cfg(test)]
@@ -46,6 +58,9 @@ pub fn mother_agent() -> AgentId {
 struct Runs {
     open: BTreeMap<MissionId, RunId>,
     ended: BTreeSet<MissionId>,
+    /// The action each mission waits on at the broker, and the port's
+    /// monotonic deadline for it.
+    waiting: BTreeMap<MissionId, (CommitmentId, u64)>,
 }
 
 /// The EffectPort over the governed-control broker.
@@ -153,9 +168,18 @@ impl EffectPort for GovernedPort {
             }
         };
         let run = self.run_for(mission)?;
+        // Before the broker is asked: the broker's deadline for an action
+        // is its monotonic clock when it prepared it plus the action's
+        // lifetime, so a deadline from this reading is never later.
+        let asked_at = self.control.authority().clock().monotonic_ms();
         match self.control.agent_action(&mother_agent(), run, &intent) {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
-            Ok(AgentOutcome::AwaitingApproval(_)) => Ok(EffectOutcome::AwaitingApproval),
+            Ok(AgentOutcome::AwaitingApproval(view)) => {
+                let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
+                let deadline = asked_at.saturating_add(lifetime);
+                self.lock().waiting.insert(mission, (view.id, deadline));
+                Ok(EffectOutcome::AwaitingApproval)
+            }
             Err(e) => Err(refused(e.class())),
         }
     }
@@ -166,6 +190,16 @@ impl EffectPort for GovernedPort {
         }
     }
 
+    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
+        let Some(run) = self.end(mission) else {
+            return Ok(());
+        };
+        self.control.cancel_run(run).map_err(|e| {
+            self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+            refused(e.class())
+        })
+    }
+
     fn finish(&self, mission: MissionId) {
         if let Some(run) = self.end(mission) {
             self.control.finish_when_settled(run);
@@ -174,6 +208,159 @@ impl EffectPort for GovernedPort {
 
     fn emergency_stopped(&self) -> bool {
         self.control.authority().runs().is_stopped()
+    }
+
+    fn broker(&self) -> &Authority {
+        self.control.authority()
+    }
+
+    /// The broker's record of the action `mission` waits on. A port that
+    /// does not know it (another process's, or one built afresh that was
+    /// not handed it back) says its outcome is unknown.
+    fn approval(&self, mission: MissionId) -> ApprovalStatus {
+        let unknown = || ApprovalStatus::Lapsed {
+            class: "approval_outcome_unknown".into(),
+        };
+        let (run, commitment, deadline) = {
+            let runs = self.lock();
+            match (runs.open.get(&mission), runs.waiting.get(&mission)) {
+                (Some(run), Some((commitment, deadline))) => (*run, *commitment, *deadline),
+                _ => return unknown(),
+            }
+        };
+        let authority = self.control.authority();
+        let Some(view) = authority.commitments().view(commitment) else {
+            return unknown();
+        };
+        if view.run != run || view.agent != mother_agent() {
+            return unknown();
+        }
+        let clock = authority.clock();
+        let status = status_of(&view, clock.wall_ms(), clock.monotonic_ms(), deadline);
+        if status != ApprovalStatus::Waiting {
+            self.lock().waiting.remove(&mission);
+        }
+        status
+    }
+
+    /// Final at the broker, or not held there at all. An action that is
+    /// not Mother's, or that runs (approved, executing), is not settled.
+    fn settled(&self, pending: &PendingAction) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                RunId::parse(&pending.run) == Some(view.run)
+                    && view.agent == mother_agent()
+                    && !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
+    fn pending(&self, mission: MissionId) -> Option<PendingAction> {
+        let runs = self.lock();
+        let run = runs.open.get(&mission)?;
+        let (commitment, deadline) = runs.waiting.get(&mission)?;
+        Some(PendingAction {
+            run: run.to_string(),
+            commitment: commitment.to_string(),
+            deadline_mono_ms: *deadline,
+        })
+    }
+
+    /// Take back a journaled action only if the broker's records agree: a
+    /// live agent run of Mother's that no other mission of this port holds,
+    /// and a commitment of that run of Mother's. The carried deadline is
+    /// trusted no further than the action's remaining lifetime by its
+    /// wall-clock expiry (`adopted_deadline`). A mission this port already
+    /// knows, or has ended, is left as it is.
+    fn adopt(&self, mission: MissionId, pending: &PendingAction) {
+        let (Some(run), Some(commitment)) = (
+            RunId::parse(&pending.run),
+            CommitmentId::parse(&pending.commitment),
+        ) else {
+            return;
+        };
+        let authority = self.control.authority();
+        let live_run =
+            authority.runs().view(run).is_some_and(|view| {
+                view.agent == mother_agent() && !view.cancelled && !view.finished
+            }) && authority.runs().class(run) == Some(RunClass::Agent);
+        let Some(view) = authority
+            .commitments()
+            .view(commitment)
+            .filter(|view| live_run && view.run == run && view.agent == mother_agent())
+        else {
+            return;
+        };
+        let clock = authority.clock();
+        let deadline = adopted_deadline(
+            pending.deadline_mono_ms,
+            clock.monotonic_ms(),
+            clock.wall_ms(),
+            view.expires_wall_ms,
+        );
+        let mut runs = self.lock();
+        if runs.ended.contains(&mission)
+            || runs.open.contains_key(&mission)
+            || runs.open.values().any(|held| *held == run)
+        {
+            return;
+        }
+        runs.open.insert(mission, run);
+        runs.waiting.insert(mission, (commitment, deadline));
+    }
+}
+
+/// The deadline a port takes for a handed-back action: what was journaled,
+/// but no later than the action's remaining lifetime by the broker's
+/// wall-clock expiry. The broker's own monotonic deadline is not in its
+/// public view, so this bound relies on the wall clock: set back since the
+/// action was created, it is looser (the journaled value, written by the
+/// port that asked, still never exceeds the broker's).
+pub(crate) fn adopted_deadline(
+    journaled: u64,
+    now_mono_ms: u64,
+    now_wall_ms: u64,
+    expires_wall_ms: u64,
+) -> u64 {
+    journaled.min(now_mono_ms.saturating_add(expires_wall_ms.saturating_sub(now_wall_ms)))
+}
+
+/// What the broker's record of a waiting action says. The broker ends an
+/// expired action only when it next touches it; past either deadline (its
+/// wall-clock expiry, or the port's monotonic deadline, which a wall clock
+/// set back does not delay) it can no longer be approved or started, so it
+/// is expired. An approved action that is running is waited for.
+pub(crate) fn status_of(
+    view: &CommitmentView,
+    now_wall_ms: u64,
+    now_mono_ms: u64,
+    deadline_mono_ms: u64,
+) -> ApprovalStatus {
+    let expired = now_wall_ms >= view.expires_wall_ms || now_mono_ms >= deadline_mono_ms;
+    match view.state {
+        CommitmentState::Prepared | CommitmentState::Authorized if expired => {
+            ApprovalStatus::Expired
+        }
+        CommitmentState::Prepared | CommitmentState::Authorized | CommitmentState::Executing => {
+            ApprovalStatus::Waiting
+        }
+        CommitmentState::Succeeded => ApprovalStatus::Approved,
+        CommitmentState::Denied => ApprovalStatus::Denied,
+        CommitmentState::Expired => ApprovalStatus::Expired,
+        CommitmentState::Failed | CommitmentState::Cancelled | CommitmentState::Revoked => {
+            ApprovalStatus::Lapsed {
+                class: view.state.as_str().into(),
+            }
+        }
     }
 }
 
