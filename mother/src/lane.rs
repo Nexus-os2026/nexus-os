@@ -120,17 +120,16 @@ pub trait Lane: Send + Sync {
 
 /// The hex SHA-256 of a lane input's canonical form.
 pub fn input_hash(input: &LaneInput) -> String {
-    let _ = (input, INPUT_DOMAIN);
-    todo!("M1 implementation follows the oracle commit")
+    let json = serde_json::to_vec(input).expect("a lane input serialises");
+    hash_hex(INPUT_DOMAIN, &json)
 }
 
 /// The hex SHA-256 of a lane output's canonical form.
 pub fn output_hash(output: &LaneOutput) -> String {
-    let _ = (output, OUTPUT_DOMAIN);
-    todo!("M1 implementation follows the oracle commit")
+    let json = serde_json::to_vec(output).expect("a lane output serialises");
+    hash_hex(OUTPUT_DOMAIN, &json)
 }
 
-#[allow(dead_code)]
 fn hash_hex(domain: &[u8], json: &[u8]) -> String {
     hex::encode(sha256(domain, &[json]))
 }

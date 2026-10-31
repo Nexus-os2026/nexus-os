@@ -53,12 +53,25 @@ impl MissionState {
 
     /// A terminal mission never moves again and dispatches nothing.
     pub fn is_terminal(self) -> bool {
-        todo!("M1 implementation follows the oracle commit")
+        matches!(
+            self,
+            MissionState::Done
+                | MissionState::Stopped
+                | MissionState::Denied
+                | MissionState::Failed
+                | MissionState::Blocked
+        )
     }
 
     /// The states in which lanes run and effects may be dispatched.
     pub fn is_working(self) -> bool {
-        todo!("M1 implementation follows the oracle commit")
+        matches!(
+            self,
+            MissionState::Investigating
+                | MissionState::Building
+                | MissionState::Verifying
+                | MissionState::Explaining
+        )
     }
 
     pub fn as_str(self) -> &'static str {
@@ -145,6 +158,26 @@ pub fn transition(
     from: MissionState,
     trigger: &Trigger,
 ) -> Result<MissionState, IllegalTransition> {
-    let _ = (from, trigger);
-    todo!("M1 implementation follows the oracle commit")
+    use MissionState::*;
+    let to = match (trigger, from) {
+        (Trigger::Revise { .. }, Draft | AwaitingConsent | Approved) => Some(Draft),
+        (Trigger::Submit { .. }, Draft) => Some(AwaitingConsent),
+        (Trigger::Consent { .. }, AwaitingConsent) => Some(Approved),
+        (Trigger::Deny { .. }, AwaitingConsent) => Some(Denied),
+        (Trigger::Start, Approved) => Some(Investigating),
+        (Trigger::PhaseDone, Investigating) => Some(Building),
+        (Trigger::PhaseDone, Building) => Some(Verifying),
+        (Trigger::PhaseDone, Explaining) => Some(Done),
+        (Trigger::VerifyPass, Verifying) => Some(Explaining),
+        (Trigger::VerifyFail { .. }, Verifying) => Some(Failed),
+        (Trigger::Block { .. }, Approved) => Some(Blocked),
+        (Trigger::Block { .. }, s) if s.is_working() => Some(Blocked),
+        (Trigger::Fail { .. }, s) if s.is_working() => Some(Failed),
+        (Trigger::Stop { .. }, s) if !s.is_terminal() => Some(Stopped),
+        _ => None,
+    };
+    to.ok_or(IllegalTransition {
+        from,
+        trigger: trigger.name(),
+    })
 }

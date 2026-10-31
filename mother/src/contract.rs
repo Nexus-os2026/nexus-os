@@ -6,7 +6,7 @@
 //! Mother needed answered and the pass criteria, all fixed before any work.
 //! Its hash binds every field.
 
-use nexus_governed_control::authority::evidence::is_plain;
+use nexus_governed_control::authority::evidence::{is_plain, shown};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -187,18 +187,79 @@ impl MissionContract {
     /// Check every bound (not the answers). Nothing is drafted that fails
     /// one.
     pub fn validate(&self) -> Result<(), ContractError> {
-        todo!("M1 implementation follows the oracle commit")
+        if self.owner_words.trim().is_empty() {
+            return Err(ContractError::EmptyOwnerWords);
+        }
+        if self.owner_words.chars().count() > MAX_OWNER_WORDS_CHARS {
+            return Err(ContractError::OwnerWordsTooLong);
+        }
+        if self.restatement.trim().is_empty() {
+            return Err(ContractError::EmptyRestatement);
+        }
+        if self.restatement.chars().count() > MAX_RESTATEMENT_CHARS {
+            return Err(ContractError::RestatementTooLong);
+        }
+        if !self.restatement.chars().all(shown) {
+            return Err(ContractError::RestatementNotPlain);
+        }
+        if let Some(folder) = &self.requested_folder {
+            if !plain(folder) {
+                return Err(ContractError::FolderNotPlain);
+            }
+        }
+        if self.questions.len() > MAX_ITEMS || self.pass_criteria.len() > MAX_ITEMS {
+            return Err(ContractError::TooManyItems);
+        }
+        if self.pass_criteria.is_empty() {
+            return Err(ContractError::NoPassCriteria);
+        }
+        for question in &self.questions {
+            let answer_plain = question.answer.as_deref().is_none_or(plain);
+            if !plain(&question.id) || !plain(&question.text) || !answer_plain {
+                return Err(ContractError::ItemNotPlain);
+            }
+        }
+        for criterion in &self.pass_criteria {
+            if !plain(&criterion.id) || !plain(&criterion.text) {
+                return Err(ContractError::ItemNotPlain);
+            }
+        }
+        let unique = |ids: Vec<&String>| ids.iter().collect::<BTreeSet<_>>().len() == ids.len();
+        if !unique(self.questions.iter().map(|q| &q.id).collect())
+            || !unique(self.pass_criteria.iter().map(|c| &c.id).collect())
+        {
+            return Err(ContractError::DuplicateId);
+        }
+        if !(1..=MAX_DURATION_MS).contains(&self.budget.max_duration_ms) {
+            return Err(ContractError::DurationOutOfRange);
+        }
+        if !(1..=MAX_MODEL_CALLS).contains(&self.budget.max_model_calls) {
+            return Err(ContractError::ModelCallsOutOfRange);
+        }
+        if self.budget.max_money_minor != 0 {
+            return Err(ContractError::MoneyNotZero);
+        }
+        Ok(())
     }
 
     /// [`Self::validate`], and every question answered: what the Owner may
     /// be asked to consent to.
     pub fn validate_for_consent(&self) -> Result<(), ContractError> {
-        todo!("M1 implementation follows the oracle commit")
+        self.validate()?;
+        match self.questions.iter().find(|q| q.answer.is_none()) {
+            Some(question) => Err(ContractError::UnansweredQuestion {
+                id: question.id.clone(),
+            }),
+            None => Ok(()),
+        }
     }
 
     /// The hash of the canonical form, binding every field.
     pub fn hash(&self) -> ContractHash {
-        todo!("M1 implementation follows the oracle commit")
+        // Struct fields serialise in declaration order and the effect set
+        // in its sorted order, so the JSON is canonical.
+        let json = serde_json::to_vec(self).expect("a contract serialises");
+        ContractHash(sha256(HASH_DOMAIN, &[&json]))
     }
 }
 
@@ -212,10 +273,8 @@ pub(crate) fn sha256(domain: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-#[allow(dead_code)]
+/// Non-blank, and every character shown as itself (at most the broker's
+/// field length).
 fn plain(text: &str) -> bool {
     !text.trim().is_empty() && is_plain(text)
 }
-
-#[allow(dead_code)]
-const _DOMAIN: &[u8] = HASH_DOMAIN;

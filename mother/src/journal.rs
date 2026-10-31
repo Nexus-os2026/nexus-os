@@ -96,30 +96,58 @@ pub enum JournalError {
 impl Entry {
     /// The entry that follows `prev` (the previous hash) at `seq`.
     pub fn chained(seq: u64, prev: &str, mission: MissionId, event: Event) -> Self {
-        let _ = (seq, prev, mission, event, ENTRY_DOMAIN);
-        todo!("M1 implementation follows the oracle commit")
+        let mut entry = Self {
+            seq,
+            prev: prev.to_string(),
+            mission,
+            event,
+            hash: String::new(),
+        };
+        entry.hash = entry.expected_hash();
+        entry
     }
 
-    /// The hash this entry must carry.
+    /// The hash this entry must carry: over the previous hash, the
+    /// sequence number, the mission and the event.
     pub fn expected_hash(&self) -> String {
-        todo!("M1 implementation follows the oracle commit")
+        let event = serde_json::to_vec(&self.event).expect("an event serialises");
+        hex::encode(sha256(
+            ENTRY_DOMAIN,
+            &[
+                self.prev.as_bytes(),
+                &self.seq.to_be_bytes(),
+                &self.mission.0.to_be_bytes(),
+                &event,
+            ],
+        ))
     }
 
     pub fn to_line(&self) -> String {
-        todo!("M1 implementation follows the oracle commit")
+        serde_json::to_string(self).expect("an entry serialises")
     }
 }
 
-/// Parse and verify a journal's lines: every entry well formed, numbered
-/// from 0, chained from [`GENESIS`] and hashed correctly.
+/// Parse and verify a journal's lines: every entry well formed and in its
+/// canonical form, numbered from 0, chained from [`GENESIS`] and hashed
+/// correctly.
 pub fn verify(lines: &[String]) -> Result<Vec<Entry>, JournalError> {
-    let _ = lines;
-    todo!("M1 implementation follows the oracle commit")
-}
-
-#[allow(dead_code)]
-fn entry_hash(_: &Entry) -> [u8; 32] {
-    sha256(ENTRY_DOMAIN, &[])
+    let mut entries = Vec::with_capacity(lines.len());
+    let mut prev = GENESIS.to_string();
+    for (index, line) in lines.iter().enumerate() {
+        let number = index + 1;
+        let entry: Entry =
+            serde_json::from_str(line).map_err(|_| JournalError::Malformed { line: number })?;
+        if entry.seq != index as u64
+            || entry.prev != prev
+            || entry.hash != entry.expected_hash()
+            || entry.to_line() != *line
+        {
+            return Err(JournalError::Tampered { line: number });
+        }
+        prev = entry.hash.clone();
+        entries.push(entry);
+    }
+    Ok(entries)
 }
 
 /// Where a journal lives: complete lines, appended only.

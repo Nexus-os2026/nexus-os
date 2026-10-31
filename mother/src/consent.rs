@@ -51,8 +51,27 @@ impl MissionConfirmation {
     }
 
     pub(crate) fn of(mission: MissionId, contract: &MissionContract) -> Self {
-        let _ = (mission, contract);
-        todo!("M1 implementation follows the oracle commit")
+        Self {
+            mission,
+            hash: contract.hash(),
+            owner_words: contract.owner_words.clone(),
+            restatement: contract.restatement.clone(),
+            requested_folder: contract.requested_folder.clone(),
+            max_duration_ms: contract.budget.max_duration_ms,
+            max_model_calls: contract.budget.max_model_calls,
+            max_money_minor: contract.budget.max_money_minor,
+            forbidden_effects: contract.forbidden_effects.clone(),
+            answers: contract
+                .questions
+                .iter()
+                .map(|q| (q.text.clone(), q.answer.clone().unwrap_or_default()))
+                .collect(),
+            pass_criteria: contract
+                .pass_criteria
+                .iter()
+                .map(|c| c.text.clone())
+                .collect(),
+        }
     }
 }
 
@@ -82,7 +101,6 @@ impl Consent {
 
     /// Whether this consent covers `contract` exactly.
     pub fn covers(&self, contract: &MissionContract) -> bool {
-        let _ = contract;
-        todo!("M1 implementation follows the oracle commit")
+        self.hash == contract.hash()
     }
 }

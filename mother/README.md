@@ -1,94 +1,114 @@
 # Mother Nexus M1: mission contract and coordinator core
 
-Status: M1 candidate on `mother/m1-coordinator`, based on `main`
-`12eec16c`. Headless library only. It is not integrated and is not a passed
-gate. Every capability here is PLANNED until its physical test passes on the
-installed build (`MOTHER.md` §1).
+Status: M1 candidate on `mother/m1-core`. Headless Rust library only: no
+UI, no real research, no website building, no model calls. It is not
+integrated and is not a passed gate. Every capability here is PLANNED
+until its physical test passes on the installed build (`MOTHER.md` §1).
 
 ## What M1 is
 
-Mother turns an Owner goal into a **mission contract**: the goal in plain
-text and the exact list of steps she would take, each one a broker `Intent`
-(data, never authority). The **coordinator** keeps each mission's state and
-moves it forward one step at a time. It holds no authority of its own: every
-real effect goes through the existing broker, `GovernedControl`
-(`crates/nexus-governed-control`), as an agent's action in an agent's run.
+Mother turns a human goal into a governed mission:
 
-```text
-draft ──► Drafted ──consent──► Approved{next} ──step──► Running{step}
-             │  declined          ▲   │                     │
-             ▼                    │   │ expiry              ├─ Done ──► Approved{next+1} / Completed
-          Declined                │   ▼                     ├─ R2 waits ─► AwaitingApproval ─refresh─┐
-                                  │ Expired                 └─ refused ─► Failed                    │
-                                  └──────────────── broker: succeeded ◄─────────────────────────────┘
-Stop (Mother's, or the broker's emergency stop) ──► Stopped, from every non-terminal state
-```
+1. **MissionContract** (`contract.rs`): the Owner's words verbatim, Mother's
+   restatement, the requested folder (a request to the broker, never path
+   authority), a budget (time, lane calls, money = 0), forbidden effects,
+   the missing-data questions with their answers, and pass criteria fixed
+   before any work. A SHA-256 hash binds every field.
+2. **Consent** (`consent.rs`): bound to the exact contract hash. A change to
+   the contract voids it. A `Consent` cannot be built, cloned or
+   deserialized outside the crate; the coordinator mints one only when a
+   `MissionConfirmer` said yes to a confirmation the coordinator built, and
+   only if the contract did not change meanwhile.
+3. **State machine** (`state.rs`): Draft → AwaitingConsent → Approved →
+   Investigating → Building → Verifying → Explaining → Done, plus Stopped,
+   Denied, Failed and Blocked. One deterministic table, used live and on
+   replay. Stop works from every state.
+4. **EffectPort** (`effect.rs`, `adapter/`): the only way Mother reaches the
+   world, sealed to `GovernedPort`, the adapter over
+   `crates/nexus-governed-control`. Each mission acts as the agent `mother`
+   in an agent run of its own, under the Owner's standing grants.
+5. **Lanes** (`lane.rs`): Researcher A/B, Skeptic, Builder, Verifier,
+   Sentinel. Every call is journaled with the lane's identity, an
+   invocation id and the hashes of its input and output. M1 has only
+   deterministic lanes.
+6. **Journal** (`journal.rs`): append-only and hash-chained. A restarted
+   coordinator resumes every mission in its state; a Stopped mission stays
+   stopped; a tampered journal is refused.
+7. **Walk example**: `cargo run -p nexus-mother --example walk`.
 
-## Invariants (the oracles in `src/oracles/` and `tests/` pin each)
+## Invariants and their oracles
 
-- **I1. No effect before consent.** Until the Owner consents to a mission's
-  exact contract, the coordinator makes no broker call for it at all: no run
-  is opened, nothing is proposed. This covers every effect category the
-  contract names: **file**, **network**, **model-tool** and **spend**.
-- **I2. Consent binds the exact contract.** Consent is given to a
-  `ConsentRequest` the coordinator builds itself: the contract's SHA-256
-  digest, the goal, every step in full (its broker intent as canonical JSON)
-  with its effect categories and declared cost, and the consent lifetime. The
-  contract cannot change after drafting; another plan is another mission.
-  Only steps of the consented contract can run, in order, each once.
-- **I3. Consent is not authority.** Mother's consent is an additional gate.
-  The broker still needs the Owner's live grant for every action and the
-  Owner's native approval for every R2 action. A consented mission with no
-  covering grant is refused by the broker, and the mission fails.
-- **I4. Stop is honoured from every state.** `stop` and `stop_all` never
-  fail for a known mission and never wait for a broker call in flight. From
-  every non-terminal state the mission becomes `Stopped`; its broker run, if
-  one is open, is cancelled (an effect in flight sees the run's cancellation
-  token). A terminal mission stays as it ended, and no effect can start for
-  it. Nothing restarts a stopped mission. A Stop that arrives while the
-  consent dialog is open, while a run is being opened or while an effect
-  runs wins over whatever that call returns.
-- **I5. The Owner's emergency stop is Mother's stop.** Before every step the
-  coordinator asks the broker whether it is emergency-stopped; if it is, or
-  the broker refuses with `emergency_stopped`, the mission is `Stopped`.
-- **I6. Consent expires.** Consent lasts at most `consent_ttl_ms` (at most
-  8 hours) on the broker's monotonic clock. A step after that ends the
-  mission as `Expired` and cancels its run.
-- **I7. Effects only through the existing broker.** The `Broker` trait is
-  sealed: outside the crate, only `GovernedControl` can be one. Mother's
-  production code calls only `open_run` (agent runs), `agent_action`,
-  `cancel_run`, `finish_when_settled`, a commitment's state and whether runs
-  are stopped. It never opens an owner run, authorizes, executes, requests or
-  revokes a grant, resumes, or raises the Owner's broker dialog. It has no
-  file, process, network or async runtime dependency of its own, and no
-  built-in consent (no production `OwnerConsent` implementation).
-- **I8. Bounded, content-free journal.** The coordinator keeps an in-memory
-  journal (at most 1024 entries) of mission identities, digests, step
-  indexes, broker run and commitment identities and refusal classes. It
-  never records a goal, an intent's content or an effect's output.
-- **I9. Fail closed on what M1 cannot route.** Perception, input and the
-  synthetic probe are refused when a contract is drafted. Steps are
-  categorised from the intent's domain, never from a model's claim:
+The oracles were committed before the implementation (`MOTHER.md` §3.1).
+Unit oracles are in `src/oracles/`; the real-broker, file-journal and
+source-scan oracles are in `src/adapter/` (only the adapter module touches
+the host, tests included).
 
-  | Intent domain | Categories |
-  |---|---|
-  | `request` (egress) | network |
-  | `connector` | network |
-  | `browse` | network, file (a session may download) |
-  | `tool` | model-tool, file (a tool may write files) |
-  | any step with `declared_cost_minor > 0` | adds spend |
+| Invariant | Oracles |
+|---|---|
+| MN-01: zero file, network, process, model-tool or spend effects before consent | `oracles/mn01.rs`, `adapter/real_broker.rs` |
+| Consent binds the exact hash; a changed contract voids it | `oracles/consent.rs` |
+| Stop from every state: no new dispatch, durable across restart, never waits | `oracles/stop.rs`, `adapter/real_broker.rs` |
+| Denial (the Owner's no, the broker's refusal) means zero effect | `oracles/deny.rs`, `adapter/real_broker.rs` |
+| A planted "consent"/"approved" string grants nothing | `oracles/consent.rs` |
+| Journal tampering is detected and refused | `oracles/journal.rs`, `adapter/file_tests.rs` |
+| The state machine is the mission's table | `oracles/state.rs` |
+| Lanes: identity, invocation id, input/output hashes, budgets | `oracles/lanes.rs` |
+| Contract bounds; the hash binds every field; verbatim words | `oracles/contract.rs` |
+| No host access outside the adapter; no kernel actuator or legacy stack | `adapter/scan.rs` |
+| No production consent confirmer (Owner condition) | `adapter/scan.rs` |
+| The port is sealed; the adapter calls only the agent side of the broker | `oracles/structure.rs` |
+
+Coordinator rules the oracles pin:
+
+- Nothing reaches the port, and no lane runs, before consent.
+- Mother refuses an effect before the port when it is forbidden, when it is
+  spend (the money budget is zero), or when it is a file request without a
+  requested folder or not relative to it. Any refusal blocks the mission.
+- The Owner's emergency stop is checked before every lane and every effect.
+- No coordinator lock is held while the Owner is asked, a lane runs or an
+  effect runs. A result that comes after a Stop is dropped and journaled
+  as overtaken.
+- Every lane call counts against the call budget. The time budget runs from
+  consent, measured on both the wall and the monotonic clock.
+- An effect dispatched but not settled when Mother restarts blocks its
+  mission (`effect_outcome_unknown`): it may have happened.
 
 ## Non-claims
 
-- Mother's consent is only as strong as the host's `OwnerConsent`. M1 has no
-  native dialog and no desktop wiring (M2). Real authority stays with the
-  broker's grants and native approvals.
-- Spend is a declared figure the Owner sees and consents to. M1 does not
-  meter what an effect costs.
-- M1 has no file broker route of its own: file effects arise only from the
-  broker's tools and browser downloads, under the broker's own controls.
-- The journal is in memory only. Persistence, recovery and the Mother
-  screen are later missions.
+- **Consent is not yet the broker's.** The broker's native confirmer
+  (`ControlConfirmer`) has no mission dialog, so `MissionConfirmer` is
+  Mother's own trait, with no implementation in Mother's library (the walk
+  example asks at the terminal; only test code fakes one). **M2 moves
+  mission consent into the broker (`confirm_mission` in `ControlConfirmer`)
+  when the desktop confirmer is rebuilt; that is a security-core change and
+  needs Owner approval and a fresh review.**
+- Consent is an extra gate, not authority: every effect still needs the
+  Owner's broker grant, and an R2 effect needs the Owner's native approval
+  (M1 blocks the mission when one is pending).
+- The journal chain is unkeyed. It detects edits, removals, reordering,
+  insertion and a torn last line. It does not detect someone with write
+  access to Mother's home who rewrites the whole chain, or cuts entries off
+  its end. Anchoring the head in the broker's evidence store is later work.
+- The journal append is made under the coordinator lock: it is the
+  transition's commit (a bounded local write), so the journal's order is the
+  state machine's.
+- The broker has no file or spend route: the adapter refuses both
+  (`no_broker_route`). M1 writes no files for a mission.
+- `GovernedPort::cancel` cannot report a failed run cancellation to its
+  caller. The adapter counts each one (`cancel_failures`).
+- Lane calls are counted as model calls; no model is called in M1.
+- Mother depends on `nexus-governed-control`, which itself depends on the
+  kernel. Mother uses no kernel actuator and none of the legacy stack.
 - Path validation, workspace grants and the broker's process-group
   ownership are not OS sandboxes. Mother adds none and claims none.
-- Linux headless tests only. Windows and macOS are not claimed.
+- Linux only. Windows and macOS are not claimed.
+
+## Run the walk
+
+```text
+cargo run -p nexus-mother --example walk
+```
+
+Each time it asks, type the first 8 characters of the contract hash shown to
+consent. In run 2, answer "no" when the Deny step asks. The walk opens a
+fresh home under the system's temporary directory and prints its path.
