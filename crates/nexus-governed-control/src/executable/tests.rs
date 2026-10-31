@@ -163,3 +163,49 @@ fn m0_fix2_f13_a_listed_location_must_still_pass_inspection() {
     let candidates = [install.link(), install.real()];
     assert!(resolve(&names(&candidates), Trust::Fixture).is_err());
 }
+
+/// M0-FIX2 F13 review (MINOR-1) oracle: the first listed location that is
+/// present decides. If it resolves outside the list it is refused, and a
+/// valid later location does not hide that.
+#[test]
+fn m0_fix2_f13_a_present_first_location_outside_the_list_is_not_passed_over() {
+    let install = Installation::new("first-unlisted");
+    let other = Installation::new("first-unlisted-other");
+    // First: a link to an unlisted (valid) executable. Later: a valid,
+    // listed one.
+    let candidates = [install.link(), other.real()];
+    assert!(inspect(Path::new(&install.real()), Trust::Fixture).is_ok());
+    assert_eq!(
+        resolve(&names(&candidates), Trust::Fixture).unwrap_err(),
+        AuthorityError::Closed("the executable resolves outside its trusted locations")
+    );
+}
+
+/// M0-FIX2 F13 review (MINOR-1) oracle: a present first location that fails
+/// `inspect` is refused with `inspect`'s error, even though a valid later
+/// location exists.
+#[test]
+fn m0_fix2_f13_a_present_first_location_failing_inspection_is_not_passed_over() {
+    use std::os::unix::fs::PermissionsExt;
+    let install = Installation::new("first-writable");
+    let other = Installation::new("first-writable-other");
+    std::fs::set_permissions(install.real(), std::fs::Permissions::from_mode(0o777)).unwrap();
+    let candidates = [install.real(), other.real()];
+    assert_eq!(
+        resolve(&names(&candidates), Trust::Fixture).unwrap_err(),
+        AuthorityError::Closed("the executable is not in a trusted location")
+    );
+}
+
+/// M0-FIX2 F13 review (MINOR-1): only a location that is not there at all
+/// is passed over (a host without the first location uses the next).
+#[test]
+fn m0_fix2_f13_an_absent_location_is_passed_over() {
+    let install = Installation::new("first-absent");
+    let candidates = [
+        install.dir.join("none").join("tool").display().to_string(),
+        install.real(),
+    ];
+    let identity = resolve(&names(&candidates), Trust::Fixture).unwrap();
+    assert_eq!(identity.path, Path::new(&install.real()));
+}
