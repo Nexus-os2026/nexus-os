@@ -305,6 +305,25 @@ fn is_removed_legacy_action(action: &PlannedAction) -> bool {
     )
 }
 
+/// The refusal of the four agent-management actions with no handler (M0-FIX
+/// F11). Creating, destroying and messaging an agent, and a human-in-the-loop
+/// request, were served by the legacy supervisor stack (M0-FIX F7), which no
+/// longer exists; the executor's fallback used to report them as a success
+/// that did nothing. They are refused, so the loop records a failed step.
+const AGENT_ACTION_UNSERVED: &str = "refused: no handler serves this agent-management action \
+     since the legacy supervisor stack was removed (M0-FIX F7, F11); it did not run";
+
+/// Whether `action` is one of the four unserved agent-management actions.
+fn is_unserved_agent_action(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::CreateSubAgent { .. }
+            | PlannedAction::DestroySubAgent { .. }
+            | PlannedAction::AgentMessage { .. }
+            | PlannedAction::HitlRequest { .. }
+    )
+}
+
 /// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
 /// context come from the plan and are carried with its label; each earlier
 /// step's result is included verbatim or carried as derived.
@@ -561,6 +580,9 @@ impl RegistryExecutor {
                 }
                 Ok(format!("notification sent: {title}"))
             }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
+            }
             _ => Ok(format!(
                 "action '{}' not routed through actuators",
                 action.action_type()
@@ -583,6 +605,9 @@ impl ActionExecutor for RegistryExecutor {
             }
             _ if is_removed_legacy_action(action) => {
                 Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
             }
             // A model call, or a read or write of retained records, needs a
             // unit (§6.1, §11.4): never run without one.
@@ -627,6 +652,9 @@ impl ActionExecutor for RegistryExecutor {
             }
             _ if is_removed_legacy_action(action) => {
                 Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
+            _ if is_unserved_agent_action(action) => {
+                Err(format!("{} {AGENT_ACTION_UNSERVED}", action.action_type()))
             }
             PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
                 let handler = self.llm_handler.as_ref().expect("checked");
@@ -6254,6 +6282,154 @@ mod tests {
             refused(action, &err);
         }
         assert_eq!(reached.load(Ordering::SeqCst), 0, "a removed actuator ran");
+    }
+
+    /// The four agent-management actions the legacy supervisor stack served
+    /// (M0-FIX F11 test inputs).
+    fn f11_agent_actions(agent_id: &str) -> Vec<PlannedAction> {
+        vec![
+            PlannedAction::CreateSubAgent {
+                manifest_json: "{}".into(),
+            },
+            PlannedAction::DestroySubAgent {
+                agent_id: agent_id.to_string(),
+            },
+            PlannedAction::AgentMessage {
+                target_agent: agent_id.to_string(),
+                message: "hello".into(),
+            },
+            PlannedAction::HitlRequest {
+                question: "ok?".into(),
+                options: vec![],
+            },
+        ]
+    }
+
+    /// M0-FIX F11 oracle: creating, destroying and messaging an agent, and a
+    /// human-in-the-loop request, have no handler since the legacy supervisor
+    /// stack was cut. The executor refuses each one with an honest error,
+    /// outside a unit and as a step of one, and never reports a success that
+    /// did nothing. Before the fix each returned
+    /// `Ok("action '...' not routed through actuators")`.
+    #[test]
+    fn m0_f11_registry_executor_refuses_unserved_agent_actions() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let id = uuid::Uuid::parse_str(&agent_id).unwrap();
+        let executor = RegistryExecutor::new(
+            std::env::temp_dir(),
+            Arc::new(Mutex::new(AuditTrail::new())),
+            sup,
+            None,
+        );
+        let mut audit = AuditTrail::new();
+        for action in &f11_agent_actions(&agent_id) {
+            let name = action.action_type();
+            let outside = executor.execute(&agent_id, action, &mut audit, true);
+            let err = outside.expect_err(&format!("{name} reported success outside a unit"));
+            assert!(
+                err.starts_with(name) && err.contains("refused:"),
+                "{name}: {err}"
+            );
+            let mut unit = hm().goal(id);
+            let plan = unit.produce("the plan");
+            let mut scope = StepScope {
+                issuer: &hm().issuer,
+                ctx: &mut unit,
+                plan: &plan,
+                prior: &[],
+            };
+            let inside = executor
+                .execute_in(&mut scope, &agent_id, action, &mut audit, true)
+                .map(|o| o.text);
+            let err = inside.expect_err(&format!("{name} reported success as a unit step"));
+            assert!(
+                err.starts_with(name) && err.contains("refused:"),
+                "{name}: {err}"
+            );
+        }
+    }
+
+    /// M0-FIX F11 oracle: through the cognitive loop with the real
+    /// executor, each of the four actions is recorded as a failed step and
+    /// never as a succeeded one.
+    #[test]
+    fn m0_f11_loop_records_unserved_agent_actions_as_failed_steps() {
+        let mut sup = Supervisor::new();
+        let id = sup
+            .start_agent(AgentManifest {
+                name: "f11-agent".into(),
+                version: "1.0.0".into(),
+                capabilities: vec!["self.modify".into(), "agent.message".into()],
+                fuel_budget: 10000,
+                autonomy_level: Some(3),
+                consent_policy_path: None,
+                requester_id: None,
+                schedule: None,
+                default_goal: None,
+                llm_model: None,
+                fuel_period_id: None,
+                monthly_fuel_cap: None,
+                allowed_endpoints: None,
+                domain_tags: vec![],
+                filesystem_permissions: vec![],
+            })
+            .unwrap();
+        let agent_id = id.to_string();
+        let sup = Arc::new(Mutex::new(sup));
+        for action in f11_agent_actions(&agent_id) {
+            let name = action.action_type();
+            let (runtime, emitter) = make_runtime(sup.clone());
+            runtime
+                .assign_goal(&agent_id, AgentGoal::new("f11".into(), 5))
+                .unwrap();
+            let plan = serde_json::to_string(&json!([
+                {"action": action, "description": "f11 step"}
+            ]))
+            .unwrap();
+            let planner = make_planner(&plan);
+            let memory_mgr = make_memory_mgr();
+            let executor = RegistryExecutor::new(
+                std::env::temp_dir(),
+                Arc::new(Mutex::new(AuditTrail::new())),
+                sup.clone(),
+                None,
+            );
+            let mut audit = AuditTrail::new();
+            for _ in 0..8 {
+                let r = runtime
+                    .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                    .unwrap();
+                if r.phase == CognitivePhase::Blocked {
+                    let pending = runtime.pending_hitl_steps(&agent_id).unwrap();
+                    runtime
+                        .approve_blocked_steps(&agent_id, pending.len() as u32)
+                        .unwrap();
+                }
+                if !r.should_continue {
+                    break;
+                }
+            }
+            let events = emitter.events.lock().unwrap();
+            let statuses: Vec<StepStatus> = events
+                .iter()
+                .filter_map(|e| match e {
+                    CognitiveEvent::StepExecuted {
+                        action_type,
+                        status,
+                        ..
+                    } if action_type == name => Some(*status),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                statuses.contains(&StepStatus::Failed),
+                "{name}: no failed step recorded: {statuses:?}"
+            );
+            assert!(
+                !statuses.contains(&StepStatus::Succeeded),
+                "{name}: recorded a success: {statuses:?}"
+            );
+        }
     }
 
     /// M0-FIX F7 oracle: the free-API registry no longer relaxes HITL. An
