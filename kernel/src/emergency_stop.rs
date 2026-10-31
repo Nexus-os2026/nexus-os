@@ -126,6 +126,25 @@ impl StopAuthority {
         self.changed.notify_all();
     }
 
+    /// Lift the stop only if it is still stop `number` (the one a resume
+    /// confirmed): a stop engaged since stays in force. Returns whether the
+    /// stop was lifted.
+    pub fn lift_if(&self, number: u64) -> bool {
+        let lifted = {
+            let mut state = self.lock();
+            if state.number == number {
+                state.stopped = false;
+                true
+            } else {
+                false
+            }
+        };
+        if lifted {
+            self.changed.notify_all();
+        }
+        lifted
+    }
+
     pub fn is_stopped(&self) -> bool {
         self.lock().stopped
     }
@@ -590,7 +609,11 @@ mod tests {
         assert_eq!(stop.engage(), 1);
         assert!(before.halted());
         assert_eq!(stop.admit().unwrap_err(), EmergencyStopped);
-        stop.lift();
+        // A resume of stop 1 does not lift a newer stop 2.
+        assert_eq!(stop.engage(), 2);
+        assert!(!stop.lift_if(1));
+        assert!(stop.is_stopped());
+        assert!(stop.lift_if(2));
         // Work the stop ended stays ended; new work is admitted.
         assert!(before.halted());
         let after = stop.admit().unwrap();

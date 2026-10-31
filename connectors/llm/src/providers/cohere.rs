@@ -107,9 +107,7 @@ impl CohereProvider {
         if let Some(endpoint) = endpoint {
             request.endpoint = endpoint.to_string();
         }
-        let client = super::credential_client(timeout).map_err(|error| {
-            AgentError::SupervisorError(format!("failed to build HTTP client for cohere: {error}"))
-        })?;
+        let client = super::credential_client(timeout)?;
 
         eprintln!(
             "[nexus-llm][governance] cohere::complete endpoint={}",

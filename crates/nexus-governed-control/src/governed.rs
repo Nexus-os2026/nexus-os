@@ -185,8 +185,11 @@ impl GovernedControl {
         Ok(governed)
     }
 
-    /// Engage and lift `stop` instead of the process's kernel authority.
-    pub fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
+    /// Engage and lift `stop` instead of the process's kernel authority
+    /// (tests only: production always uses the process's authority, so the
+    /// owner's Stop cannot be disconnected from the kernel).
+    #[cfg(test)]
+    pub(crate) fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
         if self.authority().runs().is_stopped() {
             stop.engage();
         }
@@ -394,9 +397,13 @@ impl GovernedControl {
     /// kernel's stop is lifted only once the broker's stop is lifted too;
     /// work either stop ended stays ended.
     pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+        // The kernel stop this resume may lift: the one in force before the
+        // owner is asked. A Stop pressed meanwhile (from any door) engages
+        // a newer kernel stop first, and that one is not lifted here.
+        let confirmed = self.kernel_stop.stop_number();
         self.authority().resume(confirmer)?;
         if !self.authority().runs().is_stopped() {
-            self.kernel_stop.lift();
+            self.kernel_stop.lift_if(confirmed);
         }
         Ok(())
     }

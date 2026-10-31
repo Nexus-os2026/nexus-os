@@ -136,13 +136,13 @@ impl ClaudeProvider {
             request.endpoint = endpoint.to_string();
         }
 
-        let client = super::credential_client(timeout).map_err(|error| {
-            AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
-        })?;
+        let client = super::credential_client(timeout)?;
 
         // Retry loop for overloaded (529) and rate-limited (429) errors
         let mut delay_secs = 5u64;
         let (status, payload) = loop {
+            // M0-FIX F5: refused before every attempt once a stop is engaged.
+            client.check()?;
             let response = client
                 .post(&request.endpoint)
                 .timeout(timeout)
@@ -165,7 +165,12 @@ impl ClaudeProvider {
                     status.as_u16(),
                     delay_secs
                 );
-                std::thread::sleep(Duration::from_secs(delay_secs));
+                // M0-FIX F5: the wait ends (refused) if the stop is
+                // engaged; no request follows a stop.
+                client
+                    .stop_watch()
+                    .wait_halted_timeout(Duration::from_secs(delay_secs));
+                client.check()?;
                 delay_secs *= 2;
                 continue;
             }
@@ -289,15 +294,15 @@ impl ClaudeProvider {
             body["system"] = Value::String(system_prompt.to_string());
         }
 
-        let client = super::credential_client(timeout).map_err(|e| {
-            AgentError::SupervisorError(format!("failed to build HTTP client: {e}"))
-        })?;
+        let client = super::credential_client(timeout)?;
 
         // Retry loop for overloaded (529) and rate-limited (429) errors
         let mut delay_secs = 5u64;
         let mut last_error = String::new();
 
         for attempt in 0..=MAX_RETRIES {
+            // M0-FIX F5: refused before every attempt once a stop is engaged.
+            client.check()?;
             let response = client
                 .post(&self.endpoint)
                 .timeout(timeout)
@@ -326,7 +331,12 @@ impl ClaudeProvider {
                     MAX_RETRIES,
                     delay_secs
                 );
-                std::thread::sleep(Duration::from_secs(delay_secs));
+                // M0-FIX F5: the wait ends (refused) if the stop is
+                // engaged; no request follows a stop.
+                client
+                    .stop_watch()
+                    .wait_halted_timeout(Duration::from_secs(delay_secs));
+                client.check()?;
                 delay_secs *= 2; // 5s, 10s, 20s
                 last_error =
                     format!("claude streaming request failed with status {status}: {error_body}");

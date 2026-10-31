@@ -967,8 +967,14 @@ impl CognitiveRuntime {
         }
     }
 
-    /// Observe `stop` instead of the process's emergency-stop authority.
-    pub fn with_stop_authority(mut self, stop: Arc<crate::emergency_stop::StopAuthority>) -> Self {
+    /// Observe `stop` instead of the process's emergency-stop authority
+    /// (tests only: production always observes the process's authority, so
+    /// the owner's Stop cannot be disconnected from the loop).
+    #[cfg(test)]
+    pub(crate) fn with_stop_authority(
+        mut self,
+        stop: Arc<crate::emergency_stop::StopAuthority>,
+    ) -> Self {
         self.stop = stop;
         self
     }

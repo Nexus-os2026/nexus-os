@@ -677,11 +677,50 @@ fn post_json_bounded(
 /// own uses rustls with the bundled webpki roots.
 pub(crate) fn credential_client(
     timeout: std::time::Duration,
-) -> reqwest::Result<reqwest::blocking::Client> {
-    reqwest::blocking::Client::builder()
+) -> Result<AdmittedClient, AgentError> {
+    // M0-FIX F5: every in-process provider request is admitted under the
+    // stop authority before its client exists: refused while a stop is in
+    // force. A request already sent is not interrupted; it ends within the
+    // client's finite timeout.
+    let watch = admit_model_call()?;
+    let client = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
+        .map_err(|error| {
+            AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
+        })?;
+    Ok(AdmittedClient { client, watch })
+}
+
+/// M0-FIX F5: an in-process provider client admitted under the stop
+/// authority, with the watch its retries and waits observe.
+pub(crate) struct AdmittedClient {
+    client: reqwest::blocking::Client,
+    watch: nexus_kernel::emergency_stop::StopWatch,
+}
+
+impl AdmittedClient {
+    /// Refuse a further request (a retry) once a stop was engaged.
+    pub(crate) fn check(&self) -> Result<(), AgentError> {
+        self.watch
+            .check()
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))
+    }
+
+    /// The watch a retry wait observes: it ends at once when a stop is
+    /// engaged.
+    pub(crate) fn stop_watch(&self) -> &nexus_kernel::emergency_stop::StopWatch {
+        &self.watch
+    }
+}
+
+impl std::ops::Deref for AdmittedClient {
+    type Target = reqwest::blocking::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
+    }
 }
 
 /// Send one bounded request (see [`post_json_in_process`]) and read its
@@ -693,8 +732,7 @@ fn send_bounded(
     timeout: std::time::Duration,
     max_bytes: u64,
 ) -> Result<(u16, Vec<u8>), String> {
-    let client =
-        credential_client(timeout).map_err(|error| request_error("could not start", error))?;
+    let client = credential_client(timeout).map_err(|error| error.to_string())?;
     // The client's timeout bounds each wait (the headers, then every read)
     // separately; the request's own timeout bounds the whole exchange, from
     // connecting until the body has been read.
