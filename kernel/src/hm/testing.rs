@@ -139,6 +139,16 @@ impl TestHm {
         id
     }
 
+    /// Whether a unit was ever started for `agent_id`: its route policy is
+    /// resolved first, and the first resolution creates its row.
+    pub(crate) fn unit_started(&self, agent_id: &str) -> bool {
+        self.db
+            .hm()
+            .read(|tx| tx.policy_row_raw(agent_id))
+            .expect("policy row read")
+            .is_some()
+    }
+
     /// A newly registered agent the Owner loosened (TEST FIXTURE).
     pub(crate) fn open_agent(&self, name: &str) -> Uuid {
         let id = self.agent(name);

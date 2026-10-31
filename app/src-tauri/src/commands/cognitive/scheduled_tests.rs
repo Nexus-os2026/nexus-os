@@ -301,6 +301,10 @@ fn p3_a_tick_that_never_saw_its_schedule_does_not_revive_an_owner_stopped_agent(
 /// Verification of candidate 7 (G11-A N2, N3): a stopped agent takes no
 /// HiveMind sub-task, and a loop started for it (as when its start was under
 /// way at the owner's stop) runs no cycle: its goal ends, recorded as such.
+/// P4-S1-H1: a stopped agent is given no goal of its own either (refused on
+/// both routes, with no task row written and no goal published), so the
+/// loop is started for a goal assigned while the agent ran, the owner's
+/// stop landing before the loop starts.
 #[test]
 fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
     let state = AppState::new_in_memory();
@@ -323,8 +327,69 @@ fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
         "{refused:?}"
     );
     assert!(!state.cognitive_runtime.has_active_loop(&id));
+    // P4-S1-H1: the stopped agent's own goal is refused, by either route,
+    // before a task row is written, the goal is published or anything is
+    // audited.
+    let audited = state.audit.lock().unwrap().events().len();
+    for refused in [
+        super::execute_agent_goal(&state, id.clone(), "summarize the notes".into(), 5, None),
+        super::assign_agent_goal(&state, id.clone(), "summarize the notes".into(), 5, None),
+    ] {
+        assert!(
+            refused.as_ref().is_err_and(|e| e.contains(&format!(
+                "agent '{id}' is Stopped: it takes no new goal or task"
+            ))),
+            "{refused:?}"
+        );
+    }
+    assert!(state.db.load_tasks_by_agent(&id, 10).unwrap().is_empty());
+    assert!(!state.cognitive_runtime.has_active_loop(&id));
+    assert!(state.cognitive_runtime.get_agent_status_fast(&id).is_none());
+    assert_eq!(state.audit.lock().unwrap().events().len(), audited);
+    // The goal is assigned while the agent runs: its task row is written,
+    // its loop and goal published. The owner's stop lands before its loop
+    // starts.
+    let manifest =
+        crate::commands::chat_llm::parse_agent_manifest_json(&manifest("stopping-subtask", 2))
+            .unwrap();
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        snapshot(&state, &id).map(|(s, _)| s),
+        Some(AgentState::Running)
+    );
     let goal = super::execute_agent_goal(&state, id.clone(), "summarize the notes".into(), 5, None)
         .unwrap();
+    assert!(state.cognitive_runtime.has_active_loop(&id));
+    assert!(state
+        .db
+        .load_tasks_by_agent(&id, 10)
+        .unwrap()
+        .iter()
+        .any(|task| task.id == goal && task.completed_at.is_none()));
+    assert_eq!(
+        state
+            .cognitive_runtime
+            .get_agent_status_fast(&id)
+            .and_then(|status| status.active_goal)
+            .map(|active| active.id),
+        Some(goal.clone())
+    );
+    state
+        .supervisor
+        .lock()
+        .unwrap()
+        .stop_agent(Uuid::parse_str(&id).unwrap())
+        .unwrap();
+    assert_eq!(
+        snapshot(&state, &id).map(|(s, _)| s),
+        Some(AgentState::Stopped)
+    );
     super::spawn_cognitive_loop_with_bridge(
         BackendEventBridge::default(),
         state.clone(),
@@ -355,6 +420,16 @@ fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
             .is_some_and(|json| json.contains("the agent is stopped")),
         "{:?}",
         task.result_json
+    );
+    // No cycle ran for it: its loop (left in place by the stopped exit)
+    // counted none and did no step.
+    assert_eq!(
+        state
+            .cognitive_runtime
+            .get_agent_status(&id)
+            .map(|status| (status.cycle_count, status.steps_completed)),
+        Some((0, 0)),
+        "a cycle ran for a stopped agent's goal"
     );
 }
 

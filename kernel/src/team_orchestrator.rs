@@ -9,9 +9,11 @@ use crate::cognitive::hivemind::{
     AgentInfo, CollectingHivemindEmitter, HivemindCoordinator, HivemindEvent, HivemindEventEmitter,
     HivemindLlm, HivemindSession, HivemindStatus, SubTaskStatus, SubtaskRun,
 };
-use crate::cognitive::loop_runtime::LlmQueryHandler;
+use crate::cognitive::loop_runtime::{admit_new_work, LlmQueryHandler};
 use crate::errors::AgentError;
-use crate::hm::{DerivedItem, DispatchContext, DispatchIssuer, PromptBuilder, PromptSource};
+use crate::hm::{
+    DerivedItem, DispatchContext, DispatchIssuer, Principal, PromptBuilder, PromptSource,
+};
 use crate::supervisor::Supervisor;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -100,6 +102,18 @@ impl TeamOrchestrator {
     ) -> Result<TeamWorkflowResult, AgentError> {
         let start = std::time::Instant::now();
 
+        // P4-S1-H1: a director that takes no new work runs no workflow,
+        // refused before anything is recorded or any model is asked.
+        let Principal::Agent(director_agent) = director.principal() else {
+            return Err(AgentError::SupervisorError(
+                "a team workflow's director is not an agent".to_string(),
+            ));
+        };
+        admit_new_work(
+            &self.supervisor.lock().unwrap_or_else(|p| p.into_inner()),
+            &director_agent.to_string(),
+        )?;
+
         // Log the start
         {
             let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
@@ -179,11 +193,17 @@ impl TeamOrchestrator {
 
                 // The member's own context (§11.3): its policy ⊔ the
                 // director's floor; an agent whose policy cannot be
-                // established takes no task.
+                // established takes no task. P4-S1-H1: nor does one that
+                // takes no new work (no context is derived, no model asked).
                 task_index += 1;
                 let member = uuid::Uuid::parse_str(agent_id)
                     .map_err(|e| format!("Task execution failed: invalid agent id: {e}"))
                     .and_then(|id| {
+                        admit_new_work(
+                            &self.supervisor.lock().unwrap_or_else(|p| p.into_inner()),
+                            agent_id,
+                        )
+                        .map_err(|e| format!("Task execution failed: {e}"))?;
                         director
                             .derive_member(issuer, id, task_index)
                             .map_err(|e| format!("Task execution failed: {e}"))
@@ -816,6 +836,121 @@ mod tests {
         assert!(!result.success, "the workflow reported successful");
         assert!(result.error.is_some());
         assert!(result.summary.contains("PARTIAL"), "{}", result.summary);
+    }
+
+    /// The director, researcher, writer and publisher of the mock team, all
+    /// running, in a supervisor.
+    fn running_team(sup: &mut Supervisor) -> [String; 4] {
+        [
+            create_agent(sup, "nexus-director", vec!["llm.query"], 50000),
+            create_agent(
+                sup,
+                "nexus-researcher",
+                vec!["web.search", "web.read", "llm.query", "fs.write"],
+                10000,
+            ),
+            create_agent(
+                sup,
+                "nexus-writer",
+                vec!["llm.query", "fs.read", "fs.write"],
+                10000,
+            ),
+            create_agent(
+                sup,
+                "nexus-publisher",
+                vec!["fs.read", "fs.write", "process.exec", "llm.query"],
+                5000,
+            ),
+        ]
+    }
+
+    /// P4-S1-H1: a stopped member is given no team task: no context is
+    /// derived for it and no model is asked in its name; its tasks fail. The
+    /// control: running, the same member is asked for the same tasks. (The
+    /// researcher is the first capability match of two tasks.)
+    #[test]
+    fn p4_s1_h1_a_stopped_member_is_given_no_team_task() {
+        for stopped in [false, true] {
+            let mut sup = Supervisor::new();
+            let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
+            if stopped {
+                sup.stop_agent(uuid::Uuid::parse_str(&researcher_id).unwrap())
+                    .unwrap();
+            }
+            let hm = TestHm::new().register_every_agent();
+            let llm = team_mock(&hm);
+            let prompts = llm.prompts.clone();
+            let orchestrator = TeamOrchestrator::new(
+                Arc::new(Mutex::new(sup)),
+                Arc::new(Mutex::new(AuditTrail::new())),
+                Arc::new(llm),
+            );
+            let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+            let mut director = director(&hm, &director_id);
+            let result = orchestrator
+                .execute_team_workflow(
+                    &hm.issuer,
+                    &mut director,
+                    &config,
+                    "Research, write and publish",
+                )
+                .unwrap();
+
+            let asked = prompts
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|p| p.contains("You are nexus-researcher"))
+                .count();
+            let tasks: Vec<_> = result
+                .task_results
+                .iter()
+                .filter(|t| t.agent_id == researcher_id)
+                .collect();
+            assert!(!tasks.is_empty(), "stopped={stopped}: no task for it");
+            if stopped {
+                assert_eq!(asked, 0, "the stopped researcher was asked");
+                for task in tasks {
+                    assert!(!task.success, "{task:?}");
+                    assert!(task.output.contains("is Stopped"), "{task:?}");
+                }
+            } else {
+                assert_eq!(asked, tasks.len(), "{tasks:?}");
+                assert!(tasks.iter().all(|t| t.success), "{tasks:?}");
+            }
+        }
+    }
+
+    /// P4-S1-H1: a stopped director runs no team workflow: it is refused
+    /// before anything is recorded and before any model is asked.
+    #[test]
+    fn p4_s1_h1_a_stopped_director_runs_no_team_workflow() {
+        let mut sup = Supervisor::new();
+        let [director_id, researcher_id, writer_id, publisher_id] = running_team(&mut sup);
+        sup.stop_agent(uuid::Uuid::parse_str(&director_id).unwrap())
+            .unwrap();
+        let hm = TestHm::new().register_every_agent();
+        let llm = team_mock(&hm);
+        let prompts = llm.prompts.clone();
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let orchestrator =
+            TeamOrchestrator::new(Arc::new(Mutex::new(sup)), audit.clone(), Arc::new(llm));
+        let config = make_team_config(&director_id, &researcher_id, &writer_id, &publisher_id);
+
+        let mut director = director(&hm, &director_id);
+        match orchestrator.execute_team_workflow(
+            &hm.issuer,
+            &mut director,
+            &config,
+            "Research, write and publish",
+        ) {
+            Ok(result) => panic!("a stopped director's workflow ran: {}", result.summary),
+            Err(e) => assert!(e.to_string().contains("is Stopped"), "{e}"),
+        }
+        assert!(prompts.lock().unwrap().is_empty(), "a model was asked");
+        assert!(audit.lock().unwrap().events().is_empty());
+        assert!(orchestrator.get_events().is_empty());
     }
 
     /// P3: the summary preview keeps at most 100 bytes and never cuts a
