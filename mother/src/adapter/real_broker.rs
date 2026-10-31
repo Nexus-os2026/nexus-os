@@ -660,6 +660,8 @@ fn real_broker_m1_oracles() {
     // Codex re-review MAJOR: every journaled crash point, recovered by a
     // brand-new port and coordinator over the same live broker.
     m2a_crash_points_on_the_real_broker(&w);
+    // Added after mutation testing: the port's own settled check.
+    m2a_the_port_settles_only_mother_s_final_actions(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
@@ -745,6 +747,49 @@ fn closures(path: &std::path::Path, mission: MissionId) -> usize {
         .iter()
         .filter(|e| e.mission == mission && matches!(e.event, Event::ApprovalClosed { .. }))
         .count()
+}
+
+/// Added after mutation testing (two mutants of `settled` survived the
+/// crash-point oracles, where a cancel always came first): an action is
+/// settled only when it is Mother's and final at the broker, or the broker
+/// holds no such action.
+fn m2a_the_port_settles_only_mother_s_final_actions(w: &World) {
+    let control = &w.home.control;
+    let port = GovernedPort::new(control.clone());
+    let park = |agent: &AgentId, path: &str| {
+        let run = control
+            .open_run(agent.clone(), RunOrigin::AgentGoal)
+            .unwrap();
+        let AgentOutcome::AwaitingApproval(view) = control
+            .agent_action(agent, run, &post_to(&w.origin, path))
+            .unwrap()
+        else {
+            panic!("a POST waits for the Owner");
+        };
+        (run, view.id)
+    };
+    let named = |run: RunId, commitment: &dyn std::fmt::Display| PendingAction {
+        run: run.to_string(),
+        commitment: commitment.to_string(),
+        deadline_mono_ms: 0,
+    };
+    let mother = mother_agent();
+    let other = AgentId::new("another-agent").unwrap();
+    let (run, commitment) = park(&mother, "settle-mine");
+    let (other_run, other_commitment) = park(&other, "settle-other");
+    // Waiting at the broker: not settled.
+    assert!(!port.settled(&named(run, &commitment)));
+    // Someone else's action, or Mother's run with someone else's commitment.
+    assert!(!port.settled(&named(other_run, &other_commitment)));
+    assert!(!port.settled(&named(run, &other_commitment)));
+    // A commitment the broker does not hold.
+    assert!(port.settled(&named(run, &"cmt-00000000000000000000000000000000")));
+    // Withdrawn: settled. Someone else's stays unsettled even when final.
+    control.cancel_run(run).unwrap();
+    control.cancel_run(other_run).unwrap();
+    assert!(port.settled(&named(run, &commitment)));
+    assert!(!port.settled(&named(other_run, &other_commitment)));
+    assert_eq!(w.unserved(), 0);
 }
 
 /// Codex re-review MAJOR (oracle first): each point at which Mother can be
