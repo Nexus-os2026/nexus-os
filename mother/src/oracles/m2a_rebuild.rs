@@ -630,3 +630,25 @@ fn m2a_close_a_stop_whose_closure_cannot_be_journaled_is_an_error() {
     assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
     assert!(w.journal.is_poisoned());
 }
+
+/// Fourth review MINOR: a live Stop whose withdrawal the broker refuses
+/// returns the error, with the Stop journaled and the withdrawal attempted.
+#[test]
+fn m2a_close_a_stop_whose_withdrawal_fails_is_an_error() {
+    let w = world();
+    let id = waiting_with_action(&w);
+    w.port.fail_withdrawal(id);
+    assert!(matches!(
+        w.mother.stop(id),
+        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+    ));
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert!(w.port.is_cancelled(id), "the withdrawal was attempted");
+    assert!(w.mother.journal().unwrap().iter().any(|e| e.mission == id
+        && matches!(
+            e.event,
+            Event::Transition {
+                trigger: Trigger::Stop { .. }
+            }
+        )));
+}

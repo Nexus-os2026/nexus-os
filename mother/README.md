@@ -137,7 +137,8 @@ Coordinator rules the oracles pin:
 - A request the Owner approved that is still executing when a terminal
   (or interrupted) mission is recovered is cancelled (its cancellation
   token is set) but not yet final, so its open marker is not closed: it is
-  closed only on a later reopen, once the broker holds it final. No oracle
+  closed on a later reopen once the broker holds it final (for an
+  interrupted mission, possibly already by its block in the same reopen). No oracle
   pins this on the real broker (it needs an execution in flight); a
   recording-port oracle scripts it.
 - The ids are names, not authority: the port takes one back only from a
