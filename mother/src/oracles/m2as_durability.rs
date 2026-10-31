@@ -197,6 +197,14 @@ fn reach(w: &World, state: MissionState) -> MissionId {
     id
 }
 
+fn adopted(w: &World) -> Vec<(MissionId, PendingAction)> {
+    w.port
+        .adopted()
+        .into_iter()
+        .map(|(id, pending, _)| (id, pending))
+        .collect()
+}
+
 fn performs(w: &World) -> usize {
     w.port
         .calls()
@@ -286,10 +294,10 @@ fn m2as_a_stop_neither_journaled_nor_poisoned_never_comes_back_working() {
         // After the restart the mission is held, and dispatches nothing.
         assert_held(&w, id, state, lanes);
         if state == AwaitingApproval {
-            assert!(
-                w.port.calls().contains(&PortCall::Cancel(id)),
-                "the waited request is withdrawn, never approved"
-            );
+            // Handed back to the rebuilt port as for any waiting mission,
+            // so that a Stop can withdraw it; never asked about or approved.
+            assert_eq!(adopted(&w), vec![(id, action())]);
+            assert!(!w.port.calls().contains(&PortCall::Cancel(id)));
         }
 
         // Held across any restart, clean or not, until the Owner decides.
@@ -299,9 +307,14 @@ fn m2as_a_stop_neither_journaled_nor_poisoned_never_comes_back_working() {
         closed.unwrap();
         assert_held(&w, id, state, lanes);
 
-        // The Owner's Stop of a held mission holds.
+        // The Owner's Stop of a held mission holds, and withdraws a waited
+        // request.
         assert_eq!(w.mother.stop(id), Ok(Stopped), "{state:?}");
         assert_eq!(w.mother.held(id), None, "{state:?}");
+        if state == AwaitingApproval {
+            assert!(w.port.calls().contains(&PortCall::Cancel(id)));
+            assert!(events_of(&w, id).contains(&Event::ApprovalClosed { effect: 0 }));
+        }
         let w = crash(&w);
         assert_eq!(w.mother.state(id), Some(Stopped), "{state:?}");
         assert_eq!(w.mother.resume(id).ok(), None, "{state:?}");
@@ -412,12 +425,14 @@ fn m2as_an_action_denial_neither_journaled_nor_poisoned_never_comes_back_working
 
     let w = crash(&w);
     assert_held(&w, id, AwaitingApproval, lanes);
-    assert!(
-        w.port.calls().contains(&PortCall::Cancel(id)),
-        "the denied request is withdrawn again, never approved"
-    );
-    // The withdrawal is confirmed and journaled closed.
+    // Handed back, never asked about or approved; the Owner's Stop
+    // withdraws it and it is journaled closed.
+    assert_eq!(adopted(&w), vec![(id, action())]);
+    assert!(!w.port.calls().contains(&PortCall::Cancel(id)));
+    assert_eq!(w.mother.stop(id), Ok(Stopped));
+    assert!(w.port.calls().contains(&PortCall::Cancel(id)));
     assert!(events_of(&w, id).contains(&Event::ApprovalClosed { effect: 0 }));
+    assert_eq!(performs(&w), 0);
 }
 
 #[test]
@@ -459,35 +474,41 @@ fn m2as_a_crash_holds_every_unfinished_mission_until_the_owner_resumes() {
         .map(|s| (s, w.mission_in(s)))
         .collect();
     let lanes = w.keyed_calls();
+    let before = w.journal.lines();
 
     let w = crash(&w);
     for (state, id) in &ids {
         assert_held(&w, *id, *state, lanes);
-        let held: Vec<Event> = events_of(&w, *id)
-            .into_iter()
-            .filter(|e| matches!(e, Event::Held { .. }))
-            .collect();
-        assert_eq!(
-            held,
-            vec![Event::Held {
-                reason: "unclean_shutdown".into()
-            }],
-            "{state:?}: the hold is journaled once"
-        );
     }
+    // Opening wrote nothing: the holds are journaled with the session's
+    // first record.
+    assert_eq!(w.journal.lines(), before);
     for (state, id) in &ended {
         assert_eq!(w.mother.state(*id), Some(*state), "{state:?}");
         assert_eq!(w.mother.held(*id), None, "{state:?}");
         assert!(w.mother.resume(*id).is_err(), "{state:?}");
     }
     let waiting = ids.iter().find(|(s, _)| *s == AwaitingApproval).unwrap().1;
-    assert!(w.port.calls().contains(&PortCall::Cancel(waiting)));
+    assert!(!w.port.calls().contains(&PortCall::Cancel(waiting)));
+    assert_eq!(adopted(&w), vec![(waiting, action())]);
 
     // The Owner resumes one: journaled, and it carries on to Done,
     // sending its effects.
     let building = ids.iter().find(|(s, _)| *s == Building).unwrap().1;
     assert_eq!(w.mother.resume(building), Ok(Building));
     assert_eq!(events_of(&w, building).last(), Some(&Event::Resumed));
+    // The session's first record: its opening, then every hold, once.
+    let session: Vec<Entry> =
+        crate::journal::verify(&w.journal.lines()).unwrap()[before.len()..].to_vec();
+    assert_eq!(session[0].event, Event::SessionOpened);
+    for (state, id) in &ids {
+        let held: Vec<&Entry> = session
+            .iter()
+            .filter(|e| e.mission == *id && matches!(e.event, Event::Held { .. }))
+            .collect();
+        assert_eq!(held.len(), 1, "{state:?}: the hold is journaled once");
+        assert_eq!(held[0].event, held_event(), "{state:?}");
+    }
     assert_eq!(w.mother.held(building), None);
     assert!(w.mother.resume(building).is_err(), "resume twice");
     for _ in 0..3 {
@@ -793,9 +814,43 @@ fn m2as_a_journal_from_before_sessions_is_an_unclean_shutdown() {
         .collect();
     let lanes = w.keyed_calls();
     let mut lines: Vec<String> = Vec::new();
+    // Lane calls are named by their journal sequence: renumber them.
+    let mut moved = std::collections::BTreeMap::new();
+    let mut renumbered = |invocation: InvocationId, seq: Option<u64>| {
+        if let Some(seq) = seq {
+            moved.insert(invocation.seq, seq);
+        }
+        InvocationId {
+            seq: moved[&invocation.seq],
+            ..invocation
+        }
+    };
     for entry in crate::journal::verify(&w.journal.lines()).unwrap() {
+        let seq = lines.len() as u64;
+        let event = match entry.event {
+            Event::LaneInvoked {
+                invocation,
+                identity,
+                input_hash,
+            } => Event::LaneInvoked {
+                invocation: renumbered(invocation, Some(seq)),
+                identity,
+                input_hash,
+            },
+            Event::LaneReturned {
+                invocation,
+                output_hash,
+            } => Event::LaneReturned {
+                invocation: renumbered(invocation, None),
+                output_hash,
+            },
+            Event::LaneOvertaken { invocation } => Event::LaneOvertaken {
+                invocation: renumbered(invocation, None),
+            },
+            other => other,
+        };
         if entry.mission != SESSION {
-            lines = forged(&lines, entry.mission, entry.event);
+            lines = forged(&lines, entry.mission, event);
         }
     }
     let journal = MemoryJournal::new();

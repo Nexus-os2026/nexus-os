@@ -298,6 +298,9 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     );
 
     // The rebuilt port still knows what the other mission waits on.
+    // M2a-S (Owner decision): after a crash the mission is held until the
+    // Owner resumes it.
+    assert_eq!(mother.resume(kept), Ok(MissionState::AwaitingApproval));
     assert_eq!(
         mother.advance(kept).unwrap().to,
         MissionState::AwaitingApproval
