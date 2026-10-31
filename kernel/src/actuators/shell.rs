@@ -13,47 +13,32 @@ const MAX_OUTPUT_BYTES: usize = 100 * 1024;
 /// Fuel cost per shell command.
 const FUEL_COST_SHELL: f64 = 5.0;
 
-/// Commands in the base allowlist (no subcommand restrictions).
+/// The only commands GovernedShell runs.
 ///
-/// Includes basic shell utilities + system monitoring commands needed by
-/// agents like nexus-sysmon. Dangerous commands (rm, kill, shutdown, etc.)
-/// are NOT included — see `COMMAND_BLOCKLIST`.
+/// Basic utilities and system monitoring commands needed by agents like
+/// nexus-sysmon. This list is not safe by construction: `cp`, `mv`, `tee`,
+/// `touch` and `mkdir` write files and are not confined to the working
+/// directory. Destructive and privileged commands (rm, kill, shutdown, etc.)
+/// are refused by `COMMAND_BLOCKLIST`.
 ///
 /// No entry may start a shell or an arbitrary program named in its arguments
 /// or in files it reads from the working directory or HOME (M0-FIX2 F9).
-/// Programs built for that (env, xargs, awk, sed, make, node, npx,
-/// interpreters, compilers and build tools) and programs that run what their
-/// config names (git, cargo, npm, docker) are absent; `find` and `sort` stay
-/// only under the argument rules in `TRAMPOLINE_ARGUMENTS`.
+/// Absent for that reason: programs built to start programs (env, xargs,
+/// awk, sed, make, node, npx, interpreters, compilers and build tools);
+/// programs that run what their config names (git, cargo, npm, docker);
+/// programs that were checked only by their first argument and can reach
+/// such a program (systemctl, which starts ssh for `-H`, and journalctl);
+/// `top` (rc file in HOME) and `printenv` (dumps the parent environment).
+/// `find` and `sort` stay only under the argument rules in
+/// `TRAMPOLINE_ARGUMENTS`. There is deliberately no first-argument-only
+/// subcommand allowlist: every later argument would pass unchecked.
 const BASE_ALLOWLIST: &[&str] = &[
     // Basic shell utilities
     "ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "date", "pwd", "mkdir", "cp", "mv",
     "sort", "cut", "tr", "tee", "which", "file", "diff", "touch",
     // System monitoring (read-only)
-    "free", "df", "uptime", "top", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk",
-    "lscpu", "du", "stat", "printenv", "vmstat", "iostat", "lsof", "ss",
-];
-
-/// Commands with restricted subcommands: (command, &[allowed subcommands]).
-///
-/// git (hooks, config and attribute drivers), cargo (build scripts,
-/// toolchain and cargo config), npm (package scripts, npmrc) and docker (CLI
-/// plugin config) are absent: each runs programs named in files an allowed
-/// writer can plant (M0-FIX2 F9).
-const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
-    // systemctl: read-only status queries only — no start/stop/enable/disable
-    (
-        "systemctl",
-        &[
-            "status",
-            "list-units",
-            "list-timers",
-            "is-active",
-            "is-enabled",
-            "show",
-        ],
-    ),
-    ("journalctl", &["--no-pager", "-u", "-n", "--since"]),
+    "free", "df", "uptime", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk", "lscpu",
+    "du", "stat", "vmstat", "iostat", "lsof", "ss",
 ];
 
 /// An argument that would make an allowlisted program start another program.
@@ -180,24 +165,6 @@ impl GovernedShell {
         // Check base allowlist
         if BASE_ALLOWLIST.contains(&cmd_lower.as_str()) {
             return Ok(());
-        }
-
-        // Check subcommand-restricted commands
-        for (restricted_cmd, allowed_subs) in SUBCOMMAND_ALLOWLIST {
-            if cmd_lower == *restricted_cmd {
-                if let Some(sub) = effective_args.first() {
-                    let sub_lower = sub.to_lowercase();
-                    if allowed_subs.contains(&sub_lower.as_str()) {
-                        return Ok(());
-                    }
-                    return Err(ActuatorError::CommandBlocked(format!(
-                        "subcommand '{sub}' not allowed for '{binary}'; allowed: {}",
-                        allowed_subs.join(", ")
-                    )));
-                }
-                // No subcommand — allow bare command (e.g. `git` shows help)
-                return Ok(());
-            }
         }
 
         Err(ActuatorError::CommandBlocked(format!(
