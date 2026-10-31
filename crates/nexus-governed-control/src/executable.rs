@@ -2,7 +2,9 @@
 //! checks again immediately before it happens.
 //!
 //! An executable is named by its canonical absolute path (no symbolic link,
-//! no `PATH` lookup). Its identity is the digest of that path, its device,
+//! no `PATH` lookup). A tool lists its trusted locations and is resolved
+//! among them ([`resolve`]); a link is followed only to another listed
+//! location. Its identity is the digest of that path, its device,
 //! inode, size, modification time, mode and owner, and the SHA-256 of its
 //! contents, read through one open handle whose metadata must not change
 //! while it is read. A production executable must belong to root, as must
@@ -142,6 +144,61 @@ pub(crate) fn inspect(path: &Path, trust: Trust) -> Result<ExecutableIdentity, A
     })
 }
 
+/// Resolve a tool's executable from its fixed list of trusted absolute
+/// locations (M0-FIX2 F13), in order. A location is accepted only if its
+/// canonical path is itself one of the listed locations (so a symbolic
+/// link is followed only to another listed location, never to an
+/// arbitrary target) and that canonical path passes [`inspect`]. A
+/// location that is not installed, or does not qualify, is passed over;
+/// with none qualifying the tool is refused. There is no `PATH` lookup and
+/// no other fallback, and what is returned (and pinned, and launched) is
+/// the canonical path.
+///
+/// Hard links: `inspect` does not refuse a file with several names (the
+/// rust-coreutils multicall binary is one inode with a name per tool).
+/// Every name of it is root-owned in root-owned directories, its identity
+/// pins the inode and its contents, and the name launched is the listed
+/// canonical path, whose final component (`argv[0]`) is what the multicall
+/// binary dispatches on.
+#[cfg(target_os = "linux")]
+pub(crate) fn resolve(
+    candidates: &[&str],
+    trust: Trust,
+) -> Result<ExecutableIdentity, AuthorityError> {
+    if candidates.is_empty() {
+        return Err(AuthorityError::Closed("the tool names no trusted location"));
+    }
+    if candidates.iter().any(|c| !Path::new(c).is_absolute()) {
+        return Err(AuthorityError::InvalidAction(
+            "an executable path is absolute",
+        ));
+    }
+    let mut refusal = None;
+    for candidate in candidates {
+        let Ok(canonical) = std::fs::canonicalize(candidate) else {
+            continue;
+        };
+        if !candidates
+            .iter()
+            .any(|listed| Path::new(listed) == canonical)
+        {
+            refusal.get_or_insert(AuthorityError::Closed(
+                "the executable resolves outside its trusted locations",
+            ));
+            continue;
+        }
+        match inspect(&canonical, trust) {
+            Ok(identity) => return Ok(identity),
+            Err(error) => {
+                refusal.get_or_insert(error);
+            }
+        }
+    }
+    Err(refusal.unwrap_or(AuthorityError::Unavailable(
+        "the executable is not installed",
+    )))
+}
+
 /// The most entries an installation directory may hold.
 #[cfg(target_os = "linux")]
 const MAX_INSTALLATION: usize = 8192;
@@ -183,6 +240,17 @@ pub(crate) fn inspect_tree(dir: &Path) -> Result<(), AuthorityError> {
 /// Other platforms: governed launches are not available.
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn inspect(_path: &Path, _trust: Trust) -> Result<ExecutableIdentity, AuthorityError> {
+    Err(AuthorityError::Unavailable(
+        "governed real-world control is available on Linux only",
+    ))
+}
+
+/// Other platforms: governed launches are not available.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn resolve(
+    _candidates: &[&str],
+    _trust: Trust,
+) -> Result<ExecutableIdentity, AuthorityError> {
     Err(AuthorityError::Unavailable(
         "governed real-world control is available on Linux only",
     ))

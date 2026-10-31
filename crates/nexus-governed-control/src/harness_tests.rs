@@ -290,15 +290,21 @@ pub fn canonical_tool_at(path: &str) -> &'static str {
     canonical_tool(name)
 }
 
-/// `definitions` with each executable replaced by its canonical path. The
-/// definitions, their trust and their checks are otherwise untouched.
+/// `definitions` with each tool's locations replaced by the one canonical
+/// path of its first location's tool. The definitions, their trust and
+/// their checks are otherwise untouched.
 pub fn canonical_definitions(
     mut definitions: Vec<crate::tool::ToolDefinition>,
 ) -> Vec<crate::tool::ToolDefinition> {
     for definition in &mut definitions {
-        definition.executable = canonical_tool_at(definition.executable);
+        definition.executables = only(canonical_tool_at(definition.executables[0]));
     }
     definitions
+}
+
+/// A tool location list naming just `path`.
+pub fn only(path: &'static str) -> &'static [&'static str] {
+    Box::leak(vec![path].into_boxed_slice())
 }
 
 #[test]

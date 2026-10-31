@@ -20,7 +20,13 @@ pub fn production() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
             key: "text.sha256",
-            executable: "/usr/bin/sha256sum",
+            // GNU hosts: a regular file. rust-coreutils hosts: a link into
+            // the multicall binary, whose listed name is the second entry.
+            executables: &[
+                "/usr/bin/sha256sum",
+                "/usr/lib/cargo/bin/coreutils/sha256sum",
+                "/bin/sha256sum",
+            ],
             class: EffectClass::R0,
             build: sha256,
             env: &[("LC_ALL", "C")],
@@ -31,7 +37,7 @@ pub fn production() -> Vec<ToolDefinition> {
         },
         ToolDefinition {
             key: "speech.synthesize",
-            executable: "/usr/bin/espeak-ng",
+            executables: &["/usr/bin/espeak-ng"],
             class: EffectClass::R1,
             build: speech,
             env: &[("LC_ALL", "C.UTF-8")],

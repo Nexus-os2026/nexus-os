@@ -42,7 +42,7 @@ fn fixture(
 ) -> ToolDefinition {
     ToolDefinition {
         key,
-        executable,
+        executables: crate::harness_tests::only(executable),
         class: EffectClass::R0,
         build,
         env: &[("LC_ALL", "C")],
@@ -470,13 +470,16 @@ fn the_production_catalog_has_no_shell_interpreter_or_runner() {
         "wget",
     ];
     for definition in catalog::production() {
-        let name = std::path::Path::new(definition.executable)
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
-        assert!(!NEVER.contains(&name.as_str()), "{}", definition.executable);
-        assert!(definition.executable.starts_with('/'));
+        assert!(!definition.executables.is_empty(), "{}", definition.key);
+        for executable in definition.executables {
+            let name = std::path::Path::new(executable)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            assert!(!NEVER.contains(&name.as_str()), "{executable}");
+            assert!(executable.starts_with('/'));
+        }
         assert_eq!(definition.trust, Trust::System);
         // No builder accepts a free-form command, script or argument list.
         for field in ["command", "script", "args", "argv", "program", "path"] {
@@ -529,14 +532,16 @@ fn speech_is_synthesized_when_the_local_engine_is_installed() {
 #[test]
 fn every_fixture_executable_is_named_by_its_canonical_path() {
     for definition in fixtures() {
-        let canonical = std::fs::canonicalize(definition.executable)
-            .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
-        assert_eq!(
-            canonical,
-            std::path::Path::new(definition.executable),
-            "{}: the fixture names a non-canonical executable",
-            definition.key
-        );
+        for executable in definition.executables {
+            let canonical = std::fs::canonicalize(executable)
+                .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
+            assert_eq!(
+                canonical,
+                std::path::Path::new(executable),
+                "{}: the fixture names a non-canonical executable",
+                definition.key
+            );
+        }
     }
 }
 
