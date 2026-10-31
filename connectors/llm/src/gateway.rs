@@ -169,93 +169,18 @@ pub fn select_provider(
         }
     }
 
-    // ── Priority 1: Cloud providers with API keys (user explicitly configured) ──
-    //
-    // Cloud providers with keys take priority over Ollama auto-detection.
-    // If the user configured an API key, they want to use that provider —
-    // NOT silently fall back to a local model that produces inferior output.
-
-    // ── Groq (free tier, ultra-fast inference) ──────────────────────────
-    if has_key(&config.groq_api_key) {
-        eprintln!("[nexus-llm] using Groq (free tier, fast inference)");
-        return Ok(Box::new(GroqProvider::new(config.groq_api_key.clone())));
-    }
-
-    // ── Priority 3: NVIDIA NIM (free tier, benchmark-validated) ───────
-    // Mistral 7B: 224ms P50, 100% determinism, 5/5 agentic, 51.8 req/s
-    if has_key(&config.nvidia_api_key) {
-        eprintln!(
-            "[nexus-llm] using NVIDIA NIM (primary: {}, secondary: {}, fallback: {})",
-            NIM_PRIMARY_MODEL, NIM_SECONDARY_MODEL, NIM_FALLBACK_MODEL,
-        );
-        return Ok(Box::new(NvidiaProvider::new(config.nvidia_api_key.clone())));
-    }
-
-    // ── Priority 4: Other cloud providers ───────────────────────────────
-    if has_key(&config.deepseek_api_key) {
-        return Ok(Box::new(DeepSeekProvider::new(
-            config.deepseek_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.mistral_api_key) {
-        return Ok(Box::new(MistralProvider::new(
-            config.mistral_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.together_api_key) {
-        return Ok(Box::new(TogetherProvider::new(
-            config.together_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.fireworks_api_key) {
-        return Ok(Box::new(FireworksProvider::new(
-            config.fireworks_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.perplexity_api_key) {
-        return Ok(Box::new(PerplexityProvider::new(
-            config.perplexity_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.cohere_api_key) {
-        return Ok(Box::new(CohereProvider::new(config.cohere_api_key.clone())));
-    }
-
-    if has_key(&config.openrouter_api_key) {
-        return Ok(Box::new(OpenRouterProvider::new(
-            config.openrouter_api_key.clone(),
-        )));
-    }
-
-    if has_key(&config.openai_api_key) {
-        return Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone())));
-    }
-
-    if has_key(&config.gemini_api_key) {
-        return Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone())));
-    }
-
-    if has_key(&config.anthropic_api_key) {
-        return Ok(Box::new(ClaudeProvider::new(
-            config.anthropic_api_key.clone(),
-        )));
-    }
-
-    // ── Last resort: Ollama (local, no API key needed) ─────────────────
-    // Only used when NO cloud provider keys are configured.
-    // If a user explicitly configured Ollama URL, honour it.
+    // ── Local first: Ollama ─────────────────────────────────────────────
+    // Without an explicit provider choice (`config.provider` / LLM_PROVIDER),
+    // a cloud API key that merely exists in the environment is never
+    // selected: cloud is used only when the Owner names it explicitly.
+    // A configured Ollama URL is honoured first.
     if let Some(url) = config.ollama_url.as_deref() {
         return Ok(Box::new(OllamaProvider::new(url.to_string())));
     }
     // Auto-detect Ollama on default port
     let ollama_default = OllamaProvider::from_env();
     if ollama_default.health_check().is_ok() {
-        eprintln!("[nexus-llm] no cloud API keys configured; using auto-detected Ollama at localhost:11434");
+        eprintln!("[nexus-llm] using auto-detected local Ollama");
         return Ok(Box::new(ollama_default));
     }
 
@@ -278,23 +203,16 @@ pub fn select_provider(
     }
 
     Err(AgentError::SupervisorError(
-        "No LLM provider configured. Please either:\n\
-         1. Set ANTHROPIC_API_KEY in Settings (recommended)\n\
-         2. Set OPENAI_API_KEY in Settings\n\
-         3. Set NVIDIA_NIM_API_KEY (free at build.nvidia.com)\n\
-         4. Set any supported provider API key in Settings\n\
-         5. Install and start Ollama (ollama serve) for local models\n\
-         6. Set LLM_PROVIDER=claude-code to use Claude Code CLI\n\
-         7. Set LLM_PROVIDER=codex-cli to use OpenAI Codex CLI\n\
-         8. Set LLM_PROVIDER=mock to explicitly use mock responses"
+        "No local model found. Mother Nexus is local-first and never falls back \
+         to a cloud provider because an API key happens to be present.\n\
+         1. Install and start Ollama (ollama serve) and pull a model\n\
+         2. Or set LLM_PROVIDER=claude-code / LLM_PROVIDER=codex-cli to use a \
+         local CLI you have signed in to\n\
+         3. To use a cloud provider, choose it explicitly: LLM_PROVIDER=<name> \
+         (e.g. deepseek, anthropic, openai) together with its API key\n\
+         4. Set LLM_PROVIDER=mock to explicitly use mock responses"
             .to_string(),
     ))
-}
-
-fn has_key(key: &Option<String>) -> bool {
-    key.as_deref()
-        .map(|k| !k.trim().is_empty())
-        .unwrap_or(false)
 }
 
 /// The configured local model file, only when it is an absolute path
