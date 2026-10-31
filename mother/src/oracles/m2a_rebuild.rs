@@ -241,3 +241,40 @@ fn m2a_rebuild_replay_accepts_the_action_only_where_it_is_written() {
     late.push(pending(0));
     assert!(refused(late));
 }
+
+/// Second fresh-context review (oracle first): two missions whose journal
+/// names the same action (a tampered journal) hand neither back.
+#[test]
+fn m2a_rebuild_an_action_claimed_by_two_missions_is_handed_back_to_neither() {
+    let w = world();
+    let c = contract();
+    let mut lines = Vec::new();
+    let mut prev = GENESIS.to_string();
+    let mut seq = 0u64;
+    for mission in [MissionId(1), MissionId(2)] {
+        let mut events = settled("awaiting_approval");
+        events.push(pending(0));
+        events.push(wait());
+        // Each mission drafts its own contract.
+        events[0] = Event::Drafted {
+            contract: c.clone(),
+        };
+        for event in events {
+            let entry = Entry::chained(seq, &prev, mission, event);
+            prev = entry.hash.clone();
+            lines.push(entry.to_line());
+            seq += 1;
+        }
+    }
+    w.journal.set_lines(lines);
+    let mother = w.reopen().unwrap();
+    assert_eq!(
+        mother.state(MissionId(1)),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert_eq!(
+        mother.state(MissionId(2)),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert_eq!(w.port.adopted(), vec![]);
+}

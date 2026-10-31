@@ -18,7 +18,7 @@ use nexus_governed_control::authority::approval::{
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
-use nexus_governed_control::authority::ids::AgentId;
+use nexus_governed_control::authority::ids::{AgentId, RunId};
 use nexus_governed_control::authority::run::{RunClass, RunOrigin};
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::GrantRequest;
@@ -374,6 +374,63 @@ fn m2a_a_port_adopts_only_mother_s_own_actions(w: &World) {
     assert_eq!(w.unserved(), 0);
 }
 
+/// Second fresh-context review (oracle first): a handed-back action is taken
+/// only from a live Mother run no other mission of this port holds, and the
+/// deadline it carries is never trusted beyond the broker's own.
+fn m2a_a_port_adopts_only_live_unclaimed_actions(w: &World) {
+    let control = &w.home.control;
+    let agent = mother_agent();
+    let post = |path: &str| {
+        Intent::Request(EgressIntent {
+            method: "POST".into(),
+            url: format!("{}/{path}", w.origin),
+            headers: vec![],
+            body: None,
+        })
+    };
+    let park = |path: &str| {
+        let run = control
+            .open_run(agent.clone(), RunOrigin::AgentGoal)
+            .unwrap();
+        let AgentOutcome::AwaitingApproval(view) =
+            control.agent_action(&agent, run, &post(path)).unwrap()
+        else {
+            panic!("a POST waits for the Owner");
+        };
+        (run, view)
+    };
+    let action = |run: RunId, view: &CommitmentView, deadline| PendingAction {
+        run: run.to_string(),
+        commitment: view.id.to_string(),
+        deadline_mono_ms: deadline,
+    };
+    let port = GovernedPort::new(control.clone());
+
+    // A cancelled run (its commitment revoked) is not taken back.
+    let (cancelled, view) = park("cancelled");
+    control.cancel_run(cancelled).unwrap();
+    port.adopt(MissionId(9101), &action(cancelled, &view, 0));
+    assert_eq!(port.run_of(MissionId(9101)), None);
+
+    // A live run is taken by one mission only.
+    let (live, view) = park("live");
+    port.adopt(MissionId(9102), &action(live, &view, u64::MAX));
+    assert_eq!(port.run_of(MissionId(9102)), Some(live));
+    port.adopt(MissionId(9103), &action(live, &view, u64::MAX));
+    assert_eq!(port.run_of(MissionId(9103)), None, "a run already held");
+    port.cancel(MissionId(9103));
+    assert!(!control.authority().runs().view(live).unwrap().cancelled);
+
+    // The carried deadline is clamped to the broker's lifetime from now.
+    let lifetime = view.expires_wall_ms - view.created_wall_ms;
+    let now = control.authority().clock().monotonic_ms();
+    let taken = port.pending(MissionId(9102)).unwrap();
+    assert!(taken.deadline_mono_ms <= now + lifetime, "{taken:?}");
+    port.cancel(MissionId(9102));
+    assert!(control.authority().runs().view(live).unwrap().cancelled);
+    assert_eq!(w.unserved(), 0);
+}
+
 /// M2a against the real broker: Mother waits for the Owner's native
 /// approval of an R2 action (a POST) and continues exactly once; a denial
 /// and a Stop while waiting reach nothing.
@@ -582,6 +639,9 @@ fn real_broker_m1_oracles() {
     m2a_a_rebuilt_port_withdraws_on_stop(&w);
     // Added after mutation testing: a port takes back only Mother's own.
     m2a_a_port_adopts_only_mother_s_own_actions(&w);
+    // Second review MINOR and NIT: only a live, unclaimed run; a deadline
+    // never later than the broker's.
+    m2a_a_port_adopts_only_live_unclaimed_actions(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
