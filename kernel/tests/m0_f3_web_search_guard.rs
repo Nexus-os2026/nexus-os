@@ -47,19 +47,27 @@ fn top_level_fn(source: &str, name: &str) -> Option<std::ops::Range<usize>> {
     Some(start..end)
 }
 
-/// The spans of every method `fn name(` inside an impl block: up to its
-/// closing brace at four spaces.
+/// The spans of every method `fn name(` with a body inside an impl block:
+/// up to its closing brace at four spaces. A trait declaration
+/// (`fn name(..) -> T;`) has no body and no span: its span would run on to
+/// the next method's closing brace and hide a call there.
 fn methods(source: &str, name: &str) -> Vec<std::ops::Range<usize>> {
     let needle = format!("\n    fn {name}(");
     let mut spans = Vec::new();
     let mut from = 0;
     while let Some(at) = source[from..].find(&needle) {
         let start = from + at;
+        from = start + needle.len();
+        let line_end = source[start + 1..]
+            .find('\n')
+            .map_or(source.len(), |i| start + 1 + i);
+        if !source[start..line_end].trim_end().ends_with('{') {
+            continue;
+        }
         let Some(len) = source[start..].find("\n    }\n") else {
             break;
         };
         spans.push(start..start + len + 7);
-        from = start + needle.len();
     }
     spans
 }
@@ -110,7 +118,9 @@ fn search_process_violations(source: &str) -> Vec<String> {
 fn m0_f3_web_search_builds_no_process() {
     // Planted controls: each way back to curl is caught.
     let shape = |prod: &str| format!("{prod}#[cfg(test)]\nmod tests {{}}\n");
-    let clean = "impl WebSearchBackend for B {\n    fn search(&self, q: &str) -> R {\n        Err(CLOSED.into())\n    }\n\n    fn fetch_content(&self, url: &str) -> R {\n        curl_get(url, false)\n    }\n}\n\nfn curl_get(url: &str, f: bool) -> R {\n    let mut command = Command::new(\"curl\");\n}\n";
+    // The trait declaration comes first, as in web.rs: a body-less
+    // `fn fetch_content(..);` must not cover the next method's body.
+    let clean = "pub trait WebSearchBackend {\n    fn search(&self, q: &str) -> R;\n\n    fn fetch_content(&self, url: &str) -> R;\n}\n\nimpl WebSearchBackend for B {\n    fn search(&self, q: &str) -> R {\n        Err(CLOSED.into())\n    }\n\n    fn fetch_content(&self, url: &str) -> R {\n        curl_get(url, false)\n    }\n}\n\nfn curl_get(url: &str, f: bool) -> R {\n    let mut command = Command::new(\"curl\");\n}\n";
     assert!(search_process_violations(&shape(clean)).is_empty());
     for planted in [
         clean.replace("Err(CLOSED.into())", "curl_get(q, true)"),
