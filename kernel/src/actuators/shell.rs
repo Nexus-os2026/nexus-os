@@ -723,7 +723,9 @@ mod tests {
         // M0-FIX2 F9 review: git, cargo and npm entries removed from this
         // positive control; they are now refused (see the repair oracle).
         assert_validates("find", &[".", "-type", "d", "-print"]);
-        assert_validates("systemctl", &["status"]);
+        // M0-FIX2 F9 re-review: the systemctl control is removed; systemctl
+        // is now a required refusal (see the round-2 oracle).
+        assert_validates("ps", &["aux"]);
         assert_validates("free", &["-m"]);
         assert_validates("df", &["-h"]);
     }
@@ -756,5 +758,42 @@ mod tests {
             assert_refused("find", &[".", "-name", "x", primary, "out"]);
             assert_refused(&format!("find . {primary}"), &["out"]);
         }
+    }
+
+    /// M0-FIX2 F9 re-review oracle: programs checked only by their first
+    /// argument that can reach a program following config in HOME
+    /// (`systemctl -H` starts ssh, which follows the user's ssh config;
+    /// journalctl has the same first-argument-only check), plus `top`
+    /// (rc file in HOME) and `printenv` (dumps the parent environment) are
+    /// refused in every spelling. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_first_argument_only_programs_are_refused() {
+        assert_refused("systemctl", &[]);
+        for sub in [
+            "status",
+            "list-units",
+            "list-timers",
+            "is-active",
+            "is-enabled",
+            "show",
+        ] {
+            assert_refused("systemctl", &[sub]);
+            assert_refused(&format!("systemctl {sub}"), &[]);
+        }
+        assert_refused("systemctl", &["status", "-H", "host"]);
+        assert_refused("systemctl", &["status", "--host=host"]);
+        assert_refused("systemctl", &["status", "--host", "host"]);
+        assert_refused("systemctl", &["status", "--ho=host"]);
+        assert_refused("systemctl", &["status", "-qH", "host"]);
+        assert_refused("systemctl", &["show", "-Hhost"]);
+        assert_refused("journalctl", &[]);
+        for first in ["--no-pager", "-u", "-n", "--since"] {
+            assert_refused("journalctl", &[first]);
+        }
+        assert_refused("journalctl", &["-n", "5", "-M", "machine"]);
+        assert_refused("printenv", &[]);
+        assert_refused("printenv", &["HOME"]);
+        assert_refused("top", &[]);
+        assert_refused("top", &["-b", "-n", "1"]);
     }
 }
