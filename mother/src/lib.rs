@@ -26,6 +26,23 @@
 //!     fn emergency_stopped(&self) -> bool { false }
 //! }
 //! ```
+//!
+//! M2a: a consent is made only from the broker's `MissionApproval`, which
+//! cannot be built or copied outside the broker; only this crate turns one
+//! into a consent.
+//!
+//! ```compile_fail
+//! use nexus_governed_control::authority::approval::MissionApproval;
+//! fn twice(a: MissionApproval) -> (MissionApproval, MissionApproval) { (a.clone(), a) }
+//! ```
+//!
+//! ```compile_fail
+//! let _ = nexus_governed_control::authority::approval::MissionApproval::confirmed;
+//! ```
+//!
+//! ```compile_fail
+//! let _ = nexus_mother::consent::Consent::from_broker;
+//! ```
 
 #![deny(unsafe_code)]
 
