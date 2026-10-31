@@ -1,107 +1,44 @@
-//! The coordinator: each mission's state, moved one step at a time.
+//! The coordinator: turns a contract into a governed mission.
 //!
-//! Nothing reaches the broker for a mission before the Owner consents to
-//! its exact contract. A step is reserved under the lock, run with the lock
-//! released, and completed only if its reservation still holds: a Stop, an
-//! expiry or the Owner's emergency stop that came meanwhile wins. Stop is
-//! honoured from every state and never waits for a broker call.
+//! Every change is journaled before it takes effect. Nothing reaches the
+//! EffectPort before the Owner consented to the mission's exact contract
+//! hash, and nothing reaches it after Stop. No coordinator lock is held
+//! while the Owner is asked, while a lane runs or while an effect runs: a
+//! call is reserved under the lock, made with the lock released, and its
+//! result is kept only if the mission did not move meanwhile. Stop never
+//! waits for a lane or an effect.
 
-use crate::broker::{Broker, Refusal};
-use crate::contract::{ContractDigest, ContractError, EffectCategory, MissionContract};
+use crate::consent::{Consent, MissionConfirmation, MissionConfirmer};
+use crate::contract::{ContractError, ContractHash, EffectKind, MissionContract};
+use crate::effect::EffectPort;
+use crate::journal::{Entry, JournalError, JournalStore, MissionId};
+use crate::lane::{InvocationId, Lane, LaneIdentity, LaneRole, Verdict};
+use crate::state::{IllegalTransition, MissionState};
 use nexus_governed_control::authority::clock::Clock;
-use nexus_governed_control::authority::ids::{CommitmentId, RunId};
-use nexus_governed_control::governed::GovernedControl;
-use std::collections::BTreeSet;
-use std::fmt;
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 /// The most missions one coordinator keeps.
 pub const MAX_MISSIONS: usize = 1024;
-/// The most journal entries kept (the oldest are dropped first).
-pub const MAX_JOURNAL: usize = 1024;
+/// The most effects one lane may ask for in one call.
+pub const MAX_EFFECTS_PER_CALL: usize = 16;
 
-/// A mission's identity: a name, never authority.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MissionId(u64);
-
-impl fmt::Display for MissionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "msn-{:08}", self.0)
-    }
+/// One lane per role.
+pub struct Lanes {
+    by_role: BTreeMap<LaneRole, Arc<dyn Lane>>,
 }
 
-/// Where a mission is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MissionState {
-    /// Drafted; the Owner has not consented. Nothing reaches the broker.
-    Drafted,
-    /// Consented; `next_step` runs next.
-    Approved { next_step: usize },
-    /// A step is with the broker.
-    Running { step: usize },
-    /// The broker committed an R2 step that waits for the Owner's native
-    /// approval.
-    AwaitingApproval {
-        step: usize,
-        commitment: CommitmentId,
-    },
-    Completed,
-    /// The broker refused or ended a step (or opening the run).
-    Failed { step: usize, class: &'static str },
-    /// The Owner declined consent.
-    Declined,
-    /// The consent's lifetime passed.
-    Expired,
-    Stopped,
-}
-
-impl MissionState {
-    pub fn is_terminal(&self) -> bool {
+impl Lanes {
+    /// Exactly one lane for every role, each naming its own role.
+    pub fn new(lanes: Vec<Arc<dyn Lane>>) -> Result<Self, CoordinatorError> {
+        let _ = lanes;
         todo!("M1 implementation follows the oracle commit")
     }
-}
 
-/// One step as the Owner is shown it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StepSummary {
-    pub index: usize,
-    pub domain: &'static str,
-    pub categories: BTreeSet<EffectCategory>,
-    pub declared_cost_minor: u64,
-    /// The step's broker intent, in full, as canonical JSON.
-    pub detail: String,
-}
-
-/// Exactly what the Owner consents to, built by the coordinator.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConsentRequest {
-    pub mission: MissionId,
-    pub digest: ContractDigest,
-    pub goal: String,
-    pub steps: Vec<StepSummary>,
-    pub categories: BTreeSet<EffectCategory>,
-    pub total_declared_cost_minor: u64,
-    pub consent_ttl_ms: u64,
-}
-
-/// The Owner's answer to a mission's consent request. The host provides
-/// it (M2: a native dialog); Mother has no implementation of her own.
-pub trait OwnerConsent {
-    fn confirm_mission(&self, request: &ConsentRequest) -> bool;
-}
-
-/// What one step came to.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StepOutcome {
-    Done { text: Option<String> },
-    AwaitingApproval { commitment: CommitmentId },
-}
-
-/// The report of one step.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StepReport {
-    pub step: usize,
-    pub outcome: StepOutcome,
+    #[allow(dead_code)]
+    fn get(&self, role: LaneRole) -> &Arc<dyn Lane> {
+        &self.by_role[&role]
+    }
 }
 
 /// Why the coordinator refused.
@@ -109,65 +46,162 @@ pub struct StepReport {
 pub enum CoordinatorError {
     UnknownMission,
     Contract(ContractError),
+    Journal(JournalError),
+    Illegal(IllegalTransition),
+    /// The lanes are not exactly one per role.
+    Lanes(String),
     Capacity,
-    /// Consent is asked only of a drafted mission.
-    NotDrafted(MissionState),
-    /// A step runs only in an approved mission.
-    NotApproved(MissionState),
-    /// Only a step awaiting approval is refreshed.
-    NotAwaiting(MissionState),
-    Declined,
-    Expired,
+    /// Work was asked of a mission without a consent covering its contract.
+    NoConsent,
+    /// The Owner's answer came for a contract or state that had moved on.
+    ConsentStale,
+    Denied,
     Stopped,
-    Refused(Refusal),
+    /// Another call is already working on this mission.
+    Busy,
 }
 
-/// What the journal records: identities, digests, indexes and classes only.
+/// One lane call, as reported.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum JournalEvent {
-    Drafted { digest: ContractDigest },
-    ConsentAsked { digest: ContractDigest },
-    Consented { digest: ContractDigest },
-    Declined,
-    /// An answer came after the mission had moved on (a Stop won).
-    ConsentOvertaken,
-    StepReserved { step: usize },
-    RunOpened { run: RunId },
-    StepDone { step: usize },
-    StepAwaiting { step: usize, commitment: CommitmentId },
-    StepRefused { step: usize, class: &'static str },
-    /// A broker result came after the mission had moved on.
-    StepOvertaken { step: usize },
-    Expired,
-    Stopped { reason: &'static str },
-    RunCancelled { run: RunId },
-    RunCancelFailed { run: RunId, class: &'static str },
-    Completed,
+pub struct LaneReport {
+    pub invocation: InvocationId,
+    pub identity: LaneIdentity,
+    pub text: String,
+    pub verdict: Verdict,
+    pub input_hash: String,
+    pub output_hash: String,
 }
 
+/// One effect, as reported: dispatched to the port, or refused by Mother.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct JournalEntry {
-    pub seq: u64,
-    pub mission: MissionId,
-    pub wall_ms: u64,
-    pub event: JournalEvent,
+pub struct EffectReport {
+    pub kind: EffectKind,
+    pub dispatched: bool,
+    pub outcome: String,
+}
+
+/// What one [`Coordinator::advance`] did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Advance {
+    pub from: MissionState,
+    pub to: MissionState,
+    pub lanes: Vec<LaneReport>,
+    pub effects: Vec<EffectReport>,
+    /// Set when the mission reaches Done: what Mother tells the Owner.
+    pub explanation: Option<String>,
+    /// Set when the mission ends Blocked or Failed.
+    pub reason: Option<String>,
+}
+
+#[allow(dead_code)]
+struct Mission {
+    contract: MissionContract,
+    state: MissionState,
+    consent: Option<Consent>,
+    /// Bumped by every transition: a reservation holds while it is equal.
+    generation: u64,
+    busy: bool,
+    approved_wall_ms: Option<u64>,
+    approved_mono_ms: Option<u64>,
+    model_calls: u32,
+    next_effect: u64,
+    unsettled: Option<u64>,
+    prior_outputs: Vec<String>,
+    reason: Option<String>,
+}
+
+#[allow(dead_code)]
+struct Inner {
+    store: Box<dyn JournalStore>,
+    head: String,
+    next_seq: u64,
+    missions: BTreeMap<MissionId, Mission>,
+    next_mission: u64,
 }
 
 /// The coordinator.
-pub struct Coordinator<B: Broker = GovernedControl> {
-    broker: Arc<B>,
+pub struct Coordinator<P: EffectPort> {
+    #[allow(dead_code)]
+    port: Arc<P>,
+    #[allow(dead_code)]
+    lanes: Lanes,
+    #[allow(dead_code)]
     clock: Arc<dyn Clock>,
+    #[allow(dead_code)]
+    inner: Mutex<Inner>,
 }
 
-impl<B: Broker> Coordinator<B> {
-    pub fn new(broker: Arc<B>, clock: Arc<dyn Clock>) -> Self {
-        let _ = (&broker, &clock);
+impl<P: EffectPort> Coordinator<P> {
+    /// Rebuild a coordinator from its journal (empty for a new home). A
+    /// journal that does not verify opens nothing. A mission whose last
+    /// effect's outcome was not recorded is blocked: it may have happened.
+    pub fn open(
+        store: impl JournalStore + 'static,
+        port: Arc<P>,
+        lanes: Lanes,
+        clock: Arc<dyn Clock>,
+    ) -> Result<Self, CoordinatorError> {
+        let _ = (store, port, lanes, clock);
         todo!("M1 implementation follows the oracle commit")
     }
 
-    /// Draft a mission from a contract. Nothing reaches the broker.
+    /// Draft a mission. Nothing reaches the port.
     pub fn draft(&self, contract: MissionContract) -> Result<MissionId, CoordinatorError> {
-        let _ = (contract, &self.broker, &self.clock);
+        let _ = contract;
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Change a mission's contract before work starts: it returns to Draft
+    /// and any consent is void.
+    pub fn revise(
+        &self,
+        id: MissionId,
+        contract: MissionContract,
+    ) -> Result<MissionState, CoordinatorError> {
+        let _ = (id, contract);
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Put a complete contract (every question answered) to the Owner.
+    pub fn submit(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let _ = id;
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// What the Owner would be shown.
+    pub fn confirmation(&self, id: MissionId) -> Result<MissionConfirmation, CoordinatorError> {
+        let _ = id;
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Ask the Owner. No lock is held while the Owner answers; a yes counts
+    /// only if the mission is still awaiting consent to the same hash.
+    pub fn request_consent(
+        &self,
+        id: MissionId,
+        confirmer: &dyn MissionConfirmer,
+    ) -> Result<MissionState, CoordinatorError> {
+        let _ = (id, confirmer);
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Move a consented mission one state forward, running that state's
+    /// lanes and dispatching the effects they ask for that pass every
+    /// check.
+    pub fn advance(&self, id: MissionId) -> Result<Advance, CoordinatorError> {
+        let _ = id;
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Stop a mission from whatever state it is in; a terminal mission
+    /// stays as it ended. Never waits for a lane or an effect.
+    pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let _ = id;
+        todo!("M1 implementation follows the oracle commit")
+    }
+
+    /// Stop every mission that has not ended. Returns how many.
+    pub fn stop_all(&self) -> usize {
         todo!("M1 implementation follows the oracle commit")
     }
 
@@ -176,59 +210,29 @@ impl<B: Broker> Coordinator<B> {
         todo!("M1 implementation follows the oracle commit")
     }
 
-    pub fn digest(&self, id: MissionId) -> Option<ContractDigest> {
+    pub fn contract(&self, id: MissionId) -> Option<MissionContract> {
         let _ = id;
         todo!("M1 implementation follows the oracle commit")
     }
 
-    /// The broker run the mission opened, if any.
-    pub fn run_of(&self, id: MissionId) -> Option<RunId> {
+    /// The hash the mission's consent covers, if it holds one.
+    pub fn consented_hash(&self, id: MissionId) -> Option<ContractHash> {
         let _ = id;
         todo!("M1 implementation follows the oracle commit")
     }
 
-    /// What the Owner would be shown. Nothing reaches the broker.
-    pub fn consent_request(&self, id: MissionId) -> Result<ConsentRequest, CoordinatorError> {
+    /// Why a mission ended Blocked or Failed.
+    pub fn reason(&self, id: MissionId) -> Option<String> {
         let _ = id;
         todo!("M1 implementation follows the oracle commit")
     }
 
-    /// Ask the Owner. No lock is held while the Owner answers; a Stop that
-    /// comes meanwhile wins over a yes.
-    pub fn request_consent(
-        &self,
-        id: MissionId,
-        owner: &dyn OwnerConsent,
-    ) -> Result<(), CoordinatorError> {
-        let _ = (id, owner);
+    pub fn missions(&self) -> Vec<MissionId> {
         todo!("M1 implementation follows the oracle commit")
     }
 
-    /// Run the next step through the broker.
-    pub fn step(&self, id: MissionId) -> Result<StepReport, CoordinatorError> {
-        let _ = id;
-        todo!("M1 implementation follows the oracle commit")
-    }
-
-    /// Learn what became of a step awaiting the Owner's native approval.
-    pub fn refresh(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        let _ = id;
-        todo!("M1 implementation follows the oracle commit")
-    }
-
-    /// Stop a mission, from whatever state it is in. Returns the state it
-    /// is left in.
-    pub fn stop(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        let _ = id;
-        todo!("M1 implementation follows the oracle commit")
-    }
-
-    /// Stop every mission. Returns how many were not yet terminal.
-    pub fn stop_all(&self) -> usize {
-        todo!("M1 implementation follows the oracle commit")
-    }
-
-    pub fn journal(&self) -> Vec<JournalEntry> {
+    /// The verified journal.
+    pub fn journal(&self) -> Result<Vec<Entry>, CoordinatorError> {
         todo!("M1 implementation follows the oracle commit")
     }
 }

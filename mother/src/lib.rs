@@ -1,38 +1,42 @@
 //! Mother Nexus M1: the mission contract and the coordinator core.
 //!
-//! Mother turns an Owner goal into a [`contract::MissionContract`]: the goal
-//! and the exact steps she would take, each a broker intent (data, never
-//! authority). The [`coordinator::Coordinator`] moves a mission forward one
-//! step at a time, and only after the Owner consented to that exact
-//! contract. It holds no authority: every effect goes through the existing
-//! broker, `GovernedControl`, as an agent's action in an agent's run, under
-//! the Owner's grants and native approvals. Stop is honoured from every
-//! state. See `README.md` for the invariants and the non-claims.
+//! Mother turns an Owner's goal into a [`contract::MissionContract`] (the
+//! Owner's words verbatim, a restatement, the requested folder, a budget,
+//! forbidden effects, answered questions and pass criteria, all hashed).
+//! The Owner consents to that exact hash ([`consent`]); the
+//! [`coordinator::Coordinator`] then walks the mission through the
+//! [`state`] machine, calling [`lane`]s and sending the effects they ask
+//! for through the [`effect::EffectPort`], whose only implementation is the
+//! [`adapter`] over the governed-control broker. Every transition and lane
+//! call is in the hash-chained [`journal`], from which a restarted
+//! coordinator resumes. Stop works from every state.
 //!
-//! The broker trait is sealed: outside this crate only `GovernedControl`
-//! can be Mother's broker.
+//! See `README.md` for the invariants and the non-claims.
 //!
-//! ```compile_fail,E0277
-//! use nexus_mother::broker::{Acted, Broker, Refusal};
-//! use nexus_governed_control::authority::commitment::CommitmentState;
-//! use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
-//! use nexus_governed_control::governed::Intent;
+//! The EffectPort is sealed: outside this crate only the adapter is one.
+//!
+//! ```compile_fail
+//! use nexus_mother::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
+//! use nexus_mother::journal::MissionId;
 //! struct Elsewhere;
-//! impl Broker for Elsewhere { // the trait is sealed
-//!     fn open_run(&self, _: &AgentId) -> Result<RunId, Refusal> { unimplemented!() }
-//!     fn act(&self, _: &AgentId, _: RunId, _: &Intent) -> Result<Acted, Refusal> { unimplemented!() }
-//!     fn commitment_state(&self, _: CommitmentId) -> Option<CommitmentState> { None }
-//!     fn cancel_run(&self, _: RunId) -> Result<(), Refusal> { Ok(()) }
-//!     fn finish_when_settled(&self, _: RunId) {}
-//!     fn emergency_stopped(&self) -> bool { true }
+//! impl EffectPort for Elsewhere { // the trait is sealed
+//!     fn perform(&self, _: MissionId, _: &EffectRequest) -> Result<EffectOutcome, EffectRefusal> { todo!() }
+//!     fn cancel(&self, _: MissionId) {}
+//!     fn finish(&self, _: MissionId) {}
+//!     fn emergency_stopped(&self) -> bool { false }
 //! }
 //! ```
 
 #![deny(unsafe_code)]
 
-pub mod broker;
+pub mod adapter;
+pub mod consent;
 pub mod contract;
 pub mod coordinator;
+pub mod effect;
+pub mod journal;
+pub mod lane;
+pub mod state;
 
 #[cfg(test)]
 mod oracles;

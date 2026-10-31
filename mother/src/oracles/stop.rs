@@ -1,282 +1,255 @@
-//! I4 Stop is honoured from every state; I5 the Owner's emergency stop is
-//! Mother's stop.
+//! Stop from every state: no new dispatch, and the state is durable across
+//! restart. Stop never waits for a lane or an effect in flight. The Owner's
+//! emergency stop is Mother's stop.
 
-use super::fake::{commitment_id, Call, Released, Reply};
 use super::*;
-use crate::coordinator::{CoordinatorError, JournalEvent, MissionState};
-use std::time::Duration;
-
-/// Every state a mission can be left in without a call in flight, each
-/// reached the way it is reached in use.
-fn mission_in(s: &Setup, name: &str) -> MissionId {
-    match name {
-        "drafted" => s.mother.draft(two_steps()).unwrap(),
-        "approved" => s.approved(two_steps()),
-        "approved after a step" => {
-            let id = s.approved(two_steps());
-            s.mother.step(id).unwrap();
-            id
-        }
-        "awaiting approval" => {
-            let id = s.approved(two_steps());
-            s.broker.reply(Reply::Await(commitment_id(1)));
-            s.mother.step(id).unwrap();
-            id
-        }
-        "completed" => {
-            let id = s.approved(one_step());
-            s.mother.step(id).unwrap();
-            id
-        }
-        "failed" => {
-            let id = s.approved(two_steps());
-            s.broker.reply(Reply::Refuse("no_covering_grant"));
-            let _ = s.mother.step(id);
-            id
-        }
-        "declined" => {
-            let id = s.mother.draft(two_steps()).unwrap();
-            let _ = s.mother.request_consent(id, &No);
-            id
-        }
-        "expired" => {
-            let id = s.approved(two_steps());
-            s.clock.advance(Duration::from_millis(TTL_MS));
-            let _ = s.mother.step(id);
-            id
-        }
-        "stopped" => {
-            let id = s.approved(two_steps());
-            s.mother.stop(id).unwrap();
-            id
-        }
-        other => panic!("{other}"),
-    }
-}
-
-const STATES: &[&str] = &[
-    "drafted",
-    "approved",
-    "approved after a step",
-    "awaiting approval",
-    "completed",
-    "failed",
-    "declined",
-    "expired",
-    "stopped",
-];
+use crate::journal::Event;
+use crate::state::Trigger;
 
 #[test]
-fn m1_i4_stop_is_honoured_from_every_state() {
-    for name in STATES {
-        let s = setup();
-        let id = mission_in(&s, name);
-        let before = s.mother.state(id).unwrap();
-        let effects = s.broker.effect_calls().len();
-        let run = s.mother.run_of(id);
+fn stop_from_every_state_dispatches_nothing_more_and_survives_restart() {
+    for state in MissionState::ALL {
+        // Lanes that would ask for an effect in every working state.
+        let w = world();
+        let id = w.mission_in(state);
+        let effects = w.port.effects().len();
+        let lanes = w.keyed_calls();
 
-        let after = s.mother.stop(id).expect(name);
-        if before.is_terminal() {
-            assert_eq!(after, before, "{name}: a terminal mission stays as it ended");
+        let after = w
+            .mother
+            .stop(id)
+            .expect("stop never fails for a known mission");
+        if state.is_terminal() {
+            assert_eq!(
+                after, state,
+                "{state:?}: a terminal mission stays as it ended"
+            );
         } else {
-            assert_eq!(after, MissionState::Stopped, "{name}");
-            if let Some(run) = run {
-                assert!(s.broker.is_cancelled(run), "{name}: its run is cancelled");
+            assert_eq!(after, MissionState::Stopped, "{state:?}");
+        }
+        assert_eq!(w.mother.state(id), Some(after), "{state:?}");
+        assert_eq!(w.mother.stop(id), Ok(after), "{state:?}: stop twice");
+
+        // Nothing starts it again.
+        let refuse_everything = |w: &World| {
+            for _ in 0..6 {
+                assert!(w.mother.advance(id).is_err(), "{state:?}");
             }
-        }
-        assert_eq!(s.mother.state(id), Some(after), "{name}");
-
-        // Nothing starts it again, and no effect follows.
-        assert!(s.mother.step(id).is_err(), "{name}");
-        assert!(s.mother.request_consent(id, &Yes).is_err(), "{name}");
-        let _ = s.mother.refresh(id);
-        assert_eq!(s.mother.stop(id), Ok(after), "{name}: stop twice");
-        assert_eq!(s.mother.state(id), Some(after), "{name}");
-        assert_eq!(
-            s.broker.effect_calls().len(),
-            effects,
-            "{name}: an effect started after Stop"
-        );
-        if before.is_terminal() {
-            assert!(after.is_terminal());
-        }
-    }
-}
-
-#[test]
-fn m1_i4_the_state_table_reaches_every_state_but_running() {
-    // The table above covers every variant: a variant added later must be
-    // added there (Running is driven by the threaded oracles below).
-    let s = setup();
-    let mut seen = Vec::new();
-    for name in STATES {
-        let state = s.mother.state(mission_in(&s, name)).unwrap();
-        seen.push(std::mem::discriminant(&state));
-        let named = match state {
-            MissionState::Drafted
-            | MissionState::Approved { .. }
-            | MissionState::Running { .. }
-            | MissionState::AwaitingApproval { .. }
-            | MissionState::Completed
-            | MissionState::Failed { .. }
-            | MissionState::Declined
-            | MissionState::Expired
-            | MissionState::Stopped => true,
+            assert!(w.mother.submit(id).is_err(), "{state:?}");
+            assert!(w.mother.request_consent(id, &Yes).is_err(), "{state:?}");
+            assert!(w.mother.revise(id, contract()).is_err(), "{state:?}");
         };
-        assert!(named);
-    }
-    seen.dedup();
-    assert_eq!(seen.len(), 8, "every state but Running is reached");
-}
+        refuse_everything(&w);
 
-/// Stops the mission while it is being asked, then says yes.
-struct StopsThenYes<'a> {
-    s: &'a Setup,
-    id: std::sync::Mutex<Option<MissionId>>,
-}
+        // Durable: a restarted Mother finds it as it was left.
+        let w = w.restart();
+        assert_eq!(w.mother.state(id), Some(after), "{state:?} after restart");
+        refuse_everything(&w);
+        assert_eq!(w.mother.stop(id), Ok(after), "{state:?}");
 
-impl OwnerConsent for StopsThenYes<'_> {
-    fn confirm_mission(&self, _: &crate::coordinator::ConsentRequest) -> bool {
-        let id = self.id.lock().unwrap().expect("id");
-        // No coordinator lock is held while the Owner is asked.
-        assert_eq!(self.s.mother.stop(id), Ok(MissionState::Stopped));
-        true
+        assert_eq!(
+            w.port.effects().len(),
+            effects,
+            "{state:?}: dispatch after Stop"
+        );
+        assert_eq!(w.keyed_calls(), lanes, "{state:?}: a lane ran after Stop");
     }
 }
 
 #[test]
-fn m1_i4_a_stop_while_the_owner_is_asked_wins_over_a_yes() {
-    let s = setup();
-    let id = s.mother.draft(two_steps()).unwrap();
-    let owner = StopsThenYes {
-        s: &s,
-        id: std::sync::Mutex::new(Some(id)),
-    };
-    assert_eq!(
-        s.mother.request_consent(id, &owner),
-        Err(CoordinatorError::Stopped)
-    );
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
-    assert!(s.mother.step(id).is_err());
-    assert_eq!(s.broker.calls(), vec![]);
-    assert!(s
+fn stop_is_journaled_before_it_returns() {
+    let w = world();
+    let id = w.mission_in(MissionState::Building);
+    w.mother.stop(id).unwrap();
+    let last = w
         .mother
         .journal()
-        .iter()
-        .any(|entry| entry.mission == id && entry.event == JournalEvent::ConsentOvertaken));
-}
-
-#[test]
-fn m1_i4_stop_cancels_an_effect_in_flight_without_waiting_for_it() {
-    let s = setup();
-    let id = s.approved(two_steps());
-    s.broker.hold_act();
-    let mother = s.mother.clone();
-    let stepping = std::thread::spawn(move || mother.step(id));
-    assert!(s.broker.wait_entered_act(), "the step reached the broker");
-    assert_eq!(s.mother.state(id), Some(MissionState::Running { step: 0 }));
-
-    // The action holds until its run is cancelled: Stop must not wait for
-    // it, and must cancel the run.
-    assert_eq!(s.mother.stop(id), Ok(MissionState::Stopped));
-    assert_eq!(stepping.join().unwrap(), Err(CoordinatorError::Stopped));
-    assert_eq!(
-        s.broker.released(),
-        vec![Released::ByEvent],
-        "the effect ended because Stop cancelled its run"
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.mission == id)
+        .last()
+        .unwrap();
+    assert!(
+        matches!(
+            last.event,
+            Event::Transition {
+                trigger: Trigger::Stop { .. }
+            }
+        ),
+        "{last:?}"
     );
-    let run = s.mother.run_of(id).unwrap();
-    assert!(s.broker.is_cancelled(run));
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
-    assert!(s
-        .mother
-        .journal()
+    // The lines are in the store, not only in memory.
+    assert!(w.journal.lines().last().unwrap().contains("\"stop\""));
+}
+
+#[test]
+fn stop_cancels_the_mission_at_the_port_once_it_may_have_dispatched() {
+    let w = world();
+    let id = w.mission_in(MissionState::Building);
+    w.mother.stop(id).unwrap();
+    assert!(w.port.is_cancelled(id));
+    // Before consent there is nothing to cancel and the port is not reached.
+    let draft = w.mission_in(MissionState::AwaitingConsent);
+    w.mother.stop(draft).unwrap();
+    assert!(!w.port.calls().contains(&PortCall::Cancel(draft)));
+}
+
+#[test]
+fn stop_does_not_wait_for_a_lane_in_flight_and_its_answer_is_dropped() {
+    let held = Arc::new(HeldLane::new(
+        LaneRole::ResearcherA,
+        vec![effect_of(EffectKind::Network)],
+    ));
+    let mut lanes: Vec<Arc<dyn Lane>> = vec![held.clone()];
+    lanes.extend(
+        keyed_lanes()
+            .into_iter()
+            .filter(|l| l.identity().role != LaneRole::ResearcherA),
+    );
+    let w = world_with(lanes);
+    let id = w.approved(contract());
+    w.mother.advance(id).unwrap();
+
+    let mother = w.mother.clone();
+    let working = std::thread::spawn(move || mother.advance(id));
+    assert!(held.wait_entered(), "the lane was called");
+    // The lane is still inside its call: Stop must not wait for it.
+    assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
+    held.release();
+    assert_eq!(working.join().unwrap(), Err(CoordinatorError::Stopped));
+
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert_eq!(
+        w.port.effects(),
+        vec![],
+        "the late answer's effect was dispatched"
+    );
+    let journal = w.mother.journal().unwrap();
+    assert!(journal
         .iter()
-        .any(|entry| entry.event == JournalEvent::StepOvertaken { step: 0 }));
-    assert!(s.mother.step(id).is_err());
-    assert_eq!(s.broker.acts(), 1);
+        .any(|e| matches!(e.event, Event::LaneOvertaken { .. })));
+    // No lane after the held one was called.
+    let invoked: Vec<_> = journal
+        .iter()
+        .filter_map(|e| match &e.event {
+            Event::LaneInvoked { identity, .. } => Some(identity.role),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(invoked, vec![LaneRole::Sentinel, LaneRole::ResearcherA]);
+    let w = w.restart();
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
 }
 
 #[test]
-fn m1_i4_a_stop_while_the_run_opens_cancels_the_new_run() {
-    let s = setup();
-    let id = s.approved(two_steps());
-    s.broker.hold_open();
-    let mother = s.mother.clone();
-    let stepping = std::thread::spawn(move || mother.step(id));
-    assert!(s.broker.wait_entered_open());
-    assert_eq!(s.mother.stop(id), Ok(MissionState::Stopped));
-    s.broker.release_open();
-    assert_eq!(stepping.join().unwrap(), Err(CoordinatorError::Stopped));
-    assert_eq!(s.broker.released(), vec![Released::ByEvent]);
-    let calls = s.broker.calls();
-    let opened = super::fake::run_id(1);
-    assert!(calls.contains(&Call::Cancel(opened)), "{calls:?}");
-    assert_eq!(s.broker.acts(), 0);
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
+fn stop_cancels_an_effect_in_flight_without_waiting_and_dispatches_no_more() {
+    let w = world();
+    let id = w.approved(contract_with("ASK-BUILDER-NETWORK ASK-BUILDER-PROCESS"));
+    w.mother.advance(id).unwrap();
+    w.mother.advance(id).unwrap();
+    w.port.hold();
+    let mother = w.mother.clone();
+    let working = std::thread::spawn(move || mother.advance(id));
+    assert!(w.port.wait_entered(), "the effect reached the port");
+    // The effect holds until its mission is cancelled: Stop must not wait
+    // for it, and must cancel it.
+    assert_eq!(w.mother.stop(id), Ok(MissionState::Stopped));
+    assert_eq!(working.join().unwrap(), Err(CoordinatorError::Stopped));
+    assert_eq!(w.port.released_by_event(), vec![true]);
+    assert_eq!(
+        w.port.effects(),
+        vec![(id, EffectKind::Network)],
+        "the second effect was dispatched after Stop"
+    );
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    let w = w.restart();
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert!(w.mother.advance(id).is_err());
+    assert_eq!(w.port.effects().len(), 1);
 }
 
 #[test]
-fn m1_i4_stop_all_stops_every_mission_that_has_not_ended() {
-    let s = setup();
-    let drafted = mission_in(&s, "drafted");
-    let approved = mission_in(&s, "approved after a step");
-    let waiting = mission_in(&s, "awaiting approval");
-    let completed = mission_in(&s, "completed");
-    let effects = s.broker.effect_calls().len();
-    assert_eq!(s.mother.stop_all(), 3);
-    for id in [drafted, approved, waiting] {
-        assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
+fn stop_all_stops_every_mission_that_has_not_ended() {
+    let w = world();
+    let draft = w.mission_in(MissionState::Draft);
+    let approved = w.mission_in(MissionState::Approved);
+    let building = w.mission_in(MissionState::Building);
+    let done = w.mission_in(MissionState::Done);
+    let effects = w.port.effects().len();
+    assert_eq!(w.mother.stop_all(), 3);
+    for id in [draft, approved, building] {
+        assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
     }
-    assert_eq!(s.mother.state(completed), Some(MissionState::Completed));
-    for id in [approved, waiting] {
-        assert!(s.broker.is_cancelled(s.mother.run_of(id).unwrap()));
+    assert_eq!(w.mother.state(done), Some(MissionState::Done));
+    assert_eq!(w.mother.stop_all(), 0);
+    let w = w.restart();
+    for id in [draft, approved, building] {
+        assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+        assert!(w.mother.advance(id).is_err());
     }
-    assert_eq!(s.mother.stop_all(), 0);
-    assert_eq!(s.broker.effect_calls().len(), effects);
+    assert_eq!(w.port.effects().len(), effects);
 }
 
 #[test]
-fn m1_i5_the_owner_s_emergency_stop_stops_a_mission_before_its_first_step() {
-    let s = setup();
-    let id = s.approved(two_steps());
-    s.broker.set_emergency(true);
-    assert_eq!(s.mother.step(id), Err(CoordinatorError::Stopped));
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
-    assert_eq!(s.broker.effect_calls(), vec![]);
+fn stop_the_owner_s_emergency_stop_stops_the_mission_before_any_lane() {
+    let w = world();
+    let id = w.mission_in(MissionState::Investigating);
+    let lanes = w.keyed_calls();
+    w.port.set_emergency(true);
+    assert_eq!(w.mother.advance(id), Err(CoordinatorError::Stopped));
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert_eq!(w.keyed_calls(), lanes);
     // Lifting the broker's stop does not restart Mother's mission.
-    s.broker.set_emergency(false);
-    assert!(s.mother.step(id).is_err());
-    assert_eq!(s.broker.effect_calls(), vec![]);
+    w.port.set_emergency(false);
+    assert!(w.mother.advance(id).is_err());
+    assert_eq!(w.port.effects(), vec![]);
+}
+
+/// A Builder that asks for an effect and, while it answers, the Owner's
+/// emergency stop engages.
+struct StopsWhileBuilding {
+    port: std::sync::OnceLock<Arc<RecordingPort>>,
+}
+
+impl Lane for StopsWhileBuilding {
+    fn identity(&self) -> crate::lane::LaneIdentity {
+        crate::lane::LaneIdentity {
+            role: LaneRole::Builder,
+            name: "stops-while-building".into(),
+            version: "m1-test".into(),
+        }
+    }
+
+    fn invoke(&self, _: &crate::lane::LaneInput) -> crate::lane::LaneOutput {
+        self.port.get().expect("port").set_emergency(true);
+        crate::lane::LaneOutput {
+            text: "built".into(),
+            effects: vec![effect_of(EffectKind::Network)],
+            verdict: Verdict::Continue,
+        }
+    }
 }
 
 #[test]
-fn m1_i5_the_owner_s_emergency_stop_stops_a_mission_with_an_open_run() {
-    let s = setup();
-    let id = mission_in(&s, "approved after a step");
-    let run = s.mother.run_of(id).unwrap();
-    s.broker.set_emergency(true);
-    assert_eq!(s.mother.step(id), Err(CoordinatorError::Stopped));
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
-    assert!(s.broker.is_cancelled(run));
-    assert_eq!(s.broker.acts(), 1);
-}
-
-#[test]
-fn m1_i5_an_emergency_stop_refusal_stops_rather_than_fails() {
-    let s = setup();
-    let id = s.approved(two_steps());
-    s.broker.reply(Reply::Refuse("emergency_stopped"));
-    assert_eq!(s.mother.step(id), Err(CoordinatorError::Stopped));
-    assert_eq!(s.mother.state(id), Some(MissionState::Stopped));
-    assert!(s.broker.is_cancelled(s.mother.run_of(id).unwrap()));
-}
-
-#[test]
-fn m1_i5_an_emergency_stop_while_awaiting_approval_stops_on_refresh() {
-    let s = setup();
-    let id = mission_in(&s, "awaiting approval");
-    s.broker.set_emergency(true);
-    assert_eq!(s.mother.refresh(id), Ok(MissionState::Stopped));
-    assert!(s.broker.is_cancelled(s.mother.run_of(id).unwrap()));
+fn stop_the_owner_s_emergency_stop_is_checked_before_every_effect() {
+    let builder = Arc::new(StopsWhileBuilding {
+        port: std::sync::OnceLock::new(),
+    });
+    let mut lanes: Vec<Arc<dyn Lane>> = vec![builder.clone()];
+    lanes.extend(
+        keyed_lanes()
+            .into_iter()
+            .filter(|l| l.identity().role != LaneRole::Builder),
+    );
+    let w = world_with(lanes);
+    builder.port.set(w.port.clone()).ok().unwrap();
+    let id = w.approved(contract());
+    w.mother.advance(id).unwrap();
+    w.mother.advance(id).unwrap();
+    // The stop engages inside the Builder's call, after the coordinator's
+    // own check at the start of the phase: the Builder's effect must not
+    // reach the port.
+    assert_eq!(w.mother.advance(id), Err(CoordinatorError::Stopped));
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert_eq!(w.port.effects(), vec![]);
 }
