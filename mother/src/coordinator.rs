@@ -189,6 +189,10 @@ struct Mission {
     /// The hold is in the journal (otherwise it is written before the
     /// session's next record).
     held_journaled: bool,
+    /// Replay: an unclean session opened while the mission was unfinished
+    /// and not held, so the live coordinator holds it before its next
+    /// record (recovery aside) and before the session's clean close.
+    must_hold: bool,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -225,6 +229,7 @@ impl Mission {
             open_action: None,
             held: None,
             held_journaled: false,
+            must_hold: false,
         }
     }
 
@@ -279,6 +284,7 @@ impl Mission {
         self.state = to;
         if to.is_terminal() {
             self.held = None;
+            self.must_hold = false;
         }
         self.generation += 1;
         self.dispatched_in_phase = dispatched;
@@ -362,7 +368,19 @@ impl Inner {
         Ok(())
     }
 
-    fn write(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
+    /// M2a-S: on a journal whose last session closed cleanly, journal this
+    /// session's opening at once. If that write fails nothing was lost (the
+    /// journal still ends in the clean close, or a torn line it refuses), so
+    /// the journal is not poisoned: opening fails and may be tried again.
+    fn open_session_at_once(&mut self) -> Result<(), CoordinatorError> {
+        self.write_record(SESSION, Event::SessionOpened, false)?;
+        self.session_journaled = true;
+        Ok(())
+    }
+
+    /// M2a-S: refused once the clean close is journaled, or once the store
+    /// failed.
+    fn usable(&self) -> Result<(), CoordinatorError> {
         if self.closed {
             return Err(CoordinatorError::Closed);
         }
@@ -371,12 +389,34 @@ impl Inner {
                 "the journal failed earlier".into(),
             )));
         }
+        Ok(())
+    }
+
+    fn write(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
+        self.write_record(mission, event, true)
+    }
+
+    fn write_record(
+        &mut self,
+        mission: MissionId,
+        event: Event,
+        poison: bool,
+    ) -> Result<u64, CoordinatorError> {
+        self.usable()?;
         let entry = Entry::chained(self.next_seq, &self.head, mission, event);
         if let Err(e) = self.store.append(&entry.to_line()) {
             // Fail closed, durably: a journal that may have lost a
             // transition (a Stop) must not be reopened as if it had not.
+            // If poisoning fails too, the journal reopens, but its session
+            // has no clean close: every unfinished mission comes back held.
             self.broken = true;
-            let _ = self.store.poison();
+            if poison {
+                if let Err(p) = self.store.poison() {
+                    return Err(CoordinatorError::Journal(JournalError::Store(format!(
+                        "{e:?}; poisoning failed too ({p:?}): the next open holds every unfinished mission"
+                    ))));
+                }
+            }
             return Err(CoordinatorError::Journal(e));
         }
         self.head = entry.hash;
@@ -571,8 +611,9 @@ impl<P: EffectPort> Coordinator<P> {
             }),
         };
         // If opening fails from here on (the journal is then poisoned and
-        // never reopens), every journaled open action is withdrawn first,
-        // a waiting mission's too: nothing could resume it.
+        // never reopens, or, if poisoning failed too, reopens with every
+        // unfinished mission held), every journaled open action is
+        // withdrawn first, a waiting mission's too.
         if let Err(e) = coordinator.recover(closed_cleanly, clean) {
             coordinator.withdraw_open_actions();
             return Err(e);
@@ -673,6 +714,8 @@ impl<P: EffectPort> Coordinator<P> {
         id: MissionId,
     ) -> Result<(MissionConfirmation, u64), CoordinatorError> {
         let mut inner = self.lock();
+        // A broken coordinator asks the Owner nothing.
+        inner.usable()?;
         let (seq, number) = (inner.next_seq, inner.next_request);
         inner.next_request += 1;
         let mission = inner.mission(id)?;
@@ -767,6 +810,8 @@ impl<P: EffectPort> Coordinator<P> {
     pub fn advance(&self, id: MissionId) -> Result<Advance, CoordinatorError> {
         let emergency = self.port.emergency_stopped();
         let mut inner = self.lock();
+        // A broken coordinator starts nothing and asks the broker nothing.
+        inner.usable()?;
         let mission = inner.mission(id)?;
         mission.not_held()?;
         if mission.busy {
@@ -1304,7 +1349,8 @@ impl<P: EffectPort> Coordinator<P> {
                 (&result, transition(from, &trigger))
             {
                 // The journal failed: the mission ends in memory all the
-                // same (and the poisoned journal will not reopen).
+                // same (and the journal, poisoned, will not reopen; if
+                // poisoning failed too, it reopens with the mission held).
                 inner.mission(id)?.apply(&trigger, to, mono);
             }
             result
@@ -1405,7 +1451,7 @@ impl<P: EffectPort> Coordinator<P> {
     /// never approves it, and the Owner's Stop withdraws it.
     fn recover(&self, closed_cleanly: bool, clean: bool) -> Result<(), CoordinatorError> {
         if closed_cleanly {
-            self.lock().open_session()?;
+            self.lock().open_session_at_once()?;
         }
         self.recover_and_settle()?;
         if !clean {
@@ -1480,7 +1526,8 @@ impl<P: EffectPort> Coordinator<P> {
     /// attempted; their errors are not returned, because opening already
     /// returns the first error (and the journal stays as it is: a failed
     /// append poisoned it, so it opens nothing until the Owner reconciles
-    /// it).
+    /// it; if poisoning failed too, it reopens with every unfinished
+    /// mission held).
     fn withdraw_open_actions(&self) {
         let open: Vec<MissionId> = self
             .lock()
@@ -1521,7 +1568,10 @@ impl<P: EffectPort> Coordinator<P> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
         if mission.state.is_terminal() {
-            return Ok(mission.state);
+            // M2a-S: on a broken coordinator a terminal state may be in
+            // memory only (a Stop or denial the journal lost): never Ok.
+            inner.usable()?;
+            return Ok(inner.mission(id)?.state);
         }
         let may_have_dispatched = mission.approved_wall_ms.is_some();
         let mono = self.clock.monotonic_ms();
@@ -1688,11 +1738,23 @@ fn replay(
             return Err(format!("{id}: a session record naming a mission"));
         }
         Event::SessionOpened => {
+            if *session != Session::Closed {
+                // After a session with no clean close, every unfinished
+                // mission not held must be held.
+                for mission in missions.values_mut() {
+                    if !mission.state.is_terminal() && mission.held.is_none() {
+                        mission.must_hold = true;
+                    }
+                }
+            }
             *session = Session::Open;
             return Ok(());
         }
         Event::SessionClosed if *session != Session::Open => {
             return Err("a clean close of no open session".into());
+        }
+        Event::SessionClosed if missions.values().any(|m| m.must_hold) => {
+            return Err("a clean close with a mission the session did not hold".into());
         }
         Event::SessionClosed => {
             *session = Session::Closed;
@@ -1732,6 +1794,20 @@ fn replay(
     );
     if mission.held.is_some() && !while_held {
         return Err(format!("{id}: a record while held"));
+    }
+    // Before its hold, only what recovery writes: an abandoned lane call, a
+    // closed action, or an end (a block, a lapse, a Stop).
+    let before_hold = match &entry.event {
+        Event::Held { .. } | Event::LaneOvertaken { .. } | Event::ApprovalClosed { .. } => true,
+        Event::Transition { trigger } => {
+            transition(mission.state, trigger).is_ok_and(MissionState::is_terminal)
+        }
+        _ => false,
+    };
+    if mission.must_hold && !before_hold {
+        return Err(format!(
+            "{id}: a record before the hold its session requires"
+        ));
     }
     match &entry.event {
         Event::Drafted { .. } => unreachable!(),
@@ -1884,6 +1960,7 @@ fn replay(
             }
             mission.held = Some(reason.clone());
             mission.held_journaled = true;
+            mission.must_hold = false;
         }
         Event::Resumed => {
             if mission.held.is_none() {

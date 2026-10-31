@@ -110,13 +110,14 @@ fn m2as_review_a_broken_coordinator_asks_the_owner_and_the_broker_nothing() {
     let (w, disk) = faulty_world();
     let waiting = reach(&w, AwaitingApproval);
     let other = reach(&w, Building);
+    let performed = performs(&w);
     disk.fail(true, true);
     assert!(w.mother.stop(other).is_err());
     disk.fail(false, false);
     let queries = w.port.approval_queries();
     assert!(w.mother.advance(waiting).is_err());
     assert_eq!(w.port.approval_queries(), queries, "the broker was asked");
-    assert_eq!(performs(&w), 2, "only the effects before the failure");
+    assert_eq!(performs(&w), performed, "an effect after the failure");
 }
 
 #[test]
