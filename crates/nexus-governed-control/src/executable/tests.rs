@@ -66,3 +66,100 @@ fn an_installation_others_could_change_is_refused() {
         ))
     );
 }
+
+/// M0-FIX2 F13 fixture: a private installation with an executable copy of
+/// `true` at `real/tool` and a symbolic link `bin/tool -> ../real/tool`.
+struct Installation {
+    dir: PathBuf,
+}
+
+impl Installation {
+    fn new(label: &str) -> Self {
+        let dir =
+            std::env::temp_dir().join(format!("nexus-m0-fix2-f13-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("real")).unwrap();
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        let dir = std::fs::canonicalize(&dir).unwrap();
+        std::fs::copy(canonical_tool("true"), dir.join("real").join("tool")).unwrap();
+        std::os::unix::fs::symlink("../real/tool", dir.join("bin").join("tool")).unwrap();
+        Self { dir }
+    }
+
+    fn real(&self) -> String {
+        self.dir.join("real").join("tool").display().to_string()
+    }
+
+    fn link(&self) -> String {
+        self.dir.join("bin").join("tool").display().to_string()
+    }
+}
+
+impl Drop for Installation {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn names(paths: &[String]) -> Vec<&str> {
+    paths.iter().map(String::as_str).collect()
+}
+
+/// M0-FIX2 F13 oracle: a symbolic link among a tool's trusted locations is
+/// followed to another of its trusted locations, and what is pinned is
+/// that canonical target (exactly what `inspect` pins for it).
+#[test]
+fn m0_fix2_f13_a_link_to_a_listed_location_pins_its_canonical_target() {
+    let install = Installation::new("listed");
+    let candidates = [install.link(), install.real()];
+    let identity = resolve(&names(&candidates), Trust::Fixture).unwrap();
+    assert_eq!(identity.path, Path::new(&install.real()));
+    assert_eq!(
+        identity,
+        inspect(Path::new(&install.real()), Trust::Fixture).unwrap()
+    );
+    // `inspect` itself still refuses the link.
+    assert_eq!(
+        inspect(Path::new(&install.link()), Trust::Fixture).unwrap_err(),
+        AuthorityError::Closed("an executable is named by its canonical path")
+    );
+}
+
+/// M0-FIX2 F13 oracle: a link to a location the tool does not list is
+/// refused, even though that target is a valid executable on its own.
+#[test]
+fn m0_fix2_f13_a_link_to_an_unlisted_location_is_refused() {
+    let install = Installation::new("unlisted");
+    assert!(inspect(Path::new(&install.real()), Trust::Fixture).is_ok());
+    let candidates = [install.link()];
+    assert!(
+        resolve(&names(&candidates), Trust::Fixture).is_err(),
+        "a link was followed to an unlisted location"
+    );
+}
+
+/// M0-FIX2 F13 oracle: with no listed location installed, nothing is
+/// resolved (no `PATH` lookup, no other fallback).
+#[test]
+fn m0_fix2_f13_no_installed_location_is_refused() {
+    let install = Installation::new("absent");
+    let candidates = [
+        install.dir.join("none").join("tool").display().to_string(),
+        install.dir.join("bin").join("other").display().to_string(),
+    ];
+    assert!(resolve(&names(&candidates), Trust::Fixture).is_err());
+    // A bare name is never looked up in `PATH`.
+    assert!(resolve(&["sha256sum"], Trust::System).is_err());
+    assert!(resolve(&[], Trust::System).is_err());
+}
+
+/// M0-FIX2 F13 oracle: a listed, canonical location is still accepted only
+/// if `inspect` accepts it.
+#[test]
+fn m0_fix2_f13_a_listed_location_must_still_pass_inspection() {
+    use std::os::unix::fs::PermissionsExt;
+    let install = Installation::new("writable");
+    std::fs::set_permissions(install.real(), std::fs::Permissions::from_mode(0o777)).unwrap();
+    let candidates = [install.link(), install.real()];
+    assert!(resolve(&names(&candidates), Trust::Fixture).is_err());
+}

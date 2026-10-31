@@ -539,3 +539,45 @@ fn every_fixture_executable_is_named_by_its_canonical_path() {
         );
     }
 }
+
+/// M0-FIX2 F13 oracle (host): the production SHA-256 tool, as the catalog
+/// names it (no test substitution), resolves on this host to one of its own
+/// trusted locations, and runs end to end through the sealed launch. On a
+/// rust-coreutils host its `/usr/bin` entry is a link into the multicall
+/// binary; on a GNU host it is a regular file.
+#[test]
+fn m0_fix2_f13_the_production_sha256_tool_resolves_and_runs_on_this_host() {
+    let definition = catalog::production()
+        .into_iter()
+        .find(|d| d.key == "text.sha256")
+        .unwrap();
+    let identity = crate::executable::resolve(definition.executables, definition.trust).unwrap();
+    assert!(
+        definition
+            .executables
+            .iter()
+            .any(|listed| std::path::Path::new(listed) == identity.path),
+        "{} is not a listed location",
+        identity.path.display()
+    );
+    let h = harness();
+    let mut _roots = Vec::new();
+    let tools = Tools::new(catalog::production(), root_guard(&mut _roots));
+    let scope = tools.grant_scope("text.sha256").unwrap();
+    match &scope {
+        crate::authority::policy::GrantScope::Tool { executable, .. } => {
+            assert_eq!(
+                std::path::Path::new(executable),
+                identity.path,
+                "pinned path"
+            )
+        }
+        other => panic!("{other:?}"),
+    }
+    grant(&h, &tools, "text.sha256");
+    let out = run(&h, &tools, "text.sha256", json!({ "text": "abc" })).unwrap();
+    assert_eq!(
+        out.text.as_deref(),
+        Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  input.txt\n")
+    );
+}
