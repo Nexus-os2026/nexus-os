@@ -131,4 +131,8 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// and in a final state, or the broker holds no such action. Only then
     /// does Mother journal it closed.
     fn settled(&self, pending: &PendingAction) -> bool;
+    /// Cancel the mission at the port, as [`EffectPort::cancel`], and say
+    /// whether the broker took the cancellation. Recovery and every end of
+    /// a mission use it, so that a withdrawal that failed is an error.
+    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal>;
 }

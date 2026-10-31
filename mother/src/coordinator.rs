@@ -91,6 +91,8 @@ pub enum CoordinatorError {
     ConsentMismatch,
     /// The broker refused to ask, or to record the answer: its class.
     Broker(String),
+    /// The port could not withdraw a mission's request: its class.
+    Withdrawal(String),
     Denied,
     Stopped,
     /// Another call is already working on this mission.
@@ -486,7 +488,7 @@ impl<P: EffectPort> Coordinator<P> {
         // If opening fails from here on (the journal is then poisoned and
         // never reopens), every journaled open action is withdrawn first,
         // a waiting mission's too: nothing could resume it.
-        if let Err(e) = coordinator.recover_and_settle() {
+        if let Err(e) = coordinator.recover() {
             coordinator.withdraw_open_actions();
             return Err(e);
         }
@@ -1216,12 +1218,16 @@ impl<P: EffectPort> Coordinator<P> {
             }
             result
         };
-        // Whatever the journal said, nothing more of it may start.
-        self.port.cancel(id);
-        // Best effort: an action not confirmed closed (or whose closure the
-        // journal could not take) is withdrawn again on every reopen.
-        let _ = self.close_action(id);
-        result
+        // Whatever the journal said, nothing more of it may start; a
+        // withdrawal or closure that failed is an error too (an action not
+        // confirmed closed stays open in the journal and is withdrawn again
+        // on every reopen).
+        let withdrawn = self.port.withdraw(id);
+        let closed = self.close_action(id);
+        let state = result?;
+        withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
+        closed?;
+        Ok(state)
     }
 
     /// Journal the mission's open action closed, once the port confirms
@@ -1274,11 +1280,15 @@ impl<P: EffectPort> Coordinator<P> {
             if claims == 1 {
                 self.port.adopt(*id, pending);
             }
-            if *state != MissionState::AwaitingApproval {
-                self.port.cancel(*id);
-            }
         }
         let mut first_error = None;
+        for (id, state, _) in &open {
+            if *state != MissionState::AwaitingApproval {
+                if let Err(refusal) = self.port.withdraw(*id) {
+                    first_error.get_or_insert(CoordinatorError::Withdrawal(refusal.class));
+                }
+            }
+        }
         for (id, state, _) in &open {
             if *state != MissionState::AwaitingApproval {
                 if let Err(e) = self.close_action(*id) {
@@ -1287,6 +1297,20 @@ impl<P: EffectPort> Coordinator<P> {
             }
         }
         first_error.map_or(Ok(()), Err)
+    }
+
+    /// Recovery, the one place: everything opening does after the journal
+    /// was replayed. Fail-closed: any error in it, and any journal append
+    /// that failed in it even if a step did not report it, is returned, and
+    /// `open` then withdraws every open request (waiting ones included).
+    fn recover(&self) -> Result<(), CoordinatorError> {
+        self.recover_and_settle()?;
+        if self.lock().broken {
+            return Err(CoordinatorError::Journal(JournalError::Store(
+                "the journal failed during recovery".into(),
+            )));
+        }
+        Ok(())
     }
 
     /// The rest of opening, after the journal was replayed: recover the
@@ -1334,7 +1358,11 @@ impl<P: EffectPort> Coordinator<P> {
     }
 
     /// Opening failed: withdraw every mission's journaled open action
-    /// (handed back to the port already), whatever its state.
+    /// (handed back to the port already), whatever its state. Every one is
+    /// attempted; their errors are not returned, because opening already
+    /// returns the first error (and the journal stays as it is: a failed
+    /// append poisoned it, so it opens nothing until the Owner reconciles
+    /// it).
     fn withdraw_open_actions(&self) {
         let open: Vec<MissionId> = self
             .lock()
@@ -1344,7 +1372,7 @@ impl<P: EffectPort> Coordinator<P> {
             .map(|(id, _)| *id)
             .collect();
         for id in open {
-            self.port.cancel(id);
+            let _ = self.port.withdraw(id);
         }
     }
 
@@ -1394,8 +1422,12 @@ impl<P: EffectPort> Coordinator<P> {
         }
         drop(inner);
         if may_have_dispatched {
-            self.port.cancel(id);
-            let _ = self.close_action(id);
+            let withdrawn = self.port.withdraw(id);
+            let closed = self.close_action(id);
+            let state = journaled?;
+            withdrawn.map_err(|r| CoordinatorError::Withdrawal(r.class))?;
+            closed?;
+            return Ok(state);
         }
         journaled
     }

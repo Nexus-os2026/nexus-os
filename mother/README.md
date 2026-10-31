@@ -128,6 +128,18 @@ Coordinator rules the oracles pin:
   interrupted before its withdrawal took effect is completed by the next
   reopen, and a rebuilt port can still ask about and withdraw a waiting
   action.
+- Recovery is fail-closed, in one place (`Coordinator::recover`): any
+  error in it (a journal append, a closure, a withdrawal the broker
+  refused), and any append that failed in it even if a step did not
+  report it, makes opening fail, after every journaled open request,
+  waiting ones included, has been withdrawn. A poisoned journal then opens
+  nothing until the Owner reconciles it.
+- A request the Owner approved that is still executing when a terminal
+  (or interrupted) mission is recovered is cancelled (its cancellation
+  token is set) but not yet final, so its open marker is not closed: it is
+  closed only on a later reopen, once the broker holds it final. No oracle
+  pins this on the real broker (it needs an execution in flight); a
+  recording-port oracle scripts it.
 - The ids are names, not authority: the port takes one back only from a
   live run of Mother's that no other mission holds (an action two
   missions name, compared by parsed id, is handed back to neither), and

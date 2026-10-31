@@ -29,6 +29,7 @@
 //!     fn pending(&self, _: MissionId) -> Option<nexus_mother::effect::PendingAction> { None }
 //!     fn adopt(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //!     fn settled(&self, _: &nexus_mother::effect::PendingAction) -> bool { false }
+//!     fn withdraw(&self, _: MissionId) -> Result<(), EffectRefusal> { Ok(()) }
 //! }
 //! ```
 //!

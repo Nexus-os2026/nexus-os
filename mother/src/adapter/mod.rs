@@ -190,6 +190,16 @@ impl EffectPort for GovernedPort {
         }
     }
 
+    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
+        let Some(run) = self.end(mission) else {
+            return Ok(());
+        };
+        self.control.cancel_run(run).map_err(|e| {
+            self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+            refused(e.class())
+        })
+    }
+
     fn finish(&self, mission: MissionId) {
         if let Some(run) = self.end(mission) {
             self.control.finish_when_settled(run);
