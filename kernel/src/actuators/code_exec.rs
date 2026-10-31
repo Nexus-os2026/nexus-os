@@ -607,4 +607,50 @@ printf 'workspace diagnostic' >&2"#
         let err = exec.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::CommandBlocked(_)));
     }
+
+    /// M0-FIX2 F9 oracle: CodeExecute is not a shell route. Shell languages
+    /// are refused before anything is written or spawned.
+    #[test]
+    fn m0_f9_shell_languages_are_refused() {
+        for language in ["bash", "sh", "Bash", "SH"] {
+            assert!(
+                matches!(
+                    CodeExecuteActuator::validate_language(language),
+                    Err(ActuatorError::CommandBlocked(_))
+                ),
+                "{language} must be refused"
+            );
+            let tmp = TempDir::new().unwrap();
+            let marker = tmp.path().join("ran");
+            let err = CodeExecuteActuator
+                .execute(
+                    &PlannedAction::CodeExecute {
+                        language: language.into(),
+                        code: format!("echo ran > '{}'", marker.display()),
+                        timeout_secs: Some(5),
+                    },
+                    &make_context(tmp.path()),
+                )
+                .unwrap_err();
+            assert!(
+                matches!(err, ActuatorError::CommandBlocked(_)),
+                "{language}: expected CommandBlocked, got {err:?}"
+            );
+            assert!(!marker.exists(), "{language} code must not run");
+            assert_eq!(
+                std::fs::read_dir(tmp.path()).unwrap().count(),
+                0,
+                "{language}: nothing may be written to the workspace"
+            );
+        }
+        // Positive control: the remaining runtimes still validate.
+        assert_eq!(
+            CodeExecuteActuator::validate_language("python3").unwrap(),
+            "python3"
+        );
+        assert_eq!(
+            CodeExecuteActuator::validate_language("node").unwrap(),
+            "node"
+        );
+    }
 }

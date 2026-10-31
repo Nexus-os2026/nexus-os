@@ -586,4 +586,105 @@ mod tests {
         let err = shell.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::CapabilityDenied(_)));
     }
+
+    fn assert_refused(command: &str, args: &[&str]) {
+        let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        match GovernedShell::validate_command(command, &args) {
+            Err(ActuatorError::CommandBlocked(_)) => {}
+            other => panic!("{command} {args:?} must be refused, got {other:?}"),
+        }
+    }
+
+    fn assert_validates(command: &str, args: &[&str]) {
+        let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        GovernedShell::validate_command(command, &args)
+            .unwrap_or_else(|e| panic!("{command} {args:?} must validate, got {e:?}"));
+    }
+
+    /// M0-FIX2 F9 oracle: no allowlisted program may start a shell or an
+    /// arbitrary program named in its arguments. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_program_trampolines_are_refused() {
+        // Programs whose purpose or argument language starts other programs.
+        assert_refused("env", &["sh"]);
+        assert_refused("ENV", &["sh"]);
+        assert_refused("xargs", &["sh"]);
+        assert_refused("awk", &["BEGIN{system(\"sh\")}"]);
+        assert_refused("sed", &["e"]);
+        assert_refused("make", &[]);
+        assert_refused("make", &["all"]);
+        assert_refused("node", &["-e", "1"]);
+        assert_refused("npx", &["anything"]);
+        assert_refused("cmake", &["-P", "script.cmake"]);
+        assert_refused("gcc", &["main.c"]);
+        assert_refused("g++", &["main.cc"]);
+        assert_refused("rustc", &["main.rs"]);
+        assert_refused("rustup", &["run", "stable", "sh"]);
+        assert_refused("ip", &["netns", "exec", "n", "sh"]);
+        // Interpreters are not reachable through GovernedShell at all.
+        assert_refused("python3", &["-c", "print(1)"]);
+        assert_refused("python", &["-c", "print(1)"]);
+        assert_refused("python3 -c", &["print(1)"]);
+        assert_refused("python3", &["script.py"]);
+        // find: the execution primaries are refused wherever they appear.
+        for primary in ["-exec", "-execdir", "-ok", "-okdir"] {
+            assert_refused("find", &[".", primary, "sh", ";"]);
+            assert_refused("find", &[".", "-name", "x", primary, "sh", "{}", "+"]);
+            assert_refused(&format!("find . {primary}"), &["sh", ";"]);
+        }
+        // sort: the compressor option names a program to run.
+        assert_refused("sort", &["--compress-program=sh", "f"]);
+        assert_refused("sort", &["--compress-program", "sh", "f"]);
+        assert_refused("sort", &["--compress-prog=sh", "f"]);
+        assert_refused("sort", &["--co=sh", "f"]);
+        // npm: these subcommands run package scripts through a shell.
+        for sub in ["run", "install", "test", "build"] {
+            assert_refused("npm", &[sub]);
+        }
+        // cargo: run/test execute built programs; build/check/clippy run
+        // build scripts and accept program-naming config on the command line.
+        for sub in ["run", "test", "build", "check", "clippy"] {
+            assert_refused("cargo", &[sub]);
+        }
+        assert_refused("cargo", &["fmt", "--config", "x=1"]);
+        // git: transport options name the remote helper program to start.
+        for arg in [
+            "--upload-pack=sh",
+            "--upload-pack",
+            "--upload-p=sh",
+            "--receive-pack=sh",
+            "--receive-pack",
+            "--rec=sh",
+            "--exec=sh",
+            "--exec",
+            "--ex=sh",
+        ] {
+            assert_refused("git", &["pull", arg, "origin"]);
+            assert_refused("git", &["push", arg, "origin"]);
+        }
+        // Global options before the subcommand stay refused.
+        assert_refused("git", &["-c", "alias.x=!sh", "x"]);
+        assert_refused("git", &["-c", "core.pager=sh", "log"]);
+    }
+
+    /// Positive controls: ordinary commands keep validating after F9.
+    #[test]
+    fn m0_f9_harmless_commands_still_validate() {
+        assert_validates("ls", &[]);
+        assert_validates("ls", &["-la"]);
+        assert_validates("echo", &["hello"]);
+        assert_validates("cat", &["file.txt"]);
+        assert_validates("find", &[".", "-name", "*.rs", "-type", "f"]);
+        assert_validates("sort", &["-n", "-r", "file.txt"]);
+        assert_validates("sort", &["--check", "file.txt"]);
+        assert_validates("git", &["status"]);
+        assert_validates("git", &["log", "--oneline"]);
+        assert_validates("git", &["pull", "--rebase", "origin", "main"]);
+        assert_validates("git", &["push", "origin", "main"]);
+        assert_validates("cargo", &["fmt"]);
+        assert_validates("cargo", &["fmt", "--", "--check"]);
+        assert_validates("npm", &["ls"]);
+        assert_validates("free", &["-m"]);
+        assert_validates("df", &["-h"]);
+    }
 }
