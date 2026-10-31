@@ -120,7 +120,14 @@ pub struct GovernedControl {
     /// The kernel's emergency-stop authority (M0-FIX F5): the owner's
     /// emergency stop engages it and the owner's resume lifts it.
     kernel_stop: Arc<StopAuthority>,
+    /// Tests only: runs once inside the next stop, between its kernel
+    /// engagement and its broker step (where a test interleaves a resume).
+    #[cfg(test)]
+    stop_gap: StopGap,
 }
+
+#[cfg(test)]
+type StopGap = Mutex<Option<Box<dyn FnOnce(&GovernedControl) + Send>>>;
 
 /// One display start, counted while it lasts.
 struct Starting<'a>(&'a AtomicUsize);
@@ -175,6 +182,8 @@ impl GovernedControl {
             } else {
                 StopAuthority::global()
             },
+            #[cfg(test)]
+            stop_gap: Mutex::new(None),
         };
         // An action may have happened unrecorded (EL-1 §7): governed control
         // starts emergency-stopped, through the stop itself, and resumes only
@@ -188,6 +197,11 @@ impl GovernedControl {
     /// Engage and lift `stop` instead of the process's kernel authority
     /// (tests only: production always uses the process's authority, so the
     /// owner's Stop cannot be disconnected from the kernel).
+    #[cfg(test)]
+    pub(crate) fn in_next_stop_gap(&self, gap: impl FnOnce(&GovernedControl) + Send + 'static) {
+        *self.stop_gap.lock().expect("stop gap") = Some(Box::new(gap));
+    }
+
     #[cfg(test)]
     pub(crate) fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
         if self.authority().runs().is_stopped() {
@@ -384,6 +398,10 @@ impl GovernedControl {
         // The kernel's own work first (M0-FIX F5): the cognitive loop,
         // coding runs and model calls halt and refuse new work.
         self.kernel_stop.engage();
+        #[cfg(test)]
+        if let Some(gap) = self.stop_gap.lock().expect("stop gap").take() {
+            gap(self);
+        }
         let stopped = self.control.stop_effects(reason);
         let cancelled = stopped.cancelled;
         let display = self.display.stop();

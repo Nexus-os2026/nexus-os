@@ -1012,3 +1012,26 @@ fn m0_f5_a_resume_does_not_lift_a_newer_kernel_stop() {
         "the resume lifted a kernel stop pressed after it was confirmed"
     );
 }
+
+/// M0-FIX F5 re-review: a Stop whose kernel engagement lands before a
+/// resume reads the kernel's stop number, but whose broker step lands after
+/// the broker's resume, must still leave the kernel stopped: whenever the
+/// broker is stopped, the kernel is too. The resume runs deterministically
+/// inside the Stop's gap between those two steps.
+#[test]
+fn m0_f5_a_stop_whose_broker_step_follows_a_resume_keeps_the_kernel_stopped() {
+    use nexus_kernel::emergency_stop::StopAuthority;
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    control.emergency_stop();
+    control.in_next_stop_gap(|control| {
+        control.resume(&Yes::new(true)).unwrap();
+    });
+    control.emergency_stop();
+    assert!(control.status().emergency_stopped, "the broker is stopped");
+    assert!(
+        stop.is_stopped(),
+        "the broker is stopped but the kernel stop was lifted"
+    );
+}
