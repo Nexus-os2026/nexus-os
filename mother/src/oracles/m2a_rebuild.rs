@@ -596,3 +596,37 @@ fn m2a_recovery_fails_closed_when_a_withdrawal_fails() {
         );
     }
 }
+
+/// Added after mutation testing (the propagation of these two errors
+/// survived the recovery oracles above): a withdrawal the broker refuses
+/// while recovery blocks an interrupted mission fails open(); a live Stop
+/// whose closure cannot be journaled returns the error, with the request
+/// withdrawn.
+#[test]
+fn m2a_recovery_fails_closed_when_an_interrupted_mission_s_withdrawal_fails() {
+    let w = world();
+    // Interrupted after an effect that ran (no open request).
+    let mut events = settled("done");
+    events.truncate(6);
+    w.journal.set_lines(chained(events));
+    w.port.fail_withdrawal(MissionId(1));
+    assert!(matches!(
+        w.reopen(),
+        Err(CoordinatorError::Withdrawal(class)) if class == "withdrawal_failed"
+    ));
+}
+
+#[test]
+fn m2a_close_a_stop_whose_closure_cannot_be_journaled_is_an_error() {
+    let w = world();
+    let id = waiting_with_action(&w);
+    // The Stop is journaled; its closure is not.
+    w.journal.fail_after(1);
+    assert!(matches!(
+        w.mother.stop(id),
+        Err(CoordinatorError::Journal(_))
+    ));
+    assert!(w.port.is_cancelled(id));
+    assert_eq!(w.mother.state(id), Some(MissionState::Stopped));
+    assert!(w.journal.is_poisoned());
+}
