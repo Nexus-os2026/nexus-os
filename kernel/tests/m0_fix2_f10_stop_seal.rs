@@ -1,25 +1,30 @@
 //! M0-FIX2 F10 oracle (source half): only the owner's Stop/Resume path can
 //! lift the process's emergency stop.
 //!
-//! The seal is a type-level one (see `kernel/src/emergency_stop.rs`):
-//! lifting is a method of `StopController` only, a controller is not
-//! `Clone`, `Copy` or `Default` and has no public constructor, and the
-//! process's (global) authority mints its controller once, through
-//! `StopAuthority::claim_global_controller`. This guard pins that shape and
-//! pins who claims the global controller: in production source only the
+//! Lifting is sealed at the type level (see `kernel/src/emergency_stop.rs`):
+//! it is a method of `StopController` only, a controller is not `Clone`,
+//! `Copy` or `Default` and has no public constructor, and the process's
+//! (global) authority mints its controller once, through
+//! `StopAuthority::claim_global_controller`. That function is `pub`, and
+//! Rust cannot restrict a `pub` item to one other crate: who claims the
+//! global controller is first-claim-wins, fail closed (the governed-control
+//! front door refuses to be built when it is taken), and guarded by this
+//! source scan. The scan pins who may name the function at all: the
 //! governed-control front door (`crates/nexus-governed-control/src/
-//! governed.rs`, the owner's `stop_for`/`resume` path); elsewhere only the
-//! named test binaries, which are never part of a production build.
+//! governed.rs`, the owner's `stop_for`/`resume` path) and the named test
+//! binaries, which are never part of a production build.
 //!
-//! It is a narrow text guard, not a Rust parser; the compile-fail doctests
-//! in `emergency_stop.rs` are its type-level half.
+//! It is a text guard, not a Rust parser: it matches the bare identifier
+//! anywhere in any file of the workspace (all but `target`, `.git` and
+//! `node_modules`), and fails on anything it cannot read. The compile-fail
+//! doctests in `emergency_stop.rs` are its type-level half.
 
 use std::path::{Path, PathBuf};
 
 const EMERGENCY_STOP_RS: &str = include_str!("../src/emergency_stop.rs");
 const GOVERNED_RS: &str = include_str!("../../crates/nexus-governed-control/src/governed.rs");
 
-/// The only files that may name `claim_global_controller(`: its
+/// The only files that may name `claim_global_controller`: its
 /// definition, the owner's Stop/Resume path, this guard, and test binaries
 /// that drive the process's own authority (each its own process).
 const MAY_CLAIM_THE_GLOBAL_CONTROLLER: &[&str] = &[
@@ -29,7 +34,11 @@ const MAY_CLAIM_THE_GLOBAL_CONTROLLER: &[&str] = &[
     "kernel/tests/m0_f5_emergency_stop.rs",
     "connectors/llm/tests/m0_f5_stop.rs",
     "crates/nexus-governed-control/tests/m0_fix2_f10_owner_stop.rs",
+    "crates/nexus-governed-control/tests/m0_fix2_f10_front_door_drop.rs",
 ];
+
+/// The identifier the scan looks for, wherever it appears.
+const IDENTIFIER: &str = "claim_global_controller";
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -38,22 +47,34 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
+/// Every file under `dir`, but `target`, `.git` and `node_modules`. Any
+/// entry that cannot be read, and any symbolic link to a directory (which
+/// would hide what it holds from the scan), fails the guard.
+fn every_file(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    for entry in entries {
+        let entry = entry.unwrap_or_else(|e| panic!("cannot read in {}: {e}", dir.display()));
         let path = entry.path();
         let name = entry.file_name();
         if name == "target" || name == "node_modules" || name == ".git" {
             continue;
         }
-        let Ok(kind) = entry.file_type() else {
-            continue;
-        };
+        let kind = entry
+            .file_type()
+            .unwrap_or_else(|e| panic!("cannot stat {}: {e}", path.display()));
         if kind.is_dir() {
-            rust_sources(&path, out);
-        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            every_file(&path, out);
+        } else if kind.is_symlink() {
+            let target = std::fs::metadata(&path)
+                .unwrap_or_else(|e| panic!("cannot follow {}: {e}", path.display()));
+            assert!(
+                !target.is_dir(),
+                "{} links to a directory the scan would not see",
+                path.display()
+            );
+            out.push(path);
+        } else {
             out.push(path);
         }
     }
@@ -138,25 +159,24 @@ fn m0_fix2_f10_the_controller_cannot_be_copied_or_made() {
 fn m0_fix2_f10_only_the_owner_path_claims_the_global_controller() {
     let root = workspace_root();
     let mut files = Vec::new();
-    for dir in [
-        "kernel",
-        "connectors",
-        "crates",
-        "agents",
-        "sdk",
-        "persistence",
-    ] {
-        rust_sources(&root.join(dir), &mut files);
-    }
+    every_file(&root, &mut files);
     assert!(
-        files.len() > 100,
+        files
+            .iter()
+            .filter(|f| f.extension().is_some_and(|e| e == "rs"))
+            .count()
+            > 100,
         "the scan found too few sources: {}",
         files.len()
     );
     let mut claimants = Vec::new();
     for file in files {
-        let text = std::fs::read_to_string(&file).unwrap_or_default();
-        if text.contains("claim_global_controller(") {
+        let bytes =
+            std::fs::read(&file).unwrap_or_else(|e| panic!("cannot read {}: {e}", file.display()));
+        if bytes
+            .windows(IDENTIFIER.len())
+            .any(|window| window == IDENTIFIER.as_bytes())
+        {
             let rel = file
                 .strip_prefix(&root)
                 .unwrap()
@@ -168,7 +188,7 @@ fn m0_fix2_f10_only_the_owner_path_claims_the_global_controller() {
     for claimant in &claimants {
         assert!(
             MAY_CLAIM_THE_GLOBAL_CONTROLLER.contains(&claimant.as_str()),
-            "{claimant} claims the process's stop controller"
+            "{claimant} names the process's stop controller claim"
         );
     }
     // The owner's Stop/Resume path holds it (production construction).

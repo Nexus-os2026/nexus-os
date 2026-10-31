@@ -1000,6 +1000,99 @@ mod tests {
         ));
     }
 
+    /// A durable audit that never records anything.
+    struct Failing;
+
+    impl HaltAudit for Failing {
+        fn record(&self, _: &HaltRecord) -> HaltAudited {
+            HaltAudited::Unrecorded
+        }
+    }
+
+    /// The helper, running and blocked on its stdin, under `watch`.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn blocked_helper(watch: &StopWatch) -> (GuardedChild, ChildPipes) {
+        use std::io::{BufRead, BufReader};
+        let (child, mut pipes) =
+            GuardedChild::spawn(&mut current_exe_helper(), watch, HaltArea::ModelCall).unwrap();
+        let mut out = BufReader::new(pipes.stdout.take().unwrap());
+        let mut line = String::new();
+        while !line.contains("HELPER_READY") {
+            line.clear();
+            assert!(out.read_line(&mut line).unwrap() > 0, "helper ended early");
+        }
+        (child, pipes)
+    }
+
+    /// M0-FIX2 F10 review (MINOR-1) oracle: an audit that cannot record a
+    /// halt never undoes it (the model call's child is still terminated and
+    /// reaped, the stop stays in force), and the failure is observable.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn m0_fix2_f10_a_failing_halt_audit_never_undoes_a_halt_and_is_counted() {
+        let stop = StopAuthority::new();
+        let controller = stop.claim_controller().unwrap();
+        controller.attach_halt_audit(Arc::new(Failing)).unwrap();
+        assert_eq!(stop.unrecorded_halts(), 0);
+        let watch = stop.admit().unwrap();
+        let (child, mut pipes) = blocked_helper(&watch);
+        let pid = child.id();
+        let _stdin = pipes.stdin.take();
+        stop.engage();
+        match child.finish() {
+            ChildEnd::Halted(Ok(status)) => assert!(!status.success()),
+            other => panic!("{other:?}"),
+        }
+        let alive = nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None);
+        assert_eq!(alive, Err(nix::errno::Errno::ESRCH));
+        assert!(stop.is_stopped());
+        assert!(stop.admit().is_err());
+        assert_eq!(
+            stop.unrecorded_halts(),
+            1,
+            "the unrecorded halt is invisible"
+        );
+    }
+
+    /// M0-FIX2 F10 review (MINOR-1, NIT) oracle: a model-call halt that
+    /// never reaches a durable audit is counted, whether it fell out of the
+    /// bounded log before any audit was attached or the audit refused it
+    /// when the backlog was written.
+    #[test]
+    fn m0_fix2_f10_halts_that_never_reach_the_audit_are_counted() {
+        let stop = StopAuthority::new();
+        let controller = stop.claim_controller().unwrap();
+        stop.engage();
+        for _ in 0..HALT_LOG_CAPACITY + 2 {
+            stop.record_halt(HaltArea::ModelCall, HaltOutcome::Ended);
+        }
+        // Areas with their own audit are never counted here.
+        stop.record_halt(HaltArea::Coding, HaltOutcome::Ended);
+        assert_eq!(stop.unrecorded_halts(), 3, "halts lost from the log");
+        controller.attach_halt_audit(Arc::new(Failing)).unwrap();
+        assert_eq!(
+            stop.unrecorded_halts(),
+            3 + HALT_LOG_CAPACITY as u64 - 1,
+            "backlog halts the audit refused"
+        );
+    }
+
+    /// M0-FIX2 F10 review (NIT) oracle: a halt is recorded under the stop
+    /// that ended the work, not under a later stop engaged before the halt
+    /// was recorded.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn m0_fix2_f10_a_halt_is_attributed_to_the_stop_that_ended_it() {
+        let stop = StopAuthority::new();
+        let watch = stop.admit().unwrap();
+        let (child, mut pipes) = blocked_helper(&watch);
+        let _stdin = pipes.stdin.take();
+        assert_eq!(stop.engage(), 1);
+        assert_eq!(stop.engage(), 2);
+        assert!(matches!(child.finish(), ChildEnd::Halted(Ok(_))));
+        assert_eq!(stop.halts().last().unwrap().stop_number, 1);
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn an_unstopped_guarded_child_exits_normally() {
