@@ -1165,4 +1165,118 @@ pub(crate) mod tests {
         };
         assert_eq!(EncryptionKey::from_config(&config).unwrap_err(), expected);
     }
+
+    /// The pre-F14 `NEXUS_ENC_V1` format: header, nonce, AES-256-GCM
+    /// ciphertext with no associated data.
+    fn m0_f14_legacy_v1_blob(key: &EncryptionKey, plaintext: &[u8]) -> Vec<u8> {
+        let cipher = Aes256Gcm::new_from_slice(key.as_bytes()).unwrap();
+        let nonce = [0x42_u8; NONCE_LEN];
+        let ciphertext = cipher.encrypt(&Nonce::from(nonce), plaintext).unwrap();
+        let mut blob = b"NEXUS_ENC_V1".to_vec();
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+        blob
+    }
+
+    /// M0-FIX2 F14 oracle: a ciphertext opens only under the context it was
+    /// sealed for.
+    #[test]
+    fn m0_f14_ciphertext_is_bound_to_its_context() {
+        let key = EncryptionKey::from_raw_for_test([0x11; 32]);
+        let blob = encrypt_data(&key, "context-a", b"payload").unwrap();
+        assert_eq!(
+            decrypt_data(&key, "context-a", &blob).unwrap(),
+            b"payload".to_vec()
+        );
+        for other in ["context-b", "", "context-a\0", "context-", "Context-a"] {
+            assert!(
+                matches!(
+                    decrypt_data(&key, other, &blob),
+                    Err(CryptoError::Decryption(_))
+                ),
+                "ciphertext for context-a must not open as {other:?}"
+            );
+        }
+    }
+
+    /// M0-FIX2 F14 oracle: the legacy unbound format is refused by every
+    /// reader, and is never treated as plaintext or wrapped again.
+    #[test]
+    fn m0_f14_legacy_unbound_format_is_refused() {
+        let key = EncryptionKey::from_raw_for_test([0x22; 32]);
+        let legacy = m0_f14_legacy_v1_blob(&key, b"legacy contents");
+        for context in ["", "context-a", &data_file_context("agents.db")] {
+            assert_eq!(
+                decrypt_data(&key, context, &legacy),
+                Err(CryptoError::LegacyUnbound)
+            );
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("agents.db");
+        std::fs::write(&file, &legacy).unwrap();
+        let context = data_file_context("agents.db");
+        assert_eq!(
+            decrypt_file(&key, &file, &context),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+        assert_eq!(
+            encrypt_file(&key, &file, &context),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+        let new_key = EncryptionKey::from_raw_for_test([0x23; 32]);
+        assert_eq!(
+            rotate_encryption_key(&key, &new_key, dir.path()),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+    }
+
+    /// M0-FIX2 F14 oracle: data files are bound to their own names, so a
+    /// ciphertext copied over another data file does not open, before or
+    /// after key rotation.
+    #[test]
+    fn m0_f14_data_files_are_bound_to_their_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents = dir.path().join("agents.db");
+        let audit = dir.path().join("audit.db");
+        std::fs::write(&agents, b"agents data").unwrap();
+        std::fs::write(&audit, b"audit data").unwrap();
+        let old_key = EncryptionKey::from_raw_for_test([0x31; 32]);
+        encrypt_file(&old_key, &agents, &data_file_context("agents.db")).unwrap();
+        encrypt_file(&old_key, &audit, &data_file_context("audit.db")).unwrap();
+
+        let agents_blob = std::fs::read(&agents).unwrap();
+        assert!(matches!(
+            decrypt_data(&old_key, &data_file_context("audit.db"), &agents_blob),
+            Err(CryptoError::Decryption(_))
+        ));
+
+        let new_key = EncryptionKey::from_raw_for_test([0x32; 32]);
+        assert_eq!(
+            rotate_encryption_key(&old_key, &new_key, dir.path())
+                .unwrap()
+                .len(),
+            2
+        );
+        let agents_blob = std::fs::read(&agents).unwrap();
+        assert_eq!(
+            decrypt_data(&new_key, &data_file_context("agents.db"), &agents_blob).unwrap(),
+            b"agents data".to_vec()
+        );
+        assert!(matches!(
+            decrypt_data(&new_key, &data_file_context("audit.db"), &agents_blob),
+            Err(CryptoError::Decryption(_))
+        ));
+
+        // Copy one data file's ciphertext over the other: it must not open.
+        std::fs::write(&audit, &agents_blob).unwrap();
+        assert!(matches!(
+            decrypt_file(&new_key, &audit, &data_file_context("audit.db")),
+            Err(CryptoError::Decryption(_))
+        ));
+        assert!(rotate_encryption_key(&new_key, &old_key, dir.path()).is_err());
+    }
 }

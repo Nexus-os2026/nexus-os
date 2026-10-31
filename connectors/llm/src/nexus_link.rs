@@ -1745,4 +1745,66 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    /// The pre-F14 encrypted frame: flag 0x01, length, nonce, AES-256-GCM
+    /// ciphertext with no associated data.
+    fn m0_f14_legacy_v1_frame(passphrase: &str, msg: &LinkMessage) -> Vec<u8> {
+        let key: [u8; 32] = Sha256::digest(passphrase.as_bytes()).into();
+        let cipher = Aes256Gcm::new(&key.into());
+        let nonce = [0x17_u8; 12];
+        let ciphertext = cipher
+            .encrypt(&Nonce::from(nonce), serde_json::to_vec(msg).unwrap().as_slice())
+            .unwrap();
+        let mut payload = nonce.to_vec();
+        payload.extend_from_slice(&ciphertext);
+        let mut frame = vec![0x01];
+        frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        frame.extend_from_slice(&payload);
+        frame
+    }
+
+    /// M0-FIX2 F14 oracle: an encrypted frame opens only for the direction it
+    /// was sealed for, so a frame cannot be reflected back to its sender.
+    #[test]
+    fn m0_f14_frames_are_bound_to_their_direction() {
+        let mut link = NexusLink::new("dev", "/tmp/models");
+        link.set_encryption_key("direction-key");
+        for (sealed, other) in [
+            (
+                LinkDirection::InitiatorToResponder,
+                LinkDirection::ResponderToInitiator,
+            ),
+            (
+                LinkDirection::ResponderToInitiator,
+                LinkDirection::InitiatorToResponder,
+            ),
+        ] {
+            let frame = link.serialize_message(&LinkMessage::Ping, sealed).unwrap();
+            assert!(matches!(
+                link.deserialize_message(&frame, sealed),
+                Ok(LinkMessage::Ping)
+            ));
+            assert!(
+                link.deserialize_message(&frame, other).is_err(),
+                "a {sealed:?} frame must not open as {other:?}"
+            );
+        }
+    }
+
+    /// M0-FIX2 F14 oracle: the legacy unbound encrypted frame, and a
+    /// plaintext frame while a key is configured, are refused.
+    #[test]
+    fn m0_f14_unbound_frames_are_refused() {
+        let mut link = NexusLink::new("dev", "/tmp/models");
+        link.set_encryption_key("legacy-key");
+        let legacy = m0_f14_legacy_v1_frame("legacy-key", &LinkMessage::Ping);
+        let plaintext = NexusLink::serialize_message_plaintext(&LinkMessage::Ping).unwrap();
+        for direction in [
+            LinkDirection::InitiatorToResponder,
+            LinkDirection::ResponderToInitiator,
+        ] {
+            assert!(link.deserialize_message(&legacy, direction).is_err());
+            assert!(link.deserialize_message(&plaintext, direction).is_err());
+        }
+    }
 }

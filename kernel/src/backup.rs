@@ -1752,4 +1752,95 @@ mod tests {
             std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
     }
+
+    /// Encrypts `plaintext` in the pre-F14 `NEXUS_ENC_V1` format: header,
+    /// nonce, AES-256-GCM ciphertext with no associated data.
+    fn m0_f14_legacy_v1_blob(key_bytes: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
+        use aes_gcm::aead::{Aead, KeyInit};
+        let cipher = aes_gcm::Aes256Gcm::new_from_slice(key_bytes).unwrap();
+        let nonce = [0x24_u8; 12];
+        let ciphertext = cipher
+            .encrypt(&aes_gcm::Nonce::from(nonce), plaintext)
+            .unwrap();
+        let mut blob = b"NEXUS_ENC_V1".to_vec();
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+        blob
+    }
+
+    /// M0-FIX2 F14 oracle: an archive in the legacy unbound `NEXUS_ENC_V1`
+    /// format is refused by restore and verify, never decrypted, and nothing
+    /// is written.
+    #[test]
+    fn m0_f14_legacy_unbound_archive_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let backups = tmp.path().join("backups");
+        create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(tmp.path().join("no-config.toml")),
+        )
+        .unwrap();
+        let plain_archive = std::fs::read(only_archive(&backups)).unwrap();
+
+        let key_bytes = [0x55_u8; 32];
+        let key = EncryptionKey::from_raw_for_test(key_bytes);
+        let legacy_dir = tmp.path().join("legacy");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        let legacy = legacy_dir.join("legacy.tar.gz");
+        std::fs::write(&legacy, m0_f14_legacy_v1_blob(&key_bytes, &plain_archive)).unwrap();
+
+        let restore_root = tmp.path().join("restored");
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(&legacy, &restore_root, Some(&key));
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "legacy archive must be refused: {restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+        let verified = verify_backup(&legacy, Some(&key));
+        assert!(
+            matches!(verified, Err(BackupError::Encryption(_))),
+            "legacy archive must be refused by verify: {verified:?}"
+        );
+    }
+
+    /// M0-FIX2 F14 oracle: a ciphertext sealed for another purpose (here a
+    /// data file) is not accepted as a backup archive.
+    #[test]
+    fn m0_f14_ciphertext_for_another_purpose_is_not_an_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let backups = tmp.path().join("backups");
+        create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(tmp.path().join("no-config.toml")),
+        )
+        .unwrap();
+        let plain_archive = std::fs::read(only_archive(&backups)).unwrap();
+        let key = EncryptionKey::from_raw_for_test([0x66; 32]);
+        let foreign = tmp.path().join("foreign.tar.gz");
+        std::fs::write(
+            &foreign,
+            crypto::encrypt_data(&key, &crypto::data_file_context("agents.db"), &plain_archive)
+                .unwrap(),
+        )
+        .unwrap();
+        let restore_root = tmp.path().join("restored");
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(&foreign, &restore_root, Some(&key));
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "{restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+    }
 }
