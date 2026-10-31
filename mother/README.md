@@ -65,6 +65,7 @@ the host, tests included).
 | The port is sealed; the adapter calls only the agent side of the broker | `oracles/structure.rs` |
 | M2a: consent only from the broker's recorded yes for the exact hash and request; another hash, a replayed answer, an unrecorded yes or a broker refusal give none | `oracles/m2a_consent.rs`, broker `tests/m2a_mission_consent.rs` |
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
+| M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
 
 Coordinator rules the oracles pin:
 
@@ -116,15 +117,23 @@ Coordinator rules the oracles pin:
   and runs it from the interface (`authorize`, then `execute`); Mother
   learns only its state from the broker, not its output. An action the
   Owner authorized but has not run yet still counts as waiting.
-- The port remembers which action a mission waits on, in memory. A Mother
-  restart with the same port keeps waiting. A port built afresh (or a
-  broker restart, which loses the action) reports the outcome as unknown
-  and the mission is Blocked; with a fresh port over the same broker, the
-  pending action is not withdrawn by Mother and stays until it expires or
-  the Owner denies it.
-- The broker ends an expired action only when it next touches it; the
-  adapter reports a waiting action past its wall-clock expiry as expired
-  (the broker refuses to approve or start it then).
+- The identity of the action a mission waits on (its broker run and
+  commitment, and the port's deadline for it) is journaled before the
+  wait. A reopened coordinator hands it back to its port, which takes it
+  only if the broker's records say it is Mother's, so a rebuilt port can
+  still ask about it and Stop still withdraws it. The ids are names, not
+  authority. Remaining gap: if Mother dies after the broker left the action
+  waiting but before it was journaled, the mission is blocked on restart
+  (`effect_outcome_unknown`) and a rebuilt port cannot withdraw that
+  action: it stays until it expires or the Owner denies it. A broker
+  restart loses the action itself (it can no longer be approved), and the
+  mission is Blocked (`approval_outcome_unknown`).
+- The broker ends an expired action only when it next touches it. The
+  adapter reports a waiting action as expired once its wall-clock expiry
+  or the port's monotonic deadline has passed (the broker clock read before
+  asking plus the action's lifetime, never later than the broker's own
+  deadline, which a wall clock set back does not delay). The broker
+  refuses to approve or start it then.
 - A restart after an approved action but before its phase ended blocks the
   mission (`phase_interrupted`): re-running the phase could ask again.
 - The rest of a paused phase is journaled as data: the lane's effect
