@@ -7607,17 +7607,17 @@ mod tests {
         let (gate, entered, release) = gate();
         let executor = GatedExecutor::blocking(gate, blocks);
         let mut audit = AuditTrail::new();
-        std::thread::scope(|scope| {
+        let last = std::thread::scope(|scope| {
             let cycles = scope.spawn(|| {
                 let mut audit = AuditTrail::new();
                 let memory_mgr = make_memory_mgr();
-                let mut results = Vec::new();
+                let mut last = None;
                 for _ in 0..3 {
                     match runtime.run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
                     {
                         Ok(result) => {
                             let stop_here = !result.should_continue;
-                            results.push(result);
+                            last = Some(result);
                             if stop_here || executor.steps() > 0 {
                                 break;
                             }
@@ -7625,14 +7625,14 @@ mod tests {
                         Err(_) => break,
                     }
                 }
-                audit
+                (last, audit)
             });
             entered
                 .recv_timeout(Duration::from_secs(30))
                 .expect("the step started");
             stop.engage();
             release.send(()).unwrap();
-            let step_audit = cycles.join().unwrap();
+            let (last, step_audit) = cycles.join().unwrap();
             for event in step_audit.events() {
                 audit
                     .append_event(
@@ -7642,9 +7642,15 @@ mod tests {
                     )
                     .unwrap();
             }
+            last
         });
         assert_eq!(executor.steps(), 1);
-        let result = cycle_until_halt(&runtime, &agent_id, &planner, &executor, &mut audit);
+        // The halt is observed when the step's result returns, or by the
+        // next cycle.
+        let result = match last {
+            Some(result) if !result.should_continue => result,
+            _ => cycle_until_halt(&runtime, &agent_id, &planner, &executor, &mut audit),
+        };
         assert_halted(&runtime, &agent_id, &result, &audit);
         assert_eq!(executor.steps(), 1, "a second step ran after the stop");
     }
