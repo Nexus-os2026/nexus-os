@@ -504,25 +504,22 @@ mod tests {
         assert!(matches!(err, ActuatorError::CommandBlocked(_)));
     }
 
+    /// M0-FIX2 F9 review MAJOR-1: formerly `git_allowed_subcommand`, which
+    /// asserted that `git status` is not blocked. git runs programs named in
+    /// repository config, attributes and hooks, so it is refused.
     #[test]
-    fn git_allowed_subcommand() {
+    fn git_status_is_refused() {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
-        let shell = GovernedShell;
-
         let action = PlannedAction::ShellCommand {
             command: "git".into(),
             args: vec!["status".into()],
         };
-        // May fail because tmp isn't a git repo, but validation passes
-        let result = shell.execute(&action, &ctx);
-        // We only care that it wasn't CommandBlocked
-        if let Err(e) = &result {
-            assert!(
-                !matches!(e, ActuatorError::CommandBlocked(_)),
-                "git status should not be blocked"
-            );
-        }
+        let err = GovernedShell.execute(&action, &ctx).unwrap_err();
+        assert!(
+            matches!(err, ActuatorError::CommandBlocked(_)),
+            "git status must be refused, got {err:?}"
+        );
     }
 
     #[test]
@@ -560,9 +557,10 @@ mod tests {
             "expected 'hello world' in output, got: {out:?}"
         );
 
-        // Validation alone should accept "git status" with empty args.
-        GovernedShell::validate_command("git status", &[])
-            .expect("compound 'git status' command must validate");
+        // Validation alone should accept a packed "ls -la" with empty args.
+        // (M0-FIX2 F9: formerly "git status"; git is now refused.)
+        GovernedShell::validate_command("ls -la", &[])
+            .expect("compound 'ls -la' command must validate");
     }
 
     #[test]
@@ -743,14 +741,41 @@ mod tests {
         assert_validates("find", &[".", "-name", "*.rs", "-type", "f"]);
         assert_validates("sort", &["-n", "-r", "file.txt"]);
         assert_validates("sort", &["--check", "file.txt"]);
-        assert_validates("git", &["status"]);
-        assert_validates("git", &["log", "--oneline"]);
-        assert_validates("git", &["pull", "--rebase", "origin", "main"]);
-        assert_validates("git", &["push", "origin", "main"]);
-        assert_validates("cargo", &["fmt"]);
-        assert_validates("cargo", &["fmt", "--", "--check"]);
-        assert_validates("npm", &["ls"]);
+        // M0-FIX2 F9 review: git, cargo and npm entries removed from this
+        // positive control; they are now refused (see the repair oracle).
+        assert_validates("find", &[".", "-type", "d", "-print"]);
+        assert_validates("systemctl", &["status"]);
         assert_validates("free", &["-m"]);
         assert_validates("df", &["-h"]);
+    }
+
+    /// M0-FIX2 F9 review oracle (MAJOR-1, MAJOR-2, MINOR-2): programs that
+    /// start programs named in files they read from the working directory or
+    /// HOME (repository config, hooks, attributes, toolchain and cargo config,
+    /// npm and docker config) are refused outright, and `find` may not write
+    /// or delete files. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_config_driven_trampolines_are_refused() {
+        assert_refused("git", &[]);
+        for sub in [
+            "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
+        ] {
+            assert_refused("git", &[sub]);
+            assert_refused(&format!("git {sub}"), &[]);
+        }
+        assert_refused("cargo", &[]);
+        assert_refused("cargo", &["fmt"]);
+        assert_refused("cargo", &["fmt", "--", "--check"]);
+        assert_refused("cargo fmt", &[]);
+        assert_refused("npm", &[]);
+        assert_refused("npm", &["ls"]);
+        assert_refused("docker", &[]);
+        for sub in ["ps", "images", "logs", "inspect", "stats"] {
+            assert_refused("docker", &[sub]);
+        }
+        for primary in ["-delete", "-fprint", "-fprint0", "-fprintf", "-fls"] {
+            assert_refused("find", &[".", "-name", "x", primary, "out"]);
+            assert_refused(&format!("find . {primary}"), &["out"]);
+        }
     }
 }
