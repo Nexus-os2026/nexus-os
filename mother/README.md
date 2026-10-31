@@ -136,7 +136,10 @@ Coordinator rules the oracles pin:
   not in its public view, so with a wall clock set back since the action
   was created that bound is looser. Still possible with write access to
   Mother's journal (it is unkeyed): swapping the actions of two live
-  Mother missions.
+  Mother missions, or naming one action in two
+  missions, after which neither is handed back and a stopped mission's
+  genuine request stays approvable until it expires (the Owner's emergency
+  stop withdraws it).
 - **Known limit: the pre-journal window.** If Mother dies after the broker
   left an action waiting but before its identity was journaled, the
   mission is blocked on restart (`effect_outcome_unknown` before the

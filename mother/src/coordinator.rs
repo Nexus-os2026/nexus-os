@@ -483,42 +483,12 @@ impl<P: EffectPort> Coordinator<P> {
                 next_request: 1,
             }),
         };
-        coordinator.recover_actions()?;
-        // A lane call left unanswered by the restart is abandoned.
-        {
-            let mut inner = coordinator.lock();
-            let pending: Vec<(MissionId, InvocationId)> = inner
-                .missions
-                .iter()
-                .filter_map(|(id, m)| m.pending_lane.map(|inv| (*id, inv)))
-                .collect();
-            for (id, invocation) in pending {
-                inner.append(id, Event::LaneOvertaken { invocation })?;
-                inner.mission(id)?.pending_lane = None;
-            }
-        }
-        // A mission interrupted after dispatching an effect in its current
-        // phase is blocked: an unsettled effect may have happened, and
-        // re-running the phase would repeat a settled one.
-        let interrupted: Vec<(MissionId, &str)> = {
-            let inner = coordinator.lock();
-            inner
-                .missions
-                .iter()
-                .filter(|(_, m)| !m.state.is_terminal())
-                .filter_map(|(id, m)| {
-                    if m.unsettled.is_some() {
-                        Some((*id, "effect_outcome_unknown"))
-                    } else if m.dispatched_in_phase {
-                        Some((*id, "phase_interrupted"))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        };
-        for (id, reason) in interrupted {
-            coordinator.end(id, reason)?;
+        // If opening fails from here on (the journal is then poisoned and
+        // never reopens), every journaled open action is withdrawn first,
+        // a waiting mission's too: nothing could resume it.
+        if let Err(e) = coordinator.recover_and_settle() {
+            coordinator.withdraw_open_actions();
+            return Err(e);
         }
         Ok(coordinator)
     }
@@ -1289,6 +1259,9 @@ impl<P: EffectPort> Coordinator<P> {
             })
             .collect();
         let key = |p: &PendingAction| (RunId::parse(&p.run), CommitmentId::parse(&p.commitment));
+        // Every action handed back and withdrawn first; only then is any
+        // closure journaled, so that a journal failure cannot leave a later
+        // action unwithdrawn.
         for (id, state, pending) in &open {
             let (run, commitment) = key(pending);
             let claims = open
@@ -1303,10 +1276,76 @@ impl<P: EffectPort> Coordinator<P> {
             }
             if *state != MissionState::AwaitingApproval {
                 self.port.cancel(*id);
-                self.close_action(*id)?;
             }
         }
+        let mut first_error = None;
+        for (id, state, _) in &open {
+            if *state != MissionState::AwaitingApproval {
+                if let Err(e) = self.close_action(*id) {
+                    first_error.get_or_insert(e);
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// The rest of opening, after the journal was replayed: recover the
+    /// open actions, abandon unanswered lane calls, block interrupted
+    /// missions.
+    fn recover_and_settle(&self) -> Result<(), CoordinatorError> {
+        self.recover_actions()?;
+        // A lane call left unanswered by the restart is abandoned.
+        {
+            let mut inner = self.lock();
+            let pending: Vec<(MissionId, InvocationId)> = inner
+                .missions
+                .iter()
+                .filter_map(|(id, m)| m.pending_lane.map(|inv| (*id, inv)))
+                .collect();
+            for (id, invocation) in pending {
+                inner.append(id, Event::LaneOvertaken { invocation })?;
+                inner.mission(id)?.pending_lane = None;
+            }
+        }
+        // A mission interrupted after dispatching an effect in its current
+        // phase is blocked: an unsettled effect may have happened, and
+        // re-running the phase would repeat a settled one.
+        let interrupted: Vec<(MissionId, &str)> = {
+            let inner = self.lock();
+            inner
+                .missions
+                .iter()
+                .filter(|(_, m)| !m.state.is_terminal())
+                .filter_map(|(id, m)| {
+                    if m.unsettled.is_some() {
+                        Some((*id, "effect_outcome_unknown"))
+                    } else if m.dispatched_in_phase {
+                        Some((*id, "phase_interrupted"))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+        for (id, reason) in interrupted {
+            self.end(id, reason)?;
+        }
         Ok(())
+    }
+
+    /// Opening failed: withdraw every mission's journaled open action
+    /// (handed back to the port already), whatever its state.
+    fn withdraw_open_actions(&self) {
+        let open: Vec<MissionId> = self
+            .lock()
+            .missions
+            .iter()
+            .filter(|(_, m)| m.open_action.is_some())
+            .map(|(id, _)| *id)
+            .collect();
+        for id in open {
+            self.port.cancel(id);
+        }
     }
 
     fn explain(&self, id: MissionId, mission: &Mission) -> String {
