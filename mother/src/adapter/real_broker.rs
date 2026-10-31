@@ -6,7 +6,7 @@
 //! emergency-stop controller, so one broker per process. The scenarios run
 //! in order on it, the emergency stop last.
 
-use super::{GovernedPort, Home, MOTHER_AGENT};
+use super::{mother_agent, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::journal::MissionId;
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
@@ -16,6 +16,7 @@ use nexus_governed_control::authority::approval::{
     ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::run::{RunClass, RunOrigin};
 use nexus_governed_control::governed::GrantRequest;
 use std::io::{ErrorKind, Read, Write};
@@ -31,6 +32,23 @@ impl ControlConfirmer for OwnerAtTheBroker {
     }
     fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
         true
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+}
+
+/// The Owner approving an action at the broker's native dialog (test code).
+struct OwnerApproves;
+impl ControlConfirmer for OwnerApproves {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        true
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        false
     }
     fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
         false
@@ -159,6 +177,111 @@ impl World {
             self.mother.advance(id).unwrap();
         }
     }
+
+    /// The one action of the mission's run that waits for the Owner.
+    fn pending(&self, id: MissionId) -> CommitmentView {
+        let run = self.port.run_of(id).expect("the mission's run");
+        let views = self.home.control.authority().commitments().views_of_run(run);
+        let waiting: Vec<CommitmentView> = views
+            .into_iter()
+            .filter(|v| v.state == CommitmentState::Prepared)
+            .collect();
+        assert_eq!(waiting.len(), 1, "{waiting:?}");
+        waiting.into_iter().next().unwrap()
+    }
+}
+
+/// M2a against the real broker: Mother waits for the Owner's native
+/// approval of an R2 action (a POST) and continues exactly once; a denial
+/// and a Stop while waiting reach nothing.
+fn m2a_waiting_on_the_real_broker(w: &World) {
+    w.home
+        .control
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: w.origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            Duration::from_secs(600),
+            &OwnerAtTheBroker,
+        )
+        .unwrap();
+    let post = format!("POST-BUILDER:{}/m2a", w.origin);
+    let agent = mother_agent();
+
+    // Approve: nothing reaches the world while Mother waits, not even
+    // across a restart; the Owner's approval runs it once and Mother goes
+    // on.
+    let id = w.approved(&post);
+    w.advance_to(id, 2);
+    let performed = w.port.performed();
+    assert_eq!(
+        w.mother.advance(id).unwrap().to,
+        MissionState::AwaitingApproval
+    );
+    assert_eq!(w.port.performed(), performed + 1);
+    let pending = w.pending(id);
+    assert!(pending.requires_approval);
+    assert_eq!(pending.agent.to_string(), MOTHER_AGENT);
+    assert_eq!(
+        w.mother.advance(id).unwrap().to,
+        MissionState::AwaitingApproval
+    );
+    let restarted = open_mother(&w.home, &w.port);
+    assert_eq!(restarted.state(id), Some(MissionState::AwaitingApproval));
+    drop(restarted);
+    assert_eq!(w.unserved(), 0, "nothing reached the world while waiting");
+    assert_eq!(w.port.performed(), performed + 1);
+    let served = w.serve_one();
+    let run = w.port.run_of(id).unwrap();
+    w.home
+        .control
+        .authorize(pending.id, &agent, run, &OwnerApproves)
+        .unwrap();
+    w.home.control.execute(pending.id, &agent, run).unwrap();
+    assert_eq!(served.join().unwrap(), "POST /m2a HTTP/1.1");
+    assert_eq!(w.mother.advance(id).unwrap().to, MissionState::Verifying);
+    w.advance_to(id, 2);
+    assert_eq!(w.mother.state(id), Some(MissionState::Done));
+    assert_eq!(w.unserved(), 0, "exactly once");
+    assert_eq!(w.port.performed(), performed + 1, "Mother never re-sent it");
+
+    // Deny: zero effect, the mission is Denied, its run cancelled.
+    let denied = w.approved(&post);
+    w.advance_to(denied, 3);
+    assert_eq!(w.mother.state(denied), Some(MissionState::AwaitingApproval));
+    let pending = w.pending(denied);
+    let run = w.port.run_of(denied).unwrap();
+    w.home.control.deny(pending.id, &agent, run).unwrap();
+    assert_eq!(w.mother.advance(denied).unwrap().to, MissionState::Denied);
+    assert!(w.home.control.authority().runs().view(run).unwrap().cancelled);
+    assert_eq!(w.unserved(), 0);
+
+    // Stop while waiting: the pending action is withdrawn, so the Owner
+    // can no longer approve it, and nothing reaches the world.
+    let stopped = w.approved(&post);
+    w.advance_to(stopped, 3);
+    assert_eq!(w.mother.state(stopped), Some(MissionState::AwaitingApproval));
+    let pending = w.pending(stopped);
+    let run = w.port.run_of(stopped).unwrap();
+    assert_eq!(w.mother.stop(stopped), Ok(MissionState::Stopped));
+    let view = w
+        .home
+        .control
+        .authority()
+        .commitments()
+        .view(pending.id)
+        .unwrap();
+    assert!(view.state != CommitmentState::Prepared, "{:?}", view.state);
+    assert!(w
+        .home
+        .control
+        .authorize(pending.id, &agent, run, &OwnerApproves)
+        .is_err());
+    assert!(w.home.control.execute(pending.id, &agent, run).is_err());
+    assert_eq!(open_mother(&w.home, &w.port).state(stopped), Some(MissionState::Stopped));
+    assert_eq!(w.unserved(), 0);
 }
 
 #[test]
@@ -254,6 +377,9 @@ fn real_broker_m1_oracles() {
     assert_eq!(w.mother.stop(before), Ok(MissionState::Stopped));
     assert!(w.mother.advance(before).is_err());
     assert_eq!(w.port.run_of(before), None);
+
+    // M2a: waiting for the Owner's approval.
+    m2a_waiting_on_the_real_broker(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);

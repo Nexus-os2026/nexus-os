@@ -178,19 +178,24 @@ fn confirm_bodies(text: &str) -> Vec<String> {
     bodies
 }
 
-/// Owner condition (a) on M1: no production code implements the consent
-/// confirmer to always answer yes, and none implements it inside `mother/`.
-/// Only test code may provide a fake confirmer. The one Owner-approved
-/// exception is the walk example, whose confirmer must ask the Owner at the
-/// terminal (it reads stdin) and never answer a literal yes.
+/// Owner condition (a) on M1, kept by M2a: no production code implements a
+/// consent confirmer that always answers yes. Since M2a the confirmer is the
+/// broker's `ControlConfirmer` (`confirm_mission`), and Mother's own trait is
+/// gone. Inside `mother/` only test code implements it, plus the one
+/// Owner-approved stand-in in the walk example, whose mission dialog asks
+/// the Owner at the terminal (it reads stdin), never answers a literal yes,
+/// and declines every other dialog. In the broker's production code every
+/// `confirm_mission` (the trait's own answer included) is a literal no.
 #[test]
 fn scan_no_production_consent_confirmer() {
-    let needle = format!("{}{}", "MissionConfirmer", " for");
+    let needle = format!("{}{}", "ControlConfirmer", " for");
+    let gone = format!("{}{}", "Mission", "Confirmer");
     let test_only =
         |rel: &str| rel.starts_with("src/oracles/") || rel == "src/adapter/real_broker.rs";
     let mut walk_impls = 0;
     for (rel, text) in mother_sources() {
         let text = code(&text);
+        assert!(!text.contains(gone.as_str()), "{rel}: Mother's own confirmer");
         let impls = text.matches(needle.as_str()).count();
         if impls == 0 || test_only(&rel) {
             continue;
@@ -200,7 +205,9 @@ fn scan_no_production_consent_confirmer() {
             "a consent confirmer in Mother's production code"
         );
         walk_impls += impls;
-        for body in confirm_bodies(&text) {
+        let bodies = confirm_bodies(&text);
+        assert_eq!(bodies.len(), 1, "the walk asks about missions once");
+        for body in bodies {
             assert!(
                 body.contains("stdin"),
                 "the walk's confirmer must ask the Owner: {body}"
@@ -208,17 +215,28 @@ fn scan_no_production_consent_confirmer() {
             assert_ne!(body, "true", "an always-yes confirmer");
             assert!(!body.ends_with(";true"), "an always-yes confirmer: {body}");
         }
+        for other in [
+            "confirm_action",
+            "confirm_grant",
+            "confirm_resume",
+            "confirm_acknowledgement",
+        ] {
+            let bodies = bodies_of(&text, other);
+            assert_eq!(bodies, vec!["false".to_string()], "walk: {other}");
+        }
     }
     assert_eq!(
         walk_impls, 1,
         "the walk example's terminal confirmer, exactly once"
     );
 
-    // The rest of the workspace: any implementation outside test code must
-    // not answer a literal yes.
+    // The rest of the workspace: outside test code, no confirmer answers a
+    // literal yes to a mission; in the broker, every answer is no.
     let workspace = crate_root().parent().unwrap().to_path_buf();
+    let broker = workspace.join("crates").join("nexus-governed-control");
     let mut files = Vec::new();
     rust_files(&workspace, &mut files);
+    let mut broker_answers = 0;
     for path in files {
         if path.starts_with(crate_root()) {
             continue;
@@ -226,7 +244,7 @@ fn scan_no_production_consent_confirmer() {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
-        if !text.contains(needle.as_str()) {
+        if !text.contains("confirm_mission") {
             continue;
         }
         let rel = path
@@ -234,15 +252,68 @@ fn scan_no_production_consent_confirmer() {
             .unwrap()
             .to_string_lossy()
             .to_string();
-        let test_code = rel.split('/').any(|part| part == "tests") || rel.ends_with("tests.rs");
+        let test_code = rel
+            .split('/')
+            .any(|part| part == "tests" || part.ends_with("_tests"))
+            || rel.ends_with("tests.rs");
         if test_code {
             continue;
         }
         for body in confirm_bodies(&code(&text)) {
             assert_ne!(body, "true", "{rel}: an always-yes confirmer");
             assert!(!body.ends_with(";true"), "{rel}: an always-yes confirmer");
+            if path.starts_with(&broker) {
+                assert_eq!(body, "false", "{rel}: a broker confirmer that may say yes");
+                broker_answers += 1;
+            }
         }
     }
+    assert!(
+        broker_answers >= 1,
+        "the broker's ControlConfirmer::confirm_mission default was not found"
+    );
+}
+
+/// Each `fn <name>(` body in `text`, without whitespace.
+fn bodies_of(text: &str, name: &str) -> Vec<String> {
+    let marker = format!("fn {name}(");
+    let mut bodies = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(marker.as_str()) {
+        let after = &rest[at..];
+        let open = after.find('{').unwrap();
+        let mut depth = 0;
+        let mut end = open;
+        for (i, c) in after[open..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        bodies.push(
+            after[open + 1..end]
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect(),
+        );
+        rest = &after[end..];
+    }
+    bodies
+}
+
+#[test]
+fn scan_the_body_scan_reads_each_dialog_separately() {
+    let text = "impl Dialogs for W {\n fn confirm_action(&self, _: &A) -> bool { false }\n fn confirm_mission(&self, r: &M) -> bool { ask(std::io::stdin()) }\n fn confirm_grant(&self, _: &G) -> bool {\n true\n }\n}";
+    assert_eq!(bodies_of(text, "confirm_action"), vec!["false".to_string()]);
+    assert_eq!(bodies_of(text, "confirm_grant"), vec!["true".to_string()]);
+    assert_eq!(bodies_of(text, "confirm_mission"), confirm_bodies(text));
 }
 
 #[test]

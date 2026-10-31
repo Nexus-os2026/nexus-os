@@ -7,20 +7,27 @@ mod contract;
 mod deny;
 mod journal;
 mod lanes;
+mod m2a_consent;
+mod m2a_waiting;
 mod mn01;
 mod review;
 mod state;
 mod stop;
 mod structure;
 
-use crate::consent::{MissionConfirmation, MissionConfirmer};
 use crate::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
-use crate::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
+use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
 use crate::journal::{MemoryJournal, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
 use crate::state::MissionState;
+use nexus_governed_control::authority::approval::{
+    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
+    MissionConfirmation, ResumeConfirmation,
+};
 use nexus_governed_control::authority::clock::ManualClock;
+use nexus_governed_control::authority::evidence::MemoryEvidence;
+use nexus_governed_control::authority::Authority;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::tool::ToolIntent;
@@ -44,6 +51,9 @@ pub enum PortCall {
     },
     Cancel(MissionId),
     Finish(MissionId),
+    /// Mother asked what became of the action awaiting the Owner's
+    /// approval.
+    Approval(MissionId),
 }
 
 #[derive(Default)]
@@ -55,14 +65,32 @@ struct PortState {
     entered: bool,
     cancelled: BTreeSet<MissionId>,
     released_by_event: Vec<bool>,
+    approvals: VecDeque<ApprovalStatus>,
+    hold_approval: bool,
+    approval_entered: bool,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
-/// hold the next effect until its mission is cancelled.
-#[derive(Default)]
+/// hold the next effect until its mission is cancelled. Mission consent is
+/// asked of a real broker authority (with an in-memory evidence sink), so
+/// a consent is only ever made from the broker's own answer.
 pub struct RecordingPort {
     state: Mutex<PortState>,
     changed: Condvar,
+    pub broker: Authority,
+    pub evidence: Arc<MemoryEvidence>,
+}
+
+impl Default for RecordingPort {
+    fn default() -> Self {
+        let evidence = Arc::new(MemoryEvidence::new(4096));
+        Self {
+            state: Mutex::new(PortState::default()),
+            changed: Condvar::new(),
+            broker: Authority::new(evidence.clone(), Arc::new(ManualClock::default())),
+            evidence,
+        }
+    }
 }
 
 impl RecordingPort {
@@ -118,6 +146,38 @@ impl RecordingPort {
     pub fn is_cancelled(&self, id: MissionId) -> bool {
         self.lock().cancelled.contains(&id)
     }
+
+    /// What the next approval queries answer, in order (then `Waiting`).
+    pub fn approval_reply(&self, status: ApprovalStatus) {
+        self.lock().approvals.push_back(status);
+    }
+
+    /// The next approval query blocks until its mission is cancelled, then
+    /// answers what is queued (an approval that came just as Stop did).
+    pub fn hold_approval(&self) {
+        self.lock().hold_approval = true;
+    }
+
+    pub fn wait_approval_entered(&self) -> bool {
+        let deadline = Instant::now() + HOLD_BOUND;
+        let mut state = self.lock();
+        while !state.approval_entered {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            state = self.changed.wait_timeout(state, left).expect("port").0;
+        }
+        true
+    }
+
+    /// How many times Mother asked about an awaited approval.
+    pub fn approval_queries(&self) -> usize {
+        self.calls()
+            .iter()
+            .filter(|c| matches!(c, PortCall::Approval(_)))
+            .count()
+    }
 }
 
 impl EffectPort for RecordingPort {
@@ -170,6 +230,31 @@ impl EffectPort for RecordingPort {
     fn emergency_stopped(&self) -> bool {
         self.lock().emergency
     }
+
+    fn broker(&self) -> &Authority {
+        &self.broker
+    }
+
+    fn approval(&self, mission: MissionId) -> ApprovalStatus {
+        let mut state = self.lock();
+        state.calls.push(PortCall::Approval(mission));
+        if state.hold_approval {
+            state.hold_approval = false;
+            state.approval_entered = true;
+            self.changed.notify_all();
+            let deadline = Instant::now() + HOLD_BOUND;
+            while !state.cancelled.contains(&mission) {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    break;
+                }
+                state = self.changed.wait_timeout(state, left).expect("port").0;
+            }
+            let by_event = state.cancelled.contains(&mission);
+            state.released_by_event.push(by_event);
+        }
+        state.approvals.pop_front().unwrap_or(ApprovalStatus::Waiting)
+    }
 }
 
 pub fn refusal(class: &str) -> EffectRefusal {
@@ -217,6 +302,7 @@ pub fn get(url: &str) -> EffectRequest {
 ///
 /// - `ASK-<ROLE>-<KIND>` (e.g. `ASK-BUILDER-NETWORK`): asks for that effect;
 /// - `FETCH-<ROLE>:<url>`: asks for a GET of `<url>` (up to a space);
+/// - `POST-<ROLE>:<url>`: asks for a POST of `<url>` (up to a space);
 /// - `HALT-<ROLE>`: answers Halt;
 /// - `VERIFY-FAIL`: the Verifier answers Fail;
 /// - `TEXT-<ROLE>:<text>`: answers `<text>` (up to `|`).
@@ -272,6 +358,14 @@ impl Lane for KeyedLane {
         }
         if let Some(url) = marker_value(r, &format!("FETCH-{tag}:"), ' ') {
             effects.push(get(url));
+        }
+        if let Some(url) = marker_value(r, &format!("POST-{tag}:"), ' ') {
+            effects.push(EffectRequest::Network(EgressIntent {
+                method: "POST".into(),
+                url: url.into(),
+                headers: vec![],
+                body: None,
+            }));
         }
         let verdict = if r.contains(&format!("HALT-{tag}")) {
             Verdict::Halt {
@@ -406,16 +500,38 @@ pub fn contract() -> MissionContract {
 }
 
 // ---------------------------------------------------------------- confirmers
+//
+// Test stand-ins for the Owner at the broker's native dialogs. Each answers
+// only the mission dialog; every other dialog is declined.
+
+macro_rules! mission_only {
+    () => {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            false
+        }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+            false
+        }
+    };
+}
 
 pub struct Yes;
-impl MissionConfirmer for Yes {
+impl ControlConfirmer for Yes {
+    mission_only!();
     fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
         true
     }
 }
 
 pub struct No;
-impl MissionConfirmer for No {
+impl ControlConfirmer for No {
+    mission_only!();
     fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
         false
     }
@@ -424,7 +540,8 @@ impl MissionConfirmer for No {
 /// Says yes and keeps what it was shown.
 #[derive(Default)]
 pub struct Recording(pub Mutex<Vec<MissionConfirmation>>);
-impl MissionConfirmer for Recording {
+impl ControlConfirmer for Recording {
+    mission_only!();
     fn confirm_mission(&self, request: &MissionConfirmation) -> bool {
         self.0.lock().unwrap().push(request.clone());
         true
@@ -433,7 +550,8 @@ impl MissionConfirmer for Recording {
 
 /// Runs `during` while the Owner is being asked, then says yes.
 pub struct During<F: Fn(&MissionConfirmation)>(pub F);
-impl<F: Fn(&MissionConfirmation)> MissionConfirmer for During<F> {
+impl<F: Fn(&MissionConfirmation)> ControlConfirmer for During<F> {
+    mission_only!();
     fn confirm_mission(&self, request: &MissionConfirmation) -> bool {
         (self.0)(request);
         true
@@ -562,6 +680,12 @@ impl World {
             MissionState::Stopped => {
                 let id = self.approved(contract());
                 self.mother.stop(id).unwrap();
+                id
+            }
+            MissionState::AwaitingApproval => {
+                let id = advanced("ASK-BUILDER-NETWORK ASK-BUILDER-PROCESS", 2);
+                self.port.reply(Ok(EffectOutcome::AwaitingApproval));
+                self.mother.advance(id).unwrap();
                 id
             }
         };
