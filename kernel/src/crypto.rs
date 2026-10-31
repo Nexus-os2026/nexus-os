@@ -14,7 +14,7 @@
 //! gives a correspondingly weak key. Keys are zeroized on drop.
 
 use aes_gcm::aead::rand_core::RngCore;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::aead::{Aead, KeyInit, OsRng, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -22,16 +22,19 @@ use zeroize::{Zeroize, Zeroizing};
 
 const NONCE_LEN: usize = 12;
 const SALT_LEN: usize = 16;
-const ENCRYPTED_HEADER: &[u8] = b"NEXUS_ENC_V1";
+/// Header of the identity-bound format (M0-FIX2 F14).
+const ENCRYPTED_HEADER: &[u8] = b"NEXUS_ENC_V2";
+/// Header of the legacy format: no associated data, so a ciphertext copied
+/// to another file or purpose decrypts. Recognised only to be refused.
+const LEGACY_UNBOUND_HEADER: &[u8] = b"NEXUS_ENC_V1";
+/// Format byte inside the associated data of the bound format.
+const FORMAT_BOUND_V2: u8 = 0x02;
+/// Domain label at the start of the associated data of the bound format.
+const DATA_AAD_LABEL: &[u8] = b"nexus.crypto.data";
 /// The only environment variable the vault key is read from.
 const DEFAULT_KEY_ENV: &str = "NEXUS_ENCRYPTION_KEY";
 /// Largest vault key file accepted, in bytes (Final Gate item E).
 pub const MAX_KEY_FILE_BYTES: u64 = 4096;
-
-/// Public access to the header length for other modules (e.g. backup).
-pub const ENCRYPTED_HEADER_LEN: usize = 12; // b"NEXUS_ENC_V1".len()
-/// Public access to the header bytes for other modules.
-pub const ENCRYPTED_HEADER_BYTES: &[u8] = ENCRYPTED_HEADER;
 
 // ── Error ──────────────────────────────────────────────────────────────
 
@@ -55,6 +58,11 @@ pub enum CryptoError {
 
     #[error("key source not available: {0}")]
     KeySourceUnavailable(String),
+
+    /// M0-FIX2 F14: a ciphertext in the legacy `NEXUS_ENC_V1` format, which
+    /// carries no identity binding. It is never decrypted.
+    #[error("legacy unbound ciphertext (NEXUS_ENC_V1) is refused")]
+    LegacyUnbound,
 }
 
 // ── EncryptionKey ──────────────────────────────────────────────────────
@@ -419,19 +427,57 @@ mod key_file {
 
 // ── Encrypt / Decrypt helpers ──────────────────────────────────────────
 
-/// Encrypt arbitrary data with AES-256-GCM.
+/// Associated data that binds a ciphertext to `context`: the domain label, a
+/// NUL, the format byte, then the context prefixed with its byte length (u64
+/// big-endian).
+fn data_aad(context: &str) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(DATA_AAD_LABEL.len() + 10 + context.len());
+    aad.extend_from_slice(DATA_AAD_LABEL);
+    aad.push(0);
+    aad.push(FORMAT_BOUND_V2);
+    aad.extend_from_slice(&(context.len() as u64).to_be_bytes());
+    aad.extend_from_slice(context.as_bytes());
+    aad
+}
+
+/// The context that binds a data file encrypted at rest to its file name.
+pub fn data_file_context(file_name: &str) -> String {
+    format!("nexus.data.file/{file_name}")
+}
+
+/// Whether `blob` starts with an encryption header, bound or legacy. A
+/// reader routes such a blob to [`decrypt_data`], which refuses the legacy
+/// format, instead of treating it as plaintext.
+pub fn has_encryption_header(blob: &[u8]) -> bool {
+    blob.starts_with(ENCRYPTED_HEADER) || blob.starts_with(LEGACY_UNBOUND_HEADER)
+}
+
+/// Encrypt arbitrary data with AES-256-GCM, bound to `context` (M0-FIX2
+/// F14): it decrypts only under the same context.
 ///
-/// Output format: `NEXUS_ENC_V1 || nonce(12) || ciphertext`.
-pub fn encrypt_data(key: &EncryptionKey, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+/// Output format: `NEXUS_ENC_V2 || nonce(12) || ciphertext`, with the
+/// associated data from `data_aad(context)`.
+pub fn encrypt_data(
+    key: &EncryptionKey,
+    context: &str,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
         .map_err(|e| CryptoError::Encryption(e.to_string()))?;
 
     let mut nonce_bytes = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from(nonce_bytes);
+    let aad = data_aad(context);
 
     let ciphertext = cipher
-        .encrypt(&nonce, plaintext)
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: plaintext,
+                aad: &aad,
+            },
+        )
         .map_err(|e| CryptoError::Encryption(e.to_string()))?;
 
     let mut out = Vec::with_capacity(ENCRYPTED_HEADER.len() + NONCE_LEN + ciphertext.len());
@@ -441,8 +487,16 @@ pub fn encrypt_data(key: &EncryptionKey, plaintext: &[u8]) -> Result<Vec<u8>, Cr
     Ok(out)
 }
 
-/// Decrypt data produced by [`encrypt_data`].
-pub fn decrypt_data(key: &EncryptionKey, blob: &[u8]) -> Result<Vec<u8>, CryptoError> {
+/// Decrypt data produced by [`encrypt_data`] for the same `context`. The
+/// legacy unbound format is refused with [`CryptoError::LegacyUnbound`].
+pub fn decrypt_data(
+    key: &EncryptionKey,
+    context: &str,
+    blob: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    if blob.starts_with(LEGACY_UNBOUND_HEADER) {
+        return Err(CryptoError::LegacyUnbound);
+    }
     let header_len = ENCRYPTED_HEADER.len();
     let min_len = header_len + NONCE_LEN + 1;
     if blob.len() < min_len {
@@ -450,7 +504,7 @@ pub fn decrypt_data(key: &EncryptionKey, blob: &[u8]) -> Result<Vec<u8>, CryptoE
     }
     if &blob[..header_len] != ENCRYPTED_HEADER {
         return Err(CryptoError::InvalidData(
-            "missing NEXUS_ENC_V1 header — not encrypted or wrong format".into(),
+            "missing NEXUS_ENC_V2 header — not encrypted or wrong format".into(),
         ));
     }
 
@@ -459,44 +513,59 @@ pub fn decrypt_data(key: &EncryptionKey, blob: &[u8]) -> Result<Vec<u8>, CryptoE
         .map_err(|_| CryptoError::InvalidData("nonce length mismatch".into()))?;
     let nonce = Nonce::from(nonce_array);
     let ciphertext = &blob[header_len + NONCE_LEN..];
+    let aad = data_aad(context);
 
     let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
         .map_err(|e| CryptoError::Decryption(e.to_string()))?;
 
     cipher
-        .decrypt(&nonce, ciphertext)
-        .map_err(|_| CryptoError::Decryption("decryption failed (wrong key or corrupted)".into()))
+        .decrypt(
+            &nonce,
+            Payload {
+                msg: ciphertext,
+                aad: &aad,
+            },
+        )
+        .map_err(|_| {
+            CryptoError::Decryption(
+                "decryption failed (wrong key, wrong context or corrupted)".into(),
+            )
+        })
 }
 
-/// Encrypt a file on disk in-place.
-pub fn encrypt_file(key: &EncryptionKey, path: &Path) -> Result<(), CryptoError> {
+/// Encrypt a file on disk in-place, bound to `context`. A file already in
+/// the bound format is left as it is; a legacy unbound file is refused and
+/// left as it is.
+pub fn encrypt_file(key: &EncryptionKey, path: &Path, context: &str) -> Result<(), CryptoError> {
     let plaintext =
         std::fs::read(path).map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
 
+    if plaintext.starts_with(LEGACY_UNBOUND_HEADER) {
+        return Err(CryptoError::LegacyUnbound);
+    }
     // Skip if already encrypted.
-    if plaintext.len() >= ENCRYPTED_HEADER.len()
-        && &plaintext[..ENCRYPTED_HEADER.len()] == ENCRYPTED_HEADER
-    {
+    if plaintext.starts_with(ENCRYPTED_HEADER) {
         return Ok(());
     }
 
-    let encrypted = encrypt_data(key, &plaintext)?;
+    let encrypted = encrypt_data(key, context, &plaintext)?;
     std::fs::write(path, &encrypted)
         .map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
     Ok(())
 }
 
-/// Decrypt a file on disk in-place.
-pub fn decrypt_file(key: &EncryptionKey, path: &Path) -> Result<(), CryptoError> {
+/// Decrypt a file on disk in-place, sealed for `context`. A file without an
+/// encryption header is left as it is; a legacy unbound file is refused.
+pub fn decrypt_file(key: &EncryptionKey, path: &Path, context: &str) -> Result<(), CryptoError> {
     let blob =
         std::fs::read(path).map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
 
     // Skip if not encrypted.
-    if blob.len() < ENCRYPTED_HEADER.len() || &blob[..ENCRYPTED_HEADER.len()] != ENCRYPTED_HEADER {
+    if !has_encryption_header(&blob) {
         return Ok(());
     }
 
-    let plaintext = decrypt_data(key, &blob)?;
+    let plaintext = decrypt_data(key, context, &blob)?;
     std::fs::write(path, &plaintext)
         .map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
     Ok(())
@@ -542,17 +611,22 @@ pub fn rotate_encryption_key(
         let blob = std::fs::read(&path)
             .map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
 
-        // Decrypt with old key (skip if not encrypted).
-        let plaintext = if blob.len() >= ENCRYPTED_HEADER.len()
-            && &blob[..ENCRYPTED_HEADER.len()] == ENCRYPTED_HEADER
-        {
-            decrypt_data(old_key, &blob)?
+        // Each data file is bound to its own name (M0-FIX2 F14).
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| CryptoError::InvalidData("data file name is not UTF-8".into()))?;
+        let context = data_file_context(file_name);
+
+        // Decrypt with old key (skip if not encrypted; legacy is refused).
+        let plaintext = if has_encryption_header(&blob) {
+            decrypt_data(old_key, &context, &blob)?
         } else {
             blob
         };
 
         // Re-encrypt with new key.
-        let new_blob = encrypt_data(new_key, &plaintext)?;
+        let new_blob = encrypt_data(new_key, &context, &plaintext)?;
 
         // Write to temp, verify, then replace.
         let tmp_path = path.with_extension("db.rotating");
@@ -563,7 +637,7 @@ pub fn rotate_encryption_key(
         let verify_blob = std::fs::read(&tmp_path)
             .map_err(|e| CryptoError::Io(format!("{}: {e}", tmp_path.display())))?;
         // Best-effort: verify re-encryption round-trip; discard plaintext, only check decryptability
-        let _ = decrypt_data(new_key, &verify_blob)?;
+        let _ = decrypt_data(new_key, &context, &verify_blob)?;
 
         std::fs::rename(&tmp_path, &path).map_err(|e| CryptoError::Io(format!("rename: {e}")))?;
 
@@ -628,11 +702,11 @@ pub(crate) mod tests {
         let key = EncryptionKey::derive(b"test-password-123", &salt).unwrap();
         let plaintext = b"sensitive agent data that must be protected";
 
-        let encrypted = encrypt_data(&key, plaintext).unwrap();
+        let encrypted = encrypt_data(&key, "test-context", plaintext).unwrap();
         assert_ne!(encrypted.as_slice(), plaintext.as_slice());
         assert!(encrypted.starts_with(ENCRYPTED_HEADER));
 
-        let decrypted = decrypt_data(&key, &encrypted).unwrap();
+        let decrypted = decrypt_data(&key, "test-context", &encrypted).unwrap();
         assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
@@ -642,8 +716,8 @@ pub(crate) mod tests {
         let key_a = EncryptionKey::derive(b"password-a", &salt).unwrap();
         let key_b = EncryptionKey::derive(b"password-b", &salt).unwrap();
 
-        let encrypted = encrypt_data(&key_a, b"secret").unwrap();
-        let result = decrypt_data(&key_b, &encrypted);
+        let encrypted = encrypt_data(&key_a, "test-context", b"secret").unwrap();
+        let result = decrypt_data(&key_b, "test-context", &encrypted);
         assert!(result.is_err());
     }
 
@@ -674,11 +748,11 @@ pub(crate) mod tests {
         let salt = generate_salt();
         let key = EncryptionKey::derive(b"file-password", &salt).unwrap();
 
-        encrypt_file(&key, &file_path).unwrap();
+        encrypt_file(&key, &file_path, "test-context").unwrap();
         let on_disk = std::fs::read(&file_path).unwrap();
         assert_ne!(on_disk.as_slice(), original.as_slice());
 
-        decrypt_file(&key, &file_path).unwrap();
+        decrypt_file(&key, &file_path, "test-context").unwrap();
         let restored = std::fs::read(&file_path).unwrap();
         assert_eq!(restored.as_slice(), original.as_slice());
     }
@@ -692,11 +766,11 @@ pub(crate) mod tests {
         let salt = generate_salt();
         let key = EncryptionKey::derive(b"password", &salt).unwrap();
 
-        encrypt_file(&key, &file_path).unwrap();
+        encrypt_file(&key, &file_path, "test-context").unwrap();
         let first = std::fs::read(&file_path).unwrap();
 
         // Encrypting again should be a no-op (already encrypted).
-        encrypt_file(&key, &file_path).unwrap();
+        encrypt_file(&key, &file_path, "test-context").unwrap();
         let second = std::fs::read(&file_path).unwrap();
         assert_eq!(first, second);
     }
@@ -715,8 +789,8 @@ pub(crate) mod tests {
         let old_key = EncryptionKey::derive(b"old-master", &salt).unwrap();
 
         // Encrypt with old key.
-        encrypt_file(&old_key, &db1).unwrap();
-        encrypt_file(&old_key, &db2).unwrap();
+        encrypt_file(&old_key, &db1, &data_file_context("agents.db")).unwrap();
+        encrypt_file(&old_key, &db2, &data_file_context("audit.db")).unwrap();
 
         // Rotate to new key.
         let new_key = EncryptionKey::derive(b"new-master", &salt).unwrap();
@@ -725,10 +799,10 @@ pub(crate) mod tests {
 
         // Old key should no longer work.
         let blob = std::fs::read(&db1).unwrap();
-        assert!(decrypt_data(&old_key, &blob).is_err());
+        assert!(decrypt_data(&old_key, &data_file_context("agents.db"), &blob).is_err());
 
         // New key should work.
-        let plaintext = decrypt_data(&new_key, &blob).unwrap();
+        let plaintext = decrypt_data(&new_key, &data_file_context("agents.db"), &blob).unwrap();
         assert_eq!(plaintext.as_slice(), b"agents data");
     }
 
@@ -755,11 +829,11 @@ pub(crate) mod tests {
     fn truncated_ciphertext_rejected() {
         let salt = generate_salt();
         let key = EncryptionKey::derive(b"password", &salt).unwrap();
-        let encrypted = encrypt_data(&key, b"data").unwrap();
+        let encrypted = encrypt_data(&key, "test-context", b"data").unwrap();
 
         // Truncate.
         let truncated = &encrypted[..ENCRYPTED_HEADER.len() + 5];
-        assert!(decrypt_data(&key, truncated).is_err());
+        assert!(decrypt_data(&key, "test-context", truncated).is_err());
     }
 
     #[test]
@@ -768,7 +842,7 @@ pub(crate) mod tests {
         let key = EncryptionKey::derive(b"password", &salt).unwrap();
 
         let garbage = b"NOT_NEXUS_HEADER_plus_some_more_data_here_to_pass_length";
-        assert!(decrypt_data(&key, garbage).is_err());
+        assert!(decrypt_data(&key, "test-context", garbage).is_err());
     }
 
     #[test]
@@ -1164,5 +1238,119 @@ pub(crate) mod tests {
             key_file: Some(path.to_str().unwrap().into()),
         };
         assert_eq!(EncryptionKey::from_config(&config).unwrap_err(), expected);
+    }
+
+    /// The pre-F14 `NEXUS_ENC_V1` format: header, nonce, AES-256-GCM
+    /// ciphertext with no associated data.
+    fn m0_f14_legacy_v1_blob(key: &EncryptionKey, plaintext: &[u8]) -> Vec<u8> {
+        let cipher = Aes256Gcm::new_from_slice(key.as_bytes()).unwrap();
+        let nonce = [0x42_u8; NONCE_LEN];
+        let ciphertext = cipher.encrypt(&Nonce::from(nonce), plaintext).unwrap();
+        let mut blob = b"NEXUS_ENC_V1".to_vec();
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+        blob
+    }
+
+    /// M0-FIX2 F14 oracle: a ciphertext opens only under the context it was
+    /// sealed for.
+    #[test]
+    fn m0_f14_ciphertext_is_bound_to_its_context() {
+        let key = EncryptionKey::from_raw_for_test([0x11; 32]);
+        let blob = encrypt_data(&key, "context-a", b"payload").unwrap();
+        assert_eq!(
+            decrypt_data(&key, "context-a", &blob).unwrap(),
+            b"payload".to_vec()
+        );
+        for other in ["context-b", "", "context-a\0", "context-", "Context-a"] {
+            assert!(
+                matches!(
+                    decrypt_data(&key, other, &blob),
+                    Err(CryptoError::Decryption(_))
+                ),
+                "ciphertext for context-a must not open as {other:?}"
+            );
+        }
+    }
+
+    /// M0-FIX2 F14 oracle: the legacy unbound format is refused by every
+    /// reader, and is never treated as plaintext or wrapped again.
+    #[test]
+    fn m0_f14_legacy_unbound_format_is_refused() {
+        let key = EncryptionKey::from_raw_for_test([0x22; 32]);
+        let legacy = m0_f14_legacy_v1_blob(&key, b"legacy contents");
+        for context in ["", "context-a", &data_file_context("agents.db")] {
+            assert_eq!(
+                decrypt_data(&key, context, &legacy),
+                Err(CryptoError::LegacyUnbound)
+            );
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("agents.db");
+        std::fs::write(&file, &legacy).unwrap();
+        let context = data_file_context("agents.db");
+        assert_eq!(
+            decrypt_file(&key, &file, &context),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+        assert_eq!(
+            encrypt_file(&key, &file, &context),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+        let new_key = EncryptionKey::from_raw_for_test([0x23; 32]);
+        assert_eq!(
+            rotate_encryption_key(&key, &new_key, dir.path()),
+            Err(CryptoError::LegacyUnbound)
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), legacy, "file left as it was");
+    }
+
+    /// M0-FIX2 F14 oracle: data files are bound to their own names, so a
+    /// ciphertext copied over another data file does not open, before or
+    /// after key rotation.
+    #[test]
+    fn m0_f14_data_files_are_bound_to_their_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents = dir.path().join("agents.db");
+        let audit = dir.path().join("audit.db");
+        std::fs::write(&agents, b"agents data").unwrap();
+        std::fs::write(&audit, b"audit data").unwrap();
+        let old_key = EncryptionKey::from_raw_for_test([0x31; 32]);
+        encrypt_file(&old_key, &agents, &data_file_context("agents.db")).unwrap();
+        encrypt_file(&old_key, &audit, &data_file_context("audit.db")).unwrap();
+
+        let agents_blob = std::fs::read(&agents).unwrap();
+        assert!(matches!(
+            decrypt_data(&old_key, &data_file_context("audit.db"), &agents_blob),
+            Err(CryptoError::Decryption(_))
+        ));
+
+        let new_key = EncryptionKey::from_raw_for_test([0x32; 32]);
+        assert_eq!(
+            rotate_encryption_key(&old_key, &new_key, dir.path())
+                .unwrap()
+                .len(),
+            2
+        );
+        let agents_blob = std::fs::read(&agents).unwrap();
+        assert_eq!(
+            decrypt_data(&new_key, &data_file_context("agents.db"), &agents_blob).unwrap(),
+            b"agents data".to_vec()
+        );
+        assert!(matches!(
+            decrypt_data(&new_key, &data_file_context("audit.db"), &agents_blob),
+            Err(CryptoError::Decryption(_))
+        ));
+
+        // Copy one data file's ciphertext over the other: it must not open.
+        std::fs::write(&audit, &agents_blob).unwrap();
+        assert!(matches!(
+            decrypt_file(&new_key, &audit, &data_file_context("audit.db")),
+            Err(CryptoError::Decryption(_))
+        ));
+        assert!(rotate_encryption_key(&new_key, &old_key, dir.path()).is_err());
     }
 }

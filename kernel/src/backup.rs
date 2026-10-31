@@ -14,6 +14,49 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+/// The context every encrypted backup archive is bound to (M0-FIX2 F14), so
+/// a ciphertext sealed for another purpose is not accepted as an archive.
+const BACKUP_ARCHIVE_CONTEXT: &str = "nexus.backup.archive";
+
+/// Opens archive bytes for restore or verify (M0-FIX2 F14). An archive must
+/// be encrypted when a key is supplied, or when the sidecar beside it records
+/// it as encrypted, or when that sidecar exists but cannot be read: then a
+/// body without the encryption header is refused, never read as plaintext.
+/// An encrypted body needs the key and opens only as a backup archive.
+fn open_archive_bytes(
+    archive_path: &Path,
+    raw: Vec<u8>,
+    encryption_key: Option<&EncryptionKey>,
+    missing_key: &str,
+) -> Result<Vec<u8>, BackupError> {
+    if crypto::has_encryption_header(&raw) {
+        let key = encryption_key.ok_or_else(|| BackupError::Encryption(missing_key.into()))?;
+        return Ok(crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?);
+    }
+    if encryption_key.is_some() {
+        return Err(BackupError::Encryption(
+            "a key was supplied but the archive is not encrypted".into(),
+        ));
+    }
+    let meta_path = archive_path.with_extension("meta.json");
+    match std::fs::read_to_string(&meta_path) {
+        Ok(text) => match serde_json::from_str::<BackupMetadata>(&text) {
+            Ok(meta) if !meta.encrypted => Ok(raw),
+            Ok(_) => Err(BackupError::Encryption(
+                "the backup metadata records an encrypted archive but the archive is not encrypted"
+                    .into(),
+            )),
+            Err(_) => Err(BackupError::Encryption(
+                "the backup metadata cannot be read, so an unencrypted archive is refused".into(),
+            )),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(raw),
+        Err(_) => Err(BackupError::Encryption(
+            "the backup metadata cannot be read, so an unencrypted archive is refused".into(),
+        )),
+    }
+}
+
 // ── Error ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -409,7 +452,7 @@ fn create_backup_with_config_file(
 
     // Optionally encrypt the archive.
     if let Some(key) = archive_key {
-        crypto::encrypt_file(key, &archive_path)?;
+        crypto::encrypt_file(key, &archive_path, BACKUP_ARCHIVE_CONTEXT)?;
     }
 
     // Compute checksum and size.
@@ -590,15 +633,12 @@ fn restore_with_limits(
     // Read the archive (decrypt if needed).
     let raw = std::fs::read(archive_path)?;
 
-    let archive_bytes = if raw.len() >= crypto::ENCRYPTED_HEADER_LEN
-        && &raw[..crypto::ENCRYPTED_HEADER_LEN] == crypto::ENCRYPTED_HEADER_BYTES
-    {
-        let key = encryption_key
-            .ok_or_else(|| BackupError::Encryption("encryption key required for restore".into()))?;
-        crypto::decrypt_data(key, &raw)?
-    } else {
-        raw
-    };
+    let archive_bytes = open_archive_bytes(
+        archive_path,
+        raw,
+        encryption_key,
+        "encryption key required for restore",
+    )?;
 
     // First pass: validate every entry; nothing is written.
     let (backup_id, restored_files) = plan_restore(&archive_bytes, limits)?;
@@ -804,16 +844,12 @@ pub fn verify_backup(
 
     // Try to read the archive to verify it's not corrupted.
     let raw = std::fs::read(archive_path)?;
-    let archive_data = if raw.len() >= crypto::ENCRYPTED_HEADER_LEN
-        && &raw[..crypto::ENCRYPTED_HEADER_LEN] == crypto::ENCRYPTED_HEADER_BYTES
-    {
-        let key = encryption_key.ok_or_else(|| {
-            BackupError::Encryption("key required to verify encrypted backup".into())
-        })?;
-        crypto::decrypt_data(key, &raw)?
-    } else {
-        raw
-    };
+    let archive_data = open_archive_bytes(
+        archive_path,
+        raw,
+        encryption_key,
+        "key required to verify encrypted backup",
+    )?;
 
     let decoder = GzDecoder::new(archive_data.as_slice());
     let mut archive = tar::Archive::new(decoder);
@@ -1751,5 +1787,162 @@ mod tests {
             }
             std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
+    }
+
+    /// Encrypts `plaintext` in the pre-F14 `NEXUS_ENC_V1` format: header,
+    /// nonce, AES-256-GCM ciphertext with no associated data.
+    fn m0_f14_legacy_v1_blob(key_bytes: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
+        use aes_gcm::aead::{Aead, KeyInit};
+        let cipher = aes_gcm::Aes256Gcm::new_from_slice(key_bytes).unwrap();
+        let nonce = [0x24_u8; 12];
+        let ciphertext = cipher
+            .encrypt(&aes_gcm::Nonce::from(nonce), plaintext)
+            .unwrap();
+        let mut blob = b"NEXUS_ENC_V1".to_vec();
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+        blob
+    }
+
+    /// M0-FIX2 F14 oracle: an archive in the legacy unbound `NEXUS_ENC_V1`
+    /// format is refused by restore and verify, never decrypted, and nothing
+    /// is written.
+    #[test]
+    fn m0_f14_legacy_unbound_archive_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let backups = tmp.path().join("backups");
+        create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(tmp.path().join("no-config.toml")),
+        )
+        .unwrap();
+        let plain_archive = std::fs::read(only_archive(&backups)).unwrap();
+
+        let key_bytes = [0x55_u8; 32];
+        let key = EncryptionKey::from_raw_for_test(key_bytes);
+        let legacy_dir = tmp.path().join("legacy");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        let legacy = legacy_dir.join("legacy.tar.gz");
+        std::fs::write(&legacy, m0_f14_legacy_v1_blob(&key_bytes, &plain_archive)).unwrap();
+
+        let restore_root = tmp.path().join("restored");
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(&legacy, &restore_root, Some(&key));
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "legacy archive must be refused: {restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+        let verified = verify_backup(&legacy, Some(&key));
+        assert!(
+            matches!(verified, Err(BackupError::Encryption(_))),
+            "legacy archive must be refused by verify: {verified:?}"
+        );
+    }
+
+    /// M0-FIX2 F14 oracle: a ciphertext sealed for another purpose (here a
+    /// data file) is not accepted as a backup archive.
+    #[test]
+    fn m0_f14_ciphertext_for_another_purpose_is_not_an_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let backups = tmp.path().join("backups");
+        create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(tmp.path().join("no-config.toml")),
+        )
+        .unwrap();
+        let plain_archive = std::fs::read(only_archive(&backups)).unwrap();
+        let key = EncryptionKey::from_raw_for_test([0x66; 32]);
+        let foreign = tmp.path().join("foreign.tar.gz");
+        std::fs::write(
+            &foreign,
+            crypto::encrypt_data(
+                &key,
+                &crypto::data_file_context("agents.db"),
+                &plain_archive,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let restore_root = tmp.path().join("restored");
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(&foreign, &restore_root, Some(&key));
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "{restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+    }
+
+    /// Creates one backup in `dir` (encrypted under `key` when given) and
+    /// returns its archive path.
+    fn m0_f14_backup(tmp: &Path, dir: &str, key: Option<&EncryptionKey>) -> PathBuf {
+        let data_dir = tmp.join("data");
+        if !data_dir.exists() {
+            setup_test_data(&data_dir);
+        }
+        let backups = tmp.join(dir);
+        create_backup_with_config_file(
+            &with_config(backups.clone(), key.is_some()),
+            &data_dir,
+            key,
+            || Ok(tmp.join("no-config.toml")),
+        )
+        .unwrap();
+        only_archive(&backups)
+    }
+
+    fn m0_f14_assert_refused(archive: &Path, key: Option<&EncryptionKey>, tmp: &Path) {
+        let restore_root = tmp.join(format!("restored-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(archive, &restore_root, key);
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "downgraded archive must be refused by restore: {restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+        let verified = verify_backup(archive, key);
+        assert!(
+            matches!(verified, Err(BackupError::Encryption(_))),
+            "downgraded archive must be refused by verify: {verified:?}"
+        );
+    }
+
+    /// M0-FIX2 F14 review MAJOR-1 oracle: when a key is supplied, an archive
+    /// without the encryption header is refused, never read as plaintext.
+    #[test]
+    fn m0_f14_plaintext_archive_with_a_key_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plain = m0_f14_backup(tmp.path(), "plain", None);
+        let key = EncryptionKey::from_raw_for_test([0x77; 32]);
+        m0_f14_assert_refused(&plain, Some(&key), tmp.path());
+    }
+
+    /// M0-FIX2 F14 review MAJOR-1 oracle: an archive whose sidecar records it
+    /// as encrypted is refused when its body is plaintext, with or without a
+    /// key; so is a plaintext body beside a sidecar that cannot be read.
+    #[test]
+    fn m0_f14_plaintext_body_under_an_encrypted_sidecar_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = EncryptionKey::from_raw_for_test([0x78; 32]);
+        let encrypted = m0_f14_backup(tmp.path(), "encrypted", Some(&key));
+        let plain = m0_f14_backup(tmp.path(), "plain", None);
+        std::fs::write(&encrypted, std::fs::read(&plain).unwrap()).unwrap();
+        m0_f14_assert_refused(&encrypted, None, tmp.path());
+        m0_f14_assert_refused(&encrypted, Some(&key), tmp.path());
+
+        std::fs::write(plain.with_extension("meta.json"), "not metadata").unwrap();
+        m0_f14_assert_refused(&plain, None, tmp.path());
     }
 }
