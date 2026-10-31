@@ -33,6 +33,9 @@ fn m0_fix2_f10_the_production_front_door_records_a_halted_model_call() {
 
     // A model call in flight under the process's authority.
     let watch = StopAuthority::global().admit().unwrap();
+    // The kernel stop that ends the call: the first engaged after its
+    // admission (the owner's Stop engages the kernel stop twice).
+    let ending_stop = StopAuthority::global().stop_number() + 1;
     let mut call = Command::new("cat");
     call.stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -40,7 +43,6 @@ fn m0_fix2_f10_the_production_front_door_records_a_halted_model_call() {
     let (child, mut pipes) = GuardedChild::spawn(&mut call, &watch, HaltArea::ModelCall).unwrap();
     let _held_open = pipes.stdin.take();
     control.emergency_stop();
-    let stop_number = StopAuthority::global().stop_number();
     assert!(matches!(child.finish(), ChildEnd::Halted(Ok(_))));
 
     // Reopened: the store qualifies (its chain verifies) and holds the halt.
@@ -60,7 +62,7 @@ fn m0_fix2_f10_the_production_front_door_records_a_halted_model_call() {
     assert_eq!(bodies.len(), 1, "{bodies:?}");
     let halt: serde_json::Value = serde_json::from_str(&bodies[0]).unwrap();
     assert_eq!(halt["detail"]["area"], "model_call", "{halt}");
-    assert_eq!(halt["detail"]["stop_number"], stop_number.to_string());
+    assert_eq!(halt["detail"]["stop_number"], ending_stop.to_string());
     assert_eq!(halt["outcome"], "ended", "{halt}");
     drop(db);
     let _ = std::fs::remove_dir_all(&root);

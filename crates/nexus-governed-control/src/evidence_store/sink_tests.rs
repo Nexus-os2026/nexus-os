@@ -1098,6 +1098,10 @@ fn m0_fix2_f10_a_halted_model_call_is_durably_recorded() {
 
     // A model call in flight: a child that blocks until it is ended.
     let watch = stop.admit().unwrap();
+    // The kernel stop that ends the call: the first one engaged after its
+    // admission (the owner's Stop engages the kernel stop twice, before
+    // and after the broker step; the first ends the call).
+    let ending_stop = stop.stop_number() + 1;
     let mut call = std::process::Command::new("cat");
     call.stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
@@ -1105,7 +1109,6 @@ fn m0_fix2_f10_a_halted_model_call_is_durably_recorded() {
     let (child, mut pipes) = GuardedChild::spawn(&mut call, &watch, HaltArea::ModelCall).unwrap();
     let _held_open = pipes.stdin.take();
     governed.emergency_stop();
-    let stop_number = stop.stop_number();
     assert!(
         matches!(child.finish(), ChildEnd::Halted(Ok(_))),
         "the stop did not end the model call"
@@ -1127,7 +1130,7 @@ fn m0_fix2_f10_a_halted_model_call_is_durably_recorded() {
     assert_eq!(halt["detail"]["area"], "model_call", "{halt}");
     assert_eq!(
         halt["detail"]["stop_number"],
-        stop_number.to_string(),
+        ending_stop.to_string(),
         "{halt}"
     );
     assert_eq!(halt["outcome"], "ended", "{halt}");
