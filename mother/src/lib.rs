@@ -1,4 +1,4 @@
-//! Mother Nexus M1: the mission contract and the coordinator core.
+//! Mother Nexus M1 and M2a: the mission contract and the coordinator core.
 //!
 //! Mother turns an Owner's goal into a [`contract::MissionContract`] (the
 //! Owner's words verbatim, a restatement, the requested folder, a budget,
@@ -24,6 +24,8 @@
 //!     fn cancel(&self, _: MissionId) {}
 //!     fn finish(&self, _: MissionId) {}
 //!     fn emergency_stopped(&self) -> bool { false }
+//!     fn broker(&self) -> &nexus_governed_control::authority::Authority { todo!() }
+//!     fn approval(&self, _: MissionId) -> nexus_mother::effect::ApprovalStatus { todo!() }
 //! }
 //! ```
 //!

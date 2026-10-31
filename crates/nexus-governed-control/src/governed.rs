@@ -7,7 +7,7 @@
 //! owner's grants and native approvals authorize, the pipeline executes
 //! once. There is no other entry to any actuator.
 
-use crate::authority::approval::ControlConfirmer;
+use crate::authority::approval::{ControlConfirmer, MissionApproval, MissionConfirmation};
 use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
 use crate::authority::effect::EffectClass;
@@ -499,6 +499,16 @@ impl GovernedControl {
             self.kernel_stop.lift_if(confirmed);
         }
         Ok(())
+    }
+
+    /// Ask the owner, natively, to consent to an agent's mission (Mother
+    /// Nexus M2a): see `Authority::confirm_mission`. It grants nothing.
+    pub fn confirm_mission(
+        &self,
+        request: &MissionConfirmation,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<MissionApproval, AuthorityError> {
+        self.authority().confirm_mission(request, confirmer)
     }
 
     /// The canonical scope for a grant request (identities pinned now).

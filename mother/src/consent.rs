@@ -1,17 +1,13 @@
-//! Consent: the Owner's yes to one exact contract hash.
+//! Consent: the Owner's yes to one exact contract hash, from the broker.
 //!
 //! A [`Consent`] cannot be built, cloned, copied or deserialized outside
-//! this crate. The coordinator mints one only when a [`MissionConfirmer`]
-//! answered yes to a [`MissionConfirmation`] the coordinator built from the
-//! mission's contract, and only if that contract has not changed since.
-//! No string, journal text or lane (model) output is ever read as consent.
-//!
-//! M1 non-claim: the broker's native confirmer (`ControlConfirmer`) has no
-//! mission dialog, so the confirmer is Mother's own trait, with no
-//! implementation in Mother's library. M2 moves mission consent into the
-//! broker (`confirm_mission` in `ControlConfirmer`) when the desktop
-//! confirmer is rebuilt; that is a security-core change that needs Owner
-//! approval and a fresh review.
+//! this crate. The coordinator makes one live only from the broker's
+//! [`MissionApproval`]: the Owner's yes at the broker's native mission
+//! dialog (`ControlConfirmer::confirm_mission`), recorded in the broker's
+//! evidence store, for the exact contract hash and request the coordinator
+//! asked about, while the contract has not changed. On restart, a verified
+//! journal's record of that consent is replayed. No string, journal text or
+//! lane (model) output is ever read as consent.
 //!
 //! ```compile_fail
 //! // A consent cannot be made from outside the crate.
@@ -25,12 +21,15 @@
 
 use crate::contract::{ContractHash, EffectKind, MissionContract};
 use crate::journal::MissionId;
+use nexus_governed_control::authority::approval::{MissionApproval, MissionConfirmation};
+use nexus_governed_control::authority::evidence::{quoted, wrapped};
 use std::collections::BTreeSet;
 
-/// What the Owner is shown and asked to consent to. Built only by the
-/// coordinator, from the mission's current contract.
+/// What the Owner is shown about a mission, built only by the coordinator
+/// from the mission's current contract. The broker's dialog shows it as
+/// plain lines ([`MissionSummary::lines`]) beside the exact hash.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MissionConfirmation {
+pub struct MissionSummary {
     pub mission: MissionId,
     pub hash: ContractHash,
     pub owner_words: String,
@@ -45,7 +44,7 @@ pub struct MissionConfirmation {
     pub pass_criteria: Vec<String>,
 }
 
-impl MissionConfirmation {
+impl MissionSummary {
     pub fn title(&self) -> &'static str {
         "Start this mission?"
     }
@@ -73,13 +72,56 @@ impl MissionConfirmation {
                 .collect(),
         }
     }
-}
 
-/// The Owner's native answer to a mission confirmation: `true` only if the
-/// Owner consented. Mother's library has no implementation; the host
-/// provides it (M2: the desktop's native dialog).
-pub trait MissionConfirmer {
-    fn confirm_mission(&self, request: &MissionConfirmation) -> bool;
+    /// The summary as the broker's dialog shows it: plain lines, every
+    /// text the Owner or a lane wrote quoted (each of its lines marked
+    /// `│ `, hidden characters escaped, nothing cut), so none of it can
+    /// pass for the dialog's own text.
+    pub fn lines(&self) -> Vec<String> {
+        let mut lines = vec![format!("Mission: {}", self.mission)];
+        lines.extend(quoted("Your words, exactly", &self.owner_words));
+        lines.extend(quoted("What I understood", &self.restatement));
+        match &self.requested_folder {
+            Some(folder) => {
+                lines.push(
+                    "Folder you asked for (a request to the broker, not a permission):".into(),
+                );
+                lines.extend(wrapped(folder));
+            }
+            None => lines.push("Folder: none requested".into()),
+        }
+        lines.push(format!(
+            "Budget: {} ms, {} lane calls, money {} (minor units)",
+            self.max_duration_ms, self.max_model_calls, self.max_money_minor
+        ));
+        let forbidden: Vec<&str> = self.forbidden_effects.iter().map(|k| k.as_str()).collect();
+        lines.push(format!(
+            "Never allowed: {}",
+            if forbidden.is_empty() {
+                "nothing".to_string()
+            } else {
+                forbidden.join(", ")
+            }
+        ));
+        for (question, answer) in &self.answers {
+            lines.extend(quoted("I asked", question));
+            lines.extend(quoted("You said", answer));
+        }
+        for criterion in &self.pass_criteria {
+            lines.extend(quoted("Pass criterion (fixed now)", criterion));
+        }
+        lines
+    }
+
+    /// The broker's mission confirmation for this summary, under the
+    /// coordinator's `request` label.
+    pub(crate) fn confirmation(&self, request: String) -> MissionConfirmation {
+        MissionConfirmation {
+            contract_hash: self.hash.to_hex(),
+            request,
+            summary: self.lines(),
+        }
+    }
 }
 
 /// The Owner's consent to exactly one contract hash.
@@ -89,10 +131,23 @@ pub struct Consent {
 }
 
 impl Consent {
-    /// Only after the Owner's confirmer said yes to this hash, or when a
-    /// verified journal recorded that it did.
+    /// Only when a verified journal recorded the consent (replay).
     pub(crate) fn minted(hash: ContractHash) -> Self {
         Self { hash }
+    }
+
+    /// The live consent: from the broker's approval of exactly `asked`
+    /// (its hash and its request), consuming the approval. `None` for an
+    /// approval of anything else.
+    pub(crate) fn from_broker(
+        approval: MissionApproval,
+        asked: &MissionConfirmation,
+    ) -> Option<Self> {
+        if approval.contract_hash() != asked.contract_hash || approval.request() != asked.request {
+            return None;
+        }
+        let hash = ContractHash::from_hex(approval.contract_hash())?;
+        Some(Self { hash })
     }
 
     pub fn hash(&self) -> ContractHash {

@@ -7,16 +7,24 @@
 //! revokes or resumes. The broker has no file or spend route, so those
 //! effects are refused here.
 //!
+//! M2a: an R2 action is left waiting at the broker; the port remembers it
+//! and reports what the broker's record of it says (the Owner approves and
+//! runs it from the interface; Mother never does). The Owner's mission
+//! consent is asked at the broker's authority (`broker`), by the
+//! coordinator.
+//!
 //! [`FileJournal`] keeps the mission journal in a file in Mother's home
 //! (Mother's own state, not an effect on the world). [`Home`] builds both
 //! from a directory the host chooses.
 
-use crate::effect::{EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
+use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
 use crate::journal::{JournalError, JournalStore, MissionId};
 use nexus_governed_control::authority::clock::{Clock, SystemClock};
+use nexus_governed_control::authority::commitment::CommitmentState;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
-use nexus_governed_control::authority::ids::{AgentId, RunId};
+use nexus_governed_control::authority::ids::{AgentId, CommitmentId, RunId};
 use nexus_governed_control::authority::run::RunOrigin;
+use nexus_governed_control::authority::Authority;
 use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
@@ -46,6 +54,8 @@ pub fn mother_agent() -> AgentId {
 struct Runs {
     open: BTreeMap<MissionId, RunId>,
     ended: BTreeSet<MissionId>,
+    /// The action each mission waits on at the broker.
+    waiting: BTreeMap<MissionId, CommitmentId>,
 }
 
 /// The EffectPort over the governed-control broker.
@@ -155,7 +165,10 @@ impl EffectPort for GovernedPort {
         let run = self.run_for(mission)?;
         match self.control.agent_action(&mother_agent(), run, &intent) {
             Ok(AgentOutcome::Done(output)) => Ok(EffectOutcome::Done { text: output.text }),
-            Ok(AgentOutcome::AwaitingApproval(_)) => Ok(EffectOutcome::AwaitingApproval),
+            Ok(AgentOutcome::AwaitingApproval(view)) => {
+                self.lock().waiting.insert(mission, view.id);
+                Ok(EffectOutcome::AwaitingApproval)
+            }
             Err(e) => Err(refused(e.class())),
         }
     }
@@ -174,6 +187,56 @@ impl EffectPort for GovernedPort {
 
     fn emergency_stopped(&self) -> bool {
         self.control.authority().runs().is_stopped()
+    }
+
+    fn broker(&self) -> &Authority {
+        self.control.authority()
+    }
+
+    /// The broker's record of the action `mission` waits on. A port that
+    /// does not know it (another process's, or one built afresh) says its
+    /// outcome is unknown.
+    fn approval(&self, mission: MissionId) -> ApprovalStatus {
+        let unknown = || ApprovalStatus::Lapsed {
+            class: "approval_outcome_unknown".into(),
+        };
+        let (run, commitment) = {
+            let runs = self.lock();
+            match (runs.open.get(&mission), runs.waiting.get(&mission)) {
+                (Some(run), Some(commitment)) => (*run, *commitment),
+                _ => return unknown(),
+            }
+        };
+        let authority = self.control.authority();
+        let Some(view) = authority.commitments().view(commitment) else {
+            return unknown();
+        };
+        if view.run != run || view.agent != mother_agent() {
+            return unknown();
+        }
+        // The broker ends an expired action when it is next touched; past
+        // its expiry it can no longer be approved or started.
+        let expired = authority.clock().wall_ms() >= view.expires_wall_ms;
+        let status = match view.state {
+            CommitmentState::Prepared | CommitmentState::Authorized if expired => {
+                ApprovalStatus::Expired
+            }
+            CommitmentState::Prepared
+            | CommitmentState::Authorized
+            | CommitmentState::Executing => ApprovalStatus::Waiting,
+            CommitmentState::Succeeded => ApprovalStatus::Approved,
+            CommitmentState::Denied => ApprovalStatus::Denied,
+            CommitmentState::Expired => ApprovalStatus::Expired,
+            CommitmentState::Failed | CommitmentState::Cancelled | CommitmentState::Revoked => {
+                ApprovalStatus::Lapsed {
+                    class: view.state.as_str().into(),
+                }
+            }
+        };
+        if status != ApprovalStatus::Waiting {
+            self.lock().waiting.remove(&mission);
+        }
+        status
     }
 }
 

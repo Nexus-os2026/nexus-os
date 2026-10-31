@@ -12,9 +12,16 @@
 //!
 //! Stop: every non-terminal state ─► Stopped.
 //! Block: Approved … Explaining ─► Blocked.   Fail: Investigating … Explaining ─► Failed.
+//!
+//! M2a, an effect that waits for the Owner's native approval:
+//!   Investigating | Building | Verifying ─await approval─► AwaitingApproval
+//!   AwaitingApproval ─action approved─► the phase it paused in
+//!                    ─action denied─► Denied
+//!                    ─approval lapsed─► Blocked
 //! ```
 
 use crate::contract::{ContractHash, MissionContract};
+use crate::lane::LaneRole;
 use serde::{Deserialize, Serialize};
 
 /// Where a mission is.
@@ -33,10 +40,13 @@ pub enum MissionState {
     Denied,
     Failed,
     Blocked,
+    /// M2a: an effect waits for the Owner's native approval at the broker.
+    /// No lane runs and nothing is sent until the broker answers.
+    AwaitingApproval,
 }
 
 impl MissionState {
-    pub const ALL: [MissionState; 12] = [
+    pub const ALL: [MissionState; 13] = [
         MissionState::Draft,
         MissionState::AwaitingConsent,
         MissionState::Approved,
@@ -49,6 +59,7 @@ impl MissionState {
         MissionState::Denied,
         MissionState::Failed,
         MissionState::Blocked,
+        MissionState::AwaitingApproval,
     ];
 
     /// A terminal mission never moves again and dispatches nothing.
@@ -88,7 +99,17 @@ impl MissionState {
             MissionState::Denied => "denied",
             MissionState::Failed => "failed",
             MissionState::Blocked => "blocked",
+            MissionState::AwaitingApproval => "awaiting_approval",
         }
+    }
+
+    /// The phases in which an effect may wait for the Owner's approval:
+    /// those whose lanes may ask for effects.
+    pub fn may_wait(self) -> bool {
+        matches!(
+            self,
+            MissionState::Investigating | MissionState::Building | MissionState::Verifying
+        )
     }
 }
 
@@ -126,6 +147,30 @@ pub enum Trigger {
     Stop {
         reason: String,
     },
+    /// M2a: effect number `effect` waits for the Owner's approval. What the
+    /// phase had still to do when it paused: the rest of the asking lane's
+    /// effects (as data) and the lanes still to run.
+    AwaitApproval {
+        effect: u64,
+        rest: Vec<serde_json::Value>,
+        roles_left: Vec<LaneRole>,
+    },
+    /// The Owner approved the waited effect and it ran at the broker: the
+    /// mission returns to `phase`, the phase it paused in.
+    ActionApproved {
+        effect: u64,
+        phase: MissionState,
+    },
+    /// The Owner denied the waited effect.
+    ActionDenied {
+        effect: u64,
+    },
+    /// The waited effect will not run: its approval expired, it was
+    /// revoked or failed, or Mother's own budget ran out.
+    ApprovalLapsed {
+        effect: u64,
+        reason: String,
+    },
 }
 
 /// A trigger that the state does not accept.
@@ -149,6 +194,10 @@ impl Trigger {
             Trigger::Block { .. } => "block",
             Trigger::Fail { .. } => "fail",
             Trigger::Stop { .. } => "stop",
+            Trigger::AwaitApproval { .. } => "await_approval",
+            Trigger::ActionApproved { .. } => "action_approved",
+            Trigger::ActionDenied { .. } => "action_denied",
+            Trigger::ApprovalLapsed { .. } => "approval_lapsed",
         }
     }
 }
@@ -174,6 +223,12 @@ pub fn transition(
         (Trigger::Block { .. }, s) if s.is_working() => Some(Blocked),
         (Trigger::Fail { .. }, s) if s.is_working() => Some(Failed),
         (Trigger::Stop { .. }, s) if !s.is_terminal() => Some(Stopped),
+        (Trigger::AwaitApproval { .. }, s) if s.may_wait() => Some(AwaitingApproval),
+        (Trigger::ActionApproved { phase, .. }, AwaitingApproval) if phase.may_wait() => {
+            Some(*phase)
+        }
+        (Trigger::ActionDenied { .. }, AwaitingApproval) => Some(Denied),
+        (Trigger::ApprovalLapsed { .. }, AwaitingApproval) => Some(Blocked),
         _ => None,
     };
     to.ok_or(IllegalTransition {

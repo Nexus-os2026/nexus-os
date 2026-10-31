@@ -64,7 +64,10 @@ fn deny_an_effect_awaiting_the_owner_s_native_approval_waits_and_sends_nothing_m
     assert_eq!(built.to, MissionState::AwaitingApproval);
     assert_eq!(w.mother.reason(id), None);
     assert_eq!(w.port.effects().len(), 1);
-    assert!(!w.port.is_cancelled(id), "the pending action is not withdrawn");
+    assert!(
+        !w.port.is_cancelled(id),
+        "the pending action is not withdrawn"
+    );
 }
 
 #[test]

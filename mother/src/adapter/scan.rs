@@ -195,7 +195,10 @@ fn scan_no_production_consent_confirmer() {
     let mut walk_impls = 0;
     for (rel, text) in mother_sources() {
         let text = code(&text);
-        assert!(!text.contains(gone.as_str()), "{rel}: Mother's own confirmer");
+        assert!(
+            !text.contains(gone.as_str()),
+            "{rel}: Mother's own confirmer"
+        );
         let impls = text.matches(needle.as_str()).count();
         if impls == 0 || test_only(&rel) {
             continue;
@@ -318,10 +321,10 @@ fn confirmer_blocks(text: &str) -> Vec<String> {
 
 #[test]
 fn scan_the_confirmer_blocks_are_the_trait_and_its_impls() {
+    let t = ["trait", "ControlConfirmer"].join(" ");
+    let c = "ControlConfirmer";
     let text = format!(
-        "pub {t} {{\n fn confirm_mission(&self, _: &M) -> bool {{ false }}\n}}\nimpl Other {{ pub fn confirm_mission(&self, r: &M, c: &dyn X) -> R {{ ask(r, c) }} }}\nimpl {c} for Yes {{ fn confirm_mission(&self, _: &M) -> bool {{ true }} }}",
-        t = format!("{} {}", "trait", "ControlConfirmer"),
-        c = "ControlConfirmer",
+        "pub {t} {{\n fn confirm_mission(&self, _: &M) -> bool {{ false }}\n}}\nimpl Other {{ pub fn confirm_mission(&self, r: &M, c: &dyn X) -> R {{ ask(r, c) }} }}\nimpl {c} for Yes {{ fn confirm_mission(&self, _: &M) -> bool {{ true }} }}"
     );
     let bodies: Vec<String> = confirmer_blocks(&text)
         .iter()

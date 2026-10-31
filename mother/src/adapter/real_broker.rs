@@ -181,7 +181,12 @@ impl World {
     /// The one action of the mission's run that waits for the Owner.
     fn pending(&self, id: MissionId) -> CommitmentView {
         let run = self.port.run_of(id).expect("the mission's run");
-        let views = self.home.control.authority().commitments().views_of_run(run);
+        let views = self
+            .home
+            .control
+            .authority()
+            .commitments()
+            .views_of_run(run);
         let waiting: Vec<CommitmentView> = views
             .into_iter()
             .filter(|v| v.state == CommitmentState::Prepared)
@@ -255,14 +260,25 @@ fn m2a_waiting_on_the_real_broker(w: &World) {
     let run = w.port.run_of(denied).unwrap();
     w.home.control.deny(pending.id, &agent, run).unwrap();
     assert_eq!(w.mother.advance(denied).unwrap().to, MissionState::Denied);
-    assert!(w.home.control.authority().runs().view(run).unwrap().cancelled);
+    assert!(
+        w.home
+            .control
+            .authority()
+            .runs()
+            .view(run)
+            .unwrap()
+            .cancelled
+    );
     assert_eq!(w.unserved(), 0);
 
     // Stop while waiting: the pending action is withdrawn, so the Owner
     // can no longer approve it, and nothing reaches the world.
     let stopped = w.approved(&post);
     w.advance_to(stopped, 3);
-    assert_eq!(w.mother.state(stopped), Some(MissionState::AwaitingApproval));
+    assert_eq!(
+        w.mother.state(stopped),
+        Some(MissionState::AwaitingApproval)
+    );
     let pending = w.pending(stopped);
     let run = w.port.run_of(stopped).unwrap();
     assert_eq!(w.mother.stop(stopped), Ok(MissionState::Stopped));
@@ -280,7 +296,10 @@ fn m2a_waiting_on_the_real_broker(w: &World) {
         .authorize(pending.id, &agent, run, &OwnerApproves)
         .is_err());
     assert!(w.home.control.execute(pending.id, &agent, run).is_err());
-    assert_eq!(open_mother(&w.home, &w.port).state(stopped), Some(MissionState::Stopped));
+    assert_eq!(
+        open_mother(&w.home, &w.port).state(stopped),
+        Some(MissionState::Stopped)
+    );
     assert_eq!(w.unserved(), 0);
 }
 

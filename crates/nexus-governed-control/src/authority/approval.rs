@@ -5,6 +5,21 @@
 //! commitment: it cannot be constructed, cloned or deserialized outside this
 //! crate, it names the commitment and its binding digest, and authorizing
 //! the commitment consumes it.
+//!
+//! A `MissionApproval` (Mother Nexus M2a) exists only after the owner
+//! confirmed one exact mission contract hash and the broker recorded that
+//! yes: it cannot be constructed, cloned or deserialized outside this
+//! crate either. It authorizes no action: every effect of the mission
+//! still needs the owner's grants and, for R2, the owner's approval.
+//!
+//! ```compile_fail
+//! use nexus_governed_control::authority::approval::MissionApproval;
+//! fn copy(a: &MissionApproval) -> MissionApproval { a.clone() }
+//! ```
+//!
+//! ```compile_fail
+//! let _ = nexus_governed_control::authority::approval::MissionApproval::confirmed;
+//! ```
 
 use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::DIALOG_COLUMNS;
@@ -187,12 +202,97 @@ impl GrantConfirmation {
 /// The backend's native confirmation. `true` only if the owner confirmed.
 /// Everything that raises authority asks through it: a grant, an R2
 /// approval, and lifting an emergency stop; and the owner's acknowledgement
-/// of actions whose outcome was not recorded (which grants nothing).
+/// of actions whose outcome was not recorded (which grants nothing); and
+/// the owner's consent to an agent's mission (which grants nothing either:
+/// it lets the agent ask for actions under the owner's grants).
 pub trait ControlConfirmer {
     fn confirm_action(&self, request: &ActionConfirmation) -> bool;
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool;
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool;
     fn confirm_acknowledgement(&self, request: &AcknowledgementConfirmation) -> bool;
+    /// A confirmer without a mission dialog declines every mission.
+    fn confirm_mission(&self, _request: &MissionConfirmation) -> bool {
+        false
+    }
+}
+
+/// The most summary lines a mission confirmation may carry.
+pub const MAX_MISSION_SUMMARY_LINES: usize = 16_384;
+/// The longest request label a mission confirmation may carry.
+pub const MAX_MISSION_REQUEST: usize = 64;
+
+/// What the owner is asked before an agent's mission starts (Mother Nexus
+/// M2a): one exact contract hash, the asking agent's label for this
+/// request, and a plain-language summary of the contract, each line plain
+/// and at most `MAX_FIELD` characters. The broker shows them; it does not
+/// judge the summary against the hash (the agent built both), it binds the
+/// owner's answer to the hash and the request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissionConfirmation {
+    /// The contract's SHA-256: 64 lowercase hex digits.
+    pub contract_hash: String,
+    /// The agent's label for this request (an opaque correlation name).
+    pub request: String,
+    pub summary: Vec<String>,
+}
+
+impl MissionConfirmation {
+    pub fn title(&self) -> &'static str {
+        "Start this mission?"
+    }
+
+    /// The contract hash, whole, and the request in the header; the summary
+    /// in the details.
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                ("Contract", self.contract_hash.clone()),
+                ("Request", self.request.clone()),
+            ],
+            details: fitted_lines(&self.summary),
+        }
+    }
+
+    pub fn message(&self) -> String {
+        self.text().plain()
+    }
+}
+
+/// The owner's consent to exactly one mission contract hash, recorded by
+/// the broker.
+///
+/// It has no `Clone`, `Copy`, `Default` or deserializer, and its fields are
+/// private; `Authority::confirm_mission` is its only constructor.
+#[derive(Debug)]
+pub struct MissionApproval {
+    contract_hash: String,
+    request: String,
+    evidence_seq: u64,
+}
+
+impl MissionApproval {
+    /// Only after the owner confirmed the mission natively and the broker
+    /// recorded it.
+    pub(crate) fn confirmed(contract_hash: String, request: String, evidence_seq: u64) -> Self {
+        Self {
+            contract_hash,
+            request,
+            evidence_seq,
+        }
+    }
+
+    pub fn contract_hash(&self) -> &str {
+        &self.contract_hash
+    }
+
+    pub fn request(&self) -> &str {
+        &self.request
+    }
+
+    /// The sequence number of the record of the owner's yes.
+    pub fn evidence_seq(&self) -> u64 {
+        self.evidence_seq
+    }
 }
 
 /// What the owner is shown before acknowledging unsettled actions (EL-1

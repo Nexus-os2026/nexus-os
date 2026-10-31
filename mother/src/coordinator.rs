@@ -9,16 +9,27 @@
 //! waits for a lane or an effect. (The journal append is the transition's
 //! commit, a bounded local write, and is made under the lock so that the
 //! journal's order is the state machine's.)
+//!
+//! M2a: the Owner consents through the broker's native mission dialog, and
+//! a live consent is made only from the broker's approval of the exact
+//! hash and request asked about. An effect that waits for the Owner's
+//! native approval puts the mission in AwaitingApproval: Mother asks the
+//! broker what became of it and never approves it herself; once it ran,
+//! the phase goes on from where it paused.
 
-use crate::consent::{Consent, MissionConfirmation, MissionConfirmer};
+use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, ContractError, ContractHash, EffectKind, MissionContract};
-use crate::effect::{EffectOutcome, EffectPort, EffectRequest};
+use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRequest};
 use crate::journal::{verify, Entry, Event, JournalError, JournalStore, MissionId, GENESIS};
 use crate::lane::{
     input_hash, output_hash, InvocationId, Lane, LaneIdentity, LaneInput, LaneRole, Verdict,
 };
 use crate::state::{transition, IllegalTransition, MissionState, Trigger};
+use nexus_governed_control::authority::approval::{
+    ControlConfirmer, MissionApproval, MissionConfirmation,
+};
 use nexus_governed_control::authority::clock::Clock;
+use nexus_governed_control::authority::AuthorityError;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -75,6 +86,10 @@ pub enum CoordinatorError {
     NoConsent,
     /// The Owner's answer came for a contract or state that had moved on.
     ConsentStale,
+    /// The broker's approval was for another contract hash or request.
+    ConsentMismatch,
+    /// The broker refused to ask, or to record the answer: its class.
+    Broker(String),
     Denied,
     Stopped,
     /// Another call is already working on this mission.
@@ -136,6 +151,23 @@ struct Mission {
     pending_lane: Option<InvocationId>,
     prior_outputs: Vec<String>,
     reason: Option<String>,
+    /// The broker request the Owner is being asked about (in memory).
+    asking: Option<MissionConfirmation>,
+    /// What the mission waits on in AwaitingApproval.
+    waiting: Option<Waiting>,
+    /// The effect last settled as awaiting approval, with no transition
+    /// since (replay: a wait follows it).
+    awaiting_settled: Option<u64>,
+}
+
+/// An effect that waits for the Owner's approval, and what its phase had
+/// still to do.
+#[derive(Clone)]
+struct Waiting {
+    phase: MissionState,
+    effect: u64,
+    rest: Vec<serde_json::Value>,
+    roles_left: Vec<LaneRole>,
 }
 
 impl Mission {
@@ -156,19 +188,24 @@ impl Mission {
             pending_lane: None,
             prior_outputs: Vec::new(),
             reason: None,
+            asking: None,
+            waiting: None,
+            awaiting_settled: None,
         }
     }
 
-    /// Take a transition the table accepted.
+    /// Take a transition the table accepted. A consent's token is set by
+    /// the caller: live from the broker's approval, on replay from the
+    /// verified journal.
     fn apply(&mut self, trigger: &Trigger, to: MissionState, mono_now: u64) {
+        let mut dispatched = false;
         match trigger {
             Trigger::Revise { contract } => {
                 self.contract = contract.clone();
                 self.consent = None;
                 self.approved_wall_ms = None;
             }
-            Trigger::Consent { hash, at_wall_ms } => {
-                self.consent = Some(Consent::minted(*hash));
+            Trigger::Consent { at_wall_ms, .. } => {
                 self.approved_wall_ms = Some(*at_wall_ms);
                 self.mono_ref = mono_now;
                 self.spent_at_ref = 0;
@@ -178,11 +215,38 @@ impl Mission {
             | Trigger::Fail { reason } => {
                 self.reason = Some(reason.clone());
             }
+            Trigger::AwaitApproval {
+                effect,
+                rest,
+                roles_left,
+            } => {
+                self.waiting = Some(Waiting {
+                    phase: self.state,
+                    effect: *effect,
+                    rest: rest.clone(),
+                    roles_left: roles_left.clone(),
+                });
+            }
+            Trigger::ActionApproved { .. } => {
+                self.waiting = None;
+                // An effect of this phase has run: re-running the phase
+                // after a restart could ask for it again.
+                dispatched = true;
+            }
+            Trigger::ApprovalLapsed { reason, .. } => {
+                self.waiting = None;
+                self.reason = Some(reason.clone());
+            }
+            Trigger::ActionDenied { .. } => {
+                self.waiting = None;
+            }
             _ => {}
         }
         self.state = to;
         self.generation += 1;
-        self.dispatched_in_phase = false;
+        self.dispatched_in_phase = dispatched;
+        self.asking = None;
+        self.awaiting_settled = None;
     }
 
     fn consented(&self) -> bool {
@@ -216,6 +280,8 @@ struct Inner {
     broken: bool,
     missions: BTreeMap<MissionId, Mission>,
     next_mission: u64,
+    /// Numbers the consent requests of this coordinator.
+    next_request: u64,
 }
 
 impl Inner {
@@ -393,6 +459,7 @@ impl<P: EffectPort> Coordinator<P> {
                 broken: false,
                 missions,
                 next_mission,
+                next_request: 1,
             }),
         };
         // A lane call left unanswered by the restart is abandoned.
@@ -495,70 +562,124 @@ impl<P: EffectPort> Coordinator<P> {
     }
 
     /// What the Owner would be shown.
-    pub fn confirmation(&self, id: MissionId) -> Result<MissionConfirmation, CoordinatorError> {
+    pub fn confirmation(&self, id: MissionId) -> Result<MissionSummary, CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
-        Ok(MissionConfirmation::of(id, &mission.contract))
+        Ok(MissionSummary::of(id, &mission.contract))
     }
 
-    /// Ask the Owner. No lock is held while the Owner answers; a yes counts
-    /// only if the mission is still awaiting consent to the same hash.
+    /// Ask the Owner, through the broker's native mission dialog. No lock
+    /// is held while the Owner answers. A consent is made only from the
+    /// broker's recorded yes to the exact hash and request asked about,
+    /// while the mission still awaits consent to that hash; the broker's no
+    /// denies the mission.
     pub fn request_consent(
         &self,
         id: MissionId,
-        confirmer: &dyn MissionConfirmer,
+        confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionState, CoordinatorError> {
-        let (request, generation) = {
-            let mut inner = self.lock();
-            let mission = inner.mission(id)?;
-            if mission.state != MissionState::AwaitingConsent {
-                return Err(illegal(mission.state, "consent"));
-            }
-            (
-                MissionConfirmation::of(id, &mission.contract),
-                mission.generation,
-            )
-        };
-        let yes = confirmer.confirm_mission(&request);
+        let (request, generation) = self.consent_request(id)?;
+        let answer = self.port.broker().confirm_mission(&request, confirmer);
+        self.take_answer(id, generation, answer)
+    }
+
+    /// Reserve a consent request: the broker's confirmation for the
+    /// mission's current contract under a request label of its own, which
+    /// replaces any earlier request of the mission, and the reservation.
+    pub(crate) fn consent_request(
+        &self,
+        id: MissionId,
+    ) -> Result<(MissionConfirmation, u64), CoordinatorError> {
+        let mut inner = self.lock();
+        let (seq, number) = (inner.next_seq, inner.next_request);
+        inner.next_request += 1;
+        let mission = inner.mission(id)?;
+        if mission.state != MissionState::AwaitingConsent {
+            return Err(illegal(mission.state, "consent"));
+        }
+        let request =
+            MissionSummary::of(id, &mission.contract).confirmation(format!("{id}/{seq}/{number}"));
+        mission.asking = Some(request.clone());
+        Ok((request, mission.generation))
+    }
+
+    /// Take the broker's answer to the mission's current request.
+    pub(crate) fn take_answer(
+        &self,
+        id: MissionId,
+        generation: u64,
+        answer: Result<MissionApproval, AuthorityError>,
+    ) -> Result<MissionState, CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
-        if mission.generation != generation
-            || mission.state != MissionState::AwaitingConsent
-            || mission.contract.hash() != request.hash
-        {
-            let stopped = mission.state == MissionState::Stopped;
-            inner.append(
-                id,
-                Event::ConsentRefused {
-                    reason: "the mission changed while the Owner was asked".into(),
-                },
-            )?;
-            return Err(if stopped {
-                CoordinatorError::Stopped
-            } else {
-                CoordinatorError::ConsentStale
-            });
-        }
+        let hash = mission.contract.hash();
+        let asked = match &mission.asking {
+            Some(asked)
+                if mission.generation == generation
+                    && mission.state == MissionState::AwaitingConsent
+                    && asked.contract_hash == hash.to_hex() =>
+            {
+                asked.clone()
+            }
+            _ => {
+                let stopped = mission.state == MissionState::Stopped;
+                inner.append(
+                    id,
+                    Event::ConsentRefused {
+                        reason: "the mission changed while the Owner was asked".into(),
+                    },
+                )?;
+                return Err(if stopped {
+                    CoordinatorError::Stopped
+                } else {
+                    CoordinatorError::ConsentStale
+                });
+            }
+        };
         let mono = self.clock.monotonic_ms();
-        if yes {
-            let at_wall_ms = self.clock.wall_ms();
-            inner.fire(
-                id,
-                Trigger::Consent {
-                    hash: request.hash,
-                    at_wall_ms,
-                },
-                mono,
-            )
-        } else {
-            inner.fire(id, Trigger::Deny { hash: request.hash }, mono)?;
-            Err(CoordinatorError::Denied)
+        match answer {
+            Ok(approval) => {
+                let Some(consent) = Consent::from_broker(approval, &asked) else {
+                    inner.append(
+                        id,
+                        Event::ConsentRefused {
+                            reason: "the broker's answer was for another request".into(),
+                        },
+                    )?;
+                    return Err(CoordinatorError::ConsentMismatch);
+                };
+                let at_wall_ms = self.clock.wall_ms();
+                let state = inner.fire(
+                    id,
+                    Trigger::Consent {
+                        hash: consent.hash(),
+                        at_wall_ms,
+                    },
+                    mono,
+                )?;
+                inner.mission(id)?.consent = Some(consent);
+                Ok(state)
+            }
+            Err(AuthorityError::Declined) => {
+                inner.fire(id, Trigger::Deny { hash }, mono)?;
+                Err(CoordinatorError::Denied)
+            }
+            Err(refused) => {
+                inner.append(
+                    id,
+                    Event::ConsentRefused {
+                        reason: format!("broker_refused:{}", refused.class()),
+                    },
+                )?;
+                Err(CoordinatorError::Broker(refused.class().into()))
+            }
         }
     }
 
     /// Move a consented mission one state forward, running that state's
     /// lanes and dispatching the effects they ask for that pass every
-    /// check.
+    /// check. A mission that waits for the Owner's approval asks the broker
+    /// what became of the action, and goes on only once it ran.
     pub fn advance(&self, id: MissionId) -> Result<Advance, CoordinatorError> {
         let emergency = self.port.emergency_stopped();
         let mut inner = self.lock();
@@ -567,7 +688,10 @@ impl<P: EffectPort> Coordinator<P> {
             return Err(CoordinatorError::Busy);
         }
         let from = mission.state;
-        if from != MissionState::Approved && !from.is_working() {
+        if from != MissionState::Approved
+            && from != MissionState::AwaitingApproval
+            && !from.is_working()
+        {
             return Err(illegal(from, "advance"));
         }
         if !mission.consented() {
@@ -606,6 +730,7 @@ impl<P: EffectPort> Coordinator<P> {
                 self.port.finish(id);
                 return Ok(report);
             }
+            MissionState::AwaitingApproval => &[],
             MissionState::Investigating => &[
                 LaneRole::Sentinel,
                 LaneRole::ResearcherA,
@@ -624,6 +749,9 @@ impl<P: EffectPort> Coordinator<P> {
             id,
         };
 
+        if from == MissionState::AwaitingApproval {
+            return self.resolve_wait(id, generation, report);
+        }
         match self.run_lanes(id, generation, roles, &mut report)? {
             Ended::Ended(state) => {
                 report.to = state;
@@ -632,18 +760,118 @@ impl<P: EffectPort> Coordinator<P> {
             }
             Ended::Through => {}
         }
+        report.to = self.phase_done(id, generation, from)?;
+        Ok(report)
+    }
+
+    /// The phase `phase` has run every lane of a reservation: on to the
+    /// next state.
+    fn phase_done(
+        &self,
+        id: MissionId,
+        generation: u64,
+        phase: MissionState,
+    ) -> Result<MissionState, CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
         if mission.generation != generation {
             return Err(CoordinatorError::Stopped);
         }
-        let trigger = if from == MissionState::Verifying {
+        let trigger = if phase == MissionState::Verifying {
             Trigger::VerifyPass
         } else {
             Trigger::PhaseDone
         };
         let mono = self.clock.monotonic_ms();
-        report.to = inner.fire(id, trigger, mono)?;
+        inner.fire(id, trigger, mono)
+    }
+
+    /// Ask the broker what became of the action a reserved mission waits
+    /// on (no lock held), and act on it if the reservation still holds:
+    /// approved and run, the phase goes on from where it paused; denied,
+    /// the mission is Denied; expired or otherwise lapsed, it is Blocked.
+    /// The port is cancelled whenever the wait ends without the action.
+    fn resolve_wait(
+        &self,
+        id: MissionId,
+        generation: u64,
+        mut report: Advance,
+    ) -> Result<Advance, CoordinatorError> {
+        let status = self.port.approval(id);
+        let (waiting, contract) = {
+            let mut inner = self.lock();
+            let mission = inner.mission(id)?;
+            if mission.generation != generation {
+                return Err(CoordinatorError::Stopped);
+            }
+            let Some(waiting) = mission.waiting.clone() else {
+                drop(inner);
+                report.to = self.end(id, "wait_unknown")?;
+                report.reason = self.reason(id);
+                return Ok(report);
+            };
+            (waiting, mission.contract.clone())
+        };
+        let lapsed = |reason: String| Trigger::ApprovalLapsed {
+            effect: waiting.effect,
+            reason,
+        };
+        let end = match status {
+            ApprovalStatus::Waiting => return Ok(report),
+            ApprovalStatus::Approved => None,
+            ApprovalStatus::Denied => Some(Trigger::ActionDenied {
+                effect: waiting.effect,
+            }),
+            ApprovalStatus::Expired => Some(lapsed("approval_expired".into())),
+            ApprovalStatus::Lapsed { class } => Some(lapsed(format!("approval_lapsed:{class}"))),
+        };
+        if let Some(trigger) = end {
+            report.to = self.end_with(id, trigger)?;
+            report.reason = self.reason(id);
+            return Ok(report);
+        }
+
+        // Approved, and it ran at the broker: the phase goes on.
+        let generation = {
+            let mut inner = self.lock();
+            let mono = self.clock.monotonic_ms();
+            report.to = inner.fire(
+                id,
+                Trigger::ActionApproved {
+                    effect: waiting.effect,
+                    phase: waiting.phase,
+                },
+                mono,
+            )?;
+            inner.mission(id)?.generation
+        };
+        let rest: Option<Vec<EffectRequest>> = waiting
+            .rest
+            .iter()
+            .map(|value| serde_json::from_value(value.clone()).ok())
+            .collect();
+        let Some(rest) = rest else {
+            report.to = self.end(id, "waited_rest_unreadable")?;
+            report.reason = self.reason(id);
+            return Ok(report);
+        };
+        let ended = match self.checked(id, &contract, &rest, &mut report)? {
+            Ended::Through => {
+                match self.dispatch(id, generation, &rest, &waiting.roles_left, &mut report)? {
+                    Ended::Through => {
+                        self.run_lanes(id, generation, &waiting.roles_left, &mut report)?
+                    }
+                    ended => ended,
+                }
+            }
+            ended => ended,
+        };
+        if let Ended::Ended(state) = ended {
+            report.to = state;
+            report.reason = self.reason(id);
+            return Ok(report);
+        }
+        report.to = self.phase_done(id, generation, waiting.phase)?;
         Ok(report)
     }
 
@@ -657,7 +885,7 @@ impl<P: EffectPort> Coordinator<P> {
         roles: &[LaneRole],
         report: &mut Advance,
     ) -> Result<Ended, CoordinatorError> {
-        for role in roles {
+        for (index, role) in roles.iter().enumerate() {
             let lane = self.lanes.get(*role);
             let identity = lane.identity();
             if self.port.emergency_stopped() {
@@ -765,114 +993,194 @@ impl<P: EffectPort> Coordinator<P> {
             if output.effects.len() > MAX_EFFECTS_PER_CALL {
                 return Ok(Ended::Ended(self.end(id, "too_many_effects")?));
             }
-            for effect in &output.effects {
-                if let Some(reason) = mother_refuses(&contract, effect) {
-                    self.lock().append(
-                        id,
-                        Event::EffectRefused {
-                            kind: effect.kind(),
-                            reason: reason.clone(),
-                        },
-                    )?;
-                    report.effects.push(EffectReport {
-                        kind: effect.kind(),
-                        dispatched: false,
-                        outcome: reason.clone(),
-                    });
-                    return Ok(Ended::Ended(self.end(id, &reason)?));
-                }
+            if let Ended::Ended(state) = self.checked(id, &contract, &output.effects, report)? {
+                return Ok(Ended::Ended(state));
             }
+            if let Ended::Ended(state) =
+                self.dispatch(id, generation, &output.effects, &roles[index + 1..], report)?
+            {
+                return Ok(Ended::Ended(state));
+            }
+        }
+        Ok(Ended::Through)
+    }
 
-            // Dispatch, one at a time.
-            for effect in &output.effects {
-                if self.port.emergency_stopped() {
-                    self.stop_for(id, "emergency_stop")?;
-                    return Err(CoordinatorError::Stopped);
-                }
-                let number = {
-                    let mut inner = self.lock();
-                    let mission = inner.mission(id)?;
-                    if mission.generation != generation {
-                        return Err(CoordinatorError::Stopped);
-                    }
-                    if mission.out_of_time(&*self.clock) {
-                        drop(inner);
-                        return Ok(Ended::Ended(self.end(id, "budget_time")?));
-                    }
-                    let number = mission.next_effect;
-                    inner.append(
-                        id,
-                        Event::EffectDispatched {
-                            effect: number,
-                            kind: effect.kind(),
-                            request_hash: request_hash(effect),
-                        },
-                    )?;
-                    let mission = inner.mission(id)?;
-                    mission.next_effect += 1;
-                    mission.unsettled = Some(number);
-                    mission.dispatched_in_phase = true;
-                    number
-                };
-
-                let outcome = self.port.perform(id, effect);
-
-                let settled = match &outcome {
-                    Ok(EffectOutcome::Done { .. }) => "done".to_string(),
-                    Ok(EffectOutcome::AwaitingApproval) => "awaiting_approval".to_string(),
-                    Err(refusal) => format!("refused:{}", refusal.class),
-                };
-                {
-                    let mut inner = self.lock();
-                    inner.append(
-                        id,
-                        Event::EffectSettled {
-                            effect: number,
-                            outcome: settled.clone(),
-                        },
-                    )?;
-                    let mission = inner.mission(id)?;
-                    mission.unsettled = None;
-                    if mission.generation != generation {
-                        return Err(CoordinatorError::Stopped);
-                    }
-                }
+    /// Mother's own checks of `effects`, before any is sent: the first one
+    /// she refuses blocks the mission.
+    fn checked(
+        &self,
+        id: MissionId,
+        contract: &MissionContract,
+        effects: &[EffectRequest],
+        report: &mut Advance,
+    ) -> Result<Ended, CoordinatorError> {
+        for effect in effects {
+            if let Some(reason) = mother_refuses(contract, effect) {
+                self.lock().append(
+                    id,
+                    Event::EffectRefused {
+                        kind: effect.kind(),
+                        reason: reason.clone(),
+                    },
+                )?;
                 report.effects.push(EffectReport {
                     kind: effect.kind(),
-                    dispatched: true,
-                    outcome: settled.trim_start_matches("refused:").to_string(),
+                    dispatched: false,
+                    outcome: reason.clone(),
                 });
-                match outcome {
-                    Ok(EffectOutcome::Done { .. }) => {}
-                    Ok(EffectOutcome::AwaitingApproval) => {
-                        return Ok(Ended::Ended(self.end(id, "awaiting_owner_approval")?));
+                return Ok(Ended::Ended(self.end(id, &reason)?));
+            }
+        }
+        Ok(Ended::Through)
+    }
+
+    /// Dispatch checked `effects`, one at a time. An effect that waits for
+    /// the Owner's approval pauses the mission, keeping the rest of
+    /// `effects` and the lanes `roles_left` for when it has run.
+    fn dispatch(
+        &self,
+        id: MissionId,
+        generation: u64,
+        effects: &[EffectRequest],
+        roles_left: &[LaneRole],
+        report: &mut Advance,
+    ) -> Result<Ended, CoordinatorError> {
+        for (index, effect) in effects.iter().enumerate() {
+            if self.port.emergency_stopped() {
+                self.stop_for(id, "emergency_stop")?;
+                return Err(CoordinatorError::Stopped);
+            }
+            let number = {
+                let mut inner = self.lock();
+                let mission = inner.mission(id)?;
+                if mission.generation != generation {
+                    return Err(CoordinatorError::Stopped);
+                }
+                if mission.out_of_time(&*self.clock) {
+                    drop(inner);
+                    return Ok(Ended::Ended(self.end(id, "budget_time")?));
+                }
+                let number = mission.next_effect;
+                inner.append(
+                    id,
+                    Event::EffectDispatched {
+                        effect: number,
+                        kind: effect.kind(),
+                        request_hash: request_hash(effect),
+                    },
+                )?;
+                let mission = inner.mission(id)?;
+                mission.next_effect += 1;
+                mission.unsettled = Some(number);
+                mission.dispatched_in_phase = true;
+                number
+            };
+
+            let outcome = self.port.perform(id, effect);
+
+            let settled = match &outcome {
+                Ok(EffectOutcome::Done { .. }) => "done".to_string(),
+                Ok(EffectOutcome::AwaitingApproval) => "awaiting_approval".to_string(),
+                Err(refusal) => format!("refused:{}", refusal.class),
+            };
+            {
+                let mut inner = self.lock();
+                inner.append(
+                    id,
+                    Event::EffectSettled {
+                        effect: number,
+                        outcome: settled.clone(),
+                    },
+                )?;
+                let mission = inner.mission(id)?;
+                mission.unsettled = None;
+                if mission.generation != generation {
+                    return Err(CoordinatorError::Stopped);
+                }
+            }
+            report.effects.push(EffectReport {
+                kind: effect.kind(),
+                dispatched: true,
+                outcome: settled.trim_start_matches("refused:").to_string(),
+            });
+            match outcome {
+                Ok(EffectOutcome::Done { .. }) => {}
+                Ok(EffectOutcome::AwaitingApproval) => {
+                    let rest = &effects[index + 1..];
+                    return Ok(Ended::Ended(
+                        self.wait(id, generation, number, rest, roles_left)?,
+                    ));
+                }
+                Err(refusal) => {
+                    if self.port.emergency_stopped() {
+                        self.stop_for(id, "emergency_stop")?;
+                        return Err(CoordinatorError::Stopped);
                     }
-                    Err(refusal) => {
-                        if self.port.emergency_stopped() {
-                            self.stop_for(id, "emergency_stop")?;
-                            return Err(CoordinatorError::Stopped);
-                        }
-                        let reason = format!("broker_refused:{}", refusal.class);
-                        return Ok(Ended::Ended(self.end(id, &reason)?));
-                    }
+                    let reason = format!("broker_refused:{}", refusal.class);
+                    return Ok(Ended::Ended(self.end(id, &reason)?));
                 }
             }
         }
         Ok(Ended::Through)
     }
 
-    /// Block a mission for `reason` and cancel what it opened at the port.
-    fn end(&self, id: MissionId, reason: &str) -> Result<MissionState, CoordinatorError> {
-        self.end_with(
-            id,
-            Trigger::Block {
-                reason: reason.into(),
-            },
-        )
+    /// Effect `effect` waits for the Owner's approval: the mission waits,
+    /// keeping what its phase had still to do. If the journal cannot
+    /// record the wait, the mission ends (in memory, the journal poisoned)
+    /// and the port is cancelled, which withdraws the pending action.
+    fn wait(
+        &self,
+        id: MissionId,
+        generation: u64,
+        effect: u64,
+        rest: &[EffectRequest],
+        roles_left: &[LaneRole],
+    ) -> Result<MissionState, CoordinatorError> {
+        let trigger = Trigger::AwaitApproval {
+            effect,
+            rest: rest
+                .iter()
+                .map(|e| serde_json::to_value(e).expect("an effect request serialises"))
+                .collect(),
+            roles_left: roles_left.to_vec(),
+        };
+        let mono = self.clock.monotonic_ms();
+        let waited = {
+            let mut inner = self.lock();
+            if inner.mission(id)?.generation != generation {
+                return Err(CoordinatorError::Stopped);
+            }
+            inner.fire(id, trigger, mono)
+        };
+        if let Err(CoordinatorError::Journal(e)) = waited {
+            let _ = self.end(id, "awaiting_owner_approval");
+            return Err(CoordinatorError::Journal(e));
+        }
+        waited
     }
 
-    /// End a mission with `trigger` (Block, Fail or VerifyFail) and cancel
-    /// what it opened at the port.
+    /// End a mission for `reason` (Blocked) and cancel what it opened at
+    /// the port; a waiting mission's wait lapses (which withdraws the
+    /// pending action).
+    fn end(&self, id: MissionId, reason: &str) -> Result<MissionState, CoordinatorError> {
+        let trigger = {
+            let mut inner = self.lock();
+            let mission = inner.mission(id)?;
+            match (&mission.waiting, mission.state) {
+                (Some(waiting), MissionState::AwaitingApproval) => Trigger::ApprovalLapsed {
+                    effect: waiting.effect,
+                    reason: reason.into(),
+                },
+                _ => Trigger::Block {
+                    reason: reason.into(),
+                },
+            }
+        };
+        self.end_with(id, trigger)
+    }
+
+    /// End a mission with `trigger` (Block, Fail, VerifyFail, or the end of
+    /// a wait) and cancel what it opened at the port.
     fn end_with(&self, id: MissionId, trigger: Trigger) -> Result<MissionState, CoordinatorError> {
         let mono = self.clock.monotonic_ms();
         let result = {
@@ -1052,9 +1360,32 @@ fn replay(
                 Trigger::Start if !mission.consented() => {
                     return Err(format!("{id}: work without consent"));
                 }
+                // A wait follows the settlement of the effect it waits on.
+                Trigger::AwaitApproval { effect, .. }
+                    if mission.awaiting_settled != Some(*effect) =>
+                {
+                    return Err(format!("{id}: a wait for an effect not awaiting approval"));
+                }
+                Trigger::ActionApproved { effect, phase }
+                    if mission
+                        .waiting
+                        .as_ref()
+                        .is_none_or(|w| w.effect != *effect || w.phase != *phase) =>
+                {
+                    return Err(format!("{id}: an approval of another wait"));
+                }
+                Trigger::ActionDenied { effect } | Trigger::ApprovalLapsed { effect, .. }
+                    if mission.waiting.as_ref().is_none_or(|w| w.effect != *effect) =>
+                {
+                    return Err(format!("{id}: the end of another wait"));
+                }
                 _ => {}
             }
             mission.apply(trigger, to, 0);
+            if let Trigger::Consent { hash, .. } = trigger {
+                // The verified journal's record of the broker's approval.
+                mission.consent = Some(Consent::minted(*hash));
+            }
         }
         Event::LaneInvoked { invocation, .. } => {
             if !mission.state.is_working()
@@ -1094,12 +1425,16 @@ fn replay(
             mission.next_effect += 1;
             mission.unsettled = Some(*effect);
             mission.dispatched_in_phase = true;
+            mission.awaiting_settled = None;
         }
-        Event::EffectSettled { effect, .. } => {
+        Event::EffectSettled { effect, outcome } => {
             if mission.unsettled != Some(*effect) {
                 return Err(format!("{id}: an effect settled that was not dispatched"));
             }
             mission.unsettled = None;
+            if outcome == "awaiting_approval" {
+                mission.awaiting_settled = Some(*effect);
+            }
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
     }

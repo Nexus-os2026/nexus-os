@@ -253,7 +253,10 @@ impl EffectPort for RecordingPort {
             let by_event = state.cancelled.contains(&mission);
             state.released_by_event.push(by_event);
         }
-        state.approvals.pop_front().unwrap_or(ApprovalStatus::Waiting)
+        state
+            .approvals
+            .pop_front()
+            .unwrap_or(ApprovalStatus::Waiting)
     }
 }
 

@@ -118,8 +118,9 @@ fn detail<'a>(record: &'a EvidenceRecord, key: &str) -> Option<&'a str> {
 
 /// The phases the store of record holds, in order.
 fn stored_phases(path: &std::path::Path) -> Vec<String> {
-    let db = rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .unwrap();
+    let db =
+        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
     let mut statement = db.prepare("SELECT phase FROM record ORDER BY seq").unwrap();
     let phases = statement
         .query_map([], |row| row.get::<_, String>(0))
@@ -148,11 +149,14 @@ fn m2a_mission_consent_is_the_broker_s_and_is_recorded() {
     let shown = request(HASH_A, "msn-000001/2/1");
     assert_eq!(shown.title(), "Start this mission?");
     let text = shown.text();
+    assert!(
+        text.header.iter().any(|(_, value)| value == HASH_A),
+        "{text:?}"
+    );
     assert!(text
         .header
         .iter()
-        .any(|(_, value)| value == HASH_A), "{text:?}");
-    assert!(text.header.iter().any(|(_, value)| value == "msn-000001/2/1"));
+        .any(|(_, value)| value == "msn-000001/2/1"));
     assert_eq!(text.details, shown.summary);
 
     // Yes: an approval naming exactly the hash and the request asked, and
@@ -236,7 +240,11 @@ fn m2a_mission_consent_is_the_broker_s_and_is_recorded() {
             "{bad:?}"
         );
     }
-    assert_eq!(owner.asked(), asked, "the owner was asked an invalid request");
+    assert_eq!(
+        owner.asked(),
+        asked,
+        "the owner was asked an invalid request"
+    );
     assert_eq!(mission_records(&history).len(), 4);
 
     // The store of record holds each decision.

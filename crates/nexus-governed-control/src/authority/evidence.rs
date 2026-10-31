@@ -39,6 +39,10 @@ pub enum EvidencePhase {
     /// M0-FIX2 F10: kernel work (a model call) that the owner's emergency
     /// stop ended: its area, the stop's number and the outcome only.
     KernelHalt,
+    /// Mother Nexus M2a: the owner's answer to an agent's mission: the
+    /// contract hash, the request and a digest of the summary shown.
+    MissionConsented,
+    MissionDeclined,
 }
 
 impl EvidencePhase {
@@ -65,6 +69,8 @@ impl EvidencePhase {
             EvidencePhase::DisplayStopped => "display_stopped",
             EvidencePhase::CredentialReleased => "credential_released",
             EvidencePhase::KernelHalt => "kernel_halt",
+            EvidencePhase::MissionConsented => "mission_consented",
+            EvidencePhase::MissionDeclined => "mission_declined",
         }
     }
 }

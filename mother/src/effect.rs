@@ -6,9 +6,15 @@
 //! journals it, and only then hands it to the port. The trait is sealed:
 //! outside this crate only the adapter over the governed-control broker
 //! ([`crate::adapter::GovernedPort`]) is a port.
+//!
+//! The port also reaches the broker's authority, where the Owner is asked
+//! to consent to a mission (`Authority::confirm_mission`), and reports what
+//! became of an action that waits for the Owner's native approval. Mother
+//! never approves an action herself: the Owner does, at the broker.
 
 use crate::contract::EffectKind;
 use crate::journal::MissionId;
+use nexus_governed_control::authority::Authority;
 use nexus_governed_control::connector::ConnectorIntent;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::tool::ToolIntent;
@@ -51,6 +57,23 @@ pub enum EffectOutcome {
     AwaitingApproval,
 }
 
+/// What became of the action a mission waits on, as the broker says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ApprovalStatus {
+    /// The Owner has not answered yet (or the approved action is still
+    /// running at the broker).
+    Waiting,
+    /// The Owner approved it and it ran, once, at the broker.
+    Approved,
+    /// The Owner denied it: it never ran.
+    Denied,
+    /// Its approval expired: it never ran.
+    Expired,
+    /// It ended otherwise (revoked, failed, cancelled, or its outcome is
+    /// unknown): only a stable class name.
+    Lapsed { class: String },
+}
+
 /// The port or the broker refused: only a stable class name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectRefusal {
@@ -79,4 +102,9 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     fn finish(&self, mission: MissionId);
     /// Whether the Owner's emergency stop holds.
     fn emergency_stopped(&self) -> bool;
+    /// The broker's authority, where the Owner consents to a mission.
+    fn broker(&self) -> &Authority;
+    /// What became of the action `mission` waits on (an effect that came
+    /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
+    fn approval(&self, mission: MissionId) -> ApprovalStatus;
 }

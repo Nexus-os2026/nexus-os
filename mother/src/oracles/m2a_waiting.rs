@@ -70,8 +70,12 @@ fn m2a_the_waiting_transitions_are_exactly_these() {
         for phase in MissionState::ALL {
             for trigger in triggers(phase) {
                 let expected = match (&trigger, from) {
-                    (Trigger::AwaitApproval { .. }, s) if paused.contains(&s) => Some(AwaitingApproval),
-                    (Trigger::ActionApproved { .. }, AwaitingApproval) if paused.contains(&phase) => {
+                    (Trigger::AwaitApproval { .. }, s) if paused.contains(&s) => {
+                        Some(AwaitingApproval)
+                    }
+                    (Trigger::ActionApproved { .. }, AwaitingApproval)
+                        if paused.contains(&phase) =>
+                    {
                         Some(phase)
                     }
                     (Trigger::ActionDenied { .. }, AwaitingApproval) => Some(Denied),
@@ -92,7 +96,12 @@ fn m2a_the_waiting_transitions_are_exactly_these() {
     assert!(!AwaitingApproval.is_terminal());
     assert!(!AwaitingApproval.is_working());
     assert_eq!(
-        transition(AwaitingApproval, &Trigger::Stop { reason: "owner".into() }),
+        transition(
+            AwaitingApproval,
+            &Trigger::Stop {
+                reason: "owner".into()
+            }
+        ),
         Ok(Stopped)
     );
     assert_eq!(AwaitingApproval.as_str(), "awaiting_approval");
@@ -132,7 +141,11 @@ fn m2a_approve_continues_exactly_once_from_where_it_paused() {
         w.port.effects(),
         vec![(id, EffectKind::Network), (id, EffectKind::Process)]
     );
-    assert_eq!(network_sent(&w, id), 1, "the approved action is never re-sent");
+    assert_eq!(
+        network_sent(&w, id),
+        1,
+        "the approved action is never re-sent"
+    );
     assert_eq!(w.port.approval_queries(), 1);
     // Exactly once: an approval answered again is never asked for or used.
     w.port.approval_reply(ApprovalStatus::Approved);

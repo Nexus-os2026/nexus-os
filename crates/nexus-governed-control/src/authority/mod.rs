@@ -17,10 +17,13 @@ pub(crate) mod scripted;
 #[cfg(test)]
 mod tests;
 
-use self::approval::{AcknowledgementConfirmation, ControlConfirmer, ResumeConfirmation};
+use self::approval::{
+    AcknowledgementConfirmation, ControlConfirmer, MissionApproval, MissionConfirmation,
+    ResumeConfirmation, MAX_MISSION_REQUEST, MAX_MISSION_SUMMARY_LINES,
+};
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
-use self::evidence::{EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{Lift, Refusal, RunClass, RunOrigin, RunRegistry};
@@ -301,6 +304,95 @@ impl Authority {
         Ok(())
     }
 
+    /// The owner's consent to an agent's mission (Mother Nexus M2a), only
+    /// through the native confirmation of exactly `request`. Refused before
+    /// the owner is asked when the request is not a SHA-256 hash with a
+    /// plain label and plain summary, when the store is latched, under an
+    /// emergency stop or while quitting. A no is recorded (an end record:
+    /// it permits nothing). A yes counts only once its record is written
+    /// (evidence first), and not if an emergency stop or quitting came
+    /// while the owner was asked. The approval names the hash and the
+    /// request; it grants nothing.
+    pub fn confirm_mission(
+        &self,
+        request: &MissionConfirmation,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<MissionApproval, AuthorityError> {
+        let hash = &request.contract_hash;
+        if hash.len() != 64 || !hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+            return Err(AuthorityError::InvalidAction(
+                "the contract hash is not a sha-256 hex digest",
+            ));
+        }
+        let label = &request.request;
+        if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
+            return Err(AuthorityError::InvalidAction(
+                "the mission request is not a plain label",
+            ));
+        }
+        // The owner must read exactly what is consented to.
+        if request.summary.is_empty()
+            || request.summary.len() > MAX_MISSION_SUMMARY_LINES
+            || !request.summary.iter().all(|line| is_plain(line))
+        {
+            return Err(AuthorityError::InvalidAction("mission text is not plain"));
+        }
+        if self
+            .evidence
+            .primary()
+            .is_some_and(|primary| primary.health().latched)
+        {
+            return Err(AuthorityError::EvidenceUnavailable);
+        }
+        self.mission_admissible()?;
+        let yes = confirmer.confirm_mission(request);
+        let phase = if yes {
+            EvidencePhase::MissionConsented
+        } else {
+            EvidencePhase::MissionDeclined
+        };
+        let mut record =
+            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        record
+            .detail
+            .push(("contract_hash".into(), request.contract_hash.clone()));
+        record
+            .detail
+            .push(("request".into(), request.request.clone()));
+        record
+            .detail
+            .push(("summary_digest".into(), summary_digest(&request.summary)));
+        if !yes {
+            // The owner's decline has taken effect and permits nothing.
+            self.record_end(&record);
+            return Err(AuthorityError::Declined);
+        }
+        // A stop pressed, or quitting begun, while the owner was asked wins.
+        self.mission_admissible()?;
+        // Evidence first: an unrecorded consent is no consent.
+        let seq = self
+            .evidence
+            .record(&record)
+            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+        Ok(MissionApproval::confirmed(
+            request.contract_hash.clone(),
+            request.request.clone(),
+            seq,
+        ))
+    }
+
+    /// Whether a mission may be consented to now: no emergency stop, not
+    /// quitting.
+    fn mission_admissible(&self) -> Result<(), AuthorityError> {
+        if self.runs.is_stopped() {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.runs.is_closed() {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
+        Ok(())
+    }
+
     fn display_record(
         &self,
         phase: EvidencePhase,
@@ -515,6 +607,19 @@ pub(crate) struct Stopped {
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
+}
+
+/// The digest of a mission summary as shown: SHA-256 over a domain and each
+/// line followed by a newline (no line holds one).
+fn summary_digest(summary: &[String]) -> String {
+    use sha2::{Digest as _, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"nexus-p3-mission-summary-v1\n");
+    for line in summary {
+        hasher.update(line.as_bytes());
+        hasher.update(b"\n");
+    }
+    hex::encode(hasher.finalize())
 }
 
 /// What a resume the run registry refused returns.
