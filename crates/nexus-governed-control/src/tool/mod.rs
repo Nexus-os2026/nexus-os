@@ -50,8 +50,9 @@ pub enum ToolOutput {
 /// One tool.
 pub struct ToolDefinition {
     pub key: &'static str,
-    /// Its trusted absolute locations, in order (M0-FIX2 F13): it runs
-    /// from the first whose canonical path is itself listed here and passes
+    /// Its trusted absolute locations, in order (M0-FIX2 F13): the first
+    /// present one decides, and it runs only if that location's canonical
+    /// path is itself listed here and passes
     /// [`crate::executable::inspect`]; see [`crate::executable::resolve`].
     pub executables: &'static [&'static str],
     pub class: EffectClass,
