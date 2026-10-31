@@ -157,8 +157,12 @@ fn messages() -> Vec<ModelMessage> {
 #[test]
 fn m0_f5_stop_ends_an_inflight_local_model_call() {
     let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-    let stop = StopAuthority::global();
-    stop.lift();
+    // This binary stands in for the owner's Stop/Resume path (M0-FIX2
+    // F10): it holds the process's stop controller.
+    let controller =
+        StopAuthority::claim_global_controller().expect("the process's stop controller");
+    let stop = controller.authority().clone();
+    controller.lift_if(stop.stop_number());
     let server = Server::start(Arc::new(|path: &str| match path {
         "/api/tags" => Some((200, TAGS.to_string())),
         _ => None,
@@ -191,7 +195,7 @@ fn m0_f5_stop_ends_an_inflight_local_model_call() {
     );
 
     // After the owner's resume, calls run again.
-    stop.lift();
+    assert!(controller.lift_if(stop.stop_number()));
     server.set_reply(Arc::new(|path: &str| match path {
         "/api/tags" => Some((200, TAGS.to_string())),
         _ => Some((200, finish_reply())),

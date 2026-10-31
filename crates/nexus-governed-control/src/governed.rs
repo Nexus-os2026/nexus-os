@@ -11,7 +11,7 @@ use crate::authority::approval::ControlConfirmer;
 use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
 use crate::authority::effect::EffectClass;
-use crate::authority::evidence::{EvidencePhase, EvidenceSink};
+use crate::authority::evidence::{EndStatus, EvidencePhase, EvidenceSink};
 use crate::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use crate::authority::policy::{Grant, GrantScope};
 use crate::authority::run::{RunClass, RunOrigin};
@@ -26,7 +26,9 @@ use crate::evidence_store::PrimaryEvidence;
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
-use nexus_kernel::emergency_stop::StopAuthority;
+use nexus_kernel::emergency_stop::{
+    HaltAudit, HaltAudited, HaltOutcome, HaltRecord, StopAuthority, StopController,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
@@ -117,9 +119,12 @@ pub struct GovernedControl {
     detached: Mutex<HashSet<RunId>>,
     /// Display starts under way, each counted until its end is recorded.
     display_starts: AtomicUsize,
-    /// The kernel's emergency-stop authority (M0-FIX F5): the owner's
-    /// emergency stop engages it and the owner's resume lifts it.
-    kernel_stop: Arc<StopAuthority>,
+    /// The controller of the kernel's emergency-stop authority (M0-FIX F5,
+    /// sealed by M0-FIX2 F10): the owner's emergency stop engages it and
+    /// the owner's resume lifts it. In production it is the process's
+    /// controller, minted once and held here alone: no other code can lift
+    /// the kernel's stop.
+    kernel_stop: StopController,
     /// Tests only: runs once inside the next stop, between its kernel
     /// engagement and its broker step (where a test interleaves a resume).
     #[cfg(test)]
@@ -145,6 +150,41 @@ impl Drop for Starting<'_> {
     }
 }
 
+/// The durable audit of kernel halts (M0-FIX2 F10): the evidence of
+/// record, through the authority. It holds the control weakly, so the
+/// process's stop authority (which lives as long as the process) never
+/// keeps a front door or its evidence store alive; once the control is
+/// gone a halt cannot be recorded, and says so.
+struct KernelHaltEvidence(std::sync::Weak<Control>);
+
+impl KernelHaltEvidence {
+    fn of(control: &Arc<Control>) -> Arc<dyn HaltAudit> {
+        Arc::new(Self(Arc::downgrade(control)))
+    }
+}
+
+impl HaltAudit for KernelHaltEvidence {
+    fn record(&self, halt: &HaltRecord) -> HaltAudited {
+        let Some(control) = self.0.upgrade() else {
+            return HaltAudited::Unrecorded;
+        };
+        let cleanup = match &halt.outcome {
+            HaltOutcome::Ended => None,
+            HaltOutcome::CleanupFailed(reason) => Some(reason.as_str()),
+        };
+        match control.authority().record_kernel_halt(
+            halt.area.as_str(),
+            halt.stop_number,
+            halt.outcome.as_str(),
+            cleanup,
+        ) {
+            EndStatus::Recorded { .. } => HaltAudited::Recorded,
+            EndStatus::Owed => HaltAudited::Owed,
+            EndStatus::Uncertain => HaltAudited::Unrecorded,
+        }
+    }
+}
+
 impl GovernedControl {
     /// Build the production control: `root` is the owned runtime directory,
     /// `vault` where credentials come from, `evidence` the evidence of
@@ -165,7 +205,25 @@ impl GovernedControl {
         clock: Arc<dyn Clock>,
     ) -> Result<Self, AuthorityError> {
         let root = RuntimeRoot::open(root)?;
+        // The owner's Stop/Resume path holds the kernel stop's controller
+        // (M0-FIX2 F10): the process's, which is minted once, so a second
+        // front door (or anything that claimed it first) is refused.
+        let kernel_stop = if cfg!(test) {
+            StopAuthority::new().claim_controller()
+        } else {
+            StopAuthority::claim_global_controller()
+        }
+        .ok_or(AuthorityError::Unavailable(
+            "the kernel's emergency stop is held by another owner path",
+        ))?;
         let control = Arc::new(Control::new(Authority::new(evidence, clock)));
+        // Model calls the kernel stop halts are recorded in the evidence of
+        // record (M0-FIX2 F10).
+        kernel_stop
+            .attach_halt_audit(KernelHaltEvidence::of(&control))
+            .map_err(|_| {
+                AuthorityError::Unavailable("the kernel stop's halt audit is already attached")
+            })?;
         let egress = Arc::new(Egress::system());
         let broker = CredentialBroker::new(control.authority(), secrets);
         let governed = Self {
@@ -177,11 +235,7 @@ impl GovernedControl {
             egress,
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
-            kernel_stop: if cfg!(test) {
-                StopAuthority::new()
-            } else {
-                StopAuthority::global()
-            },
+            kernel_stop,
             #[cfg(test)]
             stop_gap: Mutex::new(None),
         };
@@ -204,10 +258,16 @@ impl GovernedControl {
 
     #[cfg(test)]
     pub(crate) fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
+        let controller = stop
+            .claim_controller()
+            .expect("a test's own stop authority, its controller unclaimed");
+        controller
+            .attach_halt_audit(KernelHaltEvidence::of(&self.control))
+            .expect("a fresh authority has no halt audit");
         if self.authority().runs().is_stopped() {
-            stop.engage();
+            controller.engage();
         }
-        self.kernel_stop = stop;
+        self.kernel_stop = controller;
         self
     }
 
@@ -422,7 +482,7 @@ impl GovernedControl {
         // The kernel stop this resume may lift: the one in force before the
         // owner is asked. A Stop pressed meanwhile (from any door) engages
         // a newer kernel stop first, and that one is not lifted here.
-        let confirmed = self.kernel_stop.stop_number();
+        let confirmed = self.kernel_stop.authority().stop_number();
         self.authority().resume(confirmer)?;
         if !self.authority().runs().is_stopped() {
             self.kernel_stop.lift_if(confirmed);

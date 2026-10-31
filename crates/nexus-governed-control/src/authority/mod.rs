@@ -235,6 +235,33 @@ impl Authority {
         self.record_end(&self.display_record(phase, detail))
     }
 
+    /// Record kernel work the owner's emergency stop ended (M0-FIX2 F10):
+    /// an end record (the halt has taken effect) with the work's area, the
+    /// stop's number, the outcome and, for a failed cleanup, its reason;
+    /// never the work's command, prompt, response or credentials.
+    pub(crate) fn record_kernel_halt(
+        &self,
+        area: &'static str,
+        stop_number: u64,
+        outcome: &'static str,
+        cleanup: Option<&str>,
+    ) -> EndStatus {
+        let mut record = EvidenceRecord::new(
+            EvidencePhase::KernelHalt,
+            self.clock.wall_ms(),
+            self.generation.current(),
+        );
+        record.outcome = Some(outcome);
+        record.detail.push(("area".into(), area.into()));
+        record
+            .detail
+            .push(("stop_number".into(), stop_number.to_string()));
+        if let Some(cleanup) = cleanup {
+            record.detail.push(("cleanup".into(), cleanup.into()));
+        }
+        self.record_end(&record)
+    }
+
     /// Whether the evidence store requires the owner's acknowledgement of
     /// unsettled actions before anything is admitted (EL-1 §7).
     pub fn recovery_required(&self) -> bool {
