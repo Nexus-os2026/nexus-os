@@ -119,21 +119,34 @@ Coordinator rules the oracles pin:
   Owner authorized but has not run yet still counts as waiting.
 - The identity of the action a mission waits on (its broker run and
   commitment, and the port's deadline for it) is journaled before the
-  wait. A reopened coordinator hands it back to its port, which takes it
-  only if the broker's records say it is Mother's, so a rebuilt port can
-  still ask about it and Stop still withdraws it. The ids are names, not
-  authority: the port takes one back only from a live run of Mother's that
-  no other mission holds (an action two missions name is handed back to
-  neither), and trusts its deadline no further than the broker's. Still
-  possible with write access to Mother's journal (it is unkeyed): swapping
-  the actions of two live Mother missions. Remaining gap: if Mother dies
-  after the broker left the action waiting but before it was journaled,
-  the mission is blocked on restart (`effect_outcome_unknown` before the
-  settlement was journaled, `phase_interrupted` after it) and a rebuilt
-  port cannot withdraw that action: it stays until it expires or the Owner
-  denies it. A broker
-  restart loses the action itself (it can no longer be approved), and the
-  mission is Blocked (`approval_outcome_unknown`).
+  wait, and stays open in the journal until a closure record, which is
+  written only after the port confirms the broker no longer holds the
+  action open (Mother's and final, or not held at all). Every reopen
+  hands each open action back to its port, whatever its mission's state;
+  unless the mission still waits, it is withdrawn (the mission's run is
+  cancelled) and closed once confirmed. So a Stop, denial, lapse or block
+  interrupted before its withdrawal took effect is completed by the next
+  reopen, and a rebuilt port can still ask about and withdraw a waiting
+  action.
+- The ids are names, not authority: the port takes one back only from a
+  live run of Mother's that no other mission holds (an action two
+  missions name, compared by parsed id, is handed back to neither), and
+  trusts its deadline no further than the action's remaining lifetime by
+  the broker's wall-clock expiry. The broker's own monotonic deadline is
+  not in its public view, so with a wall clock set back since the action
+  was created that bound is looser. Still possible with write access to
+  Mother's journal (it is unkeyed): swapping the actions of two live
+  Mother missions.
+- **Known limit: the pre-journal window.** If Mother dies after the broker
+  left an action waiting but before its identity was journaled, the
+  mission is blocked on restart (`effect_outcome_unknown` before the
+  settlement was journaled, `phase_interrupted` after it) and Mother
+  cannot withdraw that action: it stays approvable until it expires or
+  the Owner denies it. The Owner's emergency stop at the broker withdraws
+  it (an oracle pins this: a request Mother never journaled is no longer
+  approvable or executable after the emergency stop). A broker restart
+  loses the action itself (it can no longer be approved), and the mission
+  is Blocked (`approval_outcome_unknown`).
 - The broker ends an expired action only when it next touches it. The
   adapter reports a waiting action as expired once its wall-clock expiry
   or the port's monotonic deadline has passed (the broker clock read before
