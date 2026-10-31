@@ -45,7 +45,7 @@ impl PresenceMap {
                 color: color.to_string(),
                 selected_section: section.map(String::from),
                 active_panel: panel.map(String::from),
-                last_seen: crate::deploy::now_iso8601(),
+                last_seen: crate::timestamp::now_iso8601(),
             },
         );
     }

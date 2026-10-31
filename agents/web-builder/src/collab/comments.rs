@@ -52,7 +52,7 @@ pub fn add_comment(
         author: author.public_key.clone(),
         author_name: author.display_name.clone(),
         text: text.to_string(),
-        timestamp: crate::deploy::now_iso8601(),
+        timestamp: crate::timestamp::now_iso8601(),
         resolved: false,
         replies: vec![],
     };
@@ -74,7 +74,7 @@ pub fn reply_to_comment(
         author: author.public_key.clone(),
         author_name: author.display_name.clone(),
         text: text.to_string(),
-        timestamp: crate::deploy::now_iso8601(),
+        timestamp: crate::timestamp::now_iso8601(),
         resolved: false,
         replies: vec![],
     };

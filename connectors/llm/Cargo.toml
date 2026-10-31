@@ -12,7 +12,6 @@ path = "src/lib.rs"
 default = []
 real-claude = []
 real-api-tests = []
-flash-infer = ["dep:nexus-flash-infer", "dep:nexus-llama-bridge"]
 # PROVISIONAL (P3-C11-48H-ZIP-Z1-PROVISIONAL-01, Owner adoption required):
 # the `local-slm` feature and its Candle dependencies are withdrawn. Every
 # candle-core release requires a zip below 9.0.0 (RUSTSEC-2026-0367, -0368,
@@ -35,15 +34,13 @@ tracing = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
-# Flash inference (behind "flash-infer" feature flag)
-nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["real-llama"], optional = true }
-nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], optional = true }
-
 [dev-dependencies]
 nexus-sdk = { path = "../../sdk" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }
 
 [lints.rust]
-# The withdrawn `local-slm` feature (see [features]): its gated source is
-# kept and must stay uncompiled, not reported as an unknown cfg.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("local-slm"))'] }
+# The withdrawn `local-slm` feature (see [features]) and the `flash-infer`
+# feature (withdrawn by the Mother Nexus cleanup with its nexus-flash-infer
+# and llama-bridge crates; Ollama is the local runtime): their gated source
+# is kept, must stay uncompiled, and is not reported as an unknown cfg.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("local-slm", "flash-infer"))'] }

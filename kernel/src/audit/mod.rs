@@ -1,8 +1,5 @@
 pub mod federation;
 pub mod retention;
-pub mod zk_mcp;
-pub mod zk_proof;
-pub mod zk_report;
 
 #[cfg(test)]
 mod writer_tests;
@@ -357,6 +354,7 @@ impl AuditTrail {
     /// Mutable access to events — restricted to kernel crate internals.
     /// External code should use `events()` for read-only access.
     /// For test-only tampering, use `events_mut_for_testing()`.
+    #[cfg(test)]
     pub(crate) fn events_mut(&mut self) -> &mut [AuditEvent] {
         &mut self.events
     }

@@ -1,4 +1,0 @@
-receipt 09-run-healthy type c4-healthy-witness role baseline: PASS
-  fact: scenario P4 step 8: offered [0, 0, 0, 1, 0, 0] consumed [] unused [0, 0, 0, 1, 0, 0] faults left 2 branches ['append_acknowledgement: Refused(NotNow(CellsBusy))'] violations []
-  fact: scenario P8 step 12: offered [0, 0, 0, 0] consumed [] unused [0, 0, 0, 0] faults left 1 branches ['append_acknowledgement: Refused(NotNow(NotHealthy))'] violations []
-exit 0

@@ -197,29 +197,6 @@ pub fn collect_audit_trail(project_dir: &Path, state: &ProjectState) -> Vec<Audi
         }
     }
 
-    // 4. Deploy history events
-    if let Some(history) = load_deploy_history(project_dir) {
-        for entry in &history.entries {
-            events.push(AuditEvent {
-                id: format!("evt-{:04}", event_id),
-                timestamp: entry.timestamp.clone(),
-                event_type: if entry.status == crate::deploy::history::DeployStatus::RolledBack {
-                    AuditEventType::Rollback
-                } else {
-                    AuditEventType::Deployed
-                },
-                description: format!("Deployed to {} — {}", entry.provider, entry.url),
-                details: serde_json::json!({
-                    "provider": entry.provider,
-                    "url": entry.url,
-                    "build_hash": entry.build_hash,
-                    "status": entry.status,
-                }),
-            });
-            event_id += 1;
-        }
-    }
-
     // 5. Export/Archive events
     if state.status == crate::project::ProjectStatus::Exported {
         events.push(AuditEvent {
@@ -344,15 +321,6 @@ fn load_quality_report(project_dir: &Path) -> Option<crate::quality::QualityRepo
 
 fn load_visual_edits(project_dir: &Path) -> Option<crate::visual_edit::VisualEditState> {
     crate::visual_edit::load_visual_edit_state(project_dir).ok()
-}
-
-fn load_deploy_history(project_dir: &Path) -> Option<crate::deploy::history::DeployHistory> {
-    let history = crate::deploy::history::load_history(project_dir);
-    if history.entries.is_empty() {
-        None
-    } else {
-        Some(history)
-    }
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────

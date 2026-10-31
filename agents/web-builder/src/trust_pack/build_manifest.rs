@@ -99,9 +99,6 @@ pub fn create_full_build_manifest(project_dir: &Path, state: &ProjectState) -> B
     let conversion_scores = load_conversion_scores(project_dir);
     let (issues_found, issues_fixed) = load_issue_counts(project_dir);
 
-    // Load deploy data if available
-    let deploy = crate::deploy::manifest::load_manifest(project_dir);
-
     // Compute build hash from current HTML
     let build_hash = compute_build_hash(project_dir);
 
@@ -119,7 +116,7 @@ pub fn create_full_build_manifest(project_dir: &Path, state: &ProjectState) -> B
             .unwrap_or_else(|| "Untitled".into()),
         build_id: uuid::Uuid::new_v4().to_string(),
         build_hash,
-        timestamp: crate::deploy::now_iso8601(),
+        timestamp: crate::timestamp::now_iso8601(),
 
         template_id: state
             .selected_template
@@ -143,9 +140,10 @@ pub fn create_full_build_manifest(project_dir: &Path, state: &ProjectState) -> B
         schema_hash,
         rls_policy_hash: rls_hash,
 
-        deploy_provider: deploy.as_ref().map(|d| d.provider.clone()),
-        deploy_url: deploy.as_ref().map(|d| d.url.clone()),
-        deploy_hash: deploy.as_ref().map(|d| d.build_hash.clone()),
+        // Publishing was removed by the Mother Nexus cleanup.
+        deploy_provider: None,
+        deploy_url: None,
+        deploy_hash: None,
 
         signer_public_key: None,
         signature: None,

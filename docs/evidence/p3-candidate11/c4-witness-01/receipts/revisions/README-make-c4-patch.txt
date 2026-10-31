@@ -1,1 +1,0 @@
-make-c4-patch.py v1 -> v2 (2026-10-14T07:49:30+01:00): v1's receipt printed the trait method 'fn acknowledgement(&mut self, set: ...' as 'the mutated function head' (first textual match). v2 matches the Publish method signature. The patch and the mutant bytes are unchanged (sha256 equal before and after).

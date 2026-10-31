@@ -1,10 +1,10 @@
 name: NEXUS OS Deferred Windows/macOS Portability
 
 # DEFERRED WINDOWS/MACOS PORTABILITY. The active Phase Zero target is Linux
-# only; ci.yml is the final gate. This workflow preserves, unchanged, the
-# Windows and macOS validation (workspace tests, the live webview boundary
-# harness in the dev and release profiles, the packaged Builder toolchain and
-# governed launch) for a future dedicated portability stage. It runs only when
+# only; ci.yml is the final gate. This workflow preserves the Windows and
+# macOS workspace tests for a future dedicated portability stage (the desktop
+# webview and Builder-toolchain steps left with the old desktop app in the
+# Mother Nexus cleanup, 2026-10-31). It runs only when
 # dispatched manually; it is not part of the Phase Zero gate, and its known
 # Windows/macOS failures are not repaired in Phase Zero.
 #
@@ -123,56 +123,6 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
-      # P0-FINAL-GATE item D: the live native webview boundary harness (real
-      # Wry runtime, production context and main-window builder, dev profile):
-      # navigation and redirects to a non-app origin are refused, and a
-      # non-app document gets no application command.
-      - name: Live webview boundary harness (item D)
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
-          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
-
-      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
-      # trusted-entry tests with its own Node, and verify the real assembled
-      # bytes through the embedded manifest (packaged backend test build).
-      # P0-002C4C3: the same packaged build runs the governed dev-server launch
-      # end to end (assembled Node, embedded manifest, Nexus entry, permission
-      # model, sealed spawn, lifecycle ownership and the loopback preview).
-      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24.21.0
-
-      - name: Assemble Nexus Builder toolchain
-        shell: bash
-        run: node packaging/builder-toolchain/scripts/assemble.mjs --target aarch64-apple-darwin --out app/src-tauri/builder-toolchain
-
-      - name: Trusted Builder entry tests (packaged Node)
-        shell: bash
-        run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
-
-      - name: Packaged Builder toolchain verification and governed launch
-        shell: bash
-        env:
-          NEXUS_BUILDER_TOOLCHAIN: packaged
-        run: |
-          set -o pipefail
-          cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
-          grep -q 'test result: ok. 13 passed' packaged-toolchain.log
-
-      # P0-FINAL-GATE item D: the same harness on tauri's release path
-      # (custom-protocol build with the embedded frontend and production CSP).
-      - name: Live webview boundary harness, release profile (item D)
-        shell: bash
-        run: |
-          set -o pipefail
-          (cd app && npm ci && npm run build)
-          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
-          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
-          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
-
   test-windows:
     runs-on: windows-latest
     steps:
@@ -264,53 +214,3 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --locked
-
-      # P0-FINAL-GATE item D: the live native webview boundary harness (real
-      # Wry runtime, production context and main-window builder, dev profile):
-      # navigation and redirects to a non-app origin are refused, and a
-      # non-app document gets no application command.
-      - name: Live webview boundary harness (item D)
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
-          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
-
-      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
-      # trusted-entry tests with its own Node, and verify the real assembled
-      # bytes through the embedded manifest (packaged backend test build).
-      # P0-002C4C3: the same packaged build runs the governed dev-server launch
-      # end to end (assembled Node, embedded manifest, Nexus entry, permission
-      # model, sealed spawn, lifecycle ownership and the loopback preview).
-      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24.21.0
-
-      - name: Assemble Nexus Builder toolchain
-        shell: bash
-        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-pc-windows-msvc --out app/src-tauri/builder-toolchain
-
-      - name: Trusted Builder entry tests (packaged Node)
-        shell: bash
-        run: app/src-tauri/builder-toolchain/node/node.exe --test packaging/builder-toolchain/test/entry.test.mjs
-
-      - name: Packaged Builder toolchain verification and governed launch
-        shell: bash
-        env:
-          NEXUS_BUILDER_TOOLCHAIN: packaged
-        run: |
-          set -o pipefail
-          cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
-          grep -q 'test result: ok. 13 passed' packaged-toolchain.log
-
-      # P0-FINAL-GATE item D: the same harness on tauri's release path
-      # (custom-protocol build with the embedded frontend and production CSP).
-      - name: Live webview boundary harness, release profile (item D)
-        shell: bash
-        run: |
-          set -o pipefail
-          (cd app && npm ci && npm run build)
-          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
-          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
-          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log

@@ -168,7 +168,7 @@ pub fn run_quality_checks(input: &QualityInput) -> Result<QualityReport, Quality
         overall_pass: overall_score >= 70,
         total_issues,
         auto_fixable_count,
-        timestamp: crate::deploy::now_iso8601(),
+        timestamp: crate::timestamp::now_iso8601(),
         build_hash: String::new(),
         signature: None,
     })

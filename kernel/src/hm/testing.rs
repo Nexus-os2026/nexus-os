@@ -359,32 +359,6 @@ impl crate::cognitive::EvolutionLlm for ScriptedLlm {
     }
 }
 
-impl crate::genome::AutoEvolveLlm for ScriptedLlm {
-    fn score_response(
-        &self,
-        ctx: &mut DispatchContext,
-        prompt: &mut PromptSource<'_>,
-    ) -> Result<DerivedItem, String> {
-        self.ask(ctx, prompt).map_err(|e| e.to_string())
-    }
-
-    fn mutate_prompt(
-        &self,
-        ctx: &mut DispatchContext,
-        prompt: &mut PromptSource<'_>,
-    ) -> Result<DerivedItem, String> {
-        self.ask(ctx, prompt).map_err(|e| e.to_string())
-    }
-
-    fn generate_with_prompt(
-        &self,
-        ctx: &mut DispatchContext,
-        prompt: &mut PromptSource<'_>,
-    ) -> Result<DerivedItem, String> {
-        self.ask(ctx, prompt).map_err(|e| e.to_string())
-    }
-}
-
 impl crate::cognitive::HivemindLlm for ScriptedLlm {
     fn decompose(
         &self,
@@ -402,22 +376,6 @@ impl crate::cognitive::HivemindLlm for ScriptedLlm {
     ) -> Result<DerivedItem, crate::errors::AgentError> {
         self.ask(ctx, prompt)
             .map_err(|e| crate::errors::AgentError::SupervisorError(e.to_string()))
-    }
-}
-
-/// A dream reply uses this many tokens (the former `MockDreamLlm`'s 50).
-pub(crate) const DREAM_TOKENS: u64 = 50;
-
-impl crate::dreams::engine::DreamLlm for ScriptedLlm {
-    fn query(
-        &self,
-        ctx: &mut DispatchContext,
-        prompt: &mut PromptSource<'_>,
-        _max_tokens: u32,
-    ) -> Result<(DerivedItem, u64), String> {
-        self.ask(ctx, prompt)
-            .map(|reply| (reply, DREAM_TOKENS))
-            .map_err(|e| e.to_string())
     }
 }
 
