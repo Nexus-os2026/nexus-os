@@ -18,7 +18,7 @@ use nexus_governed_control::broker::Vault;
 use nexus_governed_control::evidence_store::PrimaryEvidence;
 use nexus_governed_control::governed::GovernedControl;
 use nexus_kernel::emergency_stop::StopAuthority;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 struct Owner;
@@ -41,7 +41,7 @@ fn root(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("nexus-m0-fix2-f10-{name}-{}", std::process::id()))
 }
 
-fn front_door(root: &PathBuf) -> Result<GovernedControl, AuthorityError> {
+fn front_door(root: &Path) -> Result<GovernedControl, AuthorityError> {
     let evidence = PrimaryEvidence::open(
         &root.join("p3-evidence").join("evidence.sqlite3"),
         Vec::new(),
