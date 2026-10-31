@@ -4,8 +4,15 @@
 //! network. Uses length-prefixed JSON messages over TCP and SHA-256 checksums
 //! for integrity verification. Supports optional AES-256-GCM encryption and
 //! HMAC-SHA256 challenge-response peer authentication.
+//!
+//! M0-FIX2 F14: an encrypted frame is bound to its direction (initiator to
+//! responder, or back) through AES-GCM associated data, so a frame cannot be
+//! reflected to its sender. The legacy unbound encrypted frame (flag 0x01)
+//! is refused, and so is a plaintext frame while a key is configured. Frames
+//! are never persisted, so there is no legacy data to migrate. Frames are not
+//! bound to a session or a sequence number.
 
-use aes_gcm::aead::Aead;
+use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -23,8 +30,40 @@ static NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Wire-format flag: message payload is plaintext JSON.
 const FLAG_PLAINTEXT: u8 = 0x00;
-/// Wire-format flag: message payload is AES-256-GCM encrypted.
-const FLAG_ENCRYPTED: u8 = 0x01;
+/// Wire-format flag of the legacy unbound encrypted frame (no associated
+/// data). Recognised only to be refused (M0-FIX2 F14).
+const FLAG_ENCRYPTED_UNBOUND_V1: u8 = 0x01;
+/// Wire-format flag: message payload is AES-256-GCM encrypted and bound to
+/// its direction (M0-FIX2 F14).
+const FLAG_ENCRYPTED: u8 = 0x02;
+/// Domain label at the start of an encrypted frame's associated data.
+const LINK_AAD_LABEL: &[u8] = b"nexus.link.frame";
+
+/// Which way a frame travels on a Nexus Link connection. An encrypted frame
+/// opens only for the direction it was sealed for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkDirection {
+    /// From the peer that connected (discovery or send) to the peer that
+    /// accepted the connection.
+    InitiatorToResponder,
+    /// From the peer that accepted the connection back to the initiator.
+    ResponderToInitiator,
+}
+
+impl LinkDirection {
+    /// Associated data of an encrypted frame: the domain label, a NUL, the
+    /// frame flag and the direction byte.
+    fn aad(self) -> [u8; LINK_AAD_LABEL.len() + 3] {
+        let mut aad = [0u8; LINK_AAD_LABEL.len() + 3];
+        aad[..LINK_AAD_LABEL.len()].copy_from_slice(LINK_AAD_LABEL);
+        aad[LINK_AAD_LABEL.len() + 1] = FLAG_ENCRYPTED;
+        aad[LINK_AAD_LABEL.len() + 2] = match self {
+            Self::InitiatorToResponder => 0x01,
+            Self::ResponderToInitiator => 0x02,
+        };
+        aad
+    }
+}
 
 /// Largest message a peer may announce (P0-002C5C). A transfer chunk is
 /// `chunk_size` (1 MiB) of data plus framing; a longer length prefix is
@@ -304,14 +343,26 @@ impl NexusLink {
         nonce
     }
 
-    /// Encrypt data with AES-256-GCM. Returns nonce (12 bytes) || ciphertext || tag.
-    fn encrypt_payload(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    /// Encrypt data with AES-256-GCM, bound to `direction`. Returns nonce
+    /// (12 bytes) || ciphertext || tag.
+    fn encrypt_payload(
+        data: &[u8],
+        key: &[u8; 32],
+        direction: LinkDirection,
+    ) -> Result<Vec<u8>, String> {
         let cipher = Aes256Gcm::new(key.into());
         let nonce_bytes = Self::generate_nonce();
         let nonce = Nonce::from(nonce_bytes);
+        let aad = direction.aad();
 
         let ciphertext = cipher
-            .encrypt(&nonce, data)
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: data,
+                    aad: &aad,
+                },
+            )
             .map_err(|e| format!("AES-256-GCM encryption failed: {e}"))?;
 
         let mut out = Vec::with_capacity(12 + ciphertext.len());
@@ -320,8 +371,13 @@ impl NexusLink {
         Ok(out)
     }
 
-    /// Decrypt data (nonce || ciphertext || tag) with AES-256-GCM.
-    fn decrypt_payload(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    /// Decrypt data (nonce || ciphertext || tag) with AES-256-GCM, sealed for
+    /// `direction`.
+    fn decrypt_payload(
+        encrypted: &[u8],
+        key: &[u8; 32],
+        direction: LinkDirection,
+    ) -> Result<Vec<u8>, String> {
         if encrypted.len() < 28 {
             return Err(
                 "Encrypted data too short — need at least nonce + tag (28 bytes)".to_string(),
@@ -334,10 +390,20 @@ impl NexusLink {
             .map_err(|_| "invalid nonce length".to_string())?;
         let nonce = Nonce::from(nonce_arr);
         let cipher = Aes256Gcm::new(key.into());
+        let aad = direction.aad();
 
         cipher
-            .decrypt(&nonce, ciphertext)
-            .map_err(|_| "AES-256-GCM decryption failed — wrong key or tampered data".to_string())
+            .decrypt(
+                &nonce,
+                Payload {
+                    msg: ciphertext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| {
+                "AES-256-GCM decryption failed — wrong key, wrong direction or tampered data"
+                    .to_string()
+            })
     }
 
     /// Returns the device UUID.
@@ -511,12 +577,15 @@ impl NexusLink {
         // Authenticate before exchanging messages
         self.authenticate_as_initiator(&mut stream)?;
 
-        let request = self.serialize_message(&LinkMessage::ModelListRequest)?;
+        let request = self.serialize_message(
+            &LinkMessage::ModelListRequest,
+            LinkDirection::InitiatorToResponder,
+        )?;
         stream
             .write_all(&request)
             .map_err(|e| format!("Failed to send model list request: {e}"))?;
 
-        let response = self.read_message(&mut stream)?;
+        let response = self.read_message(&mut stream, LinkDirection::ResponderToInitiator)?;
         match response {
             LinkMessage::ModelListResponse { models } => Ok(models),
             _ => Err("Unexpected response from peer".to_string()),
@@ -584,16 +653,19 @@ impl NexusLink {
         self.authenticate_as_initiator(&mut stream)?;
 
         // Send transfer request
-        let request = self.serialize_message(&LinkMessage::TransferRequest {
-            model_id: model_id.to_string(),
-            filename: filename.to_string(),
-        })?;
+        let request = self.serialize_message(
+            &LinkMessage::TransferRequest {
+                model_id: model_id.to_string(),
+                filename: filename.to_string(),
+            },
+            LinkDirection::InitiatorToResponder,
+        )?;
         stream
             .write_all(&request)
             .map_err(|e| format!("Failed to send transfer request: {e}"))?;
 
         // Wait for acceptance
-        let response = self.read_message(&mut stream)?;
+        let response = self.read_message(&mut stream, LinkDirection::ResponderToInitiator)?;
         match response {
             LinkMessage::TransferAccepted { .. } => {}
             LinkMessage::TransferRejected { reason } => {
@@ -616,10 +688,13 @@ impl NexusLink {
                 break;
             }
 
-            let chunk = self.serialize_message(&LinkMessage::TransferChunk {
-                offset,
-                data: buffer[..bytes_read].to_vec(),
-            })?;
+            let chunk = self.serialize_message(
+                &LinkMessage::TransferChunk {
+                    offset,
+                    data: buffer[..bytes_read].to_vec(),
+                },
+                LinkDirection::InitiatorToResponder,
+            )?;
             stream
                 .write_all(&chunk)
                 .map_err(|e| format!("Failed to send chunk: {e}"))?;
@@ -644,9 +719,12 @@ impl NexusLink {
 
         // Send completion with checksum
         let checksum = Self::compute_file_checksum(&file_path.display().to_string())?;
-        let complete = self.serialize_message(&LinkMessage::TransferComplete {
-            checksum: checksum.clone(),
-        })?;
+        let complete = self.serialize_message(
+            &LinkMessage::TransferComplete {
+                checksum: checksum.clone(),
+            },
+            LinkDirection::InitiatorToResponder,
+        )?;
         stream
             .write_all(&complete)
             .map_err(|e| format!("Failed to send completion: {e}"))?;
@@ -670,7 +748,7 @@ impl NexusLink {
         connection: &mut TcpStream,
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<String, String> {
-        let request = self.read_message(connection)?;
+        let request = self.read_message(connection, LinkDirection::InitiatorToResponder)?;
         let (model_id, filename) = match request {
             LinkMessage::TransferRequest { model_id, filename } => (model_id, filename),
             _ => return Err("Expected TransferRequest message".to_string()),
@@ -678,9 +756,12 @@ impl NexusLink {
 
         // Governance: reject filenames with path traversal components
         if filename.contains("..") || filename.starts_with('/') || filename.contains('\\') {
-            let reject = self.serialize_message(&LinkMessage::TransferRejected {
-                reason: "Filename contains path traversal characters".to_string(),
-            })?;
+            let reject = self.serialize_message(
+                &LinkMessage::TransferRejected {
+                    reason: "Filename contains path traversal characters".to_string(),
+                },
+                LinkDirection::ResponderToInitiator,
+            )?;
             connection
                 .write_all(&reject)
                 .map_err(|e| format!("Failed to send rejection: {e}"))?;
@@ -692,9 +773,12 @@ impl NexusLink {
         // Check if model already exists
         let target_path = std::path::Path::new(&self.models_dir).join(&filename);
         if target_path.exists() {
-            let reject = self.serialize_message(&LinkMessage::TransferRejected {
-                reason: "Model already exists locally".to_string(),
-            })?;
+            let reject = self.serialize_message(
+                &LinkMessage::TransferRejected {
+                    reason: "Model already exists locally".to_string(),
+                },
+                LinkDirection::ResponderToInitiator,
+            )?;
             connection
                 .write_all(&reject)
                 .map_err(|e| format!("Failed to send rejection: {e}"))?;
@@ -702,7 +786,10 @@ impl NexusLink {
         }
 
         // We don't know total_bytes yet — accept and start receiving
-        let accept = self.serialize_message(&LinkMessage::TransferAccepted { total_bytes: 0 })?;
+        let accept = self.serialize_message(
+            &LinkMessage::TransferAccepted { total_bytes: 0 },
+            LinkDirection::ResponderToInitiator,
+        )?;
         connection
             .write_all(&accept)
             .map_err(|e| format!("Failed to send acceptance: {e}"))?;
@@ -719,7 +806,7 @@ impl NexusLink {
         let mut bytes_received: u64 = 0;
 
         let expected_checksum = loop {
-            let msg = self.read_message(connection)?;
+            let msg = self.read_message(connection, LinkDirection::InitiatorToResponder)?;
             match msg {
                 LinkMessage::TransferChunk { data, .. } => {
                     let chunk_len = data.len() as u64;
@@ -829,13 +916,18 @@ impl NexusLink {
     ///
     /// Wire format: `flag (1 byte) | length (4 bytes BE) | payload`.
     /// - flag 0x00: payload is plaintext JSON
-    /// - flag 0x01: payload is AES-256-GCM encrypted (nonce || ciphertext || tag)
-    pub fn serialize_message(&self, msg: &LinkMessage) -> Result<Vec<u8>, String> {
+    /// - flag 0x02: payload is AES-256-GCM encrypted (nonce || ciphertext ||
+    ///   tag), bound to `direction`
+    pub fn serialize_message(
+        &self,
+        msg: &LinkMessage,
+        direction: LinkDirection,
+    ) -> Result<Vec<u8>, String> {
         let json =
             serde_json::to_vec(msg).map_err(|e| format!("Failed to serialize message: {e}"))?;
 
         let (flag, payload) = if let Some(key) = &self.encryption_key {
-            let encrypted = Self::encrypt_payload(&json, key)?;
+            let encrypted = Self::encrypt_payload(&json, key, direction)?;
             (FLAG_ENCRYPTED, encrypted)
         } else {
             (FLAG_PLAINTEXT, json)
@@ -861,8 +953,45 @@ impl NexusLink {
         Ok(frame)
     }
 
-    /// Deserialize a LinkMessage from a flag + length-prefixed byte buffer.
-    pub fn deserialize_message(&self, data: &[u8]) -> Result<LinkMessage, String> {
+    /// Open a frame's payload. An encrypted frame must be bound to
+    /// `direction`; the legacy unbound encrypted frame, a plaintext frame
+    /// while a key is configured, and an unknown flag are refused.
+    fn decode_frame(
+        &self,
+        flag: u8,
+        payload: &[u8],
+        direction: LinkDirection,
+    ) -> Result<LinkMessage, String> {
+        let json_bytes = match flag {
+            FLAG_ENCRYPTED => {
+                let key = self.encryption_key.as_ref().ok_or_else(|| {
+                    "Received encrypted message but no encryption key is set".to_string()
+                })?;
+                Self::decrypt_payload(payload, key, direction)?
+            }
+            FLAG_ENCRYPTED_UNBOUND_V1 => {
+                return Err("Legacy unbound encrypted frame refused".to_string());
+            }
+            FLAG_PLAINTEXT if self.encryption_key.is_some() => {
+                return Err(
+                    "Plaintext frame refused while link encryption is configured".to_string(),
+                );
+            }
+            FLAG_PLAINTEXT => payload.to_vec(),
+            other => return Err(format!("Unknown frame flag 0x{other:02x}")),
+        };
+
+        serde_json::from_slice(&json_bytes)
+            .map_err(|e| format!("Failed to deserialize message: {e}"))
+    }
+
+    /// Deserialize a LinkMessage travelling in `direction` from a flag +
+    /// length-prefixed byte buffer.
+    pub fn deserialize_message(
+        &self,
+        data: &[u8],
+        direction: LinkDirection,
+    ) -> Result<LinkMessage, String> {
         if data.len() < 5 {
             return Err("Buffer too short for flag + length prefix".to_string());
         }
@@ -877,19 +1006,7 @@ impl NexusLink {
             ));
         }
 
-        let payload = &data[5..5 + len];
-
-        let json_bytes = if flag == FLAG_ENCRYPTED {
-            let key = self.encryption_key.as_ref().ok_or_else(|| {
-                "Received encrypted message but no encryption key is set".to_string()
-            })?;
-            Self::decrypt_payload(payload, key)?
-        } else {
-            payload.to_vec()
-        };
-
-        serde_json::from_slice(&json_bytes)
-            .map_err(|e| format!("Failed to deserialize message: {e}"))
+        self.decode_frame(flag, &data[5..5 + len], direction)
     }
 
     /// Deserialize a LinkMessage without encryption (static method for backward compatibility).
@@ -899,7 +1016,7 @@ impl NexusLink {
         }
 
         let flag = data[0];
-        if flag == FLAG_ENCRYPTED {
+        if flag != FLAG_PLAINTEXT {
             return Err(
                 "Message is encrypted but no key available (use instance method)".to_string(),
             );
@@ -918,8 +1035,13 @@ impl NexusLink {
             .map_err(|e| format!("Failed to deserialize message: {e}"))
     }
 
-    /// Read a flag + length-prefixed message from a TCP stream.
-    fn read_message(&self, stream: &mut TcpStream) -> Result<LinkMessage, String> {
+    /// Read a flag + length-prefixed message travelling in `direction` from a
+    /// TCP stream.
+    fn read_message(
+        &self,
+        stream: &mut TcpStream,
+        direction: LinkDirection,
+    ) -> Result<LinkMessage, String> {
         // Read the 1-byte flag
         let mut flag_buf = [0u8; 1];
         stream
@@ -945,17 +1067,7 @@ impl NexusLink {
             .read_exact(&mut payload)
             .map_err(|e| format!("Failed to read message body: {e}"))?;
 
-        let json_bytes = if flag == FLAG_ENCRYPTED {
-            let key = self.encryption_key.as_ref().ok_or_else(|| {
-                "Received encrypted message but no encryption key is set".to_string()
-            })?;
-            Self::decrypt_payload(&payload, key)?
-        } else {
-            payload
-        };
-
-        serde_json::from_slice(&json_bytes)
-            .map_err(|e| format!("Failed to deserialize message: {e}"))
+        self.decode_frame(flag, &payload, direction)
     }
 }
 
@@ -1079,10 +1191,16 @@ mod tests {
         ];
 
         for msg in variants {
-            let serialized = link.serialize_message(&msg).unwrap();
-            let deserialized = link.deserialize_message(&serialized).unwrap();
+            let serialized = link
+                .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+                .unwrap();
+            let deserialized = link
+                .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
+                .unwrap();
             // Verify round-trip by re-serializing
-            let re_serialized = link.serialize_message(&deserialized).unwrap();
+            let re_serialized = link
+                .serialize_message(&deserialized, LinkDirection::InitiatorToResponder)
+                .unwrap();
             assert_eq!(serialized, re_serialized);
         }
     }
@@ -1186,17 +1304,25 @@ mod tests {
         link.set_encryption_key("my-secret-passphrase");
 
         let msg = LinkMessage::Ping;
-        let serialized = link.serialize_message(&msg).unwrap();
+        let serialized = link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         // First byte should be the encrypted flag
         assert_eq!(serialized[0], FLAG_ENCRYPTED);
 
         // Deserialize with same key
-        let deserialized = link.deserialize_message(&serialized).unwrap();
+        let deserialized = link
+            .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
+            .unwrap();
         // Re-serialize plaintext to compare structure
         let plain_link = NexusLink::new("dev", "/tmp/models");
-        let plain_ser = plain_link.serialize_message(&msg).unwrap();
-        let plain_deser = plain_link.deserialize_message(&plain_ser).unwrap();
+        let plain_ser = plain_link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
+        let plain_deser = plain_link
+            .deserialize_message(&plain_ser, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         // Both should deserialize to equivalent messages
         let json1 = serde_json::to_string(&deserialized).unwrap();
@@ -1229,9 +1355,13 @@ mod tests {
         ];
 
         for msg in variants {
-            let serialized = link.serialize_message(&msg).unwrap();
+            let serialized = link
+                .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+                .unwrap();
             assert_eq!(serialized[0], FLAG_ENCRYPTED);
-            let deserialized = link.deserialize_message(&serialized).unwrap();
+            let deserialized = link
+                .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
+                .unwrap();
             // Verify round-trip
             let json_orig = serde_json::to_string(&msg).unwrap();
             let json_rt = serde_json::to_string(&deserialized).unwrap();
@@ -1248,10 +1378,12 @@ mod tests {
         receiver.set_encryption_key("wrong-key");
 
         let msg = LinkMessage::Ping;
-        let serialized = sender.serialize_message(&msg).unwrap();
+        let serialized = sender
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         // Should fail to decrypt with wrong key
-        let result = receiver.deserialize_message(&serialized);
+        let result = receiver.deserialize_message(&serialized, LinkDirection::InitiatorToResponder);
         assert!(result.is_err());
     }
 
@@ -1262,8 +1394,12 @@ mod tests {
         enc_link.set_encryption_key("secret");
 
         let msg = LinkMessage::Ping;
-        let plain = plain_link.serialize_message(&msg).unwrap();
-        let encrypted = enc_link.serialize_message(&msg).unwrap();
+        let plain = plain_link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
+        let encrypted = enc_link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         // Flags differ
         assert_eq!(plain[0], FLAG_PLAINTEXT);
@@ -1279,15 +1415,23 @@ mod tests {
         link.set_encryption_key("nonce-test");
 
         let msg = LinkMessage::Ping;
-        let enc1 = link.serialize_message(&msg).unwrap();
-        let enc2 = link.serialize_message(&msg).unwrap();
+        let enc1 = link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
+        let enc2 = link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         // Different nonces should produce different ciphertext
         assert_ne!(enc1, enc2);
 
         // But both should decrypt to the same message
-        let d1 = link.deserialize_message(&enc1).unwrap();
-        let d2 = link.deserialize_message(&enc2).unwrap();
+        let d1 = link
+            .deserialize_message(&enc1, LinkDirection::InitiatorToResponder)
+            .unwrap();
+        let d2 = link
+            .deserialize_message(&enc2, LinkDirection::InitiatorToResponder)
+            .unwrap();
         assert_eq!(
             serde_json::to_string(&d1).unwrap(),
             serde_json::to_string(&d2).unwrap()
@@ -1303,9 +1447,11 @@ mod tests {
         // receiver has no key
 
         let msg = LinkMessage::Ping;
-        let serialized = sender.serialize_message(&msg).unwrap();
+        let serialized = sender
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
-        let result = receiver.deserialize_message(&serialized);
+        let result = receiver.deserialize_message(&serialized, LinkDirection::InitiatorToResponder);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("no encryption key"));
     }
@@ -1318,7 +1464,9 @@ mod tests {
 
         // Should be readable by any instance (no key needed)
         let link = NexusLink::new("dev", "/tmp/models");
-        let deserialized = link.deserialize_message(&serialized).unwrap();
+        let deserialized = link
+            .deserialize_message(&serialized, LinkDirection::InitiatorToResponder)
+            .unwrap();
 
         let json_orig = serde_json::to_string(&msg).unwrap();
         let json_rt = serde_json::to_string(&deserialized).unwrap();
@@ -1357,7 +1505,7 @@ mod tests {
             stream.write_timeout().unwrap(),
             Some(std::time::Duration::from_secs(5))
         );
-        let error = match link.read_message(&mut stream) {
+        let error = match link.read_message(&mut stream, LinkDirection::InitiatorToResponder) {
             Ok(_) => panic!("an oversized message was accepted"),
             Err(error) => error,
         };
@@ -1504,12 +1652,14 @@ mod tests {
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(5)))
                 .unwrap();
-            server_link.read_message(&mut stream)
+            server_link.read_message(&mut stream, LinkDirection::InitiatorToResponder)
         });
 
         let mut client_stream = TcpStream::connect(addr).unwrap();
         let msg = LinkMessage::ModelListRequest;
-        let serialized = client_link.serialize_message(&msg).unwrap();
+        let serialized = client_link
+            .serialize_message(&msg, LinkDirection::InitiatorToResponder)
+            .unwrap();
         client_stream.write_all(&serialized).unwrap();
 
         let server_result = server_handle.join().unwrap();
@@ -1725,11 +1875,16 @@ mod tests {
                 .set_read_timeout(Some(std::time::Duration::from_secs(10)))
                 .unwrap();
             responder.authenticate_as_responder(&mut stream).unwrap();
-            let request = responder.read_message(&mut stream).unwrap();
+            let request = responder
+                .read_message(&mut stream, LinkDirection::InitiatorToResponder)
+                .unwrap();
             let reply = responder
-                .serialize_message(&LinkMessage::TransferRejected {
-                    reason: "test peer".into(),
-                })
+                .serialize_message(
+                    &LinkMessage::TransferRejected {
+                        reason: "test peer".into(),
+                    },
+                    LinkDirection::ResponderToInitiator,
+                )
                 .unwrap();
             stream.write_all(&reply).unwrap();
             request
@@ -1753,7 +1908,10 @@ mod tests {
         let cipher = Aes256Gcm::new(&key.into());
         let nonce = [0x17_u8; 12];
         let ciphertext = cipher
-            .encrypt(&Nonce::from(nonce), serde_json::to_vec(msg).unwrap().as_slice())
+            .encrypt(
+                &Nonce::from(nonce),
+                serde_json::to_vec(msg).unwrap().as_slice(),
+            )
             .unwrap();
         let mut payload = nonce.to_vec();
         payload.extend_from_slice(&ciphertext);

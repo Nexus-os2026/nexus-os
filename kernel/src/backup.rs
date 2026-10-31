@@ -14,6 +14,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+/// The context every encrypted backup archive is bound to (M0-FIX2 F14), so
+/// a ciphertext sealed for another purpose is not accepted as an archive.
+const BACKUP_ARCHIVE_CONTEXT: &str = "nexus.backup.archive";
+
 // ── Error ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -409,7 +413,7 @@ fn create_backup_with_config_file(
 
     // Optionally encrypt the archive.
     if let Some(key) = archive_key {
-        crypto::encrypt_file(key, &archive_path)?;
+        crypto::encrypt_file(key, &archive_path, BACKUP_ARCHIVE_CONTEXT)?;
     }
 
     // Compute checksum and size.
@@ -590,12 +594,10 @@ fn restore_with_limits(
     // Read the archive (decrypt if needed).
     let raw = std::fs::read(archive_path)?;
 
-    let archive_bytes = if raw.len() >= crypto::ENCRYPTED_HEADER_LEN
-        && &raw[..crypto::ENCRYPTED_HEADER_LEN] == crypto::ENCRYPTED_HEADER_BYTES
-    {
+    let archive_bytes = if crypto::has_encryption_header(&raw) {
         let key = encryption_key
             .ok_or_else(|| BackupError::Encryption("encryption key required for restore".into()))?;
-        crypto::decrypt_data(key, &raw)?
+        crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?
     } else {
         raw
     };
@@ -804,13 +806,11 @@ pub fn verify_backup(
 
     // Try to read the archive to verify it's not corrupted.
     let raw = std::fs::read(archive_path)?;
-    let archive_data = if raw.len() >= crypto::ENCRYPTED_HEADER_LEN
-        && &raw[..crypto::ENCRYPTED_HEADER_LEN] == crypto::ENCRYPTED_HEADER_BYTES
-    {
+    let archive_data = if crypto::has_encryption_header(&raw) {
         let key = encryption_key.ok_or_else(|| {
             BackupError::Encryption("key required to verify encrypted backup".into())
         })?;
-        crypto::decrypt_data(key, &raw)?
+        crypto::decrypt_data(key, BACKUP_ARCHIVE_CONTEXT, &raw)?
     } else {
         raw
     };
@@ -1829,8 +1829,12 @@ mod tests {
         let foreign = tmp.path().join("foreign.tar.gz");
         std::fs::write(
             &foreign,
-            crypto::encrypt_data(&key, &crypto::data_file_context("agents.db"), &plain_archive)
-                .unwrap(),
+            crypto::encrypt_data(
+                &key,
+                &crypto::data_file_context("agents.db"),
+                &plain_archive,
+            )
+            .unwrap(),
         )
         .unwrap();
         let restore_root = tmp.path().join("restored");
