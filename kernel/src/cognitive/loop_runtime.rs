@@ -388,9 +388,10 @@ impl RegistryExecutor {
 
     /// Replace the web actuator's backend with a governed implementation.
     ///
-    /// By default, `ActuatorRegistry::with_defaults()` uses `CurlWebBackend`.
-    /// Call this to inject the full governed connectors (Brave Search, scraper
-    /// reader, etc.) from the app layer.
+    /// By default there is none and web search is closed (M0-FIX F3); the
+    /// built-in `CurlWebBackend` serves agent fetches only. Call this to
+    /// inject a governed backend from the host, which then serves search and
+    /// fetch (pair it with `CognitivePlanner::with_governed_web_search`).
     pub fn with_web_backend(
         mut self,
         backend: Arc<dyn crate::actuators::WebSearchBackend>,

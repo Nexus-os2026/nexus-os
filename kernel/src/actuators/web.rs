@@ -1,9 +1,12 @@
-//! GovernedWeb actuator — governed web search and fetch with egress enforcement.
+//! GovernedWeb actuator — web fetch with egress enforcement, and web search
+//! only through a backend the host injects.
 //!
-//! Defines a `WebSearchBackend` trait so the app layer can inject a governed
-//! implementation (Brave API, scraper-based reader) without creating a circular
-//! dependency.  A built-in `CurlWebBackend` serves as the default when no
-//! external backend is injected.
+//! Defines a `WebSearchBackend` trait so the host can inject a governed
+//! implementation without a circular dependency (the broker crate depends on
+//! this kernel). M0-FIX F3: there is no built-in search. The broker has no
+//! governed web-search capability, so without an injected backend a
+//! `WebSearch` step is refused ([`WEB_SEARCH_CLOSED`]) before any process or
+//! connection. The built-in `CurlWebBackend` serves agent fetches only.
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
@@ -25,6 +28,11 @@ const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/201001
 const FUEL_COST_SEARCH: f64 = 3.0;
 /// Fuel cost per web fetch.
 const FUEL_COST_FETCH: f64 = 2.0;
+
+/// The refusal of a web search with no injected backend (M0-FIX F3).
+pub const WEB_SEARCH_CLOSED: &str = "web search is closed: no governed search backend is \
+     configured; the broker has no governed web-search capability and the built-in curl \
+     search was removed (M0-FIX F3)";
 
 // ── WebSearchBackend trait ──────────────────────────────────────────────────
 
@@ -48,119 +56,53 @@ pub trait WebSearchBackend: Send + Sync {
     fn fetch_content(&self, url: &str) -> Result<String, String>;
 }
 
-// ── CurlWebBackend (built-in default) ───────────────────────────────────────
+// ── CurlWebBackend (built-in fetch) ─────────────────────────────────────────
 
-/// Default backend that uses curl subprocesses. Works everywhere, no deps.
+/// Built-in backend for agent fetches (curl subprocess). It never searches:
+/// its `search` returns the closed refusal without starting any process.
 pub struct CurlWebBackend;
 
-/// The operator's SearXNG instance (`SEARXNG_URL`), if one is configured and
-/// answers its health probe.
-///
-/// Final Gate item B (Architect decision D6): there is no default instance.
-/// A service that happens to listen on a guessed local port is not an
-/// authorized search service, and model-chosen queries are never sent to
-/// one; without `SEARXNG_URL`, search uses only its fixed public hosts.
-fn searxng_url() -> Option<String> {
-    let url = searxng_base(std::env::var_os("SEARXNG_URL"))?;
-    // Quick probe: if SearXNG isn't running, don't waste time on it
-    // P0-002C5B: the operator URL is checked; an invalid one disables search
-    // through SearXNG rather than reaching curl.
-    let health = crate::governed_http::http_url(&format!("{url}/healthz")).ok()?;
-    if let Ok(output) = Command::new("curl")
-        .args(crate::governed_http::CURL_HTTP_ONLY)
-        .args(["-sS", "--max-time", "2", "--max-filesize", "1048576", "--"])
-        .arg(health.as_str())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-    {
-        if output.status.success() {
-            return Some(url);
-        }
-    }
-    None
-}
-
-/// The operator's SearXNG base URL: an http(s) URL with a host and no user
-/// information, query or fragment, without a trailing `/`. Anything else,
-/// including no value, is no instance.
-fn searxng_base(operator: Option<std::ffi::OsString>) -> Option<String> {
-    let url = crate::governed_http::http_url(&operator?.into_string().ok()?).ok()?;
-    if url.query().is_some() || url.fragment().is_some() {
-        return None;
-    }
-    Some(url.as_str().trim_end_matches('/').to_string())
-}
-
 impl WebSearchBackend for CurlWebBackend {
-    fn search(&self, query: &str) -> Result<Vec<WebSearchResult>, String> {
-        let encoded = urlencoded(query);
-
-        // 1. Try SearXNG (local, private, structured JSON, best results)
-        if let Some(base) = searxng_url() {
-            let url =
-                format!("{base}/search?q={encoded}&format=json&categories=general&language=en");
-            if let Ok(body) = curl_get(&url, true) {
-                let results = parse_searxng_results(&body);
-                if !results.is_empty() {
-                    return Ok(results);
-                }
-            }
-        }
-
-        // 2. Fallback: DuckDuckGo HTML (public, may be rate-limited)
-        let ddg_url = format!("https://html.duckduckgo.com/html/?q={encoded}");
-        if let Ok(body) = curl_get(&ddg_url, true) {
-            let results = parse_duckduckgo_results(&body);
-            if !results.is_empty() {
-                return Ok(results);
-            }
-        }
-
-        // 3. Fallback: HackerNews RSS (good for tech/AI queries)
-        let hn_url = format!("https://hnrss.org/newest?q={encoded}&count=10");
-        if let Ok(body) = curl_get(&hn_url, true) {
-            let results = parse_rss_results(&body);
-            if !results.is_empty() {
-                return Ok(results);
-            }
-        }
-
-        Err(format!(
-            "Web search failed for \"{query}\": all sources returned no results. \
-             Try a different query or use ShellCommand with curl directly."
-        ))
+    fn search(&self, _query: &str) -> Result<Vec<WebSearchResult>, String> {
+        Err(WEB_SEARCH_CLOSED.to_string())
     }
 
     fn fetch_content(&self, url: &str) -> Result<String, String> {
         // P0-002C5C: a fetch follows no redirect. The allowlist admitted the
         // requested URL, not wherever it redirects; the agent may fetch the
         // target itself, which is checked in turn.
-        let body = curl_get(url, false).map_err(|e| e.to_string())?;
+        let body = curl_get(url).map_err(|e| e.to_string())?;
         Ok(strip_html(&body))
     }
 }
 
 // ── GovernedWeb actuator ────────────────────────────────────────────────────
 
-/// Governed web actuator. Handles web search and URL fetching with egress
-/// enforcement. Uses an injected `WebSearchBackend` for the actual HTTP work.
+/// Governed web actuator. Handles URL fetching with egress enforcement, and
+/// web search only through an injected `WebSearchBackend`.
 pub struct GovernedWeb {
     backend: Arc<dyn WebSearchBackend>,
+    /// Whether `backend` was injected by the host and so may serve search.
+    /// The built-in backend never does (M0-FIX F3).
+    injected: bool,
 }
 
 impl GovernedWeb {
-    /// Create with the default curl backend.
+    /// Create with the built-in fetch backend: web search is closed.
     pub fn new() -> Self {
         Self {
             backend: Arc::new(CurlWebBackend),
+            injected: false,
         }
     }
 
-    /// Create with a custom backend (e.g. governed connectors from the app layer).
+    /// Create with a backend the host injects (a governed implementation, or
+    /// a hermetic one in tests); it serves both search and fetch.
     pub fn with_backend(backend: Arc<dyn WebSearchBackend>) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            injected: true,
+        }
     }
 
     /// Check if a URL is allowed by the agent's egress allowlist.
@@ -201,6 +143,7 @@ impl Clone for GovernedWeb {
     fn clone(&self) -> Self {
         Self {
             backend: Arc::clone(&self.backend),
+            injected: self.injected,
         }
     }
 }
@@ -226,6 +169,11 @@ impl Actuator for GovernedWeb {
                     "web.search",
                 ) {
                     return Err(ActuatorError::CapabilityDenied("web.search".into()));
+                }
+                // M0-FIX F3: no injected backend, no search; nothing is
+                // started and no connection is made.
+                if !self.injected {
+                    return Err(ActuatorError::Closed(WEB_SEARCH_CLOSED.to_string()));
                 }
 
                 let results = self.backend.search(query).map_err(ActuatorError::IoError)?;
@@ -291,38 +239,20 @@ impl Actuator for GovernedWeb {
 /// Marks where curl reports the redirect target of an unfollowed redirect.
 const REDIRECT_MARKER: &str = "\n__NEXUS_REDIRECT__:";
 
-/// curl's protocol options for a search that follows redirects: the request
-/// itself is http or https (an operator's SearXNG may be served over plain
-/// http; the DuckDuckGo and HackerNews addresses are https), and every
-/// redirect must be https, so no redirect moves a search, or its answer, to
-/// plain http.
-const CURL_HTTPS_REDIRECTS: [&str; 6] = [
-    "-q",
-    "--globoff",
-    "--proto",
-    "=http,https",
-    "--proto-redir",
-    "=https",
-];
-
-/// Perform a blocking HTTP GET via curl subprocess.
+/// Perform a blocking HTTP GET via curl subprocess for an agent's fetch.
 /// Safe to call from async context — spawns a child process.
 ///
-/// With `follow_redirects` false (an agent's fetch), a redirect response is
-/// refused and names its target instead of being followed. With it true (a
-/// search), redirects are followed to https addresses only.
-fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> {
+/// A redirect response is refused and names its target instead of being
+/// followed. (The redirect-following variant served only the built-in
+/// search, removed by M0-FIX F3.)
+fn curl_get(url: &str) -> Result<String, ActuatorError> {
     // P0-002C5B: HTTP(S) only, including redirects, with the URL after `--`.
     let url = crate::governed_http::http_url(url)
         .map_err(|error| ActuatorError::IoError(error.to_string()))?;
     let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
     let redirect_format = format!("{REDIRECT_MARKER}%{{redirect_url}}");
     let mut command = Command::new("curl");
-    if follow_redirects {
-        command.args(CURL_HTTPS_REDIRECTS);
-    } else {
-        command.args(crate::governed_http::CURL_HTTP_ONLY);
-    }
+    command.args(crate::governed_http::CURL_HTTP_ONLY);
     command.args([
         "-sS",
         "--max-time",
@@ -332,11 +262,7 @@ fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> 
         "-A",
         USER_AGENT,
     ]);
-    if follow_redirects {
-        command.arg("-L");
-    } else {
-        command.args(["-w", &redirect_format]);
-    }
+    command.args(["-w", &redirect_format]);
     let output = command
         .args(["--", url.as_str()])
         .stdin(Stdio::null())
@@ -359,15 +285,13 @@ fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> 
     }
 
     let mut body = String::from_utf8_lossy(&output.stdout).to_string();
-    if !follow_redirects {
-        if let Some(at) = body.rfind(REDIRECT_MARKER) {
-            let target = body[at + REDIRECT_MARKER.len()..].trim().to_string();
-            body.truncate(at);
-            if !target.is_empty() {
-                return Err(ActuatorError::IoError(format!(
-                    "the page redirects to {target}; fetch that URL if the egress allowlist admits it"
-                )));
-            }
+    if let Some(at) = body.rfind(REDIRECT_MARKER) {
+        let target = body[at + REDIRECT_MARKER.len()..].trim().to_string();
+        body.truncate(at);
+        if !target.is_empty() {
+            return Err(ActuatorError::IoError(format!(
+                "the page redirects to {target}; fetch that URL if the egress allowlist admits it"
+            )));
         }
     }
     // P0-002C5C: cut on a character boundary, never inside one.
@@ -476,171 +400,6 @@ fn strip_html_basic(html: &str) -> String {
     collapsed.trim().to_string()
 }
 
-/// Parse SearXNG JSON response into structured results.
-fn parse_searxng_results(json_body: &str) -> Vec<WebSearchResult> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(json_body) else {
-        return Vec::new();
-    };
-    let Some(results) = value.get("results").and_then(|v| v.as_array()) else {
-        return Vec::new();
-    };
-
-    results
-        .iter()
-        .take(10)
-        .enumerate()
-        .filter_map(|(i, item)| {
-            let title = item.get("title")?.as_str()?.trim().to_string();
-            if title.is_empty() {
-                return None;
-            }
-            let url = item
-                .get("url")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let snippet = item
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            Some(WebSearchResult {
-                title,
-                url,
-                snippet,
-                relevance_score: 1.0 - (i as f64 * 0.05),
-            })
-        })
-        .collect()
-}
-
-/// Parse DuckDuckGo HTML search results into structured results.
-fn parse_duckduckgo_results(html: &str) -> Vec<WebSearchResult> {
-    static TITLE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r#"(?is)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>"#)
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-    static SNIPPET_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(
-            r#"(?is)<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>"#,
-        )
-        .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-    static URL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r#"(?i)<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>"#)
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-
-    let titles: Vec<String> = TITLE_RE
-        .captures_iter(html)
-        .filter_map(|c| c.get(1).map(|m| strip_html(m.as_str())))
-        .filter(|t| !t.is_empty())
-        .collect();
-    let snippets: Vec<String> = SNIPPET_RE
-        .captures_iter(html)
-        .filter_map(|c| c.get(1).map(|m| strip_html(m.as_str())))
-        .filter(|s| !s.is_empty())
-        .collect();
-    let urls: Vec<String> = URL_RE
-        .captures_iter(html)
-        .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
-        .collect();
-
-    let max = titles.len().min(10);
-    let mut results = Vec::new();
-    for i in 0..max {
-        let title = titles.get(i).cloned().unwrap_or_default();
-        let snippet = snippets.get(i).cloned().unwrap_or_default();
-        let url = urls.get(i).cloned().unwrap_or_default();
-        if title.is_empty() {
-            continue;
-        }
-        results.push(WebSearchResult {
-            title,
-            url,
-            snippet,
-            relevance_score: 1.0 - (i as f64 * 0.05),
-        });
-    }
-
-    results
-}
-
-/// Parse RSS/XML feed into structured results (for HackerNews, Reddit, etc.)
-fn parse_rss_results(xml: &str) -> Vec<WebSearchResult> {
-    static ITEM_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"(?is)<item>(.*?)</item>")
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-    static TITLE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"(?is)<title>(.*?)</title>")
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-    static LINK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"(?is)<link>(.*?)</link>")
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-    static DESC_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"(?is)<description>(.*?)</description>")
-            .unwrap_or_else(|_| Regex::new("^$").unwrap_or_else(|_| std::process::abort()))
-    });
-
-    let mut results = Vec::new();
-    for (i, cap) in ITEM_RE.captures_iter(xml).take(10).enumerate() {
-        let item = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-        let title = TITLE_RE
-            .captures(item)
-            .and_then(|c| c.get(1))
-            .map(|m| strip_html(m.as_str()))
-            .unwrap_or_default();
-        let link = LINK_RE
-            .captures(item)
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str().trim().to_string())
-            .unwrap_or_default();
-        let desc = DESC_RE
-            .captures(item)
-            .and_then(|c| c.get(1))
-            .map(|m| strip_html(m.as_str()))
-            .unwrap_or_default();
-
-        if title.is_empty() {
-            continue;
-        }
-        results.push(WebSearchResult {
-            title,
-            url: link,
-            snippet: if desc.len() > 200 {
-                format!("{}...", &desc[..desc.floor_char_boundary(200)])
-            } else {
-                desc
-            },
-            relevance_score: 1.0 - (i as f64 * 0.08),
-        });
-    }
-
-    results
-}
-
-/// Minimal percent-encoding for URL query parameters.
-fn urlencoded(input: &str) -> String {
-    let mut encoded = String::with_capacity(input.len() * 3);
-    for byte in input.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(byte as char);
-            }
-            b' ' => encoded.push('+'),
-            _ => {
-                encoded.push('%');
-                encoded.push_str(&format!("{byte:02X}"));
-            }
-        }
-    }
-    encoded
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -704,41 +463,6 @@ mod tests {
         ));
     }
 
-    /// Final Gate item B: a search follows redirects to https only, so a
-    /// redirect never moves it (or its answer) to plain http; here a
-    /// redirect to a plain-http target is not followed and the target is
-    /// never contacted. An answer without a redirect is read as before.
-    #[test]
-    fn p0_fg_search_redirects_are_followed_to_https_only() {
-        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        target.set_nonblocking(true).unwrap();
-        let target_url = format!("http://{}/downgraded", target.local_addr().unwrap());
-        for code in [
-            "301 Moved Permanently",
-            "302 Found",
-            "307 Temporary Redirect",
-        ] {
-            let (base, server) = serve(vec![format!(
-                "HTTP/1.1 {code}\r\nLocation: {target_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
-            .into_bytes()]);
-            assert!(curl_get(&format!("{base}/search"), true).is_err(), "{code}");
-            assert_eq!(server.join().unwrap(), 1);
-        }
-        assert!(matches!(
-            target.accept(),
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
-        ));
-        let (base, server) = serve(vec![
-            b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nresults".to_vec(),
-        ]);
-        assert_eq!(
-            curl_get(&format!("{base}/search"), true).unwrap(),
-            "results"
-        );
-        server.join().unwrap();
-    }
-
     /// P0-002C5C: remote text is cut on character boundaries. Invalid
     /// UTF-8 widens under lossy decoding (one byte to three), so the cut
     /// falls inside a character unless it is placed on a boundary.
@@ -748,17 +472,10 @@ mod tests {
             b"HTTP/1.1 200 OK\r\nContent-Length: 400000\r\nConnection: close\r\n\r\n".to_vec();
         response.extend_from_slice(&[0xFF; 400_000]);
         let (base, server) = serve(vec![response]);
-        let body = curl_get(&format!("{base}/"), false).unwrap();
+        let body = curl_get(&format!("{base}/")).unwrap();
         server.join().unwrap();
         assert!(body.len() <= MAX_RESPONSE_BYTES);
         assert!(body.chars().all(|c| c == '\u{FFFD}'));
-
-        let long = format!("{}é{}", "a".repeat(199), "b".repeat(100));
-        let rss = format!(
-            "<rss><item><title>t</title><link>https://example.com/</link><description>{long}</description></item></rss>"
-        );
-        let results = parse_rss_results(&rss);
-        assert_eq!(results[0].snippet, format!("{}...", "a".repeat(199)));
     }
 
     fn make_context() -> ActuatorContext {
@@ -829,25 +546,22 @@ mod tests {
         );
     }
 
+    /// M0-FIX F3: without an injected backend a search is refused as
+    /// closed, after the capability check, before any process or request.
     #[test]
-    fn search_dispatches() {
-        let ctx = make_context();
+    fn search_is_closed_without_an_injected_backend() {
         let web = GovernedWeb::new();
-
         let action = PlannedAction::WebSearch {
             query: "rust programming".into(),
         };
-        match web.execute(&action, &ctx) {
-            Ok(result) => {
-                assert!(result.success);
-                assert!(!result.output.is_empty());
-                assert_eq!(result.side_effects.len(), 1);
-            }
-            Err(ActuatorError::IoError(_)) => {
-                // Network unavailable or search provider blocked — acceptable in CI
-            }
-            Err(other) => panic!("unexpected error: {other}"),
+        match web.execute(&action, &make_context()) {
+            Err(ActuatorError::Closed(reason)) => assert_eq!(reason, WEB_SEARCH_CLOSED),
+            other => panic!("expected the closed refusal, got {other:?}"),
         }
+        assert_eq!(
+            CurlWebBackend.search("rust").unwrap_err(),
+            WEB_SEARCH_CLOSED
+        );
     }
 
     #[test]
@@ -910,12 +624,6 @@ mod tests {
     }
 
     #[test]
-    fn urlencoded_basic() {
-        assert_eq!(urlencoded("hello world"), "hello+world");
-        assert_eq!(urlencoded("a&b=c"), "a%26b%3Dc");
-    }
-
-    #[test]
     fn custom_backend_is_used() {
         struct MockBackend;
         impl WebSearchBackend for MockBackend {
@@ -939,21 +647,6 @@ mod tests {
         };
         let result = web.execute(&action, &ctx).unwrap();
         assert!(result.output.contains("Mock Result"));
-    }
-
-    #[test]
-    fn parse_searxng_json() {
-        let json = r#"{
-            "results": [
-                {"title": "Rust Language", "url": "https://rust-lang.org", "content": "A language empowering everyone."},
-                {"title": "Rust Book", "url": "https://doc.rust-lang.org/book/", "content": "The official book."}
-            ]
-        }"#;
-        let results = parse_searxng_results(json);
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].title, "Rust Language");
-        assert_eq!(results[0].url, "https://rust-lang.org");
-        assert!(results[0].snippet.contains("empowering"));
     }
 
     #[test]
@@ -989,28 +682,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_rss_extracts_items() {
-        let rss = r#"
-        <rss><channel>
-          <item>
-            <title>AI News Today</title>
-            <link>https://example.com/ai</link>
-            <description>Latest AI developments</description>
-          </item>
-          <item>
-            <title>Rust Update</title>
-            <link>https://example.com/rust</link>
-            <description>Rust 2026 edition</description>
-          </item>
-        </channel></rss>"#;
-
-        let results = parse_rss_results(rss);
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].title, "AI News Today");
-        assert_eq!(results[1].url, "https://example.com/rust");
-    }
-
-    #[test]
     fn p0_002c5b_fetches_refuse_non_http_and_userinfo_urls_before_curl() {
         let ctx = make_context();
         let web = GovernedWeb::new();
@@ -1034,39 +705,19 @@ mod tests {
             "https://a@example.com/",
         ] {
             assert_eq!(
-                curl_get(url, false).unwrap_err().to_string(),
+                curl_get(url).unwrap_err().to_string(),
                 "io error: URL must be an http or https URL with a host",
                 "{url:?}"
             );
         }
     }
 
-    /// Final Gate item B (Architect decision D6): SearXNG is used only at an
-    /// address the operator configured. With none, search names no instance
-    /// and no local port is guessed; an unusable value is no instance.
+    /// Final Gate item B (Architect decision D6): no search service is
+    /// guessed at a local port. M0-FIX F3 removed the built-in search (and
+    /// its operator-configured instance) with the function this test also
+    /// checked; the source half stays.
     #[test]
-    fn p0_fg_searxng_needs_an_operator_address() {
-        assert_eq!(searxng_base(None), None);
-        assert_eq!(
-            searxng_base(Some("http://search.lan:8888/".into())),
-            Some("http://search.lan:8888".to_string())
-        );
-        assert_eq!(
-            searxng_base(Some("https://search.example/searx/".into())),
-            Some("https://search.example/searx".to_string())
-        );
-        for unusable in [
-            "",
-            "search.lan:8888",
-            "ftp://search.lan",
-            "file:///search",
-            "http://user:secret@search.lan",
-            "http://search.lan/?q=1",
-            "http://search.lan/#top",
-            " http://search.lan",
-        ] {
-            assert_eq!(searxng_base(Some(unusable.into())), None, "{unusable:?}");
-        }
+    fn p0_fg_no_search_service_address_is_guessed() {
         let source = include_str!("web.rs");
         assert_no_guessed_searxng_address(source);
         // As a CRLF checkout (Windows CI, core.autocrlf=true) reads it.
