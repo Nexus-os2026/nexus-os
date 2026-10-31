@@ -19,7 +19,7 @@ use windows_sys::Win32::System::JobObjects::{
     JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_JOB_MEMORY,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
-use windows_sys::Win32::System::SystemInformation::{GetSystemDirectoryW, GetWindowsDirectoryW};
+use windows_sys::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
     InitializeProcThreadAttributeList, UpdateProcThreadAttribute, WaitForSingleObject,
@@ -704,23 +704,6 @@ fn wide_nul(value: &OsStr) -> io::Result<Vec<u16>> {
     Ok(wide)
 }
 
-fn system_cmd() -> io::Result<OsString> {
-    let mut path = vec![0u16; 260];
-    loop {
-        let len = unsafe { GetSystemDirectoryW(path.as_mut_ptr(), path.len() as u32) } as usize;
-        if len == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if len < path.len() {
-            path.truncate(len);
-            let mut path = PathBuf::from(OsString::from_wide(&path));
-            path.push("cmd.exe");
-            return Ok(path.into_os_string());
-        }
-        path.resize(len + 1, 0);
-    }
-}
-
 fn command_line(spec: &ResourceSpawnSpec) -> io::Result<(Vec<u16>, Vec<u16>)> {
     let (program, args) = match &spec.program {
         ResourceProgram::Executable { program, args } => {
@@ -729,10 +712,6 @@ fn command_line(spec: &ResourceSpawnSpec) -> io::Result<(Vec<u16>, Vec<u16>)> {
             let path = std::path::absolute(spec.current_dir.join(program))?;
             (path.into_os_string(), args.clone())
         }
-        ResourceProgram::Shell(script) => (
-            system_cmd()?,
-            vec![OsString::from("/C"), OsString::from(script)],
-        ),
     };
     let application = wide_nul(&program)?;
     if application.contains(&(b'"' as u16)) {
@@ -752,9 +731,8 @@ fn command_line(spec: &ResourceSpawnSpec) -> io::Result<(Vec<u16>, Vec<u16>)> {
     Ok((application, line))
 }
 
-/// Matches std::process::Command's regular-argument encoding, including the
-/// legacy `.args(["/C", command])` terminal tail. Do not switch to raw_arg or
-/// introduce /S, /D, or a different cmd quoting contract during this repair.
+/// Matches std::process::Command's regular-argument encoding. Arguments go
+/// to the executable itself, never through a shell; do not switch to raw_arg.
 fn append_argument(line: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
     let wide = wide_nul(arg)?;
     let wide = &wide[..wide.len() - 1];

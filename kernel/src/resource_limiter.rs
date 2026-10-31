@@ -311,7 +311,9 @@ pub struct SealedSpawnSpec {
     pub stderr: ResourceOutput,
 }
 
-/// Only the two execution forms required by the terminal and native helpers.
+/// An executable plus an argument vector. There is deliberately no shell
+/// form: no caller string is ever interpreted by `sh`, `cmd` or any other
+/// shell. Each argument reaches the program as one inert argv entry.
 #[derive(Debug, Clone)]
 pub enum ResourceProgram {
     /// Use an explicit executable path for portability (Windows does not search PATH).
@@ -319,8 +321,6 @@ pub enum ResourceProgram {
         program: OsString,
         args: Vec<OsString>,
     },
-    /// `sh -lc` on Unix; system-directory `cmd.exe /C` on Windows.
-    Shell(String),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -976,6 +976,53 @@ mod tests {
         assert!(!windows_spawn.contains("None"));
         let legacy = function(windows, "    fn spawn_with_environment(");
         assert!(legacy.contains("Self::create(spec, environment, &legacy_job_limits())"));
+    }
+
+    // A resource program is an executable plus an argument vector. No
+    // production spawn path may hand a caller string to `sh -lc`, `cmd /C` or
+    // any other shell, on any platform.
+    #[test]
+    fn resource_programs_never_route_through_a_shell() {
+        fn production(source: &str) -> String {
+            let source = source.replace("\r\n", "\n");
+            let end = source.find("\n#[cfg(test)]\nmod tests").unwrap();
+            source[..end]
+                .lines()
+                .map(|line| line.split("//").next().unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        let common = include_str!("resource_limiter.rs");
+        let sources = [
+            ("resource_limiter.rs", production(common)),
+            (
+                "resource_limiter/unix.rs",
+                production(include_str!("resource_limiter/unix.rs")),
+            ),
+            (
+                "resource_limiter/windows.rs",
+                production(include_str!("resource_limiter/windows.rs")),
+            ),
+        ];
+        for (name, code) in &sources {
+            for forbidden in [
+                "ResourceProgram::Shell",
+                "Shell(",
+                "\"sh\"",
+                "\"bash\"",
+                "\"-lc\"",
+                "\"-c\"",
+                "\"/C\"",
+                "cmd.exe",
+                "system_cmd",
+                "powershell",
+            ] {
+                assert!(!code.contains(forbidden), "{forbidden} in {name}");
+            }
+        }
+        let program = function(common, "pub enum ResourceProgram {");
+        assert!(program.contains("Executable {"), "{program}");
+        assert!(!program.contains("Shell"), "{program}");
     }
 
     #[test]

@@ -28,11 +28,6 @@ impl Child {
                 command.args(args);
                 command
             }
-            ResourceProgram::Shell(script) => {
-                let mut command = Command::new("sh");
-                command.args(["-lc", script]);
-                command
-            }
         };
         command
             .current_dir(&spec.current_dir)

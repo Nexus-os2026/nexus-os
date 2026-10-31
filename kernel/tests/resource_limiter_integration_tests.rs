@@ -300,6 +300,67 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     );
 }
 
+#[test]
+#[serial_test::serial]
+fn programs_and_arguments_are_never_shell_interpreted() {
+    let directory = tempfile::tempdir().unwrap();
+    // A shell command line in the program slot names a missing executable.
+    let script = ResourceSpawnSpec {
+        program: ResourceProgram::Executable {
+            program: "mkdir program && echo injected".into(),
+            args: Vec::new(),
+        },
+        current_dir: directory.path().to_path_buf(),
+        stdin: ResourceStdin::Null,
+        stdout: ResourceOutput::Piped,
+        stderr: ResourceOutput::Piped,
+    };
+    assert!(matches!(
+        ResourceLimiter::default().spawn(&script),
+        Err(ResourceLimitError::SpawnFailed(_))
+    ));
+    // Shell and cmd metacharacters reach the helper as inert argv entries
+    // (extra libtest filters that match nothing).
+    let mut args = helper_args("helper_exit");
+    args.extend(
+        [
+            "; mkdir semicolon",
+            "$(mkdir substitution)",
+            "`mkdir backtick`",
+            "&& mkdir and",
+            "& mkdir ampersand",
+            "| mkdir pipe",
+            "> redirect",
+            "%COMSPEC% /C mkdir comspec",
+        ]
+        .map(Into::into),
+    );
+    let inert = ResourceSpawnSpec {
+        program: ResourceProgram::Executable {
+            program: std::env::current_exe().unwrap().into_os_string(),
+            args,
+        },
+        ..script
+    };
+    let mut child = ResourceLimiter::default().spawn(&inert).unwrap();
+    let stdout = Capture::new(child.take_stdout().unwrap());
+    let stderr = Capture::new(child.take_stderr().unwrap());
+    assert!(exited(&mut child).success());
+    let deadline = Instant::now() + CLEANUP;
+    child.terminate_and_reap(deadline).unwrap();
+    let lines = stdout.finish(deadline);
+    stderr.eof(deadline);
+    assert!(
+        lines.iter().any(|line| line.contains("1 passed")),
+        "{lines:?}"
+    );
+    let created: Vec<_> = std::fs::read_dir(directory.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert!(created.is_empty(), "shell side effects: {created:?}");
+}
+
 #[cfg(windows)]
 #[test]
 #[serial_test::serial]
@@ -333,53 +394,6 @@ fn handle_count() -> u32 {
         0
     );
     count
-}
-
-#[cfg(windows)]
-#[test]
-#[serial_test::serial]
-fn windows_shell_preserves_legacy_cmd_tail() {
-    // Compare with the previous production invocation, including quoted spaces
-    // and trailing backslashes. cmd is resolved from the system directory in
-    // the implementation; this baseline only compares argument behavior.
-    for command in [
-        "echo hello world",
-        "echo \"quoted text\"",
-        r"echo C:\some path\",
-        "exit /B 7",
-    ] {
-        let mut baseline = Sentinel(
-            Command::new("cmd")
-                .args(["/C", command])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap(),
-        );
-        let baseline_out = Capture::new(baseline.0.stdout.take().unwrap());
-        let baseline_err = Capture::new(baseline.0.stderr.take().unwrap());
-        let deadline = Instant::now() + STARTUP;
-        let baseline_status = loop {
-            if let Some(status) = baseline.0.try_wait().unwrap() {
-                break status;
-            }
-            assert!(Instant::now() < deadline, "legacy cmd deadline");
-            thread::sleep(Duration::from_millis(5));
-        };
-        let baseline_out = baseline_out.finish(deadline);
-        let baseline_err = baseline_err.finish(deadline);
-        let mut shell = spec("helper_exit");
-        shell.program = ResourceProgram::Shell(command.to_owned());
-        let mut child = ResourceLimiter::default().spawn(&shell).unwrap();
-        let stdout = Capture::new(child.take_stdout().unwrap());
-        let stderr = Capture::new(child.take_stderr().unwrap());
-        let status = exited(&mut child);
-        let deadline = Instant::now() + CLEANUP;
-        child.terminate_and_reap(deadline).unwrap();
-        assert_eq!(status, baseline_status);
-        assert_eq!(stdout.finish(deadline), baseline_out);
-        assert_eq!(stderr.finish(deadline), baseline_err);
-    }
 }
 
 // Each fixture is an ignored libtest entry invoked only by exact name. No
