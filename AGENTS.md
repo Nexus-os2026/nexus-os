@@ -1,5 +1,13 @@
 # AGENTS.md
-# Nexus OS Engineering Constitution for ChatGPT Work
+# Mother Nexus Engineering Constitution
+
+> **Role update, 2026-10-31 (Owner decision).** `MOTHER.md` defines current
+> roles and product direction. There is no ChatGPT, GPT or Codex role.
+> Claude Code is the Mother Architect and the executor ("Work" below).
+> Wherever this file says "Architect", read "the Mother Architect, subject to
+> the independence controls and Owner-only approvals in `MOTHER.md` §3".
+> Every permanent rule in Part I still applies in full. Part II is a historical
+> snapshot; current phase status is in `README.md` and Git.
 
 > Scope: repository root and all descendant paths unless a deeper `AGENTS.md` adds stricter local rules.
 >

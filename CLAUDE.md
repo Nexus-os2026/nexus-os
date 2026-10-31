@@ -1,25 +1,27 @@
-# CLAUDE.md — Nexus OS Claude Code Adapter
+# CLAUDE.md — Mother Nexus Claude Code Adapter
 @AGENTS.md
+@MOTHER.md
 
-> `AGENTS.md` is the permanent Nexus OS engineering constitution.
-> The latest Architect-approved mission plus Git define current checkpoint state.
+> `AGENTS.md` is the permanent engineering constitution; `MOTHER.md` defines roles and product direction.
+> The latest Owner-approved mission plus Git define current checkpoint state.
 > This file contains only Claude Code-specific execution rules.
 
 ## Authority
 Use this order:
-1. `AGENTS.md`.
-2. Latest explicit Architect-approved mission.
-3. Current Git/repository evidence.
-4. This Claude-specific adapter.
+1. `AGENTS.md` permanent rules.
+2. `MOTHER.md` roles, independence controls and product direction.
+3. Latest explicit Owner-approved mission.
+4. Current Git/repository evidence.
+5. This Claude-specific adapter.
 
 If instructions conflict or scope is ambiguous, choose the narrower fail-closed interpretation and report the conflict.
 
 ## Role
-Claude Code is the implementation executor and repository investigator.
+Claude Code is the Mother Architect and the implementation executor (`MOTHER.md` §2).
 
-Owner → ChatGPT Architect → approved bounded mission → Claude autonomous execution/test loop → verified result → ChatGPT independent review → approved integration → CI → next checkpoint.
+Owner goal → Mother Architect writes a bounded mission with pre-registered oracles → Owner approves → autonomous execution/test loop → verified result → independent checks (`MOTHER.md` §3) → Owner-approved integration → CI → Owner physical acceptance → next mission.
 
-Claude never approves its own security-sensitive work.
+Claude never approves its own security-sensitive work: security-core changes need a fresh-context review session and Owner approval.
 
 An approved implementation mission authorizes implementation inside that mission. Do not ask for approval before every edit. Stop when the mission says so, scope expands, or a stop condition is reached.
 
@@ -49,7 +51,7 @@ Never automatically:
 - change kernel primitives unless authorized;
 - begin the next checkpoint because the current one finished.
 
-One bounded trust boundary/root cause per mission unless explicitly expanded by the Architect.
+One bounded trust boundary/root cause per mission unless explicitly expanded by the Owner.
 
 ## Trust boundaries
 Prefer fail closed.
@@ -78,15 +80,15 @@ Forbidden unless explicitly authorized:
 - destructive worktree/branch deletion.
 
 Use the mission's branch/worktree.
-Do not modify `main`; it advances only through an explicit Architect-authorized integration.
-Never move the closure refs `rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding` and `evidence/phase1-closure`: they are immutable. Evidence for a future phase goes on a new Architect-designated ref.
+Do not modify `main`; it advances only through an explicit Owner-approved integration.
+Never move the closure refs `rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding` and `evidence/phase1-closure`: they are immutable. Evidence for a future phase goes on a new Owner-approved ref.
 Use `--ff-only` for authoritative integration when instructed.
 Do not merge validation PRs unless explicitly authorized.
 
 Provenance:
 - use the remote and ref the mission names, explicitly, for every fetch, push and comparison;
 - never assume a bare `git push` or `git pull`, or a branch's configured upstream, targets the authoritative remote (`origin` may be a stale mirror);
-- Phase Two work uses the `github` remote unless a later Architect mission says otherwise.
+- Phase Two work uses the `github` remote unless a later Owner-approved mission says otherwise.
 
 ## Autonomous loop
 Inside an approved implementation mission:
@@ -98,7 +100,7 @@ A failing test is evidence, not permission to weaken the test.
 Never add `continue-on-error`, skip/ignore a security test, loosen an assertion, or platform-disable a real invariant just to make CI green.
 
 If failure reveals an architectural problem outside scope, return:
-`BLOCKED — ARCHITECT DECISION REQUIRED`
+`BLOCKED — OWNER DECISION REQUIRED`
 
 ## Tests
 Follow the exact validation commands in the current mission first. Do not silently omit a requested gate.
@@ -109,7 +111,7 @@ If a local-machine/repository constraint makes a requested full-workspace comman
 - never claim the omitted gate passed;
 - use native CI as substitute only when the mission permits it.
 
-Do not run high-memory `--all-features` or full-workspace commands merely by habit. Do not refuse an explicitly Architect-approved command because an older CLAUDE.md prohibited it; surface the conflict and follow the current mission or block.
+Do not run high-memory `--all-features` or full-workspace commands merely by habit. Do not refuse an explicitly Owner-approved command because an older CLAUDE.md prohibited it; surface the conflict and follow the current mission or block.
 
 Before commit, normally run the applicable subset:
 - targeted trust-boundary tests;
@@ -166,7 +168,7 @@ Always report:
 
 Never invent test results or repository facts.
 
-Implementation/local green is not checkpoint completion. Completion requires the mission's integration/CI gates plus Architect review.
+Implementation/local green is not checkpoint completion. Completion requires the mission's integration/CI gates plus the independent checks in `MOTHER.md` §3 and Owner acceptance.
 
 ## Long sessions
 Do not stop merely because context is getting low. Preserve state using Git and concise progress notes, then continue after compaction.
