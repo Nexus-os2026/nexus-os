@@ -8,7 +8,7 @@
 
 use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
-use crate::effect::EffectPort;
+use crate::effect::{ApprovalStatus, EffectPort, PendingAction};
 use crate::journal::MissionId;
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
 use crate::state::MissionState;
@@ -18,8 +18,11 @@ use nexus_governed_control::authority::approval::{
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
+use nexus_governed_control::authority::ids::AgentId;
 use nexus_governed_control::authority::run::{RunClass, RunOrigin};
+use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::GrantRequest;
+use nexus_governed_control::governed::{AgentOutcome, Intent};
 use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
@@ -312,6 +315,65 @@ fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
     assert_eq!(w.unserved(), 0, "nothing reached the world");
 }
 
+/// Added after mutation testing (the check survived every earlier oracle):
+/// a journaled action is only a name. A port handed back one that is not
+/// Mother's (another agent's run, or Mother's run with another run's
+/// commitment) neither cancels it nor reports on it.
+fn m2a_a_port_adopts_only_mother_s_own_actions(w: &World) {
+    let control = &w.home.control;
+    let other = AgentId::new("another-agent").unwrap();
+    let run = control
+        .open_run(other.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let intent = Intent::Request(EgressIntent {
+        method: "POST".into(),
+        url: format!("{}/not-mother", w.origin),
+        headers: vec![],
+        body: None,
+    });
+    let AgentOutcome::AwaitingApproval(view) = control.agent_action(&other, run, &intent).unwrap()
+    else {
+        panic!("a POST waits for the Owner");
+    };
+    let mothers = control
+        .open_run(mother_agent(), RunOrigin::AgentGoal)
+        .unwrap();
+    let port = GovernedPort::new(control.clone());
+    let forged = [(MissionId(9001), run), (MissionId(9002), mothers)];
+    for (mission, run) in forged {
+        port.adopt(
+            mission,
+            &PendingAction {
+                run: run.to_string(),
+                commitment: view.id.to_string(),
+                deadline_mono_ms: u64::MAX,
+            },
+        );
+        assert_eq!(port.run_of(mission), None, "{mission}");
+        assert_eq!(port.pending(mission), None, "{mission}");
+        assert!(matches!(
+            port.approval(mission),
+            ApprovalStatus::Lapsed { .. }
+        ));
+        port.cancel(mission);
+    }
+    let runs = control.authority().runs();
+    assert!(!runs.view(run).unwrap().cancelled, "another agent's run");
+    assert!(!runs.view(mothers).unwrap().cancelled);
+    assert_eq!(
+        control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Prepared
+    );
+    control.cancel_run(run).unwrap();
+    control.cancel_run(mothers).unwrap();
+    assert_eq!(w.unserved(), 0);
+}
+
 /// M2a against the real broker: Mother waits for the Owner's native
 /// approval of an R2 action (a POST) and continues exactly once; a denial
 /// and a Stop while waiting reach nothing.
@@ -518,6 +580,8 @@ fn real_broker_m1_oracles() {
     // M2a Codex review: Stop withdraws a pending request after Mother and
     // her port are rebuilt.
     m2a_a_rebuilt_port_withdraws_on_stop(&w);
+    // Added after mutation testing: a port takes back only Mother's own.
+    m2a_a_port_adopts_only_mother_s_own_actions(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
