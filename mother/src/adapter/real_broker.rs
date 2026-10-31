@@ -6,7 +6,7 @@
 //! emergency-stop controller, so one broker per process. The scenarios run
 //! in order on it, the emergency stop last.
 
-use super::{mother_agent, GovernedPort, Home, MOTHER_AGENT};
+use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
 use crate::journal::MissionId;
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
@@ -194,6 +194,121 @@ impl World {
         assert_eq!(waiting.len(), 1, "{waiting:?}");
         waiting.into_iter().next().unwrap()
     }
+}
+
+/// Codex review MAJOR (oracle first): a request parked awaiting approval
+/// is withdrawn by a Stop pressed after both the coordinator and the port
+/// are rebuilt over the same live broker; the rebuilt port also still knows
+/// what the mission waits on. Its own journal, so the World's coordinator
+/// and journal are untouched. Runs after `m2a_waiting_on_the_real_broker`,
+/// which granted POST to the origin.
+fn m2a_a_rebuilt_port_withdraws_on_stop(w: &World) {
+    let post = format!("POST-BUILDER:{}/m2a-rebuilt", w.origin);
+    let agent = mother_agent();
+    let path = w.home.dir.join("m2a-rebuilt-journal.jsonl");
+    let open = |port: &Arc<GovernedPort>| {
+        Coordinator::open(
+            FileJournal::open(&path).unwrap(),
+            port.clone(),
+            Lanes::new(keyed_lanes()).unwrap(),
+            Arc::new(SystemClock::default()),
+        )
+        .unwrap()
+    };
+    let clock = w.home.control.authority().clock().clone();
+    let park = |mother: &Coordinator<GovernedPort>| {
+        let id = mother.draft(contract_with(&post)).unwrap();
+        mother.submit(id).unwrap();
+        assert_eq!(mother.request_consent(id, &Yes), Ok(MissionState::Approved));
+        for _ in 0..3 {
+            mother.advance(id).unwrap();
+        }
+        assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
+        id
+    };
+    let pending_of = |run| {
+        let views = w.home.control.authority().commitments().views_of_run(run);
+        let waiting: Vec<CommitmentView> = views
+            .into_iter()
+            .filter(|v| v.state == CommitmentState::Prepared)
+            .collect();
+        assert_eq!(waiting.len(), 1, "{waiting:?}");
+        waiting.into_iter().next().unwrap()
+    };
+
+    // Park two requests through a first port.
+    let first = Arc::new(GovernedPort::new(w.home.control.clone()));
+    let mother = open(&first);
+    let before = clock.monotonic_ms();
+    let stopped = park(&mother);
+    let after = clock.monotonic_ms();
+    let kept = park(&mother);
+    let stopped_run = first.run_of(stopped).unwrap();
+    let pending = pending_of(stopped_run);
+    let kept_run = first.run_of(kept).unwrap();
+    let kept_pending = pending_of(kept_run);
+    // The port's own deadline for the action is never later than the
+    // broker's (monotonic, taken before the broker was asked).
+    let estimate = first.pending(stopped).expect("the pending action");
+    assert_eq!(estimate.run, stopped_run.to_string());
+    assert_eq!(estimate.commitment, pending.id.to_string());
+    let ttl = pending.expires_wall_ms - pending.created_wall_ms;
+    assert!(estimate.deadline_mono_ms >= before + ttl, "{estimate:?}");
+    assert!(estimate.deadline_mono_ms <= after + ttl, "{estimate:?}");
+    drop(mother);
+    drop(first);
+
+    // Rebuilt: a new coordinator and a brand-new port over the same broker.
+    let port = Arc::new(GovernedPort::new(w.home.control.clone()));
+    let mother = open(&port);
+    assert_eq!(mother.state(stopped), Some(MissionState::AwaitingApproval));
+    assert_eq!(mother.stop(stopped), Ok(MissionState::Stopped));
+    let view = w
+        .home
+        .control
+        .authority()
+        .commitments()
+        .view(pending.id)
+        .unwrap();
+    assert!(view.state != CommitmentState::Prepared, "{:?}", view.state);
+    assert!(w
+        .home
+        .control
+        .authorize(pending.id, &agent, stopped_run, &OwnerApproves)
+        .is_err());
+    assert!(w
+        .home
+        .control
+        .execute(pending.id, &agent, stopped_run)
+        .is_err());
+    assert!(
+        w.home
+            .control
+            .authority()
+            .runs()
+            .view(stopped_run)
+            .unwrap()
+            .cancelled
+    );
+
+    // The rebuilt port still knows what the other mission waits on.
+    assert_eq!(
+        mother.advance(kept).unwrap().to,
+        MissionState::AwaitingApproval
+    );
+    assert_eq!(mother.stop(kept), Ok(MissionState::Stopped));
+    assert!(w
+        .home
+        .control
+        .authorize(kept_pending.id, &agent, kept_run, &OwnerApproves)
+        .is_err());
+    drop(mother);
+
+    // Durable: rebuilt once more, both stay stopped.
+    let again = open(&Arc::new(GovernedPort::new(w.home.control.clone())));
+    assert_eq!(again.state(stopped), Some(MissionState::Stopped));
+    assert_eq!(again.state(kept), Some(MissionState::Stopped));
+    assert_eq!(w.unserved(), 0, "nothing reached the world");
 }
 
 /// M2a against the real broker: Mother waits for the Owner's native
@@ -399,6 +514,9 @@ fn real_broker_m1_oracles() {
 
     // M2a: waiting for the Owner's approval.
     m2a_waiting_on_the_real_broker(&w);
+    // M2a Codex review: Stop withdraws a pending request after Mother and
+    // her port are rebuilt.
+    m2a_a_rebuilt_port_withdraws_on_stop(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);

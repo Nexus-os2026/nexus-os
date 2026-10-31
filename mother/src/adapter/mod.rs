@@ -36,6 +36,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
+mod expiry_tests;
+#[cfg(test)]
 mod file_tests;
 #[cfg(test)]
 mod real_broker;

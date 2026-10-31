@@ -8,6 +8,7 @@ mod deny;
 mod journal;
 mod lanes;
 mod m2a_consent;
+mod m2a_rebuild;
 mod m2a_review;
 mod m2a_waiting;
 mod mn01;
@@ -18,7 +19,9 @@ mod structure;
 
 use crate::contract::{Budget, EffectKind, MissionContract, PassCriterion, Question};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
-use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest};
+use crate::effect::{
+    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
+};
 use crate::journal::{MemoryJournal, MissionId};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole, Verdict};
 use crate::state::MissionState;
@@ -69,6 +72,10 @@ struct PortState {
     approvals: VecDeque<ApprovalStatus>,
     hold_approval: bool,
     approval_entered: bool,
+    pending: Option<PendingAction>,
+    /// Each adoption: the mission, the action, and how many calls had been
+    /// made when it came.
+    adopted: Vec<(MissionId, PendingAction, usize)>,
 }
 
 /// A recording EffectPort: performs nothing, records every call, and can
@@ -172,6 +179,15 @@ impl RecordingPort {
         true
     }
 
+    /// What the port reports as the pending action of a waiting effect.
+    pub fn set_pending(&self, pending: Option<PendingAction>) {
+        self.lock().pending = pending;
+    }
+
+    pub fn adopted(&self) -> Vec<(MissionId, PendingAction, usize)> {
+        self.lock().adopted.clone()
+    }
+
     /// How many times Mother asked about an awaited approval.
     pub fn approval_queries(&self) -> usize {
         self.calls()
@@ -234,6 +250,16 @@ impl EffectPort for RecordingPort {
 
     fn broker(&self) -> &Authority {
         &self.broker
+    }
+
+    fn pending(&self, _: MissionId) -> Option<PendingAction> {
+        self.lock().pending.clone()
+    }
+
+    fn adopt(&self, mission: MissionId, pending: &PendingAction) {
+        let mut state = self.lock();
+        let calls = state.calls.len();
+        state.adopted.push((mission, pending.clone(), calls));
     }
 
     fn approval(&self, mission: MissionId) -> ApprovalStatus {
