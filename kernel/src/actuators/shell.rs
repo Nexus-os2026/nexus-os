@@ -546,20 +546,57 @@ mod tests {
 
     #[test]
     fn uses_command_new_not_sh() {
-        // Verify that our implementation uses Command::new() directly
-        // by confirming that an unknown shell built-in fails to spawn
+        // Every argument must reach the program as one inert argv entry. A
+        // shell would expand these: a POSIX `sh` `echo` builtin turns `\n`
+        // into a newline, and the other entries would create directories.
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
-        let shell = GovernedShell;
-
-        // "echo" works because it's a binary on most systems, but we verify
-        // the allowlist mechanism, not sh -c
+        let args: Vec<String> = vec![
+            r"a\nb".into(),
+            "$(mkdir substitution)".into(),
+            "`mkdir backtick`".into(),
+            "; mkdir semicolon".into(),
+            "&& mkdir and".into(),
+            "| mkdir pipe".into(),
+            "> redirect".into(),
+            "$HOME".into(),
+        ];
         let action = PlannedAction::ShellCommand {
             command: "echo".into(),
-            args: vec!["direct".into()],
+            args: args.clone(),
         };
-        let result = shell.execute(&action, &ctx).unwrap();
+        let result = GovernedShell.execute(&action, &ctx).unwrap();
         assert!(result.success);
+        assert_eq!(result.output, format!("{}\n", args.join(" ")));
+        let created: Vec<_> = std::fs::read_dir(tmp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(created.is_empty(), "shell side effects: {created:?}");
+    }
+
+    #[test]
+    fn governed_shell_has_no_shell_route() {
+        let source = include_str!("shell.rs").replace("\r\n", "\n");
+        let end = source.find("\n#[cfg(test)]\nmod tests").unwrap();
+        let production = source[..end]
+            .lines()
+            .map(|line| line.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for forbidden in [
+            "\"/bin/sh\"",
+            "\"sh\"",
+            "\"bash\"",
+            ".arg(\"-c\")",
+            "\"-lc\"",
+            "\"/C\"",
+            "cmd.exe",
+            "powershell",
+            "shell_escape",
+        ] {
+            assert!(!production.contains(forbidden), "{forbidden} in shell.rs");
+        }
     }
 
     #[test]

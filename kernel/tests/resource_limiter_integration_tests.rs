@@ -300,6 +300,67 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     );
 }
 
+#[test]
+#[serial_test::serial]
+fn programs_and_arguments_are_never_shell_interpreted() {
+    let directory = tempfile::tempdir().unwrap();
+    // A shell command line in the program slot names a missing executable.
+    let script = ResourceSpawnSpec {
+        program: ResourceProgram::Executable {
+            program: "mkdir program && echo injected".into(),
+            args: Vec::new(),
+        },
+        current_dir: directory.path().to_path_buf(),
+        stdin: ResourceStdin::Null,
+        stdout: ResourceOutput::Piped,
+        stderr: ResourceOutput::Piped,
+    };
+    assert!(matches!(
+        ResourceLimiter::default().spawn(&script),
+        Err(ResourceLimitError::SpawnFailed(_))
+    ));
+    // Shell and cmd metacharacters reach the helper as inert argv entries
+    // (extra libtest filters that match nothing).
+    let mut args = helper_args("helper_exit");
+    args.extend(
+        [
+            "; mkdir semicolon",
+            "$(mkdir substitution)",
+            "`mkdir backtick`",
+            "&& mkdir and",
+            "& mkdir ampersand",
+            "| mkdir pipe",
+            "> redirect",
+            "%COMSPEC% /C mkdir comspec",
+        ]
+        .map(Into::into),
+    );
+    let inert = ResourceSpawnSpec {
+        program: ResourceProgram::Executable {
+            program: std::env::current_exe().unwrap().into_os_string(),
+            args,
+        },
+        ..script
+    };
+    let mut child = ResourceLimiter::default().spawn(&inert).unwrap();
+    let stdout = Capture::new(child.take_stdout().unwrap());
+    let stderr = Capture::new(child.take_stderr().unwrap());
+    assert!(exited(&mut child).success());
+    let deadline = Instant::now() + CLEANUP;
+    child.terminate_and_reap(deadline).unwrap();
+    let lines = stdout.finish(deadline);
+    stderr.eof(deadline);
+    assert!(
+        lines.iter().any(|line| line.contains("1 passed")),
+        "{lines:?}"
+    );
+    let created: Vec<_> = std::fs::read_dir(directory.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert!(created.is_empty(), "shell side effects: {created:?}");
+}
+
 #[cfg(windows)]
 #[test]
 #[serial_test::serial]
