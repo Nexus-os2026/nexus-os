@@ -115,7 +115,11 @@ Coordinator rules the oracles pin:
   and they hold across every restart until the Owner decides. A held
   waiting mission's request is handed back like any waiting one: Mother
   does not ask about it or approve it while held; the Owner's Stop
-  withdraws it.
+  withdraws it. Once the journal has failed, the coordinator acknowledges
+  nothing: Stop is never Ok (a terminal state may be in memory only), and
+  it neither asks the Owner for consent nor asks the broker about an
+  approval. Replay refuses a session the live coordinator could not write
+  (a clean close, or work, before the holds an unclean session requires).
 - Replay accepts records only in the order the live coordinator writes
   them (lane answers after their calls, no transition but Stop while an
   effect is unsettled, mission ids in sequence).
@@ -125,6 +129,8 @@ Coordinator rules the oracles pin:
 - **M2a-S: `resume` is an API call, like `stop`.** It is the Owner's
   decision, journaled, but not confirmed through a broker dialog: the
   Mother screen (M2) must bind it to the Owner. Mother never calls it.
+  It is the risky direction (it lets a mission whose Stop may have been
+  lost carry on); Stop is the safe one.
 - M2a-S: while a waiting mission is held, its request stays at the broker,
   where only the Owner's own native approval can run it. Mother does not
   ask about it or carry on from it until the Owner resumes the mission.
