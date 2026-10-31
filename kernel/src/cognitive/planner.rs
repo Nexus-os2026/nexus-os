@@ -1006,6 +1006,32 @@ mod tests {
         }
     }
 
+    /// M0-FIX F3 oracle: while web search is closed (no governed search
+    /// backend), the planner does not offer `WebSearch` or steer the model
+    /// to it, even to an agent that holds `web.search`, in the planning
+    /// prompt or the replan prompt. `WebFetch` stays offered to `web.read`.
+    #[test]
+    fn m0_f3_planner_does_not_offer_closed_web_search() {
+        let planner = CognitivePlanner::new(Box::new(MockLlm("[]")));
+        let goal = AgentGoal::new("find the latest rust release".into(), 5);
+        let ctx = make_context(vec!["llm.query", "web.search", "web.read"]);
+        let prompt = prompt_text(&planner, &goal, &ctx);
+        assert!(!prompt.contains("WebSearch"), "{prompt}");
+        assert!(!prompt.to_ascii_lowercase().contains("curl"), "{prompt}");
+        assert!(prompt.contains("WebFetch"), "{prompt}");
+        let failed = AgentStep::new(goal.id.clone(), PlannedAction::Noop);
+        let (head, plan_part, tail) =
+            planner.build_replan_prompt(&goal, &failed, "failed", &[], &ctx);
+        let replan = format!("{head}{plan_part}{tail}");
+        assert!(!replan.contains("WebSearch"), "{replan}");
+        assert!(!planner
+            .allowed_action_types(&ctx.agent_capabilities)
+            .contains("WebSearch"));
+        assert!(!planner
+            .allowed_actions_description(&ctx.agent_capabilities)
+            .contains("WebSearch"));
+    }
+
     #[test]
     fn p0_002c5a_planning_prompt_without_workspace_invents_no_directory() {
         let planner = CognitivePlanner::new(Box::new(MockLlm("[]")));
