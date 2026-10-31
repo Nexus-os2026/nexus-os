@@ -410,6 +410,7 @@ mod tests {
         )
         .set("llm", "anthropic", Zeroizing::new("synthetic-llm".into()))
         .unwrap();
+        let rows_before = db.list_secret_rows().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let key_path = dir.path().join("vault.key");
         std::fs::OpenOptions::new()
@@ -431,6 +432,9 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(db.schema_version("credential_vault_v1").unwrap(), None);
+        // M0-FIX F4 review: nor the secrets-upgrade marker, nor any row.
+        assert_eq!(db.schema_version("secrets_aad_v2").unwrap(), None);
+        assert_eq!(db.list_secret_rows().unwrap(), rows_before);
         assert_eq!(config.social.x_api_key, "synthetic-social");
         assert!(db.list_secrets("social").unwrap().is_empty());
         assert_eq!(

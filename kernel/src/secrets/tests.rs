@@ -839,3 +839,43 @@ fn f4_upgrade_with_bad_legacy_row_changes_nothing() {
     assert_eq!(f4_rows(&db, &ids[..2]), before, "half-migrated state");
     assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
 }
+
+/// M0-FIX F4 review (replay): deleting the in-database completion marker
+/// must not re-enable the upgrade. A vault that holds any bound row is
+/// post-upgrade; a legacy ciphertext for X planted into slot Y (for example
+/// from an old backup) is never re-bound to Y and never opens as X.
+#[test]
+fn f4_marker_deletion_does_not_reenable_the_upgrade() {
+    let master = test_master_key();
+    let (backend, db) = f4_backend(&master);
+    let x = ("llm", "anthropic");
+    let y = ("social", "x_access_token");
+    f4_write_legacy_row(&db, &master, x.0, x.1, b"value-x");
+    f4_write_legacy_row(&db, &master, y.0, y.1, b"value-y");
+    // The attacker kept X's pre-upgrade legacy row.
+    let (old_nonce, old_ciphertext) = db.lookup_secret(x.0, x.1).unwrap().unwrap();
+    super::migrate::upgrade_legacy_secrets(&backend).expect("upgrade");
+
+    db.with_transaction(|tx| {
+        tx.execute_batch("DELETE FROM schema_versions WHERE key = 'secrets_aad_v2'")?;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
+    db.record_secret(y.0, y.1, &old_nonce, &old_ciphertext)
+        .unwrap();
+    let before = f4_rows(&db, &[x, y]);
+
+    assert!(matches!(
+        super::migrate::upgrade_legacy_secrets(&backend),
+        Err(MigrationError::LegacyAfterUpgrade { count: 1 })
+    ));
+    assert_eq!(f4_rows(&db, &[x, y]), before, "planted row was rewritten");
+    assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
+    match backend.get(y.0, y.1) {
+        Err(SecretError::LegacyUnbound) => {}
+        Ok(value) => panic!("planted row opened as {:?}", value.as_str()),
+        Err(other) => panic!("unexpected error: {other:?}"),
+    }
+    assert_eq!(backend.get(x.0, x.1).unwrap().as_str(), "value-x");
+}
