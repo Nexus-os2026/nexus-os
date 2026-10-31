@@ -16,11 +16,22 @@
 //! native approval puts the mission in AwaitingApproval: Mother asks the
 //! broker what became of it and never approves it herself; once it ran,
 //! the phase goes on from where it paused.
+//!
+//! M2a-S: every session journals its opening before anything else it
+//! writes (at once if the journal's last session closed cleanly), and only
+//! an orderly shutdown of a coordinator that is not broken
+//! ([`Coordinator::close`]) journals a clean close. A journal whose last
+//! session did not close cleanly may lack a transition whose append failed
+//! together with its poisoning (a Stop, a denial): every unfinished mission
+//! then comes back held, and only the Owner's resume (journaled) or Stop
+//! moves it. The holds are journaled with the session's opening.
 
 use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, ContractError, ContractHash, EffectKind, MissionContract};
 use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, PendingAction};
-use crate::journal::{verify, Entry, Event, JournalError, JournalStore, MissionId, GENESIS};
+use crate::journal::{
+    verify, Entry, Event, JournalError, JournalStore, MissionId, GENESIS, SESSION,
+};
 use crate::lane::{
     input_hash, output_hash, InvocationId, Lane, LaneIdentity, LaneInput, LaneRole, Verdict,
 };
@@ -40,6 +51,8 @@ pub const MAX_MISSIONS: usize = 1024;
 pub const MAX_EFFECTS_PER_CALL: usize = 16;
 
 const REQUEST_DOMAIN: &[u8] = b"nexus-mother-effect-request-v1\n";
+/// Why a mission is held after a session that did not close cleanly.
+const UNCLEAN_SHUTDOWN: &str = "unclean_shutdown";
 
 /// One lane per role.
 pub struct Lanes {
@@ -170,6 +183,12 @@ struct Mission {
     /// effect), from its record until its closure is journaled, whatever
     /// becomes of the mission.
     open_action: Option<(u64, PendingAction)>,
+    /// M2a-S: why the mission is held (an unclean shutdown), until the
+    /// Owner resumes or stops it.
+    held: Option<String>,
+    /// The hold is in the journal (otherwise it is written before the
+    /// session's next record).
+    held_journaled: bool,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -204,6 +223,8 @@ impl Mission {
             waiting: None,
             awaiting_settled: None,
             open_action: None,
+            held: None,
+            held_journaled: false,
         }
     }
 
@@ -256,10 +277,21 @@ impl Mission {
             _ => {}
         }
         self.state = to;
+        if to.is_terminal() {
+            self.held = None;
+        }
         self.generation += 1;
         self.dispatched_in_phase = dispatched;
         self.asking = None;
         self.awaiting_settled = None;
+    }
+
+    /// M2a-S: a held mission does nothing until the Owner resumes it.
+    fn not_held(&self) -> Result<(), CoordinatorError> {
+        match self.held {
+            Some(_) => Err(CoordinatorError::Held),
+            None => Ok(()),
+        }
     }
 
     fn consented(&self) -> bool {
@@ -291,6 +323,11 @@ struct Inner {
     next_seq: u64,
     /// The store failed: nothing more is journaled or started.
     broken: bool,
+    /// M2a-S: the clean close is journaled: nothing more is journaled or
+    /// acknowledged.
+    closed: bool,
+    /// M2a-S: this session's opening is journaled.
+    session_journaled: bool,
     missions: BTreeMap<MissionId, Mission>,
     next_mission: u64,
     /// Numbers the consent requests of this coordinator.
@@ -298,7 +335,37 @@ struct Inner {
 }
 
 impl Inner {
+    /// Journal one record, after this session's opening and any hold not
+    /// journaled yet.
     fn append(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
+        self.open_session()?;
+        self.write(mission, event)
+    }
+
+    /// M2a-S: journal this session's opening, then every hold not journaled
+    /// yet, once.
+    fn open_session(&mut self) -> Result<(), CoordinatorError> {
+        if !self.session_journaled {
+            self.write(SESSION, Event::SessionOpened)?;
+            self.session_journaled = true;
+        }
+        let holds: Vec<(MissionId, String)> = self
+            .missions
+            .iter()
+            .filter(|(_, m)| !m.held_journaled)
+            .filter_map(|(id, m)| m.held.clone().map(|reason| (*id, reason)))
+            .collect();
+        for (id, reason) in holds {
+            self.write(id, Event::Held { reason })?;
+            self.mission(id)?.held_journaled = true;
+        }
+        Ok(())
+    }
+
+    fn write(&mut self, mission: MissionId, event: Event) -> Result<u64, CoordinatorError> {
+        if self.closed {
+            return Err(CoordinatorError::Closed);
+        }
         if self.broken {
             return Err(CoordinatorError::Journal(JournalError::Store(
                 "the journal failed earlier".into(),
@@ -318,6 +385,9 @@ impl Inner {
     }
 
     fn mission(&mut self, id: MissionId) -> Result<&mut Mission, CoordinatorError> {
+        if self.closed {
+            return Err(CoordinatorError::Closed);
+        }
         self.missions
             .get_mut(&id)
             .ok_or(CoordinatorError::UnknownMission)
@@ -443,6 +513,8 @@ impl<P: EffectPort> Coordinator<P> {
     /// Rebuild a coordinator from its journal (empty for a new home). A
     /// journal that does not verify opens nothing. A mission whose last
     /// effect's outcome was not recorded is blocked: it may have happened.
+    /// M2a-S: if the journal's last session did not close cleanly, every
+    /// unfinished mission is held until the Owner resumes or stops it.
     pub fn open(
         store: impl JournalStore + 'static,
         port: Arc<P>,
@@ -453,14 +525,20 @@ impl<P: EffectPort> Coordinator<P> {
         let entries = verify(&lines).map_err(CoordinatorError::Journal)?;
         let mut missions = BTreeMap::new();
         let mut next_mission = 1;
+        let mut session = Session::Never;
         for (index, entry) in entries.iter().enumerate() {
-            replay(&mut missions, &mut next_mission, entry).map_err(|reason| {
+            replay(&mut missions, &mut next_mission, &mut session, entry).map_err(|reason| {
                 CoordinatorError::Journal(JournalError::Inconsistent {
                     line: index + 1,
                     reason,
                 })
             })?;
         }
+        // Clean only on positive evidence: the last session's orderly close
+        // (an empty journal holds nothing). A journal from before sessions
+        // never closed cleanly.
+        let closed_cleanly = session == Session::Closed;
+        let clean = entries.is_empty() || closed_cleanly;
         let (mono_now, wall_now) = (clock.monotonic_ms(), clock.wall_ms());
         for mission in missions.values_mut() {
             if let Some(at) = mission.approved_wall_ms {
@@ -485,6 +563,8 @@ impl<P: EffectPort> Coordinator<P> {
                     .map_or(GENESIS.to_string(), |e| e.hash.clone()),
                 next_seq: entries.len() as u64,
                 broken: false,
+                closed: false,
+                session_journaled: false,
                 missions,
                 next_mission,
                 next_request: 1,
@@ -493,7 +573,7 @@ impl<P: EffectPort> Coordinator<P> {
         // If opening fails from here on (the journal is then poisoned and
         // never reopens), every journaled open action is withdrawn first,
         // a waiting mission's too: nothing could resume it.
-        if let Err(e) = coordinator.recover() {
+        if let Err(e) = coordinator.recover(closed_cleanly, clean) {
             coordinator.withdraw_open_actions();
             return Err(e);
         }
@@ -531,7 +611,9 @@ impl<P: EffectPort> Coordinator<P> {
         contract: MissionContract,
     ) -> Result<MissionState, CoordinatorError> {
         let mut inner = self.lock();
-        let state = inner.mission(id)?.state;
+        let mission = inner.mission(id)?;
+        mission.not_held()?;
+        let state = mission.state;
         transition(
             state,
             &Trigger::Revise {
@@ -548,6 +630,7 @@ impl<P: EffectPort> Coordinator<P> {
     pub fn submit(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
+        mission.not_held()?;
         if mission.state != MissionState::Draft {
             return Err(illegal(mission.state, "submit"));
         }
@@ -593,6 +676,7 @@ impl<P: EffectPort> Coordinator<P> {
         let (seq, number) = (inner.next_seq, inner.next_request);
         inner.next_request += 1;
         let mission = inner.mission(id)?;
+        mission.not_held()?;
         if mission.state != MissionState::AwaitingConsent {
             return Err(illegal(mission.state, "consent"));
         }
@@ -611,6 +695,7 @@ impl<P: EffectPort> Coordinator<P> {
     ) -> Result<MissionState, CoordinatorError> {
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
+        mission.not_held()?;
         let hash = mission.contract.hash();
         let asked = match &mission.asking {
             Some(asked)
@@ -683,6 +768,7 @@ impl<P: EffectPort> Coordinator<P> {
         let emergency = self.port.emergency_stopped();
         let mut inner = self.lock();
         let mission = inner.mission(id)?;
+        mission.not_held()?;
         if mission.busy {
             return Err(CoordinatorError::Busy);
         }
@@ -1308,8 +1394,23 @@ impl<P: EffectPort> Coordinator<P> {
     /// was replayed. Fail-closed: any error in it, and any journal append
     /// that failed in it even if a step did not report it, is returned, and
     /// `open` then withdraws every open request (waiting ones included).
-    fn recover(&self) -> Result<(), CoordinatorError> {
+    ///
+    /// M2a-S: on a journal whose last session closed cleanly, this
+    /// session's opening is journaled first, so that a record lost later
+    /// cannot leave the journal ending in that clean close. After a session
+    /// that did not close cleanly, every mission still unfinished once the
+    /// rest of recovery is done is held (journaled with the session's
+    /// opening, before its next record or its clean close). A held waiting
+    /// mission's request is handed back as for any waiting mission: Mother
+    /// never approves it, and the Owner's Stop withdraws it.
+    fn recover(&self, closed_cleanly: bool, clean: bool) -> Result<(), CoordinatorError> {
+        if closed_cleanly {
+            self.lock().open_session()?;
+        }
         self.recover_and_settle()?;
+        if !clean {
+            self.hold_unfinished();
+        }
         if self.lock().broken {
             return Err(CoordinatorError::Journal(JournalError::Store(
                 "the journal failed during recovery".into(),
@@ -1360,6 +1461,18 @@ impl<P: EffectPort> Coordinator<P> {
             self.end(id, reason)?;
         }
         Ok(())
+    }
+
+    /// M2a-S: hold every unfinished mission not held already. A Stop or
+    /// denial the journal lost would have ended it; only the Owner decides.
+    /// The holds are journaled with the session's opening.
+    fn hold_unfinished(&self) {
+        let mut inner = self.lock();
+        for mission in inner.missions.values_mut() {
+            if !mission.state.is_terminal() && mission.held.is_none() {
+                mission.held = Some(UNCLEAN_SHUTDOWN.into());
+            }
+        }
     }
 
     /// Opening failed: withdraw every mission's journaled open action
@@ -1451,24 +1564,67 @@ impl<P: EffectPort> Coordinator<P> {
             .count()
     }
 
-    /// M2a-S: shut down in order. Not implemented yet.
+    /// M2a-S: shut down in order, journaling the clean close that lets the
+    /// next open resume every mission. Refused (and the next open holds
+    /// every unfinished mission) if the journal failed in this session,
+    /// while a call is in flight, or if the close cannot be journaled.
     pub fn close(self) -> Result<(), CoordinatorError> {
         self.close_ref()
     }
 
+    /// [`Coordinator::close`] through a shared handle: once it succeeds,
+    /// the coordinator journals and acknowledges nothing more (every call
+    /// that would is refused with [`CoordinatorError::Closed`]), so nothing
+    /// can be lost behind the clean close.
     pub(crate) fn close_ref(&self) -> Result<(), CoordinatorError> {
+        let mut inner = self.lock();
+        if inner.closed {
+            return Err(CoordinatorError::Closed);
+        }
+        if inner.missions.values().any(|m| m.busy) {
+            return Err(CoordinatorError::Busy);
+        }
+        // A clean close vouches for the journal this coordinator wrote: it
+        // is refused if the journal changed under it (another writer).
+        let lines = inner.store.load().map_err(CoordinatorError::Journal)?;
+        let head = match lines.last() {
+            None => GENESIS.to_string(),
+            Some(line) => serde_json::from_str::<Entry>(line)
+                .map(|e| e.hash)
+                .map_err(|_| {
+                    CoordinatorError::Journal(JournalError::Malformed { line: lines.len() })
+                })?,
+        };
+        if head != inner.head || lines.len() as u64 != inner.next_seq {
+            return Err(CoordinatorError::Journal(JournalError::Store(
+                "the journal changed under this coordinator".into(),
+            )));
+        }
+        inner.append(SESSION, Event::SessionClosed)?;
+        inner.closed = true;
         Ok(())
     }
 
-    /// M2a-S: the Owner resumes a held mission. Not implemented yet.
+    /// M2a-S: the Owner resumes a mission held after an unclean shutdown.
+    /// The resume is journaled before it takes effect; the mission then
+    /// goes on from its state as it would have after a clean restart.
+    /// Mother never calls this herself: it is the Owner's decision, like
+    /// Stop.
     pub fn resume(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
-        let state = self.state(id).ok_or(CoordinatorError::UnknownMission)?;
-        Err(illegal(state, "resume"))
+        let mut inner = self.lock();
+        let mission = inner.mission(id)?;
+        let state = mission.state;
+        if mission.held.is_none() {
+            return Err(illegal(state, "resume"));
+        }
+        inner.append(id, Event::Resumed)?;
+        inner.mission(id)?.held = None;
+        Ok(state)
     }
 
-    /// M2a-S: why a mission is held, if it is. Not implemented yet.
-    pub fn held(&self, _id: MissionId) -> Option<String> {
-        None
+    /// M2a-S: why a mission is held, if it is.
+    pub fn held(&self, id: MissionId) -> Option<String> {
+        self.lock().missions.get(&id).and_then(|m| m.held.clone())
     }
 
     pub fn state(&self, id: MissionId) -> Option<MissionState> {
@@ -1507,15 +1663,46 @@ impl<P: EffectPort> Coordinator<P> {
     }
 }
 
+/// M2a-S: where replay is in the journal's sessions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Session {
+    /// No session record yet (a journal from before sessions).
+    Never,
+    Open,
+    /// Closed cleanly: only the next session's opening may follow.
+    Closed,
+}
+
 /// Replay one verified entry. Each trigger goes through the same table as
 /// live, and records must come in the order the live coordinator writes
 /// them; anything else found is refused.
 fn replay(
     missions: &mut BTreeMap<MissionId, Mission>,
     next_mission: &mut u64,
+    session: &mut Session,
     entry: &Entry,
 ) -> Result<(), String> {
     let id = entry.mission;
+    match &entry.event {
+        Event::SessionOpened | Event::SessionClosed if id != SESSION => {
+            return Err(format!("{id}: a session record naming a mission"));
+        }
+        Event::SessionOpened => {
+            *session = Session::Open;
+            return Ok(());
+        }
+        Event::SessionClosed if *session != Session::Open => {
+            return Err("a clean close of no open session".into());
+        }
+        Event::SessionClosed => {
+            *session = Session::Closed;
+            return Ok(());
+        }
+        _ if *session == Session::Closed => {
+            return Err(format!("{id}: a record after a clean close"));
+        }
+        _ => {}
+    }
     if let Event::Drafted { contract } = &entry.event {
         if id.0 != *next_mission {
             return Err(format!("{id} drafted twice or out of order"));
@@ -1533,6 +1720,19 @@ fn replay(
     let mission = missions
         .get_mut(&id)
         .ok_or_else(|| format!("{id} was never drafted"))?;
+    // While held the live coordinator only stops the mission, journals an
+    // action closed that the broker no longer holds, or takes the Owner's
+    // resume.
+    let while_held = matches!(
+        &entry.event,
+        Event::Transition {
+            trigger: Trigger::Stop { .. }
+        } | Event::ApprovalClosed { .. }
+            | Event::Resumed
+    );
+    if mission.held.is_some() && !while_held {
+        return Err(format!("{id}: a record while held"));
+    }
     match &entry.event {
         Event::Drafted { .. } => unreachable!(),
         Event::Transition { trigger } => {
@@ -1673,7 +1873,24 @@ fn replay(
             mission.open_action = None;
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
-        Event::SessionOpened | Event::SessionClosed | Event::Held { .. } | Event::Resumed => {}
+        Event::SessionOpened | Event::SessionClosed => unreachable!(),
+        Event::Held { reason } => {
+            if mission.state.is_terminal()
+                || mission.pending_lane.is_some()
+                || mission.unsettled.is_some()
+                || mission.dispatched_in_phase
+            {
+                return Err(format!("{id}: a hold out of place"));
+            }
+            mission.held = Some(reason.clone());
+            mission.held_journaled = true;
+        }
+        Event::Resumed => {
+            if mission.held.is_none() {
+                return Err(format!("{id}: a resume of a mission not held"));
+            }
+            mission.held = None;
+        }
     }
     Ok(())
 }

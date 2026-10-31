@@ -1,7 +1,8 @@
 # Mother Nexus M1 + M2a: mission contract, coordinator core, broker consent
 
-Status: M1 is on `main`. M2a (mission consent in the broker; Mother waits
-for broker approval) is a candidate on `mother/m2a-broker-consent`.
+Status: M1 and M2a (mission consent in the broker; Mother waits for broker
+approval) are on `main`. M2a-S (Stop and denial durability across
+restarts) is a candidate on `mother/m2a-s-stop-durability`.
 Headless Rust library only: no UI, no real research, no website building,
 no model calls. It is not a passed gate. Every capability here is PLANNED
 until its physical test passes on the installed build (`MOTHER.md` §1).
@@ -37,9 +38,11 @@ Mother turns a human goal into a governed mission:
    Sentinel. Every call is journaled with the lane's identity, an
    invocation id and the hashes of its input and output. M1 has only
    deterministic lanes.
-6. **Journal** (`journal.rs`): append-only and hash-chained. A restarted
-   coordinator resumes every mission in its state; a Stopped mission stays
-   stopped; a tampered journal is refused.
+6. **Journal** (`journal.rs`): append-only and hash-chained. After an
+   orderly shutdown (`Coordinator::close`) a restarted coordinator resumes
+   every mission in its state; after a crash (M2a-S) every unfinished
+   mission comes back held until the Owner resumes or stops it. A Stopped
+   mission stays stopped; a tampered journal is refused.
 7. **Walk example**: `cargo run -p nexus-mother --example walk`.
 
 ## Invariants and their oracles
@@ -66,6 +69,7 @@ the host, tests included).
 | M2a: consent only from the broker's recorded yes for the exact hash and request; another hash, a replayed answer, an unrecorded yes or a broker refusal give none | `oracles/m2a_consent.rs`, broker `tests/m2a_mission_consent.rs` |
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
+| M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs` |
 
 Coordinator rules the oracles pin:
 
@@ -98,12 +102,35 @@ Coordinator rules the oracles pin:
   `.poisoned` marker beside the file): it opens nothing until the Owner
   reconciles it, so a Stop the journal could not record is never undone
   by a restart.
+- M2a-S, when poisoning fails too: every session journals its opening
+  before anything else it writes (at once on a journal whose last session
+  closed cleanly), and only `close` of a coordinator that is not broken,
+  with no call in flight, journals a clean close (it is refused too if the
+  journal changed under it). A journal whose last session has no clean
+  close (a crash, a failed append, a journal from before sessions) brings
+  every unfinished mission back held (`unclean_shutdown`): advance,
+  consent, submit and revise are refused; only the Owner's `resume`
+  (journaled) or Stop moves it. The holds are journaled with the session's
+  first record or its clean close, so opening stays read-only until then,
+  and they hold across every restart until the Owner decides. A held
+  waiting mission's request is handed back like any waiting one: Mother
+  does not ask about it or approve it while held; the Owner's Stop
+  withdraws it.
 - Replay accepts records only in the order the live coordinator writes
   them (lane answers after their calls, no transition but Stop while an
   effect is unsettled, mission ids in sequence).
 
 ## Non-claims
 
+- **M2a-S: `resume` is an API call, like `stop`.** It is the Owner's
+  decision, journaled, but not confirmed through a broker dialog: the
+  Mother screen (M2) must bind it to the Owner. Mother never calls it.
+- M2a-S: while a waiting mission is held, its request stays at the broker,
+  where only the Owner's own native approval can run it. Mother does not
+  ask about it or carry on from it until the Owner resumes the mission.
+- M2a-S: the clean close is a record in the unkeyed chain. Someone with
+  write access who cuts the journal back to a clean close (dropping a
+  later Stop) is not detected; that is the existing truncation non-claim.
 - **Consent is the broker's, the dialog is not built yet.** No desktop
   dialog implements `confirm_mission` in this mission (no UI): the walk
   example stands in for it at the terminal, and only test code fakes one.

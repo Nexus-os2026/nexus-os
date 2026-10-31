@@ -151,6 +151,15 @@ fn open(
     }
 }
 
+/// An orderly shutdown: journals the clean close that lets the next start
+/// carry on every mission. Without it (a crash), the next start holds every
+/// unfinished mission until the Owner resumes or stops it.
+fn shut_down(mother: Coordinator<GovernedPort>) {
+    if let Err(e) = mother.close() {
+        println!("  Mother could not shut down cleanly ({e:?}): her next start holds every unfinished mission.");
+    }
+}
+
 fn say_advance(a: &Advance) {
     for lane in &a.lanes {
         println!(
@@ -234,7 +243,7 @@ fn main() {
     } else {
         println!("  You said no, so nothing ran.");
     }
-    drop(mother);
+    shut_down(mother);
     let restarted = open(&journal, &port, lanes(vec![]));
     println!(
         "  Mother restarted from her journal: {id} is {}.",
@@ -245,7 +254,7 @@ fn main() {
         port.performed(),
         mothers_runs(&port)
     );
-    drop(restarted);
+    shut_down(restarted);
 
     // ------------------------------------------------------------ run 2
     println!();
@@ -304,7 +313,7 @@ fn main() {
             Ok(_) => println!("  Unexpected: a denied mission moved"),
         }
     }
-    drop(mother);
+    shut_down(mother);
 
     let restarted = open(&run2, &port, lanes(asks));
     println!();
