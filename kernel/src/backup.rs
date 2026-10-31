@@ -1847,4 +1847,66 @@ mod tests {
         );
         assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
     }
+
+    /// Creates one backup in `dir` (encrypted under `key` when given) and
+    /// returns its archive path.
+    fn m0_f14_backup(tmp: &Path, dir: &str, key: Option<&EncryptionKey>) -> PathBuf {
+        let data_dir = tmp.join("data");
+        if !data_dir.exists() {
+            setup_test_data(&data_dir);
+        }
+        let backups = tmp.join(dir);
+        create_backup_with_config_file(
+            &with_config(backups.clone(), key.is_some()),
+            &data_dir,
+            key,
+            || Ok(tmp.join("no-config.toml")),
+        )
+        .unwrap();
+        only_archive(&backups)
+    }
+
+    fn m0_f14_assert_refused(archive: &Path, key: Option<&EncryptionKey>, tmp: &Path) {
+        let restore_root = tmp.join(format!("restored-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let restored = restore_backup(archive, &restore_root, key);
+        assert!(
+            matches!(restored, Err(BackupError::Encryption(_))),
+            "downgraded archive must be refused by restore: {restored:?}"
+        );
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
+        let verified = verify_backup(archive, key);
+        assert!(
+            matches!(verified, Err(BackupError::Encryption(_))),
+            "downgraded archive must be refused by verify: {verified:?}"
+        );
+    }
+
+    /// M0-FIX2 F14 review MAJOR-1 oracle: when a key is supplied, an archive
+    /// without the encryption header is refused, never read as plaintext.
+    #[test]
+    fn m0_f14_plaintext_archive_with_a_key_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plain = m0_f14_backup(tmp.path(), "plain", None);
+        let key = EncryptionKey::from_raw_for_test([0x77; 32]);
+        m0_f14_assert_refused(&plain, Some(&key), tmp.path());
+    }
+
+    /// M0-FIX2 F14 review MAJOR-1 oracle: an archive whose sidecar records it
+    /// as encrypted is refused when its body is plaintext, with or without a
+    /// key; so is a plaintext body beside a sidecar that cannot be read.
+    #[test]
+    fn m0_f14_plaintext_body_under_an_encrypted_sidecar_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = EncryptionKey::from_raw_for_test([0x78; 32]);
+        let encrypted = m0_f14_backup(tmp.path(), "encrypted", Some(&key));
+        let plain = m0_f14_backup(tmp.path(), "plain", None);
+        std::fs::write(&encrypted, std::fs::read(&plain).unwrap()).unwrap();
+        m0_f14_assert_refused(&encrypted, None, tmp.path());
+        m0_f14_assert_refused(&encrypted, Some(&key), tmp.path());
+
+        std::fs::write(plain.with_extension("meta.json"), "not metadata").unwrap();
+        m0_f14_assert_refused(&plain, None, tmp.path());
+    }
 }

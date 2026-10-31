@@ -1921,48 +1921,218 @@ mod tests {
         frame
     }
 
-    /// M0-FIX2 F14 oracle: an encrypted frame opens only for the direction it
-    /// was sealed for, so a frame cannot be reflected back to its sender.
-    #[test]
-    fn m0_f14_frames_are_bound_to_their_direction() {
-        let mut link = NexusLink::new("dev", "/tmp/models");
-        link.set_encryption_key("direction-key");
-        for (sealed, other) in [
-            (
-                LinkDirection::InitiatorToResponder,
-                LinkDirection::ResponderToInitiator,
-            ),
-            (
-                LinkDirection::ResponderToInitiator,
-                LinkDirection::InitiatorToResponder,
-            ),
-        ] {
-            let frame = link.serialize_message(&LinkMessage::Ping, sealed).unwrap();
-            assert!(matches!(
-                link.deserialize_message(&frame, sealed),
-                Ok(LinkMessage::Ping)
-            ));
-            assert!(
-                link.deserialize_message(&frame, other).is_err(),
-                "a {sealed:?} frame must not open as {other:?}"
-            );
-        }
+    fn m0_f14_keyed_link(name: &str) -> NexusLink {
+        let mut link = NexusLink::new(name, "/tmp/models");
+        link.set_encryption_key("session-key");
+        link.set_shared_secret("session-secret");
+        link
     }
 
-    /// M0-FIX2 F14 oracle: the legacy unbound encrypted frame, and a
-    /// plaintext frame while a key is configured, are refused.
+    /// M0-FIX2 F14 oracle (round 2 rewrite of the direction test for the
+    /// session API; same assertions): an encrypted frame opens only for the
+    /// direction it was sealed for, so it cannot be reflected to its sender.
+    #[test]
+    fn m0_f14_frames_are_bound_to_their_direction() {
+        let link = m0_f14_keyed_link("dev");
+        let (mut initiator, mut responder) = LinkSession::pair_for_test();
+        let to_responder = link
+            .serialize_message(&LinkMessage::Ping, &mut initiator)
+            .unwrap();
+        assert!(
+            link.deserialize_message(&to_responder, &mut initiator)
+                .is_err(),
+            "an initiator frame must not be reflected back to the initiator"
+        );
+        assert!(matches!(
+            link.deserialize_message(&to_responder, &mut responder),
+            Ok(LinkMessage::Ping)
+        ));
+        let to_initiator = link
+            .serialize_message(&LinkMessage::Pong, &mut responder)
+            .unwrap();
+        assert!(
+            link.deserialize_message(&to_initiator, &mut responder)
+                .is_err(),
+            "a responder frame must not be reflected back to the responder"
+        );
+        assert!(matches!(
+            link.deserialize_message(&to_initiator, &mut initiator),
+            Ok(LinkMessage::Pong)
+        ));
+    }
+
+    /// M0-FIX2 F14 oracle (round 2 rewrite for the session API; same
+    /// assertions): the legacy unbound encrypted frame, and a plaintext frame
+    /// while a key is configured, are refused.
     #[test]
     fn m0_f14_unbound_frames_are_refused() {
         let mut link = NexusLink::new("dev", "/tmp/models");
         link.set_encryption_key("legacy-key");
         let legacy = m0_f14_legacy_v1_frame("legacy-key", &LinkMessage::Ping);
         let plaintext = NexusLink::serialize_message_plaintext(&LinkMessage::Ping).unwrap();
-        for direction in [
-            LinkDirection::InitiatorToResponder,
-            LinkDirection::ResponderToInitiator,
-        ] {
-            assert!(link.deserialize_message(&legacy, direction).is_err());
-            assert!(link.deserialize_message(&plaintext, direction).is_err());
+        let (mut initiator, mut responder) = LinkSession::pair_for_test();
+        for session in [&mut initiator, &mut responder] {
+            assert!(link.deserialize_message(&legacy, session).is_err());
+            assert!(link.deserialize_message(&plaintext, session).is_err());
         }
+    }
+
+    /// M0-FIX2 F14 review MAJOR-2 oracle: a frame sealed in one session does
+    /// not open in another, even in the right direction and position.
+    #[test]
+    fn m0_f14_frame_from_another_session_is_refused() {
+        let link = m0_f14_keyed_link("dev");
+        let (mut initiator_a, mut responder_a) = LinkSession::pair_for_test();
+        let (_initiator_b, mut responder_b) = LinkSession::pair_for_test();
+        let frame = link
+            .serialize_message(&LinkMessage::ModelListRequest, &mut initiator_a)
+            .unwrap();
+        assert!(link.deserialize_message(&frame, &mut responder_b).is_err());
+        assert!(matches!(
+            link.deserialize_message(&frame, &mut responder_a),
+            Ok(LinkMessage::ModelListRequest)
+        ));
+    }
+
+    /// M0-FIX2 F14 review MAJOR-2 oracle: frames are accepted only in the
+    /// order they were sealed; a skipped, reordered or repeated frame is
+    /// refused.
+    #[test]
+    fn m0_f14_frames_out_of_order_or_repeated_are_refused() {
+        let link = m0_f14_keyed_link("dev");
+        let (mut initiator, mut responder) = LinkSession::pair_for_test();
+        let first = link
+            .serialize_message(&LinkMessage::Ping, &mut initiator)
+            .unwrap();
+        let second = link
+            .serialize_message(&LinkMessage::Pong, &mut initiator)
+            .unwrap();
+        assert!(
+            link.deserialize_message(&second, &mut responder).is_err(),
+            "a frame ahead of its turn must be refused"
+        );
+        assert!(matches!(
+            link.deserialize_message(&first, &mut responder),
+            Ok(LinkMessage::Ping)
+        ));
+        assert!(
+            link.deserialize_message(&first, &mut responder).is_err(),
+            "a repeated frame must be refused"
+        );
+        assert!(matches!(
+            link.deserialize_message(&second, &mut responder),
+            Ok(LinkMessage::Pong)
+        ));
+    }
+
+    /// M0-FIX2 F14 review MAJOR-2 oracle, end to end: everything an initiator
+    /// sent on one connection, recorded by a relay and replayed byte for byte
+    /// on a new connection, is refused by the responder.
+    #[test]
+    fn m0_f14_recorded_connection_replayed_is_refused() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let responder_addr = listener.local_addr().unwrap();
+        let responder = std::thread::spawn(move || {
+            let responder = m0_f14_keyed_link("responder");
+            let mut results = Vec::new();
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let result = responder
+                    .authenticate_as_responder(&mut stream)
+                    .and_then(|mut session| responder.read_message(&mut stream, &mut session));
+                results.push(result);
+            }
+            results
+        });
+
+        // Connection 1 runs through a relay that records the initiator's bytes.
+        let relay_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let relay_addr = relay_listener.local_addr().unwrap();
+        let relay = std::thread::spawn(move || {
+            let (mut client, _) = relay_listener.accept().unwrap();
+            let mut upstream = TcpStream::connect(responder_addr).unwrap();
+            let mut recorded = Vec::new();
+            let mut forward = |from: &mut TcpStream, to: &mut TcpStream, n: usize| {
+                let mut buf = vec![0u8; n];
+                from.read_exact(&mut buf).unwrap();
+                to.write_all(&buf).unwrap();
+                buf
+            };
+            // Initiator random, responder HMAC + random, then one frame.
+            recorded.extend(forward(&mut client, &mut upstream, 32));
+            forward(&mut upstream, &mut client, 64);
+            let header = forward(&mut client, &mut upstream, 5);
+            let len = u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize;
+            recorded.extend(header);
+            recorded.extend(forward(&mut client, &mut upstream, len));
+            recorded
+        });
+        let initiator = m0_f14_keyed_link("initiator");
+        let mut stream = TcpStream::connect(relay_addr).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut session = initiator.authenticate_as_initiator(&mut stream).unwrap();
+        let frame = initiator
+            .serialize_message(
+                &LinkMessage::TransferRequest {
+                    model_id: "m".into(),
+                    filename: "model.gguf".into(),
+                },
+                &mut session,
+            )
+            .unwrap();
+        stream.write_all(&frame).unwrap();
+        let recorded = relay.join().unwrap();
+
+        // Connection 2: the recording, replayed directly to the responder.
+        let mut replay = TcpStream::connect(responder_addr).unwrap();
+        replay
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        replay.write_all(&recorded[..32]).unwrap();
+        let mut answer = [0u8; 64];
+        replay.read_exact(&mut answer).unwrap();
+        replay.write_all(&recorded[32..]).unwrap();
+
+        let results = responder.join().unwrap();
+        assert!(
+            matches!(&results[0], Ok(LinkMessage::TransferRequest { filename, .. }) if filename == "model.gguf"),
+            "the genuine connection must work: {:?}",
+            results[0]
+        );
+        assert!(
+            results[1].is_err(),
+            "a replayed connection must be refused: {:?}",
+            results[1]
+        );
+    }
+
+    /// M0-FIX2 F14 review MAJOR-3 oracle: link nonces and handshake randoms
+    /// come from the operating system's random source, not from the clock
+    /// and a per-process counter that restarts at zero in every process.
+    #[test]
+    fn m0_f14_link_randomness_comes_from_the_os() {
+        let source = include_str!("nexus_link.rs").replace("\r\n", "\n");
+        let production = &source[..source.find("\n#[cfg(test)]\nmod tests").unwrap()];
+        for function in ["fn generate_nonce", "fn generate_random"] {
+            let start = production
+                .find(function)
+                .unwrap_or_else(|| panic!("{function} missing"));
+            let body = &production[start..];
+            let body = &body[..body.find("\n    }\n").unwrap()];
+            assert!(body.contains("OsRng"), "{function} must use OsRng: {body}");
+            for forbidden in ["SystemTime", "NONCE_COUNTER", "as_nanos"] {
+                assert!(!body.contains(forbidden), "{function} uses {forbidden}");
+            }
+        }
+        assert!(!production.contains("NONCE_COUNTER"));
+        let nonces: std::collections::HashSet<[u8; 12]> =
+            (0..4096).map(|_| NexusLink::generate_nonce()).collect();
+        assert_eq!(nonces.len(), 4096);
     }
 }
