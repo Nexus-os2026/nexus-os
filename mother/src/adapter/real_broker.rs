@@ -654,6 +654,8 @@ fn real_broker_m1_oracles() {
     // Codex re-review #2 MAJOR: recovery is fail-closed for every failing
     // append.
     m2a_recovery_fails_closed_at_every_append_on_the_real_broker(&w);
+    // Codex re-review #3 MINOR: the same with an abandoned lane call.
+    m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(&w);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
@@ -888,6 +890,146 @@ fn m2a_recovery_fails_closed_at_every_append_on_the_real_broker(w: &World) {
     );
     mother.stop(MissionId(2)).unwrap();
     unapprovable(requests[1], "no failure, then Stop");
+    drop(mother);
+
+    for n in 0..appends {
+        let (lines, requests) = scene(n + 1);
+        let journal = MemoryJournal::new();
+        journal.set_lines(lines);
+        journal.fail_after(n);
+        let port = Arc::new(GovernedPort::new(control.clone()));
+        assert!(
+            Coordinator::open(journal, port, lanes(), clock()).is_err(),
+            "append {n} failed, yet open succeeded"
+        );
+        for (i, request) in requests.into_iter().enumerate() {
+            unapprovable(request, &format!("append {n} failed: request {}", i + 1));
+        }
+    }
+    assert_eq!(w.unserved(), 0);
+}
+
+/// Codex re-review #3 MINOR (new oracle; the one above is unchanged): a
+/// dead coordinator leaves a waiting request (mission 1), a stopped
+/// mission's request never withdrawn (mission 2) and an unanswered lane
+/// call (mission 3, which recovery journals abandoned). For every N, a
+/// journal failing its Nth recovery append makes `open` fail, and neither
+/// request stays approvable or executable.
+fn m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(w: &World) {
+    let control = &w.home.control;
+    let agent = mother_agent();
+    let lanes = || Lanes::new(keyed_lanes()).unwrap();
+    let clock = || Arc::new(SystemClock::default());
+    let scene = |round: usize| {
+        let journal = MemoryJournal::new();
+        let port = Arc::new(GovernedPort::new(control.clone()));
+        let mother = Coordinator::open(journal.clone(), port.clone(), lanes(), clock()).unwrap();
+        let mut requests = Vec::new();
+        for n in 1..=2u64 {
+            let id = mother
+                .draft(contract_with(&format!(
+                    "POST-BUILDER:{}/lane-{round}-{n}",
+                    w.origin
+                )))
+                .unwrap();
+            mother.submit(id).unwrap();
+            mother.request_consent(id, &Yes).unwrap();
+            for _ in 0..3 {
+                mother.advance(id).unwrap();
+            }
+            assert_eq!(mother.state(id), Some(MissionState::AwaitingApproval));
+            let pending = port.pending(id).unwrap();
+            requests.push((
+                RunId::parse(&pending.run).unwrap(),
+                nexus_governed_control::authority::ids::CommitmentId::parse(&pending.commitment)
+                    .unwrap(),
+            ));
+        }
+        let lane = mother.draft(contract_with("")).unwrap();
+        assert_eq!(lane, MissionId(3));
+        mother.submit(lane).unwrap();
+        mother.request_consent(lane, &Yes).unwrap();
+        mother.advance(lane).unwrap();
+        assert_eq!(mother.state(lane), Some(MissionState::Investigating));
+        drop(mother);
+        drop(port);
+        let mut lines = journal.lines();
+        let mut push = |mission: MissionId, event: Event| {
+            let entries = verify(&lines).unwrap();
+            let entry = Entry::chained(
+                entries.len() as u64,
+                &entries.last().unwrap().hash,
+                mission,
+                event,
+            );
+            lines.push(entry.to_line());
+        };
+        push(
+            MissionId(2),
+            Event::Transition {
+                trigger: Trigger::Stop {
+                    reason: "owner".into(),
+                },
+            },
+        );
+        let seq = verify(&journal.lines()).unwrap().len() as u64 + 1;
+        push(
+            lane,
+            Event::LaneInvoked {
+                invocation: crate::lane::InvocationId { mission: lane, seq },
+                identity: crate::lane::LaneIdentity {
+                    role: crate::lane::LaneRole::Sentinel,
+                    name: "keyed-sentinel".into(),
+                    version: "m1-test".into(),
+                },
+                input_hash: "0".repeat(64),
+            },
+        );
+        (lines, requests)
+    };
+    let unapprovable = |(run, commitment): (RunId, _), why: &str| {
+        let state = control
+            .authority()
+            .commitments()
+            .view(commitment)
+            .unwrap()
+            .state;
+        assert!(
+            !matches!(
+                state,
+                CommitmentState::Prepared | CommitmentState::Authorized
+            ),
+            "{why}: {state:?}"
+        );
+        assert!(
+            control
+                .authorize(commitment, &agent, run, &OwnerApproves)
+                .is_err(),
+            "{why}"
+        );
+        assert!(control.execute(commitment, &agent, run).is_err(), "{why}");
+    };
+
+    // How many appends a recovery that does not fail makes.
+    let (lines, requests) = scene(0);
+    let journal = MemoryJournal::new();
+    journal.set_lines(lines.clone());
+    let mother = Coordinator::open(
+        journal.clone(),
+        Arc::new(GovernedPort::new(control.clone())),
+        lanes(),
+        clock(),
+    )
+    .unwrap();
+    let appends = journal.lines().len() - lines.len();
+    assert!(appends >= 2, "{appends}");
+    assert!(verify(&journal.lines())
+        .unwrap()
+        .iter()
+        .any(|e| e.mission == MissionId(3) && matches!(e.event, Event::LaneOvertaken { .. })));
+    unapprovable(requests[1], "no failure: the stopped mission's");
+    mother.stop(MissionId(1)).unwrap();
+    unapprovable(requests[0], "no failure, then Stop");
     drop(mother);
 
     for n in 0..appends {

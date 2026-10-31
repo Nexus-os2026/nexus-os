@@ -652,3 +652,102 @@ fn m2a_close_a_stop_whose_withdrawal_fails_is_an_error() {
             }
         )));
 }
+
+/// Codex re-review #3 MINOR: `three_open` plus a fourth mission whose lane
+/// call was left unanswered (recovery journals it abandoned).
+fn three_open_and_an_unanswered_lane() -> Vec<String> {
+    let mut lines = three_open();
+    let entries = crate::journal::verify(&lines).unwrap();
+    let mut prev = entries.last().unwrap().hash.clone();
+    let mut seq = entries.len() as u64;
+    let c = contract();
+    let lane_call = |seq: u64| Event::LaneInvoked {
+        invocation: crate::lane::InvocationId {
+            mission: MissionId(4),
+            seq,
+        },
+        identity: crate::lane::LaneIdentity {
+            role: LaneRole::Sentinel,
+            name: "keyed-sentinel".into(),
+            version: "m1-test".into(),
+        },
+        input_hash: "0".repeat(64),
+    };
+    let mut events = vec![
+        Event::Drafted {
+            contract: c.clone(),
+        },
+        Event::Transition {
+            trigger: Trigger::Submit { hash: c.hash() },
+        },
+        Event::Transition {
+            trigger: Trigger::Consent {
+                hash: c.hash(),
+                at_wall_ms: 0,
+            },
+        },
+        Event::Transition {
+            trigger: Trigger::Start,
+        },
+    ];
+    events.push(lane_call(seq + events.len() as u64));
+    for event in events {
+        let entry = Entry::chained(seq, &prev, MissionId(4), event);
+        prev = entry.hash.clone();
+        lines.push(entry.to_line());
+        seq += 1;
+    }
+    lines
+}
+
+/// Codex re-review #3 MINOR (new oracle; the ones above are unchanged):
+/// the every-append fault injection with an interrupted lane call to
+/// abandon as well as a waiting request and the scripted
+/// executing-then-final request. For every N, open() fails, every request
+/// is withdrawn, and Mother neither sent an effect nor asked about an
+/// approval while recovering (the recording port has no broker to refuse
+/// authorize or execute; the real-broker oracle asserts those).
+#[test]
+fn m2a_recovery_fails_closed_at_every_append_with_an_abandoned_lane() {
+    let clean = world();
+    clean.journal.set_lines(three_open_and_an_unanswered_lane());
+    scripted(&clean);
+    let mother = clean.reopen().unwrap();
+    let appends = clean.journal.lines().len() - three_open_and_an_unanswered_lane().len();
+    assert!(appends >= 4, "{appends}");
+    assert!(clean
+        .mother
+        .journal()
+        .unwrap()
+        .iter()
+        .any(|e| e.mission == MissionId(4) && matches!(e.event, Event::LaneOvertaken { .. })));
+    assert_eq!(
+        mother.state(MissionId(2)),
+        Some(MissionState::AwaitingApproval)
+    );
+    assert!(
+        !clean.port.is_cancelled(MissionId(2)),
+        "a waiting request stays"
+    );
+    for n in 0..appends {
+        let w = world();
+        w.journal.set_lines(three_open_and_an_unanswered_lane());
+        scripted(&w);
+        w.journal.fail_after(n);
+        assert!(w.reopen().is_err(), "append {n} failed, yet open succeeded");
+        for m in 1..=3u64 {
+            assert!(
+                w.port.is_cancelled(MissionId(m)),
+                "append {n} failed: mission {m} not withdrawn"
+            );
+        }
+        assert!(
+            w.port
+                .calls()
+                .iter()
+                .all(|c| matches!(c, PortCall::Cancel(_))),
+            "append {n} failed: recovery did more than withdraw: {:?}",
+            w.port.calls()
+        );
+    }
+}
