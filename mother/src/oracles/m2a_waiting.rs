@@ -541,3 +541,26 @@ fn m2a_a_restart_after_an_approved_action_mid_phase_blocks_the_mission() {
     );
     assert_eq!(w.port.effects(), vec![]);
 }
+
+/// Added after mutation testing (a stricter check; the oracles above are
+/// unchanged): when Mother's time budget has run out, the wait ends before
+/// the broker is asked, even when the waited effect was the phase's last
+/// (an approval must not carry the mission into its next phase).
+#[test]
+fn m2a_mother_s_time_budget_ends_the_wait_before_the_broker_is_asked() {
+    let w = world();
+    let id = waiting(&w, "ASK-BUILDER-NETWORK");
+    w.clock.advance(Duration::from_millis(3_600_000));
+    w.port.approval_reply(ApprovalStatus::Approved);
+    let a = w.mother.advance(id).unwrap();
+    assert_eq!(a.to, MissionState::Blocked);
+    assert_eq!(w.mother.reason(id).as_deref(), Some("budget_time"));
+    assert_eq!(w.port.approval_queries(), 0);
+    assert!(w.port.is_cancelled(id));
+    assert!(!w.mother.journal().unwrap().iter().any(|e| matches!(
+        &e.event,
+        Event::Transition {
+            trigger: Trigger::ActionApproved { .. }
+        }
+    )));
+}
