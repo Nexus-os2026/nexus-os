@@ -430,3 +430,56 @@ fn m2a_close_replay_accepts_a_closure_only_of_the_open_request() {
     twice.push(Event::ApprovalClosed { effect: 0 });
     assert!(refused(twice), "closed twice");
 }
+
+/// Third review MAJOR (oracle first): a journal that fails while recovery
+/// closes one action still sees every other open action withdrawn, the
+/// waiting one included (a journal that cannot open never resumes it).
+#[test]
+fn m2a_close_a_journal_failure_during_recovery_still_withdraws_every_action() {
+    let w = world();
+    let c = contract();
+    let action_of = |n: u8| PendingAction {
+        run: format!("run-{:032x}", n),
+        commitment: format!("cmt-{:032x}", n),
+        deadline_mono_ms: 600_000,
+    };
+    let mut lines = Vec::new();
+    let mut prev = GENESIS.to_string();
+    let mut seq = 0u64;
+    for (n, stopped) in [(1u8, true), (2, true), (3, false)] {
+        let mission = MissionId(n as u64);
+        let mut events = settled("awaiting_approval");
+        events[0] = Event::Drafted {
+            contract: c.clone(),
+        };
+        events.push(Event::ApprovalPending {
+            effect: 0,
+            pending: action_of(n),
+        });
+        events.push(wait());
+        if stopped {
+            events.push(Event::Transition {
+                trigger: Trigger::Stop {
+                    reason: "owner".into(),
+                },
+            });
+        }
+        for event in events {
+            let entry = Entry::chained(seq, &prev, mission, event);
+            prev = entry.hash.clone();
+            lines.push(entry.to_line());
+            seq += 1;
+        }
+    }
+    w.journal.set_lines(lines);
+    // The first closure recovery journals fails.
+    w.journal.fail_after(0);
+    assert!(matches!(w.reopen(), Err(CoordinatorError::Journal(_))));
+    for n in 1..=3u64 {
+        assert!(
+            w.port.is_cancelled(MissionId(n)),
+            "mission {n} not withdrawn"
+        );
+    }
+    assert!(w.journal.is_poisoned());
+}
