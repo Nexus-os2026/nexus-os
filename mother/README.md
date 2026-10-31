@@ -122,10 +122,16 @@ Coordinator rules the oracles pin:
   wait. A reopened coordinator hands it back to its port, which takes it
   only if the broker's records say it is Mother's, so a rebuilt port can
   still ask about it and Stop still withdraws it. The ids are names, not
-  authority. Remaining gap: if Mother dies after the broker left the action
-  waiting but before it was journaled, the mission is blocked on restart
-  (`effect_outcome_unknown`) and a rebuilt port cannot withdraw that
-  action: it stays until it expires or the Owner denies it. A broker
+  authority: the port takes one back only from a live run of Mother's that
+  no other mission holds (an action two missions name is handed back to
+  neither), and trusts its deadline no further than the broker's. Still
+  possible with write access to Mother's journal (it is unkeyed): swapping
+  the actions of two live Mother missions. Remaining gap: if Mother dies
+  after the broker left the action waiting but before it was journaled,
+  the mission is blocked on restart (`effect_outcome_unknown` before the
+  settlement was journaled, `phase_interrupted` after it) and a rebuilt
+  port cannot withdraw that action: it stays until it expires or the Owner
+  denies it. A broker
   restart loses the action itself (it can no longer be approved), and the
   mission is Blocked (`approval_outcome_unknown`).
 - The broker ends an expired action only when it next touches it. The

@@ -500,14 +500,22 @@ impl<P: EffectPort> Coordinator<P> {
         // The port gets back every journaled action of a mission that has
         // not ended, before anything is cancelled, so that it can withdraw
         // it (a rebuilt port knows nothing of its own).
+        // An action that two missions name (a tampered journal) is handed
+        // back to neither.
         let parked: Vec<(MissionId, PendingAction)> = coordinator
             .lock()
             .missions
             .iter()
             .filter_map(|(id, m)| m.pending_action().map(|p| (*id, p.clone())))
             .collect();
-        for (id, pending) in parked {
-            coordinator.port.adopt(id, &pending);
+        for (id, pending) in &parked {
+            let claims = parked
+                .iter()
+                .filter(|(_, p)| p.run == pending.run || p.commitment == pending.commitment)
+                .count();
+            if claims == 1 {
+                coordinator.port.adopt(*id, pending);
+            }
         }
         // A lane call left unanswered by the restart is abandoned.
         {

@@ -244,9 +244,12 @@ impl EffectPort for GovernedPort {
         })
     }
 
-    /// Take back a journaled action only if the broker's records agree: an
-    /// agent run of Mother's, and a commitment of that run of Mother's. A
-    /// mission this port already knows, or has ended, is left as it is.
+    /// Take back a journaled action only if the broker's records agree: a
+    /// live agent run of Mother's that no other mission of this port holds,
+    /// and a commitment of that run of Mother's. The carried deadline is
+    /// trusted no further than the action's lifetime from now (the broker's
+    /// own deadline is earlier). A mission this port already knows, or has
+    /// ended, is left as it is.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
@@ -255,25 +258,30 @@ impl EffectPort for GovernedPort {
             return;
         };
         let authority = self.control.authority();
-        let ours = authority
-            .runs()
-            .view(run)
-            .is_some_and(|view| view.agent == mother_agent())
-            && authority.runs().class(run) == Some(RunClass::Agent)
-            && authority
-                .commitments()
-                .view(commitment)
-                .is_some_and(|view| view.run == run && view.agent == mother_agent());
-        if !ours {
+        let live_run =
+            authority.runs().view(run).is_some_and(|view| {
+                view.agent == mother_agent() && !view.cancelled && !view.finished
+            }) && authority.runs().class(run) == Some(RunClass::Agent);
+        let Some(view) = authority
+            .commitments()
+            .view(commitment)
+            .filter(|view| live_run && view.run == run && view.agent == mother_agent())
+        else {
             return;
-        }
+        };
+        let lifetime = view.expires_wall_ms.saturating_sub(view.created_wall_ms);
+        let deadline = pending
+            .deadline_mono_ms
+            .min(authority.clock().monotonic_ms().saturating_add(lifetime));
         let mut runs = self.lock();
-        if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
+        if runs.ended.contains(&mission)
+            || runs.open.contains_key(&mission)
+            || runs.open.values().any(|held| *held == run)
+        {
             return;
         }
         runs.open.insert(mission, run);
-        runs.waiting
-            .insert(mission, (commitment, pending.deadline_mono_ms));
+        runs.waiting.insert(mission, (commitment, deadline));
     }
 }
 
