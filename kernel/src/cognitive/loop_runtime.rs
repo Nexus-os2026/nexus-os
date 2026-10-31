@@ -815,6 +815,9 @@ struct AgentLoopState {
     /// The typed result of each succeeded step, by step id (§11.3), kept
     /// beside the steps.
     results: HashMap<String, StepItem>,
+    /// The emergency-stop watch this goal was admitted under (M0-FIX F5):
+    /// once any stop is engaged after it, the loop halts.
+    stop_watch: crate::emergency_stop::StopWatch,
 }
 
 /// The identity of a cycle in flight (P3-HM-CONTRACT-02 §13.2 LK-1).
@@ -1017,6 +1020,11 @@ impl CognitiveRuntime {
             .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
         let goal_uuid = uuid::Uuid::parse_str(&goal.id)
             .map_err(|e| AgentError::SupervisorError(format!("invalid goal id: {e}")))?;
+        // M0-FIX F5: no goal (and no goal unit) while the owner's emergency
+        // stop is in force.
+        self.stop
+            .admit()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         // P4-S1-H1: an agent that takes no new work gets no goal unit
         // either. `assign_goal_in` decides again, as it publishes the loop.
         admit_new_work(
@@ -1042,6 +1050,11 @@ impl CognitiveRuntime {
         goal: AgentGoal,
         ctx: DispatchContext,
     ) -> Result<(), AgentError> {
+        // M0-FIX F5: admitted under the stop authority, or refused.
+        let stop_watch = self
+            .stop
+            .admit()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1068,6 +1081,7 @@ impl CognitiveRuntime {
             reserved_fuel: 0.0,
             plan: None,
             results: HashMap::new(),
+            stop_watch,
         };
 
         // P4-S1-H1: decided and published as one step. `loops` and then the
@@ -1294,7 +1308,9 @@ impl CognitiveRuntime {
         state.plan = flight.plan;
         state.results = flight.results;
         state.in_flight = None;
-        if state.shutdown.load(Ordering::Relaxed) {
+        // M0-FIX F5: a result that returns after the owner's emergency stop
+        // is refused like one after a shutdown; the next cycle ends the loop.
+        if state.shutdown.load(Ordering::Relaxed) || state.stop_watch.halted() {
             state.reserved_fuel = 0.0;
             return None;
         }
@@ -1326,6 +1342,17 @@ impl CognitiveRuntime {
         if let Ok(issuer) = self.issuer() {
             issuer.record_stale_result_refused(agent, kind.class_name(), effect);
         }
+        // M0-FIX F5: a result refused because the owner's emergency stop
+        // halted the loop ends that loop now. (Every caller has released
+        // `loops`.)
+        let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        if loops
+            .get(agent_id)
+            .is_some_and(|state| state.in_flight.is_none() && state.stop_watch.halted())
+        {
+            return self.halt_loop(agent_id, loops, audit);
+        }
+        drop(loops);
         let reason = format!(
             "stale result refused ({} step): the goal was cancelled, replaced or ended while it ran",
             kind.class_name()
@@ -1409,6 +1436,10 @@ impl CognitiveRuntime {
             return Err(AgentError::SupervisorError(format!(
                 "a cycle of agent '{agent_id}' is in flight"
             )));
+        }
+        // M0-FIX F5: the owner's emergency stop ends the loop.
+        if state.stop_watch.halted() {
+            return Ok(self.halt_loop(agent_id, loops, audit));
         }
 
         // Check shutdown
@@ -2281,6 +2312,61 @@ impl CognitiveRuntime {
         })
     }
 
+    /// M0-FIX F5: end a loop the owner's emergency stop halted: removed with
+    /// its flag and snapshot (no further step), the halt recorded in the
+    /// audit and the stop authority's halt log after `loops` is released.
+    fn halt_loop(
+        &self,
+        agent_id: &str,
+        mut loops: std::sync::MutexGuard<'_, HashMap<String, AgentLoopState>>,
+        audit: &mut dyn AuditWriter,
+    ) -> CycleResult {
+        let removed = loops.remove(agent_id);
+        if let Some(state) = &removed {
+            state.shutdown.store(true, Ordering::Relaxed);
+        }
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
+        drop(loops);
+        if let Some(state) = &removed {
+            let mut flags = self
+                .shutdown_flags
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if flags
+                .get(agent_id)
+                .is_some_and(|flag| Arc::ptr_eq(flag, &state.shutdown))
+            {
+                flags.remove(agent_id);
+            }
+        }
+        let stop_number = self.stop.stop_number();
+        // Best-effort like every cycle record: the halt has taken effect.
+        let _ = audit.append_event(
+            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+            EventType::StateChange,
+            json!({
+                "event": "cognitive.loop_halted_by_emergency_stop",
+                "stop_number": stop_number,
+            }),
+        );
+        self.stop.record_halt(
+            crate::emergency_stop::HaltArea::CognitiveLoop,
+            crate::emergency_stop::HaltOutcome::Ended,
+        );
+        CycleResult {
+            phase: CognitivePhase::Idle,
+            steps_executed: 0,
+            fuel_consumed: 0.0,
+            should_continue: false,
+            blocked_reason: Some("halted by the owner's emergency stop".into()),
+            success: false,
+            failure_reason: Some("halted by the owner's emergency stop".into()),
+        }
+    }
+
     /// Stop a running agent loop.
     pub fn stop_agent_loop(&self, agent_id: &str) -> Result<(), AgentError> {
         if let Some(flag) = self
@@ -2537,6 +2623,11 @@ impl CognitiveRuntime {
         let state = loops.get_mut(agent_id).ok_or_else(|| {
             AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
         })?;
+        // M0-FIX F5: an approval does not revive a loop the stop ended.
+        state
+            .stop_watch
+            .check()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         state.hitl_approval_allowance = state.hitl_approval_allowance.saturating_add(count.max(1));
         Ok(())
     }

@@ -120,6 +120,16 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// The stop authority new runs are admitted under: the process's, or in a
+/// test the thread's own.
+fn stop_authority() -> Arc<crate::emergency_stop::StopAuthority> {
+    #[cfg(test)]
+    if let Some(stop) = TEST_STOP.with(|slot| slot.borrow().clone()) {
+        return stop;
+    }
+    crate::emergency_stop::StopAuthority::global()
+}
+
 /// Run `body` with the runs this thread creates observing `stop`.
 #[cfg(test)]
 pub(crate) fn with_test_stop_authority<T>(
@@ -707,6 +717,8 @@ pub struct CodingRun {
     restore_approved: Option<ReviewBinding>,
     /// The sandboxed verification lifecycle (Phase Two).
     verifier: verifier::VerifierState,
+    /// The emergency-stop watch the run was admitted under (M0-FIX F5).
+    stop: crate::emergency_stop::StopWatch,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -776,6 +788,17 @@ impl CodingRun {
         selected: Option<(ProjectId, NodeIdentity)>,
         project_lease: Option<ProjectReadLease>,
     ) -> Result<Self, RunError> {
+        // M0-FIX F5: no run while the owner's emergency stop is in force.
+        let stop = match stop_authority().admit() {
+            Ok(stop) => stop,
+            Err(_) => {
+                // The refused run's own read grant closes now.
+                if let Some(mut lease) = project_lease {
+                    lease.close();
+                }
+                return Err(RunError::Revoked(RevocationReason::EmergencyStop));
+            }
+        };
         let mut run = Self {
             id: RunId::generate(),
             state: RunState::Created,
@@ -804,6 +827,7 @@ impl CodingRun {
             applied: None,
             restore_approved: None,
             verifier: verifier::VerifierState::default(),
+            stop,
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -876,6 +900,9 @@ impl CodingRun {
     // ── Authority ───────────────────────────────────────────────────────
 
     fn resolve_grant(&self, grant: WorkspaceGrantId) -> Result<WorkspaceGrant, RunError> {
+        // M0-FIX F5: no run authority resolves for work the owner's
+        // emergency stop ended, nor for anything while it is in force.
+        self.stop_refusal()?;
         self.registry
             .resolve(grant, self.binding)
             .map_err(|error| match error {
@@ -1050,6 +1077,45 @@ impl CodingRun {
         }
     }
 
+    /// M0-FIX F5: whether the stop ends this run: it is live, or it holds a
+    /// verified candidate that has not been applied (the stop withdraws it,
+    /// as a worker panic does).
+    fn stop_ends(&self) -> bool {
+        !self.state.is_terminal()
+            || (self.state == RunState::StructurallyVerified
+                && self.apply_state == apply::ApplyState::NotApplied)
+    }
+
+    /// M0-FIX F5: the refusal by the owner's emergency stop, if any: a run
+    /// the stop ends is refused once any stop was engaged since it was
+    /// created (it never resumes by itself); every run is refused while a
+    /// stop is in force (an applied run's restore works again after the
+    /// resume).
+    fn stop_refusal(&self) -> Result<(), RunError> {
+        if (self.stop_ends() && self.stop.halted()) || self.stop.authority().is_stopped() {
+            return Err(RunError::Revoked(RevocationReason::EmergencyStop));
+        }
+        Ok(())
+    }
+
+    /// M0-FIX F5: end a run the owner's emergency stop halted (its candidate
+    /// and approval withdrawn, its authority closed, the revocation recorded
+    /// in the run ledger and the stop's halt log), or refuse work while the
+    /// stop is in force.
+    pub(crate) fn halt_if_stopped(&mut self) -> Result<(), RunError> {
+        let refusal = self.stop_refusal();
+        if refusal.is_err() && self.stop_ends() {
+            self.stop.authority().record_halt(
+                crate::emergency_stop::HaltArea::Coding,
+                crate::emergency_stop::HaltOutcome::Ended,
+            );
+            self.verification = None;
+            self.approved = None;
+            self.enter_terminal(RunState::Revoked(RevocationReason::EmergencyStop));
+        }
+        refusal
+    }
+
     /// Turn an authority, identity or staging error into the matching
     /// terminal state; return the error unchanged.
     fn fail(&mut self, error: RunError) -> RunError {
@@ -1066,6 +1132,12 @@ impl CodingRun {
         };
         if let Some(state) = terminal {
             if !self.state.is_terminal() {
+                if state == RunState::Revoked(RevocationReason::EmergencyStop) {
+                    self.stop.authority().record_halt(
+                        crate::emergency_stop::HaltArea::Coding,
+                        crate::emergency_stop::HaltOutcome::Ended,
+                    );
+                }
                 self.enter_terminal(state);
             }
         }

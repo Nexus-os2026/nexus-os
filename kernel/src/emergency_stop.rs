@@ -50,7 +50,8 @@ pub struct EmergencyStopped;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HaltArea {
     CognitiveLoop,
-    CodingRun,
+    /// A governed coding run.
+    Coding,
     ModelCall,
 }
 

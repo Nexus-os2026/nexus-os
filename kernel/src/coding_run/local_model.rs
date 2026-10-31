@@ -12,7 +12,6 @@
 //! source off the machine), without following redirects, with a bounded wait
 //! and a bounded response.
 
-use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
@@ -176,12 +175,13 @@ impl LocalOllama {
         let url = endpoint
             .join("api/tags")
             .map_err(|_| ModelError::InvalidAddress)?;
-        let raw = on_request_thread(move || {
+        let raw = on_request_thread(move || async move {
             let response = client(LIST_TIMEOUT)?
                 .get(url)
                 .send()
+                .await
                 .map_err(request_error)?;
-            read_body(response, MAX_LIST_RESPONSE_BYTES)
+            read_body(response, MAX_LIST_RESPONSE_BYTES).await
         })?;
         let value: Value = serde_json::from_slice(&raw).map_err(|_| ModelError::Malformed)?;
         let models = value
@@ -246,17 +246,18 @@ impl LocalModel for LocalOllama {
         let envelope_cap = max_response_bytes
             .saturating_mul(2)
             .saturating_add(64 * 1024);
-        let raw = on_request_thread(move || {
+        let raw = on_request_thread(move || async move {
             let response = client(timeout)?
                 .post(url)
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body)
                 .send()
+                .await
                 .map_err(request_error)?;
             if !response.status().is_success() {
                 return Err(ModelError::Unavailable);
             }
-            read_body(response, envelope_cap)
+            read_body(response, envelope_cap).await
         })?;
         let value: Value = serde_json::from_slice(&raw).map_err(|_| ModelError::Malformed)?;
         let content = value
@@ -271,8 +272,8 @@ impl LocalModel for LocalOllama {
 }
 
 /// A client that uses no proxy and follows no redirect.
-fn client(timeout: Duration) -> Result<reqwest::blocking::Client, ModelError> {
-    reqwest::blocking::Client::builder()
+fn client(timeout: Duration) -> Result<reqwest::Client, ModelError> {
+    reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(timeout)
@@ -288,26 +289,56 @@ fn request_error(error: reqwest::Error) -> ModelError {
     }
 }
 
-fn read_body(response: reqwest::blocking::Response, cap: u64) -> Result<Vec<u8>, ModelError> {
+async fn read_body(mut response: reqwest::Response, cap: u64) -> Result<Vec<u8>, ModelError> {
     let mut raw = Vec::new();
-    response
-        .take(cap + 1)
-        .read_to_end(&mut raw)
-        .map_err(|_| ModelError::Unavailable)?;
-    if raw.len() as u64 > cap {
-        return Err(ModelError::ResponseTooLarge);
+    while let Some(chunk) = response.chunk().await.map_err(request_error)? {
+        raw.extend_from_slice(&chunk);
+        if raw.len() as u64 > cap {
+            return Err(ModelError::ResponseTooLarge);
+        }
     }
     Ok(raw)
 }
 
-/// The blocking client must not run on an async runtime's thread; each
-/// request runs on its own thread.
-fn on_request_thread<T: Send + 'static>(
-    request: impl FnOnce() -> Result<T, ModelError> + Send + 'static,
-) -> Result<T, ModelError> {
+/// Each request runs on its own thread, on its own single-threaded
+/// runtime, as work admitted under the process's emergency-stop authority
+/// (M0-FIX F5): refused while a stop is in force, and ended by a stop while
+/// in flight. Ending it drops the request and then the runtime with its
+/// connection, so the model server sees the connection close; the call
+/// returns [`ModelError::Stopped`] and the halt is logged.
+fn on_request_thread<T, F, Fut>(request: F) -> Result<T, ModelError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = Result<T, ModelError>>,
+{
+    let watch = crate::emergency_stop::StopAuthority::global()
+        .admit()
+        .map_err(|_| ModelError::Stopped)?;
     std::thread::Builder::new()
         .name("nexus-coding-model".to_string())
-        .spawn(request)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|_| ModelError::Unavailable)?;
+            let stopped = watch.clone();
+            let result = runtime.block_on(async move {
+                tokio::select! {
+                    result = request() => result,
+                    () = stopped.halted_async() => Err(ModelError::Stopped),
+                }
+            });
+            // The connection ends with the runtime.
+            drop(runtime);
+            if matches!(result, Err(ModelError::Stopped)) {
+                watch.authority().record_halt(
+                    crate::emergency_stop::HaltArea::ModelCall,
+                    crate::emergency_stop::HaltOutcome::Ended,
+                );
+            }
+            result
+        })
         .map_err(|_| ModelError::Unavailable)?
         .join()
         .map_err(|_| ModelError::Unavailable)?

@@ -221,29 +221,69 @@ pub(crate) fn checked_route_endpoint(
     Ok(url.as_str().to_string())
 }
 
+/// M0-FIX F5: a model call is work admitted under the process's
+/// emergency-stop authority: refused while a stop is in force.
+pub(crate) fn admit_model_call() -> Result<nexus_kernel::emergency_stop::StopWatch, AgentError> {
+    nexus_kernel::emergency_stop::StopAuthority::global()
+        .admit()
+        .map_err(|error| AgentError::SupervisorError(error.to_string()))
+}
+
+/// The error of a guarded curl child: refused by, or ended by, the
+/// emergency stop (its cleanup outcome included), or not started.
+pub(crate) fn guarded_error(error: nexus_kernel::emergency_stop::GuardedOutputError) -> AgentError {
+    use nexus_kernel::emergency_stop::{GuardError, GuardedOutputError};
+    AgentError::SupervisorError(match error {
+        GuardedOutputError::Guard(GuardError::Spawn(error)) => {
+            format!("curl execution failed: {error}")
+        }
+        other => other.to_string(),
+    })
+}
+
+/// Run a curl child to completion as a model call the emergency stop
+/// terminates (M0-FIX F5).
+pub(crate) fn guarded_curl(
+    command: &mut Command,
+    stdin: Option<&[u8]>,
+) -> Result<std::process::Output, AgentError> {
+    let watch = admit_model_call()?;
+    nexus_kernel::emergency_stop::guarded_output(
+        command,
+        stdin,
+        &watch,
+        nexus_kernel::emergency_stop::HaltArea::ModelCall,
+    )
+    .map_err(guarded_error)
+}
+
 pub(crate) fn curl_get_status(endpoint: &str, route: CurlRoute) -> Result<u16, AgentError> {
     let endpoint = checked_route_endpoint(endpoint, route)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
     // Final Gate item B: no redirect is followed; the checked address is the
     // one contacted.
-    let output = Command::new("curl")
-        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(route.args())
-        .args([
-            "-sS",
-            "-m",
-            "5",
-            "--max-filesize",
-            "1048576",
-            "-o",
-            "/dev/null",
-            "-w",
-            "%{http_code}",
-            "--",
-        ])
-        .arg(&endpoint)
-        .output()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+    let output = guarded_curl(
+        Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(route.args())
+            .args([
+                "-sS",
+                "-m",
+                "5",
+                "--max-filesize",
+                "1048576",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "--",
+            ])
+            .arg(&endpoint)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+        None,
+    )?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
@@ -352,25 +392,9 @@ pub(crate) fn curl_post_json_with_timeout(
         AgentError::SupervisorError(format!("failed to encode request body: {error}"))
     })?;
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
-
-    // Pipe body via stdin to avoid OS ARG_MAX limits with large payloads (e.g. base64 images)
-    if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
-        if let Err(error) = stdin.write_all(encoded_body.as_bytes()) {
-            drop(stdin);
-            reap_child(&mut child);
-            return Err(AgentError::SupervisorError(format!(
-                "failed to write body to curl stdin: {error}"
-            )));
-        }
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+    // The body goes to stdin to avoid OS ARG_MAX limits with large payloads
+    // (e.g. base64 images); the child is a model call the stop terminates.
+    let output = guarded_curl(&mut command, Some(encoded_body.as_bytes()))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
@@ -397,15 +421,6 @@ pub(crate) fn curl_post_json_with_timeout(
         AgentError::SupervisorError(format!("invalid HTTP status from curl: {error}"))
     })?;
     Ok((status, json_response(body_raw.trim())?))
-}
-
-/// Stop and reap a curl child that an early error leaves behind (Final Gate
-/// item I), so no request keeps running unowned and no child stays unreaped.
-/// Killing a child that already exited is not an error here; the caller
-/// reports its own failure either way.
-pub(crate) fn reap_child(child: &mut std::process::Child) {
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// A provider's JSON response body: `null` when empty, and otherwise JSON,
@@ -560,6 +575,10 @@ pub(crate) fn post_json_in_process(
     body: &Value,
     timeout_secs: u32,
 ) -> Result<(u16, Value), AgentError> {
+    // M0-FIX F5: no new model call while the owner's emergency stop is in
+    // force. (An in-process call already in flight is not interrupted: a
+    // documented residual gap.)
+    admit_model_call()?;
     post_json_bounded(
         endpoint,
         headers,
@@ -1654,8 +1673,12 @@ mod tests {
     }
 
     /// Final Gate item I: every early error after a curl child starts stops
-    /// and reaps it (`reap_child`) instead of returning with the child still
-    /// running and unreaped. The pre-repair `?` returns are gone.
+    /// and reaps it instead of returning with the child still running and
+    /// unreaped. The pre-repair `?` returns are gone. Since M0-FIX F5 every
+    /// curl child is a kernel `GuardedChild` (directly, or through
+    /// `guarded_curl`): the emergency stop terminates it, `finish` reaps it,
+    /// and dropping the guard on an early return kills and reaps it. No raw
+    /// `spawn` or `output` of a child remains in these files.
     #[test]
     fn p0_fg_curl_children_are_reaped_on_early_errors() {
         let (helpers, ollama) = (include_str!("mod.rs"), include_str!("ollama.rs"));
@@ -1678,8 +1701,23 @@ mod tests {
         };
         let helpers = production(helpers);
         let ollama = production(ollama);
-        assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
-        assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
+        for source in [&helpers, &ollama] {
+            assert!(!source.contains(".spawn()"), "a raw child spawn remains");
+            assert!(!source.contains(".output()"), "a raw child output remains");
+            assert!(
+                !source.contains("wait_with_output"),
+                "a raw child wait remains"
+            );
+        }
+        // Every curl child is guarded: two through `guarded_curl` here
+        // (status and JSON POST) and one in Ollama's JSON GET, and the two
+        // streaming children as guards.
+        assert_eq!(helpers.matches("Command::new(\"curl\")").count(), 2);
+        assert_eq!(helpers.matches("guarded_curl(").count(), 2 + 1);
+        assert_eq!(ollama.matches("Command::new(\"curl\")").count(), 3);
+        assert_eq!(ollama.matches("super::guarded_curl(").count(), 1);
+        assert_eq!(ollama.matches("GuardedChild::spawn(").count(), 2);
+        assert_eq!(ollama.matches("stream_end(child.finish())").count(), 5);
         for gone in [
             "\"no stdout from curl\".to_string()))?",
             "read error during chat: {e}\")))?",

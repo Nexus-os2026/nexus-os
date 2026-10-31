@@ -590,6 +590,10 @@ impl CodingRun {
         if self.verifier.phase.blocks_apply() {
             return Err(VerificationError::InvalidState);
         }
+        // M0-FIX F5: nothing is prepared after the owner's emergency stop.
+        if self.halt_if_stopped().is_err() {
+            return Err(VerificationError::EmergencyStopped);
+        }
         let verification = self.current_structural("prepare_verification")?;
         let binding = VerifierLaunchBinding::new(&verification, inputs);
         record(
@@ -638,6 +642,10 @@ impl CodingRun {
             (VerificationPhase::Materialized, Some(binding)) => binding,
             _ => return Err(VerificationError::InvalidState),
         };
+        if self.halt_if_stopped().is_err() {
+            self.verifier.reset();
+            return Err(VerificationError::EmergencyStopped);
+        }
         match self.current_structural("request_verification_approval") {
             Ok(verification)
                 if VerifierLaunchBinding::new(&verification, binding.inputs) == binding => {}
@@ -688,6 +696,10 @@ impl CodingRun {
             (VerificationPhase::Approved, Some(binding)) => binding,
             _ => return Err(VerificationError::InvalidState),
         };
+        if self.halt_if_stopped().is_err() {
+            self.verifier.reset();
+            return Err(VerificationError::EmergencyStopped);
+        }
         let verification = match self.current_structural("begin_verification") {
             Ok(verification) => verification,
             Err(error) => {

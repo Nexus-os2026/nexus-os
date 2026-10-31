@@ -299,14 +299,22 @@ fn drive(
         let Some(remaining) = budget.remaining() else {
             return Err(stop(run, WorkerError::Deadline));
         };
+        // M0-FIX F5: no turn starts after the owner's emergency stop.
+        run.halt_if_stopped().map_err(WorkerError::Run)?;
         budget.turns += 1;
         let answer = match model.complete(&messages, remaining, limits.max_response_bytes) {
             Ok(answer) => answer,
             Err(ModelError::Timeout) if budget.remaining().is_none() => {
                 return Err(stop(run, WorkerError::Deadline))
             }
+            Err(ModelError::Stopped) => {
+                run.halt_if_stopped().map_err(WorkerError::Run)?;
+                return Err(stop(run, WorkerError::Model(ModelError::Stopped)));
+            }
             Err(error) => return Err(stop(run, WorkerError::Model(error))),
         };
+        // An answer that returns after the stop is never used.
+        run.halt_if_stopped().map_err(WorkerError::Run)?;
         if budget.remaining().is_none() {
             return Err(stop(run, WorkerError::Deadline));
         }

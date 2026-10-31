@@ -187,6 +187,9 @@ impl GovernedControl {
 
     /// Engage and lift `stop` instead of the process's kernel authority.
     pub fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
+        if self.authority().runs().is_stopped() {
+            stop.engage();
+        }
         self.kernel_stop = stop;
         self
     }
@@ -375,6 +378,9 @@ impl GovernedControl {
     /// stopped too), then the records, which may only become owed (EL-1
     /// §6).
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        // The kernel's own work first (M0-FIX F5): the cognitive loop,
+        // coding runs and model calls halt and refuse new work.
+        self.kernel_stop.engage();
         let stopped = self.control.stop_effects(reason);
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
@@ -384,8 +390,15 @@ impl GovernedControl {
         cancelled
     }
 
+    /// Lift the emergency stop after the owner's native confirmation. The
+    /// kernel's stop is lifted only once the broker's stop is lifted too;
+    /// work either stop ended stays ended.
     pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        self.authority().resume(confirmer)
+        self.authority().resume(confirmer)?;
+        if !self.authority().runs().is_stopped() {
+            self.kernel_stop.lift();
+        }
+        Ok(())
     }
 
     /// The canonical scope for a grant request (identities pinned now).
