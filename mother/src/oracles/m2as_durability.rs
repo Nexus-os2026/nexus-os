@@ -23,7 +23,7 @@ use MissionState::*;
 /// so a mission that carried on would reach the port.
 const MARKERS: &str = "ASK-BUILDER-NETWORK ASK-VERIFIER-NETWORK";
 
-fn action() -> PendingAction {
+pub(super) fn action() -> PendingAction {
     PendingAction {
         run: "run-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a".into(),
         commitment: "cmt-5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a".into(),
@@ -80,7 +80,7 @@ impl JournalStore for Faulty {
 
 // ---------------------------------------------------------------- worlds
 
-fn keyed() -> Vec<Arc<KeyedLane>> {
+pub(super) fn keyed() -> Vec<Arc<KeyedLane>> {
     LaneRole::ALL
         .iter()
         .map(|role| Arc::new(KeyedLane::new(*role)))
@@ -89,7 +89,7 @@ fn keyed() -> Vec<Arc<KeyedLane>> {
 
 /// A Mother process over `store`, with a port of its own (a restart
 /// rebuilds the port).
-fn open_on(
+pub(super) fn open_on(
     store: impl JournalStore + 'static,
     journal: MemoryJournal,
     clock: Arc<ManualClock>,
@@ -114,7 +114,7 @@ fn open_on(
 }
 
 /// A new home whose journal sits on a disk that can fail.
-fn faulty_world() -> (World, Faulty) {
+pub(super) fn faulty_world() -> (World, Faulty) {
     let disk = Faulty::over(MemoryJournal::new());
     let w = open_on(
         disk.clone(),
@@ -127,7 +127,7 @@ fn faulty_world() -> (World, Faulty) {
 }
 
 /// Mother dies (no orderly shutdown) and a new process opens the journal.
-fn crash(w: &World) -> World {
+pub(super) fn crash(w: &World) -> World {
     try_crash(w).expect("the journal opens")
 }
 
@@ -142,7 +142,7 @@ fn try_crash(w: &World) -> Result<World, CoordinatorError> {
 
 /// Mother shuts down in order (the coordinator is taken by `close`), then
 /// a new process opens the journal.
-fn close_and_reopen(w: World) -> (Result<(), CoordinatorError>, World) {
+pub(super) fn close_and_reopen(w: World) -> (Result<(), CoordinatorError>, World) {
     let World {
         journal,
         clock,
@@ -158,7 +158,7 @@ fn close_and_reopen(w: World) -> (Result<(), CoordinatorError>, World) {
     (closed, w)
 }
 
-fn unfinished() -> Vec<MissionState> {
+pub(super) fn unfinished() -> Vec<MissionState> {
     MissionState::ALL
         .into_iter()
         .filter(|s| !s.is_terminal())
@@ -167,7 +167,7 @@ fn unfinished() -> Vec<MissionState> {
 
 /// A mission in `state` whose lanes would send effects if it carried on;
 /// a waiting one has its broker action journaled.
-fn reach(w: &World, state: MissionState) -> MissionId {
+pub(super) fn reach(w: &World, state: MissionState) -> MissionId {
     let advanced = |steps: usize| {
         let id = w.approved(contract_with(MARKERS));
         for _ in 0..steps {
@@ -205,7 +205,7 @@ fn adopted(w: &World) -> Vec<(MissionId, PendingAction)> {
         .collect()
 }
 
-fn performs(w: &World) -> usize {
+pub(super) fn performs(w: &World) -> usize {
     w.port
         .calls()
         .iter()
@@ -216,7 +216,7 @@ fn performs(w: &World) -> usize {
 /// Held after an unclean shutdown: in its state, and nothing but the
 /// Owner's resume or Stop moves it. No lane runs, nothing reaches the
 /// port, and Mother does not even ask the broker about a waited action.
-fn assert_held(w: &World, id: MissionId, state: MissionState, lanes: usize) {
+pub(super) fn assert_held(w: &World, id: MissionId, state: MissionState, lanes: usize) {
     assert_eq!(w.mother.state(id), Some(state), "{state:?}");
     assert_eq!(
         w.mother.held(id).as_deref(),
@@ -246,7 +246,7 @@ fn assert_held(w: &World, id: MissionId, state: MissionState, lanes: usize) {
     assert_eq!(w.keyed_calls(), lanes, "{state:?}: a lane ran");
 }
 
-fn events_of(w: &World, id: MissionId) -> Vec<Event> {
+pub(super) fn events_of(w: &World, id: MissionId) -> Vec<Event> {
     w.mother
         .journal()
         .unwrap()
@@ -666,7 +666,7 @@ fn m2as_no_clean_close_while_a_call_is_in_flight_and_nothing_after_close() {
 
 // ---------------------------------------------------------------- replay
 
-fn forged(lines: &[String], mission: MissionId, event: Event) -> Vec<String> {
+pub(super) fn forged(lines: &[String], mission: MissionId, event: Event) -> Vec<String> {
     let entries = crate::journal::verify(lines).unwrap();
     let prev = entries
         .last()
@@ -676,7 +676,7 @@ fn forged(lines: &[String], mission: MissionId, event: Event) -> Vec<String> {
     out
 }
 
-fn opens(lines: Vec<String>) -> Result<World, CoordinatorError> {
+pub(super) fn opens(lines: Vec<String>) -> Result<World, CoordinatorError> {
     let journal = MemoryJournal::new();
     journal.set_lines(lines);
     open_on(
@@ -687,7 +687,7 @@ fn opens(lines: Vec<String>) -> Result<World, CoordinatorError> {
     )
 }
 
-fn refused(lines: Vec<String>, what: &str) {
+pub(super) fn refused(lines: Vec<String>, what: &str) {
     assert!(
         matches!(
             opens(lines).err(),
@@ -697,7 +697,7 @@ fn refused(lines: Vec<String>, what: &str) {
     );
 }
 
-fn held_event() -> Event {
+pub(super) fn held_event() -> Event {
     Event::Held {
         reason: "unclean_shutdown".into(),
     }

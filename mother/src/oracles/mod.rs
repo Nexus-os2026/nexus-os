@@ -12,6 +12,7 @@ mod m2a_rebuild;
 mod m2a_review;
 mod m2a_waiting;
 mod m2as_durability;
+mod m2as_review;
 mod mn01;
 mod review;
 mod state;
