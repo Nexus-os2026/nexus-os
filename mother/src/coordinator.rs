@@ -1268,7 +1268,7 @@ impl<P: EffectPort> Coordinator<P> {
         // Every action handed back and withdrawn first; only then is any
         // closure journaled, so that a journal failure cannot leave a later
         // action unwithdrawn.
-        for (id, state, pending) in &open {
+        for (id, _, pending) in &open {
             let (run, commitment) = key(pending);
             let claims = open
                 .iter()
