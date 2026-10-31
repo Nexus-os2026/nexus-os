@@ -192,6 +192,10 @@ pub enum ActuatorError {
     #[error("action not handled by this actuator")]
     ActionNotHandled,
 
+    /// The action is closed: refused before any effect, with the reason.
+    #[error("refused: {0}")]
+    Closed(String),
+
     #[error("io error: {0}")]
     IoError(String),
 

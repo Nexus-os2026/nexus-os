@@ -54,11 +54,27 @@ pub struct Plan {
 /// Generates executable step plans from high-level goals.
 pub struct CognitivePlanner {
     llm: Box<dyn PlannerLlm>,
+    /// Whether the host injected a governed web-search backend, so
+    /// `WebSearch` is offered to agents holding `web.search`. Off by default:
+    /// web search is closed without one (M0-FIX F3).
+    web_search: bool,
 }
 
 impl CognitivePlanner {
     pub fn new(llm: Box<dyn PlannerLlm>) -> Self {
-        Self { llm }
+        Self {
+            llm,
+            web_search: false,
+        }
+    }
+
+    /// Offer `WebSearch` to agents holding `web.search`. Call this only
+    /// together with `RegistryExecutor::with_web_backend`, which injects the
+    /// governed backend that serves it; the executor refuses a search
+    /// without one either way.
+    pub fn with_governed_web_search(mut self) -> Self {
+        self.web_search = true;
+        self
     }
 
     /// Plan steps for a goal of the unit `ctx` given the agent's context.
@@ -190,7 +206,7 @@ RULES:
 3. Keep the plan minimal — use the fewest steps possible.
 4. Always end with an LlmQuery step that synthesizes the final answer from gathered data.
 5. Do NOT repeat steps. Do NOT add unnecessary file reads.
-6. NEVER hallucinate or fabricate data. Use tools to get REAL data. If you need system info, use ShellCommand. If you need web data, use WebSearch/WebFetch. NEVER make up numbers or pretend you executed something.
+6. NEVER hallucinate or fabricate data. Use tools to get REAL data. If you need system info, use ShellCommand. If you need web data, use an allowed web action; if none is allowed, say the data is unavailable. NEVER make up numbers or pretend you executed something.
 7. Do NOT include <think> tags or reasoning blocks. Output ONLY the JSON array.
 
 Each step object MUST have exactly these top-level fields:
@@ -215,8 +231,7 @@ For each action type, use ONLY these fields:
 - FileWrite: type, path, content
 - ShellCommand: type, command, args (array of strings)
 - CodeExecute: type, language, code, timeout_secs (optional)
-- WebSearch: type, query
-- WebFetch: type, url
+{web_search_fields}- WebFetch: type, url
 - ApiCall: type, method, url, body, headers (optional object e.g. {{"Authorization": "Bearer xxx"}})
 - MemoryStore: type, key, value, memory_type
 - MemoryRecall: type, query, memory_type
@@ -227,6 +242,11 @@ Do NOT include duplicate fields.
 Do NOT include any text outside the JSON array."#,
             allowed_actions = allowed_actions,
             action_types = self.allowed_action_types(&context.agent_capabilities),
+            web_search_fields = if self.offers_web_search(&context.agent_capabilities) {
+                "- WebSearch: type, query\n"
+            } else {
+                ""
+            },
         );
         // G8b diagnostic — TEMPORARY, remove after C3 verified
         let cwd_present = head.contains("Current working directory contents");
@@ -343,6 +363,12 @@ Each item must be:
         )
     }
 
+    /// Whether `WebSearch` is offered: a governed backend is injected and the
+    /// agent holds `web.search`.
+    fn offers_web_search(&self, capabilities: &[String]) -> bool {
+        self.web_search && has_capability(capabilities.iter().map(String::as_str), "web.search")
+    }
+
     fn allowed_actions_description(&self, capabilities: &[String]) -> String {
         let has =
             |required: &str| has_capability(capabilities.iter().map(String::as_str), required);
@@ -382,7 +408,7 @@ Each item must be:
                     .to_string(),
             );
         }
-        if has("web.search") {
+        if self.offers_web_search(capabilities) {
             actions.push(r#"- WebSearch: {"type": "WebSearch", "query": "..."}"#.to_string());
         }
         if has("web.read") {
@@ -425,7 +451,7 @@ Each item must be:
             actions.push("ShellCommand");
             actions.push("CodeExecute");
         }
-        if has("web.search") {
+        if self.offers_web_search(capabilities) {
             actions.push("WebSearch");
         }
         if has("web.read") {
@@ -1030,6 +1056,26 @@ mod tests {
         assert!(!planner
             .allowed_actions_description(&ctx.agent_capabilities)
             .contains("WebSearch"));
+    }
+
+    /// M0-FIX F3: with a governed backend injected, `WebSearch` is offered
+    /// again, but only to an agent that holds `web.search`.
+    #[test]
+    fn m0_f3_planner_offers_web_search_only_with_a_governed_backend() {
+        let planner = CognitivePlanner::new(Box::new(MockLlm("[]"))).with_governed_web_search();
+        let goal = AgentGoal::new("find the latest rust release".into(), 5);
+        let with = make_context(vec!["llm.query", "web.search"]);
+        let prompt = prompt_text(&planner, &goal, &with);
+        assert!(
+            prompt.contains(r#"- WebSearch: {"type": "WebSearch""#),
+            "{prompt}"
+        );
+        assert!(prompt.contains("- WebSearch: type, query\n"), "{prompt}");
+        assert!(planner
+            .allowed_action_types(&with.agent_capabilities)
+            .contains("WebSearch"));
+        let without = make_context(vec!["llm.query"]);
+        assert!(!prompt_text(&planner, &goal, &without).contains("WebSearch"));
     }
 
     #[test]
