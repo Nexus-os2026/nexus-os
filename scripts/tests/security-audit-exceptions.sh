@@ -66,5 +66,17 @@ printf '[advisories]\nignore = [\n]\n' > "$tmp/deny.toml"
 SHIM_DENY_STATUS=1 run
 [ "$status" -ne 0 ] || fail "a cargo-deny failure was masked on an empty list"
 
+# 4. A malformed entry (an advisory ID not in the canonical `id = "..."` form,
+#    which cargo-deny might honour but cargo-audit would not receive) is
+#    rejected rather than silently ignored.
+printf '[advisories]\nignore = ["RUSTSEC-2099-0001"]\n' > "$tmp/deny.toml"
+run
+[ "$status" -ne 0 ] || fail "a malformed exception entry was accepted"
+grep -q '^audit --file' "$tmp/log" && fail "scanners ran despite a malformed exception entry"
+# A mention in a comment is not an entry.
+printf '# RUSTSEC-2099-0001 was removed\n[advisories]\nignore = []\n' > "$tmp/deny.toml"
+run
+[ "$status" -eq 0 ] || fail "a commented advisory ID was treated as an entry (status $status): $out"
+
 if [ "$failures" -ne 0 ]; then echo "security-audit-exceptions: $failures failure(s)" >&2; exit 1; fi
 echo "security-audit-exceptions: ok"
