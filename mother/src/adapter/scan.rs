@@ -259,12 +259,21 @@ fn scan_no_production_consent_confirmer() {
         if test_code {
             continue;
         }
-        for body in confirm_bodies(&code(&text)) {
+        let text = code(&text);
+        for body in confirm_bodies(&text) {
             assert_ne!(body, "true", "{rel}: an always-yes confirmer");
             assert!(!body.ends_with(";true"), "{rel}: an always-yes confirmer");
-            if path.starts_with(&broker) {
-                assert_eq!(body, "false", "{rel}: a broker confirmer that may say yes");
-                broker_answers += 1;
+        }
+        // Correction after the first run (see the commit): in the broker,
+        // the confirmers are the `ControlConfirmer` trait (its default
+        // answer) and its implementations; the broker's own entry points
+        // named `confirm_mission` ask a confirmer and are not one.
+        if path.starts_with(&broker) {
+            for block in confirmer_blocks(&text) {
+                for body in confirm_bodies(&block) {
+                    assert_eq!(body, "false", "{rel}: a broker confirmer that may say yes");
+                    broker_answers += 1;
+                }
             }
         }
     }
@@ -272,6 +281,53 @@ fn scan_no_production_consent_confirmer() {
         broker_answers >= 1,
         "the broker's ControlConfirmer::confirm_mission default was not found"
     );
+}
+
+/// The text of each `trait ControlConfirmer` and `impl … ControlConfirmer
+/// for …` block in `text`.
+fn confirmer_blocks(text: &str) -> Vec<String> {
+    let trait_of = format!("{} {}", "trait", "ControlConfirmer");
+    let impl_of = format!("{}{}", "ControlConfirmer", " for ");
+    let mut blocks = Vec::new();
+    for needle in [trait_of, impl_of] {
+        let mut rest = text;
+        while let Some(at) = rest.find(needle.as_str()) {
+            let after = &rest[at..];
+            let open = after.find('{').unwrap();
+            let mut depth = 0;
+            let mut end = open;
+            for (i, c) in after[open..].char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + i;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            blocks.push(after[open..=end].to_string());
+            rest = &after[end..];
+        }
+    }
+    blocks
+}
+
+#[test]
+fn scan_the_confirmer_blocks_are_the_trait_and_its_impls() {
+    let text = format!(
+        "pub {t} {{\n fn confirm_mission(&self, _: &M) -> bool {{ false }}\n}}\nimpl Other {{ pub fn confirm_mission(&self, r: &M, c: &dyn X) -> R {{ ask(r, c) }} }}\nimpl {c} for Yes {{ fn confirm_mission(&self, _: &M) -> bool {{ true }} }}",
+        t = format!("{} {}", "trait", "ControlConfirmer"),
+        c = "ControlConfirmer",
+    );
+    let bodies: Vec<String> = confirmer_blocks(&text)
+        .iter()
+        .flat_map(|b| confirm_bodies(b))
+        .collect();
+    assert_eq!(bodies, vec!["false".to_string(), "true".to_string()]);
 }
 
 /// Each `fn <name>(` body in `text`, without whitespace.
