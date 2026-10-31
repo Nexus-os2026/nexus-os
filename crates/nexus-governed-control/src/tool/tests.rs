@@ -506,3 +506,20 @@ fn speech_is_synthesized_when_the_local_engine_is_installed() {
     )
     .is_err());
 }
+
+/// Oracle: the broker accepts an executable only by its canonical path, so a
+/// fixture that names a symlink (as rust-coreutils hosts install `env`,
+/// `sleep`, ...) can never run. Every fixture must name a canonical path.
+#[test]
+fn every_fixture_executable_is_named_by_its_canonical_path() {
+    for definition in fixtures() {
+        let canonical = std::fs::canonicalize(definition.executable)
+            .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
+        assert_eq!(
+            canonical,
+            std::path::Path::new(definition.executable),
+            "{}: the fixture names a non-canonical executable",
+            definition.key
+        );
+    }
+}
