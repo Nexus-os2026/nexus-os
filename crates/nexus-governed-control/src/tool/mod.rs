@@ -27,7 +27,7 @@ use crate::executable::{inspect, resolve, Trust};
 use crate::runtime_root::RuntimeRoot;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// What a tool's builder produced from its typed input.
