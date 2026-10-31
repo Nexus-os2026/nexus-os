@@ -140,6 +140,14 @@ Coordinator rules the oracles pin:
   missions, after which neither is handed back and a stopped mission's
   genuine request stays approvable until it expires (the Owner's emergency
   stop withdraws it).
+- **Known limit: the adopted deadline (Owner decision, exact clamp in
+  M2b).** A port that takes back a journaled action clamps its deadline to
+  the action's remaining lifetime by the broker's wall-clock expiry, not to
+  the broker's original monotonic deadline, which the broker's public view
+  does not expose. With a wall clock set back since the action was created,
+  the clamp is looser than the broker's deadline (the port may report
+  Waiting a little longer; the broker still refuses an expired action). No
+  broker change in M2a.
 - **Known limit: the pre-journal window.** If Mother dies after the broker
   left an action waiting but before its identity was journaled, the
   mission is blocked on restart (`effect_outcome_unknown` before the
