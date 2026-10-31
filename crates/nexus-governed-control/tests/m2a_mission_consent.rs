@@ -83,6 +83,27 @@ impl ControlConfirmer for Legacy {
     }
 }
 
+/// Presses the owner's emergency stop while asked, then says yes.
+struct StopsWhileAsked<'a>(&'a GovernedControl);
+impl ControlConfirmer for StopsWhileAsked<'_> {
+    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+        false
+    }
+    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+        false
+    }
+    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
+        self.0.emergency_stop();
+        true
+    }
+}
+
 fn request(hash: &str, request: &str) -> MissionConfirmation {
     MissionConfirmation {
         contract_hash: hash.into(),
@@ -244,6 +265,17 @@ fn m2a_mission_consent_is_the_broker_s_and_is_recorded() {
         owner.asked(),
         asked,
         "the owner was asked an invalid request"
+    );
+    assert_eq!(mission_records(&history).len(), 4);
+
+    // Review MINOR-3 (added after review): an emergency stop pressed while
+    // the owner is asked overtakes a yes: no approval and no consent record.
+    let stops = StopsWhileAsked(&control);
+    assert_eq!(
+        control
+            .confirm_mission(&request(HASH_A, "msn-000006/7/6"), &stops)
+            .err(),
+        Some(AuthorityError::EmergencyStopped)
     );
     assert_eq!(mission_records(&history).len(), 4);
 

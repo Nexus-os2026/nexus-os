@@ -8,6 +8,7 @@ mod deny;
 mod journal;
 mod lanes;
 mod m2a_consent;
+mod m2a_review;
 mod m2a_waiting;
 mod mn01;
 mod review;
