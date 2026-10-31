@@ -8,7 +8,9 @@ use crate::authority::effect::EffectClass;
 use crate::authority::AuthorityError;
 use crate::control::EffectOutput;
 use crate::executable::Trust;
-use crate::harness_tests::{harness, temp_root, Harness, TempRoot, Yes};
+use crate::harness_tests::{
+    canonical_definitions, canonical_tool, harness, temp_root, Harness, TempRoot, Yes,
+};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -52,38 +54,38 @@ fn fixture(
 }
 
 fn fixtures() -> Vec<ToolDefinition> {
-    let mut all = catalog::production();
+    let mut all = canonical_definitions(catalog::production());
     all.push(fixture(
         "fixture.environment",
-        "/usr/bin/env",
+        canonical_tool("env"),
         no_args,
         Duration::from_secs(10),
         64 * 1024,
     ));
     all.push(fixture(
         "fixture.sleep.short",
-        "/usr/bin/sleep",
+        canonical_tool("sleep"),
         sleep_long,
         Duration::from_millis(300),
         1024,
     ));
     all.push(fixture(
         "fixture.sleep.long",
-        "/usr/bin/sleep",
+        canonical_tool("sleep"),
         sleep_long,
         Duration::from_secs(60),
         1024,
     ));
     all.push(fixture(
         "fixture.noisy",
-        "/usr/bin/yes",
+        canonical_tool("yes"),
         no_args,
         Duration::from_secs(10),
         1024,
     ));
     all.push(fixture(
         "fixture.false",
-        "/usr/bin/false",
+        canonical_tool("false"),
         no_args,
         Duration::from_secs(10),
         1024,
@@ -209,7 +211,7 @@ fn nothing_runs_without_a_grant_or_with_untyped_input() {
 fn copied_true(dir: &std::path::Path) -> &'static str {
     std::fs::create_dir_all(dir).unwrap();
     let path = std::fs::canonicalize(dir).unwrap().join("fixture-true");
-    std::fs::copy("/usr/bin/true", &path).unwrap();
+    std::fs::copy(canonical_tool("true"), &path).unwrap();
     Box::leak(path.to_string_lossy().into_owned().into_boxed_str())
 }
 
@@ -246,7 +248,7 @@ fn a_changed_executable_needs_a_new_grant_and_fails_a_pending_run() {
     h.control
         .authorize(view.id, &h.agent, h.run, &Yes::new(true))
         .unwrap();
-    std::fs::copy("/usr/bin/false", executable).unwrap();
+    std::fs::copy(canonical_tool("false"), executable).unwrap();
     assert_eq!(
         h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
         AuthorityError::TargetChanged
@@ -303,7 +305,21 @@ fn cancelling_the_run_ends_a_running_tool() {
     let (agent, run) = (h.agent.clone(), h.run);
     let started = Instant::now();
     let worker = std::thread::spawn(move || control.execute(view.id, &agent, run));
-    std::thread::sleep(Duration::from_millis(200));
+    // Cancel only once the execution has begun (readiness, not a fixed
+    // sleep: pinning a large multicall executable can take longer than any
+    // fixed pause), so the cancellation reaches a running tool.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while h
+        .control
+        .authority()
+        .commitments()
+        .view(view.id)
+        .map(|v| v.state)
+        != Some(CommitmentState::Executing)
+    {
+        assert!(Instant::now() < deadline, "the execution never began");
+        std::thread::sleep(Duration::from_millis(5));
+    }
     h.control.cancel_run(h.run).unwrap();
     assert_eq!(
         worker.join().unwrap().unwrap_err().cause(),
@@ -342,7 +358,7 @@ fn a_tool_is_not_spawned_once_its_run_is_cancelled() {
     let mut definitions = fixtures();
     definitions.push(fixture(
         "fixture.touch",
-        "/usr/bin/touch",
+        canonical_tool("touch"),
         touch_marker,
         Duration::from_secs(10),
         1024,
@@ -505,4 +521,21 @@ fn speech_is_synthesized_when_the_local_engine_is_installed() {
         json!({ "text": "x", "voice": "../../etc" })
     )
     .is_err());
+}
+
+/// Oracle: the broker accepts an executable only by its canonical path, so a
+/// fixture that names a symlink (as rust-coreutils hosts install `env`,
+/// `sleep`, ...) can never run. Every fixture must name a canonical path.
+#[test]
+fn every_fixture_executable_is_named_by_its_canonical_path() {
+    for definition in fixtures() {
+        let canonical = std::fs::canonicalize(definition.executable)
+            .unwrap_or_else(|e| panic!("{}: {e}", definition.key));
+        assert_eq!(
+            canonical,
+            std::path::Path::new(definition.executable),
+            "{}: the fixture names a non-canonical executable",
+            definition.key
+        );
+    }
 }

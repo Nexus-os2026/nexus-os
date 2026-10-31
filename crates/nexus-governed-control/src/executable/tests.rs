@@ -1,21 +1,25 @@
 //! Executable identity on the real filesystem.
 use super::*;
+use crate::harness_tests::canonical_tool;
 
 #[test]
 fn system_executables_are_pinned_by_content_and_location() {
-    let a = inspect(Path::new("/usr/bin/sha256sum"), Trust::System).unwrap();
-    let b = inspect(Path::new("/usr/bin/sha256sum"), Trust::System).unwrap();
+    let sha256sum = Path::new(canonical_tool("sha256sum"));
+    let env = Path::new(canonical_tool("env"));
+    let a = inspect(sha256sum, Trust::System).unwrap();
+    let b = inspect(sha256sum, Trust::System).unwrap();
     assert_eq!(a, b, "stable");
-    let other = inspect(Path::new("/usr/bin/env"), Trust::System).unwrap();
+    let other = inspect(env, Trust::System).unwrap();
     assert_ne!(a.digest, other.digest);
-    assert!(
-        inspect(Path::new("usr/bin/env"), Trust::System).is_err(),
-        "relative"
-    );
-    assert!(
-        inspect(Path::new("/usr/bin/../bin/env"), Trust::System).is_err(),
-        "not canonical"
-    );
+    let relative = env.strip_prefix("/").unwrap();
+    assert!(inspect(relative, Trust::System).is_err(), "relative");
+    // The same file, named through a `..` detour.
+    let dir = env.parent().unwrap();
+    let detour = dir
+        .join("..")
+        .join(dir.file_name().unwrap())
+        .join(env.file_name().unwrap());
+    assert!(inspect(&detour, Trust::System).is_err(), "not canonical");
     assert!(inspect(
         Path::new("/usr/bin/definitely-not-installed"),
         Trust::System
@@ -32,7 +36,7 @@ fn a_user_writable_location_is_not_trusted() {
     let dir = std::env::temp_dir().join(format!("nexus-p3-exe-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let copy = dir.join("true-copy");
-    std::fs::copy("/usr/bin/true", &copy).unwrap();
+    std::fs::copy(canonical_tool("true"), &copy).unwrap();
     let copy = std::fs::canonicalize(&copy).unwrap();
     assert_eq!(
         inspect(&copy, Trust::System).unwrap_err(),

@@ -9,7 +9,7 @@ use crate::authority::run::RunOrigin;
 use crate::authority::AuthorityError;
 use crate::broker::Vault;
 use crate::egress::EgressIntent;
-use crate::harness_tests::{temp_root, Reply, TempRoot, TestServer, Yes};
+use crate::harness_tests::{canonical_definitions, temp_root, Reply, TempRoot, TestServer, Yes};
 use crate::planned::{classify, Disposition};
 use crate::tool::ToolIntent;
 use nexus_kernel::cognitive::types::BrowserAction;
@@ -22,13 +22,20 @@ use std::time::Duration;
 fn control() -> (GovernedControl, Arc<MemoryEvidence>, TempRoot) {
     let root = temp_root("front-door");
     let evidence = Arc::new(MemoryEvidence::new(10_000));
-    let control = GovernedControl::with_secrets(
+    let mut control = GovernedControl::with_secrets(
         root.0.path(),
         Vault::Disabled.source(),
         evidence.clone(),
         Arc::new(SystemClock::default()),
     )
     .unwrap();
+    // The production catalog names `/usr/bin/<tool>`, which is a symlink on
+    // some hosts and so refused by the broker. Run the same tools by their
+    // canonical paths; every other definition and check is the production one.
+    control.tools = crate::tool::Tools::new(
+        canonical_definitions(crate::tool::catalog::production()),
+        root.0.clone(),
+    );
     (control, evidence, root)
 }
 
