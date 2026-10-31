@@ -221,29 +221,98 @@ pub(crate) fn checked_route_endpoint(
     Ok(url.as_str().to_string())
 }
 
+/// M0-FIX F5: a model call is work admitted under the process's
+/// emergency-stop authority: refused while a stop is in force.
+pub(crate) fn admit_model_call() -> Result<nexus_kernel::emergency_stop::StopWatch, AgentError> {
+    model_stop_authority()
+        .admit()
+        .map_err(|error| AgentError::SupervisorError(error.to_string()))
+}
+
+/// The authority model calls are admitted under: the process's, or in a
+/// test the thread's own (tests must not engage the process's authority).
+fn model_stop_authority() -> std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority> {
+    #[cfg(test)]
+    if let Some(stop) = TEST_STOP.with(|slot| slot.borrow().clone()) {
+        return stop;
+    }
+    nexus_kernel::emergency_stop::StopAuthority::global()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_STOP: std::cell::RefCell<
+        Option<std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority>>,
+    > = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `body` with the model calls this thread makes admitted under `stop`.
+#[cfg(test)]
+pub(crate) fn with_test_stop<T>(
+    stop: std::sync::Arc<nexus_kernel::emergency_stop::StopAuthority>,
+    body: impl FnOnce() -> T,
+) -> T {
+    TEST_STOP.with(|slot| *slot.borrow_mut() = Some(stop));
+    let out = body();
+    TEST_STOP.with(|slot| *slot.borrow_mut() = None);
+    out
+}
+
+/// The error of a guarded curl child: refused by, or ended by, the
+/// emergency stop (its cleanup outcome included), or not started.
+pub(crate) fn guarded_error(error: nexus_kernel::emergency_stop::GuardedOutputError) -> AgentError {
+    use nexus_kernel::emergency_stop::{GuardError, GuardedOutputError};
+    AgentError::SupervisorError(match error {
+        GuardedOutputError::Guard(GuardError::Spawn(error)) => {
+            format!("curl execution failed: {error}")
+        }
+        other => other.to_string(),
+    })
+}
+
+/// Run a curl child to completion as a model call the emergency stop
+/// terminates (M0-FIX F5).
+pub(crate) fn guarded_curl(
+    command: &mut Command,
+    stdin: Option<&[u8]>,
+) -> Result<std::process::Output, AgentError> {
+    let watch = admit_model_call()?;
+    nexus_kernel::emergency_stop::guarded_output(
+        command,
+        stdin,
+        &watch,
+        nexus_kernel::emergency_stop::HaltArea::ModelCall,
+    )
+    .map_err(guarded_error)
+}
+
 pub(crate) fn curl_get_status(endpoint: &str, route: CurlRoute) -> Result<u16, AgentError> {
     let endpoint = checked_route_endpoint(endpoint, route)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
     // Final Gate item B: no redirect is followed; the checked address is the
     // one contacted.
-    let output = Command::new("curl")
-        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(route.args())
-        .args([
-            "-sS",
-            "-m",
-            "5",
-            "--max-filesize",
-            "1048576",
-            "-o",
-            "/dev/null",
-            "-w",
-            "%{http_code}",
-            "--",
-        ])
-        .arg(&endpoint)
-        .output()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+    let output = guarded_curl(
+        Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(route.args())
+            .args([
+                "-sS",
+                "-m",
+                "5",
+                "--max-filesize",
+                "1048576",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "--",
+            ])
+            .arg(&endpoint)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+        None,
+    )?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
@@ -352,25 +421,9 @@ pub(crate) fn curl_post_json_with_timeout(
         AgentError::SupervisorError(format!("failed to encode request body: {error}"))
     })?;
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
-
-    // Pipe body via stdin to avoid OS ARG_MAX limits with large payloads (e.g. base64 images)
-    if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
-        if let Err(error) = stdin.write_all(encoded_body.as_bytes()) {
-            drop(stdin);
-            reap_child(&mut child);
-            return Err(AgentError::SupervisorError(format!(
-                "failed to write body to curl stdin: {error}"
-            )));
-        }
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+    // The body goes to stdin to avoid OS ARG_MAX limits with large payloads
+    // (e.g. base64 images); the child is a model call the stop terminates.
+    let output = guarded_curl(&mut command, Some(encoded_body.as_bytes()))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
@@ -397,15 +450,6 @@ pub(crate) fn curl_post_json_with_timeout(
         AgentError::SupervisorError(format!("invalid HTTP status from curl: {error}"))
     })?;
     Ok((status, json_response(body_raw.trim())?))
-}
-
-/// Stop and reap a curl child that an early error leaves behind (Final Gate
-/// item I), so no request keeps running unowned and no child stays unreaped.
-/// Killing a child that already exited is not an error here; the caller
-/// reports its own failure either way.
-pub(crate) fn reap_child(child: &mut std::process::Child) {
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// A provider's JSON response body: `null` when empty, and otherwise JSON,
@@ -560,6 +604,10 @@ pub(crate) fn post_json_in_process(
     body: &Value,
     timeout_secs: u32,
 ) -> Result<(u16, Value), AgentError> {
+    // M0-FIX F5: no new model call while the owner's emergency stop is in
+    // force. (An in-process call already in flight is not interrupted: a
+    // documented residual gap.)
+    admit_model_call()?;
     post_json_bounded(
         endpoint,
         headers,
@@ -629,11 +677,50 @@ fn post_json_bounded(
 /// own uses rustls with the bundled webpki roots.
 pub(crate) fn credential_client(
     timeout: std::time::Duration,
-) -> reqwest::Result<reqwest::blocking::Client> {
-    reqwest::blocking::Client::builder()
+) -> Result<AdmittedClient, AgentError> {
+    // M0-FIX F5: every in-process provider request is admitted under the
+    // stop authority before its client exists: refused while a stop is in
+    // force. A request already sent is not interrupted; it ends within the
+    // client's finite timeout.
+    let watch = admit_model_call()?;
+    let client = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
+        .map_err(|error| {
+            AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
+        })?;
+    Ok(AdmittedClient { client, watch })
+}
+
+/// M0-FIX F5: an in-process provider client admitted under the stop
+/// authority, with the watch its retries and waits observe.
+pub(crate) struct AdmittedClient {
+    client: reqwest::blocking::Client,
+    watch: nexus_kernel::emergency_stop::StopWatch,
+}
+
+impl AdmittedClient {
+    /// Refuse a further request (a retry) once a stop was engaged.
+    pub(crate) fn check(&self) -> Result<(), AgentError> {
+        self.watch
+            .check()
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))
+    }
+
+    /// The watch a retry wait observes: it ends at once when a stop is
+    /// engaged.
+    pub(crate) fn stop_watch(&self) -> &nexus_kernel::emergency_stop::StopWatch {
+        &self.watch
+    }
+}
+
+impl std::ops::Deref for AdmittedClient {
+    type Target = reqwest::blocking::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
+    }
 }
 
 /// Send one bounded request (see [`post_json_in_process`]) and read its
@@ -645,8 +732,7 @@ fn send_bounded(
     timeout: std::time::Duration,
     max_bytes: u64,
 ) -> Result<(u16, Vec<u8>), String> {
-    let client =
-        credential_client(timeout).map_err(|error| request_error("could not start", error))?;
+    let client = credential_client(timeout).map_err(|error| error.to_string())?;
     // The client's timeout bounds each wait (the headers, then every read)
     // separately; the request's own timeout bounds the whole exchange, from
     // connecting until the body has been read.
@@ -1654,8 +1740,12 @@ mod tests {
     }
 
     /// Final Gate item I: every early error after a curl child starts stops
-    /// and reaps it (`reap_child`) instead of returning with the child still
-    /// running and unreaped. The pre-repair `?` returns are gone.
+    /// and reaps it instead of returning with the child still running and
+    /// unreaped. The pre-repair `?` returns are gone. Since M0-FIX F5 every
+    /// curl child is a kernel `GuardedChild` (directly, or through
+    /// `guarded_curl`): the emergency stop terminates it, `finish` reaps it,
+    /// and dropping the guard on an early return kills and reaps it. No raw
+    /// `spawn` or `output` of a child remains in these files.
     #[test]
     fn p0_fg_curl_children_are_reaped_on_early_errors() {
         let (helpers, ollama) = (include_str!("mod.rs"), include_str!("ollama.rs"));
@@ -1678,8 +1768,23 @@ mod tests {
         };
         let helpers = production(helpers);
         let ollama = production(ollama);
-        assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
-        assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
+        for source in [&helpers, &ollama] {
+            assert!(!source.contains(".spawn()"), "a raw child spawn remains");
+            assert!(!source.contains(".output()"), "a raw child output remains");
+            assert!(
+                !source.contains("wait_with_output"),
+                "a raw child wait remains"
+            );
+        }
+        // Every curl child is guarded: two through `guarded_curl` here
+        // (status and JSON POST) and one in Ollama's JSON GET, and the two
+        // streaming children as guards.
+        assert_eq!(helpers.matches("Command::new(\"curl\")").count(), 2);
+        assert_eq!(helpers.matches("guarded_curl(").count(), 2 + 1);
+        assert_eq!(ollama.matches("Command::new(\"curl\")").count(), 3);
+        assert_eq!(ollama.matches("super::guarded_curl(").count(), 1);
+        assert_eq!(ollama.matches("GuardedChild::spawn(").count(), 2);
+        assert_eq!(ollama.matches("stream_end(child.finish())").count(), 5);
         for gone in [
             "\"no stdout from curl\".to_string()))?",
             "read error during chat: {e}\")))?",
@@ -1904,5 +2009,194 @@ mod tests {
             .read_to_end(&mut over)
             .unwrap_err();
         assert_eq!(error.to_string(), "the response is larger than 5 bytes");
+    }
+
+    // ── M0-FIX F5 review: every provider entry point is admitted ──────
+
+    /// The four in-process credentialed paths (Claude's query and stream,
+    /// Cohere, the OpenAI-compatible family) are refused while the stop is
+    /// in force, before anything reaches the server; after the owner's
+    /// resume they run again. Each test uses its own stop authority.
+    #[test]
+    fn m0_f5_in_process_providers_are_refused_while_stopped() {
+        use nexus_kernel::emergency_stop::StopAuthority;
+        let stop = StopAuthority::new();
+        stop.engage();
+        let listeners: Vec<_> = (0..4).map(|_| quiet_listener()).collect();
+        let bases: [String; 4] = std::array::from_fn(|i| listeners[i].1.clone());
+        let outcomes = super::with_test_stop(stop.clone(), || {
+            provider_outcomes(bases, Duration::from_secs(5), 4096)
+        });
+        for (outcome, (listener, _)) in outcomes.iter().zip(&listeners) {
+            assert!(outcome.contains("emergency stop"), "{outcome}");
+            assert_never_contacted(listener);
+        }
+        stop.lift();
+        let servers: Vec<_> = (0..4)
+            .map(|_| {
+                serve_once(
+                    b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_vec(),
+                )
+            })
+            .collect();
+        let bases: [String; 4] = std::array::from_fn(|i| servers[i].0.clone());
+        let outcomes = super::with_test_stop(stop.clone(), || {
+            provider_outcomes(bases, Duration::from_secs(5), 4096)
+        });
+        for (outcome, (_, server)) in outcomes.iter().zip(servers) {
+            assert!(!outcome.contains("emergency stop"), "{outcome}");
+            assert!(
+                server.join().unwrap().contains("POST"),
+                "no request after the resume"
+            );
+        }
+    }
+
+    /// Claude's retry loop does not open a new connection after the stop:
+    /// a stop engaged once the first (retryable) answer is sent ends the
+    /// call without a second request.
+    #[test]
+    fn m0_f5_claude_does_not_retry_after_the_stop() {
+        use nexus_kernel::emergency_stop::StopAuthority;
+        use std::io::{Read, Write};
+        let stop = StopAuthority::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut byte = [0u8; 1];
+                while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    request.push(byte[0]);
+                }
+                let head = String::from_utf8_lossy(&request).to_lowercase();
+                let length = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                let mut body = vec![0u8; length];
+                let _ = stream.read_exact(&mut body);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 529 Overloaded\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                drop(stream);
+                stop.engage();
+                listener.set_nonblocking(true).unwrap();
+                listener
+            })
+        };
+        let result = super::with_test_stop(stop.clone(), || {
+            super::claude::ClaudeProvider::new(Some("k".to_string())).query_bounded(
+                Some(&format!("{base}/v1/messages")),
+                "p",
+                1,
+                "m",
+                Duration::from_secs(30),
+                4096,
+            )
+        });
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("emergency stop"), "{error}");
+        let listener = server.join().unwrap();
+        assert_never_contacted(&listener);
+    }
+
+    /// Structural guard: no provider entry point reaches the network or a
+    /// model without admission under the stop authority.
+    /// - Every in-process HTTP client is built by `credential_client`
+    ///   (pinned by the Final Gate item C guard), which admits first.
+    /// - Every curl child goes through `guarded_curl` or a `GuardedChild`
+    ///   admitted in the same function (pinned by the item I guard), and no
+    ///   other provider file starts a process.
+    /// - `post_json_in_process` admits.
+    /// - Claude's retry waits on the stop watch, never a blind sleep, and
+    ///   re-checks before each retry.
+    /// - In-process inference (Flash, LocalSlm) admits before it runs.
+    #[test]
+    fn m0_f5_every_provider_path_is_admitted() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/providers");
+        let production = |name: &str| {
+            std::fs::read_to_string(dir.join(name))
+                .unwrap()
+                .replace("\r\n", "\n")
+                .split("#[cfg(test)]\nmod tests")
+                .next()
+                .unwrap()
+                .to_string()
+        };
+        let body_of = |source: &str, signature: &str| {
+            let start = source
+                .find(signature)
+                .unwrap_or_else(|| panic!("{signature}"));
+            let rest = &source[start..];
+            let end = rest
+                .find("\n}\n")
+                .or_else(|| rest.find("\n    }\n"))
+                .unwrap();
+            rest[..end].to_string()
+        };
+        let helpers = production("mod.rs");
+        let client = body_of(&helpers, "pub(crate) fn credential_client(");
+        let admit = client
+            .find("admit_model_call()")
+            .expect("credential_client admits");
+        assert!(
+            admit < client.find("Client::builder()").unwrap(),
+            "{client}"
+        );
+        for signature in [
+            "pub(crate) fn post_json_in_process(",
+            "pub(crate) fn guarded_curl(",
+        ] {
+            assert!(
+                body_of(&helpers, signature).contains("admit_model_call()?"),
+                "{signature}"
+            );
+        }
+        let ollama = production("ollama.rs");
+        for signature in ["pub fn chat_stream<", "pub fn pull_model<"] {
+            assert!(
+                body_of(&ollama, signature).contains("admit_model_call()?"),
+                "{signature}"
+            );
+        }
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            if !name.ends_with(".rs") || name == "mod.rs" || name == "ollama.rs" {
+                continue;
+            }
+            let source = production(&name);
+            for spawn in [
+                concat!("Command", "::new("),
+                concat!("process::", "Command"),
+            ] {
+                assert!(!source.contains(spawn), "{name} starts a process");
+            }
+        }
+        let claude = production("claude.rs");
+        assert!(
+            !claude.contains("thread::sleep"),
+            "Claude retries after a blind sleep"
+        );
+        assert!(
+            claude.contains("wait_halted_timeout"),
+            "Claude's retry ignores the stop"
+        );
+        let flash = production("flash.rs");
+        let query = body_of(&flash, "    fn query(&self, prompt: &str");
+        assert!(
+            query.contains("admit_model_call()?"),
+            "Flash inference is not admitted"
+        );
+        let local_slm = production("local_slm.rs");
+        let query = body_of(&local_slm, "    fn query(&self, prompt: &str");
+        assert!(
+            query.contains("admit_model_call()?"),
+            "LocalSlm inference is not admitted"
+        );
     }
 }

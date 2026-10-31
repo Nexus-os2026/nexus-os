@@ -86,12 +86,7 @@ pub(super) fn execute_bounded(
             .insert((*header_name).to_string(), header_value.clone());
     }
 
-    let client = super::credential_client(timeout).map_err(|error| {
-        AgentError::SupervisorError(format!(
-            "failed to build HTTP client for {}: {error}",
-            query.provider_name
-        ))
-    })?;
+    let client = super::credential_client(timeout)?;
 
     eprintln!(
         "[nexus-llm][governance] {}::complete endpoint={}",

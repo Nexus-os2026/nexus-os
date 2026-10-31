@@ -1367,6 +1367,8 @@ impl LocalSlmProvider {
 
 impl LlmProvider for LocalSlmProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        // M0-FIX F5: no inference while the owner's emergency stop is in force.
+        super::admit_model_call()?;
         // Get the active loaded model
         let active = self
             .active_model

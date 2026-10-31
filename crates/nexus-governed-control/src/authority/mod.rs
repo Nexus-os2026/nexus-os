@@ -374,7 +374,12 @@ impl Authority {
     /// number is exhausted, and whether the stop before it was lifted.
     /// Everything takes effect first, unconditionally; only then are the
     /// records written, and they may only become owed (EL-1 §6).
-    pub fn emergency_stop(&self) -> usize {
+    /// Tests only (M0-FIX F5): the owner's Stop goes through
+    /// `GovernedControl::emergency_stop`, which also engages the kernel's
+    /// stop; this authority-level stop alone would not, so production code
+    /// cannot call it.
+    #[cfg(test)]
+    pub(crate) fn emergency_stop(&self) -> usize {
         let stopped = self.stop_effects(None);
         let cancelled = stopped.cancelled;
         self.write_stop_records(stopped);

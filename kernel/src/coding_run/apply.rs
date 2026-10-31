@@ -222,6 +222,8 @@ pub enum Refusal {
     VerificationInProgress,
     /// A sandboxed verification's cleanup is unconfirmed.
     VerificationCleanupFailed,
+    /// The owner's emergency stop ended the run or is in force (M0-FIX F5).
+    EmergencyStopped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -462,7 +464,11 @@ impl CodingRun {
         grant: ProjectGrant,
         storage: &StagingParent,
     ) -> Result<ApplyReport, ApplyError> {
-        let result = if approval.kind == ConfirmationKind::Apply {
+        // M0-FIX F5: refused, before any write, by the emergency stop.
+        let result = if self.halt_if_stopped().is_err() {
+            self.approved = None;
+            Err(refused(Refusal::EmergencyStopped))
+        } else if approval.kind == ConfirmationKind::Apply {
             self.apply_inner(approval.binding, &grant, storage)
         } else {
             self.approved = None;
@@ -899,7 +905,11 @@ impl CodingRun {
         approval: OwnerApproval,
         grant: ProjectGrant,
     ) -> Result<ApplyReport, ApplyError> {
-        let result = if approval.kind == ConfirmationKind::Restore {
+        // M0-FIX F5: refused, before any write, while the stop is in force.
+        let result = if self.halt_if_stopped().is_err() {
+            self.restore_approved = None;
+            Err(refused(Refusal::EmergencyStopped))
+        } else if approval.kind == ConfirmationKind::Restore {
             self.restore_inner(approval.binding, &grant)
         } else {
             self.restore_approved = None;

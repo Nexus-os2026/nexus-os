@@ -941,3 +941,104 @@ fn an_agent_action_never_runs_in_an_owner_run() {
         AgentOutcome::Done(_)
     ));
 }
+
+/// M0-FIX F5: the owner's emergency stop is the kernel's stop too. It
+/// engages the kernel's stop authority (halting the cognitive loop, coding
+/// runs and model calls that observe it), and only the owner's confirmed
+/// resume lifts it; a declined resume leaves it in force.
+#[test]
+fn m0_f5_emergency_stop_engages_and_resume_lifts_the_kernel_stop() {
+    use nexus_kernel::emergency_stop::StopAuthority;
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    let admitted = stop.admit().unwrap();
+    control.emergency_stop();
+    assert!(stop.is_stopped(), "the kernel stop was not engaged");
+    assert!(
+        admitted.halted(),
+        "kernel work admitted before the stop survived it"
+    );
+    assert!(
+        stop.admit().is_err(),
+        "new kernel work was admitted while stopped"
+    );
+    assert_eq!(
+        control.resume(&Yes::new(false)).unwrap_err(),
+        AuthorityError::Declined
+    );
+    assert!(
+        stop.is_stopped(),
+        "a declined resume lifted the kernel stop"
+    );
+    control.resume(&Yes::new(true)).unwrap();
+    assert!(
+        !stop.is_stopped(),
+        "the owner's resume did not lift the kernel stop"
+    );
+    assert!(admitted.halted(), "work the stop ended came back by itself");
+    assert!(stop.admit().is_ok());
+}
+
+/// M0-FIX F5 review: a resume lifts only the kernel stop it confirmed. A
+/// Stop pressed from another door while the owner's resume is being
+/// confirmed has already engaged the kernel stop (its first step) when
+/// the resume completes; the resume must not lift that newer stop.
+#[test]
+fn m0_f5_a_resume_does_not_lift_a_newer_kernel_stop() {
+    use crate::authority::approval::{
+        AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
+        ResumeConfirmation,
+    };
+    use nexus_kernel::emergency_stop::StopAuthority;
+    /// Confirms the resume, and presses the other door's Stop (its kernel
+    /// engagement) while the confirmation is shown.
+    struct StopWhileConfirming(Arc<StopAuthority>);
+    impl ControlConfirmer for StopWhileConfirming {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            false
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            false
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            self.0.engage();
+            true
+        }
+        fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
+            true
+        }
+    }
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    control.emergency_stop();
+    let _ = control.resume(&StopWhileConfirming(stop.clone()));
+    assert!(
+        stop.is_stopped(),
+        "the resume lifted a kernel stop pressed after it was confirmed"
+    );
+}
+
+/// M0-FIX F5 re-review: a Stop whose kernel engagement lands before a
+/// resume reads the kernel's stop number, but whose broker step lands after
+/// the broker's resume, must still leave the kernel stopped: whenever the
+/// broker is stopped, the kernel is too. The resume runs deterministically
+/// inside the Stop's gap between those two steps.
+#[test]
+fn m0_f5_a_stop_whose_broker_step_follows_a_resume_keeps_the_kernel_stopped() {
+    use nexus_kernel::emergency_stop::StopAuthority;
+    let stop = StopAuthority::new();
+    let (control, _evidence, _root) = control();
+    let control = control.with_kernel_stop(stop.clone());
+    control.emergency_stop();
+    control.in_next_stop_gap(|control| {
+        control.resume(&Yes::new(true)).unwrap();
+    });
+    control.emergency_stop();
+    assert!(control.status().emergency_stopped, "the broker is stopped");
+    assert!(
+        stop.is_stopped(),
+        "the broker is stopped but the kernel stop was lifted"
+    );
+}

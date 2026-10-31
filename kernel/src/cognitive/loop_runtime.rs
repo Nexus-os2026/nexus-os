@@ -816,6 +816,9 @@ struct AgentLoopState {
     /// The typed result of each succeeded step, by step id (§11.3), kept
     /// beside the steps.
     results: HashMap<String, StepItem>,
+    /// The emergency-stop watch this goal was admitted under (M0-FIX F5):
+    /// once any stop is engaged after it, the loop halts.
+    stop_watch: crate::emergency_stop::StopWatch,
 }
 
 /// The identity of a cycle in flight (P3-HM-CONTRACT-02 §13.2 LK-1).
@@ -925,6 +928,9 @@ pub struct CognitiveRuntime {
     external_action_turn: Mutex<()>,
     /// The next goal assignment's epoch.
     next_epoch: std::sync::atomic::AtomicU64,
+    /// The emergency-stop authority this runtime observes (M0-FIX F5): the
+    /// process's own unless a host injects one.
+    stop: Arc<crate::emergency_stop::StopAuthority>,
 }
 
 impl CognitiveRuntime {
@@ -958,7 +964,20 @@ impl CognitiveRuntime {
             issuer: None,
             external_action_turn: Mutex::new(()),
             next_epoch: std::sync::atomic::AtomicU64::new(1),
+            stop: crate::emergency_stop::StopAuthority::global(),
         }
+    }
+
+    /// Observe `stop` instead of the process's emergency-stop authority
+    /// (tests only: production always observes the process's authority, so
+    /// the owner's Stop cannot be disconnected from the loop).
+    #[cfg(test)]
+    pub(crate) fn with_stop_authority(
+        mut self,
+        stop: Arc<crate::emergency_stop::StopAuthority>,
+    ) -> Self {
+        self.stop = stop;
+        self
     }
 
     /// Mint, recall and write every goal's work through `issuer`
@@ -1008,6 +1027,11 @@ impl CognitiveRuntime {
             .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
         let goal_uuid = uuid::Uuid::parse_str(&goal.id)
             .map_err(|e| AgentError::SupervisorError(format!("invalid goal id: {e}")))?;
+        // M0-FIX F5: no goal (and no goal unit) while the owner's emergency
+        // stop is in force.
+        self.stop
+            .admit()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         // P4-S1-H1: an agent that takes no new work gets no goal unit
         // either. `assign_goal_in` decides again, as it publishes the loop.
         admit_new_work(
@@ -1033,6 +1057,11 @@ impl CognitiveRuntime {
         goal: AgentGoal,
         ctx: DispatchContext,
     ) -> Result<(), AgentError> {
+        // M0-FIX F5: admitted under the stop authority, or refused.
+        let stop_watch = self
+            .stop
+            .admit()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1059,6 +1088,7 @@ impl CognitiveRuntime {
             reserved_fuel: 0.0,
             plan: None,
             results: HashMap::new(),
+            stop_watch,
         };
 
         // P4-S1-H1: decided and published as one step. `loops` and then the
@@ -1285,7 +1315,9 @@ impl CognitiveRuntime {
         state.plan = flight.plan;
         state.results = flight.results;
         state.in_flight = None;
-        if state.shutdown.load(Ordering::Relaxed) {
+        // M0-FIX F5: a result that returns after the owner's emergency stop
+        // is refused like one after a shutdown; the next cycle ends the loop.
+        if state.shutdown.load(Ordering::Relaxed) || state.stop_watch.halted() {
             state.reserved_fuel = 0.0;
             return None;
         }
@@ -1317,6 +1349,17 @@ impl CognitiveRuntime {
         if let Ok(issuer) = self.issuer() {
             issuer.record_stale_result_refused(agent, kind.class_name(), effect);
         }
+        // M0-FIX F5: a result refused because the owner's emergency stop
+        // halted the loop ends that loop now. (Every caller has released
+        // `loops`.)
+        let loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        if loops
+            .get(agent_id)
+            .is_some_and(|state| state.in_flight.is_none() && state.stop_watch.halted())
+        {
+            return self.halt_loop(agent_id, loops, audit);
+        }
+        drop(loops);
         let reason = format!(
             "stale result refused ({} step): the goal was cancelled, replaced or ended while it ran",
             kind.class_name()
@@ -1400,6 +1443,10 @@ impl CognitiveRuntime {
             return Err(AgentError::SupervisorError(format!(
                 "a cycle of agent '{agent_id}' is in flight"
             )));
+        }
+        // M0-FIX F5: the owner's emergency stop ends the loop.
+        if state.stop_watch.halted() {
+            return Ok(self.halt_loop(agent_id, loops, audit));
         }
 
         // Check shutdown
@@ -2272,6 +2319,61 @@ impl CognitiveRuntime {
         })
     }
 
+    /// M0-FIX F5: end a loop the owner's emergency stop halted: removed with
+    /// its flag and snapshot (no further step), the halt recorded in the
+    /// audit and the stop authority's halt log after `loops` is released.
+    fn halt_loop(
+        &self,
+        agent_id: &str,
+        mut loops: std::sync::MutexGuard<'_, HashMap<String, AgentLoopState>>,
+        audit: &mut dyn AuditWriter,
+    ) -> CycleResult {
+        let removed = loops.remove(agent_id);
+        if let Some(state) = &removed {
+            state.shutdown.store(true, Ordering::Relaxed);
+        }
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
+        drop(loops);
+        if let Some(state) = &removed {
+            let mut flags = self
+                .shutdown_flags
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if flags
+                .get(agent_id)
+                .is_some_and(|flag| Arc::ptr_eq(flag, &state.shutdown))
+            {
+                flags.remove(agent_id);
+            }
+        }
+        let stop_number = self.stop.stop_number();
+        // Best-effort like every cycle record: the halt has taken effect.
+        let _ = audit.append_event(
+            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+            EventType::StateChange,
+            json!({
+                "event": "cognitive.loop_halted_by_emergency_stop",
+                "stop_number": stop_number,
+            }),
+        );
+        self.stop.record_halt(
+            crate::emergency_stop::HaltArea::CognitiveLoop,
+            crate::emergency_stop::HaltOutcome::Ended,
+        );
+        CycleResult {
+            phase: CognitivePhase::Idle,
+            steps_executed: 0,
+            fuel_consumed: 0.0,
+            should_continue: false,
+            blocked_reason: Some("halted by the owner's emergency stop".into()),
+            success: false,
+            failure_reason: Some("halted by the owner's emergency stop".into()),
+        }
+    }
+
     /// Stop a running agent loop.
     pub fn stop_agent_loop(&self, agent_id: &str) -> Result<(), AgentError> {
         if let Some(flag) = self
@@ -2528,6 +2630,11 @@ impl CognitiveRuntime {
         let state = loops.get_mut(agent_id).ok_or_else(|| {
             AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
         })?;
+        // M0-FIX F5: an approval does not revive a loop the stop ended.
+        state
+            .stop_watch
+            .check()
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
         state.hitl_approval_allowance = state.hitl_approval_allowance.saturating_add(count.max(1));
         Ok(())
     }
@@ -7317,5 +7424,378 @@ mod tests {
                 "A-L6: two agents' external steps overlapped"
             );
         }
+    }
+
+    // ── M0-FIX F5: the owner's emergency stop halts the cognitive loop ──
+    //
+    // Each test injects its own stop authority (never the process's). Stop
+    // is pressed in every state: idle, planning (mid model call), awaiting
+    // HITL, executing an action and executing a model step. A halted loop
+    // ends (no further step), the halt is in the audit, new goals are
+    // refused until the owner's resume, and work resumes after it.
+
+    use crate::emergency_stop::StopAuthority;
+    use std::sync::mpsc;
+
+    /// One blocking point: the blocked side reports that it entered, then
+    /// waits for the release.
+    struct Gate {
+        entered: Mutex<mpsc::Sender<()>>,
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+
+    fn gate() -> (Arc<Gate>, mpsc::Receiver<()>, mpsc::Sender<()>) {
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        (
+            Arc::new(Gate {
+                entered: Mutex::new(entered_tx),
+                release: Mutex::new(release_rx),
+            }),
+            entered_rx,
+            release_tx,
+        )
+    }
+
+    impl Gate {
+        fn block(&self) {
+            self.entered.lock().unwrap().send(()).unwrap();
+            self.release
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(30))
+                .expect("the test releases the gate");
+        }
+    }
+
+    /// Counts every step; blocks at the gate on the actions `blocks` picks.
+    struct GatedExecutor {
+        steps: std::sync::atomic::AtomicUsize,
+        gate: Option<Arc<Gate>>,
+        blocks: fn(&PlannedAction) -> bool,
+    }
+
+    impl GatedExecutor {
+        fn counting() -> Self {
+            Self {
+                steps: std::sync::atomic::AtomicUsize::new(0),
+                gate: None,
+                blocks: |_| false,
+            }
+        }
+
+        fn blocking(gate: Arc<Gate>, blocks: fn(&PlannedAction) -> bool) -> Self {
+            Self {
+                steps: std::sync::atomic::AtomicUsize::new(0),
+                gate: Some(gate),
+                blocks,
+            }
+        }
+
+        fn steps(&self) -> usize {
+            self.steps.load(Ordering::SeqCst)
+        }
+    }
+
+    impl ActionExecutor for GatedExecutor {
+        fn execute(
+            &self,
+            _agent_id: &str,
+            action: &PlannedAction,
+            _audit: &mut dyn AuditWriter,
+            _hitl_approved: bool,
+        ) -> Result<String, String> {
+            let earlier = self.steps.fetch_add(1, Ordering::SeqCst);
+            if let Some(gate) = &self.gate {
+                // Only the first step blocks.
+                if earlier == 0 && (self.blocks)(action) {
+                    gate.block();
+                }
+            }
+            Ok("step done".to_string())
+        }
+    }
+
+    fn f5_runtime(sup: Arc<Mutex<Supervisor>>, stop: &Arc<StopAuthority>) -> CognitiveRuntime {
+        make_runtime(sup).0.with_stop_authority(stop.clone())
+    }
+
+    const TWO_READS: &str = r#"[{"action": {"type": "FileRead", "path": "/tmp/f5-a"}, "description": "a"}, {"action": {"type": "FileRead", "path": "/tmp/f5-b"}, "description": "b"}]"#;
+
+    /// The loop was halted by the stop: it ended, no further step ran, and
+    /// the halt is in the audit.
+    fn assert_halted(
+        runtime: &CognitiveRuntime,
+        agent_id: &str,
+        result: &CycleResult,
+        audit: &AuditTrail,
+    ) {
+        assert!(!result.should_continue, "{result:?}");
+        assert!(
+            result
+                .blocked_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("emergency stop")),
+            "{result:?}"
+        );
+        assert!(
+            !runtime.has_active_loop(agent_id),
+            "the loop survived the stop"
+        );
+        assert!(
+            audit
+                .events()
+                .iter()
+                .any(|e| e.payload["event"] == "cognitive.loop_halted_by_emergency_stop"),
+            "no halt record in the audit"
+        );
+    }
+
+    /// Run cycles until one reports the halt (at most `limit`).
+    fn cycle_until_halt(
+        runtime: &CognitiveRuntime,
+        agent_id: &str,
+        planner: &CognitivePlanner,
+        executor: &dyn ActionExecutor,
+        audit: &mut AuditTrail,
+    ) -> CycleResult {
+        let memory_mgr = make_memory_mgr();
+        let mut last = None;
+        for _ in 0..4 {
+            match runtime.run_cycle(agent_id, planner, &memory_mgr, executor, audit) {
+                Ok(result) => {
+                    let halted = !result.should_continue;
+                    last = Some(result);
+                    if halted {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        last.expect("a cycle ran")
+    }
+
+    #[test]
+    fn m0_f5_stop_halts_an_idle_loop() {
+        let stop = StopAuthority::new();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let runtime = f5_runtime(sup, &stop);
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("idle".into(), 5))
+            .unwrap();
+        stop.engage();
+        let executor = GatedExecutor::counting();
+        let mut audit = AuditTrail::new();
+        let result = cycle_until_halt(
+            &runtime,
+            &agent_id,
+            &make_planner(TWO_READS),
+            &executor,
+            &mut audit,
+        );
+        assert_halted(&runtime, &agent_id, &result, &audit);
+        assert_eq!(executor.steps(), 0);
+    }
+
+    #[test]
+    fn m0_f5_stop_halts_a_loop_mid_planning_model_call() {
+        let stop = StopAuthority::new();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let runtime = f5_runtime(sup, &stop);
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("plan".into(), 5))
+            .unwrap();
+        let (gate, entered, release) = gate();
+        let planner_gate = gate.clone();
+        let planner = CognitivePlanner::new(Box::new(ScriptedLlm::answering(
+            &hm().issuer,
+            RouteClass::Local,
+            move |_| {
+                planner_gate.block();
+                TWO_READS.to_string()
+            },
+        )));
+        let executor = GatedExecutor::counting();
+        let mut audit = AuditTrail::new();
+        let result = std::thread::scope(|scope| {
+            let cycle = scope.spawn(|| {
+                let mut audit = AuditTrail::new();
+                let first = runtime.run_cycle(
+                    &agent_id,
+                    &planner,
+                    &make_memory_mgr(),
+                    &executor,
+                    &mut audit,
+                );
+                (first, audit)
+            });
+            entered
+                .recv_timeout(Duration::from_secs(30))
+                .expect("the planner's model call started");
+            stop.engage();
+            release.send(()).unwrap();
+            cycle.join().unwrap()
+        });
+        let (first, first_audit) = result;
+        for event in first_audit.events() {
+            audit
+                .append_event(
+                    event.agent_id,
+                    event.event_type.clone(),
+                    event.payload.clone(),
+                )
+                .unwrap();
+        }
+        let result = match first {
+            Ok(result) if !result.should_continue => result,
+            _ => cycle_until_halt(
+                &runtime,
+                &agent_id,
+                &make_planner(TWO_READS),
+                &executor,
+                &mut audit,
+            ),
+        };
+        assert_halted(&runtime, &agent_id, &result, &audit);
+        assert_eq!(executor.steps(), 0, "a step ran after the stop");
+    }
+
+    #[test]
+    fn m0_f5_stop_halts_a_loop_awaiting_hitl() {
+        let stop = StopAuthority::new();
+        let (sup, agent_id) = make_supervisor_with_autonomy(1);
+        let runtime = f5_runtime(sup, &stop);
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("write".into(), 5))
+            .unwrap();
+        let planner = make_planner(
+            r#"[{"action": {"type": "FileWrite", "path": "/tmp/f5-x", "content": "x"}, "description": "write"}]"#,
+        );
+        let executor = GatedExecutor::counting();
+        let mut audit = AuditTrail::new();
+        let memory_mgr = make_memory_mgr();
+        let mut blocked = None;
+        for _ in 0..3 {
+            let result = runtime
+                .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            if result.phase == CognitivePhase::Blocked {
+                blocked = Some(result);
+                break;
+            }
+        }
+        assert!(blocked.is_some(), "the loop never waited for HITL");
+        stop.engage();
+        // The owner's approval does not revive a stopped loop.
+        let _ = runtime.approve_blocked_steps(&agent_id, 1);
+        let result = cycle_until_halt(&runtime, &agent_id, &planner, &executor, &mut audit);
+        assert_halted(&runtime, &agent_id, &result, &audit);
+        assert_eq!(executor.steps(), 0, "the approved step ran after the stop");
+    }
+
+    fn halts_mid_step(plan: &str, blocks: fn(&PlannedAction) -> bool) {
+        let stop = StopAuthority::new();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let runtime = f5_runtime(sup, &stop);
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("act".into(), 5))
+            .unwrap();
+        let planner = make_planner(plan);
+        let (gate, entered, release) = gate();
+        let executor = GatedExecutor::blocking(gate, blocks);
+        let mut audit = AuditTrail::new();
+        let last = std::thread::scope(|scope| {
+            let cycles = scope.spawn(|| {
+                let mut audit = AuditTrail::new();
+                let memory_mgr = make_memory_mgr();
+                let mut last = None;
+                for _ in 0..3 {
+                    match runtime.run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                    {
+                        Ok(result) => {
+                            let stop_here = !result.should_continue;
+                            last = Some(result);
+                            if stop_here || executor.steps() > 0 {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                (last, audit)
+            });
+            entered
+                .recv_timeout(Duration::from_secs(30))
+                .expect("the step started");
+            stop.engage();
+            release.send(()).unwrap();
+            let (last, step_audit) = cycles.join().unwrap();
+            for event in step_audit.events() {
+                audit
+                    .append_event(
+                        event.agent_id,
+                        event.event_type.clone(),
+                        event.payload.clone(),
+                    )
+                    .unwrap();
+            }
+            last
+        });
+        assert_eq!(executor.steps(), 1);
+        // The halt is observed when the step's result returns, or by the
+        // next cycle.
+        let result = match last {
+            Some(result) if !result.should_continue => result,
+            _ => cycle_until_halt(&runtime, &agent_id, &planner, &executor, &mut audit),
+        };
+        assert_halted(&runtime, &agent_id, &result, &audit);
+        assert_eq!(executor.steps(), 1, "a second step ran after the stop");
+    }
+
+    #[test]
+    fn m0_f5_stop_halts_a_loop_executing_an_action() {
+        halts_mid_step(TWO_READS, |action| {
+            matches!(action, PlannedAction::FileRead { .. })
+        });
+    }
+
+    #[test]
+    fn m0_f5_stop_halts_a_loop_mid_model_step() {
+        halts_mid_step(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "summarise", "context": []}, "description": "think"}, {"action": {"type": "FileRead", "path": "/tmp/f5-b"}, "description": "b"}]"#,
+            |action| matches!(action, PlannedAction::LlmQuery { .. }),
+        );
+    }
+
+    #[test]
+    fn m0_f5_new_goals_are_refused_until_the_owner_resumes() {
+        let stop = StopAuthority::new();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let runtime = f5_runtime(sup, &stop);
+        stop.engage();
+        let refused = runtime
+            .assign_goal(&agent_id, AgentGoal::new("while stopped".into(), 5))
+            .unwrap_err();
+        assert!(refused.to_string().contains("emergency stop"), "{refused}");
+        assert!(!runtime.has_active_loop(&agent_id));
+        stop.lift();
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("after resume".into(), 5))
+            .unwrap();
+        let executor = GatedExecutor::counting();
+        let mut audit = AuditTrail::new();
+        let memory_mgr = make_memory_mgr();
+        let planner = make_planner(TWO_READS);
+        for _ in 0..3 {
+            let result = runtime
+                .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            assert!(result.should_continue || executor.steps() > 0, "{result:?}");
+            if executor.steps() > 0 {
+                break;
+            }
+        }
+        assert!(executor.steps() > 0, "no step ran after the resume");
     }
 }

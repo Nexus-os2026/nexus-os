@@ -227,6 +227,8 @@ impl FlashProvider {
 
 impl LlmProvider for FlashProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        // M0-FIX F5: no inference while the owner's emergency stop is in force.
+        super::admit_model_call()?;
         let model_display = if model.is_empty() {
             &self.model_path
         } else {

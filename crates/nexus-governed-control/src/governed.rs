@@ -26,6 +26,7 @@ use crate::evidence_store::PrimaryEvidence;
 use crate::runtime_root::RuntimeRoot;
 use crate::synthetic::{self, SyntheticIntent};
 use crate::tool::{ToolIntent, Tools};
+use nexus_kernel::emergency_stop::StopAuthority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
@@ -116,7 +117,17 @@ pub struct GovernedControl {
     detached: Mutex<HashSet<RunId>>,
     /// Display starts under way, each counted until its end is recorded.
     display_starts: AtomicUsize,
+    /// The kernel's emergency-stop authority (M0-FIX F5): the owner's
+    /// emergency stop engages it and the owner's resume lifts it.
+    kernel_stop: Arc<StopAuthority>,
+    /// Tests only: runs once inside the next stop, between its kernel
+    /// engagement and its broker step (where a test interleaves a resume).
+    #[cfg(test)]
+    stop_gap: StopGap,
 }
+
+#[cfg(test)]
+type StopGap = Mutex<Option<Box<dyn FnOnce(&GovernedControl) + Send>>>;
 
 /// One display start, counted while it lasts.
 struct Starting<'a>(&'a AtomicUsize);
@@ -166,6 +177,13 @@ impl GovernedControl {
             egress,
             detached: Mutex::new(HashSet::new()),
             display_starts: AtomicUsize::new(0),
+            kernel_stop: if cfg!(test) {
+                StopAuthority::new()
+            } else {
+                StopAuthority::global()
+            },
+            #[cfg(test)]
+            stop_gap: Mutex::new(None),
         };
         // An action may have happened unrecorded (EL-1 §7): governed control
         // starts emergency-stopped, through the stop itself, and resumes only
@@ -174,6 +192,23 @@ impl GovernedControl {
             governed.stop_for(Some("recovery_required"));
         }
         Ok(governed)
+    }
+
+    /// Engage and lift `stop` instead of the process's kernel authority
+    /// (tests only: production always uses the process's authority, so the
+    /// owner's Stop cannot be disconnected from the kernel).
+    #[cfg(test)]
+    pub(crate) fn in_next_stop_gap(&self, gap: impl FnOnce(&GovernedControl) + Send + 'static) {
+        *self.stop_gap.lock().expect("stop gap") = Some(Box::new(gap));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_kernel_stop(mut self, stop: Arc<StopAuthority>) -> Self {
+        if self.authority().runs().is_stopped() {
+            stop.engage();
+        }
+        self.kernel_stop = stop;
+        self
     }
 
     /// End whatever can no longer start (expired, stale, its run or a grant
@@ -360,7 +395,18 @@ impl GovernedControl {
     /// stopped too), then the records, which may only become owed (EL-1
     /// §6).
     fn stop_for(&self, reason: Option<&'static str>) -> usize {
+        // The kernel's own work first (M0-FIX F5): the cognitive loop,
+        // coding runs and model calls halt and refuse new work.
+        self.kernel_stop.engage();
+        #[cfg(test)]
+        if let Some(gap) = self.stop_gap.lock().expect("stop gap").take() {
+            gap(self);
+        }
         let stopped = self.control.stop_effects(reason);
+        // Again once the broker is stopped: a resume that ran between the
+        // first engagement and the broker step may have lifted the kernel
+        // stop, and the broker must never be stopped with the kernel lifted.
+        self.kernel_stop.engage();
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
         self.authority().write_stop_records(stopped);
@@ -369,8 +415,19 @@ impl GovernedControl {
         cancelled
     }
 
+    /// Lift the emergency stop after the owner's native confirmation. The
+    /// kernel's stop is lifted only once the broker's stop is lifted too;
+    /// work either stop ended stays ended.
     pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        self.authority().resume(confirmer)
+        // The kernel stop this resume may lift: the one in force before the
+        // owner is asked. A Stop pressed meanwhile (from any door) engages
+        // a newer kernel stop first, and that one is not lifted here.
+        let confirmed = self.kernel_stop.stop_number();
+        self.authority().resume(confirmer)?;
+        if !self.authority().runs().is_stopped() {
+            self.kernel_stop.lift_if(confirmed);
+        }
+        Ok(())
     }
 
     /// The canonical scope for a grant request (identities pinned now).

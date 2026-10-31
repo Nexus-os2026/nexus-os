@@ -2,6 +2,7 @@ use super::{
     curl_get_status, curl_post_json, curl_post_json_with_timeout, CurlRoute, EmbeddingResponse,
     LlmProvider, LlmResponse, ProviderRequest,
 };
+use nexus_kernel::emergency_stop::{ChildEnd, GuardedChild, HaltArea};
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -317,38 +318,44 @@ impl OllamaProvider {
         eprintln!("[nexus-llm][governance] ollama::chat_stream endpoint={endpoint} model={model}");
         let timeout_str = self.streaming_timeout_secs.to_string();
         let endpoint = super::checked_route_endpoint(&endpoint, self.route)?;
-        let mut child = Command::new("curl")
-            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-            .args(self.route.args())
-            .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
-            .args(["--max-filesize", "67108864"])
-            .arg("-H")
-            .arg("content-type: application/json")
-            .arg("--data-binary")
-            .arg("@-")
-            .arg("--")
-            .arg(&endpoint)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
+        // M0-FIX F5: a model call the emergency stop terminates; dropping
+        // the guard on an early return also ends and reaps the child.
+        let watch = super::admit_model_call()?;
+        let (child, mut pipes) = GuardedChild::spawn(
+            Command::new("curl")
+                .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+                .args(self.route.args())
+                .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
+                .args(["--max-filesize", "67108864"])
+                .arg("-H")
+                .arg("content-type: application/json")
+                .arg("--data-binary")
+                .arg("@-")
+                .arg("--")
+                .arg(&endpoint)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped()),
+            &watch,
+            HaltArea::ModelCall,
+        )
+        .map_err(|e| super::guarded_error(e.into()))?;
 
         // Write the JSON body via stdin to avoid OS argument length limits
         // (base64-encoded images can exceed ARG_MAX).
-        if let Some(mut stdin) = child.stdin.take() {
+        if let Some(mut stdin) = pipes.stdin.take() {
             use std::io::Write;
             if let Err(e) = stdin.write_all(encoded.as_bytes()) {
                 drop(stdin);
-                super::reap_child(&mut child);
-                return Err(AgentError::SupervisorError(format!(
-                    "failed to write request body to curl: {e}"
-                )));
+                return Err(stream_end(child.finish()).err().unwrap_or_else(|| {
+                    AgentError::SupervisorError(format!(
+                        "failed to write request body to curl: {e}"
+                    ))
+                }));
             }
             // stdin is dropped here, closing the pipe so curl proceeds
         }
 
-        let Some(stdout) = child.stdout.take() else {
-            super::reap_child(&mut child);
+        let Some(stdout) = pipes.stdout.take() else {
             return Err(AgentError::SupervisorError(
                 "no stdout from curl".to_string(),
             ));
@@ -362,10 +369,9 @@ impl OllamaProvider {
             let line = match line {
                 Ok(line) => line,
                 Err(e) => {
-                    super::reap_child(&mut child);
-                    return Err(AgentError::SupervisorError(format!(
-                        "read error during chat: {e}"
-                    )));
+                    return Err(stream_end(child.finish()).err().unwrap_or_else(|| {
+                        AgentError::SupervisorError(format!("read error during chat: {e}"))
+                    }));
                 }
             };
             let trimmed = line.trim();
@@ -395,8 +401,9 @@ impl OllamaProvider {
             }
         }
 
-        // Best-effort: wait for curl child process to avoid zombie processes
-        let _ = child.wait();
+        // The child is reaped; a stop that ended it is an error, not a
+        // (truncated) answer.
+        stream_end(child.finish())?;
 
         Ok(full_response)
     }
@@ -427,23 +434,26 @@ impl OllamaProvider {
         );
         let timeout_str = self.streaming_timeout_secs.to_string();
         let endpoint = super::checked_route_endpoint(&endpoint, self.route)?;
-        let mut child = Command::new("curl")
-            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-            .args(self.route.args())
-            .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
-            .args(["--max-filesize", "67108864"])
-            .arg("-H")
-            .arg("content-type: application/json")
-            .arg("--data-raw")
-            .arg(&encoded_body)
-            .arg("--")
-            .arg(&endpoint)
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
+        let watch = super::admit_model_call()?;
+        let (child, mut pipes) = GuardedChild::spawn(
+            Command::new("curl")
+                .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+                .args(self.route.args())
+                .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
+                .args(["--max-filesize", "67108864"])
+                .arg("-H")
+                .arg("content-type: application/json")
+                .arg("--data-raw")
+                .arg(&encoded_body)
+                .arg("--")
+                .arg(&endpoint)
+                .stdout(std::process::Stdio::piped()),
+            &watch,
+            HaltArea::ModelCall,
+        )
+        .map_err(|e| super::guarded_error(e.into()))?;
 
-        let Some(stdout) = child.stdout.take() else {
-            super::reap_child(&mut child);
+        let Some(stdout) = pipes.stdout.take() else {
             return Err(AgentError::SupervisorError(
                 "no stdout from curl".to_string(),
             ));
@@ -456,10 +466,9 @@ impl OllamaProvider {
             let line = match line {
                 Ok(line) => line,
                 Err(e) => {
-                    super::reap_child(&mut child);
-                    return Err(AgentError::SupervisorError(format!(
-                        "read error during pull: {e}"
-                    )));
+                    return Err(stream_end(child.finish()).err().unwrap_or_else(|| {
+                        AgentError::SupervisorError(format!("read error during pull: {e}"))
+                    }));
                 }
             };
             if line.trim().is_empty() {
@@ -485,10 +494,24 @@ impl OllamaProvider {
             }
         }
 
-        // Best-effort: wait for curl child process to avoid zombie processes
-        let _ = child.wait();
+        stream_end(child.finish())?;
 
         Ok(last_status)
+    }
+}
+
+/// M0-FIX F5: how a streaming curl child ended. A stop that terminated it
+/// is an error (with its cleanup outcome); a normal exit is not.
+fn stream_end(end: ChildEnd) -> Result<(), AgentError> {
+    match end {
+        ChildEnd::Exited(_) => Ok(()),
+        ChildEnd::Halted(Ok(_)) => Err(AgentError::SupervisorError(
+            "refused: the owner's emergency stop ended this model call (terminated and reaped)"
+                .to_string(),
+        )),
+        ChildEnd::Halted(Err(error)) => Err(AgentError::SupervisorError(format!(
+            "refused: the owner's emergency stop ended this model call (cleanup failed: {error})"
+        ))),
     }
 }
 
@@ -504,16 +527,20 @@ fn curl_get_json(endpoint: &str, route: CurlRoute) -> Result<(u16, Value), Agent
     let marker = "__NEXUS_STATUS__:";
     // Final Gate item B: no redirect is followed. The authorized Ollama
     // address was checked, not wherever it might redirect.
-    let output = Command::new("curl")
-        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(route.args())
-        .args(["-sS", "-m", "10", "--max-filesize", "33554432"])
-        .arg("-w")
-        .arg(format!("\n{marker}%{{http_code}}"))
-        .arg("--")
-        .arg(&endpoint)
-        .output()
-        .map_err(|e| AgentError::SupervisorError(format!("curl execution failed: {e}")))?;
+    let output = super::guarded_curl(
+        Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(route.args())
+            .args(["-sS", "-m", "10", "--max-filesize", "33554432"])
+            .arg("-w")
+            .arg(format!("\n{marker}%{{http_code}}"))
+            .arg("--")
+            .arg(&endpoint)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped()),
+        None,
+    )?;
 
     if !output.status.success() {
         return Err(AgentError::SupervisorError(
@@ -602,6 +629,9 @@ fn format_model_not_installed_error(model: &str, available: &[String]) -> String
 
 impl LlmProvider for OllamaProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        // M0-FIX F5: no model call (not even the probe) while the owner's
+        // emergency stop is in force.
+        super::admit_model_call()?;
         // Fast check: is Ollama even running? (200ms TCP probe instead of 5s curl)
         if self.health_check().is_err() {
             return Err(AgentError::SupervisorError(format!(
