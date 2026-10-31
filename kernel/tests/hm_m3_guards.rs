@@ -297,6 +297,26 @@ fn is_hm_module(rel: &str) -> bool {
     rel == "kernel/src/hm.rs" || rel.starts_with("kernel/src/hm/") || rel == "persistence/src/hm.rs"
 }
 
+/// Mother Nexus cleanup (2026-10-31): the old desktop app was removed with
+/// its desktop-specific checks (see `archive/nexus-before-mother`). This
+/// tripwire fails as soon as a desktop source tree returns, so those
+/// checks must be restored and re-pinned before the guard can pass.
+fn assert_desktop_removed(files: &[ProdFile]) {
+    let desktop: Vec<&str> = files
+        .iter()
+        .map(|f| f.rel.as_str())
+        .filter(|rel| rel.starts_with("app/"))
+        .collect();
+    assert!(
+        desktop.is_empty(),
+        "desktop source returned; restore and re-pin its checks: {desktop:?}"
+    );
+    assert!(
+        !source::workspace_root().join("app/src-tauri").exists(),
+        "app/src-tauri returned; restore and re-pin its checks"
+    );
+}
+
 // ── A-S1: no IPC writes hm_*; no REPLACE; foreign keys on ────────────────────
 
 /// The desktop's production references to the historical-memory tables
@@ -412,19 +432,19 @@ fn hm_m3_n5_a_s1_no_ipc_writes_hm_no_replace_and_foreign_keys_on() {
         "run_t0_option_a_at_start",
         "backfill_authority_events",
     ] {
+        // Its one allowed caller, the desktop's `start_historical_memory`
+        // (`app/src-tauri/src/hm_wiring.rs`), was removed: no caller now.
         let outside: Vec<(String, String)> = call_sites(&files, authority_writer)
             .into_iter()
             .filter(|(rel, _)| !is_hm_module(rel))
             .collect();
-        let allowed: Vec<(String, String)> = outside
-            .iter()
-            .filter(|(rel, f)| {
-                rel == "app/src-tauri/src/hm_wiring.rs" && f == "start_historical_memory"
-            })
-            .cloned()
-            .collect();
-        assert_eq!(outside, allowed, "{authority_writer}");
+        assert_eq!(
+            outside,
+            Vec::<(String, String)>::new(),
+            "{authority_writer}"
+        );
     }
+    assert_desktop_removed(&files);
     // A-G0 (AD-4 disabled): nothing in production inserts a grant row, and
     // the store has no grant-insert method.
     for f in &files {
@@ -519,7 +539,7 @@ fn content_reads(f: &ProdFile) -> Vec<(String, String)> {
 
 /// The reviewed direct reads inside prompt-building modules, each with
 /// why it never feeds a prompt or is the route-first control read.
-const PROMPT_MODULE_READS: [(&str, &str, &str, &str); 7] = [
+const PROMPT_MODULE_READS: [(&str, &str, &str, &str); 6] = [
     (
         "kernel/src/cognitive/loop_runtime.rs",
         "CognitiveRuntime::latest_control_json",
@@ -555,12 +575,6 @@ const PROMPT_MODULE_READS: [(&str, &str, &str, &str); 7] = [
         "EvolutionTracker::discover_shareable_strategies",
         "load_strategy_history",
         "strategy hashes and scores; each share is a labelled §14 rule 3 write (share_learning)",
-    ),
-    (
-        "kernel/src/team_orchestrator.rs",
-        "TeamOrchestrator::read_team_memories",
-        "recall_relevant",
-        "latent (§12.3 item 4): no production caller (asserted below)",
     ),
 ];
 
@@ -662,9 +676,10 @@ fn hm_m3_n5_a_s3_planted_controls() {
 #[test]
 fn hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store() {
     let files = production_files();
-    // One issuer: `DispatchIssuer::new` once in production, in the
-    // desktop's `build_dispatch_issuer`, which both `AppState`
-    // constructors call (the single issuer of the process).
+    // One issuer at most: `DispatchIssuer::new` was called once in
+    // production, in the desktop's `build_dispatch_issuer`, which both
+    // `AppState` constructors called (the single issuer of the process).
+    // That desktop was removed: no production issuer remains.
     let issuer_new: Vec<(String, String)> = files
         .iter()
         .filter(|f| !is_hm_module(&f.rel))
@@ -679,26 +694,13 @@ fn hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store() {
             v
         })
         .collect();
-    assert_eq!(
-        issuer_new,
-        vec![(
-            "app/src-tauri/src/hm_wiring.rs".to_string(),
-            "build_dispatch_issuer".to_string()
-        )]
-    );
+    // Its only members were desktop sites: now empty, and the desktop is gone.
+    assert_eq!(issuer_new, Vec::<(String, String)>::new());
     assert_eq!(
         call_sites(&files, "build_dispatch_issuer"),
-        vec![
-            (
-                "app/src-tauri/src/lib.rs".to_string(),
-                "AppState::new".to_string()
-            ),
-            (
-                "app/src-tauri/src/lib.rs".to_string(),
-                "AppState::new_in_memory".to_string()
-            ),
-        ]
+        Vec::<(String, String)>::new()
     );
+    assert_desktop_removed(&files);
     // Transport evidence only from `attest_route` (connectors), besides its
     // definition in `nexus_kernel::hm`.
     for f in files.iter().filter(|f| !is_hm_module(&f.rel)) {
@@ -757,31 +759,10 @@ fn hm_m3_n5_a_s3_single_issuer_attestation_admission_and_store() {
         unexpected.is_empty(),
         "label-taking pub fns: {unexpected:?}"
     );
-    // Both `AppState` constructors open the database, then run the start-up
-    // sequence (T₀ → verify → back-fill), then build the issuer
-    // (AMENDMENT 1 A1.10).
-    let lib = &file(&files, "app/src-tauri/src/lib.rs").code;
-    for (ctor, open) in [
-        ("pub fn new(", "NexusDatabase::open("),
-        ("pub fn new_in_memory(", "NexusDatabase::in_memory("),
-    ] {
-        let at = lib.find(ctor).unwrap_or_else(|| panic!("{ctor}"));
-        let body_open = at + lib[at..].find('{').unwrap();
-        let body = &lib[body_open..close_of(lib, body_open)];
-        let opened = body.find(open).unwrap_or_else(|| panic!("{ctor}: {open}"));
-        let started = body
-            .find("start_historical_memory(")
-            .unwrap_or_else(|| panic!("{ctor}: start"));
-        let issued = body
-            .find("build_dispatch_issuer(")
-            .unwrap_or_else(|| panic!("{ctor}: issuer"));
-        assert!(opened < started && started < issued, "{ctor}");
-        assert_eq!(
-            body.matches("start_historical_memory(").count(),
-            1,
-            "{ctor}"
-        );
-    }
+    // Both desktop `AppState` constructors opened the database, then ran the
+    // start-up sequence (T₀ → verify → back-fill), then built the issuer
+    // (AMENDMENT 1 A1.10). That desktop-specific check was removed with
+    // `app/src-tauri/src/lib.rs` (the desktop tripwire above guards it).
 }
 
 // ── A-S6: the §12.8 no-handoff guard ────────────────────────────────────────
@@ -820,51 +801,14 @@ const NO_HANDOFF: [&str; 26] = [
 
 /// The subsystems of §12.8, by whole file (`dir/` prefix or file) or by
 /// function (`file::fn`).
-const SEPARATED_FILES: [&str; 12] = [
-    "kernel/src/simulation/",
-    "kernel/src/temporal/",
+const SEPARATED_FILES: [&str; 3] = [
     "connectors/llm/src/rag.rs",
-    "crates/nexus-swarm/",
-    "agents/conductor/",
-    "agents/coder/",
     "agents/web-builder/",
-    "app/src-tauri/src/builder_workspace.rs",
-    "app/src-tauri/src/commands/swarm.rs",
-    "app/src-tauri/src/commands/flash.rs",
-    "app/src-tauri/src/commands/model_hub.rs",
     "kernel/src/cognitive/algorithms/world_model.rs",
 ];
-const SEPARATED_FNS: [(&str, &str); 14] = [
-    ("app/src-tauri/src/commands/chat_llm.rs", "chat_dispatch"),
-    (
-        "app/src-tauri/src/commands/chat_llm.rs",
-        "chat_with_ollama_streaming",
-    ),
-    (
-        "app/src-tauri/src/commands/chat_llm.rs",
-        "test_llm_connection",
-    ),
-    ("app/src-tauri/src/commands/simulation.rs", "temporal_fork"),
-    ("app/src-tauri/src/commands/simulation.rs", "temporal_unit"),
-    ("app/src-tauri/src/commands/simulation.rs", "human_request"),
-    (
-        "app/src-tauri/src/commands/simulation.rs",
-        "run_dilated_session",
-    ),
-    (
-        "app/src-tauri/src/commands/consent.rs",
-        "build_simulation_llm",
-    ),
-    (
-        "app/src-tauri/src/commands/consent.rs",
-        "run_parallel_simulation_reports_with",
-    ),
-    ("app/src-tauri/src/commands/cognitive.rs", "simulation_llm"),
-    ("app/src-tauri/src/hm_dispatch.rs", "human_provider"),
-    ("app/src-tauri/src/hm_dispatch.rs", "dispatch_text"),
-    ("app/src-tauri/src/hm_dispatch.rs", "IssuedProvider::issued"),
-    ("app/src-tauri/src/hm_dispatch.rs", "IssuedProvider::query"),
-];
+/// Mother Nexus cleanup (2026-10-31): every by-function entry was a desktop
+/// function (`app/src-tauri/src/...`), removed with the desktop.
+const SEPARATED_FNS: [(&str, &str); 0] = [];
 
 /// The forbidden names reached in `span` of `f`: `(fn, name)`.
 fn handoffs(f: &ProdFile, span: (usize, usize)) -> Vec<(String, String)> {
@@ -938,6 +882,8 @@ fn hm_m3_n5_a_s6_separated_subsystems_receive_no_hm_content() {
         }
     }
     assert_eq!(found, Vec::<(String, String, String)>::new());
+    // The by-function entries were all desktop functions: now empty.
+    assert_desktop_removed(&files);
     // No actuator or cognitive module hands data to them.
     for f in files.iter().filter(|f| {
         (f.rel.starts_with("kernel/src/actuators/") || f.rel.starts_with("kernel/src/cognitive/"))
@@ -1000,16 +946,11 @@ fn hm_m3_n5_r7_no_unlabelled_in_scope_content_write() {
     })
     .collect();
     assert_eq!(calls, reviewed);
-    let lib = file(&files, "app/src-tauri/src/lib.rs");
-    for function in [
-        "DbMemoryStore::save_memory",
-        "DbStrategyStore::upsert_strategy_score",
-    ] {
-        let (a, z) = fn_span(lib, function);
-        let body = &lib.code[a..z];
-        assert!(body.contains("Err(UNLABELLED_WRITE_REFUSED"), "{function}");
-        assert!(!body.contains("self.db"), "{function}");
-    }
+    // The desktop's `DbMemoryStore::save_memory` and
+    // `DbStrategyStore::upsert_strategy_score` (the production `MemoryStore`
+    // implementations, which refused) were removed with
+    // `app/src-tauri/src/lib.rs`.
+    assert_desktop_removed(&files);
     // No raw SQL content write to an in-scope table outside the
     // persistence crate.
     for f in files
@@ -1046,108 +987,26 @@ fn hm_m3_n5_i4_no_checkpoint_memory_is_written_back() {
             assert!(calls_of(&f.code, name).is_empty(), "{}: {name}", f.rel);
         }
     }
-    let lib = file(&files, "app/src-tauri/src/lib.rs");
-    for command in [
-        "time_machine_undo",
-        "time_machine_undo_checkpoint",
-        "time_machine_redo",
-    ] {
-        let (a, z) = fn_span(lib, command);
-        assert!(
-            lib.text[a..z].contains("Closure::CheckpointReplay"),
-            "{command} is not closed"
-        );
-    }
-    // The checkpoint's memories are only recorded (serialised into the
-    // checkpoint), never handed to a writer.
-    let cognitive = file(&files, "app/src-tauri/src/commands/cognitive.rs");
-    let (a, z) = fn_span(cognitive, "record_agent_execution_checkpoint");
-    let body = &cognitive.code[a..z];
-    for writer in [
-        "save_memory",
-        "record_episodic",
-        "record_semantic",
-        "record_procedural",
-        "save_task",
-    ] {
-        assert!(
-            !body.contains(writer),
-            "record_agent_execution_checkpoint: {writer}"
-        );
-    }
+    // The desktop's closed undo/redo commands (`time_machine_undo`,
+    // `time_machine_undo_checkpoint`, `time_machine_redo` in
+    // `app/src-tauri/src/lib.rs`) and its checkpoint recorder
+    // (`record_agent_execution_checkpoint` in
+    // `app/src-tauri/src/commands/cognitive.rs`) were removed with the
+    // desktop.
+    assert_desktop_removed(&files);
 }
 
 /// The classified model-call sites (P3-HM-CONTRACT-02 §12.2 and
 /// `04-DISPATCH-INVENTORY.md` §K): `(file, fn or "*", class, reference)`.
 /// A file entry with `"*"` covers every site of that file (the contract
 /// names the file or its directory).
-const CLASSIFIED: [(&str, &str, &str, &str); 36] = [
-    // Desktop (§12.2), at their post-M3 locations.
-    (
-        "app/src-tauri/src/commands/chat_llm.rs",
-        "chat_dispatch",
-        "AC/HD",
-        "§12.2 send_chat, agent-routed and no agent",
-    ),
-    (
-        "app/src-tauri/src/commands/chat_llm.rs",
-        "chat_with_ollama_streaming",
-        "HD",
-        "§12.2 Ollama streaming",
-    ),
-    (
-        "app/src-tauri/src/commands/chat_llm.rs",
-        "test_llm_connection",
-        "SY",
-        "§12.2 test_llm_connection",
-    ),
-    (
-        "app/src-tauri/src/commands/flash.rs",
-        "flash_generate",
-        "HD",
-        "§12.2 Flash flash_generate",
-    ),
-    (
-        "app/src-tauri/src/commands/model_hub.rs",
-        "chat_with_documents",
-        "XS",
-        "§12.2 RAG",
-    ),
-    (
-        "app/src-tauri/src/commands/simulation.rs",
-        "human_request",
-        "HB/HD",
-        "§12.2 temporal_fork, run_dilated_session",
-    ),
-    (
-        "app/src-tauri/src/hm_dispatch.rs",
-        "AgentTransport::send",
-        "AR",
-        "§12.2 cognitive planner / Flash as an agent transport",
-    ),
-    (
-        "app/src-tauri/src/hm_dispatch.rs",
-        "guarded_query",
-        "AR",
-        "§12.2 cognitive planner, LlmQuery, evolution, auto-evolution, HiveMind, team, dreams",
-    ),
-    (
-        "app/src-tauri/src/hm_dispatch.rs",
-        "IssuedProvider::query",
-        "XS",
-        "§12.2 RAG, builder (A2.4 I1)",
-    ),
-    (
-        "app/src-tauri/src/hm_dispatch.rs",
-        "IssuedProvider::embed",
-        "XS",
-        "§12.2 RAG",
-    ),
+const CLASSIFIED: [(&str, &str, &str, &str); 13] = [
+    // Mother Nexus cleanup (2026-10-31): the desktop (§12.2) rows, the
+    // dreams, simulation, conductor and coder rows, the removed web-builder
+    // modules and the swarm, capability-measurement and self-improve rows
+    // named deleted code (see `archive/nexus-before-mother`).
     // Kernel (04 §K).
     ("kernel/src/cognitive/planner.rs", "*", "AR", "04 K1"),
-    ("kernel/src/dreams/engine.rs", "*", "AR/HR", "04 K7"),
-    ("kernel/src/dreams/report.rs", "*", "AR/HR", "04 K7"),
-    ("kernel/src/simulation/mod.rs", "*", "XS", "04 K8"),
     (
         "kernel/src/cognitive/algorithms/world_model.rs",
         "*",
@@ -1182,10 +1041,6 @@ const CLASSIFIED: [(&str, &str, &str, &str); 36] = [
     ),
     ("connectors/llm/src/routing.rs", "*", "latent", "04 K18"),
     // Builder agents (04 K12, §12.2 "Builder agents").
-    ("agents/conductor/src/lib.rs", "*", "XS", "04 K12"),
-    ("agents/conductor/src/planner.rs", "*", "XS", "04 K12"),
-    ("agents/coder/src/llm_codegen.rs", "*", "XS", "04 K12"),
-    ("agents/web-builder/src/llm_codegen.rs", "*", "XS", "04 K12"),
     ("agents/web-builder/src/plan.rs", "*", "XS", "04 K12"),
     ("agents/web-builder/src/classifier.rs", "*", "XS", "04 K12"),
     (
@@ -1195,41 +1050,9 @@ const CLASSIFIED: [(&str, &str, &str, &str); 36] = [
         "04 K12",
     ),
     ("agents/web-builder/src/content_gen.rs", "*", "XS", "04 K12"),
-    (
-        "agents/web-builder/src/backend/rls_gen.rs",
-        "*",
-        "XS",
-        "04 K12",
-    ),
-    (
-        "agents/web-builder/src/backend/schema_gen.rs",
-        "*",
-        "XS",
-        "04 K12",
-    ),
-    ("agents/web-builder/src/interpreter.rs", "*", "XS", "04 K12"),
-    ("agents/self-improve/src/learner.rs", "*", "SY", "04 K13"),
     // Crates (04 §K; §12.2 "Outside the desktop crate").
-    (
-        "crates/nexus-swarm/src/providers/",
-        "*",
-        "HD",
-        "04 K14; §12.2 swarm providers/*",
-    ),
-    (
-        "crates/nexus-capability-measurement/src/",
-        "*",
-        "SY",
-        "04 K15",
-    ),
     ("crates/nexus-memory/src/", "*", "latent", "04 K16"),
 ];
-const CLASSIFIED_UI_REPAIR: (&str, &str, &str, &str) = (
-    "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
-    "*",
-    "XS",
-    "04 K19",
-);
 
 // ── A-S4 errata E-M3-1 (AMENDMENT 3 A3.1): the sites §12.2 and 04 do not name
 
@@ -1237,10 +1060,9 @@ const CLASSIFIED_UI_REPAIR: (&str, &str, &str, &str) = (
 /// `LlmProvider::query`/`embed` and their `Box`/`Arc` forwarding. Not
 /// dispatch sites: every production call of `query`/`embed` outside these
 /// files is itself a classified site (asserted in A-S4).
-const TRANSPORT: [(&str, &str); 3] = [
+const TRANSPORT: [(&str, &str); 2] = [
     ("connectors/llm/src/providers/", "*"),
     ("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
-    ("nexus-code/src/llm/providers/", "*"),
 ];
 
 /// The E-M3-1 classes XS, SY and AR CLOSED: `(file, fn or "*", class,
@@ -1248,85 +1070,10 @@ const TRANSPORT: [(&str, &str); 3] = [
 /// (`hm_m3_n5_a_s6_xs_crates_reach_no_hm_content`). SY: a fixed probe, no
 /// content (pinned in A-S4). AR CLOSED: the kernel executor never reaches
 /// the actuator (pinned in A-S4; runtime test and mutant 18).
-const ERRATA_E_M3_1: [(&str, &str, &str, &str); 15] = [
-    (
-        "protocols/src/http_gateway.rs",
-        "build_router",
-        "XS",
-        "caller server_runtime::run_server (run_from_args, its only caller, has no production caller; both binaries withdrawn)",
-    ),
-    (
-        "protocols/src/http_gateway.rs",
-        "anthropic_messages",
-        "XS",
-        "routed by build_router",
-    ),
-    (
-        "protocols/src/http_gateway.rs",
-        "openai_chat_completions",
-        "XS",
-        "routed by build_router",
-    ),
-    (
-        "protocols/src/http_gateway.rs",
-        "openai_embeddings",
-        "XS",
-        "routed by build_router",
-    ),
-    (
-        "content/src/generator.rs",
-        "ContentGenerator::generate_post",
-        "XS",
-        "caller agents/social-poster (CLI run_social_poster_from_manifest)",
-    ),
-    (
-        "factory/src/intent.rs",
-        "IntentParser::parse",
-        "XS",
-        "caller factory remote.rs RemoteFactoryInterface (referenced nowhere outside factory)",
-    ),
-    (
-        "crates/nexus-perception/src/vision.rs",
-        "ApiVisionProvider::new_groq",
-        "XS",
-        "caller tauri_commands::init_provider (the desktop's perception_init is closed and never calls it)",
-    ),
-    (
-        "crates/nexus-perception/src/vision.rs",
-        "ApiVisionProvider::new_nim",
-        "XS",
-        "caller tauri_commands::init_provider (as new_groq)",
-    ),
-    (
-        "agents/coder/src/fix_loop.rs",
-        "LlmErrorFixer::propose_fixes",
-        "XS",
-        "caller conductor execute_fix_project through fix_until_pass",
-    ),
-    (
-        "agents/coder/src/writer.rs",
-        "CodeWriter::write_code",
-        "XS",
-        "caller conductor through writer::write_code",
-    ),
-    (
-        "agents/web-builder/src/image_gen/api.rs",
-        "generate_api",
-        "XS",
-        "caller image_gen::generate_image (generate_image and generate_all_images are referenced nowhere outside web-builder)",
-    ),
-    (
-        "nexus-code/src/",
-        "*",
-        "XS",
-        "reached through app/src-tauri nx_bridge; coding content",
-    ),
-    (
-        "connectors/core/src/validation.rs",
-        "validate_anthropic_key",
-        "SY",
-        "a fixed key probe (GET /v1/models, headers only), no content",
-    ),
+/// Mother Nexus cleanup (2026-10-31): the protocols, content, factory,
+/// perception, coder, web-builder `image_gen/api.rs`, nexus-code and
+/// connectors/core rows named deleted code.
+const ERRATA_E_M3_1: [(&str, &str, &str, &str); 2] = [
     (
         "kernel/src/actuators/image_gen.rs",
         "*",
@@ -1341,6 +1088,9 @@ const ERRATA_E_M3_1: [(&str, &str, &str, &str); 15] = [
     ),
 ];
 
+/// A LATENT entry: `(file, site, closed set)`.
+type LatentEntry = (&'static str, &'static str, &'static [&'static str]);
+
 /// Class LATENT: `(file, site, closed set)`. The closed set is the site's
 /// item and every item of the same file that reaches it (a type stands for
 /// its definition and impl blocks; a lower-case name is a free function; a
@@ -1348,71 +1098,10 @@ const ERRATA_E_M3_1: [(&str, &str, &str, &str); 15] = [
 /// The proof (`latent_references`): no production reference to any item of
 /// the set outside the set's own items, so none outside the defining file;
 /// a reference appearing later fails A-S4.
-const LATENT: [(&str, &str, &[&str]); 11] = [
-    (
-        "adaptation/src/adapter.rs",
-        "LlmStrategyAdvisor::recommend_focus",
-        &["LlmStrategyAdvisor"],
-    ),
-    (
-        "research/src/strategy.rs",
-        "StrategySynthesizer::synthesize",
-        &["StrategySynthesizer"],
-    ),
-    (
-        "control/src/vision/loop.rs",
-        "ProviderVisionModel::infer",
-        &["ProviderVisionModel"],
-    ),
-    (
-        "self-update/src/analyzer.rs",
-        "ErrorAnalyzer::analyze_crash",
-        &["ErrorAnalyzer"],
-    ),
-    (
-        "agents/coder/src/analyzer.rs",
-        "query_llm_summary",
-        &["query_llm_summary", "analyze"],
-    ),
-    (
-        "agents/coder/src/init.rs",
-        "build_readme",
-        &[
-            "build_readme",
-            "ProjectInitializer",
-            "init_project",
-            "init_project_in",
-        ],
-    ),
-    (
-        "agents/designer/src/generator.rs",
-        "DesignGenerator::generate_design",
-        &["DesignGenerator", "generate_design"],
-    ),
-    (
-        "agents/designer/src/screenshot_to_code.rs",
-        "ScreenshotToCode::screenshot_to_code",
-        &["ScreenshotToCode", "screenshot_to_code"],
-    ),
-    (
-        "agents/screen-poster/src/comments.rs",
-        "CommentInteractor::generate_reply",
-        &["CommentInteractor", "generate_reply", "scan_comments"],
-    ),
-    (
-        "agents/screen-poster/src/composer.rs",
-        "ContentComposer::compose",
-        &["ContentComposer", "compose"],
-    ),
-    // Mission P3-C11-HM-M4 C-4: no production caller; it returns a genome
-    // whose system prompt is an unlabelled copy of a model reply (its model
-    // call is the `AutoEvolveLlm::mutate_prompt` trait call, §11.4).
-    (
-        "kernel/src/genome/auto_evolve.rs",
-        "AutoEvolutionManager::apply_evolution",
-        &["AutoEvolutionManager::apply_evolution"],
-    ),
-];
+/// Mother Nexus cleanup (2026-10-31): every entry (adaptation, research,
+/// control, self-update, coder, designer, screen-poster and the genome's
+/// `AutoEvolutionManager::apply_evolution`) named deleted code.
+const LATENT: [LatentEntry; 0] = [];
 
 /// The §11.4 model-trait calls through which a LATENT method that is no
 /// model-call site of [`CALLS`] reaches a model (mission P3-C11-HM-M4 C-4).
@@ -1424,16 +1113,18 @@ const MODEL_TRAIT_CALLS: [&str; 3] = [
 
 /// Exact-site scanner exceptions: `(file, fn, shape, reason)`. Each matches
 /// exactly one inventory row, and its premise is pinned in A-S4.
-const NOT_MODEL_CALLS: [(&str, &str, &str, &str); 1] = [(
-    "agents/social-poster/src/lib.rs",
-    "RealSearchStep::search",
-    "query",
-    "WebSearchConnector::query(ctx, topic, max_results): a web-search connector, not a model call",
-)];
+/// Mother Nexus cleanup (2026-10-31): its one entry,
+/// `agents/social-poster/src/lib.rs` `RealSearchStep::search`, was deleted.
+const NOT_MODEL_CALLS: [(&str, &str, &str, &str); 0] = [];
 
 /// The class of the site `(file, fn)`: T first, then §12.2 / 04, then
 /// E-M3-1 (XS, SY, AR CLOSED), then LATENT.
 fn class_of(file: &str, function: &str) -> Option<&'static str> {
+    class_with_latent(&LATENT, file, function)
+}
+
+/// [`class_of`] with `latent` as the LATENT table.
+fn class_with_latent(latent: &[LatentEntry], file: &str, function: &str) -> Option<&'static str> {
     let matches = |f: &str, g: &str| {
         (f == file || (f.ends_with('/') && file.starts_with(f))) && (g == "*" || g == function)
     };
@@ -1442,11 +1133,10 @@ fn class_of(file: &str, function: &str) -> Option<&'static str> {
     }
     CLASSIFIED
         .iter()
-        .chain(std::iter::once(&CLASSIFIED_UI_REPAIR))
         .chain(ERRATA_E_M3_1.iter())
         .find(|e| matches(e.0, e.1))
         .map(|e| e.2)
-        .or_else(|| LATENT.iter().any(|e| matches(e.0, e.1)).then_some("LATENT"))
+        .or_else(|| latent.iter().any(|e| matches(e.0, e.1)).then_some("LATENT"))
 }
 
 /// The module name of `rel` (its file stem, or its directory for `mod.rs`).
@@ -1673,14 +1363,21 @@ fn latent_references(
 #[test]
 fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
     // Planted: an unknown site is unclassified; each class resolves.
+    // Mother Nexus cleanup (2026-10-31): the controls on deleted rows
+    // (dreams, nexus-swarm, nexus-code, research) moved to kept rows, and
+    // the LATENT control to a synthetic LATENT table (every LATENT row was
+    // deleted code).
     assert_eq!(class_of("kernel/src/x.rs", "f"), None);
     assert_eq!(
-        class_of("kernel/src/dreams/engine.rs", "dream_query"),
-        Some("AR/HR")
+        class_of(
+            "kernel/src/cognitive/planner.rs",
+            "CognitivePlanner::query_plan_with_retry"
+        ),
+        Some("AR")
     );
     assert_eq!(
-        class_of("crates/nexus-swarm/src/providers/anthropic.rs", "invoke"),
-        Some("HD")
+        class_of("crates/nexus-memory/src/embedding.rs", "embed_batch"),
+        Some("latent")
     );
     assert_eq!(
         class_of(
@@ -1690,25 +1387,34 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         Some("T")
     );
     assert_eq!(
-        class_of(
-            "nexus-code/src/llm/providers/google.rs",
-            "GoogleProvider::new"
-        ),
+        class_of("connectors/llm/src/attest.rs", "VerifiedLocalOllama::query"),
         Some("T")
     );
-    assert_eq!(class_of("nexus-code/src/agent/mod.rs", "run"), Some("XS"));
+    assert_eq!(
+        class_of("agents/web-builder/src/plan.rs", "generate_plan_with_model"),
+        Some("XS")
+    );
     assert_eq!(
         class_of("connectors/llm/src/attest.rs", "verify_local_ollama"),
         None
     );
+    let planted_latent: [LatentEntry; 1] = [(
+        "planted/src/strategy.rs",
+        "StrategySynthesizer::synthesize",
+        &["StrategySynthesizer"],
+    )];
     assert_eq!(
-        class_of(
-            "research/src/strategy.rs",
+        class_with_latent(
+            &planted_latent,
+            "planted/src/strategy.rs",
             "StrategySynthesizer::synthesize"
         ),
         Some("LATENT")
     );
-    assert_eq!(class_of("research/src/strategy.rs", "other"), None);
+    assert_eq!(
+        class_with_latent(&planted_latent, "planted/src/strategy.rs", "other"),
+        None
+    );
     assert_eq!(
         class_of("kernel/src/actuators/tts.rs", "TtsActuator::run_openai"),
         Some("AR CLOSED")
@@ -1725,17 +1431,8 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
             "{file} {function}: {reason}"
         );
     }
-    // Its premise: the call is on the step's web-search connector.
-    let poster = file(&files, "agents/social-poster/src/lib.rs");
-    let def = poster.code.find("struct RealSearchStep").unwrap();
-    let body =
-        &poster.code[def..close_of(&poster.code, def + poster.code[def..].find('{').unwrap())];
-    assert!(
-        squash(body).contains("connector: websearchconnector,"),
-        "{body}"
-    );
-    let (a, z) = fn_span(poster, "RealSearchStep::search");
-    assert!(poster.code[a..z].contains("self.connector.query("));
+    // (The premise of the removed social-poster exception was pinned here;
+    // it was deleted with `agents/social-poster`.)
 
     let unclassified: Vec<String> = inventory
         .iter()
@@ -1814,15 +1511,9 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
             );
         }
     }
-    // SY: the key probe sends headers to a fixed models URL, and no body.
-    let validation = file(&files, "connectors/core/src/validation.rs");
-    let (a, z) = fn_span(validation, "validate_anthropic_key");
-    let probe = &validation.text[a..z];
-    assert!(probe.contains("https://api.anthropic.com/v1/models"));
-    assert!(validation.code[a..z].contains("http_status_with_headers(url.as_str(), &headers)"));
-    for body in ["-d", "--data", "messages", "prompt", "json!"] {
-        assert!(!probe.contains(body), "validate_anthropic_key: {body}");
-    }
+    // (The SY key probe, `connectors/core/src/validation.rs`
+    // `validate_anthropic_key`, was pinned here; it was deleted with
+    // `connectors/core`.)
     // AR CLOSED (G4): the kernel executor refuses both actions before any
     // routing, in `execute` and in `execute_in`; no other production
     // registry user names them.
@@ -1850,13 +1541,11 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
         .filter(|f| f.code.contains("ActuatorRegistry::with_defaults("))
         .map(|f| f.rel.as_str())
         .collect();
+    // (`kernel/src/content_pipeline.rs` and `kernel/src/protocols/mcp.rs`
+    // were deleted.)
     assert_eq!(
         registries,
-        [
-            "kernel/src/cognitive/loop_runtime.rs",
-            "kernel/src/content_pipeline.rs",
-            "kernel/src/protocols/mcp.rs",
-        ],
+        ["kernel/src/cognitive/loop_runtime.rs"],
         "production users of the default actuator registry"
     );
     for rel in &registries[1..] {
@@ -1872,14 +1561,29 @@ fn hm_m3_n5_a_s4_every_production_model_call_is_classified() {
 /// split across lines) or by a path, is a reference that fails A-S4; the
 /// method's own definition, another type's definition of a method of that
 /// name, and a mention in a comment or a string are none.
+///
+/// Mother Nexus cleanup (2026-10-31): `kernel/src/genome/auto_evolve.rs`
+/// and its LATENT row were deleted, so the controls run against a synthetic
+/// defining file of the same shape, added to the real production files.
 #[test]
 fn hm_m4_n1_c4_latent_apply_evolution_planted_controls() {
-    let (file_rel, site, items) = LATENT
-        .iter()
-        .find(|e| e.1 == "AutoEvolutionManager::apply_evolution")
-        .copied()
-        .expect("C-4: apply_evolution is in the LATENT set");
+    let (file_rel, site, items): LatentEntry = (
+        "kernel/src/planted_auto_evolve.rs",
+        "AutoEvolutionManager::apply_evolution",
+        &["AutoEvolutionManager::apply_evolution"],
+    );
+    let defining = "pub struct AutoEvolutionManager { trackers: u8 }\n\
+                    impl AutoEvolutionManager {\n    \
+                    pub fn apply_evolution(&self, ctx: &mut DispatchContext, genome: &AgentGenome, llm: &dyn AutoEvolveLlm) -> Option<AgentGenome> {\n        \
+                    let mutated = llm.mutate_prompt(ctx, &mut |c| None).ok()?;\n        \
+                    Some(mutate_with_prompt(genome, mutated))\n    }\n}\n";
     let mut files = production_files();
+    assert!(files.iter().all(|f| f.rel != file_rel));
+    files.push(ProdFile {
+        rel: file_rel.into(),
+        code: mask(defining, false),
+        text: mask(defining, true),
+    });
     assert!(
         latent_references(&files, file_rel, items).is_empty(),
         "precondition: no production caller in the workspace"
@@ -1979,29 +1683,14 @@ fn hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog() {
     );
 
     let files = production_files();
+    // Its only member, the desktop's `NativeRoutePolicyDialog`
+    // (`app/src-tauri/src/hm_policy.rs`), was removed: now empty. Its
+    // dialog-body checks (`confirm_loosening`, `dialog_text`) went with it.
     assert_eq!(
         trait_impls_of(&files, "RoutePolicyConfirmer"),
-        vec![(
-            "app/src-tauri/src/hm_policy.rs".to_string(),
-            "NativeRoutePolicyDialog".to_string()
-        )]
+        Vec::<(String, String)>::new()
     );
-    let policy = file(&files, "app/src-tauri/src/hm_policy.rs");
-    let (a, z) = fn_span(policy, "NativeRoutePolicyDialog::confirm_loosening");
-    let body = squash(&policy.text[a..z]);
-    assert!(
-        body.contains("if std::thread::current().name() == some(\"main\") { return false; }"),
-        "{body}"
-    );
-    assert!(
-        body.ends_with(".message(dialog_text(&request.message())) .title(request.title()) .kind(messagedialogkind::warning) .buttons(messagedialogbuttons::okcancelcustom( \"allow non-local providers\".to_string(), \"cancel\".to_string(), )) .blocking_show() }"),
-        "{body}"
-    );
-    let (a, z) = fn_span(policy, "dialog_text");
-    assert_eq!(
-        squash(&policy.text[a..z]),
-        "{ message.replace('%', \"%%\") }"
-    );
+    assert_desktop_removed(&files);
 }
 
 // ── A-S6 extended (E-M3-1): XS crates reach no HM content ───────────────────
@@ -2009,18 +1698,10 @@ fn hm_m4_n2_the_only_production_route_policy_confirmer_is_the_native_dialog() {
 /// The XS crates of E-M3-1, and the modules they hand data to, scanned
 /// whole: no read of the in-scope tables, the dream queue, the
 /// auto-evolution log or `ConsciousnessState` text.
-const XS_CRATES: [&str; 10] = [
-    "protocols/src/",
-    "content/src/",
-    "agents/social-poster/src/",
-    "connectors/social/src/",
-    "factory/src/",
-    "crates/nexus-perception/src/",
-    "nexus-code/src/",
-    "agents/coder/src/",
-    "agents/conductor/",
-    "agents/web-builder/",
-];
+/// Mother Nexus cleanup (2026-10-31): the protocols, content, social-poster,
+/// connectors/social, factory, perception, nexus-code, coder and conductor
+/// rows named deleted crates.
+const XS_CRATES: [&str; 1] = ["agents/web-builder/"];
 
 /// What an XS crate may never name: [`NO_HANDOFF`] and the types that hold
 /// or produce HM content.
@@ -2037,103 +1718,23 @@ const XS_NO_HANDOFF: [&str; 8] = [
 
 /// XS entry points referenced nowhere outside their crate: `(crate dir,
 /// identifiers)`.
-const XS_CLOSED_ENTRIES: [(&str, &[&str]); 3] = [
-    (
-        "protocols/src/",
-        &[
-            "build_router",
-            "GatewayState",
-            "run_from_args",
-            "server_runtime",
-            "http_gateway",
-        ],
-    ),
-    ("factory/src/", &["IntentParser", "RemoteFactoryInterface"]),
-    (
-        "agents/web-builder/",
-        &["generate_image", "generate_all_images", "generate_api"],
-    ),
-];
+/// Mother Nexus cleanup (2026-10-31): the protocols and factory rows named
+/// deleted crates.
+const XS_CLOSED_ENTRIES: [(&str, &[&str]); 1] = [(
+    "agents/web-builder/",
+    &["generate_image", "generate_all_images", "generate_api"],
+)];
 
 /// XS crates reached from outside the scanned set, by their library names.
-const XS_LIBS: [(&str, &str); 5] = [
-    ("crates/nexus-perception/src/", "nexus_perception"),
-    ("nexus-code/src/", "nexus_code"),
-    ("agents/social-poster/src/", "social_poster_agent"),
-    ("content/src/", "nexus_content"),
-    ("agents/coder/src/", "coder_agent"),
-];
+/// Mother Nexus cleanup (2026-10-31): every row (nexus-perception,
+/// nexus-code, social-poster, content, coder) named a deleted crate.
+const XS_LIBS: [(&str, &str); 0] = [];
 
 /// The reviewed functions outside the scanned set that hand data to an XS
 /// crate: `(file, fn, lib, what is handed)`.
-const XS_HANDOFF_FNS: [(&str, &str, &str, &str); 11] = [
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_analyze_chart",
-        "nexus_perception",
-        "the frontend's image and format",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_describe",
-        "nexus_perception",
-        "the frontend's image and format",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_extract_data",
-        "nexus_perception",
-        "the frontend's image, format and schema",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_extract_text",
-        "nexus_perception",
-        "the frontend's image and format",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_find_ui_elements",
-        "nexus_perception",
-        "the frontend's image",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_get_policy",
-        "nexus_perception",
-        "the perception state only (reads its policy)",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_question",
-        "nexus_perception",
-        "the frontend's image, format and question",
-    ),
-    (
-        "app/src-tauri/src/commands/crate_bridges.rs",
-        "perception_read_error",
-        "nexus_perception",
-        "the frontend's image",
-    ),
-    (
-        "app/src-tauri/src/nx_bridge/commands.rs",
-        "nx_switch_provider",
-        "nexus_code",
-        "the frontend's provider name and its default model",
-    ),
-    (
-        "app/src-tauri/src/nx_bridge/mod.rs",
-        "init_nx_state",
-        "nexus_code",
-        "the desktop's nexus-code config file and memory paths under the identity home",
-    ),
-    (
-        "cli/src/lib.rs",
-        "start_agent",
-        "social_poster_agent",
-        "the social-poster manifest path and the dry-run flag",
-    ),
-];
+/// Mother Nexus cleanup (2026-10-31): every row named deleted code (the
+/// desktop's `crate_bridges.rs` and `nx_bridge`, and `cli/src/lib.rs`).
+const XS_HANDOFF_FNS: [(&str, &str, &str, &str); 0] = [];
 
 /// The forbidden names reached in `span` of `f`, with [`XS_NO_HANDOFF`]:
 /// `(fn, name)`.
@@ -2391,6 +1992,8 @@ fn hm_m3_n5_a_s6_xs_crates_reach_no_hm_content() {
         .collect();
     reviewed.sort();
     assert_eq!(computed, reviewed, "XS handoff functions");
+    // The reviewed handoffs were desktop and CLI functions: now empty.
+    assert_desktop_removed(&files);
     let mut found = Vec::new();
     for (rel, function, _) in &computed {
         let f = file(&files, rel);
@@ -2403,49 +2006,14 @@ fn hm_m3_n5_a_s6_xs_crates_reach_no_hm_content() {
 
 // ── A3.2 (C2): the one test-only desktop module that uses the store ─────────
 
+/// Mother Nexus cleanup (2026-10-31): this guard's only subject was the
+/// desktop's `#[cfg(test)] mod hm_m3_tests` (`app/src-tauri/src/lib.rs`
+/// declaring `app/src-tauri/src/hm_m3_tests.rs`, the one desktop file that
+/// reached the store). It was removed with the desktop; the tripwire stands
+/// in until a desktop returns.
 #[test]
 fn hm_m3_n5_a3_2_the_desktop_store_fixture_module_is_test_only() {
-    let root = source::workspace_root();
-    let lib = std::fs::read_to_string(root.join("app/src-tauri/src/lib.rs")).unwrap();
-    let code = mask(&lib, false);
-    let decls: Vec<usize> = words(&code, "hm_m3_tests")
-        .into_iter()
-        .filter(|&at| code[..at].trim_end().ends_with("mod"))
-        .collect();
-    assert_eq!(decls.len(), 1, "one declaration of hm_m3_tests");
-    let before = code[..decls[0]]
-        .trim_end()
-        .trim_end_matches("mod")
-        .trim_end();
-    assert!(
-        before.ends_with("#[cfg(test)]"),
-        "hm_m3_tests is not #[cfg(test)]"
-    );
-    let files = production_files();
-    assert!(files
-        .iter()
-        .all(|f| f.rel != "app/src-tauri/src/hm_m3_tests.rs"));
-    // Every desktop source file (test code included) that reaches the store
-    // is that module.
-    let mut users = Vec::new();
-    let mut stack = vec![root.join("app/src-tauri/src")];
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|e| e == "rs") {
-                let code = mask(&std::fs::read_to_string(&p).unwrap(), false);
-                if [".hm()", "HmStore", "HmTx", "persistence::hm"]
-                    .iter()
-                    .any(|h| code.contains(h))
-                {
-                    users.push(source::relative(&p));
-                }
-            }
-        }
-    }
-    assert_eq!(users, vec!["app/src-tauri/src/hm_m3_tests.rs".to_string()]);
+    assert_desktop_removed(&production_files());
 }
 
 /// Mission P3-C11-HM-M4 N4 (AD-6): the capture seam is test code only. No
