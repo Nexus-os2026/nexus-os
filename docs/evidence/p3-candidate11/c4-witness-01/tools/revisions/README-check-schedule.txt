@@ -1,1 +1,0 @@
-check-schedule.py v1 -> v2 (2026-10-14T07:52:01+01:00): v1 stopped with 'field faults not found': the captured const body excludes the final newline, so the last field had no ',\n'. v2 appends a newline to each captured body. No check was removed or weakened.

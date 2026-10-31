@@ -119,7 +119,7 @@ impl WorldModel {
             b.text(&prompt);
             Some(b.build())
         })?;
-        let value = crate::simulation::extract_json_value(response.text())?;
+        let value = extract_json_value(response.text())?;
         match serde_json::from_value::<SeedGraphResponse>(value).map_err(|error| {
             AgentError::SupervisorError(format!("invalid world model json: {error}"))
         })? {
@@ -172,4 +172,28 @@ impl WorldModel {
             0.35 + (self.entities.len() as f64 * 0.05) + (self.relationships.len() as f64 * 0.03);
         raw.clamp(0.1, 0.95)
     }
+}
+
+/// Parse a model reply as JSON: the whole text, else its outermost `[...]`
+/// or `{...}` span (moved here from the retired `simulation` module).
+fn extract_json_value(text: &str) -> Result<serde_json::Value, AgentError> {
+    serde_json::from_str::<serde_json::Value>(text)
+        .or_else(|_| extract_delimited_json(text, '[', ']'))
+        .or_else(|_| extract_delimited_json(text, '{', '}'))
+        .map_err(|error| {
+            AgentError::SupervisorError(format!("unable to parse json response: {error}"))
+        })
+}
+
+fn extract_delimited_json(
+    text: &str,
+    open: char,
+    close: char,
+) -> Result<serde_json::Value, serde_json::Error> {
+    let start = text.find(open).unwrap_or(0);
+    let end = text
+        .rfind(close)
+        .map(|index| index + 1)
+        .unwrap_or(text.len());
+    serde_json::from_str::<serde_json::Value>(&text[start..end])
 }

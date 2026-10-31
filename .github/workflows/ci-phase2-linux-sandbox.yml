@@ -255,9 +255,11 @@ jobs:
             exit 1
           fi
 
-      - name: Phase Two kernel and desktop controls
+      # The desktop controls (phase2_tests, coding_flow::verification,
+      # phase1_tests) left with the old desktop app in the Mother Nexus
+      # cleanup (2026-10-31); they return with the Mother screen.
+      - name: Phase Two kernel controls
         shell: bash
         run: |
           set -o pipefail
           cargo test -p nexus-kernel --locked --lib -- p2b_ p2e_input p2h_ 2>&1 | tee phase2-kernel.log
-          cargo test -p nexus-desktop-backend --locked --lib -- phase2_tests coding_flow::verification phase1_tests 2>&1 | tee phase2-desktop.log

@@ -890,49 +890,71 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // including the command registry in lib.rs, must not. Phase Two: its
     // verification submodule, included only from `coding_flow.rs`, is part
     // of the same flow.
-    const GOVERNED_FLOW: &str = "coding_flow.rs";
-    const GOVERNED_VERIFICATION: &str = "coding_flow/verification.rs";
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/src-tauri/src");
+    //
+    // Mother Nexus cleanup (2026-10-31): the old desktop app was removed, so
+    // the scan now covers every workspace source, not only the desktop's. No
+    // production source outside the primitive's own module, its ledger and
+    // the two crate roots that declare them may name it; a desktop source
+    // tree, when one returns, is scanned with the same rule and the same two
+    // governed-flow exceptions.
+    const GOVERNED_FLOW: &str = "app/src-tauri/src/coding_flow.rs";
+    const GOVERNED_VERIFICATION: &str = "app/src-tauri/src/coding_flow/verification.rs";
+    const DECLARATIONS: [&str; 4] = [
+        "kernel/src/lib.rs",
+        "persistence/src/lib.rs",
+        "persistence/src/coding_run_ledger.rs",
+        "kernel/src/coding_run.rs",
+    ];
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .canonicalize()
+        .unwrap();
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
             if path.is_dir() {
-                if path.file_name().is_some_and(|n| n != "tests") {
+                if !matches!(
+                    name.as_str(),
+                    "tests" | "target" | ".git" | "node_modules" | ".claude"
+                ) {
                     walk(&path, out);
                 }
-            } else if path.extension().is_some_and(|e| e == "rs")
-                && !path
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .ends_with("tests.rs")
-            {
+            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
                 out.push(path);
             }
         }
     }
     let mut sources = Vec::new();
-    walk(&root, &mut sources);
-    assert!(sources.len() > 20, "desktop sources not found");
-    assert!(
-        sources.iter().any(|path| path.ends_with("lib.rs")),
-        "the desktop command registry (lib.rs) must be scanned"
-    );
-    assert!(
-        sources.iter().any(|path| path.ends_with(GOVERNED_FLOW)),
-        "the governed coding flow must exist"
-    );
+    walk(&repo, &mut sources);
+    let rel = |path: &Path| {
+        path.strip_prefix(&repo)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/")
+    };
+    assert!(sources.len() > 200, "workspace sources not found");
+    for required in [
+        "kernel/src/lib.rs",
+        "crates/nexus-governed-control/src/lib.rs",
+    ] {
+        assert!(
+            sources.iter().any(|path| rel(path) == required),
+            "{required} must be scanned"
+        );
+    }
     for path in sources {
-        if path.ends_with(GOVERNED_FLOW) || path.ends_with(GOVERNED_VERIFICATION) {
+        let rel = rel(&path);
+        if rel.starts_with("kernel/src/coding_run/")
+            || DECLARATIONS.contains(&rel.as_str())
+            || rel == GOVERNED_FLOW
+            || rel == GOVERNED_VERIFICATION
+        {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
         for needle in ["coding_run", "CodingRun", "CodingRunLedger"] {
-            assert!(
-                !text.contains(needle),
-                "{} references {needle}",
-                path.display()
-            );
+            assert!(!text.contains(needle), "{rel} references {needle}");
         }
     }
 }

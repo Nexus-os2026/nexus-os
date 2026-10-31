@@ -1,1 +1,0 @@
-c4-append v1 -> v2 (2026-10-14T08:00:49+01:00): doc comments of C4_P4 and C4_P8 only (the delegated review's nit: '(C and X empty)' and '(Healthy)' named test 1's condition, not the cause of the refusal). No code or constant changed.

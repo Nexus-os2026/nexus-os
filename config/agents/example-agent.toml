@@ -1,9 +1,0 @@
-name = "example-research-agent"
-version = "0.1.0"
-capabilities = ["llm.query", "web.read"]
-fuel_budget = 5000
-autonomy_level = 1
-llm_model = "claude-sonnet-4-5"
-
-[config]
-description = "Demonstrates the capability manifest schema"

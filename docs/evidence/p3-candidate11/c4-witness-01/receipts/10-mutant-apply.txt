@@ -1,6 +1,0 @@
-C4 MUTANT APPLY — A 04e42a7ddf0d0a2af17b6506c51997006e7a08dc tree fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3; A's model_tests.rs 28085ce232827301104b5d757af042ec933976f8; patch /home/nexus/nexus-audits/claude-architect/p3-c11-dr01-d2a1-c4-witness-01/patches/C4-test1-removed.patch sha256 24ac7add3716a030dd710539e6082e197fdc5bd624c26a595b378b3971e0838d
-HEAD is now at 04e42a7d test(experiment): add replay witness for control C4 (P4 and P8 on F-8)
-  before: HEAD 04e42a7ddf0d0a2af17b6506c51997006e7a08dc tree fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3 porcelain lines 0 protocol.rs a2df2841b99cad5d452008a6d4150e9369d07e66 model_tests.rs 28085ce232827301104b5d757af042ec933976f8
-  git apply --check: ok
-  after: protocol.rs blob f3793c2ff61f8adbf43fe17d6b5237b49bc507b0 sha256 4037de6e33a901f933f118dde5a395b70b1e5cd7e58e54dcf0078d4a40f335b2; model_tests.rs 28085ce232827301104b5d757af042ec933976f8; porcelain [' M crates/nexus-governed-control/src/ledger/protocol.rs']; numstat '0\t16\tcrates/nexus-governed-control/src/ledger/protocol.rs'
-  RESULT: the mutant source is A plus exactly the frozen C4 patch

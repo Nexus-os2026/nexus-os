@@ -1,9 +1,0 @@
-{
- "source_commit": "04e42a7ddf0d0a2af17b6506c51997006e7a08dc",
- "source_tree": "fca5c2a28e1c6cfef3cd92fbb81484a56769a9b3",
- "model_tests_blob": "28085ce232827301104b5d757af042ec933976f8",
- "baseline_protocol_blob": "a2df2841b99cad5d452008a6d4150e9369d07e66",
- "mutant_protocol_blob": "f3793c2ff61f8adbf43fe17d6b5237b49bc507b0",
- "baseline_executable_sha256": "f72a09a338df176121e69bda8cba8bb30ff11b4ef9666a9a796cf77c6a52f62e",
- "mutant_executable_sha256": "5a4c4f17ea5b3883fb87a1a16fe19d53810608d4c229548a37932c405aa1fe8c"
-}

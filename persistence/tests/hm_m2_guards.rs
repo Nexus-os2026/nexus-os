@@ -93,6 +93,26 @@ fn is_test_path(rel: &str) -> bool {
         || rel.starts_with("tests/")
 }
 
+/// Mother Nexus cleanup (2026-10-31): the old desktop app was removed with
+/// its desktop-specific checks (see `archive/nexus-before-mother`). This
+/// tripwire fails as soon as a desktop source tree returns, so those
+/// checks must be restored and re-pinned before the guard can pass.
+fn assert_desktop_removed(files: &[PathBuf]) {
+    let desktop: Vec<String> = files
+        .iter()
+        .map(|f| relative(f))
+        .filter(|rel| rel.starts_with("app/"))
+        .collect();
+    assert!(
+        desktop.is_empty(),
+        "desktop source returned; restore and re-pin its checks: {desktop:?}"
+    );
+    assert!(
+        !workspace_root().join("app/src-tauri").exists(),
+        "app/src-tauri returned; restore and re-pin its checks"
+    );
+}
+
 // ── Guard 1: no REPLACE write to any hm_* table (§5.1) ──────────────────────
 
 /// The targets of every REPLACE write (`replace into`, `insert or replace
@@ -233,15 +253,11 @@ fn hm_m2_n7_no_insert_into_hm_grant() {
 
 // ── Guard 3: HmStore / HmTx used only by the hm modules (§11.0, A-S3) ───────
 
-/// The desktop's one historical-memory test module (mission
-/// P3-C11-HM-M3, AMENDMENT 1 A1.9: its tests loosen a policy only through a
-/// TEST FIXTURE writing through the store, never product code). It is test
-/// code only: the desktop declares it once, under `#[cfg(test)]`.
-const DESKTOP_HM_TEST_MODULE: &str = "app/src-tauri/src/hm_m3_tests.rs";
-
+/// Mother Nexus cleanup (2026-10-31): the allowance for the desktop's one
+/// historical-memory test module (`app/src-tauri/src/hm_m3_tests.rs`,
+/// mission P3-C11-HM-M3, AMENDMENT 1 A1.9) was removed with the desktop.
 fn hm_store_user_allowed(rel: &str) -> bool {
-    rel == DESKTOP_HM_TEST_MODULE
-        || rel == "persistence/src/hm.rs"
+    rel == "persistence/src/hm.rs"
         || rel == "kernel/src/hm.rs"
         || rel.starts_with("kernel/src/hm/")
         || (rel.starts_with("kernel/tests/hm_") && rel.ends_with(".rs"))
@@ -271,16 +287,18 @@ fn hm_m2_n7_hm_store_is_called_only_from_the_hm_modules() {
     assert!(!hm_store_user_allowed("app/src-tauri/src/lib.rs"));
     assert!(!hm_store_user_allowed("app/src-tauri/src/hm_wiring.rs"));
     assert!(!hm_store_user_allowed("app/src-tauri/src/hm_dispatch.rs"));
+    assert!(!hm_store_user_allowed("app/src-tauri/src/hm_m3_tests.rs"));
     // Ported (mission P3-C11-HM-M3 R12): the desktop's historical-memory
-    // test module is allowed, and it is test code only.
-    let lib = std::fs::read_to_string(workspace_root().join("app/src-tauri/src/lib.rs")).unwrap();
-    assert_eq!(lib.matches("mod hm_m3_tests").count(), 1);
-    assert!(lib.contains("#[cfg(test)]\nmod hm_m3_tests;"));
+    // test module was allowed, and it was test code only (its declaration in
+    // `app/src-tauri/src/lib.rs` was pinned here). Mother Nexus cleanup
+    // (2026-10-31): both were removed with the desktop.
     assert!(!hm_store_user_allowed("kernel/src/hmx.rs"));
     assert!(hm_store_user_allowed("kernel/src/hm/write.rs"));
 
+    let files = source_files(&["rs"]);
+    assert_desktop_removed(&files);
     let mut hits = Vec::new();
-    for f in source_files(&["rs"]) {
+    for f in files {
         let rel = relative(&f);
         let Ok(text) = std::fs::read_to_string(&f) else {
             continue;
@@ -333,7 +351,9 @@ fn raw_opens(text: &str) -> usize {
 
 /// Non-test files that open their own SQLite file directly, with the file
 /// each one opens. None of them is the identity-home `nexus.db`.
-const RAW_OPEN_FILES: [(&str, &str); 7] = [
+/// Mother Nexus cleanup (2026-10-31): the `metering/src/store.rs` and
+/// `marketplace/src/sqlite_registry.rs` rows named deleted crates.
+const RAW_OPEN_FILES: [(&str, &str); 5] = [
     (
         "persistence/src/lib.rs",
         "NexusDatabase::open / in_memory (foreign keys on)",
@@ -347,8 +367,6 @@ const RAW_OPEN_FILES: [(&str, &str); 7] = [
         "crates/nexus-memory/src/audit.rs",
         "<data_dir>/memory_audit.db",
     ),
-    ("metering/src/store.rs", "metering.db"),
-    ("marketplace/src/sqlite_registry.rs", "marketplace.db"),
     (
         "crates/nexus-governed-control/src/evidence_store.rs",
         "<state>/p3-evidence/evidence.sqlite3",
@@ -356,13 +374,12 @@ const RAW_OPEN_FILES: [(&str, &str); 7] = [
 ];
 
 /// Non-test files that resolve the identity-home `nexus.db` path.
-const IDENTITY_DB_CALLERS: [&str; 6] = [
+/// Mother Nexus cleanup (2026-10-31): the social-poster and desktop rows
+/// (`app/src-tauri/src/lib.rs`, `commands/swarm.rs`, `commands/chat_llm.rs`)
+/// named deleted code.
+const IDENTITY_DB_CALLERS: [&str; 2] = [
     "kernel/src/identity_home.rs",
     "kernel/src/cognitive/loop_runtime.rs",
-    "agents/social-poster/src/lib.rs",
-    "app/src-tauri/src/lib.rs",
-    "app/src-tauri/src/commands/swarm.rs",
-    "app/src-tauri/src/commands/chat_llm.rs",
 ];
 
 /// The connections to the state database: contract §8 item 4, plus
@@ -373,14 +390,15 @@ const IDENTITY_DB_CALLERS: [&str; 6] = [
 /// cognitive-parameter actuators no longer open a connection of their own;
 /// they write through the unit's issuer on the shared state database
 /// ([`NO_OWN_CONNECTION`]).
-const STATE_DB_OPENERS: [&str; 7] = [
-    "app/src-tauri/src/lib.rs",
+///
+/// Mother Nexus cleanup (2026-10-31): the desktop rows
+/// (`app/src-tauri/src/lib.rs`, `app/src-tauri/src/commands/swarm.rs`) and
+/// `agents/social-poster/src/lib.rs` named deleted code.
+const STATE_DB_OPENERS: [&str; 4] = [
     "kernel/src/persistence.rs",
     "kernel/src/actuators/self_evolution.rs",
     "kernel/src/actuators/agent_lifecycle.rs",
-    "app/src-tauri/src/commands/swarm.rs",
     "kernel/src/cognitive/loop_runtime.rs",
-    "agents/social-poster/src/lib.rs",
 ];
 
 /// Former state-database openers that open no connection at all now
@@ -437,7 +455,11 @@ fn hm_m2_n7_every_identity_home_connection_enables_foreign_keys() {
     // names the identity-home database.
     let mut unclassified = Vec::new();
     let mut identity_callers = Vec::new();
-    for f in source_files(&["rs"]) {
+    let files = source_files(&["rs"]);
+    // The desktop's identity-home callers and state-database openers were
+    // pinned below; they were removed with the desktop.
+    assert_desktop_removed(&files);
+    for f in files {
         let rel = relative(&f);
         if is_test_path(&rel) {
             continue;

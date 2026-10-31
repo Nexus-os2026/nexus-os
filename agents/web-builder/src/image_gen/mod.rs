@@ -1,11 +1,9 @@
-//! Image Generation Module — orchestrates local SD, API, and placeholder tiers.
+//! Image Generation Module — SVG placeholders only.
 //!
-//! Tier selection: local SD → API (DALL-E) → SVG placeholder.
-//! Never fails — always produces at least a placeholder.
+//! The Mother Nexus cleanup removed the local Stable Diffusion (ComfyUI) and
+//! paid API (DALL-E) tiers: both made raw network calls outside the broker.
+//! Every image is a themed SVG placeholder written into the output folder.
 
-pub mod api;
-pub mod local;
-pub mod optimize;
 pub mod placeholder;
 pub mod prompt;
 
@@ -240,108 +238,20 @@ pub fn infer_image_type(slot_name: &str) -> ImageType {
 
 // ─── Orchestrator ───────────────────────────────────────────────────────────
 
-/// Generate an image using the tiered approach: local → API → placeholder.
-///
-/// Never fails — always produces at least a placeholder SVG.
+/// Generate a themed SVG placeholder for an image slot. Never fails.
 pub async fn generate_image(
     request: &ImageRequest,
     output_dir: &Path,
-    config: &ImageGenConfig,
+    _config: &ImageGenConfig,
     theme_colors: &ThemeColors,
 ) -> GeneratedImage {
     let (width, height) = request.image_type.default_dimensions();
-    let enhanced_prompt =
-        prompt::enhance_prompt(&request.prompt, &request.image_type, &request.section_id);
 
     // Ensure images directory exists
     let images_dir = output_dir.join("images");
     let _ = std::fs::create_dir_all(&images_dir);
 
     let base_name = sanitize_filename(&request.slot_name);
-
-    // Tier 1: Local SD (if enabled and not placeholder-only)
-    if !config.placeholder_only && config.prefer_local {
-        if let Ok(()) = local::generate_local(
-            &enhanced_prompt,
-            width,
-            height,
-            &images_dir.join(format!("{base_name}.png")),
-        )
-        .await
-        {
-            // Optimize the generated image
-            if let Ok(optimized) = optimize::optimize_image(
-                &images_dir.join(format!("{base_name}.png")),
-                &images_dir,
-                &base_name,
-                &request.image_type.srcset_sizes(),
-                needs_transparency(request.image_type),
-            ) {
-                return GeneratedImage {
-                    primary_path: format!("images/{}", optimized.primary_name),
-                    srcset_paths: optimized
-                        .variants
-                        .iter()
-                        .map(|v| (format!("images/{}", v.name), v.width))
-                        .collect(),
-                    alt_text: request.prompt.clone(),
-                    width,
-                    height,
-                    format: if needs_transparency(request.image_type) {
-                        ImageFormat::Png
-                    } else {
-                        ImageFormat::WebP
-                    },
-                    generation_method: "local_sd".into(),
-                    cost: 0.0,
-                };
-            }
-        }
-    }
-
-    // Tier 2: API generation (if key available and not placeholder-only)
-    if !config.placeholder_only {
-        if let Some(ref api_key) = config.openai_api_key {
-            if let Ok(cost) = api::generate_api(
-                &enhanced_prompt,
-                width,
-                height,
-                &images_dir.join(format!("{base_name}.png")),
-                api_key,
-                config.fuel_budget_usd.unwrap_or(1.0),
-            )
-            .await
-            {
-                // Optimize the generated image
-                if let Ok(optimized) = optimize::optimize_image(
-                    &images_dir.join(format!("{base_name}.png")),
-                    &images_dir,
-                    &base_name,
-                    &request.image_type.srcset_sizes(),
-                    needs_transparency(request.image_type),
-                ) {
-                    return GeneratedImage {
-                        primary_path: format!("images/{}", optimized.primary_name),
-                        srcset_paths: optimized
-                            .variants
-                            .iter()
-                            .map(|v| (format!("images/{}", v.name), v.width))
-                            .collect(),
-                        alt_text: request.prompt.clone(),
-                        width,
-                        height,
-                        format: if needs_transparency(request.image_type) {
-                            ImageFormat::Png
-                        } else {
-                            ImageFormat::WebP
-                        },
-                        generation_method: "api_openai".into(),
-                        cost,
-                    };
-                }
-            }
-        }
-    }
 
     // Tier 0: Placeholder (always works)
     let svg = placeholder::generate_placeholder(&request.prompt, width, height, theme_colors);
@@ -417,10 +327,10 @@ pub async fn generate_all_images(
 }
 
 /// Check the current availability of image generation tiers.
-pub async fn check_status(config: &ImageGenConfig) -> ImageGenStatus {
+pub async fn check_status(_config: &ImageGenConfig) -> ImageGenStatus {
     ImageGenStatus {
-        local_sd_available: local::is_available().await,
-        api_available: config.openai_api_key.is_some(),
+        local_sd_available: false,
+        api_available: false,
         placeholder_available: true,
     }
 }
@@ -448,10 +358,6 @@ fn sanitize_filename(name: &str) -> String {
             }
         })
         .collect()
-}
-
-fn needs_transparency(image_type: ImageType) -> bool {
-    matches!(image_type, ImageType::Logo | ImageType::Feature)
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -546,14 +452,6 @@ mod tests {
         assert_eq!(sanitize_filename("hero_image"), "hero_image");
         assert_eq!(sanitize_filename("product 1"), "product_1");
         assert_eq!(sanitize_filename("file/name"), "file_name");
-    }
-
-    #[test]
-    fn test_needs_transparency() {
-        assert!(needs_transparency(ImageType::Logo));
-        assert!(needs_transparency(ImageType::Feature));
-        assert!(!needs_transparency(ImageType::Hero));
-        assert!(!needs_transparency(ImageType::Product));
     }
 
     #[test]

@@ -1,3 +1,0 @@
-systemd: /usr/share/man/man5/systemd.unit.5.gz
-systemd: /usr/share/man/man5/systemd.scope.5.gz
-systemd	255.4-1ubuntu8.17

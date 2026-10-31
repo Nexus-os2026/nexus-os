@@ -1,7 +1,0 @@
-{
-  "bundle": {
-    "resources": {
-      "builder-toolchain": "toolchain"
-    }
-  }
-}

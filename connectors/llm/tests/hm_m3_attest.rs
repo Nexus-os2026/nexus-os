@@ -319,12 +319,49 @@ fn remote_fields(fields: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Mother Nexus cleanup (2026-10-31): `llama-bridge` (with
+/// `nexus-flash-infer` and the `flash-infer` feature that linked them) was
+/// removed (see `archive/nexus-before-mother`). This tripwire fails as soon
+/// as the bridge returns, so the A-F2 checks on its `build.rs` link
+/// directives and its `ModelLoadConfig` fields must be restored and
+/// re-pinned before the guard can pass.
+fn assert_llama_bridge_removed() {
+    let root = workspace_root();
+    assert!(
+        !root.join("llama-bridge").exists(),
+        "llama-bridge returned; restore and re-pin its A-F2 checks"
+    );
+    for manifest in ["Cargo.toml", "connectors/llm/Cargo.toml"] {
+        let toml = std::fs::read_to_string(root.join(manifest)).unwrap();
+        // TOML comments (the manifest's notes on the removal) are no use.
+        for line in toml.lines().map(|l| l.split('#').next().unwrap_or("")) {
+            assert!(
+                !line.contains("llama-bridge") && !line.contains("llama_bridge"),
+                "{manifest} names llama-bridge; restore and re-pin its A-F2 checks: {line}"
+            );
+        }
+    }
+}
+
+/// A-F2 guarded `llama-bridge/build.rs` (only the allowed local link
+/// libraries, no remote backend) and `llama-bridge/src/types.rs` (a
+/// `ModelLoadConfig` with no remote field). The bridge was deleted: the
+/// tripwire stands in for those checks, and the scanners' planted controls
+/// run on a synthetic bridge of the same shape.
 #[test]
 fn hm_m3_n2_a_f2_the_bridge_links_no_remote_backend_and_loads_no_server() {
-    let root = workspace_root();
-    let build_rs = std::fs::read_to_string(root.join("llama-bridge/build.rs")).unwrap();
-    assert_eq!(link_violations(&build_rs), Vec::<String>::new());
-    let libs = link_libs(&build_rs);
+    assert_llama_bridge_removed();
+    let build_rs = concat!(
+        "fn main() {\n",
+        "    println!(\"cargo:rustc-link-lib=static=llama\");\n",
+        "    println!(\"cargo:rustc-link-lib=static=ggml\");\n",
+        "    println!(\"cargo:rustc-link-lib=static=ggml-base\");\n",
+        "    println!(\"cargo:rustc-link-lib=static=ggml-cpu\");\n",
+        "    println!(\"cargo:rustc-link-lib=stdc++\");\n",
+        "}\n"
+    );
+    assert_eq!(link_violations(build_rs), Vec::<String>::new());
+    let libs = link_libs(build_rs);
     for core in [
         "static=llama",
         "static=ggml",
@@ -339,8 +376,16 @@ fn hm_m3_n2_a_f2_the_bridge_links_no_remote_backend_and_loads_no_server() {
             assert!(!lower.contains(marker), "{lib}");
         }
     }
-    let types = std::fs::read_to_string(root.join("llama-bridge/src/types.rs")).unwrap();
-    let fields = struct_fields(&types, "ModelLoadConfig");
+    let types = concat!(
+        "pub struct ModelLoadConfig {\n",
+        "    /// Filesystem path to the GGUF file.\n",
+        "    pub model_path: String,\n",
+        "    pub n_gpu_layers: i32,\n",
+        "    pub use_mmap: bool,\n",
+        "    pub n_threads: Option<u32>,\n",
+        "}\n"
+    );
+    let fields = struct_fields(types, "ModelLoadConfig");
     assert!(fields.contains(&"model_path".to_string()), "{fields:?}");
     assert_eq!(remote_fields(&fields), Vec::<String>::new(), "{fields:?}");
 

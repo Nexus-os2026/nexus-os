@@ -37,7 +37,7 @@ pub fn sign_edit(
     payload: &str,
     identity: &CryptoIdentity,
 ) -> Result<SignedEdit, AttributionError> {
-    let timestamp = crate::deploy::now_iso8601();
+    let timestamp = crate::timestamp::now_iso8601();
     let message = format!("{edit_type}|{payload}|{timestamp}");
 
     let sig = identity
