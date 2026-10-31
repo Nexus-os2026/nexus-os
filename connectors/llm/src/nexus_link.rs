@@ -2056,7 +2056,7 @@ mod tests {
             let (mut client, _) = relay_listener.accept().unwrap();
             let mut upstream = TcpStream::connect(responder_addr).unwrap();
             let mut recorded = Vec::new();
-            let mut forward = |from: &mut TcpStream, to: &mut TcpStream, n: usize| {
+            let forward = |from: &mut TcpStream, to: &mut TcpStream, n: usize| {
                 let mut buf = vec![0u8; n];
                 from.read_exact(&mut buf).unwrap();
                 to.write_all(&buf).unwrap();
