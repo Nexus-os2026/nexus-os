@@ -1071,3 +1071,75 @@ fn el1_m7_y1_an_expiry_after_a_recorded_start_ends_the_commitment_and_nothing_is
     assert!(rows_of(&rows, "finished", &id).is_empty());
     reopened_settled(f);
 }
+
+/// M0-FIX2 F10 oracle: a model call that the owner's Stop halts is recorded
+/// in the evidence of record (a `kernel_halt` end record: the area, the
+/// stop number and the outcome, never the call's command, prompt or
+/// credentials), and the record survives reopening the store. The model
+/// call is the kernel's guarded child, as the providers' curl calls are,
+/// admitted under the front door's kernel stop and ended by the owner's
+/// emergency stop.
+#[cfg(unix)]
+#[test]
+fn m0_fix2_f10_a_halted_model_call_is_durably_recorded() {
+    use nexus_kernel::emergency_stop::{ChildEnd, GuardedChild, HaltArea, StopAuthority};
+    let scratch = Scratch::new();
+    let path = scratch.store();
+    let evidence = PrimaryEvidence::open(&path, vec![]).unwrap();
+    let stop = StopAuthority::new();
+    let governed = crate::governed::GovernedControl::with_secrets(
+        &scratch.path("runtime"),
+        crate::broker::Vault::Disabled.source(),
+        evidence.clone(),
+        Arc::new(ManualClock::default()),
+    )
+    .unwrap()
+    .with_kernel_stop(stop.clone());
+
+    // A model call in flight: a child that blocks until it is ended.
+    let watch = stop.admit().unwrap();
+    let mut call = std::process::Command::new("cat");
+    call.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let (child, mut pipes) = GuardedChild::spawn(&mut call, &watch, HaltArea::ModelCall).unwrap();
+    let _held_open = pipes.stdin.take();
+    governed.emergency_stop();
+    let stop_number = stop.stop_number();
+    assert!(
+        matches!(child.finish(), ChildEnd::Halted(Ok(_))),
+        "the stop did not end the model call"
+    );
+
+    // A new session over the same file: the halt is there.
+    drop(governed);
+    drop(evidence);
+    let reopened = PrimaryEvidence::open(&path, vec![]).unwrap();
+    let halts: Vec<serde_json::Value> = reopened
+        .store()
+        .rows()
+        .into_iter()
+        .filter(|row| row.phase == "kernel_halt")
+        .map(|row| serde_json::from_str(&row.body).unwrap())
+        .collect();
+    assert_eq!(halts.len(), 1, "{halts:?}");
+    let halt = &halts[0];
+    assert_eq!(halt["detail"]["area"], "model_call", "{halt}");
+    assert_eq!(
+        halt["detail"]["stop_number"],
+        stop_number.to_string(),
+        "{halt}"
+    );
+    assert_eq!(halt["outcome"], "ended", "{halt}");
+    // Opaque fields only: nothing of the call itself.
+    let detail = halt["detail"].as_object().unwrap();
+    for key in detail.keys() {
+        assert!(
+            ["area", "stop_number", "cleanup"].contains(&key.as_str()),
+            "unexpected detail {key}: {halt}"
+        );
+    }
+    for field in ["target", "target_digest", "parameters_digest", "approval"] {
+        assert!(halt[field].is_null(), "{field}: {halt}");
+    }
+}

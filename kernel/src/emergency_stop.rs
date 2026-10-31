@@ -21,6 +21,42 @@
 //! audit trail, the coding-run ledger).
 //!
 //! No lock is held across a termination, an audit append or a provider call.
+//!
+//! # Who may lift a stop (M0-FIX2 F10)
+//!
+//! Only the owner's Stop/Resume path. The authority itself cannot lift:
+//!
+//! ```compile_fail
+//! nexus_kernel::emergency_stop::StopAuthority::global().lift();
+//! ```
+//!
+//! ```compile_fail
+//! nexus_kernel::emergency_stop::StopAuthority::global().lift_if(1);
+//! ```
+//!
+//! and the controller that can is never copied:
+//!
+//! ```compile_fail
+//! use nexus_kernel::emergency_stop::StopController;
+//! fn copy(controller: &StopController) -> StopController {
+//!     controller.clone()
+//! }
+//! ```
+//!
+//! A private authority's controller is claimed once, by its creator; the
+//! process's authority never hands its controller out this way:
+//!
+//! ```
+//! use nexus_kernel::emergency_stop::StopAuthority;
+//! let stop = StopAuthority::new();
+//! let controller = stop.claim_controller().unwrap();
+//! assert!(stop.claim_controller().is_none());
+//! let number = controller.engage();
+//! assert!(stop.is_stopped());
+//! assert!(controller.lift_if(number));
+//! assert!(!stop.is_stopped());
+//! assert!(StopAuthority::global().claim_controller().is_none());
+//! ```
 
 use std::collections::VecDeque;
 use std::io;
