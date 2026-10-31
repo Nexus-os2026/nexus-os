@@ -46,6 +46,35 @@ pub enum MigrationError {
     VerifyMismatch { scope: String, name: String },
     #[error("sqlite backend not configured on facade")]
     SqliteUnavailable,
+    /// A legacy row does not open under the current key (wrong key, or a
+    /// damaged or foreign ciphertext). Nothing was upgraded.
+    #[error("legacy secret {scope}.{name} does not decrypt; nothing was upgraded")]
+    LegacyUndecryptable { scope: String, name: String },
+    /// A legacy row opens to a value that is not text. Nothing was upgraded.
+    #[error("legacy secret {scope}.{name} is damaged; nothing was upgraded")]
+    LegacyDamaged { scope: String, name: String },
+    /// Legacy rows appeared after the one-time upgrade completed. They are
+    /// never upgraded later and stay refused.
+    #[error("{count} legacy secret row(s) found after the secrets upgrade completed; refused")]
+    LegacyAfterUpgrade { count: usize },
+}
+
+/// Outcome of [`upgrade_legacy_secrets`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpgradeReport {
+    AlreadyRun,
+    Upgraded { rows: Vec<(String, String)> },
+}
+
+/// Explicit one-time upgrade of legacy (unbound) secret rows to the
+/// identity-bound format. Interface registered with the M0-FIX F4 oracle;
+/// not implemented yet, so it fails closed.
+pub fn upgrade_legacy_secrets(
+    _sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
+) -> Result<UpgradeReport, MigrationError> {
+    Err(MigrationError::Storage(
+        "secrets upgrade not implemented".into(),
+    ))
 }
 
 #[derive(Debug, Clone)]

@@ -13,7 +13,7 @@ use super::backend_keyring::{KeyringBackend, KeyringBackendAdapter, MockKeyring}
 use super::backend_memory::MemoryBackend;
 use super::backend_sqlite::SqliteEnvelopeBackend;
 use super::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
-use super::{ResolvedFrom, SecretAuditCtx, SecretError, SecretsFacade};
+use super::{ResolvedFrom, SecretAuditCtx, SecretBackend, SecretError, SecretsFacade};
 use crate::config::{CredentialFacadeConfig, NexusConfig};
 use crate::crypto::EncryptionKey;
 use std::sync::Arc;
@@ -602,4 +602,237 @@ fn env_var_guard_restores_the_previous_state() {
         assert_eq!(value().as_deref(), Some("before".as_ref()));
     }
     assert_eq!(value(), None);
+}
+
+// ── M0-FIX F4: ciphertexts are bound to their secret identity ─────
+
+const F4_SCHEMA_KEY: &str = "secrets_aad_v2";
+
+fn f4_backend(
+    master: &EncryptionKey,
+) -> (SqliteEnvelopeBackend, Arc<nexus_persistence::NexusDatabase>) {
+    let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+    (SqliteEnvelopeBackend::new(Arc::clone(&db), master), db)
+}
+
+/// Writes a row exactly as the pre-F4 backend did: a 12-byte nonce and
+/// AES-256-GCM under the `nexus.secrets.v1` domain key with no associated
+/// data.
+fn f4_write_legacy_row(
+    db: &nexus_persistence::NexusDatabase,
+    master: &EncryptionKey,
+    scope: &str,
+    name: &str,
+    plaintext: &[u8],
+) {
+    use aes_gcm::aead::{Aead, KeyInit};
+    let key = Zeroizing::new(master.derive_subkey(b"nexus.secrets.v1"));
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(key.as_ref()).unwrap();
+    let nonce = [0x5a_u8; 12];
+    let ciphertext = cipher
+        .encrypt(&aes_gcm::Nonce::from(nonce), plaintext)
+        .unwrap();
+    db.record_secret(scope, name, &nonce, &ciphertext).unwrap();
+}
+
+fn f4_copy_row(db: &nexus_persistence::NexusDatabase, from: (&str, &str), to: (&str, &str)) {
+    let (nonce, ciphertext) = db.lookup_secret(from.0, from.1).unwrap().unwrap();
+    db.record_secret(to.0, to.1, &nonce, &ciphertext).unwrap();
+}
+
+fn f4_rows(
+    db: &nexus_persistence::NexusDatabase,
+    ids: &[(&str, &str)],
+) -> Vec<Option<(Vec<u8>, Vec<u8>)>> {
+    ids.iter()
+        .map(|(scope, name)| db.lookup_secret(scope, name).unwrap())
+        .collect()
+}
+
+/// (a) A ciphertext and nonce copied from one row into another never open
+/// as the other secret: same scope, same name in another scope, and scope
+/// and name boundaries that concatenate to the same bytes.
+#[test]
+fn f4_ciphertext_copied_between_identities_does_not_open() {
+    let master = test_master_key();
+    let (backend, db) = f4_backend(&master);
+    let ids = [
+        ("llm", "anthropic"),
+        ("llm", "openai"),
+        ("social", "anthropic"),
+        ("ab", "c"),
+        ("a", "bc"),
+    ];
+    for (scope, name) in ids {
+        backend
+            .set(scope, name, Zeroizing::new(format!("value-{scope}-{name}")))
+            .unwrap();
+    }
+    for (from, to) in [
+        (ids[0], ids[1]),
+        (ids[0], ids[2]),
+        (ids[3], ids[4]),
+        (ids[4], ids[3]),
+    ] {
+        f4_copy_row(&db, from, to);
+        match backend.get(to.0, to.1) {
+            Err(SecretError::DecryptionFailed) => {}
+            Ok(value) => panic!(
+                "{}.{} copied into {}.{} opened as {:?}",
+                from.0,
+                from.1,
+                to.0,
+                to.1,
+                value.as_str()
+            ),
+            Err(other) => panic!("unexpected error for {}.{}: {other:?}", to.0, to.1),
+        }
+    }
+    // The source rows still open as themselves.
+    assert_eq!(
+        backend.get("llm", "anthropic").unwrap().as_str(),
+        "value-llm-anthropic"
+    );
+    assert_eq!(backend.get("ab", "c").unwrap().as_str(), "value-ab-c");
+}
+
+/// (b) A legacy row with no identity binding is refused on the read path
+/// with its own error, by the backend and by the facade (not skipped, not
+/// reported as missing, never decrypted).
+#[test]
+fn f4_legacy_unbound_row_is_refused_by_get() {
+    let master = test_master_key();
+    let (backend, db) = f4_backend(&master);
+    f4_write_legacy_row(&db, &master, "llm", "anthropic", b"legacy-value");
+    assert!(matches!(
+        backend.get("llm", "anthropic"),
+        Err(SecretError::LegacyUnbound)
+    ));
+    let message = SecretError::LegacyUnbound.to_string();
+    assert!(!message.contains("legacy-value"));
+    for other in [
+        SecretError::DecryptionFailed.to_string(),
+        SecretError::NotFound.to_string(),
+    ] {
+        assert_ne!(message, other);
+    }
+
+    let (facade, db) = build_facade(
+        CredentialFacadeConfig::default(),
+        KeyringBackendAdapter::rejecting(),
+    );
+    f4_write_legacy_row(&db, &master, "social", "x_access_token", b"legacy-token");
+    assert!(matches!(
+        facade.get_secret(&SecretAuditCtx::system(), "social", "x_access_token"),
+        Err(SecretError::LegacyUnbound)
+    ));
+}
+
+/// (c) The explicit upgrade re-encrypts every legacy row under its own
+/// identity, atomically records completion, and is one-time: legacy rows
+/// that appear afterwards stay refused.
+#[test]
+fn f4_upgrade_binds_legacy_rows_to_their_own_identity() {
+    let master = test_master_key();
+    let (backend, db) = f4_backend(&master);
+    f4_write_legacy_row(&db, &master, "llm", "anthropic", b"value-a");
+    f4_write_legacy_row(&db, &master, "social", "x_access_token", b"value-b");
+    assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
+
+    let report = super::migrate::upgrade_legacy_secrets(&backend).expect("upgrade");
+    assert_eq!(
+        report,
+        super::migrate::UpgradeReport::Upgraded {
+            rows: vec![
+                ("llm".to_string(), "anthropic".to_string()),
+                ("social".to_string(), "x_access_token".to_string()),
+            ],
+        }
+    );
+    assert!(db.schema_version(F4_SCHEMA_KEY).unwrap().is_some());
+    assert_eq!(backend.get("llm", "anthropic").unwrap().as_str(), "value-a");
+    assert_eq!(
+        backend.get("social", "x_access_token").unwrap().as_str(),
+        "value-b"
+    );
+    // Upgraded rows are bound: a copy does not open as the other identity.
+    f4_copy_row(&db, ("llm", "anthropic"), ("social", "x_access_token"));
+    assert!(matches!(
+        backend.get("social", "x_access_token"),
+        Err(SecretError::DecryptionFailed)
+    ));
+
+    // One-time: a second run does nothing, and a legacy row written later
+    // (for example restored from an old backup) is never upgraded.
+    assert_eq!(
+        super::migrate::upgrade_legacy_secrets(&backend).unwrap(),
+        super::migrate::UpgradeReport::AlreadyRun
+    );
+    f4_write_legacy_row(&db, &master, "llm", "openai", b"value-late");
+    let before = f4_rows(&db, &[("llm", "openai")]);
+    assert!(matches!(
+        super::migrate::upgrade_legacy_secrets(&backend),
+        Err(MigrationError::LegacyAfterUpgrade { count: 1 })
+    ));
+    assert_eq!(f4_rows(&db, &[("llm", "openai")]), before);
+    assert!(matches!(
+        backend.get("llm", "openai"),
+        Err(SecretError::LegacyUnbound)
+    ));
+}
+
+/// (d) A legacy row that does not decrypt, or opens to non-text, fails the
+/// upgrade loudly and leaves every row and the completion marker untouched.
+#[test]
+fn f4_upgrade_with_bad_legacy_row_changes_nothing() {
+    let master = test_master_key();
+    let other = EncryptionKey::from_raw_for_test([0x24_u8; 32]);
+    let ids = [
+        ("llm", "anthropic"),
+        ("llm", "openai"),
+        ("social", "x_access_token"),
+    ];
+
+    // Corrupt ciphertext, and a row written under another key.
+    for corrupt in [true, false] {
+        let (backend, db) = f4_backend(&master);
+        f4_write_legacy_row(&db, &master, ids[0].0, ids[0].1, b"value-a");
+        if corrupt {
+            f4_write_legacy_row(&db, &master, ids[1].0, ids[1].1, b"value-b");
+            let (nonce, mut ciphertext) = db.lookup_secret(ids[1].0, ids[1].1).unwrap().unwrap();
+            ciphertext[0] ^= 0x01;
+            db.record_secret(ids[1].0, ids[1].1, &nonce, &ciphertext)
+                .unwrap();
+        } else {
+            f4_write_legacy_row(&db, &other, ids[1].0, ids[1].1, b"value-b");
+        }
+        f4_write_legacy_row(&db, &master, ids[2].0, ids[2].1, b"value-c");
+        let before = f4_rows(&db, &ids);
+        match super::migrate::upgrade_legacy_secrets(&backend) {
+            Err(MigrationError::LegacyUndecryptable { scope, name }) => {
+                assert_eq!((scope.as_str(), name.as_str()), ids[1]);
+            }
+            other => panic!("expected LegacyUndecryptable, got {other:?}"),
+        }
+        assert_eq!(f4_rows(&db, &ids), before, "half-migrated state");
+        assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
+        for (scope, name) in ids {
+            assert!(matches!(
+                backend.get(scope, name),
+                Err(SecretError::LegacyUnbound)
+            ));
+        }
+    }
+
+    // A legacy row that opens to a value that is not text.
+    let (backend, db) = f4_backend(&master);
+    f4_write_legacy_row(&db, &master, ids[0].0, ids[0].1, b"value-a");
+    f4_write_legacy_row(&db, &master, ids[1].0, ids[1].1, &[0xff, 0xfe, 0x00]);
+    let before = f4_rows(&db, &ids[..2]);
+    assert!(matches!(
+        super::migrate::upgrade_legacy_secrets(&backend),
+        Err(MigrationError::LegacyDamaged { .. })
+    ));
+    assert_eq!(f4_rows(&db, &ids[..2]), before, "half-migrated state");
+    assert_eq!(db.schema_version(F4_SCHEMA_KEY).unwrap(), None);
 }
