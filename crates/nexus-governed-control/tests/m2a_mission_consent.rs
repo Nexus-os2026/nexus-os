@@ -247,7 +247,22 @@ fn m2a_mission_consent_is_the_broker_s_and_is_recorded() {
     );
     assert_eq!(mission_records(&history).len(), 4);
 
-    // The store of record holds each decision.
+    // Under the owner's emergency stop no mission is asked about (last: it
+    // is not lifted).
+    control.emergency_stop();
+    assert_eq!(
+        control
+            .confirm_mission(&request(HASH_A, "msn-000005/6/5"), &owner)
+            .err(),
+        Some(AuthorityError::EmergencyStopped)
+    );
+    assert_eq!(owner.asked(), asked);
+    assert_eq!(mission_records(&history).len(), 4);
+
+    // The store of record holds each decision. (Correction after the first
+    // run: the store keeps its database locked while the front door holds
+    // it, so it is read once the front door is gone.)
+    drop(control);
     let phases = stored_phases(&store);
     assert_eq!(
         phases.iter().filter(|p| *p == "mission_consented").count(),
@@ -260,16 +275,5 @@ fn m2a_mission_consent_is_the_broker_s_and_is_recorded() {
         "{phases:?}"
     );
 
-    // Under the owner's emergency stop no mission is asked about (last: it
-    // is not lifted).
-    control.emergency_stop();
-    assert_eq!(
-        control
-            .confirm_mission(&request(HASH_A, "msn-000005/6/5"), &owner)
-            .err(),
-        Some(AuthorityError::EmergencyStopped)
-    );
-    assert_eq!(owner.asked(), asked);
-    assert_eq!(mission_records(&history).len(), 4);
     let _ = std::fs::remove_dir_all(&root);
 }
