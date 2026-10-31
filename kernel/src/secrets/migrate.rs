@@ -53,13 +53,14 @@ pub enum MigrationError {
     /// A legacy row opens to a value that is not text. Nothing was upgraded.
     #[error("legacy secret {scope}.{name} is damaged; nothing was upgraded")]
     LegacyDamaged { scope: String, name: String },
-    /// Legacy rows appeared after the one-time upgrade completed. They are
-    /// never upgraded later and stay refused.
+    /// Legacy rows exist in a vault that is already upgraded (the marker
+    /// exists or a bound row exists). They are never re-bound; startup
+    /// fails closed on this error and refuses the whole vault.
     #[error("{count} legacy secret row(s) found after the secrets upgrade completed; refused")]
     LegacyAfterUpgrade { count: usize },
 }
 
-/// Outcome of [`upgrade_legacy_secrets`].
+/// Outcome of the one-time legacy upgrade.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpgradeReport {
     AlreadyRun,
@@ -214,8 +215,10 @@ pub fn migrate_config_to_vault(
 const AAD_SCHEMA_KEY: &str = "secrets_aad_v2";
 const AAD_SCHEMA_VERSION: i64 = 2;
 
-/// M0-FIX F4: explicit, one-time upgrade of legacy (unbound) secret rows
-/// to the identity-bound format.
+/// M0-FIX F4: one-time upgrade of legacy (unbound) secret rows to the
+/// identity-bound format. Production runs it from
+/// `startup::run_migrations` as [`plan_legacy_upgrade`] (read-only), the
+/// key check, then [`UpgradePlan::commit`] and [`record_upgrade_audit`].
 ///
 /// Every legacy row is decrypted (without associated data, the only place
 /// that ever happens) and re-encrypted under its own `(scope, name)`.
@@ -224,32 +227,63 @@ const AAD_SCHEMA_VERSION: i64 = 2;
 /// - any legacy row that does not decrypt (wrong key, damaged or foreign
 ///   ciphertext) or opens to non-text fails the whole upgrade with an
 ///   error naming the row, and nothing changes;
-/// - once the marker exists the upgrade never runs again; legacy rows
-///   that appear later (for example from an old backup) are reported as
-///   `LegacyAfterUpgrade` and stay refused by the read path.
+/// - the vault counts as already upgraded when the marker exists **or any
+///   row is already in the bound format**, so deleting the marker does not
+///   re-enable the upgrade while bound rows remain; the transaction
+///   re-checks that no bound row exists before it writes;
+/// - legacy rows found in an upgraded vault (for example from an old
+///   backup) are never re-bound: the upgrade fails with
+///   `LegacyAfterUpgrade`, and startup refuses the whole vault (not just
+///   that secret) until the rows are removed.
 ///
-/// Rows that are already bound, or malformed, are left untouched; the read
-/// path and the startup key check report them.
-pub fn upgrade_legacy_secrets(
+/// Rows that are malformed are left untouched; the read path and the
+/// startup key check report them.
+///
+/// This composition (plan then commit, no key check, no audit) is the
+/// test entry point.
+#[cfg(test)]
+pub(crate) fn upgrade_legacy_secrets(
     sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
 ) -> Result<UpgradeReport, MigrationError> {
+    plan_legacy_upgrade(sqlite)?.commit(sqlite)
+}
+
+/// A computed, not yet written, legacy upgrade. Planning only reads: it
+/// proves that every legacy row opens under the current key before
+/// anything is written.
+pub(crate) enum UpgradePlan {
+    AlreadyRun,
+    Pending {
+        replacements: Vec<nexus_persistence::SecretRowReplacement>,
+    },
+}
+
+fn storage(e: nexus_persistence::PersistenceError) -> MigrationError {
+    MigrationError::Storage(format!("{e}"))
+}
+
+/// Read-only half of the one-time legacy upgrade (see `upgrade_legacy_secrets`).
+pub(crate) fn plan_legacy_upgrade(
+    sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
+) -> Result<UpgradePlan, MigrationError> {
     use super::backend_sqlite::SqliteEnvelopeBackend;
     use super::SecretError;
     let db = sqlite.db();
-    let storage = |e: nexus_persistence::PersistenceError| MigrationError::Storage(format!("{e}"));
-    let completed = db
+    let marker = db
         .schema_version(AAD_SCHEMA_KEY)
         .map_err(storage)?
         .is_some();
-    let legacy: Vec<_> = db
-        .list_secret_rows()
-        .map_err(storage)?
+    let rows = db.list_secret_rows().map_err(storage)?;
+    let bound = rows
+        .iter()
+        .any(|row| SqliteEnvelopeBackend::is_bound_row(&row.nonce));
+    let legacy: Vec<_> = rows
         .into_iter()
         .filter(|row| SqliteEnvelopeBackend::is_legacy_row(&row.nonce))
         .collect();
-    if completed {
+    if marker || bound {
         return if legacy.is_empty() {
-            Ok(UpgradeReport::AlreadyRun)
+            Ok(UpgradePlan::AlreadyRun)
         } else {
             Err(MigrationError::LegacyAfterUpgrade {
                 count: legacy.len(),
@@ -288,12 +322,64 @@ pub fn upgrade_legacy_secrets(
             new_ciphertext,
         });
     }
-    db.replace_secret_rows_once(&replacements, AAD_SCHEMA_KEY, AAD_SCHEMA_VERSION)
-        .map_err(storage)?;
-    Ok(UpgradeReport::Upgraded {
-        rows: replacements
-            .into_iter()
-            .map(|row| (row.scope, row.name))
-            .collect(),
-    })
+    Ok(UpgradePlan::Pending { replacements })
+}
+
+impl UpgradePlan {
+    /// Write half of the one-time legacy upgrade: one transaction that first
+    /// re-checks that no bound row exists, then swaps every planned row and
+    /// records the marker, or changes nothing.
+    pub(crate) fn commit(
+        self,
+        sqlite: &super::backend_sqlite::SqliteEnvelopeBackend,
+    ) -> Result<UpgradeReport, MigrationError> {
+        let UpgradePlan::Pending { replacements } = self else {
+            return Ok(UpgradeReport::AlreadyRun);
+        };
+        let (bound_len, bound_prefix) =
+            super::backend_sqlite::SqliteEnvelopeBackend::bound_row_shape();
+        sqlite
+            .db()
+            .replace_secret_rows_once(
+                &replacements,
+                AAD_SCHEMA_KEY,
+                AAD_SCHEMA_VERSION,
+                bound_len,
+                bound_prefix,
+            )
+            .map_err(storage)?;
+        Ok(UpgradeReport::Upgraded {
+            rows: replacements
+                .into_iter()
+                .map(|row| (row.scope, row.name))
+                .collect(),
+        })
+    }
+}
+
+/// M0-FIX F4: one audit event for a completed upgrade, with the number of
+/// rows re-bound only (no names, no values). Nothing is recorded when the
+/// upgrade had already run. Like every secrets audit append, a failure is
+/// reported on stderr and does not undo the committed upgrade.
+pub(crate) fn record_upgrade_audit(
+    audit: &std::sync::Mutex<crate::audit::AuditTrail>,
+    report: &UpgradeReport,
+) {
+    let UpgradeReport::Upgraded { rows } = report else {
+        return;
+    };
+    let payload = serde_json::json!({
+        "event": "secrets_format_upgraded",
+        "result": "ok",
+        "rows_upgraded": rows.len(),
+        "capability": super::SecretAuditCtx::startup().capability,
+    });
+    let mut guard = audit.lock().unwrap_or_else(|p| p.into_inner());
+    if let Err(e) = guard.append_event(
+        uuid::Uuid::nil(),
+        crate::audit::EventType::UserAction,
+        payload,
+    ) {
+        eprintln!("secrets audit append failed (event=secrets_format_upgraded): {e}");
+    }
 }

@@ -14,9 +14,10 @@
 //! authentication. Rows written before F4 hold exactly the 12-byte nonce
 //! and no associated data; the length tells the two formats apart
 //! without any trial decryption. The read path refuses a legacy row
-//! with `SecretError::LegacyUnbound`; only the explicit, one-time
-//! `migrate::upgrade_legacy_secrets` step decrypts it, to re-encrypt it
-//! under its own identity.
+//! with `SecretError::LegacyUnbound`; only the one-time legacy upgrade
+//! (`migrate::plan_legacy_upgrade`), run by startup before anything reads
+//! the vault, decrypts it, to re-encrypt it under its own identity.
+//! A vault that already holds a bound row is never upgraded again.
 //!
 //! Master-key sourcing is delegated entirely to
 //! `crate::crypto::EncryptionKey::from_config` — env primary, file
@@ -148,8 +149,20 @@ impl SqliteEnvelopeBackend {
         matches!(row_format(stored_nonce), Ok(RowFormat::Legacy(_)))
     }
 
+    /// M0-FIX F4: whether a stored `nonce` column is an identity-bound row.
+    pub(crate) fn is_bound_row(stored_nonce: &[u8]) -> bool {
+        matches!(row_format(stored_nonce), Ok(RowFormat::BoundV2(_)))
+    }
+
+    /// M0-FIX F4: the stored `nonce` column length and prefix of a bound
+    /// row, for the upgrade's in-transaction "no bound row yet" check.
+    pub(crate) fn bound_row_shape() -> (usize, &'static [u8]) {
+        (NONCE_LEN + 1, &[FORMAT_BOUND_V2])
+    }
+
     /// M0-FIX F4: decrypt a legacy (unbound) row. Called only by the
-    /// explicit `migrate::upgrade_legacy_secrets` step, never by `get`.
+    /// one-time legacy upgrade (`migrate::plan_legacy_upgrade`), never by
+    /// `get`.
     /// Anything that is not a legacy row is refused.
     pub(crate) fn decrypt_legacy_for_upgrade(
         &self,

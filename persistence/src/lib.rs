@@ -2313,17 +2313,38 @@ impl NexusDatabase {
 
     /// M0-FIX F4: replace secret rows and record the one-time
     /// `schema_versions[schema_key]` marker in one SQLite transaction.
+    /// Before any write, inside the transaction, it refuses if any stored
+    /// nonce already has the `refuse_nonce_len` length and starts with
+    /// `refuse_nonce_prefix` (the caller's already-upgraded row shape).
     /// Each replacement is a compare-and-swap on the row's current
-    /// `(nonce, ciphertext)`. If any row changed or vanished since it was
-    /// read, or the marker already exists, everything rolls back.
+    /// `(nonce, ciphertext)`. If such a row exists, any row changed or
+    /// vanished since it was read, or the marker already exists, everything
+    /// rolls back.
     pub fn replace_secret_rows_once(
         &self,
         rows: &[SecretRowReplacement],
         schema_key: &str,
         schema_version: i64,
+        refuse_nonce_len: usize,
+        refuse_nonce_prefix: &[u8],
     ) -> Result<()> {
         let mut conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let tx = conn.transaction()?;
+        let refused: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM secrets
+             WHERE length(nonce) = ?1 AND substr(nonce, 1, ?2) = ?3",
+            params![
+                refuse_nonce_len as i64,
+                refuse_nonce_prefix.len() as i64,
+                refuse_nonce_prefix
+            ],
+            |row| row.get(0),
+        )?;
+        if refused != 0 {
+            return Err(PersistenceError::Serialization(format!(
+                "{refused} secret row(s) already have the replacement shape"
+            )));
+        }
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -5061,20 +5082,39 @@ mod tests {
         };
         // The second row no longer matches what was read: nothing changes.
         let stale = [swap("a", b"c-a"), swap("b", b"stale")];
-        assert!(db.replace_secret_rows_once(&stale, "k", 2).is_err());
+        assert!(db
+            .replace_secret_rows_once(&stale, "k", 2, 5, b"new")
+            .is_err());
         assert_eq!(db.list_secret_rows().unwrap(), rows);
         assert_eq!(db.schema_version("k").unwrap(), None);
         // Matching rows swap together with the marker, once.
         let fresh = [swap("a", b"c-a"), swap("b", b"c-b")];
-        db.replace_secret_rows_once(&fresh, "k", 2).unwrap();
+        db.replace_secret_rows_once(&fresh, "k", 2, 5, b"new")
+            .unwrap();
         assert_eq!(db.schema_version("k").unwrap(), Some(2));
         assert_eq!(
             db.lookup_secret("llm", "b").unwrap(),
             Some((b"new-n".to_vec(), b"new-b".to_vec()))
         );
-        let after = db.list_secret_rows().unwrap();
-        assert!(db.replace_secret_rows_once(&[], "k", 2).is_err());
-        assert_eq!(db.list_secret_rows().unwrap(), after);
+        assert!(db.replace_secret_rows_once(&[], "k2", 2, 6, b"x").is_ok());
+        assert!(db.replace_secret_rows_once(&[], "k", 2, 6, b"x").is_err());
+        // A row with the refused shape blocks the replacement in the
+        // transaction, before anything is written.
+        db.record_secret("llm", "c", b"n-c", b"c-c").unwrap();
+        let refused = [SecretRowReplacement {
+            scope: "llm".into(),
+            name: "c".into(),
+            old_nonce: b"n-c".to_vec(),
+            old_ciphertext: b"c-c".to_vec(),
+            new_nonce: b"x".to_vec(),
+            new_ciphertext: b"y".to_vec(),
+        }];
+        let snapshot = db.list_secret_rows().unwrap();
+        assert!(db
+            .replace_secret_rows_once(&refused, "k3", 2, 5, b"new")
+            .is_err());
+        assert_eq!(db.list_secret_rows().unwrap(), snapshot);
+        assert_eq!(db.schema_version("k3").unwrap(), None);
     }
 
     // ── Foreign-Key Enforcement (P3-C11-HM-FK01) ───────────────────────

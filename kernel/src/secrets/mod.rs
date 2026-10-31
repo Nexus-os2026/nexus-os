@@ -58,11 +58,10 @@ pub enum SecretError {
     #[error("crypto error: {0}")]
     Crypto(String),
     /// The stored row predates identity binding (no associated data). It
-    /// is never decrypted on the read path; only the explicit
-    /// `migrate::upgrade_legacy_secrets` step may upgrade it.
-    #[error(
-        "secret is stored in the legacy unbound format and is refused; run the secrets upgrade"
-    )]
+    /// is never decrypted on the read path; only the one-time startup
+    /// upgrade (`migrate::plan_legacy_upgrade`) re-encrypts such rows,
+    /// and never in a vault that has already been upgraded.
+    #[error("secret is stored in the legacy format without identity binding and is refused")]
     LegacyUnbound,
 }
 
