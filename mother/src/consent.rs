@@ -22,7 +22,7 @@
 use crate::contract::{ContractHash, EffectKind, MissionContract};
 use crate::journal::MissionId;
 use nexus_governed_control::authority::approval::{MissionApproval, MissionConfirmation};
-use nexus_governed_control::authority::evidence::{quoted, wrapped};
+use nexus_governed_control::authority::evidence::quoted;
 use std::collections::BTreeSet;
 
 /// What the Owner is shown about a mission, built only by the coordinator
@@ -82,12 +82,10 @@ impl MissionSummary {
         lines.extend(quoted("Your words, exactly", &self.owner_words));
         lines.extend(quoted("What I understood", &self.restatement));
         match &self.requested_folder {
-            Some(folder) => {
-                lines.push(
-                    "Folder you asked for (a request to the broker, not a permission):".into(),
-                );
-                lines.extend(wrapped(folder));
-            }
+            Some(folder) => lines.extend(quoted(
+                "Folder you asked for (a request to the broker, not a permission)",
+                folder,
+            )),
             None => lines.push("Folder: none requested".into()),
         }
         lines.push(format!(

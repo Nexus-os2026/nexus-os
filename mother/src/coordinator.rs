@@ -374,6 +374,21 @@ fn mother_refuses(contract: &MissionContract, effect: &EffectRequest) -> Option<
     }
 }
 
+/// The lanes a working phase runs, in order (none outside them).
+fn phase_roles(phase: MissionState) -> &'static [LaneRole] {
+    match phase {
+        MissionState::Investigating => &[
+            LaneRole::Sentinel,
+            LaneRole::ResearcherA,
+            LaneRole::ResearcherB,
+            LaneRole::Skeptic,
+        ],
+        MissionState::Building => &[LaneRole::Sentinel, LaneRole::Builder],
+        MissionState::Verifying => &[LaneRole::Sentinel, LaneRole::Verifier],
+        _ => &[],
+    }
+}
+
 fn request_hash(effect: &EffectRequest) -> String {
     let json = serde_json::to_vec(effect).expect("an effect request serialises");
     hex::encode(sha256(REQUEST_DOMAIN, &[&json]))
@@ -730,15 +745,7 @@ impl<P: EffectPort> Coordinator<P> {
                 self.port.finish(id);
                 return Ok(report);
             }
-            MissionState::AwaitingApproval => &[],
-            MissionState::Investigating => &[
-                LaneRole::Sentinel,
-                LaneRole::ResearcherA,
-                LaneRole::ResearcherB,
-                LaneRole::Skeptic,
-            ],
-            MissionState::Building => &[LaneRole::Sentinel, LaneRole::Builder],
-            _ => &[LaneRole::Sentinel, LaneRole::Verifier],
+            other => phase_roles(other),
         };
         let mission = inner.mission(id)?;
         mission.busy = true;
@@ -1085,13 +1092,21 @@ impl<P: EffectPort> Coordinator<P> {
             };
             {
                 let mut inner = self.lock();
-                inner.append(
+                let journaled = inner.append(
                     id,
                     Event::EffectSettled {
                         effect: number,
                         outcome: settled.clone(),
                     },
-                )?;
+                );
+                if let Err(e) = journaled {
+                    // The journal failed: the mission ends in memory (the
+                    // journal is poisoned) and the port is cancelled, which
+                    // withdraws an action left waiting for approval.
+                    drop(inner);
+                    let _ = self.end(id, "journal_failed");
+                    return Err(e);
+                }
                 let mission = inner.mission(id)?;
                 mission.unsettled = None;
                 if mission.generation != generation {
@@ -1366,6 +1381,19 @@ fn replay(
                 {
                     return Err(format!("{id}: a wait for an effect not awaiting approval"));
                 }
+                // What the live coordinator keeps: the rest of one answer
+                // (effect requests) and the lanes after the asking one.
+                Trigger::AwaitApproval {
+                    rest, roles_left, ..
+                } if rest.len() >= MAX_EFFECTS_PER_CALL
+                    || !rest
+                        .iter()
+                        .all(|v| serde_json::from_value::<EffectRequest>(v.clone()).is_ok())
+                    || !phase_roles(mission.state).ends_with(roles_left)
+                    || roles_left.len() >= phase_roles(mission.state).len() =>
+                {
+                    return Err(format!("{id}: a wait the coordinator would not write"));
+                }
                 Trigger::ActionApproved { effect, phase }
                     if mission
                         .waiting
@@ -1398,6 +1426,7 @@ fn replay(
             }
             mission.pending_lane = Some(*invocation);
             mission.model_calls = mission.model_calls.saturating_add(1);
+            mission.awaiting_settled = None;
         }
         Event::LaneReturned {
             invocation,

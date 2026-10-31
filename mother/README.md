@@ -127,8 +127,11 @@ Coordinator rules the oracles pin:
   (the broker refuses to approve or start it then).
 - A restart after an approved action but before its phase ended blocks the
   mission (`phase_interrupted`): re-running the phase could ask again.
-- The rest of a paused phase is journaled as data: effect requests (URLs,
-  methods, bodies; never credentials, which egress intents cannot carry).
+- The rest of a paused phase is journaled as data: the lane's effect
+  requests as it wrote them (URLs, methods, headers, bodies, tool and
+  connector input), before the broker has checked them. The broker refuses
+  credential headers when a request reaches it, but a lane that put a
+  secret in a request would have it written to Mother's journal.
 - Anchoring Mother's journal (and its consent entries) in the broker's
   evidence store is deferred to Gate E.
 - The journal chain is unkeyed. It detects edits, removals, reordering,
