@@ -97,6 +97,11 @@ pub enum CoordinatorError {
     Stopped,
     /// Another call is already working on this mission.
     Busy,
+    /// M2a-S: the mission is held after an unclean shutdown; only the
+    /// Owner's resume or Stop moves it.
+    Held,
+    /// M2a-S: the coordinator was closed.
+    Closed,
 }
 
 /// One lane call, as reported.
@@ -1446,6 +1451,26 @@ impl<P: EffectPort> Coordinator<P> {
             .count()
     }
 
+    /// M2a-S: shut down in order. Not implemented yet.
+    pub fn close(self) -> Result<(), CoordinatorError> {
+        self.close_ref()
+    }
+
+    pub(crate) fn close_ref(&self) -> Result<(), CoordinatorError> {
+        Ok(())
+    }
+
+    /// M2a-S: the Owner resumes a held mission. Not implemented yet.
+    pub fn resume(&self, id: MissionId) -> Result<MissionState, CoordinatorError> {
+        let state = self.state(id).ok_or(CoordinatorError::UnknownMission)?;
+        Err(illegal(state, "resume"))
+    }
+
+    /// M2a-S: why a mission is held, if it is. Not implemented yet.
+    pub fn held(&self, _id: MissionId) -> Option<String> {
+        None
+    }
+
     pub fn state(&self, id: MissionId) -> Option<MissionState> {
         self.lock().missions.get(&id).map(|m| m.state)
     }
@@ -1648,6 +1673,7 @@ fn replay(
             mission.open_action = None;
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
+        Event::SessionOpened | Event::SessionClosed | Event::Held { .. } | Event::Resumed => {}
     }
     Ok(())
 }

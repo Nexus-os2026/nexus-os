@@ -11,6 +11,7 @@ mod m2a_consent;
 mod m2a_rebuild;
 mod m2a_review;
 mod m2a_waiting;
+mod m2as_durability;
 mod mn01;
 mod review;
 mod state;
@@ -681,7 +682,13 @@ pub fn world_with(lanes: Vec<Arc<dyn Lane>>) -> World {
 impl World {
     /// Mother restarts: a new coordinator from the same journal (the port
     /// and the clock carry on).
+    ///
+    /// M2a-S: the restart is orderly when it can be: the old coordinator is
+    /// closed first, which it refuses while broken or while a call is in
+    /// flight (the restart is then a crash). Crashes are modelled in
+    /// `m2as_durability.rs`.
     pub fn reopen(&self) -> Result<Coordinator<RecordingPort>, CoordinatorError> {
+        let _ = self.mother.close_ref();
         Coordinator::open(
             self.journal.clone(),
             self.port.clone(),
