@@ -19,7 +19,7 @@
 
 use crate::consent::{Consent, MissionSummary};
 use crate::contract::{sha256, ContractError, ContractHash, EffectKind, MissionContract};
-use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRequest};
+use crate::effect::{ApprovalStatus, EffectOutcome, EffectPort, EffectRequest, PendingAction};
 use crate::journal::{verify, Entry, Event, JournalError, JournalStore, MissionId, GENESIS};
 use crate::lane::{
     input_hash, output_hash, InvocationId, Lane, LaneIdentity, LaneInput, LaneRole, Verdict,
@@ -158,6 +158,9 @@ struct Mission {
     /// The effect last settled as awaiting approval, with no transition
     /// since (replay: a wait follows it).
     awaiting_settled: Option<u64>,
+    /// The journaled identity of that effect's action, until the wait
+    /// takes it.
+    parked: Option<PendingAction>,
 }
 
 /// An effect that waits for the Owner's approval, and what its phase had
@@ -168,6 +171,8 @@ struct Waiting {
     effect: u64,
     rest: Vec<serde_json::Value>,
     roles_left: Vec<LaneRole>,
+    /// The action's identity at the broker, when it was journaled.
+    pending: Option<PendingAction>,
 }
 
 impl Mission {
@@ -191,6 +196,7 @@ impl Mission {
             asking: None,
             waiting: None,
             awaiting_settled: None,
+            parked: None,
         }
     }
 
@@ -225,6 +231,7 @@ impl Mission {
                     effect: *effect,
                     rest: rest.clone(),
                     roles_left: roles_left.clone(),
+                    pending: self.parked.take(),
                 });
             }
             Trigger::ActionApproved { .. } => {
@@ -247,6 +254,19 @@ impl Mission {
         self.dispatched_in_phase = dispatched;
         self.asking = None;
         self.awaiting_settled = None;
+        self.parked = None;
+    }
+
+    /// The journaled action of a mission that has not ended: what it waits
+    /// on, or what it parked before the wait was journaled.
+    fn pending_action(&self) -> Option<&PendingAction> {
+        if self.state.is_terminal() {
+            return None;
+        }
+        self.waiting
+            .as_ref()
+            .and_then(|w| w.pending.as_ref())
+            .or(self.parked.as_ref())
     }
 
     fn consented(&self) -> bool {
@@ -477,6 +497,18 @@ impl<P: EffectPort> Coordinator<P> {
                 next_request: 1,
             }),
         };
+        // The port gets back every journaled action of a mission that has
+        // not ended, before anything is cancelled, so that it can withdraw
+        // it (a rebuilt port knows nothing of its own).
+        let parked: Vec<(MissionId, PendingAction)> = coordinator
+            .lock()
+            .missions
+            .iter()
+            .filter_map(|(id, m)| m.pending_action().map(|p| (*id, p.clone())))
+            .collect();
+        for (id, pending) in parked {
+            coordinator.port.adopt(id, &pending);
+        }
         // A lane call left unanswered by the restart is abandoned.
         {
             let mut inner = coordinator.lock();
@@ -1159,6 +1191,27 @@ impl<P: EffectPort> Coordinator<P> {
                 .collect(),
             roles_left: roles_left.to_vec(),
         };
+        // The action's identity first, so that a rebuilt port can still
+        // withdraw it.
+        if let Some(pending) = self.port.pending(id) {
+            let mut inner = self.lock();
+            if inner.mission(id)?.generation != generation {
+                return Err(CoordinatorError::Stopped);
+            }
+            let journaled = inner.append(
+                id,
+                Event::ApprovalPending {
+                    effect,
+                    pending: pending.clone(),
+                },
+            );
+            if let Err(e) = journaled {
+                drop(inner);
+                let _ = self.end(id, "awaiting_owner_approval");
+                return Err(e);
+            }
+            inner.mission(id)?.parked = Some(pending);
+        }
         let mono = self.clock.monotonic_ms();
         let waited = {
             let mut inner = self.lock();
@@ -1419,6 +1472,7 @@ fn replay(
             if !mission.state.is_working()
                 || mission.state == MissionState::Explaining
                 || mission.pending_lane.is_some()
+                || mission.parked.is_some()
                 || invocation.mission != id
                 || invocation.seq != entry.seq
             {
@@ -1448,6 +1502,7 @@ fn replay(
             if !mission.state.is_working()
                 || *effect != mission.next_effect
                 || mission.unsettled.is_some()
+                || mission.parked.is_some()
             {
                 return Err(format!("{id}: an effect dispatch out of place"));
             }
@@ -1464,6 +1519,15 @@ fn replay(
             if outcome == "awaiting_approval" {
                 mission.awaiting_settled = Some(*effect);
             }
+        }
+        Event::ApprovalPending { effect, pending } => {
+            if !mission.state.may_wait()
+                || mission.awaiting_settled != Some(*effect)
+                || mission.parked.is_some()
+            {
+                return Err(format!("{id}: a pending action out of place"));
+            }
+            mission.parked = Some(pending.clone());
         }
         Event::ConsentRefused { .. } | Event::EffectRefused { .. } => {}
     }

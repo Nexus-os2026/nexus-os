@@ -8,6 +8,7 @@
 
 use super::{mother_agent, FileJournal, GovernedPort, Home, MOTHER_AGENT};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
+use crate::effect::EffectPort;
 use crate::journal::MissionId;
 use crate::oracles::{contract_with, keyed_lanes, No, Yes};
 use crate::state::MissionState;

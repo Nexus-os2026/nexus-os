@@ -26,6 +26,8 @@
 //!     fn emergency_stopped(&self) -> bool { false }
 //!     fn broker(&self) -> &nexus_governed_control::authority::Authority { todo!() }
 //!     fn approval(&self, _: MissionId) -> nexus_mother::effect::ApprovalStatus { todo!() }
+//!     fn pending(&self, _: MissionId) -> Option<nexus_mother::effect::PendingAction> { None }
+//!     fn adopt(&self, _: MissionId, _: &nexus_mother::effect::PendingAction) {}
 //! }
 //! ```
 //!

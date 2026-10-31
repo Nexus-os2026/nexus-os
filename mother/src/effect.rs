@@ -74,6 +74,19 @@ pub enum ApprovalStatus {
     Lapsed { class: String },
 }
 
+/// The identity of an action a mission waits on at the broker: opaque
+/// names of its run and commitment (never authority: the port checks them
+/// against the broker's own records before using them), and the port's
+/// monotonic deadline for it, never later than the broker's. Mother
+/// journals it so that a rebuilt port can still withdraw the action.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PendingAction {
+    pub run: String,
+    pub commitment: String,
+    pub deadline_mono_ms: u64,
+}
+
 /// The port or the broker refused: only a stable class name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectRefusal {
@@ -107,4 +120,11 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// What became of the action `mission` waits on (an effect that came
     /// back [`EffectOutcome::AwaitingApproval`]). Never approves it.
     fn approval(&self, mission: MissionId) -> ApprovalStatus;
+    /// The identity of the action `mission` waits on, if the port knows it.
+    fn pending(&self, mission: MissionId) -> Option<PendingAction>;
+    /// A reopened coordinator hands back the journaled action of a mission
+    /// that has not ended, so that this port can still withdraw it (cancel)
+    /// and ask about it. The port uses it only if the broker's records
+    /// agree: Mother's agent run, and that run's commitment.
+    fn adopt(&self, mission: MissionId, pending: &PendingAction);
 }
