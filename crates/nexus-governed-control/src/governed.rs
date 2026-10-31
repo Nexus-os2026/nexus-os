@@ -403,6 +403,10 @@ impl GovernedControl {
             gap(self);
         }
         let stopped = self.control.stop_effects(reason);
+        // Again once the broker is stopped: a resume that ran between the
+        // first engagement and the broker step may have lifted the kernel
+        // stop, and the broker must never be stopped with the kernel lifted.
+        self.kernel_stop.engage();
         let cancelled = stopped.cancelled;
         let display = self.display.stop();
         self.authority().write_stop_records(stopped);
