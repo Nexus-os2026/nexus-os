@@ -1,4 +1,4 @@
-//! GovernedShell actuator — sandboxed command execution with strict allowlists.
+//! GovernedShell actuator — allowlisted argv command execution (not an OS sandbox).
 
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
@@ -13,47 +13,72 @@ const MAX_OUTPUT_BYTES: usize = 100 * 1024;
 /// Fuel cost per shell command.
 const FUEL_COST_SHELL: f64 = 5.0;
 
-/// Commands in the base allowlist (no subcommand restrictions).
+/// The only commands GovernedShell runs.
 ///
-/// Includes basic shell utilities + system monitoring commands needed by
-/// agents like nexus-sysmon. Dangerous commands (rm, kill, shutdown, etc.)
-/// are NOT included — see `COMMAND_BLOCKLIST`.
+/// Basic utilities and system monitoring commands needed by agents like
+/// nexus-sysmon. This list is not safe by construction: `cp`, `mv`, `tee`,
+/// `touch` and `mkdir` write files and are not confined to the working
+/// directory. Destructive and privileged commands (rm, kill, shutdown, etc.)
+/// are refused by `COMMAND_BLOCKLIST`.
+///
+/// No entry may start a shell or an arbitrary program named in its arguments
+/// or in files it reads from the working directory or HOME (M0-FIX2 F9).
+/// Absent for that reason: programs built to start programs (env, xargs,
+/// awk, sed, make, node, npx, interpreters, compilers and build tools);
+/// programs that run what their config names (git, cargo, npm, docker);
+/// programs that were checked only by their first argument and can reach
+/// such a program (systemctl, which starts ssh for `-H`, and journalctl);
+/// `top` (rc file in HOME) and `printenv` (dumps the parent environment).
+/// `find` and `sort` stay only under the argument rules in
+/// `TRAMPOLINE_ARGUMENTS`. There is deliberately no first-argument-only
+/// subcommand allowlist: every later argument would pass unchecked.
 const BASE_ALLOWLIST: &[&str] = &[
     // Basic shell utilities
     "ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "date", "pwd", "mkdir", "cp", "mv",
-    "sort", "cut", "tr", "awk", "sed", "tee", "xargs", "which", "file", "diff", "touch",
+    "sort", "cut", "tr", "tee", "which", "file", "diff", "touch",
     // System monitoring (read-only)
-    "free", "df", "uptime", "top", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk",
-    "lscpu", "du", "stat", "env", "printenv", "vmstat", "iostat", "lsof", "ss", "ip",
-    // Development tools
-    "node", "npx", "rustc", "rustup", "make", "cmake", "gcc", "g++",
+    "free", "df", "uptime", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk", "lscpu",
+    "du", "stat", "vmstat", "iostat", "lsof", "ss",
 ];
 
-/// Commands with restricted subcommands: (command, &[allowed subcommands]).
-const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
+/// An argument that would make an allowlisted program start another program.
+enum TrampolineArgument {
+    /// Refused when the argument equals this token.
+    Exact(&'static str),
+    /// Refused when the argument starts with this text.
+    Prefix(&'static str),
+}
+
+/// Per-program arguments refused anywhere in the argument list (M0-FIX2 F9).
+const TRAMPOLINE_ARGUMENTS: &[(&str, &[TrampolineArgument])] = &[
     (
-        "git",
+        "find",
         &[
-            "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
+            // Run a program.
+            TrampolineArgument::Exact("-exec"),
+            TrampolineArgument::Exact("-execdir"),
+            TrampolineArgument::Exact("-ok"),
+            TrampolineArgument::Exact("-okdir"),
+            // Write or delete files.
+            TrampolineArgument::Exact("-delete"),
+            TrampolineArgument::Exact("-fprint"),
+            TrampolineArgument::Exact("-fprint0"),
+            TrampolineArgument::Exact("-fprintf"),
+            TrampolineArgument::Exact("-fls"),
         ],
     ),
-    ("cargo", &["build", "test", "check", "fmt", "clippy", "run"]),
-    ("npm", &["install", "run", "build", "test", "ls"]),
-    // systemctl: read-only status queries only — no start/stop/enable/disable
-    (
-        "systemctl",
-        &[
-            "status",
-            "list-units",
-            "list-timers",
-            "is-active",
-            "is-enabled",
-            "show",
-        ],
-    ),
-    ("docker", &["ps", "images", "logs", "inspect", "stats"]),
-    ("journalctl", &["--no-pager", "-u", "-n", "--since"]),
+    // `--compress-program`; `--co` is already its only unambiguous abbreviation.
+    ("sort", &[TrampolineArgument::Prefix("--co")]),
 ];
+
+impl TrampolineArgument {
+    fn matches(&self, arg: &str) -> bool {
+        match self {
+            Self::Exact(token) => arg == *token,
+            Self::Prefix(prefix) => arg.starts_with(prefix),
+        }
+    }
+}
 
 /// Commands/patterns that are always rejected — destructive or privileged operations.
 const COMMAND_BLOCKLIST: &[&str] = &[
@@ -112,16 +137,6 @@ impl GovernedShell {
             )));
         }
 
-        // Check for python3 special case: only -c flag allowed
-        if cmd_lower == "python3" || cmd_lower == "python" {
-            if effective_args.first().map(|a| a.as_str()) != Some("-c") {
-                return Err(ActuatorError::CommandBlocked(
-                    "python3 only allowed with -c flag".into(),
-                ));
-            }
-            return Ok(());
-        }
-
         // Check dangerous patterns in full command string
         let full_cmd = format!("{} {}", binary, effective_args.join(" "));
         for pattern in DANGEROUS_PATTERNS {
@@ -132,27 +147,24 @@ impl GovernedShell {
             }
         }
 
+        // Refuse arguments that would start another program, whatever their
+        // position (option parsers permute and accept abbreviations).
+        for (program, refused) in TRAMPOLINE_ARGUMENTS {
+            if cmd_lower == *program {
+                if let Some(arg) = effective_args
+                    .iter()
+                    .find(|arg| refused.iter().any(|rule| rule.matches(arg)))
+                {
+                    return Err(ActuatorError::CommandBlocked(format!(
+                        "argument '{arg}' would let '{binary}' start another program"
+                    )));
+                }
+            }
+        }
+
         // Check base allowlist
         if BASE_ALLOWLIST.contains(&cmd_lower.as_str()) {
             return Ok(());
-        }
-
-        // Check subcommand-restricted commands
-        for (restricted_cmd, allowed_subs) in SUBCOMMAND_ALLOWLIST {
-            if cmd_lower == *restricted_cmd {
-                if let Some(sub) = effective_args.first() {
-                    let sub_lower = sub.to_lowercase();
-                    if allowed_subs.contains(&sub_lower.as_str()) {
-                        return Ok(());
-                    }
-                    return Err(ActuatorError::CommandBlocked(format!(
-                        "subcommand '{sub}' not allowed for '{binary}'; allowed: {}",
-                        allowed_subs.join(", ")
-                    )));
-                }
-                // No subcommand — allow bare command (e.g. `git` shows help)
-                return Ok(());
-            }
         }
 
         Err(ActuatorError::CommandBlocked(format!(
@@ -438,25 +450,22 @@ mod tests {
         assert!(matches!(err, ActuatorError::CommandBlocked(_)));
     }
 
+    /// M0-FIX2 F9 review MAJOR-1: formerly `git_allowed_subcommand`, which
+    /// asserted that `git status` is not blocked. git runs programs named in
+    /// repository config, attributes and hooks, so it is refused.
     #[test]
-    fn git_allowed_subcommand() {
+    fn git_status_is_refused() {
         let tmp = TempDir::new().unwrap();
         let ctx = make_context(tmp.path());
-        let shell = GovernedShell;
-
         let action = PlannedAction::ShellCommand {
             command: "git".into(),
             args: vec!["status".into()],
         };
-        // May fail because tmp isn't a git repo, but validation passes
-        let result = shell.execute(&action, &ctx);
-        // We only care that it wasn't CommandBlocked
-        if let Err(e) = &result {
-            assert!(
-                !matches!(e, ActuatorError::CommandBlocked(_)),
-                "git status should not be blocked"
-            );
-        }
+        let err = GovernedShell.execute(&action, &ctx).unwrap_err();
+        assert!(
+            matches!(err, ActuatorError::CommandBlocked(_)),
+            "git status must be refused, got {err:?}"
+        );
     }
 
     #[test]
@@ -494,9 +503,10 @@ mod tests {
             "expected 'hello world' in output, got: {out:?}"
         );
 
-        // Validation alone should accept "git status" with empty args.
-        GovernedShell::validate_command("git status", &[])
-            .expect("compound 'git status' command must validate");
+        // Validation alone should accept a packed "ls -la" with empty args.
+        // (M0-FIX2 F9: formerly "git status"; git is now refused.)
+        GovernedShell::validate_command("ls -la", &[])
+            .expect("compound 'ls -la' command must validate");
     }
 
     #[test]
@@ -585,5 +595,172 @@ mod tests {
         };
         let err = shell.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::CapabilityDenied(_)));
+    }
+
+    fn assert_refused(command: &str, args: &[&str]) {
+        let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        match GovernedShell::validate_command(command, &args) {
+            Err(ActuatorError::CommandBlocked(_)) => {}
+            other => panic!("{command} {args:?} must be refused, got {other:?}"),
+        }
+    }
+
+    fn assert_validates(command: &str, args: &[&str]) {
+        let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        GovernedShell::validate_command(command, &args)
+            .unwrap_or_else(|e| panic!("{command} {args:?} must validate, got {e:?}"));
+    }
+
+    /// M0-FIX2 F9 oracle: no allowlisted program may start a shell or an
+    /// arbitrary program named in its arguments. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_program_trampolines_are_refused() {
+        // Programs whose purpose or argument language starts other programs.
+        assert_refused("env", &["sh"]);
+        assert_refused("ENV", &["sh"]);
+        assert_refused("xargs", &["sh"]);
+        assert_refused("awk", &["BEGIN{system(\"sh\")}"]);
+        assert_refused("sed", &["e"]);
+        assert_refused("make", &[]);
+        assert_refused("make", &["all"]);
+        assert_refused("node", &["-e", "1"]);
+        assert_refused("npx", &["anything"]);
+        assert_refused("cmake", &["-P", "script.cmake"]);
+        assert_refused("gcc", &["main.c"]);
+        assert_refused("g++", &["main.cc"]);
+        assert_refused("rustc", &["main.rs"]);
+        assert_refused("rustup", &["run", "stable", "sh"]);
+        assert_refused("ip", &["netns", "exec", "n", "sh"]);
+        // Interpreters are not reachable through GovernedShell at all.
+        assert_refused("python3", &["-c", "print(1)"]);
+        assert_refused("python", &["-c", "print(1)"]);
+        assert_refused("python3 -c", &["print(1)"]);
+        assert_refused("python3", &["script.py"]);
+        // find: the execution primaries are refused wherever they appear.
+        for primary in ["-exec", "-execdir", "-ok", "-okdir"] {
+            assert_refused("find", &[".", primary, "sh", ";"]);
+            assert_refused("find", &[".", "-name", "x", primary, "sh", "{}", "+"]);
+            assert_refused(&format!("find . {primary}"), &["sh", ";"]);
+        }
+        // sort: the compressor option names a program to run.
+        assert_refused("sort", &["--compress-program=sh", "f"]);
+        assert_refused("sort", &["--compress-program", "sh", "f"]);
+        assert_refused("sort", &["--compress-prog=sh", "f"]);
+        assert_refused("sort", &["--co=sh", "f"]);
+        // npm: these subcommands run package scripts through a shell.
+        for sub in ["run", "install", "test", "build"] {
+            assert_refused("npm", &[sub]);
+        }
+        // cargo: run/test execute built programs; build/check/clippy run
+        // build scripts and accept program-naming config on the command line.
+        for sub in ["run", "test", "build", "check", "clippy"] {
+            assert_refused("cargo", &[sub]);
+        }
+        assert_refused("cargo", &["fmt", "--config", "x=1"]);
+        // git: transport options name the remote helper program to start.
+        for arg in [
+            "--upload-pack=sh",
+            "--upload-pack",
+            "--upload-p=sh",
+            "--receive-pack=sh",
+            "--receive-pack",
+            "--rec=sh",
+            "--exec=sh",
+            "--exec",
+            "--ex=sh",
+        ] {
+            assert_refused("git", &["pull", arg, "origin"]);
+            assert_refused("git", &["push", arg, "origin"]);
+        }
+        // Global options before the subcommand stay refused.
+        assert_refused("git", &["-c", "alias.x=!sh", "x"]);
+        assert_refused("git", &["-c", "core.pager=sh", "log"]);
+    }
+
+    /// Positive controls: ordinary commands keep validating after F9.
+    #[test]
+    fn m0_f9_harmless_commands_still_validate() {
+        assert_validates("ls", &[]);
+        assert_validates("ls", &["-la"]);
+        assert_validates("echo", &["hello"]);
+        assert_validates("cat", &["file.txt"]);
+        assert_validates("find", &[".", "-name", "*.rs", "-type", "f"]);
+        assert_validates("sort", &["-n", "-r", "file.txt"]);
+        assert_validates("sort", &["--check", "file.txt"]);
+        // M0-FIX2 F9 review: git, cargo and npm entries removed from this
+        // positive control; they are now refused (see the repair oracle).
+        assert_validates("find", &[".", "-type", "d", "-print"]);
+        // M0-FIX2 F9 re-review: the systemctl control is removed; systemctl
+        // is now a required refusal (see the round-2 oracle).
+        assert_validates("ps", &["aux"]);
+        assert_validates("free", &["-m"]);
+        assert_validates("df", &["-h"]);
+    }
+
+    /// M0-FIX2 F9 review oracle (MAJOR-1, MAJOR-2, MINOR-2): programs that
+    /// start programs named in files they read from the working directory or
+    /// HOME (repository config, hooks, attributes, toolchain and cargo config,
+    /// npm and docker config) are refused outright, and `find` may not write
+    /// or delete files. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_config_driven_trampolines_are_refused() {
+        assert_refused("git", &[]);
+        for sub in [
+            "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
+        ] {
+            assert_refused("git", &[sub]);
+            assert_refused(&format!("git {sub}"), &[]);
+        }
+        assert_refused("cargo", &[]);
+        assert_refused("cargo", &["fmt"]);
+        assert_refused("cargo", &["fmt", "--", "--check"]);
+        assert_refused("cargo fmt", &[]);
+        assert_refused("npm", &[]);
+        assert_refused("npm", &["ls"]);
+        assert_refused("docker", &[]);
+        for sub in ["ps", "images", "logs", "inspect", "stats"] {
+            assert_refused("docker", &[sub]);
+        }
+        for primary in ["-delete", "-fprint", "-fprint0", "-fprintf", "-fls"] {
+            assert_refused("find", &[".", "-name", "x", primary, "out"]);
+            assert_refused(&format!("find . {primary}"), &["out"]);
+        }
+    }
+
+    /// M0-FIX2 F9 re-review oracle: programs checked only by their first
+    /// argument that can reach a program following config in HOME
+    /// (`systemctl -H` starts ssh, which follows the user's ssh config;
+    /// journalctl has the same first-argument-only check), plus `top`
+    /// (rc file in HOME) and `printenv` (dumps the parent environment) are
+    /// refused in every spelling. Validation only; nothing runs.
+    #[test]
+    fn m0_f9_first_argument_only_programs_are_refused() {
+        assert_refused("systemctl", &[]);
+        for sub in [
+            "status",
+            "list-units",
+            "list-timers",
+            "is-active",
+            "is-enabled",
+            "show",
+        ] {
+            assert_refused("systemctl", &[sub]);
+            assert_refused(&format!("systemctl {sub}"), &[]);
+        }
+        assert_refused("systemctl", &["status", "-H", "host"]);
+        assert_refused("systemctl", &["status", "--host=host"]);
+        assert_refused("systemctl", &["status", "--host", "host"]);
+        assert_refused("systemctl", &["status", "--ho=host"]);
+        assert_refused("systemctl", &["status", "-qH", "host"]);
+        assert_refused("systemctl", &["show", "-Hhost"]);
+        assert_refused("journalctl", &[]);
+        for first in ["--no-pager", "-u", "-n", "--since"] {
+            assert_refused("journalctl", &[first]);
+        }
+        assert_refused("journalctl", &["-n", "5", "-M", "machine"]);
+        assert_refused("printenv", &[]);
+        assert_refused("printenv", &["HOME"]);
+        assert_refused("top", &[]);
+        assert_refused("top", &["-b", "-n", "1"]);
     }
 }

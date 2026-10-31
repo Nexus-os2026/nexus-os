@@ -636,9 +636,10 @@ mod tests {
         let registry = ActuatorRegistry::with_defaults();
         let mut audit = AuditTrail::new();
 
+        // M0-FIX2 F9: Bash is refused; route through Python instead.
         let action = PlannedAction::CodeExecute {
-            language: "bash".into(),
-            code: "echo 'tool system works'".into(),
+            language: "python3".into(),
+            code: "print('tool system works')".into(),
             timeout_secs: Some(5),
         };
         let result = registry.execute_action(&action, &ctx, &mut audit).unwrap();
