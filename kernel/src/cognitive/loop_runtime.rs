@@ -278,6 +278,33 @@ fn is_closed_model_actuator(action: &PlannedAction) -> bool {
     )
 }
 
+/// The refusal of the self-evolution, governance-policy and
+/// cognitive-parameter actions (M0-FIX F7). Their actuators existed only to
+/// drive the legacy supervisor stack (orchestration, delegation, speculative
+/// simulation and Time Machine checkpoints) and were removed with it, so the
+/// executor refuses them instead of reporting a stub success. The old
+/// surface stays closed; it is not degraded or emulated.
+const LEGACY_ACTION_REMOVED: &str = "refused: this action was removed from the cognitive \
+     loop with the legacy supervisor stack (M0-FIX F7); it is closed";
+
+/// Whether `action` is one of the removed legacy cognitive actions.
+fn is_removed_legacy_action(action: &PlannedAction) -> bool {
+    matches!(
+        action,
+        PlannedAction::SelfModifyDescription { .. }
+            | PlannedAction::SelfModifyStrategy { .. }
+            | PlannedAction::RunEvolutionTournament { .. }
+            | PlannedAction::ModifyGovernancePolicy { .. }
+            | PlannedAction::AllocateEcosystemFuel { .. }
+            | PlannedAction::ModifyCognitiveParams { .. }
+            | PlannedAction::SelectLlmProvider { .. }
+            | PlannedAction::SelectAlgorithm { .. }
+            | PlannedAction::DesignAgentEcosystem { .. }
+            | PlannedAction::RunCounterfactual { .. }
+            | PlannedAction::TemporalPlan { .. }
+    )
+}
+
 /// The prompt of an `LlmQuery` step (§11.2, §11.3): the step's prompt and
 /// context come from the plan and are carried with its label; each earlier
 /// step's result is included verbatim or carried as derived.
@@ -457,12 +484,6 @@ fn is_actuator_action(action: &PlannedAction) -> bool {
             | PlannedAction::KeyboardShortcut { .. }
             | PlannedAction::ScrollWheel { .. }
             | PlannedAction::ComputerAction { .. }
-            | PlannedAction::ModifyCognitiveParams { .. }
-            | PlannedAction::SelectLlmProvider { .. }
-            | PlannedAction::SelectAlgorithm { .. }
-            | PlannedAction::DesignAgentEcosystem { .. }
-            | PlannedAction::RunCounterfactual { .. }
-            | PlannedAction::TemporalPlan { .. }
             | PlannedAction::A2aDelegation { .. }
     )
 }
@@ -559,6 +580,9 @@ impl ActionExecutor for RegistryExecutor {
             _ if is_closed_model_actuator(action) => {
                 Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
             }
+            _ if is_removed_legacy_action(action) => {
+                Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
+            }
             // A model call, or a read or write of retained records, needs a
             // unit (§6.1, §11.4): never run without one.
             PlannedAction::LlmQuery { .. } if self.llm_handler.is_some() => {
@@ -599,6 +623,9 @@ impl ActionExecutor for RegistryExecutor {
         match action {
             _ if is_closed_model_actuator(action) => {
                 Err(format!("{} {MODEL_ACTUATOR_CLOSED}", action.action_type()))
+            }
+            _ if is_removed_legacy_action(action) => {
+                Err(format!("{} {LEGACY_ACTION_REMOVED}", action.action_type()))
             }
             PlannedAction::LlmQuery { prompt, context } if self.llm_handler.is_some() => {
                 let handler = self.llm_handler.as_ref().expect("checked");
@@ -2735,11 +2762,9 @@ fn compute_last_step_result(steps: &[AgentStep]) -> Option<String> {
 /// Determine if an action requires HITL approval based on autonomy level.
 fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
     match action {
-        // ApiCall to known free APIs (CoinGecko, Wikipedia, etc.) is safe at L2
-        PlannedAction::ApiCall { url, .. } if crate::free_api_registry::is_known_free_api(url) => {
-            autonomy_level < 2
-        }
-        // Other high-risk actions require L3+ or HITL
+        // High-risk actions require L3+ or HITL. (An ApiCall to an address
+        // the removed free-API registry listed was relaxed to L2 by a string
+        // prefix match; M0-FIX F7 removed that relaxation.)
         PlannedAction::FileWrite { .. }
         | PlannedAction::ShellCommand { .. }
         | PlannedAction::DockerCommand { .. }
