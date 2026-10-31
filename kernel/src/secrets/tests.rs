@@ -618,7 +618,7 @@ fn f4_backend(
 /// Writes a row exactly as the pre-F4 backend did: a 12-byte nonce and
 /// AES-256-GCM under the `nexus.secrets.v1` domain key with no associated
 /// data.
-fn f4_write_legacy_row(
+pub(crate) fn f4_write_legacy_row(
     db: &nexus_persistence::NexusDatabase,
     master: &EncryptionKey,
     scope: &str,
@@ -668,13 +668,13 @@ fn f4_ciphertext_copied_between_identities_does_not_open() {
             .set(scope, name, Zeroizing::new(format!("value-{scope}-{name}")))
             .unwrap();
     }
-    for (from, to) in [
-        (ids[0], ids[1]),
-        (ids[0], ids[2]),
-        (ids[3], ids[4]),
-        (ids[4], ids[3]),
-    ] {
-        f4_copy_row(&db, from, to);
+    // Copy each source row as originally written (a copy made earlier in
+    // this loop must not become the next source).
+    let original = f4_rows(&db, &ids);
+    for (from, to) in [(0, 1), (0, 2), (3, 4), (4, 3)] {
+        let (nonce, ciphertext) = original[from].clone().unwrap();
+        let (from, to) = (ids[from], ids[to]);
+        db.record_secret(to.0, to.1, &nonce, &ciphertext).unwrap();
         match backend.get(to.0, to.1) {
             Err(SecretError::DecryptionFailed) => {}
             Ok(value) => panic!(
@@ -688,11 +688,14 @@ fn f4_ciphertext_copied_between_identities_does_not_open() {
             Err(other) => panic!("unexpected error for {}.{}: {other:?}", to.0, to.1),
         }
     }
-    // The source rows still open as themselves.
+    // The source rows still open as themselves, and a row put back in its
+    // own slot opens again.
     assert_eq!(
         backend.get("llm", "anthropic").unwrap().as_str(),
         "value-llm-anthropic"
     );
+    let (nonce, ciphertext) = original[3].clone().unwrap();
+    db.record_secret("ab", "c", &nonce, &ciphertext).unwrap();
     assert_eq!(backend.get("ab", "c").unwrap().as_str(), "value-ab-c");
 }
 
