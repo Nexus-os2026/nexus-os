@@ -363,7 +363,7 @@ fn test_select_provider_no_config_and_no_ollama_returns_error() {
         Err(e) => {
             let msg = e.to_string();
             assert!(
-                msg.contains("No LLM provider configured"),
+                msg.contains("No local model found"),
                 "error should guide user: got {msg}"
             );
         }
@@ -428,10 +428,11 @@ fn test_select_provider_explicit_flash() {
 }
 
 #[test]
-fn test_select_provider_priority_deepseek_over_ollama() {
-    // When both DeepSeek key and Ollama URL are set (without explicit provider),
-    // the cloud provider with an API key takes priority — the user explicitly
-    // configured a cloud key, so they want cloud inference, not local Ollama.
+fn test_select_provider_ollama_url_over_cloud_key() {
+    // Local-first (M0-FIX F6): a cloud key present without an explicit
+    // provider never outranks a configured Ollama URL. The previous
+    // cloud-first expectation was replaced by the Owner's local-first policy;
+    // the full matrix lives in local_first_selection.rs.
     let config = ProviderSelectionConfig {
         ollama_url: Some("http://127.0.0.1:19999".into()),
         deepseek_api_key: Some("test-key".into()),
@@ -439,27 +440,20 @@ fn test_select_provider_priority_deepseek_over_ollama() {
     };
     let result = select_provider(&config);
     assert!(result.is_ok());
-    // Cloud provider with key takes priority over Ollama
-    assert_eq!(result.unwrap().name(), "deepseek");
+    assert_eq!(result.unwrap().name(), "ollama");
 }
 
 #[test]
-fn test_select_provider_deepseek_without_ollama_url() {
-    // Cloud-first routing: cloud providers with keys take priority.
-    // DeepSeek key is set, so DeepSeek should be selected.
-    // Ollama auto-detect only kicks in as last resort (no keys at all).
+fn test_select_provider_cloud_key_alone_is_never_cloud() {
+    // A DeepSeek key with no explicit provider must not select DeepSeek:
+    // either a local Ollama is auto-detected, or selection errors.
     let config = ProviderSelectionConfig {
         deepseek_api_key: Some("test-key".into()),
         ..Default::default()
     };
-    let result = select_provider(&config);
-    assert!(result.is_ok());
-    let provider = result.unwrap();
-    let name = provider.name();
-    assert!(
-        name == "deepseek" || name == "ollama",
-        "expected deepseek or ollama, got {name}"
-    );
+    if let Ok(provider) = select_provider(&config) {
+        assert_eq!(provider.name(), "ollama");
+    }
 }
 
 // ── Group 7: Provider token estimation ──────────────────────────────────
