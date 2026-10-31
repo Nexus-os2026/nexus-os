@@ -259,5 +259,8 @@ jobs:
       - name: Use fresh advisory databases
         run: rm -rf ~/.cargo/advisory-db ~/.cargo/advisory-dbs
 
+      - name: Security gate exception-list test
+        run: scripts/tests/security-audit-exceptions.sh
+
       - name: Security gate (cargo-audit and cargo-deny)
         run: scripts/security-audit.sh --install

@@ -3,6 +3,8 @@ all-features = true
 
 [advisories]
 # The Linux security gate's one exception set (P0-LINUX-FINAL-R1, repair B).
+# It is empty (M0-FIX2 F12 removed the last waiver, RUSTSEC-2026-0258): zero
+# ignores is the strictest state, and any advisory now fails the gate.
 #
 # scripts/security-audit.sh runs cargo-deny with this file and passes the same
 # IDs (read from the `id = "RUSTSEC-..."` entries below) to cargo-audit, which
@@ -18,14 +20,12 @@ all-features = true
 # - a listed ID that no longer matches anything fails the gate (the script
 #   passes `-D advisory-not-detected`), so the list cannot go stale.
 #
-# Each entry: package, what it is, how it reaches the workspace, and why it is
-# accepted for Phase Zero (Architect decision; dossier, "Dependencies").
+# Each entry, if one is ever added: package, what it is, how it reaches the
+# workspace, and why it is accepted (Architect decision).
 unmaintained = "all"
 unsound = "all"
 yanked = "warn"
-ignore = [
-    { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 unbounded empty DATA frames; readability 0.3 -> reqwest 0.11 -> hyper 0.14 -> nexus-kernel; the kernel calls only readability::extractor::extract on text it holds and builds no reqwest 0.11 client; no fix on the 0.3 line" },
-]
+ignore = []
 
 [licenses]
 allow = [

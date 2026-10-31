@@ -2,7 +2,8 @@
 # Linux security gate for Rust dependencies (P0-LINUX-FINAL-R1, repair B).
 #
 # Runs the pinned cargo-audit and cargo-deny on this checkout's Cargo.lock
-# with the one exception set in deny.toml. Exits non-zero when:
+# with the one exception set in deny.toml (which may be empty). Exits
+# non-zero when:
 # - either scanner is missing or is not the pinned version;
 # - either scanner fails for any reason (no failure is masked);
 # - a vulnerability not in deny.toml's exception set is found;
@@ -55,15 +56,24 @@ esac
 
 # The exception set: the `id = "RUSTSEC-..."` entries of deny.toml.
 mapfile -t accepted < <(grep -oE 'id = "RUSTSEC-[0-9]{4}-[0-9]{4}"' deny.toml | grep -oE 'RUSTSEC-[0-9]{4}-[0-9]{4}')
-if [ "${#accepted[@]}" -eq 0 ]; then
-    echo "security-audit: no exception entries found in deny.toml" >&2
+# An empty set is valid and is the strictest state: nothing is accepted. Every
+# advisory ID written outside a comment must be in the canonical entry form, so
+# a malformed entry cannot be silently ignored by cargo-audit while cargo-deny
+# honours it.
+mentioned="$({ grep -v '^[[:space:]]*#' deny.toml | grep -oE 'RUSTSEC-[0-9A-Za-z-]+' || true; } | wc -l)"
+if [ "$mentioned" -ne "${#accepted[@]}" ]; then
+    echo "security-audit: deny.toml mentions $mentioned advisory ID(s) but only ${#accepted[@]} are in the form id = \"RUSTSEC-YYYY-NNNN\"" >&2
     exit 1
 fi
 echo "security-audit: cargo-audit $CARGO_AUDIT_VERSION, cargo-deny $CARGO_DENY_VERSION"
-echo "security-audit: accepted advisories (deny.toml): ${accepted[*]}"
+if [ "${#accepted[@]}" -eq 0 ]; then
+    echo "security-audit: accepted advisories (deny.toml): none"
+else
+    echo "security-audit: accepted advisories (deny.toml): ${accepted[*]}"
+fi
 
 audit_args=(--file Cargo.lock)
-for id in "${accepted[@]}"; do
+for id in ${accepted[@]+"${accepted[@]}"}; do
     audit_args+=(--ignore "$id")
 done
 deny_config="deny.toml"
