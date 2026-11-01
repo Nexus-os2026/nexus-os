@@ -56,6 +56,8 @@ mod m2as_model;
 #[cfg(test)]
 mod m2as_mutants;
 #[cfg(test)]
+mod m2as_nowait;
+#[cfg(test)]
 mod m2as_review2;
 #[cfg(test)]
 mod m2as_scan;
@@ -126,6 +128,15 @@ pub struct GovernedPort {
     pub(crate) fence_between_cancels: crate::oracles::m2as_hooks::HookSlot,
     #[cfg(test)]
     pub(crate) after_fence: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in perform once the fence was checked, as the
+    /// broker is asked to act (a stand-in for a broker call that stalls
+    /// where no cancellation reaches it, such as a DNS lookup).
+    #[cfg(test)]
+    pub(crate) in_broker_action: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run by the fence at its first cancellation, given
+    /// whether the port was fenced at that moment.
+    #[cfg(test)]
+    pub(crate) first_fence_cancel: crate::oracles::m2as_hooks::SeenSlot,
 }
 
 impl GovernedPort {
@@ -148,6 +159,10 @@ impl GovernedPort {
             fence_between_cancels: Default::default(),
             #[cfg(test)]
             after_fence: Default::default(),
+            #[cfg(test)]
+            in_broker_action: Default::default(),
+            #[cfg(test)]
+            first_fence_cancel: Default::default(),
         }
     }
 
@@ -267,6 +282,8 @@ impl EffectPort for GovernedPort {
         #[cfg(test)]
         self.before_broker_action.fire();
         let _gate = self.enter()?;
+        #[cfg(test)]
+        self.in_broker_action.fire();
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
@@ -368,6 +385,10 @@ impl EffectPort for GovernedPort {
             runs.fenced = true;
             runs.open.values().copied().collect()
         };
+        #[cfg(test)]
+        if !before.is_empty() {
+            self.first_fence_cancel.fire(self.lock().fenced);
+        }
         for run in &before {
             self.cancel_run(*run);
             #[cfg(test)]

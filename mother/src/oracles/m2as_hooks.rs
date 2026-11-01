@@ -88,3 +88,27 @@ impl ControlConfirmer for OwnerApproves {
         false
     }
 }
+
+type SeenHook = Box<dyn FnOnce(bool) + Send>;
+
+/// One armed hook given what its caller saw at that moment (a flag of the
+/// caller's own state, read where the hook cannot read it itself), once.
+#[derive(Clone, Default)]
+pub(crate) struct SeenSlot(Arc<Mutex<Option<SeenHook>>>);
+
+impl SeenSlot {
+    pub fn arm(&self, hook: impl FnOnce(bool) + Send + 'static) {
+        *self.0.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    pub fn armed(&self) -> bool {
+        self.0.lock().unwrap().is_some()
+    }
+
+    pub(crate) fn fire(&self, seen: bool) {
+        let hook = self.0.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook(seen);
+        }
+    }
+}
