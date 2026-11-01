@@ -70,7 +70,7 @@ the host, tests included).
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
 | M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs`, `oracles/m2as_review.rs`, `oracles/m2as_resume.rs` |
-| M2a-S: a call reserved before the break never reaches the world after it (fenced at the broker); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs` |
+| M2a-S: a call reserved before the break never reaches the world after it (fenced at the broker); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs` |
 
 Coordinator rules the oracles pin:
 
@@ -125,14 +125,18 @@ Coordinator rules the oracles pin:
   lock that marks it broken) the port is fenced: every broker run it holds
   is cancelled, so a call reserved before the break (an effect journaled
   dispatched, a waiting request) is refused by the broker itself, and the
-  port opens no new run. The port's gate makes this race-free: every broker
-  call it makes (opening a run, an action, an approval query, adopting, a
-  settled check, a cancellation, a finish) holds the gate in read mode and
-  checks `fenced` inside it. The fence sets `fenced`, cancels every run it
-  holds at once (an action executing on one sees its run's cancellation
-  token: it is interrupted, not waited for), then takes the gate in write
-  mode and cancels every run opened meanwhile by a call that was already
-  inside. A call either entered before the break or is refused. The
+  port keeps no new run. The fence never waits (Owner decision): under the
+  port's mutex it sets `fenced` and cancels every run registered, then
+  returns. Every broker call the port makes (opening a run, an action, an
+  approval query, adopting, a settled check, a cancellation, a finish)
+  checks `fenced` first and is refused once it is set. A call that checked
+  just before the break is not waited for, even one stalled where no
+  cancellation reaches it (a DNS lookup): its run is cancelled, so the
+  broker refuses it, and an action executing on it sees its run's
+  cancellation token. Every run registration checks `fenced` in the same
+  critical section as the fence: it comes before the fence's (which
+  cancels the run) or after (and cancels the run itself, never giving it
+  to the mission). The
   Owner's consent dialog and the emergency-stop read are not gated: they
   produce no effect, and a consent answered after the break is discarded
   (a source scan pins that the ungated broker Authority is used for
@@ -142,8 +146,9 @@ Coordinator rules the oracles pin:
   nothing is journaled for it, if the coordinator broke or the mission is
   held. Every journaled open request is handed back to the port before any
   session record is written, so an open that fails still withdraws it; the
-  port's withdraw is an error for a handed-back request it does not hold
-  while the broker holds it open (one two missions claim is recorded, not
+  port's withdraw asks the broker for every handed-back request's own run
+  and state, and is an error while the broker holds one open on any other
+  run than the one it just cancelled (one two missions claim is recorded, not
   given back, so an open that would leave it approvable fails closed). A
   fence is final: a coordinator opened again after a break needs a new
   port. A hold after a resume is journaled again.
@@ -169,7 +174,9 @@ Coordinator rules the oracles pin:
   broker's cancellation record is written while that lock is held (Owner
   decision). An effect already executing inside the broker when the
   coordinator breaks sees its run's cancellation token; one past the point
-  where it checks it may complete. The oracles pin every call reserved but
+  where it checks it may complete. Without waiting, the broker can open a
+  run for a call that checked `fenced` just before the break; the port
+  cancels it as it registers (it is recorded at the broker, cancelled). The oracles pin every call reserved but
   not yet handed to the broker.
 - M2a-S: the clean close is a record in the unkeyed chain. Someone with
   write access who cuts the journal back to a clean close (dropping a

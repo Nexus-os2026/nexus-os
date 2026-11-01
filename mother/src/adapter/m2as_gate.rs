@@ -7,8 +7,11 @@
 //! - (b) B passes the port's fence check, the fence completes, then B asks
 //!   the broker to open a run.
 //!
-//! In both, nothing reaches the world, nothing executes at the broker, and
-//! no run is opened after the fence. Threads meet at test hooks in the port
+//! In both, nothing reaches the world and nothing executes at the broker.
+//! In (a) no run is opened after the fence; in (b), after re-review #3 (the
+//! fence never waits; Owner-approved amendment of its run-count assertion),
+//! a run the broker opens after the fence is cancelled at once and never
+//! given to B. Threads meet at test hooks in the port
 //! (bounded waits, never a fixed sleep as the proof): the assertions are on
 //! the broker's and the world's own records.
 //!
@@ -23,6 +26,7 @@ use crate::journal::{MemoryJournal, MissionId};
 use crate::oracles::{contract_with, keyed_lanes, Yes};
 use crate::state::MissionState;
 use nexus_governed_control::authority::clock::SystemClock;
+use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::governed::GovernedControl;
 use std::collections::BTreeSet;
 use std::net::TcpListener;
@@ -67,6 +71,17 @@ fn approved(r: &Rig, markers: &str) -> MissionId {
         Ok(MissionState::Approved)
     );
     id
+}
+
+fn mothers_run_ids(control: &GovernedControl) -> BTreeSet<RunId> {
+    control
+        .authority()
+        .runs()
+        .views()
+        .iter()
+        .filter(|run| run.agent.to_string() == MOTHER_AGENT)
+        .map(|run| run.id)
+        .collect()
 }
 
 fn mothers_runs(control: &GovernedControl) -> usize {
@@ -178,13 +193,12 @@ fn no_run_opens_after_the_fence(control: &Arc<GovernedControl>, origin: &str, wo
     assert_eq!(r.port.run_of(b), None);
 
     let (b_checked, fence_done) = (Flag::default(), Flag::default());
-    let after_fence: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
+    let after_fence: Arc<Mutex<Option<BTreeSet<RunId>>>> = Arc::new(Mutex::new(None));
     {
         let (b_checked, fence_done) = (b_checked.clone(), fence_done.clone());
         r.port.before_open_run.arm(0, move || {
             b_checked.set();
-            // Wait for the fence to complete (bounded: with the gate it
-            // cannot complete while B is inside).
+            // Wait for the fence to complete (it never waits for B).
             let _ = fence_done.wait(GRACE);
         });
     }
@@ -192,7 +206,7 @@ fn no_run_opens_after_the_fence(control: &Arc<GovernedControl>, origin: &str, wo
         let (fence_done, after_fence, control) =
             (fence_done.clone(), after_fence.clone(), control.clone());
         r.port.after_fence.arm(0, move || {
-            *after_fence.lock().unwrap() = Some(mothers_runs(&control));
+            *after_fence.lock().unwrap() = Some(mothers_run_ids(&control));
             fence_done.set();
         });
     }
@@ -204,12 +218,26 @@ fn no_run_opens_after_the_fence(control: &Arc<GovernedControl>, origin: &str, wo
 
     assert!(answer.is_err(), "B answered {answer:?} after the break");
     assert!(!world.saw("/gate-open"), "an effect reached the world");
-    let at_fence = after_fence.lock().unwrap().expect("the fence completed");
-    assert_eq!(
-        mothers_runs(control),
-        at_fence,
-        "a run was opened after the fence"
-    );
+    let at_fence = after_fence
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the fence completed");
+    // Owner-approved amendment (re-review #3, the fence never waits): every
+    // run opened after the fence is cancelled at once, never given to B, and
+    // executes nothing (it replaces "the run count is unchanged").
+    let late: BTreeSet<RunId> = mothers_run_ids(control)
+        .difference(&at_fence)
+        .copied()
+        .collect();
+    for run in &late {
+        assert!(
+            control.authority().runs().view(*run).unwrap().cancelled,
+            "a run opened after the fence was left open"
+        );
+        assert_ne!(r.port.run_of(b), Some(*run), "B was given a late run");
+    }
+    assert_eq!(executed(control, &late), 0, "a late run executed");
     if let Some(run) = r.port.run_of(b) {
         assert!(control.authority().runs().view(run).unwrap().cancelled);
         assert_eq!(executed(control, &BTreeSet::from([run])), 0);

@@ -35,7 +35,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, RwLock, RwLockReadGuard};
+use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
 mod expiry_tests;
@@ -83,8 +83,9 @@ struct Runs {
     /// The action each mission waits on at the broker, and the port's
     /// monotonic deadline for it.
     waiting: BTreeMap<MissionId, (CommitmentId, u64)>,
-    /// M2a-S: the coordinator broke. Every run was cancelled at the broker
-    /// and no new one opens.
+    /// M2a-S: the coordinator broke. Every run registered then was
+    /// cancelled at the broker; a run opened later is cancelled as it
+    /// registers, and no broker call starts.
     fenced: bool,
     /// M2a-S: every journaled action handed back for each mission, taken or
     /// not, so that a withdrawal is an error while the broker still holds
@@ -95,13 +96,10 @@ struct Runs {
 /// The EffectPort over the governed-control broker.
 pub struct GovernedPort {
     control: Arc<GovernedControl>,
+    /// M2a-S: `fenced` and every run registration are under this mutex, so
+    /// a run registers either before the fence (which cancels it) or after
+    /// (and cancels itself); every broker call checks `fenced` first.
     runs: Mutex<Runs>,
-    /// M2a-S, the gate: every broker call this port makes holds it in read
-    /// mode and checks `fenced` inside it, refusing once set; the fence sets
-    /// `fenced`, then holds it in write mode while it cancels every run. So a
-    /// broker call either entered before the break (and has finished before
-    /// any run is cancelled) or is refused.
-    gate: RwLock<()>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
     /// M2a-S (tests): run just before an effect is performed, and before
@@ -115,15 +113,13 @@ pub struct GovernedPort {
     #[cfg(test)]
     pub(crate) before_broker_action: crate::oracles::m2as_hooks::HookSlot,
     /// M2a-S (tests): run in run_for once the fence was checked, just before
-    /// the broker is asked to open a run. It runs INSIDE the read gate: a
-    /// hook here must not break the coordinator or call this port (the fence
-    /// would wait for this thread to leave the gate).
+    /// the broker is asked to open a run.
     #[cfg(test)]
     pub(crate) before_open_run: crate::oracles::m2as_hooks::HookSlot,
-    /// M2a-S (tests): run in the fence after each run it cancels before
-    /// write mode, and once it is done (inside write mode). Both run under
-    /// the coordinator lock: a hook here must not call the coordinator or
-    /// this port.
+    /// M2a-S (tests): run in the fence after each run it cancels (under the
+    /// coordinator lock and the port's mutex), and once it is done (under
+    /// the coordinator lock only): a hook here must not call the coordinator
+    /// or this port.
     #[cfg(test)]
     pub(crate) fence_between_cancels: crate::oracles::m2as_hooks::HookSlot,
     #[cfg(test)]
@@ -144,7 +140,6 @@ impl GovernedPort {
         Self {
             control,
             runs: Mutex::new(Runs::default()),
-            gate: RwLock::new(()),
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
             #[cfg(test)]
@@ -195,23 +190,25 @@ impl GovernedPort {
         self.runs.lock().expect("mother port")
     }
 
-    /// Enter the broker: the gate in read mode, refused once fenced. Never
-    /// taken twice by one thread (a waiting fence would block the second).
-    fn enter(&self) -> Result<RwLockReadGuard<'_, ()>, EffectRefusal> {
-        // The gate guards nothing but entry: a panic inside a broker call
-        // that poisoned it leaves nothing to repair.
-        let gate = self.gate.read().unwrap_or_else(PoisonError::into_inner);
+    /// The check before every broker call: refused once fenced. It never
+    /// waits for the fence, nor the fence for it: a call that passed it just
+    /// before the break runs on a run the fence cancels (the broker refuses
+    /// it, or an executing action sees its run's cancellation token).
+    fn enter(&self) -> Result<(), EffectRefusal> {
         if self.lock().fenced {
             return Err(refused("port_fenced"));
         }
-        Ok(gate)
+        Ok(())
     }
 
-    /// The mission's agent run, opened on its first effect, inside the gate:
-    /// no run opens once the port is fenced. A mission that ended meanwhile
-    /// gets no run (the one just opened is cancelled).
+    /// The mission's agent run, opened on its first effect. Its registration
+    /// checks `fenced` in the same critical section as the fence's: a run
+    /// opened after the fence (its call checked just before the break) is
+    /// cancelled at once and never given to the mission. A mission that
+    /// ended meanwhile gets no run either (the one just opened is
+    /// cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
-        let _gate = self.enter()?;
+        self.enter()?;
         {
             let runs = self.lock();
             if runs.ended.contains(&mission) {
@@ -227,19 +224,26 @@ impl GovernedPort {
             .control
             .open_run(mother_agent(), RunOrigin::AgentGoal)
             .map_err(|e| refused(e.class()))?;
-        let mut runs = self.lock();
-        if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
-            drop(runs);
+        let refusal = {
+            let mut runs = self.lock();
+            if runs.fenced {
+                Some("port_fenced")
+            } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
+                Some("mission_cancelled")
+            } else {
+                runs.open.insert(mission, run);
+                None
+            }
+        };
+        if let Some(class) = refusal {
             self.cancel_run(run);
-            return Err(refused("mission_cancelled"));
+            return Err(refused(class));
         }
-        runs.open.insert(mission, run);
         Ok(run)
     }
 
-    /// Cancel `run` at the broker: inside the gate (read or write), or by
-    /// the fence once `fenced` is set (a cancellation only ever stops
-    /// effects).
+    /// Cancel `run` at the broker (also once fenced: a cancellation only
+    /// ever stops effects).
     fn cancel_run(&self, run: RunId) {
         if self.control.cancel_run(run).is_err() {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
@@ -281,7 +285,7 @@ impl EffectPort for GovernedPort {
         let run = self.run_for(mission)?;
         #[cfg(test)]
         self.before_broker_action.fire();
-        let _gate = self.enter()?;
+        self.enter()?;
         #[cfg(test)]
         self.in_broker_action.fire();
         // Before the broker is asked: the broker's deadline for an action
@@ -301,32 +305,32 @@ impl EffectPort for GovernedPort {
     }
 
     fn cancel(&self, mission: MissionId) {
-        let gate = self.enter();
+        let entered = self.enter();
         let run = self.end(mission);
         // Fenced: every run this port held is cancelled already.
-        if let (Ok(_gate), Some(run)) = (gate, run) {
+        if let (Ok(()), Some(run)) = (entered, run) {
             self.cancel_run(run);
         }
     }
 
     /// Cancel the mission's run, and say whether everything journaled for
     /// it is withdrawn: an error if the broker refused the cancellation, or
-    /// if a request handed back for the mission names another run (or
-    /// another commitment than the one held) and the broker still holds it
-    /// open. Fenced: an error, unless there was nothing to withdraw.
+    /// if the broker still holds open a request handed back for the mission
+    /// on any other run than the one just cancelled (asked of the broker for
+    /// each one, never read from the record's run). Fenced: an error, unless
+    /// there was nothing to withdraw.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
-        let gate = self.enter();
+        let entered = self.enter();
         let run = self.end(mission);
-        let (handed, waiting) = {
-            let runs = self.lock();
-            (
-                runs.handed.get(&mission).cloned().unwrap_or_default(),
-                runs.waiting.get(&mission).map(|(c, _)| *c),
-            )
-        };
+        let handed = self
+            .lock()
+            .handed
+            .get(&mission)
+            .cloned()
+            .unwrap_or_default();
         // Fenced: the fence cancelled every run this port held (a
         // cancellation it could not make is counted, not retried here).
-        let Ok(_gate) = gate else {
+        if entered.is_err() {
             return match (run, handed.is_empty()) {
                 (None, true) => Ok(()),
                 _ => Err(refused("port_fenced")),
@@ -339,11 +343,7 @@ impl EffectPort for GovernedPort {
             })?;
         }
         for pending in handed {
-            let same_run = run.is_some() && RunId::parse(&pending.run) == run;
-            let same_commitment =
-                waiting.is_none_or(|held| CommitmentId::parse(&pending.commitment) == Some(held));
-            let covered = same_run && same_commitment;
-            if !covered && !self.settled_inside(&pending) {
+            if !self.withdrawn(&pending, run) {
                 return Err(refused("action_not_held"));
             }
         }
@@ -351,10 +351,10 @@ impl EffectPort for GovernedPort {
     }
 
     fn finish(&self, mission: MissionId) {
-        let gate = self.enter();
+        let entered = self.enter();
         let run = self.end(mission);
         // Fenced: the run is cancelled already.
-        if let (Ok(_gate), Some(run)) = (gate, run) {
+        if let (Ok(()), Some(run)) = (entered, run) {
             self.control.finish_when_settled(run);
         }
     }
@@ -364,46 +364,35 @@ impl EffectPort for GovernedPort {
     }
 
     /// The coordinator broke (called under the coordinator lock). Owner
-    /// decisions: `fenced` first, then cancel before and after write mode.
-    /// 1. `fenced`: every broker call that enters the gate from now on is
-    ///    refused (even one that gets the read gate while this fence waits
-    ///    for write mode: the lock lets a reader in right after the last one
-    ///    leaves).
-    /// 2. Every run held now is cancelled at once: an action executing on it
-    ///    sees its run's cancellation token (it is interrupted, not waited
-    ///    for), and the broker authorizes or starts nothing more of it.
-    /// 3. Write mode: every call already inside (it entered before the
-    ///    break) has left the gate; every run held now that was not
-    ///    cancelled in 2 (opened or taken back by such a call) is cancelled.
+    /// decision: the fence never waits. Under the port's mutex it sets
+    /// `fenced` and cancels every run registered, then returns.
+    /// - A broker call that checks `fenced` from now on is refused.
+    /// - A call that checked it just before is not waited for: its run is
+    ///   cancelled here, so the broker refuses it, or an action executing on
+    ///   it sees its run's cancellation token (a call that stalls where no
+    ///   cancellation reaches it, such as a DNS lookup, is refused by the
+    ///   broker when it goes on).
+    /// - A run registration's critical section precedes this one (the run
+    ///   is cancelled here) or follows it (it sees `fenced` and cancels the
+    ///   run itself).
     ///
     /// A cancellation the broker refuses is counted (`cancel_failures`). A
     /// fence is final: a coordinator opened again after a break needs a new
     /// port.
     fn fence(&self) {
-        let before: Vec<RunId> = {
+        {
             let mut runs = self.lock();
             runs.fenced = true;
-            runs.open.values().copied().collect()
-        };
-        #[cfg(test)]
-        if !before.is_empty() {
-            self.first_fence_cancel.fire(self.lock().fenced);
-        }
-        for run in &before {
-            self.cancel_run(*run);
+            let open: Vec<RunId> = runs.open.values().copied().collect();
             #[cfg(test)]
-            self.fence_between_cancels.fire();
-        }
-        let _gate = self.gate.write().unwrap_or_else(PoisonError::into_inner);
-        let after: Vec<RunId> = self
-            .lock()
-            .open
-            .values()
-            .copied()
-            .filter(|run| !before.contains(run))
-            .collect();
-        for run in after {
-            self.cancel_run(run);
+            if !open.is_empty() {
+                self.first_fence_cancel.fire(runs.fenced);
+            }
+            for run in open {
+                self.cancel_run(run);
+                #[cfg(test)]
+                self.fence_between_cancels.fire();
+            }
         }
         #[cfg(test)]
         self.after_fence.fire();
@@ -423,7 +412,7 @@ impl EffectPort for GovernedPort {
     fn approval(&self, mission: MissionId) -> ApprovalStatus {
         #[cfg(test)]
         self.before_approval.fire();
-        let Ok(_gate) = self.enter() else {
+        let Ok(()) = self.enter() else {
             return ApprovalStatus::Lapsed {
                 class: "port_fenced".into(),
             };
@@ -458,7 +447,7 @@ impl EffectPort for GovernedPort {
     fn settled(&self, pending: &PendingAction) -> bool {
         // Fenced: not confirmed (the action stays open in the journal and is
         // withdrawn again on the next open).
-        let Ok(_gate) = self.enter() else {
+        let Ok(()) = self.enter() else {
             return false;
         };
         self.settled_inside(pending)
@@ -483,7 +472,7 @@ impl EffectPort for GovernedPort {
     /// knows, or has ended, is left as it is; a fenced port takes nothing.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
         self.record_handed(mission, pending);
-        let Ok(_gate) = self.enter() else {
+        let Ok(()) = self.enter() else {
             return;
         };
         self.adopt_inside(mission, pending);
@@ -500,7 +489,28 @@ impl GovernedPort {
         }
     }
 
-    /// [`EffectPort::settled`], inside the gate.
+    /// Whether the broker no longer holds `pending` open, or holds it on
+    /// `cancelled` (the run this withdrawal just cancelled): the broker's own
+    /// record of the commitment, never the record's run.
+    fn withdrawn(&self, pending: &PendingAction, cancelled: Option<RunId>) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                cancelled == Some(view.run)
+                    || !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
+    /// [`EffectPort::settled`], once the fence was checked.
     fn settled_inside(&self, pending: &PendingAction) -> bool {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
             return false;
@@ -520,7 +530,8 @@ impl GovernedPort {
         }
     }
 
-    /// [`EffectPort::adopt`], inside the gate.
+    /// [`EffectPort::adopt`], once the fence was checked; its registration
+    /// checks `fenced` again, in the same critical section.
     fn adopt_inside(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),

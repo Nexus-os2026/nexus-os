@@ -338,7 +338,7 @@ struct Inner {
     /// M2a-S: the port's fence, run under this lock at the moment the
     /// store fails: no broker call enters the port from then on, an action
     /// executing at the broker is interrupted (its run is cancelled), and
-    /// every run the port holds is cancelled.
+    /// every run the port holds is cancelled. It never waits.
     fence: Box<dyn Fn() + Send>,
     missions: BTreeMap<MissionId, Mission>,
     next_mission: u64,
