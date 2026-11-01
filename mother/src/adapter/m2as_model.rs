@@ -237,7 +237,9 @@ impl<'a> Seq<'a> {
                     return Ok(());
                 }
                 // The disk recovers: it reopens, or is refused fail-closed.
+                // A new coordinator: the failed open's measure is not its.
                 self.disk.fail(false, false);
+                *self.broke_at.lock().unwrap() = None;
                 let failures = self.disk.failures();
                 match rig(self.control, self.disk.clone()) {
                     Ok(rig) => {
@@ -349,9 +351,10 @@ impl<'a> Seq<'a> {
                 return Err("a broken coordinator with no failing append".into());
             };
             ensure(self.world.count() == at, || {
+                let lines = self.world.counter().lock().unwrap()[at..].to_vec();
                 format!(
-                    "(b) {} request(s) reached the world after the break",
-                    self.world.count() - at
+                    "(b) {} request(s) reached the world after the break: {lines:?}",
+                    lines.len()
                 )
             })?;
         }
