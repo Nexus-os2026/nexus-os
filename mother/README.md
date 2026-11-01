@@ -1,7 +1,8 @@
 # Mother Nexus M1 + M2a: mission contract, coordinator core, broker consent
 
-Status: M1 is on `main`. M2a (mission consent in the broker; Mother waits
-for broker approval) is a candidate on `mother/m2a-broker-consent`.
+Status: M1 and M2a (mission consent in the broker; Mother waits for broker
+approval) are on `main`. M2a-S (Stop and denial durability across
+restarts) is a candidate on `mother/m2a-s-stop-durability`.
 Headless Rust library only: no UI, no real research, no website building,
 no model calls. It is not a passed gate. Every capability here is PLANNED
 until its physical test passes on the installed build (`MOTHER.md` §1).
@@ -37,9 +38,11 @@ Mother turns a human goal into a governed mission:
    Sentinel. Every call is journaled with the lane's identity, an
    invocation id and the hashes of its input and output. M1 has only
    deterministic lanes.
-6. **Journal** (`journal.rs`): append-only and hash-chained. A restarted
-   coordinator resumes every mission in its state; a Stopped mission stays
-   stopped; a tampered journal is refused.
+6. **Journal** (`journal.rs`): append-only and hash-chained. After an
+   orderly shutdown (`Coordinator::close`) a restarted coordinator resumes
+   every mission in its state; after a crash (M2a-S) every unfinished
+   mission comes back held until the Owner resumes or stops it. A Stopped
+   mission stays stopped; a tampered journal is refused.
 7. **Walk example**: `cargo run -p nexus-mother --example walk`.
 
 ## Invariants and their oracles
@@ -66,6 +69,8 @@ the host, tests included).
 | M2a: consent only from the broker's recorded yes for the exact hash and request; another hash, a replayed answer, an unrecorded yes or a broker refusal give none | `oracles/m2a_consent.rs`, broker `tests/m2a_mission_consent.rs` |
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
+| M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs`, `oracles/m2as_review.rs`, `oracles/m2as_resume.rs` |
+| M2a-S: after a break, no effect dispatched after the break executes; an effect already dispatched (journaled and past the fenced check) may still enter the broker and is interrupted where the broker can, the same in-flight limit as an ordinary Stop (fenced at the broker; the fence's sweep is panic-safe); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
 
 Coordinator rules the oracles pin:
 
@@ -98,12 +103,95 @@ Coordinator rules the oracles pin:
   `.poisoned` marker beside the file): it opens nothing until the Owner
   reconciles it, so a Stop the journal could not record is never undone
   by a restart.
+- M2a-S, when poisoning fails too: every session journals its opening
+  before anything else it writes (at once on a journal whose last session
+  closed cleanly), and only `close` of a coordinator that is not broken,
+  with no call in flight, journals a clean close (it is refused too if the
+  journal changed under it). A journal whose last session has no clean
+  close (a crash, a failed append, a journal from before sessions) brings
+  every unfinished mission back held (`unclean_shutdown`): advance,
+  consent, submit and revise are refused; only the Owner's `resume`
+  (journaled) or Stop moves it. The holds are journaled with the session's
+  first record or its clean close, so opening stays read-only until then,
+  and they hold across every restart until the Owner decides. A held
+  waiting mission's request is handed back like any waiting one: Mother
+  does not ask about it or approve it while held; the Owner's Stop
+  withdraws it. Once the journal has failed, the coordinator acknowledges
+  nothing: Stop is never Ok (a terminal state may be in memory only), and
+  it neither asks the Owner for consent nor asks the broker about an
+  approval. Replay refuses a session the live coordinator could not write
+  (a clean close, or work, before the holds an unclean session requires).
+- M2a-S, the fence: at the moment the journal fails (under the coordinator
+  lock that marks it broken) the port is fenced: every registered run gets
+  a cancellation attempt; a failed attempt, including a panic, is counted;
+  anything still queued is swept on the next lock acquisition. A waiting
+  request on a cancelled run is refused by the broker itself, and the port
+  keeps no new run. The claim (invariant (b)): after a break, no
+  effect dispatched after the break executes; an effect already dispatched
+  (journaled and past the fenced check) may still enter the broker and is
+  interrupted where the broker can, the same in-flight limit as an
+  ordinary Stop. The fence does not wait for in-flight actions (Owner
+  decision); the broker's cancellation evidence writes can still block
+  (known limit, closed by M2c). Under the port's mutex it sets `fenced`
+  and cancels every run registered, then returns. A
+  panic while cancelling one run does not skip the others (the whole sweep
+  is done, then the panic is resumed; a sweep a panic cut short is
+  completed when the poisoned mutex is taken back). Every broker call the port makes (opening a run, an action, an
+  approval query, adopting, a settled check, a cancellation, a finish)
+  checks `fenced` first and is refused once it is set. A call that checked
+  just before the break is not waited for, even one stalled where no
+  cancellation reaches it (a DNS lookup): it is interrupted where the
+  broker can (its run is cancelled, so the broker refuses a step it has not
+  begun, and an action executing on it sees its run's cancellation token);
+  see the in-flight known limit. Every run registration checks `fenced` in the same
+  critical section as the fence: it comes before the fence's (which
+  cancels the run) or after (and cancels the run itself, never giving it
+  to the mission). The
+  Owner's consent dialog and the emergency-stop read do not check the
+  fence: they produce no effect, and a consent answered after the break is
+  discarded (a source scan pins that the broker Authority, which does not
+  check the fence, is used for consent only). A fenced port's withdraw does not retry a cancellation
+  the fence could not make; it reports an error. After every outbound call (a perform, a lane, the
+  Owner's consent dialog, an approval query) the result is discarded, and
+  nothing is journaled for it, if the coordinator broke or the mission is
+  held. Every journaled open request is handed back to the port before any
+  session record is written, so an open that fails still withdraws it; the
+  port's withdraw asks the broker for every handed-back request's own run
+  and state, and is an error while the broker holds one open on any other
+  run than the one it just cancelled (one two missions claim is recorded, not
+  given back, so an open that would leave it approvable fails closed). A
+  fence is final: a coordinator opened again after a break needs a new
+  port. A hold after a resume is journaled again.
+- M2a-S class test (`adapter/m2as_model.rs`): 500 seeded sequences on the
+  real broker (more with `MOTHER_M2AS_SEQUENCES`), checking after every step
+  that an acknowledged Stop or denial holds, invariant (b) (checked as: no
+  request of the generated sequences reaches the world after a break), the
+  holds, and that a failed open leaves no request open.
 - Replay accepts records only in the order the live coordinator writes
   them (lane answers after their calls, no transition but Stop while an
   effect is unsettled, mission ids in sequence).
 
 ## Non-claims
 
+- **M2a-S: `resume` is an API call, like `stop`.** It is the Owner's
+  decision, journaled, but not confirmed through a broker dialog: the
+  Mother screen (M2) must bind it to the Owner. Mother never calls it.
+  It is the risky direction (it lets a mission whose Stop may have been
+  lost carry on); Stop is the safe one.
+- M2a-S: while a waiting mission is held, its request stays at the broker,
+  where only the Owner's own native approval can run it. Mother does not
+  ask about it or carry on from it until the Owner resumes the mission.
+- M2a-S: the fence cancels broker runs under the coordinator lock, so the
+  broker's cancellation record is written while that lock is held (Owner
+  decision). An effect already executing inside the broker when the
+  coordinator breaks sees its run's cancellation token; one past the point
+  where it checks it may complete. Without waiting, the broker can open a
+  run for a call that checked `fenced` just before the break; the port
+  cancels it as it registers (it is recorded at the broker, cancelled). The oracles pin every call reserved but
+  not yet handed to the broker.
+- M2a-S: the clean close is a record in the unkeyed chain. Someone with
+  write access who cuts the journal back to a clean close (dropping a
+  later Stop) is not detected; that is the existing truncation non-claim.
 - **Consent is the broker's, the dialog is not built yet.** No desktop
   dialog implements `confirm_mission` in this mission (no UI): the walk
   example stands in for it at the terminal, and only test code fakes one.
@@ -153,6 +241,25 @@ Coordinator rules the oracles pin:
   missions, after which neither is handed back and a stopped mission's
   genuine request stays approvable until it expires (the Owner's emergency
   stop withdraws it).
+- **Known limit: the in-flight window (closed by planned mission M2c, a
+  broker-owned atomic halt).** An effect already dispatched before a break
+  (journaled and past the port's fenced check) may still enter the broker
+  after it; it is interrupted only where the broker can (a cancelled run,
+  an executing action's cancellation token), the same in-flight limit as
+  an ordinary Stop.
+- **Known limit: the fence can block on the broker's evidence store
+  (closed by planned mission M2c).** The fence (under the coordinator lock
+  and the port's mutex) and Stop wait for the broker's own evidence-store
+  writes of its cancellation records; a stalled evidence store stalls
+  them.
+- **Known limit: the sweep guarantees attempts, not success (closed by
+  planned mission M2c).** An incomplete sweep is finished only when the
+  next port call takes the lock; a call already past `enter()` does not
+  take it. In current code nothing panics outside the per-run
+  `catch_unwind` except possibly the drop of a second panic's payload
+  (`adapter/mod.rs:225`), and no such payload exists today. A run whose
+  cancellation panics before its token is set is not requeued: the sweep
+  guarantees attempts, not success.
 - **Known limit: the adopted deadline (Owner decision, exact clamp in
   M2b).** A port that takes back a journaled action clamps its deadline to
   the action's remaining lifetime by the broker's wall-clock expiry, not to

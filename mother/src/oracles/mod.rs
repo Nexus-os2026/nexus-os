@@ -11,6 +11,11 @@ mod m2a_consent;
 mod m2a_rebuild;
 mod m2a_review;
 mod m2a_waiting;
+mod m2as_durability;
+pub(crate) mod m2as_hooks;
+mod m2as_postcall;
+mod m2as_resume;
+mod m2as_review;
 mod mn01;
 mod review;
 mod state;
@@ -79,6 +84,8 @@ struct PortState {
     settled_script: std::collections::BTreeMap<String, VecDeque<bool>>,
     /// Missions whose withdrawal the port fails.
     failing_withdrawals: BTreeSet<MissionId>,
+    /// M2a-S: the coordinator broke: nothing more is performed.
+    fenced: bool,
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
@@ -235,6 +242,9 @@ impl EffectPort for RecordingPort {
         if state.cancelled.contains(&mission) {
             return Err(refusal("mission_cancelled"));
         }
+        if state.fenced {
+            return Err(refusal("port_fenced"));
+        }
         if state.hold {
             state.hold = false;
             state.entered = true;
@@ -266,6 +276,14 @@ impl EffectPort for RecordingPort {
 
     fn finish(&self, mission: MissionId) {
         self.lock().calls.push(PortCall::Finish(mission));
+    }
+
+    fn hand(&self, _: MissionId, _: &PendingAction) {}
+
+    fn fence(&self) {
+        let mut state = self.lock();
+        state.fenced = true;
+        self.changed.notify_all();
     }
 
     fn emergency_stopped(&self) -> bool {
@@ -315,14 +333,16 @@ impl EffectPort for RecordingPort {
             state.approval_entered = true;
             self.changed.notify_all();
             let deadline = Instant::now() + HOLD_BOUND;
-            while !state.cancelled.contains(&mission) {
+            // M2a-S: a fence releases a held query too (the answer still
+            // comes back, scripted: a port that ignores the fence).
+            while !state.cancelled.contains(&mission) && !state.fenced {
                 let left = deadline.saturating_duration_since(Instant::now());
                 if left.is_zero() {
                     break;
                 }
                 state = self.changed.wait_timeout(state, left).expect("port").0;
             }
-            let by_event = state.cancelled.contains(&mission);
+            let by_event = state.cancelled.contains(&mission) || state.fenced;
             state.released_by_event.push(by_event);
         }
         state
@@ -681,7 +701,13 @@ pub fn world_with(lanes: Vec<Arc<dyn Lane>>) -> World {
 impl World {
     /// Mother restarts: a new coordinator from the same journal (the port
     /// and the clock carry on).
+    ///
+    /// M2a-S: the restart is orderly when it can be: the old coordinator is
+    /// closed first, which it refuses while broken or while a call is in
+    /// flight (the restart is then a crash). Crashes are modelled in
+    /// `m2as_durability.rs`.
     pub fn reopen(&self) -> Result<Coordinator<RecordingPort>, CoordinatorError> {
+        let _ = self.mother.close_ref();
         Coordinator::open(
             self.journal.clone(),
             self.port.clone(),

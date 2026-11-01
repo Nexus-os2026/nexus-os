@@ -55,6 +55,9 @@ fn review_a_restart_with_an_unanswered_lane_call_reopens_consistently() {
     assert_eq!(reopened.state(id), Some(MissionState::Building));
     // The phase runs again (no effect was dispatched in it), then a
     // second restart still verifies.
+    // M2a-S (Owner decision): after a crash the mission is held until the
+    // Owner resumes it.
+    assert_eq!(reopened.resume(id), Ok(MissionState::Building));
     reopened.advance(id).unwrap();
     drop(reopened);
     let again = after.reopen().unwrap();
@@ -282,6 +285,9 @@ fn review_a_wall_clock_set_back_before_consent_spends_the_time_budget() {
         }),
     ]));
     let reopened = w.reopen().unwrap();
+    // M2a-S (Owner decision): a journal with no clean close holds the
+    // mission until the Owner resumes it.
+    assert_eq!(reopened.resume(id), Ok(MissionState::Approved));
     let a = reopened.advance(id).unwrap();
     assert_eq!(a.to, MissionState::Blocked);
     assert_eq!(reopened.reason(id).as_deref(), Some("budget_time"));

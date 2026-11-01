@@ -135,4 +135,12 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// whether the broker took the cancellation. Recovery and every end of
     /// a mission use it, so that a withdrawal that failed is an error.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal>;
+    /// M2a-S: the coordinator broke (a journal append failed): cancel every
+    /// broker run this port holds, and keep no run opened or taken back
+    /// later. It never waits for a broker call.
+    fn fence(&self);
+    /// M2a-S: a journaled action this port is not given back (claimed by
+    /// two missions): recorded, so that withdrawing it is an error while
+    /// the broker still holds it open.
+    fn hand(&self, mission: MissionId, pending: &PendingAction);
 }

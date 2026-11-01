@@ -25,6 +25,9 @@ const ENTRY_DOMAIN: &[u8] = b"nexus-mother-journal-v1\n";
 /// The `prev` of the first entry.
 pub const GENESIS: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+/// The name session records carry: no mission is ever drafted with it.
+pub const SESSION: MissionId = MissionId(0);
+
 /// A mission's identity: a name, never authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MissionId(pub u64);
@@ -73,6 +76,18 @@ pub enum Event {
     /// open (final, or gone). Written only after the confirmation; until
     /// it is, every reopen withdraws the action again.
     ApprovalClosed { effect: u64 },
+    /// M2a-S (session record, [`SESSION`]): a coordinator opened this
+    /// journal. Written on every open, before anything else.
+    SessionOpened,
+    /// M2a-S (session record): the coordinator shut down in order, not
+    /// broken. Nothing follows it but the next `SessionOpened`.
+    SessionClosed,
+    /// M2a-S: the session before this one did not close cleanly, so a
+    /// transition (a Stop, a denial) may be missing: the mission does
+    /// nothing until the Owner resumes or stops it.
+    Held { reason: String },
+    /// M2a-S: the Owner resumed a held mission.
+    Resumed,
 }
 
 /// One journal entry.

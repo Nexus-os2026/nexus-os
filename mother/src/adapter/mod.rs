@@ -33,6 +33,7 @@ use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -41,6 +42,32 @@ use std::sync::{Arc, Mutex};
 mod expiry_tests;
 #[cfg(test)]
 mod file_tests;
+#[cfg(test)]
+mod m2as_adopt;
+#[cfg(test)]
+mod m2as_fence;
+#[cfg(test)]
+mod m2as_gate;
+#[cfg(test)]
+mod m2as_gate_review;
+#[cfg(test)]
+mod m2as_inflight;
+#[cfg(test)]
+mod m2as_model;
+#[cfg(test)]
+mod m2as_mutants;
+#[cfg(test)]
+mod m2as_nowait;
+#[cfg(test)]
+mod m2as_poison;
+#[cfg(test)]
+mod m2as_review2;
+#[cfg(test)]
+mod m2as_scan;
+#[cfg(test)]
+mod m2as_support;
+#[cfg(test)]
+mod m2as_sweep;
 #[cfg(test)]
 mod real_broker;
 #[cfg(test)]
@@ -61,14 +88,59 @@ struct Runs {
     /// The action each mission waits on at the broker, and the port's
     /// monotonic deadline for it.
     waiting: BTreeMap<MissionId, (CommitmentId, u64)>,
+    /// M2a-S: the coordinator broke. Every run registered then was
+    /// cancelled at the broker; a run opened later is cancelled as it
+    /// registers, and no broker call starts.
+    fenced: bool,
+    /// M2a-S: every journaled action handed back for each mission, taken or
+    /// not, so that a withdrawal is an error while the broker still holds
+    /// open any of them this port does not hold.
+    handed: BTreeMap<MissionId, Vec<PendingAction>>,
+    /// M2a-S: the runs the fence has still to cancel, last first. A sweep a
+    /// panic cut short is completed when the poisoned mutex is taken back.
+    unswept: Vec<RunId>,
 }
 
 /// The EffectPort over the governed-control broker.
 pub struct GovernedPort {
     control: Arc<GovernedControl>,
+    /// M2a-S: `fenced` and every run registration are under this mutex, so
+    /// a run registers either before the fence (which cancels it) or after
+    /// (and cancels itself); every broker call checks `fenced` first.
     runs: Mutex<Runs>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
+    /// M2a-S (tests): run just before an effect is performed, and before
+    /// the broker is asked about an approval (deterministic interleavings).
+    #[cfg(test)]
+    pub(crate) before_perform: crate::oracles::m2as_hooks::HookSlot,
+    #[cfg(test)]
+    pub(crate) before_approval: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run once the effect's run is known, just before the
+    /// broker is asked to act on it.
+    #[cfg(test)]
+    pub(crate) before_broker_action: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in run_for once the fence was checked, just before
+    /// the broker is asked to open a run.
+    #[cfg(test)]
+    pub(crate) before_open_run: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in the fence after each run it cancels (under the
+    /// coordinator lock and the port's mutex), and once it is done (under
+    /// the coordinator lock only): a hook here must not call the coordinator
+    /// or this port.
+    #[cfg(test)]
+    pub(crate) fence_between_cancels: crate::oracles::m2as_hooks::HookSlot,
+    #[cfg(test)]
+    pub(crate) after_fence: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in perform once the fence was checked, as the
+    /// broker is asked to act (a stand-in for a broker call that stalls
+    /// where no cancellation reaches it, such as a DNS lookup).
+    #[cfg(test)]
+    pub(crate) in_broker_action: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run by the fence at its first cancellation, given
+    /// whether the port was fenced at that moment.
+    #[cfg(test)]
+    pub(crate) first_fence_cancel: crate::oracles::m2as_hooks::SeenSlot,
 }
 
 impl GovernedPort {
@@ -78,6 +150,22 @@ impl GovernedPort {
             runs: Mutex::new(Runs::default()),
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
+            #[cfg(test)]
+            before_perform: Default::default(),
+            #[cfg(test)]
+            before_approval: Default::default(),
+            #[cfg(test)]
+            before_broker_action: Default::default(),
+            #[cfg(test)]
+            before_open_run: Default::default(),
+            #[cfg(test)]
+            fence_between_cancels: Default::default(),
+            #[cfg(test)]
+            after_fence: Default::default(),
+            #[cfg(test)]
+            in_broker_action: Default::default(),
+            #[cfg(test)]
+            first_fence_cancel: Default::default(),
         }
     }
 
@@ -100,14 +188,68 @@ impl GovernedPort {
         &self.control
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
-        self.runs.lock().expect("mother port")
+    /// M2a-S (tests): whether the port was fenced.
+    #[cfg(test)]
+    pub(crate) fn fenced(&self) -> bool {
+        self.lock().fenced
     }
 
-    /// The mission's agent run, opened on its first effect. No lock is
-    /// held across the broker call; a mission that ended meanwhile gets no
-    /// run (the one just opened is cancelled).
+    /// The port's mutex. A panic while it was held poisons it; the only
+    /// critical section that calls out is the fence's (it cancels runs at
+    /// the broker), which sets `fenced` first. A poisoned mutex is taken
+    /// back and its port treated as fenced, so every later call refuses
+    /// instead of panicking, and a sweep the panic cut short is completed
+    /// (its panic was raised already).
+    fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
+        self.runs.lock().unwrap_or_else(|poisoned| {
+            let mut runs = poisoned.into_inner();
+            runs.fenced = true;
+            let _ = self.sweep(&mut runs);
+            runs
+        })
+    }
+
+    /// Cancel every run the fence has still to cancel, each on its own: a
+    /// panic while cancelling one is counted as a failed cancellation and
+    /// does not skip the others. Returns the first panic, once all are done.
+    fn sweep(&self, runs: &mut Runs) -> Option<Box<dyn std::any::Any + Send>> {
+        let mut first = None;
+        while let Some(run) = runs.unswept.pop() {
+            let cancelled = catch_unwind(AssertUnwindSafe(|| {
+                self.cancel_run(run);
+                #[cfg(test)]
+                self.fence_between_cancels.fire();
+            }));
+            if let Err(panic) = cancelled {
+                self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                first.get_or_insert(panic);
+            }
+        }
+        first
+    }
+
+    /// The check before every broker call: refused once fenced. It waits
+    /// only while the fence's critical section runs (the broker writing its
+    /// cancellations), and the fence never waits for it. A call that passed
+    /// it just before the break goes on unwaited: on a run the fence
+    /// cancels (the broker refuses it, or an executing action sees its
+    /// run's cancellation token), or on a run it opens afterwards, which
+    /// its registration cancels at once (`run_for`).
+    fn enter(&self) -> Result<(), EffectRefusal> {
+        if self.lock().fenced {
+            return Err(refused("port_fenced"));
+        }
+        Ok(())
+    }
+
+    /// The mission's agent run, opened on its first effect. Its registration
+    /// checks `fenced` in the same critical section as the fence's: a run
+    /// opened after the fence (its call checked just before the break) is
+    /// cancelled at once and never given to the mission. A mission that
+    /// ended meanwhile gets no run either (the one just opened is
+    /// cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
+        self.enter()?;
         {
             let runs = self.lock();
             if runs.ended.contains(&mission) {
@@ -117,20 +259,32 @@ impl GovernedPort {
                 return Ok(*run);
             }
         }
+        #[cfg(test)]
+        self.before_open_run.fire();
         let run = self
             .control
             .open_run(mother_agent(), RunOrigin::AgentGoal)
             .map_err(|e| refused(e.class()))?;
-        let mut runs = self.lock();
-        if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
-            drop(runs);
+        let refusal = {
+            let mut runs = self.lock();
+            if runs.fenced {
+                Some("port_fenced")
+            } else if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
+                Some("mission_cancelled")
+            } else {
+                runs.open.insert(mission, run);
+                None
+            }
+        };
+        if let Some(class) = refusal {
             self.cancel_run(run);
-            return Err(refused("mission_cancelled"));
+            return Err(refused(class));
         }
-        runs.open.insert(mission, run);
         Ok(run)
     }
 
+    /// Cancel `run` at the broker (also once fenced: a cancellation only
+    /// ever stops effects).
     fn cancel_run(&self, run: RunId) {
         if self.control.cancel_run(run).is_err() {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
@@ -157,6 +311,8 @@ impl EffectPort for GovernedPort {
         mission: MissionId,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
+        #[cfg(test)]
+        self.before_perform.fire();
         self.performed.fetch_add(1, Ordering::SeqCst);
         let intent = match effect {
             EffectRequest::Network(intent) => Intent::Request(intent.clone()),
@@ -168,6 +324,11 @@ impl EffectPort for GovernedPort {
             }
         };
         let run = self.run_for(mission)?;
+        #[cfg(test)]
+        self.before_broker_action.fire();
+        self.enter()?;
+        #[cfg(test)]
+        self.in_broker_action.fire();
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
@@ -185,25 +346,99 @@ impl EffectPort for GovernedPort {
     }
 
     fn cancel(&self, mission: MissionId) {
-        if let Some(run) = self.end(mission) {
+        let entered = self.enter();
+        let run = self.end(mission);
+        // Fenced: every run this port held is cancelled already.
+        if let (Ok(()), Some(run)) = (entered, run) {
             self.cancel_run(run);
         }
     }
 
+    /// Cancel the mission's run, and say whether everything journaled for
+    /// it is withdrawn: an error if the broker refused the cancellation, or
+    /// if the broker still holds open a request handed back for the mission
+    /// on any other run than the one just cancelled (asked of the broker for
+    /// each one, never read from the record's run). Fenced: an error, unless
+    /// there was nothing to withdraw.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
-        let Some(run) = self.end(mission) else {
-            return Ok(());
+        let entered = self.enter();
+        let run = self.end(mission);
+        let handed = self
+            .lock()
+            .handed
+            .get(&mission)
+            .cloned()
+            .unwrap_or_default();
+        // Fenced: the fence cancelled every run this port held (a
+        // cancellation it could not make is counted, not retried here).
+        if entered.is_err() {
+            return match (run, handed.is_empty()) {
+                (None, true) => Ok(()),
+                _ => Err(refused("port_fenced")),
+            };
         };
-        self.control.cancel_run(run).map_err(|e| {
-            self.cancel_failures.fetch_add(1, Ordering::SeqCst);
-            refused(e.class())
-        })
+        if let Some(run) = run {
+            self.control.cancel_run(run).map_err(|e| {
+                self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                refused(e.class())
+            })?;
+        }
+        for pending in handed {
+            if !self.withdrawn(&pending, run) {
+                return Err(refused("action_not_held"));
+            }
+        }
+        Ok(())
     }
 
     fn finish(&self, mission: MissionId) {
-        if let Some(run) = self.end(mission) {
+        let entered = self.enter();
+        let run = self.end(mission);
+        // Fenced: the run is cancelled already.
+        if let (Ok(()), Some(run)) = (entered, run) {
             self.control.finish_when_settled(run);
         }
+    }
+
+    fn hand(&self, mission: MissionId, pending: &PendingAction) {
+        self.record_handed(mission, pending);
+    }
+
+    /// The coordinator broke (called under the coordinator lock). Owner
+    /// decision: the fence does not wait for in-flight actions; the broker's
+    /// cancellation evidence writes can still block (known limit, closed by
+    /// M2c). Under the port's mutex it sets `fenced` and cancels every run
+    /// registered, then returns.
+    /// - A broker call that checks `fenced` from now on is refused.
+    /// - A call that checked it just before is not waited for: it is
+    ///   interrupted where the broker can (its run is cancelled here, so the
+    ///   broker refuses a step it has not begun, and an action executing on
+    ///   it sees its run's cancellation token). That is the in-flight limit
+    ///   of an ordinary Stop (README, known limits).
+    /// - A run registration's critical section precedes this one (the run
+    ///   is cancelled here) or follows it (it sees `fenced` and cancels the
+    ///   run itself).
+    ///
+    /// A cancellation the broker refuses is counted (`cancel_failures`). A
+    /// panic while cancelling one run is counted too and does not skip the
+    /// others: the whole sweep is done, then the panic is resumed (under the
+    /// mutex, which it poisons; the port stays fenced). A fence is final: a
+    /// coordinator opened again after a break needs a new port.
+    fn fence(&self) {
+        {
+            let mut runs = self.lock();
+            runs.fenced = true;
+            runs.unswept = runs.open.values().rev().copied().collect();
+            #[cfg(test)]
+            if !runs.unswept.is_empty() {
+                self.first_fence_cancel.fire(runs.fenced);
+            }
+            if let Some(panic) = self.sweep(&mut runs) {
+                resume_unwind(panic);
+            }
+        }
+        #[cfg(test)]
+        self.after_fence.fire();
     }
 
     fn emergency_stopped(&self) -> bool {
@@ -218,6 +453,13 @@ impl EffectPort for GovernedPort {
     /// does not know it (another process's, or one built afresh that was
     /// not handed it back) says its outcome is unknown.
     fn approval(&self, mission: MissionId) -> ApprovalStatus {
+        #[cfg(test)]
+        self.before_approval.fire();
+        let Ok(()) = self.enter() else {
+            return ApprovalStatus::Lapsed {
+                class: "port_fenced".into(),
+            };
+        };
         let unknown = || ApprovalStatus::Lapsed {
             class: "approval_outcome_unknown".into(),
         };
@@ -246,22 +488,12 @@ impl EffectPort for GovernedPort {
     /// Final at the broker, or not held there at all. An action that is
     /// not Mother's, or that runs (approved, executing), is not settled.
     fn settled(&self, pending: &PendingAction) -> bool {
-        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+        // Fenced: not confirmed (the action stays open in the journal and is
+        // withdrawn again on the next open).
+        let Ok(()) = self.enter() else {
             return false;
         };
-        match self.control.authority().commitments().view(commitment) {
-            None => true,
-            Some(view) => {
-                RunId::parse(&pending.run) == Some(view.run)
-                    && view.agent == mother_agent()
-                    && !matches!(
-                        view.state,
-                        CommitmentState::Prepared
-                            | CommitmentState::Authorized
-                            | CommitmentState::Executing
-                    )
-            }
-        }
+        self.settled_inside(pending)
     }
 
     fn pending(&self, mission: MissionId) -> Option<PendingAction> {
@@ -280,8 +512,70 @@ impl EffectPort for GovernedPort {
     /// and a commitment of that run of Mother's. The carried deadline is
     /// trusted no further than the action's remaining lifetime by its
     /// wall-clock expiry (`adopted_deadline`). A mission this port already
-    /// knows, or has ended, is left as it is.
+    /// knows, or has ended, is left as it is; a fenced port takes nothing.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
+        self.record_handed(mission, pending);
+        let Ok(()) = self.enter() else {
+            return;
+        };
+        self.adopt_inside(mission, pending);
+    }
+}
+
+impl GovernedPort {
+    /// Every journaled action handed back for `mission`, once each.
+    fn record_handed(&self, mission: MissionId, pending: &PendingAction) {
+        let mut runs = self.lock();
+        let handed = runs.handed.entry(mission).or_default();
+        if !handed.contains(pending) {
+            handed.push(pending.clone());
+        }
+    }
+
+    /// Whether the broker no longer holds `pending` open, or holds it on
+    /// `cancelled` (the run this withdrawal just cancelled): the broker's own
+    /// record of the commitment, never the record's run.
+    fn withdrawn(&self, pending: &PendingAction, cancelled: Option<RunId>) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                cancelled == Some(view.run)
+                    || !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
+    /// [`EffectPort::settled`], once the fence was checked.
+    fn settled_inside(&self, pending: &PendingAction) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                RunId::parse(&pending.run) == Some(view.run)
+                    && view.agent == mother_agent()
+                    && !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
+    /// [`EffectPort::adopt`], once the fence was checked; its registration
+    /// checks `fenced` again, in the same critical section.
+    fn adopt_inside(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
             CommitmentId::parse(&pending.commitment),
@@ -308,7 +602,8 @@ impl EffectPort for GovernedPort {
             view.expires_wall_ms,
         );
         let mut runs = self.lock();
-        if runs.ended.contains(&mission)
+        if runs.fenced
+            || runs.ended.contains(&mission)
             || runs.open.contains_key(&mission)
             || runs.open.values().any(|held| *held == run)
         {
