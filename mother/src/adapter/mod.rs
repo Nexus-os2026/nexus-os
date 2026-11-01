@@ -42,6 +42,14 @@ mod expiry_tests;
 #[cfg(test)]
 mod file_tests;
 #[cfg(test)]
+mod m2as_adopt;
+#[cfg(test)]
+mod m2as_fence;
+#[cfg(test)]
+mod m2as_model;
+#[cfg(test)]
+pub(crate) mod m2as_support;
+#[cfg(test)]
 mod real_broker;
 #[cfg(test)]
 mod scan;
@@ -98,6 +106,12 @@ impl GovernedPort {
 
     pub fn control(&self) -> &Arc<GovernedControl> {
         &self.control
+    }
+
+    /// M2a-S (tests): whether the port was fenced. Not implemented yet.
+    #[cfg(test)]
+    pub(crate) fn fenced(&self) -> bool {
+        false
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
@@ -205,6 +219,8 @@ impl EffectPort for GovernedPort {
             self.control.finish_when_settled(run);
         }
     }
+
+    fn fence(&self) {}
 
     fn emergency_stopped(&self) -> bool {
         self.control.authority().runs().is_stopped()

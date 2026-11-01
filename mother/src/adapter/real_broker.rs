@@ -659,6 +659,12 @@ fn real_broker_m1_oracles() {
     m2a_recovery_fails_closed_at_every_append_on_the_real_broker(&w);
     // Codex re-review #3 MINOR: the same with an abandoned lane call.
     m2a_recovery_fails_closed_with_an_abandoned_lane_on_the_real_broker(&w);
+    // M2a-S Codex REJECT (oracles in their own files; one broker per
+    // process, so they run here, before the emergency stop): the fence at
+    // the broker, adoption before the session record, and the class test.
+    super::m2as_fence::on_the_real_broker(&w.home, &w.origin, &w.listener);
+    super::m2as_adopt::on_the_real_broker(&w.home, &w.origin, &w.listener);
+    super::m2as_model::on_the_real_broker(&w.home, &w.origin, &w.listener);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);

@@ -12,6 +12,7 @@ mod m2a_rebuild;
 mod m2a_review;
 mod m2a_waiting;
 mod m2as_durability;
+mod m2as_resume;
 mod m2as_review;
 mod mn01;
 mod review;
@@ -269,6 +270,8 @@ impl EffectPort for RecordingPort {
     fn finish(&self, mission: MissionId) {
         self.lock().calls.push(PortCall::Finish(mission));
     }
+
+    fn fence(&self) {}
 
     fn emergency_stopped(&self) -> bool {
         self.lock().emergency

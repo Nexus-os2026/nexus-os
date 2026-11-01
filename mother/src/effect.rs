@@ -98,6 +98,8 @@ mod sealed {
     impl Sealed for crate::adapter::GovernedPort {}
     #[cfg(test)]
     impl Sealed for crate::oracles::RecordingPort {}
+    #[cfg(test)]
+    impl Sealed for crate::adapter::m2as_support::Gated {}
 }
 
 /// The calls Mother makes to reach the world.
@@ -135,4 +137,7 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     /// whether the broker took the cancellation. Recovery and every end of
     /// a mission use it, so that a withdrawal that failed is an error.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal>;
+    /// M2a-S: the coordinator broke (a journal append failed). Not
+    /// implemented yet.
+    fn fence(&self);
 }

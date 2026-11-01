@@ -1672,6 +1672,12 @@ impl<P: EffectPort> Coordinator<P> {
         Ok(state)
     }
 
+    /// M2a-S (tests): whether the journal failed in this coordinator.
+    #[cfg(test)]
+    pub(crate) fn broken(&self) -> bool {
+        self.lock().broken
+    }
+
     /// M2a-S: why a mission is held, if it is.
     pub fn held(&self, id: MissionId) -> Option<String> {
         self.lock().missions.get(&id).and_then(|m| m.held.clone())
