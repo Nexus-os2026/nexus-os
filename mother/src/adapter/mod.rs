@@ -188,14 +188,26 @@ impl GovernedPort {
         self.lock().fenced
     }
 
+    /// The port's mutex. A panic while it was held poisons it; the only
+    /// critical section that calls out is the fence's (it cancels runs at
+    /// the broker), which sets `fenced` first. A poisoned mutex is taken
+    /// back and its port treated as fenced, so every later call refuses
+    /// instead of panicking.
     fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
-        self.runs.lock().expect("mother port")
+        self.runs.lock().unwrap_or_else(|poisoned| {
+            let mut runs = poisoned.into_inner();
+            runs.fenced = true;
+            runs
+        })
     }
 
-    /// The check before every broker call: refused once fenced. It never
-    /// waits for the fence, nor the fence for it: a call that passed it just
-    /// before the break runs on a run the fence cancels (the broker refuses
-    /// it, or an executing action sees its run's cancellation token).
+    /// The check before every broker call: refused once fenced. It waits
+    /// only while the fence's critical section runs (the broker writing its
+    /// cancellations), and the fence never waits for it. A call that passed
+    /// it just before the break goes on unwaited: on a run the fence
+    /// cancels (the broker refuses it, or an executing action sees its
+    /// run's cancellation token), or on a run it opens afterwards, which
+    /// its registration cancels at once (`run_for`).
     fn enter(&self) -> Result<(), EffectRefusal> {
         if self.lock().fenced {
             return Err(refused("port_fenced"));

@@ -1,9 +1,11 @@
 //! M2a-S, oracles added after the gate review (they do not replace or edit
 //! the earlier ones). Run from `real_broker.rs` (one broker per process).
 //!
-//! - MINOR 1: a gate poisoned by a panic in write mode (inside the fence;
-//!   a panic under a read guard does not poison it) still refuses every
-//!   broker call, and a second fence still runs, without panicking.
+//! - MINOR 1 (written for the read/write gate, which the fence no longer
+//!   has): a panic at the end of the fence (`after_fence`, outside the
+//!   port's mutex since the fence never waits) leaves the port refusing
+//!   every broker call, and a second fence still runs, without panicking.
+//!   A panic inside the port's mutex is `m2as_poison.rs`.
 //! - MINOR 2: every request handed back for a mission counts: one that is
 //!   final does not hide a second one still open.
 
@@ -44,8 +46,8 @@ fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, orig
     );
     let waiting_run = r.port.run_of(waiting).unwrap();
 
-    // Only a panic while the gate is held in write mode poisons it: the
-    // broker panics at the end of the fence (inside write mode).
+    // The broker panics at the end of the fence (outside the port's
+    // mutex: nothing is poisoned).
     r.port
         .after_fence
         .arm(0, || panic!("the broker panicked during the fence"));
@@ -64,8 +66,8 @@ fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, orig
         "the fence cancelled the runs before the panic"
     );
 
-    // The gate is poisoned now: the port still refuses every broker call,
-    // and a second fence still runs, without panicking.
+    // The port still refuses every broker call, and a second fence still
+    // runs, without panicking.
     let port = r.port.clone();
     let approval = catch_unwind(AssertUnwindSafe(|| port.approval(waiting)));
     assert!(

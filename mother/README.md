@@ -137,10 +137,10 @@ Coordinator rules the oracles pin:
   critical section as the fence: it comes before the fence's (which
   cancels the run) or after (and cancels the run itself, never giving it
   to the mission). The
-  Owner's consent dialog and the emergency-stop read are not gated: they
-  produce no effect, and a consent answered after the break is discarded
-  (a source scan pins that the ungated broker Authority is used for
-  consent only). A fenced port's withdraw does not retry a cancellation
+  Owner's consent dialog and the emergency-stop read do not check the
+  fence: they produce no effect, and a consent answered after the break is
+  discarded (a source scan pins that the broker Authority, which does not
+  check the fence, is used for consent only). A fenced port's withdraw does not retry a cancellation
   the fence could not make; it reports an error. After every outbound call (a perform, a lane, the
   Owner's consent dialog, an approval query) the result is discarded, and
   nothing is journaled for it, if the coordinator broke or the mission is

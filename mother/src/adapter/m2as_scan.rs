@@ -1,6 +1,6 @@
 //! M2a-S, oracle added after the gate review (it does not replace or edit
 //! the earlier ones): the port's whole broker Authority (`EffectPort::broker`)
-//! is not behind the gate, so Mother's production code may use it only to
+//! does not check the fence, so Mother's production code may use it only to
 //! put a mission to the Owner (`confirm_mission`, no effect; an answer that
 //! comes after a break is discarded). Read at compile time: no host access.
 
@@ -17,7 +17,7 @@ const PRODUCTION: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn m2as_scan_the_ungated_broker_authority_is_used_only_for_mission_consent() {
+fn m2as_scan_the_unfenced_broker_authority_is_used_only_for_mission_consent() {
     let mut uses = 0;
     for (name, text) in PRODUCTION {
         for (at, _) in text.match_indices(".broker()") {
