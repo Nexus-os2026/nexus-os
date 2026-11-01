@@ -287,7 +287,16 @@ impl<'a> Seq<'a> {
                     )
                 })?;
             } else {
-                ensure(got == k.state || got.is_terminal(), || {
+                // An error leaves the attempted transition journaled or not:
+                // a block, a Stop, a denial or a failure; never Done.
+                let ended = matches!(
+                    got,
+                    MissionState::Blocked
+                        | MissionState::Stopped
+                        | MissionState::Denied
+                        | MissionState::Failed
+                );
+                ensure(got == k.state || ended, || {
                     format!("({what}) {id} was {:?} (uncertain), it is {got:?}", k.state)
                 })?;
             }

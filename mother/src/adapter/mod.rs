@@ -48,11 +48,15 @@ mod m2as_fence;
 #[cfg(test)]
 mod m2as_gate;
 #[cfg(test)]
+mod m2as_inflight;
+#[cfg(test)]
 mod m2as_model;
 #[cfg(test)]
 mod m2as_mutants;
 #[cfg(test)]
 mod m2as_review2;
+#[cfg(test)]
+mod m2as_scan;
 #[cfg(test)]
 mod m2as_support;
 #[cfg(test)]
