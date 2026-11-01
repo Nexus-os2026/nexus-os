@@ -1,17 +1,18 @@
 //! M2a-S, oracles added after the gate review (they do not replace or edit
 //! the earlier ones). Run from `real_broker.rs` (one broker per process).
 //!
-//! - MINOR 1: a panic inside a broker call that poisons the port's gate does
-//!   not stop the fence: at the next break every run is still cancelled.
+//! - MINOR 1: a gate poisoned by a panic in write mode (inside the fence;
+//!   a panic under a read guard does not poison it) still refuses every
+//!   broker call, and a second fence still runs, without panicking.
 //! - MINOR 2: every request handed back for a mission counts: one that is
 //!   final does not hide a second one still open.
 
 use super::m2as_support::{rig, Disk, Rig};
 use super::{GovernedPort, Home};
 use crate::coordinator::{Coordinator, Lanes};
-use crate::effect::EffectPort;
+use crate::effect::{ApprovalStatus, EffectPort};
 use crate::journal::{MemoryJournal, MissionId};
-use crate::oracles::{contract_with, keyed_lanes, Yes};
+use crate::oracles::{contract_with, get, keyed_lanes, Yes};
 use crate::state::MissionState;
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::governed::GovernedControl;
@@ -28,7 +29,7 @@ fn approved(r: &Rig, markers: &str) -> MissionId {
     id
 }
 
-fn a_poisoned_gate_still_fences(control: &Arc<GovernedControl>, origin: &str) {
+fn a_poisoned_gate_still_refuses_and_fences(control: &Arc<GovernedControl>, origin: &str) {
     let disk = Disk::over(MemoryJournal::new());
     let r = rig(control, disk.clone()).unwrap();
     let victim = approved(&r, "");
@@ -43,27 +44,15 @@ fn a_poisoned_gate_still_fences(control: &Arc<GovernedControl>, origin: &str) {
     );
     let waiting_run = r.port.run_of(waiting).unwrap();
 
-    // A panic inside the read gate (in run_for, before the broker opens a
-    // run) poisons it.
-    let b = approved(&r, &format!("FETCH-BUILDER:{origin}/gate-poison-b"));
-    for _ in 0..2 {
-        r.mother.advance(b).unwrap();
-    }
+    // Only a panic while the gate is held in write mode poisons it: the
+    // broker panics at the end of the fence (inside write mode).
     r.port
-        .before_open_run
-        .arm(0, || panic!("a broker call panicked inside the gate"));
-    let mother = r.mother.clone();
-    assert!(catch_unwind(AssertUnwindSafe(|| mother.advance(b))).is_err());
-
-    // The break: the fence still runs, and cancels every run.
+        .after_fence
+        .arm(0, || panic!("the broker panicked during the fence"));
     disk.fail(true, true);
     let stopped = catch_unwind(AssertUnwindSafe(|| r.mother.stop(victim)));
     disk.fail(false, false);
-    assert!(
-        matches!(stopped, Ok(Err(_))),
-        "the break did not return an error (it panicked: {})",
-        stopped.is_err()
-    );
+    assert!(stopped.is_err(), "the fence's panic was not raised");
     assert!(r.port.fenced());
     assert!(
         control
@@ -72,7 +61,30 @@ fn a_poisoned_gate_still_fences(control: &Arc<GovernedControl>, origin: &str) {
             .view(waiting_run)
             .unwrap()
             .cancelled,
-        "a poisoned gate stopped the fence"
+        "the fence cancelled the runs before the panic"
+    );
+
+    // The gate is poisoned now: the port still refuses every broker call,
+    // and a second fence still runs, without panicking.
+    let port = r.port.clone();
+    let approval = catch_unwind(AssertUnwindSafe(|| port.approval(waiting)));
+    assert!(
+        matches!(&approval, Ok(ApprovalStatus::Lapsed { class }) if class == "port_fenced"),
+        "a poisoned gate: the approval query panicked or was not refused"
+    );
+    let perform = catch_unwind(AssertUnwindSafe(|| {
+        port.perform(
+            MissionId(9_301),
+            &get(&format!("{origin}/gate-poison-after")),
+        )
+    }));
+    assert!(
+        matches!(&perform, Ok(Err(refusal)) if refusal.class == "port_fenced"),
+        "a poisoned gate: the perform panicked or was not refused"
+    );
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| port.fence())).is_ok(),
+        "a poisoned gate: a second fence panicked"
     );
 }
 
@@ -115,6 +127,6 @@ fn every_handed_request_counts(control: &Arc<GovernedControl>, origin: &str) {
 }
 
 pub(super) fn on_the_real_broker(home: &Home, origin: &str) {
-    a_poisoned_gate_still_fences(&home.control, origin);
+    a_poisoned_gate_still_refuses_and_fences(&home.control, origin);
     every_handed_request_counts(&home.control, origin);
 }
