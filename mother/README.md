@@ -122,14 +122,18 @@ Coordinator rules the oracles pin:
   approval. Replay refuses a session the live coordinator could not write
   (a clean close, or work, before the holds an unclean session requires).
 - M2a-S, the fence: at the moment the journal fails (under the coordinator
-  lock that marks it broken) the port is fenced: every broker run it holds
-  is cancelled, so a waiting request is refused by the broker itself, and
-  the port keeps no new run. The claim (invariant (b)): after a break, no
+  lock that marks it broken) the port is fenced: every registered run gets
+  a cancellation attempt; a failed attempt, including a panic, is counted;
+  anything still queued is swept on the next lock acquisition. A waiting
+  request on a cancelled run is refused by the broker itself, and the port
+  keeps no new run. The claim (invariant (b)): after a break, no
   effect dispatched after the break executes; an effect already dispatched
   (journaled and past the fenced check) may still enter the broker and is
   interrupted where the broker can, the same in-flight limit as an
-  ordinary Stop. The fence never waits (Owner decision): under the port's
-  mutex it sets `fenced` and cancels every run registered, then returns. A
+  ordinary Stop. The fence does not wait for in-flight actions (Owner
+  decision); the broker's cancellation evidence writes can still block
+  (known limit, closed by M2c). Under the port's mutex it sets `fenced`
+  and cancels every run registered, then returns. A
   panic while cancelling one run does not skip the others (the whole sweep
   is done, then the panic is resumed; a sweep a panic cut short is
   completed when the poisoned mutex is taken back). Every broker call the port makes (opening a run, an action, an
@@ -248,6 +252,14 @@ Coordinator rules the oracles pin:
   and the port's mutex) and Stop wait for the broker's own evidence-store
   writes of its cancellation records; a stalled evidence store stalls
   them.
+- **Known limit: the sweep guarantees attempts, not success (closed by
+  planned mission M2c).** An incomplete sweep is finished only when the
+  next port call takes the lock; a call already past `enter()` does not
+  take it. In current code nothing panics outside the per-run
+  `catch_unwind` except possibly the drop of a second panic's payload
+  (`adapter/mod.rs:225`), and no such payload exists today. A run whose
+  cancellation panics before its token is set is not requeued: the sweep
+  guarantees attempts, not success.
 - **Known limit: the adopted deadline (Owner decision, exact clamp in
   M2b).** A port that takes back a journaled action clamps its deadline to
   the action's remaining lifetime by the broker's wall-clock expiry, not to

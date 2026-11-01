@@ -405,8 +405,10 @@ impl EffectPort for GovernedPort {
     }
 
     /// The coordinator broke (called under the coordinator lock). Owner
-    /// decision: the fence never waits. Under the port's mutex it sets
-    /// `fenced` and cancels every run registered, then returns.
+    /// decision: the fence does not wait for in-flight actions; the broker's
+    /// cancellation evidence writes can still block (known limit, closed by
+    /// M2c). Under the port's mutex it sets `fenced` and cancels every run
+    /// registered, then returns.
     /// - A broker call that checks `fenced` from now on is refused.
     /// - A call that checked it just before is not waited for: it is
     ///   interrupted where the broker can (its run is cancelled here, so the
