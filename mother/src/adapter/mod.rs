@@ -50,6 +50,8 @@ mod m2as_model;
 #[cfg(test)]
 mod m2as_mutants;
 #[cfg(test)]
+mod m2as_review2;
+#[cfg(test)]
 mod m2as_support;
 #[cfg(test)]
 mod real_broker;
@@ -92,6 +94,10 @@ pub struct GovernedPort {
     pub(crate) before_perform: crate::oracles::m2as_hooks::HookSlot,
     #[cfg(test)]
     pub(crate) before_approval: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run once the effect's run is known, just before the
+    /// broker is asked to act on it.
+    #[cfg(test)]
+    pub(crate) before_broker_action: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
@@ -105,6 +111,8 @@ impl GovernedPort {
             before_perform: Default::default(),
             #[cfg(test)]
             before_approval: Default::default(),
+            #[cfg(test)]
+            before_broker_action: Default::default(),
         }
     }
 
@@ -206,6 +214,8 @@ impl EffectPort for GovernedPort {
             }
         };
         let run = self.run_for(mission)?;
+        #[cfg(test)]
+        self.before_broker_action.fire();
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
@@ -250,6 +260,8 @@ impl EffectPort for GovernedPort {
             self.control.finish_when_settled(run);
         }
     }
+
+    fn hand(&self, _mission: MissionId, _pending: &PendingAction) {}
 
     /// The coordinator broke: cancel every run this port holds at the
     /// broker (no commitment of it can then be authorized or started, and

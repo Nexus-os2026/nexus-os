@@ -278,6 +278,8 @@ impl EffectPort for RecordingPort {
         self.lock().calls.push(PortCall::Finish(mission));
     }
 
+    fn hand(&self, _: MissionId, _: &PendingAction) {}
+
     fn fence(&self) {
         let mut state = self.lock();
         state.fenced = true;
