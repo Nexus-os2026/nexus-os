@@ -35,7 +35,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::sync::{Arc, Mutex, PoisonError, RwLock, RwLockReadGuard};
 
 #[cfg(test)]
 mod expiry_tests;
@@ -47,6 +47,8 @@ mod m2as_adopt;
 mod m2as_fence;
 #[cfg(test)]
 mod m2as_gate;
+#[cfg(test)]
+mod m2as_gate_review;
 #[cfg(test)]
 mod m2as_inflight;
 #[cfg(test)]
@@ -82,10 +84,10 @@ struct Runs {
     /// M2a-S: the coordinator broke. Every run was cancelled at the broker
     /// and no new one opens.
     fenced: bool,
-    /// M2a-S: every journaled action handed back, taken or not, so that a
-    /// withdrawal of one this port does not hold is an error while the
-    /// broker still holds it open.
-    handed: BTreeMap<MissionId, PendingAction>,
+    /// M2a-S: every journaled action handed back for each mission, taken or
+    /// not, so that a withdrawal is an error while the broker still holds
+    /// open any of them this port does not hold.
+    handed: BTreeMap<MissionId, Vec<PendingAction>>,
 }
 
 /// The EffectPort over the governed-control broker.
@@ -111,11 +113,15 @@ pub struct GovernedPort {
     #[cfg(test)]
     pub(crate) before_broker_action: crate::oracles::m2as_hooks::HookSlot,
     /// M2a-S (tests): run in run_for once the fence was checked, just before
-    /// the broker is asked to open a run.
+    /// the broker is asked to open a run. It runs INSIDE the read gate: a
+    /// hook here must not break the coordinator or call this port (the fence
+    /// would wait for this thread to leave the gate).
     #[cfg(test)]
     pub(crate) before_open_run: crate::oracles::m2as_hooks::HookSlot,
-    /// M2a-S (tests): run in the fence after each run it cancels, and once
-    /// it is done.
+    /// M2a-S (tests): run in the fence after each run it cancels before
+    /// write mode, and once it is done (inside write mode). Both run under
+    /// the coordinator lock: a hook here must not call the coordinator or
+    /// this port.
     #[cfg(test)]
     pub(crate) fence_between_cancels: crate::oracles::m2as_hooks::HookSlot,
     #[cfg(test)]
@@ -177,7 +183,9 @@ impl GovernedPort {
     /// Enter the broker: the gate in read mode, refused once fenced. Never
     /// taken twice by one thread (a waiting fence would block the second).
     fn enter(&self) -> Result<RwLockReadGuard<'_, ()>, EffectRefusal> {
-        let gate = self.gate.read().expect("mother port gate");
+        // The gate guards nothing but entry: a panic inside a broker call
+        // that poisoned it leaves nothing to repair.
+        let gate = self.gate.read().unwrap_or_else(PoisonError::into_inner);
         if self.lock().fenced {
             return Err(refused("port_fenced"));
         }
@@ -214,8 +222,9 @@ impl GovernedPort {
         Ok(run)
     }
 
-    /// Cancel `run` at the broker. Called only inside the gate (read or
-    /// write).
+    /// Cancel `run` at the broker: inside the gate (read or write), or by
+    /// the fence once `fenced` is set (a cancellation only ever stops
+    /// effects).
     fn cancel_run(&self, run: RunId) {
         if self.control.cancel_run(run).is_err() {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
@@ -294,13 +303,15 @@ impl EffectPort for GovernedPort {
         let (handed, waiting) = {
             let runs = self.lock();
             (
-                runs.handed.get(&mission).cloned(),
+                runs.handed.get(&mission).cloned().unwrap_or_default(),
                 runs.waiting.get(&mission).map(|(c, _)| *c),
             )
         };
+        // Fenced: the fence cancelled every run this port held (a
+        // cancellation it could not make is counted, not retried here).
         let Ok(_gate) = gate else {
-            return match (run, handed) {
-                (None, None) => Ok(()),
+            return match (run, handed.is_empty()) {
+                (None, true) => Ok(()),
                 _ => Err(refused("port_fenced")),
             };
         };
@@ -310,7 +321,7 @@ impl EffectPort for GovernedPort {
                 refused(e.class())
             })?;
         }
-        if let Some(pending) = handed {
+        for pending in handed {
             let same_run = run.is_some() && RunId::parse(&pending.run) == run;
             let same_commitment =
                 waiting.is_none_or(|held| CommitmentId::parse(&pending.commitment) == Some(held));
@@ -332,32 +343,46 @@ impl EffectPort for GovernedPort {
     }
 
     fn hand(&self, mission: MissionId, pending: &PendingAction) {
-        self.lock()
-            .handed
-            .entry(mission)
-            .or_insert_with(|| pending.clone());
+        self.record_handed(mission, pending);
     }
 
-    /// The coordinator broke: cancel every run this port holds at the
-    /// broker (no commitment of it can then be authorized or started, and
-    /// executing ones see their token set), and open or take back no new
-    /// one. A cancellation the broker refuses is counted
-    /// (`cancel_failures`). A fence is final: a coordinator opened again
-    /// after a break needs a new port.
+    /// The coordinator broke (called under the coordinator lock). Owner
+    /// decisions: `fenced` first, then cancel before and after write mode.
+    /// 1. `fenced`: every broker call that enters the gate from now on is
+    ///    refused (even one that gets the read gate while this fence waits
+    ///    for write mode: the lock lets a reader in right after the last one
+    ///    leaves).
+    /// 2. Every run held now is cancelled at once: an action executing on it
+    ///    sees its run's cancellation token (it is interrupted, not waited
+    ///    for), and the broker authorizes or starts nothing more of it.
+    /// 3. Write mode: every call already inside (it entered before the
+    ///    break) has left the gate; every run held now that was not
+    ///    cancelled in 2 (opened or taken back by such a call) is cancelled.
+    ///
+    /// A cancellation the broker refuses is counted (`cancel_failures`). A
+    /// fence is final: a coordinator opened again after a break needs a new
+    /// port.
     fn fence(&self) {
-        // `fenced` first (Owner decision): a broker call that enters the gate
-        // from now on sees it and is refused, even one that takes the read
-        // gate while this fence still waits for write mode (the lock lets a
-        // reader in right after the last one leaves).
-        self.lock().fenced = true;
-        // Write mode: every broker call already inside (it entered before
-        // the break) has left the gate before any run is cancelled.
-        let _gate = self.gate.write().expect("mother port gate");
-        let runs: Vec<RunId> = self.lock().open.values().copied().collect();
-        for run in runs {
-            self.cancel_run(run);
+        let before: Vec<RunId> = {
+            let mut runs = self.lock();
+            runs.fenced = true;
+            runs.open.values().copied().collect()
+        };
+        for run in &before {
+            self.cancel_run(*run);
             #[cfg(test)]
             self.fence_between_cancels.fire();
+        }
+        let _gate = self.gate.write().unwrap_or_else(PoisonError::into_inner);
+        let after: Vec<RunId> = self
+            .lock()
+            .open
+            .values()
+            .copied()
+            .filter(|run| !before.contains(run))
+            .collect();
+        for run in after {
+            self.cancel_run(run);
         }
         #[cfg(test)]
         self.after_fence.fire();
@@ -436,10 +461,7 @@ impl EffectPort for GovernedPort {
     /// wall-clock expiry (`adopted_deadline`). A mission this port already
     /// knows, or has ended, is left as it is; a fenced port takes nothing.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
-        self.lock()
-            .handed
-            .entry(mission)
-            .or_insert_with(|| pending.clone());
+        self.record_handed(mission, pending);
         let Ok(_gate) = self.enter() else {
             return;
         };
@@ -448,6 +470,15 @@ impl EffectPort for GovernedPort {
 }
 
 impl GovernedPort {
+    /// Every journaled action handed back for `mission`, once each.
+    fn record_handed(&self, mission: MissionId, pending: &PendingAction) {
+        let mut runs = self.lock();
+        let handed = runs.handed.entry(mission).or_default();
+        if !handed.contains(pending) {
+            handed.push(pending.clone());
+        }
+    }
+
     /// [`EffectPort::settled`], inside the gate.
     fn settled_inside(&self, pending: &PendingAction) -> bool {
         let Some(commitment) = CommitmentId::parse(&pending.commitment) else {

@@ -336,8 +336,9 @@ struct Inner {
     /// M2a-S: this session's opening is journaled.
     session_journaled: bool,
     /// M2a-S: the port's fence, run under this lock at the moment the
-    /// store fails: every broker run the port holds is cancelled, so a call
-    /// reserved before the break is refused by the broker itself.
+    /// store fails: no broker call enters the port from then on, an action
+    /// executing at the broker is interrupted (its run is cancelled), and
+    /// every run the port holds is cancelled.
     fence: Box<dyn Fn() + Send>,
     missions: BTreeMap<MissionId, Mission>,
     next_mission: u64,

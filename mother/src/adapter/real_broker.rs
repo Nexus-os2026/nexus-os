@@ -669,6 +669,7 @@ fn real_broker_m1_oracles() {
     super::m2as_review2::on_the_real_broker(&w.home, &w.origin, &w.listener);
     super::m2as_gate::on_the_real_broker(&w.home, &w.origin, &w.listener);
     super::m2as_inflight::on_the_real_broker(&w.home, &w.origin, &w.listener);
+    super::m2as_gate_review::on_the_real_broker(&w.home, &w.origin);
 
     // The Owner's emergency stop stops Mother (last: it is not lifted).
     let emergency = w.approved(&fetch);
