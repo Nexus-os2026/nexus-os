@@ -13,6 +13,7 @@ mod m2a_review;
 mod m2a_waiting;
 mod m2as_durability;
 pub(crate) mod m2as_hooks;
+mod m2as_postcall;
 mod m2as_resume;
 mod m2as_review;
 mod mn01;
@@ -330,14 +331,16 @@ impl EffectPort for RecordingPort {
             state.approval_entered = true;
             self.changed.notify_all();
             let deadline = Instant::now() + HOLD_BOUND;
-            while !state.cancelled.contains(&mission) {
+            // M2a-S: a fence releases a held query too (the answer still
+            // comes back, scripted: a port that ignores the fence).
+            while !state.cancelled.contains(&mission) && !state.fenced {
                 let left = deadline.saturating_duration_since(Instant::now());
                 if left.is_zero() {
                     break;
                 }
                 state = self.changed.wait_timeout(state, left).expect("port").0;
             }
-            let by_event = state.cancelled.contains(&mission);
+            let by_event = state.cancelled.contains(&mission) || state.fenced;
             state.released_by_event.push(by_event);
         }
         state

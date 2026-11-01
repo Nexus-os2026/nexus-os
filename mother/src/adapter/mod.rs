@@ -48,6 +48,8 @@ mod m2as_fence;
 #[cfg(test)]
 mod m2as_model;
 #[cfg(test)]
+mod m2as_mutants;
+#[cfg(test)]
 mod m2as_support;
 #[cfg(test)]
 mod real_broker;
