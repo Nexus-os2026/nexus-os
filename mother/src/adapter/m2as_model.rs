@@ -18,17 +18,26 @@
 //! - (e) a journal Mother wrote reopens, or is refused fail-closed (poisoned,
 //!   or a failure injected during that open) with no request left open.
 //!
+//! The model keeps its own record of every mission (from the answers it
+//! was given, never read back from Mother) and derives the expected states,
+//! holds and recovery outcomes from it. After every step it also reopens a
+//! copy of the journal, as a crash at that moment would (an inert port, no
+//! broker side effect), and checks it against the model.
+//!
 //! Every failing seed is collected with its steps, then the test fails.
-//! `MOTHER_M2AS_SEQUENCES` raises the number of sequences (default 500).
+//! `MOTHER_M2AS_SEQUENCES` raises the number of sequences (default 500;
+//! fewer is refused).
 
 use super::m2as_support::{
     open_requests, owner_runs, rig, Disk, HookConfirmer, HookSlot, Rig, WorldServer,
 };
 use super::{mother_agent, GovernedPort, Home};
-use crate::coordinator::{Coordinator, CoordinatorError};
+use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
+use crate::effect::EffectPort;
 use crate::journal::{verify, Event, JournalError, MemoryJournal, MissionId};
-use crate::oracles::{contract_with, No, Yes};
+use crate::oracles::{contract_with, keyed_lanes, No, RecordingPort, Yes};
 use crate::state::{MissionState, Trigger};
+use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::ids::RunId;
 use nexus_governed_control::governed::GovernedControl;
 use std::collections::{BTreeMap, BTreeSet};
@@ -105,6 +114,18 @@ impl Coverage {
     }
 }
 
+/// What the model knows of a mission, from the answers it was given (never
+/// read back from Mother): its durable state, and whether that is certain.
+/// An Ok answer is durable; an error on a broken coordinator (or a failed
+/// withdrawal) may or may not have reached the journal, so the mission is
+/// uncertain until the next open, where it must be in that state or have
+/// ended (recovery blocks an interrupted phase).
+#[derive(Clone, Copy, Debug)]
+struct Known {
+    state: MissionState,
+    certain: bool,
+}
+
 struct Seq<'a> {
     seed: u64,
     rng: Rng,
@@ -119,6 +140,8 @@ struct Seq<'a> {
     acked: BTreeMap<MissionId, MissionState>,
     /// The model's held missions.
     held: BTreeSet<MissionId>,
+    /// The model's own record of each mission.
+    known: BTreeMap<MissionId, Known>,
     runs: BTreeSet<RunId>,
     /// What had reached the world when the current coordinator broke.
     broke_at: Arc<Mutex<Option<usize>>>,
@@ -152,6 +175,7 @@ impl<'a> Seq<'a> {
             missions: Vec::new(),
             acked: BTreeMap::new(),
             held: BTreeSet::new(),
+            known: BTreeMap::new(),
             runs: BTreeSet::new(),
             broke_at,
             ended: false,
@@ -210,8 +234,98 @@ impl<'a> Seq<'a> {
             format!("{id} acknowledged as {state:?}")
         })?;
         self.acked.insert(id, state);
-        self.held.remove(&id);
+        self.know(id, state);
         Ok(())
+    }
+
+    /// An Ok answer: the mission is durably in `state`.
+    fn know(&mut self, id: MissionId, state: MissionState) {
+        self.known.insert(
+            id,
+            Known {
+                state,
+                certain: true,
+            },
+        );
+        if state.is_terminal() {
+            self.held.remove(&id);
+        }
+    }
+
+    /// An error: on a broken coordinator, or a failed withdrawal (its
+    /// transition is journaled), the mission becomes uncertain; any other
+    /// error changed nothing.
+    fn after_err(&mut self, id: MissionId, e: &CoordinatorError) {
+        let broken = self.rig.as_ref().is_some_and(|r| r.mother.broken());
+        if broken
+            || matches!(
+                e,
+                CoordinatorError::Withdrawal(_) | CoordinatorError::Journal(_)
+            )
+        {
+            if let Some(k) = self.known.get_mut(&id) {
+                k.certain = false;
+            }
+        }
+    }
+
+    /// A coordinator over the journal (the live one after an open, or a
+    /// shadow) agrees with the model: a certain mission is in its state; an
+    /// uncertain one in its state or ended; an unfinished one held exactly
+    /// when the journal is unclean or the model holds it.
+    fn validate<P: EffectPort>(&self, view: &Coordinator<P>, clean: bool, what: &str) -> Check {
+        for (id, k) in &self.known {
+            let got = view.state(*id);
+            let Some(got) = got else {
+                return Err(format!("({what}) {id} is unknown after the open"));
+            };
+            if k.certain {
+                ensure(got == k.state, || {
+                    format!(
+                        "({what}) recovery moved {id}: the model says {:?}, it is {got:?}",
+                        k.state
+                    )
+                })?;
+            } else {
+                ensure(got == k.state || got.is_terminal(), || {
+                    format!("({what}) {id} was {:?} (uncertain), it is {got:?}", k.state)
+                })?;
+            }
+            if let Some(acked) = self.acked.get(id) {
+                ensure(got == *acked, || {
+                    format!("(a) ({what}) {id} was acknowledged {acked:?}, is {got:?}")
+                })?;
+            }
+            if !got.is_terminal() {
+                let expected = !clean || self.held.contains(id);
+                ensure(view.held(*id).is_some() == expected, || {
+                    format!(
+                        "(c) ({what}) {id} held is {:?}, the model says {expected}",
+                        view.held(*id)
+                    )
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// After every step: open a copy of the journal as a crash now would
+    /// (an inert recording port: no broker side effect) and check it.
+    fn shadow(&self) -> Check {
+        if self.disk.inner.is_poisoned() {
+            return Ok(());
+        }
+        let clean = self.journal_clean()?;
+        let copy = MemoryJournal::new();
+        copy.set_lines(self.disk.inner.lines());
+        let view = Coordinator::open(
+            copy,
+            Arc::new(RecordingPort::default()),
+            Lanes::new(keyed_lanes()).unwrap(),
+            Arc::new(SystemClock::default()),
+        )
+        .map_err(|e| format!("(e) the journal does not reopen now: {e:?}"))?;
+        self.validate(&view, clean, "shadow reopen")
     }
 
     /// A Stop of `victim` whose append and poisoning both fail, run inside
@@ -234,8 +348,9 @@ impl<'a> Seq<'a> {
         if let Some(r) = result.lock().unwrap().take() {
             self.log
                 .push(format!("    (inside: stop {victim} -> {r:?})"));
-            if let Ok(state) = r {
-                self.ack(victim, state)?;
+            match r {
+                Ok(state) => self.ack(victim, state)?,
+                Err(e) => self.after_err(victim, &e),
             }
         }
         Ok(())
@@ -254,19 +369,23 @@ impl<'a> Seq<'a> {
         }
     }
 
-    /// A coordinator opened: every unfinished mission is held if the journal
-    /// was unclean; holds the model already knows stay.
-    fn expect_holds(&mut self, clean: bool) -> Check {
-        for m in self.missions.clone() {
-            match self.mother().state(m) {
-                Some(s) if !s.is_terminal() => {
-                    if !clean {
-                        self.held.insert(m);
-                    }
-                }
-                _ => {
-                    self.held.remove(&m);
-                }
+    /// A coordinator opened: it must agree with the model; then the
+    /// uncertain missions are settled by what it found (within what the
+    /// model allowed), and every unfinished mission is held if the journal
+    /// was unclean.
+    fn reopened(&mut self, clean: bool) -> Check {
+        let mother = self.mother().clone();
+        self.validate(&mother, clean, "open")?;
+        for (id, k) in self.known.iter_mut() {
+            let got = mother.state(*id).expect("validated");
+            *k = Known {
+                state: got,
+                certain: true,
+            };
+            if got.is_terminal() {
+                self.held.remove(id);
+            } else if !clean {
+                self.held.insert(*id);
             }
         }
         self.journal_holds_are_respected()
@@ -284,7 +403,7 @@ impl<'a> Seq<'a> {
                     if clean { "clean" } else { "unclean" }
                 ));
                 *self.broke_at.lock().unwrap() = None;
-                self.expect_holds(clean)
+                self.reopened(clean)
             }
             Err(e) => {
                 self.log.push(format!("    open -> Err({e:?})"));
@@ -315,7 +434,7 @@ impl<'a> Seq<'a> {
                             "    reopened after the disk recovered ({})",
                             if clean { "clean" } else { "unclean" }
                         ));
-                        self.expect_holds(clean)
+                        self.reopened(clean)
                     }
                     Err(e) => {
                         let injected = self.disk.failures() > failures;
@@ -412,23 +531,21 @@ impl<'a> Seq<'a> {
                 )
             })?;
         }
-        // (c)
-        for m in &self.missions {
-            if let Some(state) = mother.state(*m) {
-                if state.is_terminal() {
-                    self.held.remove(m);
-                    continue;
-                }
-                ensure(mother.held(*m).is_some() == self.held.contains(m), || {
-                    format!(
-                        "(c) {m} held is {:?}, the model says {}",
-                        mother.held(*m),
-                        self.held.contains(m)
-                    )
-                })?;
+        // (c), from the model's own record.
+        for (m, k) in &self.known {
+            if !k.certain || k.state.is_terminal() {
+                continue;
             }
+            ensure(mother.held(*m).is_some() == self.held.contains(m), || {
+                format!(
+                    "(c) {m} held is {:?}, the model says {}",
+                    mother.held(*m),
+                    self.held.contains(m)
+                )
+            })?;
         }
-        Ok(())
+        // (a)-(e) as a crash now would find them.
+        self.shadow()
     }
 
     // ------------------------------------------------------------ steps
@@ -483,7 +600,12 @@ impl<'a> Seq<'a> {
             return Ok(());
         };
         self.missions.push(id);
+        self.know(id, MissionState::Draft);
         let submitted = mother.submit(id);
+        match &submitted {
+            Ok(state) => self.know(id, *state),
+            Err(e) => self.after_err(id, e),
+        }
         let yes = self.rng.percent(75);
         let inside = if self.rng.percent(20) {
             self.live_other_than(id)
@@ -520,8 +642,10 @@ impl<'a> Seq<'a> {
                 r
             }
         };
-        if result == Err(CoordinatorError::Denied) {
-            self.ack(id, MissionState::Denied)?;
+        match result {
+            Ok(state) => self.know(id, state),
+            Err(CoordinatorError::Denied) => self.ack(id, MissionState::Denied)?,
+            Err(e) => self.after_err(id, &e),
         }
         Ok(())
     }
@@ -540,12 +664,26 @@ impl<'a> Seq<'a> {
                 format!("(c) held {id} advanced: {:?}", r.as_ref().map(|a| a.to))
             })?;
         }
-        if let Ok(a) = &r {
-            if a.to == MissionState::Denied {
-                self.ack(id, MissionState::Denied)?;
+        self.advanced(id, r)
+    }
+
+    /// What an advance answered, into the model.
+    fn advanced(
+        &mut self,
+        id: MissionId,
+        r: Result<crate::coordinator::Advance, CoordinatorError>,
+    ) -> Check {
+        match r {
+            Ok(a) if a.to == MissionState::Denied => self.ack(id, MissionState::Denied),
+            Ok(a) => {
+                self.know(id, a.to);
+                Ok(())
+            }
+            Err(e) => {
+                self.after_err(id, &e);
+                Ok(())
             }
         }
-        Ok(())
     }
 
     fn stop(&mut self) -> Check {
@@ -554,8 +692,9 @@ impl<'a> Seq<'a> {
         };
         let r = self.mother().stop(id);
         self.log.push(format!("stop {id} -> {r:?}"));
-        if let Ok(state) = r {
-            self.ack(id, state)?;
+        match r {
+            Ok(state) => self.ack(id, state)?,
+            Err(e) => self.after_err(id, &e),
         }
         Ok(())
     }
@@ -715,12 +854,7 @@ impl<'a> Seq<'a> {
             r.as_ref().map(|x| x.to)
         ));
         self.take_breaker(a, &kept)?;
-        if let Ok(x) = &r {
-            if x.to == MissionState::Denied {
-                self.ack(b, MissionState::Denied)?;
-            }
-        }
-        Ok(())
+        self.advanced(b, r)
     }
 
     fn run(&mut self) -> Check {
@@ -737,10 +871,19 @@ impl<'a> Seq<'a> {
 }
 
 pub(super) fn on_the_real_broker(home: &Home, origin: &str, listener: &TcpListener) {
-    let sequences: u64 = std::env::var("MOTHER_M2AS_SEQUENCES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(500);
+    let sequences: u64 = match std::env::var("MOTHER_M2AS_SEQUENCES") {
+        Err(_) => 500,
+        Ok(v) => {
+            let n: u64 = v
+                .parse()
+                .unwrap_or_else(|_| panic!("MOTHER_M2AS_SEQUENCES={v:?} is not a number"));
+            assert!(
+                n >= 500,
+                "MOTHER_M2AS_SEQUENCES={n}: at least 500 sequences"
+            );
+            n
+        }
+    };
     let world = WorldServer::start(listener);
     let mut failures: Vec<(u64, String, Vec<String>)> = Vec::new();
     let mut coverage = Coverage::default();

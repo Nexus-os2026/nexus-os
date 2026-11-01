@@ -46,6 +46,8 @@ mod m2as_adopt;
 #[cfg(test)]
 mod m2as_fence;
 #[cfg(test)]
+mod m2as_gate;
+#[cfg(test)]
 mod m2as_model;
 #[cfg(test)]
 mod m2as_mutants;
@@ -98,6 +100,16 @@ pub struct GovernedPort {
     /// broker is asked to act on it.
     #[cfg(test)]
     pub(crate) before_broker_action: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in run_for once the fence was checked, just before
+    /// the broker is asked to open a run.
+    #[cfg(test)]
+    pub(crate) before_open_run: crate::oracles::m2as_hooks::HookSlot,
+    /// M2a-S (tests): run in the fence after each run it cancels, and once
+    /// it is done.
+    #[cfg(test)]
+    pub(crate) fence_between_cancels: crate::oracles::m2as_hooks::HookSlot,
+    #[cfg(test)]
+    pub(crate) after_fence: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
@@ -113,6 +125,12 @@ impl GovernedPort {
             before_approval: Default::default(),
             #[cfg(test)]
             before_broker_action: Default::default(),
+            #[cfg(test)]
+            before_open_run: Default::default(),
+            #[cfg(test)]
+            fence_between_cancels: Default::default(),
+            #[cfg(test)]
+            after_fence: Default::default(),
         }
     }
 
@@ -161,6 +179,8 @@ impl GovernedPort {
                 return Ok(*run);
             }
         }
+        #[cfg(test)]
+        self.before_open_run.fire();
         let run = self
             .control
             .open_run(mother_agent(), RunOrigin::AgentGoal)
@@ -282,7 +302,11 @@ impl EffectPort for GovernedPort {
         };
         for run in runs {
             self.cancel_run(run);
+            #[cfg(test)]
+            self.fence_between_cancels.fire();
         }
+        #[cfg(test)]
+        self.after_fence.fire();
     }
 
     fn emergency_stopped(&self) -> bool {
