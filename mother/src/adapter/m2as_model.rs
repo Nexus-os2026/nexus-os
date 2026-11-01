@@ -526,12 +526,10 @@ impl<'a> Seq<'a> {
                 )
             })?;
         }
-        // (b)
-        if mother.broken() {
-            let at = *self.broke_at.lock().unwrap();
-            let Some(at) = at else {
-                return Err("a broken coordinator with no failing append".into());
-            };
+        // (b), from the disk's own record of the break (its first failing
+        // append under this coordinator), never from Mother's broken flag.
+        let broke_at = *self.broke_at.lock().unwrap();
+        if let Some(at) = broke_at {
             ensure(self.world.count() == at, || {
                 let lines = self.world.counter().lock().unwrap()[at..].to_vec();
                 format!(
@@ -540,6 +538,19 @@ impl<'a> Seq<'a> {
                 )
             })?;
         }
+        // Mother's broken flag, checked against the disk: broken exactly
+        // when an append of this coordinator failed.
+        ensure(mother.broken() == broke_at.is_some(), || {
+            format!(
+                "(b) Mother's broken flag is {}, the disk recorded {}",
+                mother.broken(),
+                if broke_at.is_some() {
+                    "a failing append"
+                } else {
+                    "no failing append"
+                }
+            )
+        })?;
         // (c), from the model's own record.
         for (m, k) in &self.known {
             if !k.certain || k.state.is_terminal() {
