@@ -915,32 +915,8 @@ pub(super) fn on_the_real_broker(home: &Home, origin: &str, listener: &TcpListen
         coverage.breaks_with_open_request,
         coverage.failed_opens_after_clean_close
     );
-    // The class test must reach what it exists for (minimums for the
-    // default 500 fixed seeds, scaled for more).
-    let scale = sequences as usize;
-    let floor = |per_500: usize| per_500 * scale / 500;
-    let reached = [
-        ("a perform", coverage.breaks[0], floor(MIN_PERFORM)),
-        ("a lane", coverage.breaks[1], floor(MIN_LANE)),
-        ("an approval query", coverage.breaks[2], floor(MIN_APPROVAL)),
-        ("a consent dialog", coverage.breaks[3], floor(MIN_CONSENT)),
-        (
-            "a request open",
-            coverage.breaks_with_open_request,
-            floor(MIN_WITH_REQUEST),
-        ),
-        (
-            "a failed open after a clean close",
-            coverage.failed_opens_after_clean_close,
-            floor(MIN_FAILED_OPEN),
-        ),
-    ];
-    for (what, got, min) in reached {
-        assert!(
-            got >= min,
-            "class test coverage: breaks with {what}: {got} < {min}"
-        );
-    }
+    // Failures first: a failing sequence ends early and starves the
+    // coverage, which must not hide what failed.
     if !failures.is_empty() {
         let mut by_kind: BTreeMap<String, Vec<u64>> = BTreeMap::new();
         for (seed, msg, _) in &failures {
@@ -971,5 +947,31 @@ pub(super) fn on_the_real_broker(home: &Home, origin: &str, listener: &TcpListen
             ));
         }
         panic!("{report}");
+    }
+    // The class test must reach what it exists for (minimums for the
+    // default 500 fixed seeds, scaled for more).
+    let scale = sequences as usize;
+    let floor = |per_500: usize| per_500 * scale / 500;
+    let reached = [
+        ("a perform", coverage.breaks[0], floor(MIN_PERFORM)),
+        ("a lane", coverage.breaks[1], floor(MIN_LANE)),
+        ("an approval query", coverage.breaks[2], floor(MIN_APPROVAL)),
+        ("a consent dialog", coverage.breaks[3], floor(MIN_CONSENT)),
+        (
+            "a request open",
+            coverage.breaks_with_open_request,
+            floor(MIN_WITH_REQUEST),
+        ),
+        (
+            "a failed open after a clean close",
+            coverage.failed_opens_after_clean_close,
+            floor(MIN_FAILED_OPEN),
+        ),
+    ];
+    for (what, got, min) in reached {
+        assert!(
+            got >= min,
+            "class test coverage: breaks with {what}: {got} < {min}"
+        );
     }
 }
