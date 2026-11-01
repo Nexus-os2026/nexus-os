@@ -35,7 +35,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
 
 #[cfg(test)]
 mod expiry_tests;
@@ -88,6 +88,12 @@ struct Runs {
 pub struct GovernedPort {
     control: Arc<GovernedControl>,
     runs: Mutex<Runs>,
+    /// M2a-S, the gate: every broker call this port makes holds it in read
+    /// mode and checks `fenced` inside it, refusing once set; the fence sets
+    /// `fenced`, then holds it in write mode while it cancels every run. So a
+    /// broker call either entered before the break (and has finished before
+    /// any run is cancelled) or is refused.
+    gate: RwLock<()>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
     /// M2a-S (tests): run just before an effect is performed, and before
@@ -117,6 +123,7 @@ impl GovernedPort {
         Self {
             control,
             runs: Mutex::new(Runs::default()),
+            gate: RwLock::new(()),
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
             #[cfg(test)]
@@ -163,15 +170,23 @@ impl GovernedPort {
         self.runs.lock().expect("mother port")
     }
 
-    /// The mission's agent run, opened on its first effect. No lock is
-    /// held across the broker call; a mission that ended meanwhile gets no
-    /// run (the one just opened is cancelled).
+    /// Enter the broker: the gate in read mode, refused once fenced. Never
+    /// taken twice by one thread (a waiting fence would block the second).
+    fn enter(&self) -> Result<RwLockReadGuard<'_, ()>, EffectRefusal> {
+        let gate = self.gate.read().expect("mother port gate");
+        if self.lock().fenced {
+            return Err(refused("port_fenced"));
+        }
+        Ok(gate)
+    }
+
+    /// The mission's agent run, opened on its first effect, inside the gate:
+    /// no run opens once the port is fenced. A mission that ended meanwhile
+    /// gets no run (the one just opened is cancelled).
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
+        let _gate = self.enter()?;
         {
             let runs = self.lock();
-            if runs.fenced {
-                return Err(refused("port_fenced"));
-            }
             if runs.ended.contains(&mission) {
                 return Err(refused("mission_cancelled"));
             }
@@ -186,7 +201,7 @@ impl GovernedPort {
             .open_run(mother_agent(), RunOrigin::AgentGoal)
             .map_err(|e| refused(e.class()))?;
         let mut runs = self.lock();
-        if runs.fenced || runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
+        if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
             drop(runs);
             self.cancel_run(run);
             return Err(refused("mission_cancelled"));
@@ -195,6 +210,8 @@ impl GovernedPort {
         Ok(run)
     }
 
+    /// Cancel `run` at the broker. Called only inside the gate (read or
+    /// write).
     fn cancel_run(&self, run: RunId) {
         if self.control.cancel_run(run).is_err() {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
@@ -236,6 +253,7 @@ impl EffectPort for GovernedPort {
         let run = self.run_for(mission)?;
         #[cfg(test)]
         self.before_broker_action.fire();
+        let _gate = self.enter()?;
         // Before the broker is asked: the broker's deadline for an action
         // is its monotonic clock when it prepared it plus the action's
         // lifetime, so a deadline from this reading is never later.
@@ -253,30 +271,58 @@ impl EffectPort for GovernedPort {
     }
 
     fn cancel(&self, mission: MissionId) {
-        if let Some(run) = self.end(mission) {
+        let gate = self.enter();
+        let run = self.end(mission);
+        // Fenced: every run this port held is cancelled already.
+        if let (Ok(_gate), Some(run)) = (gate, run) {
             self.cancel_run(run);
         }
     }
 
+    /// Cancel the mission's run, and say whether everything journaled for
+    /// it is withdrawn: an error if the broker refused the cancellation, or
+    /// if a request handed back for the mission names another run (or
+    /// another commitment than the one held) and the broker still holds it
+    /// open. Fenced: an error, unless there was nothing to withdraw.
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
-        let Some(run) = self.end(mission) else {
-            // Nothing held. A journaled action handed back but not taken
-            // (not Mother's live run, or claimed twice) cannot be withdrawn
-            // here: an error while the broker still holds it open.
-            let handed = self.lock().handed.get(&mission).cloned();
-            return match handed {
-                Some(pending) if !self.settled(&pending) => Err(refused("action_not_held")),
-                _ => Ok(()),
+        let gate = self.enter();
+        let run = self.end(mission);
+        let (handed, waiting) = {
+            let runs = self.lock();
+            (
+                runs.handed.get(&mission).cloned(),
+                runs.waiting.get(&mission).map(|(c, _)| *c),
+            )
+        };
+        let Ok(_gate) = gate else {
+            return match (run, handed) {
+                (None, None) => Ok(()),
+                _ => Err(refused("port_fenced")),
             };
         };
-        self.control.cancel_run(run).map_err(|e| {
-            self.cancel_failures.fetch_add(1, Ordering::SeqCst);
-            refused(e.class())
-        })
+        if let Some(run) = run {
+            self.control.cancel_run(run).map_err(|e| {
+                self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                refused(e.class())
+            })?;
+        }
+        if let Some(pending) = handed {
+            let same_run = run.is_some() && RunId::parse(&pending.run) == run;
+            let same_commitment =
+                waiting.is_none_or(|held| CommitmentId::parse(&pending.commitment) == Some(held));
+            let covered = same_run && same_commitment;
+            if !covered && !self.settled_inside(&pending) {
+                return Err(refused("action_not_held"));
+            }
+        }
+        Ok(())
     }
 
     fn finish(&self, mission: MissionId) {
-        if let Some(run) = self.end(mission) {
+        let gate = self.enter();
+        let run = self.end(mission);
+        // Fenced: the run is cancelled already.
+        if let (Ok(_gate), Some(run)) = (gate, run) {
             self.control.finish_when_settled(run);
         }
     }
@@ -295,11 +341,15 @@ impl EffectPort for GovernedPort {
     /// (`cancel_failures`). A fence is final: a coordinator opened again
     /// after a break needs a new port.
     fn fence(&self) {
-        let runs: Vec<RunId> = {
-            let mut runs = self.lock();
-            runs.fenced = true;
-            runs.open.values().copied().collect()
-        };
+        // `fenced` first (Owner decision): a broker call that enters the gate
+        // from now on sees it and is refused, even one that takes the read
+        // gate while this fence still waits for write mode (the lock lets a
+        // reader in right after the last one leaves).
+        self.lock().fenced = true;
+        // Write mode: every broker call already inside (it entered before
+        // the break) has left the gate before any run is cancelled.
+        let _gate = self.gate.write().expect("mother port gate");
+        let runs: Vec<RunId> = self.lock().open.values().copied().collect();
         for run in runs {
             self.cancel_run(run);
             #[cfg(test)]
@@ -323,6 +373,11 @@ impl EffectPort for GovernedPort {
     fn approval(&self, mission: MissionId) -> ApprovalStatus {
         #[cfg(test)]
         self.before_approval.fire();
+        let Ok(_gate) = self.enter() else {
+            return ApprovalStatus::Lapsed {
+                class: "port_fenced".into(),
+            };
+        };
         let unknown = || ApprovalStatus::Lapsed {
             class: "approval_outcome_unknown".into(),
         };
@@ -351,22 +406,12 @@ impl EffectPort for GovernedPort {
     /// Final at the broker, or not held there at all. An action that is
     /// not Mother's, or that runs (approved, executing), is not settled.
     fn settled(&self, pending: &PendingAction) -> bool {
-        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+        // Fenced: not confirmed (the action stays open in the journal and is
+        // withdrawn again on the next open).
+        let Ok(_gate) = self.enter() else {
             return false;
         };
-        match self.control.authority().commitments().view(commitment) {
-            None => true,
-            Some(view) => {
-                RunId::parse(&pending.run) == Some(view.run)
-                    && view.agent == mother_agent()
-                    && !matches!(
-                        view.state,
-                        CommitmentState::Prepared
-                            | CommitmentState::Authorized
-                            | CommitmentState::Executing
-                    )
-            }
-        }
+        self.settled_inside(pending)
     }
 
     fn pending(&self, mission: MissionId) -> Option<PendingAction> {
@@ -385,12 +430,42 @@ impl EffectPort for GovernedPort {
     /// and a commitment of that run of Mother's. The carried deadline is
     /// trusted no further than the action's remaining lifetime by its
     /// wall-clock expiry (`adopted_deadline`). A mission this port already
-    /// knows, or has ended, is left as it is.
+    /// knows, or has ended, is left as it is; a fenced port takes nothing.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
         self.lock()
             .handed
             .entry(mission)
             .or_insert_with(|| pending.clone());
+        let Ok(_gate) = self.enter() else {
+            return;
+        };
+        self.adopt_inside(mission, pending);
+    }
+}
+
+impl GovernedPort {
+    /// [`EffectPort::settled`], inside the gate.
+    fn settled_inside(&self, pending: &PendingAction) -> bool {
+        let Some(commitment) = CommitmentId::parse(&pending.commitment) else {
+            return false;
+        };
+        match self.control.authority().commitments().view(commitment) {
+            None => true,
+            Some(view) => {
+                RunId::parse(&pending.run) == Some(view.run)
+                    && view.agent == mother_agent()
+                    && !matches!(
+                        view.state,
+                        CommitmentState::Prepared
+                            | CommitmentState::Authorized
+                            | CommitmentState::Executing
+                    )
+            }
+        }
+    }
+
+    /// [`EffectPort::adopt`], inside the gate.
+    fn adopt_inside(&self, mission: MissionId, pending: &PendingAction) {
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
             CommitmentId::parse(&pending.commitment),

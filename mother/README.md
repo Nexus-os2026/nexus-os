@@ -125,7 +125,14 @@ Coordinator rules the oracles pin:
   lock that marks it broken) the port is fenced: every broker run it holds
   is cancelled, so a call reserved before the break (an effect journaled
   dispatched, a waiting request) is refused by the broker itself, and the
-  port opens no new run. After every outbound call (a perform, a lane, the
+  port opens no new run. The port's gate makes this race-free: every broker
+  call it makes (opening a run, an action, an approval query, adopting, a
+  settled check, a cancellation, a finish) holds the gate in read mode and
+  checks `fenced` inside it; the fence sets `fenced`, then takes the gate in
+  write mode and cancels every run. A call either entered before the break
+  and has left the gate before any run is cancelled, or is refused. The
+  Owner's consent dialog and the emergency-stop read are not gated: they
+  produce no effect, and a consent answered after the break is discarded. After every outbound call (a perform, a lane, the
   Owner's consent dialog, an approval query) the result is discarded, and
   nothing is journaled for it, if the coordinator broke or the mission is
   held. Every journaled open request is handed back to the port before any
