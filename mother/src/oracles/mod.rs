@@ -83,6 +83,8 @@ struct PortState {
     settled_script: std::collections::BTreeMap<String, VecDeque<bool>>,
     /// Missions whose withdrawal the port fails.
     failing_withdrawals: BTreeSet<MissionId>,
+    /// M2a-S: the coordinator broke: nothing more is performed.
+    fenced: bool,
     /// Each adoption: the mission, the action, and how many calls had been
     /// made when it came.
     adopted: Vec<(MissionId, PendingAction, usize)>,
@@ -239,6 +241,9 @@ impl EffectPort for RecordingPort {
         if state.cancelled.contains(&mission) {
             return Err(refusal("mission_cancelled"));
         }
+        if state.fenced {
+            return Err(refusal("port_fenced"));
+        }
         if state.hold {
             state.hold = false;
             state.entered = true;
@@ -272,7 +277,11 @@ impl EffectPort for RecordingPort {
         self.lock().calls.push(PortCall::Finish(mission));
     }
 
-    fn fence(&self) {}
+    fn fence(&self) {
+        let mut state = self.lock();
+        state.fenced = true;
+        self.changed.notify_all();
+    }
 
     fn emergency_stopped(&self) -> bool {
         self.lock().emergency

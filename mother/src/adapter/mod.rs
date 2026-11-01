@@ -69,6 +69,13 @@ struct Runs {
     /// The action each mission waits on at the broker, and the port's
     /// monotonic deadline for it.
     waiting: BTreeMap<MissionId, (CommitmentId, u64)>,
+    /// M2a-S: the coordinator broke. Every run was cancelled at the broker
+    /// and no new one opens.
+    fenced: bool,
+    /// M2a-S: every journaled action handed back, taken or not, so that a
+    /// withdrawal of one this port does not hold is an error while the
+    /// broker still holds it open.
+    handed: BTreeMap<MissionId, PendingAction>,
 }
 
 /// The EffectPort over the governed-control broker.
@@ -118,10 +125,10 @@ impl GovernedPort {
         &self.control
     }
 
-    /// M2a-S (tests): whether the port was fenced. Not implemented yet.
+    /// M2a-S (tests): whether the port was fenced.
     #[cfg(test)]
     pub(crate) fn fenced(&self) -> bool {
-        false
+        self.lock().fenced
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
@@ -134,6 +141,9 @@ impl GovernedPort {
     fn run_for(&self, mission: MissionId) -> Result<RunId, EffectRefusal> {
         {
             let runs = self.lock();
+            if runs.fenced {
+                return Err(refused("port_fenced"));
+            }
             if runs.ended.contains(&mission) {
                 return Err(refused("mission_cancelled"));
             }
@@ -146,7 +156,7 @@ impl GovernedPort {
             .open_run(mother_agent(), RunOrigin::AgentGoal)
             .map_err(|e| refused(e.class()))?;
         let mut runs = self.lock();
-        if runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
+        if runs.fenced || runs.ended.contains(&mission) || runs.open.contains_key(&mission) {
             drop(runs);
             self.cancel_run(run);
             return Err(refused("mission_cancelled"));
@@ -218,7 +228,14 @@ impl EffectPort for GovernedPort {
 
     fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
         let Some(run) = self.end(mission) else {
-            return Ok(());
+            // Nothing held. A journaled action handed back but not taken
+            // (not Mother's live run, or claimed twice) cannot be withdrawn
+            // here: an error while the broker still holds it open.
+            let handed = self.lock().handed.get(&mission).cloned();
+            return match handed {
+                Some(pending) if !self.settled(&pending) => Err(refused("action_not_held")),
+                _ => Ok(()),
+            };
         };
         self.control.cancel_run(run).map_err(|e| {
             self.cancel_failures.fetch_add(1, Ordering::SeqCst);
@@ -232,7 +249,20 @@ impl EffectPort for GovernedPort {
         }
     }
 
-    fn fence(&self) {}
+    /// The coordinator broke: cancel every run this port holds at the
+    /// broker (no commitment of it can then be authorized or started, and
+    /// executing ones see their token set), and open no new one. A
+    /// cancellation the broker refuses is counted (`cancel_failures`).
+    fn fence(&self) {
+        let runs: Vec<RunId> = {
+            let mut runs = self.lock();
+            runs.fenced = true;
+            runs.open.values().copied().collect()
+        };
+        for run in runs {
+            self.cancel_run(run);
+        }
+    }
 
     fn emergency_stopped(&self) -> bool {
         self.control.authority().runs().is_stopped()
@@ -312,6 +342,10 @@ impl EffectPort for GovernedPort {
     /// wall-clock expiry (`adopted_deadline`). A mission this port already
     /// knows, or has ended, is left as it is.
     fn adopt(&self, mission: MissionId, pending: &PendingAction) {
+        self.lock()
+            .handed
+            .entry(mission)
+            .or_insert_with(|| pending.clone());
         let (Some(run), Some(commitment)) = (
             RunId::parse(&pending.run),
             CommitmentId::parse(&pending.commitment),
@@ -338,7 +372,8 @@ impl EffectPort for GovernedPort {
             view.expires_wall_ms,
         );
         let mut runs = self.lock();
-        if runs.ended.contains(&mission)
+        if runs.fenced
+            || runs.ended.contains(&mission)
             || runs.open.contains_key(&mission)
             || runs.open.values().any(|held| *held == run)
         {

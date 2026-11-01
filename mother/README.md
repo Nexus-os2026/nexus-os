@@ -69,7 +69,8 @@ the host, tests included).
 | M2a: consent only from the broker's recorded yes for the exact hash and request; another hash, a replayed answer, an unrecorded yes or a broker refusal give none | `oracles/m2a_consent.rs`, broker `tests/m2a_mission_consent.rs` |
 | M2a: waiting for approval: approve continues once, deny = zero effect and Denied, expiry = Blocked, Stop withdraws durably, restart never re-sends or approves | `oracles/m2a_waiting.rs`, `adapter/real_broker.rs` |
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
-| M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs` |
+| M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs`, `oracles/m2as_review.rs`, `oracles/m2as_resume.rs` |
+| M2a-S: a call reserved before the break never reaches the world after it (fenced at the broker); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs` |
 
 Coordinator rules the oracles pin:
 
@@ -120,6 +121,21 @@ Coordinator rules the oracles pin:
   it neither asks the Owner for consent nor asks the broker about an
   approval. Replay refuses a session the live coordinator could not write
   (a clean close, or work, before the holds an unclean session requires).
+- M2a-S, the fence: at the moment the journal fails (under the coordinator
+  lock that marks it broken) the port is fenced: every broker run it holds
+  is cancelled, so a call reserved before the break (an effect journaled
+  dispatched, a waiting request) is refused by the broker itself, and the
+  port opens no new run. After every outbound call (a perform, a lane, the
+  Owner's consent dialog, an approval query) the result is discarded, and
+  nothing is journaled for it, if the coordinator broke or the mission is
+  held. Every journaled open request is handed back to the port before any
+  session record is written, so an open that fails still withdraws it; the
+  port's withdraw is an error for a handed-back request it does not hold
+  while the broker holds it open. A hold after a resume is journaled again.
+- M2a-S class test (`adapter/m2as_model.rs`): 500 seeded sequences on the
+  real broker (more with `MOTHER_M2AS_SEQUENCES`), checking after every step
+  that an acknowledged Stop or denial holds, that nothing reaches the world
+  after a break, the holds, and that a failed open leaves no request open.
 - Replay accepts records only in the order the live coordinator writes
   them (lane answers after their calls, no transition but Stop while an
   effect is unsettled, mission ids in sequence).
@@ -134,6 +150,12 @@ Coordinator rules the oracles pin:
 - M2a-S: while a waiting mission is held, its request stays at the broker,
   where only the Owner's own native approval can run it. Mother does not
   ask about it or carry on from it until the Owner resumes the mission.
+- M2a-S: the fence cancels broker runs under the coordinator lock, so the
+  broker's cancellation record is written while that lock is held (Owner
+  decision). An effect already executing inside the broker when the
+  coordinator breaks sees its run's cancellation token; one past the point
+  where it checks it may complete. The oracles pin every call reserved but
+  not yet handed to the broker.
 - M2a-S: the clean close is a record in the unkeyed chain. Someone with
   write access who cuts the journal back to a clean close (dropping a
   later Stop) is not detected; that is the existing truncation non-claim.
