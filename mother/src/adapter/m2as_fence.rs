@@ -10,11 +10,10 @@
 //! point of mission B's call. Run from `real_broker.rs` (one broker per
 //! process).
 
-use super::m2as_support::Gated;
 use super::m2as_support::{
     executed, owner_runs, rig, Disk, HookConfirmer, HookSlot, Rig, WorldServer,
 };
-use super::Home;
+use super::{GovernedPort, Home};
 use crate::coordinator::Coordinator;
 use crate::journal::{Event, MemoryJournal, MissionId};
 use crate::oracles::{contract_with, Yes};
@@ -40,10 +39,11 @@ fn approved(r: &Rig, markers: &str) -> MissionId {
 /// fail, so the coordinator breaks.
 fn break_by_stopping(
     disk: &Disk,
-    mother: &Arc<Coordinator<Gated>>,
+    mother: &Arc<Coordinator<GovernedPort>>,
     victim: MissionId,
 ) -> impl FnOnce() + Send + 'static {
-    let (disk, mother): (Disk, Weak<Coordinator<Gated>>) = (disk.clone(), Arc::downgrade(mother));
+    let (disk, mother): (Disk, Weak<Coordinator<GovernedPort>>) =
+        (disk.clone(), Arc::downgrade(mother));
     move || {
         disk.fail(true, true);
         let mother = mother.upgrade().expect("the coordinator");
@@ -90,7 +90,7 @@ fn a_reserved_effect_of_a_live_run_is_refused_by_the_broker(
         r.mother.advance(b).unwrap();
     }
     assert!(world.saw("/fence-perform-1"));
-    let run = r.port.inner.run_of(b).expect("B's run");
+    let run = r.port.run_of(b).expect("B's run");
     let runs = BTreeSet::from([run]);
     let before = executed(control, &runs);
     r.port
@@ -107,7 +107,7 @@ fn a_reserved_effect_of_a_live_run_is_refused_by_the_broker(
         control.authority().runs().view(run).unwrap().cancelled,
         "B's run is cancelled at the broker"
     );
-    assert!(r.port.inner.fenced());
+    assert!(r.port.fenced());
     for _ in 0..3 {
         assert!(r.mother.advance(b).is_err());
     }
@@ -126,14 +126,14 @@ fn a_reserved_first_effect_opens_no_run(
     for _ in 0..2 {
         r.mother.advance(b).unwrap();
     }
-    assert_eq!(r.port.inner.run_of(b), None);
+    assert_eq!(r.port.run_of(b), None);
     r.port
         .before_perform
         .arm(0, break_by_stopping(&disk, &r.mother, victim));
     assert!(r.mother.advance(b).is_err());
     assert!(!r.port.before_perform.armed(), "the hook ran");
     assert!(!world.saw("/fence-first"), "the effect reached the world");
-    if let Some(run) = r.port.inner.run_of(b) {
+    if let Some(run) = r.port.run_of(b) {
         assert_eq!(executed(control, &BTreeSet::from([run])), 0);
         assert!(control.authority().runs().view(run).unwrap().cancelled);
     }
@@ -151,17 +151,13 @@ fn a_lane_answer_after_the_break_is_discarded(
     for _ in 0..2 {
         r.mother.advance(b).unwrap();
     }
-    let performed = r.port.inner.performed();
+    let performed = r.port.performed();
     // Building runs the Sentinel, then the Builder.
     r.lane_hook
         .arm(1, break_by_stopping(&disk, &r.mother, victim));
     assert!(r.mother.advance(b).is_err());
     assert!(!r.lane_hook.armed(), "the hook ran");
-    assert_eq!(
-        r.port.inner.performed(),
-        performed,
-        "an effect was performed"
-    );
+    assert_eq!(r.port.performed(), performed, "an effect was performed");
     assert!(!world.saw("/fence-lane"));
     assert!(
         !r.mother
@@ -238,10 +234,7 @@ fn an_approval_answer_after_the_break_is_discarded(
         r.mother.advance(d).unwrap();
     }
     assert_eq!(r.mother.state(d), Some(MissionState::AwaitingApproval));
-    let (c_run, d_run) = (
-        r.port.inner.run_of(c).unwrap(),
-        r.port.inner.run_of(d).unwrap(),
-    );
+    let (c_run, d_run) = (r.port.run_of(c).unwrap(), r.port.run_of(d).unwrap());
     // The Owner approved and ran C's action before the break.
     assert!(owner_runs(control, &waiting_view(control, c_run)));
     assert!(world.saw("/fence-approval-post"));

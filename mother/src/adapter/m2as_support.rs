@@ -4,30 +4,23 @@
 //! - [`Disk`]: a journal store whose appends fail (now, or after a count)
 //!   and whose poisoning fails, on demand; it can measure the world at the
 //!   first failure (the moment the coordinator breaks).
-//! - [`Gated`]: the real port with hooks run just before it performs an
-//!   effect or asks the broker about an approval (a deterministic
-//!   interleaving: the hook is the other thread's work, done at exactly
-//!   that point).
-//! - [`HookLane`], [`HookConfirmer`]: the same inside a lane call and inside
-//!   the Owner's consent dialog.
+//! - the real port's test-only hooks (`GovernedPort::before_perform`,
+//!   `before_approval`), run just before it performs an effect or asks the
+//!   broker about an approval: a deterministic interleaving (the hook is
+//!   the other thread's work, done at exactly that point);
+//! - [`HookLane`] (and `oracles::m2as_hooks::HookConfirmer`): the same inside
+//!   a lane call and inside the Owner's consent dialog.
 //! - [`WorldServer`]: the world, counting every request that reaches it.
 
 use super::{mother_agent, GovernedPort};
 use crate::coordinator::{Coordinator, CoordinatorError, Lanes};
-use crate::effect::{
-    ApprovalStatus, EffectOutcome, EffectPort, EffectRefusal, EffectRequest, PendingAction,
-};
-use crate::journal::{JournalError, JournalStore, MemoryJournal, MissionId};
+use crate::journal::{JournalError, JournalStore, MemoryJournal};
 use crate::lane::{Lane, LaneIdentity, LaneInput, LaneOutput, LaneRole};
+pub(crate) use crate::oracles::m2as_hooks::{HookConfirmer, HookSlot, OwnerApproves};
 use crate::oracles::KeyedLane;
-use nexus_governed_control::authority::approval::{
-    AcknowledgementConfirmation, ActionConfirmation, ControlConfirmer, GrantConfirmation,
-    MissionConfirmation, ResumeConfirmation,
-};
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
 use nexus_governed_control::authority::ids::RunId;
-use nexus_governed_control::authority::Authority;
 use nexus_governed_control::governed::GovernedControl;
 use std::collections::BTreeSet;
 use std::io::{ErrorKind, Read, Write};
@@ -129,102 +122,6 @@ impl JournalStore for Disk {
 
 // ---------------------------------------------------------------- hooks
 
-type Hook = Box<dyn FnOnce() + Send>;
-
-/// One armed hook: it runs on the call after `skip` more calls, once.
-#[derive(Clone, Default)]
-pub(crate) struct HookSlot(Arc<Mutex<Option<(usize, Hook)>>>);
-
-impl HookSlot {
-    pub fn arm(&self, skip: usize, hook: impl FnOnce() + Send + 'static) {
-        *self.0.lock().unwrap() = Some((skip, Box::new(hook)));
-    }
-
-    pub fn disarm(&self) {
-        *self.0.lock().unwrap() = None;
-    }
-
-    pub fn armed(&self) -> bool {
-        self.0.lock().unwrap().is_some()
-    }
-
-    fn fire(&self) {
-        let hook = {
-            let mut slot = self.0.lock().unwrap();
-            match slot.as_mut() {
-                Some((0, _)) => slot.take().map(|(_, hook)| hook),
-                Some((n, _)) => {
-                    *n -= 1;
-                    None
-                }
-                None => None,
-            }
-        };
-        if let Some(hook) = hook {
-            hook();
-        }
-    }
-}
-
-/// The real port, with hooks just before a perform and an approval query.
-pub(crate) struct Gated {
-    pub inner: GovernedPort,
-    pub before_perform: HookSlot,
-    pub before_approval: HookSlot,
-}
-
-impl Gated {
-    pub fn over(control: &Arc<GovernedControl>) -> Self {
-        Self {
-            inner: GovernedPort::new(control.clone()),
-            before_perform: HookSlot::default(),
-            before_approval: HookSlot::default(),
-        }
-    }
-}
-
-impl EffectPort for Gated {
-    fn perform(
-        &self,
-        mission: MissionId,
-        effect: &EffectRequest,
-    ) -> Result<EffectOutcome, EffectRefusal> {
-        self.before_perform.fire();
-        self.inner.perform(mission, effect)
-    }
-    fn cancel(&self, mission: MissionId) {
-        self.inner.cancel(mission)
-    }
-    fn finish(&self, mission: MissionId) {
-        self.inner.finish(mission)
-    }
-    fn emergency_stopped(&self) -> bool {
-        self.inner.emergency_stopped()
-    }
-    fn broker(&self) -> &Authority {
-        self.inner.broker()
-    }
-    fn approval(&self, mission: MissionId) -> ApprovalStatus {
-        self.before_approval.fire();
-        self.inner.approval(mission)
-    }
-    fn pending(&self, mission: MissionId) -> Option<PendingAction> {
-        self.inner.pending(mission)
-    }
-    fn adopt(&self, mission: MissionId, pending: &PendingAction) {
-        self.inner.adopt(mission, pending)
-    }
-    fn settled(&self, pending: &PendingAction) -> bool {
-        self.inner.settled(pending)
-    }
-    fn withdraw(&self, mission: MissionId) -> Result<(), EffectRefusal> {
-        self.inner.withdraw(mission)
-    }
-    fn fence(&self) {
-        self.inner.fence()
-    }
-}
-
 /// A keyed lane with a hook run inside its call, before it answers.
 pub(crate) struct HookLane {
     inner: KeyedLane,
@@ -241,61 +138,18 @@ impl Lane for HookLane {
     }
 }
 
-/// The Owner at the mission dialog: runs its hook while asked, then
-/// answers `yes`.
-pub(crate) struct HookConfirmer {
-    pub hook: HookSlot,
-    pub yes: bool,
-}
-
-impl ControlConfirmer for HookConfirmer {
-    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
-        false
-    }
-    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
-        false
-    }
-    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
-        false
-    }
-    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
-        false
-    }
-    fn confirm_mission(&self, _: &MissionConfirmation) -> bool {
-        self.hook.fire();
-        self.yes
-    }
-}
-
-/// The Owner approving an action at the broker's native dialog.
-pub(crate) struct OwnerApproves;
-impl ControlConfirmer for OwnerApproves {
-    fn confirm_action(&self, _: &ActionConfirmation) -> bool {
-        true
-    }
-    fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
-        false
-    }
-    fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
-        false
-    }
-    fn confirm_acknowledgement(&self, _: &AcknowledgementConfirmation) -> bool {
-        false
-    }
-}
-
 // ---------------------------------------------------------------- rig
 
 /// A Mother process over `store` and the shared broker: a port of its own
 /// (gated), hooked keyed lanes.
 pub(crate) struct Rig {
-    pub port: Arc<Gated>,
-    pub mother: Arc<Coordinator<Gated>>,
+    pub port: Arc<GovernedPort>,
+    pub mother: Arc<Coordinator<GovernedPort>>,
     pub lane_hook: HookSlot,
 }
 
 pub(crate) fn rig(control: &Arc<GovernedControl>, store: Disk) -> Result<Rig, CoordinatorError> {
-    let port = Arc::new(Gated::over(control));
+    let port = Arc::new(GovernedPort::new(control.clone()));
     let lane_hook = HookSlot::default();
     let lanes: Vec<Arc<dyn Lane>> = LaneRole::ALL
         .iter()

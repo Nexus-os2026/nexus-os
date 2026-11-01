@@ -98,8 +98,6 @@ mod sealed {
     impl Sealed for crate::adapter::GovernedPort {}
     #[cfg(test)]
     impl Sealed for crate::oracles::RecordingPort {}
-    #[cfg(test)]
-    impl Sealed for crate::adapter::m2as_support::Gated {}
 }
 
 /// The calls Mother makes to reach the world.

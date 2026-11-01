@@ -21,11 +21,10 @@
 //! Every failing seed is collected with its steps, then the test fails.
 //! `MOTHER_M2AS_SEQUENCES` raises the number of sequences (default 500).
 
-use super::m2as_support::Gated;
 use super::m2as_support::{
     open_requests, owner_runs, rig, Disk, HookConfirmer, HookSlot, Rig, WorldServer,
 };
-use super::{mother_agent, Home};
+use super::{mother_agent, GovernedPort, Home};
 use crate::coordinator::{Coordinator, CoordinatorError};
 use crate::journal::{verify, Event, JournalError, MemoryJournal, MissionId};
 use crate::oracles::{contract_with, No, Yes};
@@ -125,11 +124,11 @@ impl<'a> Seq<'a> {
         }
     }
 
-    fn mother(&self) -> &Arc<Coordinator<Gated>> {
+    fn mother(&self) -> &Arc<Coordinator<GovernedPort>> {
         &self.rig.as_ref().expect("a coordinator").mother
     }
 
-    fn weak(&self) -> Weak<Coordinator<Gated>> {
+    fn weak(&self) -> Weak<Coordinator<GovernedPort>> {
         Arc::downgrade(self.mother())
     }
 
@@ -148,7 +147,7 @@ impl<'a> Seq<'a> {
     fn note_runs(&mut self) {
         if let Some(rig) = &self.rig {
             for m in &self.missions {
-                if let Some(run) = rig.port.inner.run_of(*m) {
+                if let Some(run) = rig.port.run_of(*m) {
                     self.runs.insert(run);
                 }
             }

@@ -48,7 +48,7 @@ mod m2as_fence;
 #[cfg(test)]
 mod m2as_model;
 #[cfg(test)]
-pub(crate) mod m2as_support;
+mod m2as_support;
 #[cfg(test)]
 mod real_broker;
 #[cfg(test)]
@@ -77,6 +77,12 @@ pub struct GovernedPort {
     runs: Mutex<Runs>,
     performed: AtomicUsize,
     cancel_failures: AtomicUsize,
+    /// M2a-S (tests): run just before an effect is performed, and before
+    /// the broker is asked about an approval (deterministic interleavings).
+    #[cfg(test)]
+    pub(crate) before_perform: crate::oracles::m2as_hooks::HookSlot,
+    #[cfg(test)]
+    pub(crate) before_approval: crate::oracles::m2as_hooks::HookSlot,
 }
 
 impl GovernedPort {
@@ -86,6 +92,10 @@ impl GovernedPort {
             runs: Mutex::new(Runs::default()),
             performed: AtomicUsize::new(0),
             cancel_failures: AtomicUsize::new(0),
+            #[cfg(test)]
+            before_perform: Default::default(),
+            #[cfg(test)]
+            before_approval: Default::default(),
         }
     }
 
@@ -171,6 +181,8 @@ impl EffectPort for GovernedPort {
         mission: MissionId,
         effect: &EffectRequest,
     ) -> Result<EffectOutcome, EffectRefusal> {
+        #[cfg(test)]
+        self.before_perform.fire();
         self.performed.fetch_add(1, Ordering::SeqCst);
         let intent = match effect {
             EffectRequest::Network(intent) => Intent::Request(intent.clone()),
@@ -234,6 +246,8 @@ impl EffectPort for GovernedPort {
     /// does not know it (another process's, or one built afresh that was
     /// not handed it back) says its outcome is unknown.
     fn approval(&self, mission: MissionId) -> ApprovalStatus {
+        #[cfg(test)]
+        self.before_approval.fire();
         let unknown = || ApprovalStatus::Lapsed {
             class: "approval_outcome_unknown".into(),
         };
