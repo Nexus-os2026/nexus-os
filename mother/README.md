@@ -131,7 +131,10 @@ Coordinator rules the oracles pin:
   held. Every journaled open request is handed back to the port before any
   session record is written, so an open that fails still withdraws it; the
   port's withdraw is an error for a handed-back request it does not hold
-  while the broker holds it open. A hold after a resume is journaled again.
+  while the broker holds it open (one two missions claim is recorded, not
+  given back, so an open that would leave it approvable fails closed). A
+  fence is final: a coordinator opened again after a break needs a new
+  port. A hold after a resume is journaled again.
 - M2a-S class test (`adapter/m2as_model.rs`): 500 seeded sequences on the
   real broker (more with `MOTHER_M2AS_SEQUENCES`), checking after every step
   that an acknowledged Stop or denial holds, that nothing reaches the world

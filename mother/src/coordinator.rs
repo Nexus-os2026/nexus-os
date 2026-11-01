@@ -376,7 +376,8 @@ impl Inner {
     /// M2a-S: on a journal whose last session closed cleanly, journal this
     /// session's opening at once. If that write fails nothing was lost (the
     /// journal still ends in the clean close, or a torn line it refuses), so
-    /// the journal is not poisoned: opening fails and may be tried again.
+    /// the journal is not poisoned: opening fails and may be tried again
+    /// (with a new port: the failure fenced this one).
     fn open_session_at_once(&mut self) -> Result<(), CoordinatorError> {
         self.write_record(SESSION, Event::SessionOpened, false)?;
         self.session_journaled = true;
@@ -1454,6 +1455,10 @@ impl<P: EffectPort> Coordinator<P> {
                 .count();
             if claims == 1 {
                 self.port.adopt(*id, pending);
+            } else {
+                // Given back to neither, but recorded: withdrawing it is an
+                // error while the broker still holds it open.
+                self.port.hand(*id, pending);
             }
         }
     }

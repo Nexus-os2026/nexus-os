@@ -140,6 +140,6 @@ pub trait EffectPort: Send + Sync + sealed::Sealed {
     fn fence(&self);
     /// M2a-S: a journaled action this port is not given back (claimed by
     /// two missions): recorded, so that withdrawing it is an error while
-    /// the broker still holds it open. Not implemented yet.
+    /// the broker still holds it open.
     fn hand(&self, mission: MissionId, pending: &PendingAction);
 }

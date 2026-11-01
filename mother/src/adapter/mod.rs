@@ -261,12 +261,19 @@ impl EffectPort for GovernedPort {
         }
     }
 
-    fn hand(&self, _mission: MissionId, _pending: &PendingAction) {}
+    fn hand(&self, mission: MissionId, pending: &PendingAction) {
+        self.lock()
+            .handed
+            .entry(mission)
+            .or_insert_with(|| pending.clone());
+    }
 
     /// The coordinator broke: cancel every run this port holds at the
     /// broker (no commitment of it can then be authorized or started, and
-    /// executing ones see their token set), and open no new one. A
-    /// cancellation the broker refuses is counted (`cancel_failures`).
+    /// executing ones see their token set), and open or take back no new
+    /// one. A cancellation the broker refuses is counted
+    /// (`cancel_failures`). A fence is final: a coordinator opened again
+    /// after a break needs a new port.
     fn fence(&self) {
         let runs: Vec<RunId> = {
             let mut runs = self.lock();
