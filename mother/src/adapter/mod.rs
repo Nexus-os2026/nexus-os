@@ -33,6 +33,7 @@ use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -95,6 +96,9 @@ struct Runs {
     /// not, so that a withdrawal is an error while the broker still holds
     /// open any of them this port does not hold.
     handed: BTreeMap<MissionId, Vec<PendingAction>>,
+    /// M2a-S: the runs the fence has still to cancel, last first. A sweep a
+    /// panic cut short is completed when the poisoned mutex is taken back.
+    unswept: Vec<RunId>,
 }
 
 /// The EffectPort over the governed-control broker.
@@ -194,13 +198,34 @@ impl GovernedPort {
     /// critical section that calls out is the fence's (it cancels runs at
     /// the broker), which sets `fenced` first. A poisoned mutex is taken
     /// back and its port treated as fenced, so every later call refuses
-    /// instead of panicking.
+    /// instead of panicking, and a sweep the panic cut short is completed
+    /// (its panic was raised already).
     fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
         self.runs.lock().unwrap_or_else(|poisoned| {
             let mut runs = poisoned.into_inner();
             runs.fenced = true;
+            let _ = self.sweep(&mut runs);
             runs
         })
+    }
+
+    /// Cancel every run the fence has still to cancel, each on its own: a
+    /// panic while cancelling one is counted as a failed cancellation and
+    /// does not skip the others. Returns the first panic, once all are done.
+    fn sweep(&self, runs: &mut Runs) -> Option<Box<dyn std::any::Any + Send>> {
+        let mut first = None;
+        while let Some(run) = runs.unswept.pop() {
+            let cancelled = catch_unwind(AssertUnwindSafe(|| {
+                self.cancel_run(run);
+                #[cfg(test)]
+                self.fence_between_cancels.fire();
+            }));
+            if let Err(panic) = cancelled {
+                self.cancel_failures.fetch_add(1, Ordering::SeqCst);
+                first.get_or_insert(panic);
+            }
+        }
+        first
     }
 
     /// The check before every broker call: refused once fenced. It waits
@@ -383,31 +408,31 @@ impl EffectPort for GovernedPort {
     /// decision: the fence never waits. Under the port's mutex it sets
     /// `fenced` and cancels every run registered, then returns.
     /// - A broker call that checks `fenced` from now on is refused.
-    /// - A call that checked it just before is not waited for: its run is
-    ///   cancelled here, so the broker refuses it, or an action executing on
-    ///   it sees its run's cancellation token (a call that stalls where no
-    ///   cancellation reaches it, such as a DNS lookup, is refused by the
-    ///   broker when it goes on).
+    /// - A call that checked it just before is not waited for: it is
+    ///   interrupted where the broker can (its run is cancelled here, so the
+    ///   broker refuses a step it has not begun, and an action executing on
+    ///   it sees its run's cancellation token). That is the in-flight limit
+    ///   of an ordinary Stop (README, known limits).
     /// - A run registration's critical section precedes this one (the run
     ///   is cancelled here) or follows it (it sees `fenced` and cancels the
     ///   run itself).
     ///
     /// A cancellation the broker refuses is counted (`cancel_failures`). A
-    /// fence is final: a coordinator opened again after a break needs a new
-    /// port.
+    /// panic while cancelling one run is counted too and does not skip the
+    /// others: the whole sweep is done, then the panic is resumed (under the
+    /// mutex, which it poisons; the port stays fenced). A fence is final: a
+    /// coordinator opened again after a break needs a new port.
     fn fence(&self) {
         {
             let mut runs = self.lock();
             runs.fenced = true;
-            let open: Vec<RunId> = runs.open.values().copied().collect();
+            runs.unswept = runs.open.values().rev().copied().collect();
             #[cfg(test)]
-            if !open.is_empty() {
+            if !runs.unswept.is_empty() {
                 self.first_fence_cancel.fire(runs.fenced);
             }
-            for run in open {
-                self.cancel_run(run);
-                #[cfg(test)]
-                self.fence_between_cancels.fire();
+            if let Some(panic) = self.sweep(&mut runs) {
+                resume_unwind(panic);
             }
         }
         #[cfg(test)]

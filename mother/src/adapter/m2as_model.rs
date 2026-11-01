@@ -10,7 +10,11 @@
 //! consent dialog, before an approval query). After every step:
 //!
 //! - (a) a Stop or denial that returned Ok holds forever;
-//! - (b) once the coordinator breaks, nothing more reaches the world;
+//! - (b) after a break, no effect dispatched after the break executes; an
+//!   effect already dispatched (journaled and past the fenced check) may
+//!   still enter the broker and is interrupted where the broker can, the
+//!   same in-flight limit as an ordinary Stop (checked here as: no request
+//!   of these sequences reaches the world after the break);
 //! - (c) after an unclean session every unfinished mission is held, and a
 //!   held mission dispatches nothing until a journaled resume;
 //! - (d) after any open() error, no request of the sequence's runs is
