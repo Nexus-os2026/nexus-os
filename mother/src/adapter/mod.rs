@@ -58,6 +58,8 @@ mod m2as_mutants;
 #[cfg(test)]
 mod m2as_nowait;
 #[cfg(test)]
+mod m2as_poison;
+#[cfg(test)]
 mod m2as_review2;
 #[cfg(test)]
 mod m2as_scan;
