@@ -29,9 +29,14 @@ use crate::authority::policy::GrantScope;
 use crate::authority::run::RunOrigin;
 use crate::authority::AuthorityError;
 use crate::broker::{CredentialSpec, Placement, SecretSource, SecretUnavailable};
+use crate::connector::{
+    Connector, ConnectorIntent, ConnectorOperation, Connectors, DestinationIdentity,
+    DestinationResolver, OperationRequest,
+};
 use crate::control::{EffectOutput, PendingEffect, Preparation};
 use crate::egress::destination::Destination;
-use crate::egress::{EgressIntent, ReleaseCredential};
+use crate::egress::transport::Method;
+use crate::egress::{Egress, EgressIntent, ReleaseCredential};
 use crate::evidence_store::tests::Scratch;
 use crate::evidence_store::{Fault, PrimaryEvidence};
 use crate::harness_tests::{temp_root, Reply, TestServer, Yes};
@@ -1132,6 +1137,229 @@ fn m2c_b8_pending_effects_meet_the_halt() {
     f.authorize(id, run).unwrap();
     f.execute(id, run).unwrap();
     assert_eq!(counter.ran.load(Ordering::SeqCst), 1);
+    f.gov.probe_locks();
+}
+
+/// B8's connector fixture: one discovery read (`/b8/who`) identifies a
+/// post's (`/b8/post`) destination, over governed egress to a loopback
+/// world; no credential.
+fn b8_read(_: &serde_json::Value) -> Result<OperationRequest, AuthorityError> {
+    Ok(OperationRequest {
+        path: "/b8/who".into(),
+        body: None,
+        content_type: None,
+        summary: vec!["Who is it".into()],
+    })
+}
+
+fn b8_post(_: &serde_json::Value) -> Result<OperationRequest, AuthorityError> {
+    Ok(OperationRequest {
+        path: "/b8/post".into(),
+        body: Some("hello".into()),
+        content_type: Some("text/plain"),
+        summary: vec!["Post hello".into()],
+    })
+}
+
+fn b8_lookups(
+    _: &serde_json::Value,
+) -> Result<Vec<(&'static str, serde_json::Value)>, AuthorityError> {
+    Ok(vec![("b8.who", serde_json::Value::Null)])
+}
+
+fn b8_identify(
+    _: &serde_json::Value,
+    _: &[EffectOutput],
+) -> Result<DestinationIdentity, AuthorityError> {
+    Ok(DestinationIdentity {
+        lines: vec!["Destination: b8".into()],
+        display: "b8".into(),
+    })
+}
+
+/// The world's armed hold: tell the test, then wait for its release.
+type Hold = Arc<Mutex<Option<(Sender<()>, Receiver<()>)>>>;
+
+/// A world whose next discovery read, once armed, is held unanswered until
+/// released (by a send or the guard's drop), and the connector over it.
+struct B8World {
+    server: TestServer,
+    hold: Hold,
+    connectors: Arc<Connectors>,
+}
+
+impl B8World {
+    fn new(f: &Fx) -> Self {
+        let hold: Hold = Arc::default();
+        let server = {
+            let hold = hold.clone();
+            TestServer::start(move |request| {
+                if request.path == "/b8/who" {
+                    let armed = hold.lock().unwrap().take();
+                    if let Some((entered, released)) = armed {
+                        let _ = entered.send(());
+                        let _ = released.recv_timeout(3 * JOIN);
+                    }
+                }
+                Reply::ok("{}")
+            })
+        };
+        let connector = Connector {
+            id: "b8",
+            origin: server.origin(),
+            allow_private: true,
+            operations: vec![
+                ConnectorOperation {
+                    id: "b8.who",
+                    class: EffectClass::R1,
+                    method: Method::Get,
+                    credential: None,
+                    build: b8_read,
+                    destination: None,
+                },
+                ConnectorOperation {
+                    id: "b8.post",
+                    class: EffectClass::R2,
+                    method: Method::Post,
+                    credential: None,
+                    build: b8_post,
+                    destination: Some(DestinationResolver {
+                        lookups: b8_lookups,
+                        identify: b8_identify,
+                    }),
+                },
+            ],
+        };
+        let connectors = Arc::new(Connectors::new(
+            vec![connector],
+            Arc::new(Egress::system()),
+            f.gov.credentials.clone(),
+        ));
+        f.gov
+            .authority()
+            .grants()
+            .request(
+                connectors
+                    .grant_scope("b8", "owner", &["b8.post".to_string()])
+                    .unwrap(),
+                Duration::from_secs(600),
+                &Owner,
+            )
+            .unwrap();
+        Self {
+            server,
+            hold,
+            connectors,
+        }
+    }
+
+    /// Hold the next discovery read at the world.
+    fn hold_next_read(&self) -> Pause {
+        let (entered, reached) = channel();
+        let (release, released) = channel::<()>();
+        *self.hold.lock().unwrap() = Some((entered, released));
+        Pause {
+            entered: reached,
+            release: Some(release),
+        }
+    }
+
+    /// Propose the post in `run` (its discovery read runs first), on a
+    /// thread.
+    fn propose(&self, f: &Fx, run: RunId) -> Receiver<Result<CommitmentId, AuthorityError>> {
+        let (gov, connectors) = (f.gov.clone(), self.connectors.clone());
+        spawn(move || {
+            connectors
+                .propose(
+                    &gov.control,
+                    &mother(),
+                    run,
+                    &ConnectorIntent {
+                        operation: "b8.post".into(),
+                        input: serde_json::Value::Null,
+                    },
+                )
+                .map(|view| view.id)
+        })
+    }
+
+    fn reached(&self, path: &str) -> usize {
+        self.server
+            .received()
+            .iter()
+            .filter(|r| r.path == path)
+            .count()
+    }
+}
+
+/// B8 (Architect decision 1, `test(oracle-add)`): connectors meet the halt.
+/// Discovery paused at its egress read (the world holds the read), then a
+/// halt: the read is cancelled while the world still holds it, and no post
+/// is proposed or sent. A bound post re-reading its destination under its
+/// own commitment, paused there, then a halt: cancelled while held, and
+/// nothing is posted. A bound post awaiting approval: the halt revokes it
+/// and nothing is posted. Positive control first, on the same door.
+#[test]
+fn m2c_b8_connectors_meet_the_halt() {
+    let f = fx();
+    let world = B8World::new(&f);
+    let door = Arc::new(f.door());
+
+    // Positive control: discovery, approval, the re-read and the post.
+    let run = door.open_run().unwrap();
+    let post = join(&world.propose(&f, run)).unwrap();
+    f.authorize(post, run).unwrap();
+    f.execute(post, run).unwrap();
+    assert_eq!(world.reached("/b8/who"), 2);
+    assert_eq!(world.reached("/b8/post"), 1);
+
+    // Discovery paused at its egress read, then the halt.
+    let run = door.open_run().unwrap();
+    let held = world.hold_next_read();
+    let proposing = world.propose(&f, run);
+    held.reached();
+    let batch = halt(&door);
+    // Bounded, with the world still holding the read: the halt's token
+    // cancels it, not the world's answer.
+    let proposed = join(&proposing);
+    assert!(proposed.is_err(), "discovery is cancelled or refused");
+    held.release();
+    let views = f.gov.authority().commitments().views_of_run(run);
+    assert_eq!(views.len(), 1, "only the read: no post was proposed");
+    assert_ne!(views[0].state, CommitmentState::Succeeded);
+    assert!(f.cancelled(run));
+    assert_eq!(world.reached("/b8/post"), 1, "nothing more was posted");
+    let _ = batch.write();
+
+    // A bound post paused at its re-read under its own commitment.
+    let door = Arc::new(f.door());
+    let run = door.open_run().unwrap();
+    let post = join(&world.propose(&f, run)).unwrap();
+    f.authorize(post, run).unwrap();
+    let held = world.hold_next_read();
+    let executing = {
+        let gov = f.gov.clone();
+        spawn(move || gov.control.execute(post, &mother(), run).map(|_| ()))
+    };
+    held.reached();
+    let batch = halt(&door);
+    let executed = join(&executing);
+    assert!(executed.is_err(), "the bound post is cancelled");
+    held.release();
+    assert_ne!(f.state(post), CommitmentState::Succeeded);
+    assert_eq!(world.reached("/b8/post"), 1, "nothing was posted");
+    let _ = batch.write();
+
+    // A bound post awaiting approval: revoked, never posted.
+    let door = Arc::new(f.door());
+    let run = door.open_run().unwrap();
+    let post = join(&world.propose(&f, run)).unwrap();
+    let batch = halt(&door);
+    assert_eq!(f.state(post), CommitmentState::Revoked);
+    assert!(f.authorize(post, run).is_err());
+    assert!(f.execute(post, run).is_err());
+    assert_eq!(world.reached("/b8/post"), 1, "nothing was posted");
+    let _ = batch.write();
     f.gov.probe_locks();
 }
 
