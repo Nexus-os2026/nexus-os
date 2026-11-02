@@ -18,7 +18,7 @@ use super::m2c_support::{
     unexpected_dialogs, HeldOwner, Home,
 };
 use crate::coordinator::CoordinatorError;
-use crate::journal::{verify, Event, JournalStore, MemoryJournal, MissionId};
+use crate::journal::{verify, Event, MemoryJournal, MissionId};
 use crate::oracles::m2c_owner::OwnerLiftsTheStop;
 use crate::oracles::{contract_with, No, Recording, Yes};
 use crate::state::MissionState;
@@ -26,9 +26,10 @@ use nexus_governed_control::governed::GovernedControl;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-/// How many `Resumed` records the journal holds for `id`.
+/// How many `Resumed` records the journal holds for `id` (read from its
+/// lines: a poisoned journal refuses `load`).
 fn resumed(disk: &Disk, id: MissionId) -> usize {
-    verify(&disk.inner.load().unwrap())
+    verify(&disk.inner.lines())
         .unwrap()
         .iter()
         .filter(|e| e.mission == id && matches!(e.event, Event::Resumed))
