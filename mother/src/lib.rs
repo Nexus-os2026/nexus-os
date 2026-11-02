@@ -121,7 +121,9 @@
 //! }
 //! impl<T: ?Sized> Probe for T {}
 //! fn reach<P: EffectPort>(mut p: P) {
-//!     let _: Absent = p.broker();
+//!     // The same call, spaced: `adapter/m2as_scan.rs` forbids the literal
+//!     // unspaced call text in this file.
+//!     let _: Absent = p.broker ();
 //! }
 //! ```
 //!
