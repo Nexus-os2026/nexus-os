@@ -365,7 +365,7 @@ fn finish(
         primary,
         clock,
         grant: grant
-            .unwrap_or_else(|| GrantId::parse("grt-00000000000000000000000000000000").unwrap()),
+            .unwrap_or_else(|| GrantId::parse("grant-00000000000000000000000000000000").unwrap()),
         server,
         _keep: keep,
     }
@@ -614,12 +614,12 @@ fn m2c_b3_a_start_held_in_the_store_is_refused() {
     );
     assert_eq!(counter.ran.load(Ordering::SeqCst), 0);
     assert_eq!(f.state(id), CommitmentState::Revoked);
+    let _ = batch.write();
     let revoked = f.records(EvidencePhase::Revoked);
     assert!(revoked.iter().any(|r| r
         .detail
         .iter()
         .any(|(k, v)| k == "interrupted" && v == "start")));
-    let _ = batch.write();
     f.gov.probe_locks();
 }
 
@@ -1705,7 +1705,7 @@ fn m2c_b13_the_lock_order_has_no_cycle() {
                     let _ = gov.control.authorize(id, &mother(), run, &Owner);
                 }
             });
-            let _ = join(&running);
+            join(&running);
             paused.release();
             let _ = join(&halting);
             f.gov.probe_locks();
@@ -1715,8 +1715,9 @@ fn m2c_b13_the_lock_order_has_no_cycle() {
     // A projection that halts the door and presses the emergency stop while
     // it projects a Started record (it runs with no broker lock held).
     let scratch = Scratch::new();
-    let doors: Arc<Mutex<Option<(Arc<AgentDoor>, Arc<GovernedControl>)>>> = Default::default();
-    struct HaltsOnStart(Arc<Mutex<Option<(Arc<AgentDoor>, Arc<GovernedControl>)>>>);
+    type Doors = Arc<Mutex<Option<(Arc<AgentDoor>, Arc<GovernedControl>)>>>;
+    let doors: Doors = Default::default();
+    struct HaltsOnStart(Doors);
     impl crate::authority::evidence::EvidenceProjection for HaltsOnStart {
         fn project(&self, record: &EvidenceRecord) {
             if record.phase == EvidencePhase::Started {
