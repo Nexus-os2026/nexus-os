@@ -8,6 +8,7 @@ pub mod clock;
 pub mod commitment;
 pub mod effect;
 pub mod evidence;
+pub mod halt;
 pub mod ids;
 pub mod policy;
 pub mod run;
@@ -25,6 +26,7 @@ use self::approval::{
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
 use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
+use self::halt::{HaltCounters, RecordBatch};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
 use self::run::{GroupId, Lift, Refusal, RunClass, RunOrigin, RunRegistry};
@@ -62,6 +64,9 @@ pub enum AuthorityError {
     Capacity,
     /// Mother Nexus M2c: the run is not in the calling door's group.
     NotMember,
+    /// Mother Nexus M2c PR-B: the calling door, or the run's door group, is
+    /// halted (final).
+    Halted,
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -102,6 +107,7 @@ impl AuthorityError {
             AuthorityError::EvidenceUnavailable => "evidence_unavailable",
             AuthorityError::Capacity => "capacity",
             AuthorityError::NotMember => "not_member",
+            AuthorityError::Halted => "halted",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
@@ -144,6 +150,8 @@ pub struct Authority {
     commitments: CommitmentRegistry,
     evidence: Arc<dyn EvidenceSink>,
     clock: Arc<dyn Clock>,
+    /// M2c PR-B: every door halt's records, accounted for.
+    halt_counters: Arc<HaltCounters>,
 }
 
 impl Authority {
@@ -169,7 +177,24 @@ impl Authority {
             commitments,
             evidence,
             clock,
+            halt_counters: Arc::new(HaltCounters::default()),
         }
+    }
+
+    /// M2c PR-B: an empty record batch, counted from now on.
+    pub(crate) fn batch(&self) -> RecordBatch {
+        RecordBatch::new(self.evidence.clone(), self.halt_counters.clone())
+    }
+
+    /// M2c PR-B: the halt counters.
+    pub(crate) fn halt_records(&self) -> halt::HaltRecords {
+        self.halt_counters.snapshot()
+    }
+
+    /// The broker's test hooks (tests).
+    #[cfg(test)]
+    pub(crate) fn hooks(&self) -> &Arc<crate::test_hooks::Hooks> {
+        self.commitments.hooks()
     }
 
     pub fn grants(&self) -> &GrantStore {
@@ -577,10 +602,18 @@ impl Authority {
         let run = self
             .runs
             .open_in(agent, origin, class, self.clock.wall_ms(), group)?;
+        #[cfg(test)]
+        self.hooks().fire(crate::test_hooks::at::OPEN_INSERTED);
         record.run = Some(run.to_string());
         if self.record(&record).is_err() {
             self.runs.cancel(run);
             return Err(AuthorityError::EvidenceUnavailable);
+        }
+        // M2c PR-B, after the record: a door's run its halt cancelled meanwhile
+        // is refused (an earlier opening may still return one, cancelled for
+        // good: every call on it refuses).
+        if group.is_some() && self.runs.view(run).is_some_and(|view| view.cancelled) {
+            return Err(AuthorityError::Halted);
         }
         Ok(run)
     }

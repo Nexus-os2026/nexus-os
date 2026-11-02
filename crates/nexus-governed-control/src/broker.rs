@@ -34,14 +34,14 @@ use crate::authority::commitment::{CommitmentRegistry, CommitmentView, Execution
 use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
 use crate::authority::ids::{AgentId, LeaseId, RunId};
 use crate::authority::policy::PolicyGeneration;
-use crate::authority::run::RunRegistry;
+use crate::authority::run::{CancelToken, RunRegistry};
 use crate::authority::{Authority, AuthorityError};
 use crate::egress::destination::Destination;
 use crate::egress::transport::SecretHeader;
 use crate::egress::ReleaseCredential;
 use reqwest::header::{HeaderName, AUTHORIZATION};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 use zeroize::Zeroizing;
 
@@ -180,11 +180,19 @@ struct Room<'a> {
 }
 
 impl Room<'_> {
-    fn fill(mut self, id: LeaseId, lease: Lease) {
+    /// Insert the lease, unless its run's token was set meanwhile (M2c PR-B:
+    /// a halt or cancellation that came while the issue was recorded wins;
+    /// the token is an atomic, read under this lock alone). Returns whether
+    /// it was inserted.
+    fn fill(mut self, id: LeaseId, lease: Lease, token: &CancelToken) -> bool {
         let mut leases = self.table.leases.lock().expect("leases");
         leases.reserved = leases.reserved.saturating_sub(1);
-        leases.map.insert(id, lease);
         self.held = false;
+        if token.is_cancelled() {
+            return false;
+        }
+        leases.map.insert(id, lease);
+        true
     }
 }
 
@@ -199,8 +207,11 @@ impl Drop for Room<'_> {
 }
 
 impl LeaseEnd for LeaseTable {
+    /// Ending a lease only ever withdraws a credential: it goes on even if
+    /// the table's lock is poisoned (M2c PR-B).
     fn end(&self, lease: LeaseId) {
-        if let Some(lease) = self.leases.lock().expect("leases").map.get_mut(&lease) {
+        let mut leases = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(lease) = leases.map.get_mut(&lease) {
             lease.state = LeaseState::Ended;
         }
     }
@@ -220,6 +231,9 @@ pub struct CredentialBroker {
     clock: Arc<dyn Clock>,
     evidence: Arc<dyn EvidenceSink>,
     generation: Arc<PolicyGeneration>,
+    /// The broker's test hooks (tests).
+    #[cfg(test)]
+    hooks: Arc<crate::test_hooks::Hooks>,
 }
 
 impl CredentialBroker {
@@ -236,6 +250,8 @@ impl CredentialBroker {
             clock: authority.clock().clone(),
             evidence: authority.evidence().clone(),
             generation: authority.generation().clone(),
+            #[cfg(test)]
+            hooks: authority.hooks().clone(),
         })
     }
 
@@ -256,7 +272,7 @@ impl CredentialBroker {
         origin: &Destination,
         ttl: Duration,
     ) -> Result<LeaseId, AuthorityError> {
-        self.runs.check(run, agent)?;
+        let token = self.runs.check(run, agent)?;
         let id = LeaseId::fresh();
         let now = self.clock.monotonic_ms();
         let ttl_ms = u64::try_from(ttl.min(MAX_LEASE_TTL).as_millis()).unwrap_or(u64::MAX);
@@ -291,7 +307,9 @@ impl CredentialBroker {
         };
         // Evidence first: an unrecorded lease is never issued.
         self.record(record)?;
-        room.fill(
+        #[cfg(test)]
+        self.hooks.fire(crate::test_hooks::at::LEASE_RECORDED);
+        let inserted = room.fill(
             id,
             Lease {
                 agent: agent.clone(),
@@ -301,8 +319,43 @@ impl CredentialBroker {
                 deadline_ms: now.saturating_add(ttl_ms),
                 state: LeaseState::Issued,
             },
+            &token,
         );
+        if !inserted {
+            // Why, asked with the lease table's lock released (no L -> R edge).
+            return Err(self
+                .runs
+                .check(run, agent)
+                .err()
+                .unwrap_or(AuthorityError::RunCancelled));
+        }
         Ok(id)
+    }
+
+    /// M2c PR-B, a door halt's lease step: under the lease table's lock
+    /// alone, taken even if poisoned, end every lease of `runs`.
+    pub(crate) fn end_runs(&self, runs: &std::collections::BTreeSet<RunId>) {
+        let mut leases = self
+            .table
+            .leases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        for lease in leases.map.values_mut() {
+            if runs.contains(&lease.run) {
+                lease.state = LeaseState::Ended;
+            }
+        }
+    }
+
+    /// Take the lease table's lock and panic while holding it (tests).
+    #[cfg(test)]
+    pub(crate) fn panic_holding_leases(&self) {
+        let _leases = self
+            .table
+            .leases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        panic!("the lease table is poisoned on purpose (test)");
     }
 
     /// Take and release the lease table's lock once (tests).
@@ -452,8 +505,12 @@ impl ReleaseCredential for CredentialBroker {
         // cancellation, a stop, the lease's expiry) is asked about now,
         // before the vault is read.
         self.record(record)?;
+        #[cfg(test)]
+        self.hooks.fire(crate::test_hooks::at::RELEASE_RECORDED);
         self.still_releasing(lease_id, guard, &view)?;
         let secret = self.source.read(spec.scope, spec.name);
+        #[cfg(test)]
+        self.hooks.fire(crate::test_hooks::at::RELEASE_VAULT_READ);
         // And once more now that the vault has answered: refused, the secret
         // read is dropped (zeroized) and no header is built. Later than
         // this, egress's own look before the exchange and the transport's

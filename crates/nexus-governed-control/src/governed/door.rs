@@ -10,8 +10,15 @@
 //! Nothing reachable from a door leads to the front door, the authority,
 //! the issuer or an owner API, and a door cannot be built, cloned or
 //! deserialized outside this crate.
+//!
+//! PR-B: its holder can halt it ([`AgentDoor::halt`]), for good. A halted
+//! door refuses `open_run`, `agent_action`, `adopt`, `finish_when_settled`,
+//! `confirm_mission` and `confirm_held_mission` with `Halted`, decided under
+//! the runs lock before anything is settled, asked or written; it still
+//! allows `cancel_run` and `halt` (they only stop effects) and answers
+//! `clock`, `emergency_stopped` and `commitment`. Nothing lifts a door halt.
 
-use super::{AgentOutcome, GovernedControl, Intent};
+use super::{AgentOutcome, GovernedControl, HaltReason, Intent, RecordBatch};
 use crate::authority::approval::{
     ControlConfirmer, MissionApproval, MissionConfirmation, MissionResumeApproval,
     MissionResumeConfirmation,
@@ -84,10 +91,40 @@ impl AgentDoor {
     /// Open an agent run for this door's agent; it joins this door's group
     /// as it is inserted.
     pub fn open_run(&self) -> Result<RunId, AuthorityError> {
+        // A halted door settles nothing (settling may write).
+        self.not_halted()?;
         self.control.settle();
+        #[cfg(test)]
         self.control
+            .hooks()
+            .fire(crate::test_hooks::at::OPEN_SETTLED);
+        let run = self
+            .control
             .authority()
-            .open_run_in(self.core.agent.clone(), self.core.group)
+            .open_run_in(self.core.agent.clone(), self.core.group)?;
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::OPEN_CHECKED);
+        Ok(run)
+    }
+
+    /// PR-B: refused once this door is halted (read under the runs lock).
+    fn not_halted(&self) -> Result<(), AuthorityError> {
+        if self.control.authority().runs().door_halted(self.core.group) {
+            return Err(AuthorityError::Halted);
+        }
+        Ok(())
+    }
+
+    /// PR-B: halt this door, for good: every run of its group is cancelled,
+    /// their unconsumed commitments revoked, their leases ended and their
+    /// pending effects dropped, in memory (no I/O). Once it returns, none of
+    /// its runs admits a commitment to Executing, and none joins its group.
+    /// The records of what this call did are returned, to write once no lock
+    /// is held. Idempotent: a later call makes only what is left to make.
+    pub fn halt(&self, reason: HaltReason) -> RecordBatch {
+        self.control.halt_door(&self.core, reason)
     }
 
     /// The run must be in this door's group.
@@ -95,7 +132,7 @@ impl AgentDoor {
         self.control
             .authority()
             .runs()
-            .check_member(run, &self.core.agent, self.core.group)
+            .check_member(run, &self.core.agent, self.core.group, false)
     }
 
     /// An action in one of this door's runs, under the owner's standing
@@ -106,13 +143,24 @@ impl AgentDoor {
         intent: &Intent,
     ) -> Result<AgentOutcome, AuthorityError> {
         self.member(run)?;
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::DOOR_MEMBER_CHECKED);
         self.control.agent_action(&self.core.agent, run, intent)
     }
 
-    /// Cancel one of this door's runs (recorded).
-    pub fn cancel_run(&self, run: RunId) -> Result<(), AuthorityError> {
-        self.member(run)?;
-        self.control.cancel_run(run)
+    /// Cancel one of this door's runs, also once the door is halted (a
+    /// cancellation only stops effects). PR-B: in memory; the records of
+    /// what this call did are returned, to write once no lock is held.
+    pub fn cancel_run(&self, run: RunId) -> Result<RecordBatch, AuthorityError> {
+        self.control.authority().runs().check_member(
+            run,
+            &self.core.agent,
+            self.core.group,
+            true,
+        )?;
+        Ok(self.control.cancel_member(run))
     }
 
     /// One of this door's runs is done: it finishes once nothing of it
@@ -181,8 +229,16 @@ impl AgentDoor {
         &self,
         request: &MissionConfirmation,
     ) -> Result<MissionApproval, AuthorityError> {
+        self.not_halted()?;
         let authority = self.control.authority();
         let approval = authority.confirm_mission(request, &*self.confirmer)?;
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::MISSION_RECORDED);
+        // After the record: it says the owner said yes; no approval exists
+        // if this door was halted, or a stop came, meanwhile.
+        self.not_halted()?;
         authority.mission_admissible()?;
         Ok(approval)
     }
@@ -195,8 +251,17 @@ impl AgentDoor {
         &self,
         request: &MissionResumeConfirmation,
     ) -> Result<MissionResumeApproval, AuthorityError> {
-        self.control
+        self.not_halted()?;
+        let approval = self
+            .control
             .authority()
-            .confirm_held_mission(request, &*self.confirmer)
+            .confirm_held_mission(request, &*self.confirmer)?;
+        #[cfg(test)]
+        self.control
+            .hooks()
+            .fire(crate::test_hooks::at::HELD_RECORDED);
+        // After the record (§2.6 step 6): no approval if halted meanwhile.
+        self.not_halted()?;
+        Ok(approval)
     }
 }

@@ -13,6 +13,8 @@
 //! or adopts it, and leaves it only when the registry drops the run or the
 //! door is gone. Every membership change is made under the runs lock.
 
+use super::evidence::{EvidencePhase, EvidenceRecord};
+use super::halt::{HaltReason, RecordBatch};
 use super::ids::{AgentId, RunId};
 use super::AuthorityError;
 use std::any::Any;
@@ -89,6 +91,8 @@ struct DoorEntry {
     life: DoorLife,
     agent: AgentId,
     active: bool,
+    /// M2c PR-B: halted (final): its runs refuse every admission.
+    halted: bool,
     members: BTreeSet<RunId>,
 }
 
@@ -119,6 +123,14 @@ impl DerefMut for Table {
 }
 
 impl Table {
+    /// Whether `entry` lists a halted group.
+    fn in_halted_group(&self, entry: &RunEntry) -> bool {
+        entry
+            .groups
+            .iter()
+            .any(|group| self.doors.get(group).is_some_and(|door| door.halted))
+    }
+
     /// Reclaim the groups of doors that are gone: each entry, and its id in
     /// its members' lists.
     fn prune_doors(&mut self) {
@@ -301,6 +313,7 @@ impl RunRegistry {
         }
         if let Some(group) = group {
             match runs.doors.get(&group) {
+                Some(door) if door.halted => return Err(AuthorityError::Halted),
                 Some(door) if door.active && door.alive() => {
                     if door.agent != entry.view.agent {
                         return Err(AuthorityError::WrongAgent);
@@ -347,6 +360,7 @@ impl RunRegistry {
                 life,
                 agent: agent.clone(),
                 active: false,
+                halted: false,
                 members: BTreeSet::new(),
             },
         );
@@ -380,14 +394,20 @@ impl RunRegistry {
     }
 
     /// M2c, every door call on a run: the run exists, is `agent`'s and an
-    /// agent's run, and lists `group`. Changes nothing.
+    /// agent's run, and lists `group`; PR-B: and the group is not halted,
+    /// unless `halted_too` (a cancellation only stops effects). Changes
+    /// nothing.
     pub(crate) fn check_member(
         &self,
         run: RunId,
         agent: &AgentId,
         group: GroupId,
+        halted_too: bool,
     ) -> Result<(), AuthorityError> {
         let runs = self.runs.lock().expect("runs");
+        if !halted_too && runs.doors.get(&group).is_some_and(|door| door.halted) {
+            return Err(AuthorityError::Halted);
+        }
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
@@ -399,6 +419,76 @@ impl RunRegistry {
             return Err(AuthorityError::NotMember);
         }
         Ok(())
+    }
+
+    /// M2c PR-B: whether `group` is halted (read under the lock: a door's
+    /// precheck before anything it would settle or ask).
+    pub(crate) fn door_halted(&self, group: GroupId) -> bool {
+        self.runs
+            .lock()
+            .expect("runs")
+            .doors
+            .get(&group)
+            .is_some_and(|door| door.halted)
+    }
+
+    /// M2c PR-B, the halt's first step, in one hold of the runs lock, taken
+    /// even if poisoned: mark `group` halted (its `door_halted` record goes
+    /// to the call that set it); snapshot every member, cancelled ones too
+    /// (§11 C1: the later steps use only this snapshot); cancel every
+    /// active member, each record pushed as it is made. Returns the
+    /// snapshot, and whether this call set the flag. No other lock, no I/O.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn halt_group(
+        &self,
+        group: GroupId,
+        door: &str,
+        agent: &AgentId,
+        reason: HaltReason,
+        wall_ms: u64,
+        generation: u64,
+        batch: &mut RecordBatch,
+    ) -> (BTreeSet<RunId>, bool) {
+        let mut guard = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+        let table = &mut *guard;
+        let Some(entry) = table.doors.get_mut(&group) else {
+            return (BTreeSet::new(), false);
+        };
+        let newly = !entry.halted;
+        if newly {
+            entry.halted = true;
+            let mut record = EvidenceRecord::new(EvidencePhase::DoorHalted, wall_ms, generation);
+            record.agent = Some(agent.to_string());
+            record.cancelled = true;
+            record.detail.push(("door".into(), door.to_string()));
+            record
+                .detail
+                .push(("reason".into(), reason.as_str().into()));
+            batch.push(record);
+        }
+        let members = entry.members.clone();
+        for run in &members {
+            if let Some(run_entry) = table.runs.get_mut(run) {
+                cancel_one(run_entry, wall_ms, generation, batch);
+            }
+        }
+        (members, newly)
+    }
+
+    /// M2c PR-B, a door's cancellation of one run, under the runs lock taken
+    /// even if poisoned: its record goes into `batch` if this call made the
+    /// transition.
+    pub(crate) fn cancel_into(
+        &self,
+        run: RunId,
+        wall_ms: u64,
+        generation: u64,
+        batch: &mut RecordBatch,
+    ) {
+        let mut runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(entry) = runs.get_mut(&run) {
+            cancel_one(entry, wall_ms, generation, batch);
+        }
     }
 
     /// M2c: whether `run` lists `group` (read-only).
@@ -424,12 +514,10 @@ impl RunRegistry {
         let mut guard = self.runs.lock().expect("runs");
         let table = &mut *guard;
         table.prune_doors();
-        if !table
-            .doors
-            .get(&group)
-            .is_some_and(|door| door.active && door.alive() && &door.agent == agent)
-        {
-            return Err(AuthorityError::NotMember);
+        match table.doors.get(&group) {
+            Some(door) if door.halted => return Err(AuthorityError::Halted),
+            Some(door) if door.active && door.alive() && &door.agent == agent => {}
+            _ => return Err(AuthorityError::NotMember),
         }
         let entry = table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
@@ -467,6 +555,10 @@ impl RunRegistry {
         let entry = runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
+        }
+        // M2c PR-B: a run of a halted door's group says so.
+        if runs.in_halted_group(entry) {
+            return Err(AuthorityError::Halted);
         }
         if entry.view.finished {
             return Err(AuthorityError::RunNotActive);
@@ -692,5 +784,21 @@ impl RunRegistry {
             .collect();
         views.sort_by_key(|v| v.opened_wall_ms);
         views
+    }
+}
+
+/// Cancel one run that is still active, as `cancel` does, and push its
+/// `run_cancelled` record (M2c PR-B: the record of the call that made the
+/// transition). Under the runs lock.
+fn cancel_one(entry: &mut RunEntry, wall_ms: u64, generation: u64, batch: &mut RecordBatch) {
+    let was_active = !entry.view.cancelled && !entry.view.finished;
+    entry.view.cancelled = true;
+    entry.cancelled.store(true, Ordering::SeqCst);
+    if was_active {
+        let mut record = EvidenceRecord::new(EvidencePhase::RunCancelled, wall_ms, generation);
+        record.run = Some(entry.view.id.to_string());
+        record.agent = Some(entry.view.agent.to_string());
+        record.cancelled = true;
+        batch.push(record);
     }
 }
