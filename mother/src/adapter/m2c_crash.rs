@@ -1,13 +1,20 @@
 //! M2c-B (PR-B) crash-point oracles, pre-registered before the halt exists
 //! (design v3 §6, §7.3, §11 C4): MC1–MC4 in-process over the shared broker,
-//! and CR1–CR8 across real processes (N4b).
+//! and CR1–CR7 across real processes (N4b). CR8's property (an Executing
+//! member, the whole batch durable, a crash before its end: unsettled) is
+//! the broker's R6 (Architect decision 3): no record is written between
+//! Executing and Finished, so no Mother test can hold a worker there.
 //!
 //! The child-process harness: a CR test re-runs this test binary with
 //! `--exact adapter::m2c_crash::m2c_crash_child`, which does nothing unless
 //! `MOTHER_M2C_CHILD` is set. Child 1 builds its own broker and Mother in a
 //! fresh home (one front door per process), runs to the crash point and
 //! aborts; just before, it writes down every broker record committed so far
-//! (a projection sees a record only after its commit). Child 2 reopens the
+//! (a projection sees a record only after its commit), then its receipt:
+//! the point it is at, whether its coordinator broke, the halt records
+//! counted since the break began and how many records the gate saw. The
+//! parent accepts only that abort with a well-formed receipt naming the
+//! expected point. Child 2 reopens the
 //! same home in a new process, answers the dialogs by script, and prints its
 //! observations as one JSON line. The parent waits for each child with a
 //! 60 s bound, polling its own child handle and killing that handle on
@@ -30,7 +37,7 @@ use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
@@ -212,10 +219,8 @@ impl JournalStore for FailingFile {
 }
 
 /// The world, in the child: answers every request, except one whose path
-/// holds `/hang`, which it takes and never answers (its action stays
-/// Executing). Says when it took a hanging request.
-fn world(listener: TcpListener) -> std::sync::mpsc::Receiver<()> {
-    let (took, taken) = std::sync::mpsc::channel();
+/// holds `/hang`, which it takes and never answers.
+fn world(listener: TcpListener) {
     std::thread::spawn(move || {
         let mut kept = Vec::new();
         for stream in listener.incoming() {
@@ -225,7 +230,6 @@ fn world(listener: TcpListener) -> std::sync::mpsc::Receiver<()> {
             let line = String::from_utf8_lossy(&request[..n]).to_string();
             if line.contains("/hang") {
                 kept.push(stream);
-                let _ = took.send(());
             } else {
                 let _ = stream.write_all(
                     b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nmother",
@@ -233,29 +237,62 @@ fn world(listener: TcpListener) -> std::sync::mpsc::Receiver<()> {
             }
         }
     });
-    taken
 }
 
-/// Write down every broker record committed so far (with where the break
-/// began), then abort the process.
-fn crash_now(home: &Home, dir: &Path, break_at: usize) -> ! {
-    let seen = home.gate.seen();
-    let mut text = format!("break_at={break_at}\n");
-    for record in &seen {
-        text.push_str(&record.phase);
-        text.push('\n');
-    }
-    let mut file = std::fs::File::create(dir.join("seen.log")).unwrap();
+/// Every halt record the broker has counted, in any state.
+fn counted(home: &Home) -> u64 {
+    let c = home.control.status().halt_records;
+    c.pending + c.recorded + c.owed + c.uncertain + c.lost
+}
+
+/// Write `text` to `name` in `dir`, durably.
+fn write_synced(dir: &Path, name: &str, text: &str) {
+    let mut file = std::fs::File::create(dir.join(name)).unwrap();
     file.write_all(text.as_bytes()).unwrap();
     file.sync_all().unwrap();
-    std::process::abort();
+}
+
+/// Child 1 at its named crash point: where the break began (the records
+/// the gate had seen, and the halt records counted, before it).
+#[derive(Clone)]
+struct At {
+    home: Arc<Home>,
+    dir: PathBuf,
+    point: &'static str,
+    break_at: usize,
+    base: u64,
+}
+
+impl At {
+    /// Write down every broker record committed so far (with where the
+    /// break began), then the receipt (`broken`: whether the coordinator
+    /// broke), then abort the process.
+    fn crash(&self, broken: bool) -> ! {
+        let seen = self.home.gate.seen();
+        let mut text = format!("break_at={}\n", self.break_at);
+        for record in &seen {
+            text.push_str(&record.phase);
+            text.push('\n');
+        }
+        write_synced(&self.dir, "seen.log", &text);
+        let batch = counted(&self.home) - self.base;
+        write_synced(
+            &self.dir,
+            "receipt.log",
+            &format!(
+                "point={}\nbroken={broken}\nbatch={batch}\ngate={}\n",
+                self.point,
+                seen.len()
+            ),
+        );
+        std::process::abort();
+    }
 }
 
 struct Child {
     home: Arc<Home>,
     dir: PathBuf,
     origin: String,
-    taken: std::sync::mpsc::Receiver<()>,
     appends: Arc<AtomicBool>,
     poison: Arc<AtomicBool>,
 }
@@ -265,7 +302,7 @@ impl Child {
         let home = Arc::new(Home::open(dir).unwrap());
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
-        let taken = world(listener);
+        world(listener);
         home.control
             .request_grant(
                 &GrantRequest::Egress {
@@ -281,7 +318,6 @@ impl Child {
             home,
             dir: dir.to_path_buf(),
             origin,
-            taken,
             appends: Arc::new(AtomicBool::new(false)),
             poison: Arc::new(AtomicBool::new(false)),
         }
@@ -311,30 +347,52 @@ impl Child {
         id
     }
 
-    /// A mission whose Builder's GET is taken by the world and never
-    /// answered: it stays Executing.
+    /// A mission whose Builder's GET has started and is held: its worker
+    /// waits at the gate in the projection of its own `Started` record (on
+    /// its own thread, after the commit, with no broker or Mother lock
+    /// held), so that record is durable and the worker never reaches its
+    /// transport or its end before child 1 aborts. The gate holds every
+    /// `started` writer; this action is the only one child 1 starts, and
+    /// the held record is shown to be its worker's.
     fn executing(&self, mother: &Arc<Coordinator<GovernedPort>>) -> MissionId {
         let id = self.approved(mother, &format!("FETCH-BUILDER:{}/hang", self.origin));
         mother.advance(id).unwrap();
         mother.advance(id).unwrap();
+        let before = self.home.gate.count("started");
+        self.home.gate.arm("started", None);
         let m = mother.clone();
-        std::thread::spawn(move || {
+        let worker = std::thread::spawn(move || {
             let _ = m.advance(id);
         });
-        self.taken
-            .recv_timeout(Duration::from_secs(10))
-            .expect("the world took the hanging request");
+        assert!(
+            self.home.gate.wait_held(),
+            "the action's Started record reached the gate"
+        );
+        let started: Vec<_> = self
+            .home
+            .gate
+            .seen()
+            .into_iter()
+            .filter(|s| s.phase == "started")
+            .collect();
+        assert_eq!(started.len(), before + 1, "one action started");
+        assert_eq!(
+            started.last().map(|s| s.thread),
+            Some(worker.thread().id()),
+            "the held Started is this action's own"
+        );
         id
     }
 
-    fn crash(&self, break_at: usize) -> ! {
-        crash_now(&self.home, &self.dir, break_at)
-    }
-
-    /// Break the coordinator; `marker` decides whether its poisoning works.
-    fn break_it(&self, mother: &Coordinator<GovernedPort>, marker: bool) -> usize {
-        let victim = self.victim(mother);
-        self.break_with(mother, victim, marker)
+    /// Child 1's crash point `point`, the break beginning now.
+    fn at(&self, point: &'static str) -> At {
+        At {
+            home: self.home.clone(),
+            dir: self.dir.clone(),
+            point,
+            break_at: self.home.gate.seen().len(),
+            base: counted(&self.home),
+        }
     }
 
     /// The mission whose Stop will break the coordinator, drafted before
@@ -343,30 +401,23 @@ impl Child {
         mother.draft(contract_with("")).unwrap()
     }
 
-    /// Break the coordinator with a Stop of `victim`.
-    fn break_with(
-        &self,
-        mother: &Coordinator<GovernedPort>,
-        victim: MissionId,
-        marker: bool,
-    ) -> usize {
-        let at = self.home.gate.seen().len();
+    /// Break the coordinator with a Stop of `victim`; `marker` decides
+    /// whether its poisoning works.
+    fn break_with(&self, mother: &Coordinator<GovernedPort>, victim: MissionId, marker: bool) {
         self.poison.store(!marker, Ordering::SeqCst);
         self.appends.store(true, Ordering::SeqCst);
         let _ = mother.stop(victim);
-        at
     }
 
-    /// Arm `point` to crash on this thread's next call that reaches it (the
-    /// breaking Stop), once it proved it is at that point: the coordinator
-    /// is broken, and the batch it is about to write (before the write) or
-    /// has just written (after it) is non-empty. Otherwise child 1 exits
-    /// with `VACUOUS` instead of aborting. Another thread's call reaching
-    /// the hook first (CR8's cancelled action) leaves it armed.
-    fn arm_proven(&self, mother: &Arc<Coordinator<GovernedPort>>, point: CallPoint, at: usize) {
+    /// Arm `point` to crash on the next call that reaches it (the breaking
+    /// Stop), once it proved it is at that point: the coordinator is
+    /// broken, and the batch it is about to write (before the write) or has
+    /// just written (after it) is non-empty. Otherwise child 1 exits with
+    /// `VACUOUS` instead of aborting.
+    fn arm_proven(&self, mother: &Arc<Coordinator<GovernedPort>>, point: CallPoint, at: At) {
         let (home, dir, weak) = (self.home.clone(), self.dir.clone(), Arc::downgrade(mother));
         let base = home.control.status().halt_records;
-        let proof = Box::new(move || {
+        arm_call_point(mother, point, move || {
             if !weak.upgrade().is_some_and(|m| m.broken()) {
                 vacuous(&dir, "the coordinator is not broken");
             }
@@ -381,14 +432,8 @@ impl Child {
             if !batch {
                 vacuous(&dir, "the batch at the crash point is empty");
             }
-            crash_now(&home, &dir, at)
+            at.crash(true)
         });
-        arm_on(
-            Arc::downgrade(mother),
-            point,
-            std::thread::current().id(),
-            proof,
-        );
     }
 
     /// After a breaking Stop whose proven hook never fired: not at the point.
@@ -406,26 +451,8 @@ fn vacuous(dir: &Path, why: &str) -> ! {
     std::process::exit(VACUOUS);
 }
 
-/// Arm `point` for the next call on thread `on` that reaches it; a call on
-/// another thread re-arms it and goes on.
-fn arm_on(
-    mother: Weak<Coordinator<GovernedPort>>,
-    point: CallPoint,
-    on: std::thread::ThreadId,
-    hook: Box<dyn FnOnce() + Send>,
-) {
-    let Some(m) = mother.upgrade() else { return };
-    let again = mother.clone();
-    arm_call_point(&m, point, move || {
-        if std::thread::current().id() == on {
-            hook()
-        } else {
-            arm_on(again, point, on, hook)
-        }
-    });
-}
-
-/// Child 1: run to `point`, then abort.
+/// Child 1: run to `point`, then abort with its receipt; a breaking call
+/// that never reached its crash point exits with `VACUOUS` instead.
 fn child_one(point: &str, dir: &Path) -> ! {
     let c = Child::open(dir);
     let mother = c.mother();
@@ -433,28 +460,34 @@ fn child_one(point: &str, dir: &Path) -> ! {
         "cr1" => {
             c.executing(&mother);
             c.approved(&mother, "");
-            c.crash(0);
+            c.at(CR1).crash(mother.broken());
         }
         "cr2" | "cr3" | "cr5" => {
             let x = c.approved(&mother, &format!("POST-BUILDER:{}/cr-wait", c.origin));
             for _ in 0..3 {
                 mother.advance(x).unwrap();
             }
-            let at = c.home.gate.seen().len();
             let victim = c.victim(&mother);
             if point == "cr2" {
-                let (home, dir) = (c.home.clone(), c.dir.clone());
+                // The crashing call holds the coordinator lock here (after
+                // the fence, before the marker): its break is shown by the
+                // fence's batch, which only a break makes.
+                let at = c.at(CR2);
+                let (home, dir, base) = (c.home.clone(), c.dir.clone(), at.base);
                 arm_call_point(&mother, CallPoint::FenceToMarker, move || {
-                    crash_now(&home, &dir, at)
+                    if counted(&home) == base {
+                        vacuous(&dir, "no fence batch at the marker point");
+                    }
+                    at.crash(true)
                 });
                 c.break_with(&mother, victim, false);
-                c.crash(at);
+                c.missed();
             }
-            let point_at = match point {
-                "cr3" => CallPoint::BeforeOwedWrite,
-                _ => CallPoint::AfterOwedWrite,
+            let (point_at, name) = match point {
+                "cr3" => (CallPoint::BeforeOwedWrite, CR3),
+                _ => (CallPoint::AfterOwedWrite, CR5),
             };
-            c.arm_proven(&mother, point_at, at);
+            c.arm_proven(&mother, point_at, c.at(name));
             c.break_with(&mother, victim, true);
             c.missed();
         }
@@ -464,13 +497,14 @@ fn child_one(point: &str, dir: &Path) -> ! {
             for _ in 0..3 {
                 mother.advance(z).unwrap();
             }
-            let at = c.home.gate.seen().len();
-            let (home, dir) = (c.home.clone(), c.dir.clone());
-            c.home
-                .gate
-                .arm_with("run_cancelled", None, move || crash_now(&home, &dir, at));
-            c.break_it(&mother, true);
-            c.crash(at);
+            let victim = c.victim(&mother);
+            let at = c.at(CR4);
+            let weak = Arc::downgrade(&mother);
+            c.home.gate.arm_with("run_cancelled", None, move || {
+                at.crash(weak.upgrade().is_some_and(|m| m.broken()))
+            });
+            c.break_with(&mother, victim, true);
+            c.missed();
         }
         "cr6" => {
             c.approved(&mother, "");
@@ -492,30 +526,31 @@ fn child_one(point: &str, dir: &Path) -> ! {
                 Arc::new(SystemClock::default()),
             );
             assert!(opened.is_err(), "the first SessionOpened fails");
-            c.crash(0);
+            // No coordinator is open: none broke.
+            c.at(CR6).crash(false);
         }
         "cr7" => {
             let x = c.approved(&mother, &format!("FETCH-BUILDER:{}/cr-done", c.origin));
             for _ in 0..3 {
                 mother.advance(x).unwrap();
             }
-            let at = c.home.gate.seen().len();
             let victim = c.victim(&mother);
-            c.arm_proven(&mother, CallPoint::BeforeOwedWrite, at);
-            c.break_with(&mother, victim, true);
-            c.missed();
-        }
-        "cr8" => {
-            c.executing(&mother);
-            let at = c.home.gate.seen().len();
-            let victim = c.victim(&mother);
-            c.arm_proven(&mother, CallPoint::AfterOwedWrite, at);
+            c.arm_proven(&mother, CallPoint::BeforeOwedWrite, c.at(CR7));
             c.break_with(&mother, victim, true);
             c.missed();
         }
         other => panic!("no crash point {other}"),
     }
 }
+
+/// The crash points, as child 1's receipt names them.
+const CR1: &str = "cr1.p0_executing";
+const CR2: &str = "cr2.p1_fence_to_marker";
+const CR3: &str = "cr3.p2_before_owed_write";
+const CR4: &str = "cr4.p2k_run_cancelled_projected";
+const CR5: &str = "cr5.p3_after_owed_write";
+const CR6: &str = "cr6.session_opened_failed";
+const CR7: &str = "cr7.before_owed_write";
 
 /// Child 2: reopen the home; answer by script; print the observations.
 fn child_two(dir: &Path) {
@@ -675,9 +710,45 @@ impl Seen {
     }
 }
 
+/// Whether child 1 ended by `std::process::abort` (SIGABRT on Unix, exit
+/// code 3 on Windows).
+fn aborted(status: &ExitStatus) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal() == Some(6)
+    }
+    #[cfg(windows)]
+    {
+        status.code() == Some(3)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = status;
+        false
+    }
+}
+
+/// A file child 1 must have written: its absence fails the test.
+fn required(dir: &Path, name: &str, point: &str) -> String {
+    std::fs::read_to_string(dir.join(name))
+        .unwrap_or_else(|e| panic!("{point}: child 1 wrote no {name}: {e}"))
+}
+
+/// `key=value` on `line`, parsed; anything else fails the test.
+fn field<T: std::str::FromStr>(line: Option<&str>, key: &str, point: &str) -> T {
+    line.and_then(|l| l.strip_prefix(key))
+        .and_then(|l| l.strip_prefix('='))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| panic!("{point}: malformed {key} line: {line:?}"))
+}
+
 /// Crash child 1 at `point`, reopen with child 2: child 1's records and
-/// child 2's observations.
-fn crash_case(point: &str) -> (Seen, Value) {
+/// child 2's observations. Child 1 must have aborted at the crash point
+/// its receipt names, `expected`, with its coordinator `broken` as given,
+/// a non-empty batch exactly when it broke, and every record the gate saw
+/// written down.
+fn crash_case(point: &str, expected: &str, broken: bool) -> (Seen, Value) {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
@@ -688,16 +759,31 @@ fn crash_case(point: &str) -> (Seen, Value) {
         let _ = std::fs::remove_dir_all(&dir);
         panic!("{point}: child 1 was not at its named crash point: {why}");
     }
-    assert!(!status.success(), "{point}: child 1 must crash");
-    let log = std::fs::read_to_string(dir.join("seen.log")).unwrap_or_default();
+    assert!(
+        aborted(&status),
+        "{point}: child 1 must abort at its crash point, not {status:?}"
+    );
+    let receipt = required(&dir, "receipt.log", point);
+    let mut lines = receipt.lines();
+    let named: String = field(lines.next(), "point", point);
+    let was_broken: bool = field(lines.next(), "broken", point);
+    let batch: u64 = field(lines.next(), "batch", point);
+    let gate: usize = field(lines.next(), "gate", point);
+    assert_eq!(lines.next(), None, "{point}: malformed receipt");
+    assert_eq!(
+        named, expected,
+        "{point}: the receipt names its crash point"
+    );
+    assert_eq!(was_broken, broken, "{point}: the receipt's coordinator");
+    assert_eq!(batch > 0, broken, "{point}: the receipt's batch ({batch})");
+    let log = required(&dir, "seen.log", point);
     let mut lines = log.lines();
-    let break_at: usize = lines
-        .next()
-        .and_then(|l| l.strip_prefix("break_at="))
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(0);
+    let break_at: usize = field(lines.next(), "break_at", point);
+    let records: Vec<String> = lines.map(str::to_string).collect();
+    assert_eq!(records.len(), gate, "{point}: every record the gate saw");
+    assert!(break_at <= gate, "{point}: break_at {break_at} > {gate}");
     let seen = Seen {
-        after_break: lines.skip(break_at).map(str::to_string).collect(),
+        after_break: records[break_at..].to_vec(),
     };
     let (status, text) = run_child(point, "2", &dir);
     assert!(status.success(), "{point}: child 2 ran to its end:\n{text}");
@@ -724,7 +810,7 @@ fn mission(obs: &Value, n: u64) -> &Value {
 /// back held and its resume asks.
 #[test]
 fn m2c_cr1_an_executing_action_at_the_crash() {
-    let (_, obs) = crash_case("cr1");
+    let (_, obs) = crash_case("cr1", CR1, false);
     assert_eq!(obs["recovery_required"], json!(true));
     assert_eq!(obs["door_before_recovery"], json!(false));
     assert_eq!(obs["recovered"], json!(true));
@@ -742,7 +828,7 @@ fn m2c_cr1_an_executing_action_at_the_crash() {
 /// unfinished mission is held, and its resume asks.
 #[test]
 fn m2c_cr2_after_the_halt_before_the_marker() {
-    let (seen, obs) = crash_case("cr2");
+    let (seen, obs) = crash_case("cr2", CR2, true);
     assert_eq!(seen.count("door_halted"), 0, "S0");
     assert_eq!(seen.count("run_cancelled"), 0, "S0");
     assert_eq!(obs["door_asked"], json!(1));
@@ -756,7 +842,7 @@ fn m2c_cr2_after_the_halt_before_the_marker() {
 /// poisoned: no coordinator after the door's yes), S0.
 #[test]
 fn m2c_cr3_after_the_marker_before_the_records() {
-    let (seen, obs) = crash_case("cr3");
+    let (seen, obs) = crash_case("cr3", CR3, true);
     assert_eq!(seen.count("door_halted"), 0, "S0");
     assert_eq!(obs["door_asked"], json!(1));
     assert_eq!(obs["open"], json!("poisoned"));
@@ -767,7 +853,7 @@ fn m2c_cr3_after_the_marker_before_the_records() {
 /// the started member is unsettled, the never-started one is not.
 #[test]
 fn m2c_cr4_a_prefix_of_the_batch() {
-    let (seen, obs) = crash_case("cr4");
+    let (seen, obs) = crash_case("cr4", CR4, true);
     assert_eq!(seen.count("door_halted"), 1, "S1");
     assert_eq!(seen.count("run_cancelled"), 1, "S1: exactly k = 2 records");
     assert_eq!(seen.count("revoked"), 0, "S1");
@@ -778,7 +864,7 @@ fn m2c_cr4_a_prefix_of_the_batch() {
 /// CR5 (P3): after the records: J3, S2.
 #[test]
 fn m2c_cr5_after_the_records() {
-    let (seen, obs) = crash_case("cr5");
+    let (seen, obs) = crash_case("cr5", CR5, true);
     assert_eq!(seen.count("door_halted"), 1, "S2");
     assert_eq!(seen.count("run_cancelled"), 1, "S2");
     assert_eq!(seen.count("revoked"), 1, "S2: the waiting action");
@@ -790,7 +876,7 @@ fn m2c_cr5_after_the_records() {
 /// J0's exception: no mission is held, and the door is still asked.
 #[test]
 fn m2c_cr6_a_failed_first_session_record_holds_nothing() {
-    let (_, obs) = crash_case("cr6");
+    let (_, obs) = crash_case("cr6", CR6, false);
     assert_eq!(obs["door_asked"], json!(1));
     assert_eq!(obs["open"], json!("ok"));
     assert_eq!(obs["held"], json!([]));
@@ -800,21 +886,8 @@ fn m2c_cr6_a_failed_first_session_record_holds_nothing() {
 /// and the halt's records lost (S0): the action is not unsettled.
 #[test]
 fn m2c_cr7_a_finished_member_is_settled_without_halt_records() {
-    let (seen, obs) = crash_case("cr7");
+    let (seen, obs) = crash_case("cr7", CR7, true);
     assert_eq!(seen.count("door_halted"), 0, "S0");
     assert_eq!(obs["recovery_required"], json!(false));
     assert_eq!(obs["unsettled"], json!(0));
-}
-
-/// CR8 (§11 C4): a member action Executing, the whole batch durable (S2),
-/// then a crash before the action's end: it is unsettled, and recovery is
-/// required. (Plant (j): recovery that treats a durable halt record as
-/// settling a member.)
-#[test]
-fn m2c_cr8_a_durable_halt_does_not_settle_an_executing_member() {
-    let (seen, obs) = crash_case("cr8");
-    assert_eq!(seen.count("door_halted"), 1, "S2");
-    assert_eq!(obs["recovery_required"], json!(true));
-    assert_eq!(obs["unsettled"], json!(1));
-    assert_eq!(obs["door_before_recovery"], json!(false));
 }
