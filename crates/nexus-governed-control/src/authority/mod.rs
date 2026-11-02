@@ -19,14 +19,15 @@ mod tests;
 
 use self::approval::{
     AcknowledgementConfirmation, ControlConfirmer, MissionApproval, MissionConfirmation,
-    ResumeConfirmation, MAX_MISSION_REQUEST, MAX_MISSION_SUMMARY_LINES,
+    MissionResumeApproval, MissionResumeConfirmation, ResumeConfirmation, MAX_MISSION_REQUEST,
+    MAX_MISSION_SUMMARY_LINES,
 };
 use self::clock::Clock;
 use self::commitment::CommitmentRegistry;
 use self::evidence::{is_plain, EndStatus, EvidencePhase, EvidenceRecord, EvidenceSink};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
-use self::run::{Lift, Refusal, RunClass, RunOrigin, RunRegistry};
+use self::run::{GroupId, Lift, Refusal, RunClass, RunOrigin, RunRegistry};
 use std::fmt;
 use std::sync::Arc;
 
@@ -59,6 +60,8 @@ pub enum AuthorityError {
     ParametersChanged,
     EvidenceUnavailable,
     Capacity,
+    /// Mother Nexus M2c: the run is not in the calling door's group.
+    NotMember,
     Closed(&'static str),
     InvalidAction(&'static str),
     Unavailable(&'static str),
@@ -98,6 +101,7 @@ impl AuthorityError {
             AuthorityError::ParametersChanged => "parameters_changed",
             AuthorityError::EvidenceUnavailable => "evidence_unavailable",
             AuthorityError::Capacity => "capacity",
+            AuthorityError::NotMember => "not_member",
             AuthorityError::Closed(_) => "closed",
             AuthorityError::InvalidAction(_) => "invalid_action",
             AuthorityError::Unavailable(_) => "unavailable",
@@ -318,25 +322,7 @@ impl Authority {
         request: &MissionConfirmation,
         confirmer: &dyn ControlConfirmer,
     ) -> Result<MissionApproval, AuthorityError> {
-        let hash = &request.contract_hash;
-        if hash.len() != 64 || !hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
-            return Err(AuthorityError::InvalidAction(
-                "the contract hash is not a sha-256 hex digest",
-            ));
-        }
-        let label = &request.request;
-        if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
-            return Err(AuthorityError::InvalidAction(
-                "the mission request is not a plain label",
-            ));
-        }
-        // The owner must read exactly what is consented to.
-        if request.summary.is_empty()
-            || request.summary.len() > MAX_MISSION_SUMMARY_LINES
-            || !request.summary.iter().all(|line| is_plain(line))
-        {
-            return Err(AuthorityError::InvalidAction("mission text is not plain"));
-        }
+        mission_text(&request.contract_hash, &request.request, &request.summary)?;
         if self
             .evidence
             .primary()
@@ -381,9 +367,136 @@ impl Authority {
         ))
     }
 
+    /// The owner's yes to resuming one held mission of an agent (Mother
+    /// Nexus M2c), only through the native confirmation of exactly
+    /// `request`. Refused before the owner is asked when the request is
+    /// not a SHA-256 hash with plain labels and a plain summary, when the
+    /// store is latched, under an emergency stop or while quitting. A no is
+    /// recorded (an end record: it permits nothing). A yes counts only once
+    /// its record is written (evidence first) and not if an emergency stop
+    /// or quitting came while the owner was asked; after the record it is
+    /// checked again, and then the record stands with no approval. The
+    /// approval records the owner's yes to the hash and the request: it
+    /// resumes nothing and grants nothing. (A door calls this with the
+    /// confirmer its host bound.)
+    pub fn confirm_held_mission(
+        &self,
+        request: &MissionResumeConfirmation,
+        confirmer: &dyn ControlConfirmer,
+    ) -> Result<MissionResumeApproval, AuthorityError> {
+        mission_text(&request.contract_hash, &request.request, &request.summary)?;
+        for label in [&request.mission, &request.held_reason] {
+            if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
+                return Err(AuthorityError::InvalidAction(
+                    "the held mission is not named by plain labels",
+                ));
+            }
+        }
+        if self
+            .evidence
+            .primary()
+            .is_some_and(|primary| primary.health().latched)
+        {
+            return Err(AuthorityError::EvidenceUnavailable);
+        }
+        self.mission_admissible()?;
+        let yes = confirmer.confirm_held_mission(request);
+        let phase = if yes {
+            EvidencePhase::MissionResumeConfirmed
+        } else {
+            EvidencePhase::MissionResumeDeclined
+        };
+        let mut record =
+            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        record
+            .detail
+            .push(("mission".into(), request.mission.clone()));
+        record
+            .detail
+            .push(("contract_hash".into(), request.contract_hash.clone()));
+        record
+            .detail
+            .push(("request".into(), request.request.clone()));
+        record
+            .detail
+            .push(("held_reason".into(), request.held_reason.clone()));
+        record
+            .detail
+            .push(("summary_digest".into(), summary_digest(&request.summary)));
+        if !yes {
+            // The owner's decline has taken effect and permits nothing.
+            self.record_end(&record);
+            return Err(AuthorityError::Declined);
+        }
+        // A stop pressed, or quitting begun, while the owner was asked wins.
+        self.mission_admissible()?;
+        // Evidence first: an unrecorded yes is no yes.
+        let seq = self
+            .evidence
+            .record(&record)
+            .map_err(|_| AuthorityError::EvidenceUnavailable)?;
+        // After the record (M2c §2.6 step 6): the record says the owner said
+        // yes; no approval exists if a stop or quitting came meanwhile.
+        self.mission_admissible()?;
+        Ok(MissionResumeApproval::confirmed(
+            request.contract_hash.clone(),
+            request.request.clone(),
+            seq,
+        ))
+    }
+
+    /// Whether a door may be issued now (Mother Nexus M2c): the store not
+    /// latched, no recovery required, no emergency stop, not quitting.
+    pub(crate) fn door_admissible(&self) -> Result<(), AuthorityError> {
+        if let Some(primary) = self.evidence.primary() {
+            let health = primary.health();
+            if health.latched {
+                return Err(AuthorityError::EvidenceUnavailable);
+            }
+            if health.recovery_required {
+                return Err(AuthorityError::Unavailable(
+                    "actions whose outcome was not recorded need acknowledgement",
+                ));
+            }
+        }
+        self.mission_admissible()
+    }
+
+    /// The record of the owner's answer to a door: a yes is a gating record
+    /// (no door exists unless it is written); a no is an end record.
+    pub(crate) fn record_door(
+        &self,
+        yes: bool,
+        agent: &AgentId,
+        door: &str,
+    ) -> Result<(), AuthorityError> {
+        let phase = if yes {
+            EvidencePhase::AgentDoorOpened
+        } else {
+            EvidencePhase::AgentDoorDeclined
+        };
+        let mut record =
+            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        record.agent = Some(agent.to_string());
+        record.detail.push(("door".into(), door.to_string()));
+        if yes {
+            self.record(&record)
+        } else {
+            self.record_end(&record);
+            Ok(())
+        }
+    }
+
+    /// Unclean sessions the evidence store reports (advisory only).
+    pub(crate) fn unclean_sessions(&self) -> usize {
+        self.evidence
+            .primary()
+            .map_or(0, |primary| primary.health().unclean_sessions)
+    }
+
     /// Whether a mission may be consented to now: no emergency stop, not
     /// quitting.
-    fn mission_admissible(&self) -> Result<(), AuthorityError> {
+    pub(crate) fn mission_admissible(&self) -> Result<(), AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -411,7 +524,17 @@ impl Authority {
         agent: AgentId,
         origin: RunOrigin,
     ) -> Result<RunId, AuthorityError> {
-        self.open_classed(agent, origin, RunClass::Agent)
+        self.open_classed(agent, origin, RunClass::Agent, None)
+    }
+
+    /// Open an agent's run that joins a door's group at its insertion, in
+    /// the same hold of the runs lock (Mother Nexus M2c).
+    pub(crate) fn open_run_in(
+        &self,
+        agent: AgentId,
+        group: GroupId,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_classed(agent, RunOrigin::AgentGoal, RunClass::Agent, Some(group))
     }
 
     /// Open the run of one of the owner's own commands (the unified front
@@ -427,6 +550,7 @@ impl Authority {
             agent.clone(),
             RunOrigin::Command { modalities },
             RunClass::Owner,
+            None,
         )?;
         Ok((agent, run))
     }
@@ -436,6 +560,7 @@ impl Authority {
         agent: AgentId,
         origin: RunOrigin,
         class: RunClass,
+        group: Option<GroupId>,
     ) -> Result<RunId, AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
@@ -449,7 +574,9 @@ impl Authority {
         if class == RunClass::Owner {
             record.detail.push(("class".into(), "owner".into()));
         }
-        let run = self.runs.open(agent, origin, class, self.clock.wall_ms())?;
+        let run = self
+            .runs
+            .open_in(agent, origin, class, self.clock.wall_ms(), group)?;
         record.run = Some(run.to_string());
         if self.record(&record).is_err() {
             self.runs.cancel(run);
@@ -607,6 +734,29 @@ pub(crate) struct Stopped {
     pub(crate) cancelled: usize,
     revoked: commitment::Unwritten,
     record: EvidenceRecord,
+}
+
+/// The text of a mission or held-mission request: a SHA-256 hex digest, a
+/// plain request label, and a plain summary the owner reads whole.
+fn mission_text(hash: &str, label: &str, summary: &[String]) -> Result<(), AuthorityError> {
+    if hash.len() != 64 || !hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return Err(AuthorityError::InvalidAction(
+            "the contract hash is not a sha-256 hex digest",
+        ));
+    }
+    if label.is_empty() || label.chars().count() > MAX_MISSION_REQUEST || !is_plain(label) {
+        return Err(AuthorityError::InvalidAction(
+            "the mission request is not a plain label",
+        ));
+    }
+    // The owner must read exactly what is consented to.
+    if summary.is_empty()
+        || summary.len() > MAX_MISSION_SUMMARY_LINES
+        || !summary.iter().all(|line| is_plain(line))
+    {
+        return Err(AuthorityError::InvalidAction("mission text is not plain"));
+    }
+    Ok(())
 }
 
 /// The digest of a mission summary as shown: SHA-256 over a domain and each

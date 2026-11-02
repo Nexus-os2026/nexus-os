@@ -43,6 +43,15 @@ pub enum EvidencePhase {
     /// contract hash, the request and a digest of the summary shown.
     MissionConsented,
     MissionDeclined,
+    /// Mother Nexus M2c: the owner's answer to a door for an agent: the
+    /// agent and the door's opaque id.
+    AgentDoorOpened,
+    AgentDoorDeclined,
+    /// Mother Nexus M2c: the owner's answer to resuming a held mission: the
+    /// mission, the contract hash, the request, the hold and a digest of
+    /// the summary shown. A yes records the answer; it resumes nothing.
+    MissionResumeConfirmed,
+    MissionResumeDeclined,
 }
 
 impl EvidencePhase {
@@ -71,6 +80,10 @@ impl EvidencePhase {
             EvidencePhase::KernelHalt => "kernel_halt",
             EvidencePhase::MissionConsented => "mission_consented",
             EvidencePhase::MissionDeclined => "mission_declined",
+            EvidencePhase::AgentDoorOpened => "agent_door_opened",
+            EvidencePhase::AgentDoorDeclined => "agent_door_declined",
+            EvidencePhase::MissionResumeConfirmed => "mission_resume_confirmed",
+            EvidencePhase::MissionResumeDeclined => "mission_resume_declined",
         }
     }
 }

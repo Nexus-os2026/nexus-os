@@ -1308,6 +1308,21 @@ impl CommitmentRegistry {
         self.entries().get(&id).map(|e| e.view(id))
     }
 
+    /// M2c: run `f` on the view of `id` while the commitments lock is held
+    /// (a door's adoption joins its group inside: entries → runs, the
+    /// existing order).
+    pub(crate) fn holding_view<T>(
+        &self,
+        id: CommitmentId,
+        f: impl FnOnce(Option<CommitmentView>) -> T,
+    ) -> T {
+        let entries = self.entries();
+        let view = entries.get(&id).map(|e| e.view(id));
+        let result = f(view);
+        drop(entries);
+        result
+    }
+
     pub fn views_of_run(&self, run: RunId) -> Vec<CommitmentView> {
         let mut views: Vec<CommitmentView> = self
             .entries()

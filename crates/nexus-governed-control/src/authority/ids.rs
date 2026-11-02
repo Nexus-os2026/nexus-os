@@ -53,7 +53,7 @@ impl fmt::Display for Digest {
 }
 
 /// 128 bits from the operating system's generator.
-fn random16() -> [u8; 16] {
+pub(crate) fn random16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
     getrandom::getrandom(&mut bytes).expect("the OS random generator is available");
     bytes

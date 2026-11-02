@@ -6,6 +6,11 @@
 //! crate, it names the commitment and its binding digest, and authorizing
 //! the commitment consumes it.
 //!
+//! A `MissionResumeApproval` (Mother Nexus M2c) exists only after the
+//! owner confirmed resuming one exact held-mission request and the broker
+//! recorded that yes. It resumes nothing by itself, cannot be constructed,
+//! cloned or deserialized outside this crate, and grants no action.
+//!
 //! A `MissionApproval` (Mother Nexus M2a) exists only after the owner
 //! confirmed one exact mission contract hash and the broker recorded that
 //! yes: it cannot be constructed, cloned or deserialized outside this
@@ -213,6 +218,131 @@ pub trait ControlConfirmer {
     /// A confirmer without a mission dialog declines every mission.
     fn confirm_mission(&self, _request: &MissionConfirmation) -> bool {
         false
+    }
+    /// The owner's yes to one door for an agent (Mother Nexus M2c): every
+    /// door is asked for. A confirmer without the dialog declines every
+    /// door.
+    fn confirm_agent_door(&self, _request: &AgentDoorConfirmation) -> bool {
+        false
+    }
+    /// The owner's yes to resuming one held mission (Mother Nexus M2c). A
+    /// confirmer without the dialog declines every resume.
+    fn confirm_held_mission(&self, _request: &MissionResumeConfirmation) -> bool {
+        false
+    }
+}
+
+/// What the owner is asked before an agent gets a door (Mother Nexus M2c):
+/// the agent, the door's opaque id, and advisory lines (such as an earlier
+/// session that did not close cleanly). The advisory lines inform only: no
+/// safety property reads them. A door lets the agent act only in the runs
+/// it opens or adopts, under the owner's grants and approvals.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentDoorConfirmation {
+    pub agent: String,
+    pub door: String,
+    pub advisory: Vec<String>,
+}
+
+/// What the door dialog says a door is.
+pub const AGENT_DOOR_MEANING: [&str; 2] = [
+    "A door lets this agent ask for actions in the runs it opens or adopts.",
+    "Each action still needs your grants and, for sensitive actions, your approval.",
+];
+
+impl AgentDoorConfirmation {
+    pub fn title(&self) -> &'static str {
+        "Let this agent act?"
+    }
+
+    /// The agent and the door in the header; the advisory lines, then what
+    /// a door is, in the details.
+    pub fn text(&self) -> ConfirmationText {
+        let mut details = self.advisory.clone();
+        details.extend(AGENT_DOOR_MEANING.iter().map(|line| line.to_string()));
+        ConfirmationText {
+            header: vec![("Agent", self.agent.clone()), ("Door", self.door.clone())],
+            details: fitted_lines(&details),
+        }
+    }
+
+    pub fn message(&self) -> String {
+        self.text().plain()
+    }
+}
+
+/// What the owner is asked before a held mission resumes (Mother Nexus
+/// M2c): the mission's label, its exact contract hash, the agent's label
+/// for this request, why it is held, and the mission's summary, each line
+/// plain. The broker binds the answer to the hash and the request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissionResumeConfirmation {
+    pub mission: String,
+    /// The contract's SHA-256: 64 lowercase hex digits.
+    pub contract_hash: String,
+    /// The agent's label for this request (an opaque correlation name).
+    pub request: String,
+    pub held_reason: String,
+    pub summary: Vec<String>,
+}
+
+impl MissionResumeConfirmation {
+    pub fn title(&self) -> &'static str {
+        "Resume this held mission?"
+    }
+
+    /// The mission, the contract hash, the request and the hold in the
+    /// header; the summary in the details.
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                ("Mission", self.mission.clone()),
+                ("Contract", self.contract_hash.clone()),
+                ("Request", self.request.clone()),
+                ("Held because", self.held_reason.clone()),
+            ],
+            details: fitted_lines(&self.summary),
+        }
+    }
+
+    pub fn message(&self) -> String {
+        self.text().plain()
+    }
+}
+
+/// The owner's yes to resuming exactly one held-mission request, recorded
+/// by the broker. It records the yes; it resumes nothing.
+///
+/// It has no `Clone`, `Copy`, `Default` or deserializer, and its fields are
+/// private; `Authority::confirm_held_mission` is its only constructor.
+#[derive(Debug)]
+pub struct MissionResumeApproval {
+    contract_hash: String,
+    request: String,
+    evidence_seq: u64,
+}
+
+impl MissionResumeApproval {
+    /// Only after the owner confirmed natively and the broker recorded it.
+    pub(crate) fn confirmed(contract_hash: String, request: String, evidence_seq: u64) -> Self {
+        Self {
+            contract_hash,
+            request,
+            evidence_seq,
+        }
+    }
+
+    pub fn contract_hash(&self) -> &str {
+        &self.contract_hash
+    }
+
+    pub fn request(&self) -> &str {
+        &self.request
+    }
+
+    /// The sequence number of the record of the owner's yes.
+    pub fn evidence_seq(&self) -> u64 {
+        self.evidence_seq
     }
 }
 
