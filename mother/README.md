@@ -71,7 +71,7 @@ the host, tests included).
 | M2a: Stop withdraws a pending request after the port is rebuilt; expiry by either clock | `oracles/m2a_rebuild.rs`, `adapter/real_broker.rs`, `adapter/expiry_tests.rs` |
 | M2a-S: a Stop or denial that returns Ok holds across every restart; one whose append and poisoning both fail returns Err, nothing further runs, and after any restart every unfinished mission is held (no lane, no port call, no broker query) until the Owner resumes or stops it; a clean close resumes normally | `oracles/m2as_durability.rs`, `oracles/m2as_review.rs`, `oracles/m2as_resume.rs` |
 | M2c: Mother acts only through a broker-issued door, bound to her agent and to the runs it opened or adopted; nothing reachable from the port leads to the front door, the authority, the issuer or an owner API | `lib.rs` (A1 compile_fail), broker `lib.rs` (A1), broker `governed/door_tests.rs` (A2, A3), `adapter/scan.rs` (A8) |
-| M2c: every door asks: the Owner's native yes is needed for every door, at every start and in the same process; no stored state decides it; a no or an unrecorded yes gives no door; live doors and memberships are bounded and reclaimed | broker `governed/door_tests.rs` (A7) |
+| M2c: every door asks: the Owner's native yes is needed for every issuance of a door, in a new process or in the same one; no stored state decides it; a no or an unrecorded yes gives no door; live doors and memberships are bounded and reclaimed. (A coordinator reopened on an existing port reuses that port's door; the walk asks for a fresh door at every run and restart.) | broker `governed/door_tests.rs` (A7) |
 | M2c: consent asks through the door's bound confirmer, once, with the exact request | `adapter/m2c_door.rs` (A4), broker `governed/door_tests.rs` (A4) |
 | M2c: resume asks: a held mission resumes only after the Owner's native dialog naming its contract hash, once per request (the table below) | `adapter/m2c_door.rs` (A5, A6), broker `governed/door_tests.rs` (A5, A6-f) |
 | M2a-S: after a break, no effect dispatched after the break executes; an effect already dispatched (journaled and past the fenced check) may still enter the broker and is interrupted where the broker can, the same in-flight limit as an ordinary Stop (fenced at the broker; the fence's sweep is panic-safe); a failed open still withdraws every journaled request; the class test over random sequences | `adapter/m2as_fence.rs`, `adapter/m2as_adopt.rs`, `adapter/m2as_model.rs`, `adapter/m2as_gate.rs`, `adapter/m2as_nowait.rs`, `adapter/m2as_sweep.rs` |
@@ -168,10 +168,10 @@ Coordinator rules the oracles pin:
   critical section as the fence: it comes before the fence's (which
   cancels the run) or after (and cancels the run itself, never giving it
   to the mission). The
-  Owner's consent dialog and the emergency-stop read do not check the
-  fence: they produce no effect, and a consent answered after the break is
-  discarded (a source scan pins that the broker Authority, which does not
-  check the fence, is used for consent only). A fenced port's withdraw does not retry a cancellation
+  Owner's consent and resume dialogs and the emergency-stop read do not
+  check the fence: they produce no effect, and an answer that comes after
+  the break is discarded. Both dialogs go through the port's door (M2c:
+  Mother holds no broker Authority handle). A fenced port's withdraw does not retry a cancellation
   the fence could not make; it reports an error. After every outbound call (a perform, a lane, the
   Owner's consent dialog, an approval query) the result is discarded, and
   nothing is journaled for it, if the coordinator broke or the mission is
