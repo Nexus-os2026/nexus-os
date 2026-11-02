@@ -1701,6 +1701,36 @@ fn m2c_b10_h_a_panic_inside_revoke_where_loses_nothing_uncounted() {
     // The commitments lock was poisoned on purpose: no probe.
 }
 
+/// B10-i (§11 C2, Codex review 1 of PR #51): a panic inside
+/// `end_unconsumed` after its revocation record exists and before it
+/// returns: that record is counted lost, the counters balance, the group
+/// stays halted, admission refused.
+#[test]
+fn m2c_b10_i_a_panic_inside_end_unconsumed_loses_nothing_uncounted() {
+    let f = fx();
+    let door = f.door();
+    let made = members(&f, &door, 1);
+    assert_eq!(f.state(made[0].1), CommitmentState::Prepared);
+    f.gov.hooks().arm(at::END_UNCONSUMED_RECORDED, || {
+        panic!("inside end_unconsumed (test)")
+    });
+    let halted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| halt(&door)));
+    assert!(halted.is_err());
+    let c = counters(&f);
+    assert_eq!(
+        c.lost, 3,
+        "door_halted, run_cancelled and the revocation: {c:?}"
+    );
+    balanced(&f, 3);
+    assert_eq!(door.open_run(), Err(AuthorityError::Halted));
+    assert_eq!(
+        door.agent_action(made[0].0, &f.get("/b10i")).unwrap_err(),
+        AuthorityError::Halted
+    );
+    assert_eq!(f.reached("/b10i"), 0);
+    // The commitments lock was poisoned on purpose: no probe.
+}
+
 // ---------------------------------------------------------------- B11
 
 /// B11: each lock the halt takes, poisoned on its own: the halt completes

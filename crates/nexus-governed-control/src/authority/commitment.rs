@@ -814,6 +814,8 @@ impl CommitmentRegistry {
                     | AuthorityError::Halted
             );
         });
+        #[cfg(test)]
+        self.fire(crate::test_hooks::at::END_UNCONSUMED_RECORDED);
     }
 
     /// End leases no commitment will list (their proposal was refused), or

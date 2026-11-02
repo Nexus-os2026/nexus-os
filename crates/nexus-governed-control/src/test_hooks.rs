@@ -28,6 +28,7 @@ pub(crate) mod at {
     pub(crate) const HALT_AFTER_ENTRIES: &str = "halt.after_entries";
     pub(crate) const HALT_AFTER_LEASES: &str = "halt.after_leases";
     pub(crate) const REVOKE_WHERE_FIRST: &str = "revoke_where.first";
+    pub(crate) const END_UNCONSUMED_RECORDED: &str = "end_unconsumed.recorded";
     pub(crate) const DOOR_MEMBER_CHECKED: &str = "door.member_checked";
     pub(crate) const HELD_RECORDED: &str = "door.held_recorded";
     pub(crate) const MISSION_RECORDED: &str = "door.mission_recorded";
