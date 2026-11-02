@@ -2460,3 +2460,110 @@ fn m2c_r5_recovery_comes_before_any_door() {
     f.gov.resume(&Owner).unwrap();
     assert!(door_with(&f, owner.clone()).is_ok());
 }
+
+/// Non-cooperative work (R6): once Executing, it says so and blocks until
+/// the test releases it (bounded), never checking for cancellation.
+struct Stubborn {
+    entered: Sender<()>,
+    release: Receiver<()>,
+}
+
+impl PendingEffect for Stubborn {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        Ok(target())
+    }
+
+    fn parameters(&self) -> Digest {
+        parameters()
+    }
+
+    fn execute(
+        self: Box<Self>,
+        _guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        let _ = self.entered.send(());
+        let _ = self.release.recv_timeout(3 * JOIN);
+        Ok(EffectOutput::default())
+    }
+}
+
+/// R6 (§11 C4, Architect decision 3: CR8's property): a member action
+/// truly Executing while its door is halted and the whole batch written
+/// (S2), then a crash before the action's end: the halt's durable records
+/// do not settle it. The commitment is unsettled, control starts
+/// emergency-stopped, and the next door issue is refused until the Owner
+/// acknowledges. (Plant (j): recovery that treats a durable halt record as
+/// settling a member.)
+#[test]
+fn m2c_r6_an_executing_member_survives_a_written_halt_as_unsettled() {
+    let scratch = Scratch::new();
+    let f = fx_store(&scratch);
+    let door = f.door();
+    let run = door.open_run().unwrap();
+    let (entered, executing) = channel();
+    let (release, released) = channel::<()>();
+    let id = f
+        .gov
+        .control
+        .propose(
+            &mother(),
+            run,
+            Preparation {
+                action: PreparedAction {
+                    kind: CapabilityKind::Perception,
+                    class: EffectClass::R1,
+                    operation: "m2c.observe",
+                    target: TargetIdentity {
+                        display: "m2c target".into(),
+                        digest: target(),
+                    },
+                    parameters: parameters(),
+                    grants: vec![f.grant],
+                    leases: vec![],
+                    summary: vec!["m2c".into()],
+                },
+                effect: Box::new(Stubborn {
+                    entered,
+                    release: released,
+                }),
+                ttl: Duration::from_secs(60),
+            },
+        )
+        .unwrap()
+        .id;
+    f.authorize(id, run).unwrap();
+    let gov = f.gov.clone();
+    let worker = spawn(move || gov.control.execute(id, &mother(), run));
+    executing
+        .recv_timeout(JOIN)
+        .expect("the action never began executing");
+    assert_eq!(f.state(id), CommitmentState::Executing);
+    let outcome = halt(&door).write();
+    assert_eq!(
+        (outcome.recorded, outcome.owed, outcome.uncertain),
+        (2, 0, 0),
+        "S2: door_halted and run_cancelled written: {outcome:?}"
+    );
+    assert_eq!(f.state(id), CommitmentState::Executing, "still Executing");
+    drop(door);
+    // Dropped as a dead process leaves it: no shut_down, no close_session.
+    crash(f);
+    let f = fx_store(&scratch);
+    let rows = f.primary.as_ref().unwrap().store().rows();
+    for phase in ["door_halted", "run_cancelled", "started"] {
+        assert!(rows.iter().any(|row| row.phase == phase), "{phase}");
+    }
+    assert_eq!(unsettled(&f), vec![id.to_string()], "R6: unsettled");
+    assert!(f.gov.authority().recovery_required());
+    assert!(f.gov.status().emergency_stopped);
+    let owner = Arc::new(Counting::default());
+    assert!(
+        door_with(&f, owner.clone()).is_err(),
+        "refused until acknowledged"
+    );
+    assert_eq!(owner.doors.load(Ordering::SeqCst), 0);
+    f.gov.resume(&Owner).unwrap();
+    assert!(door_with(&f, owner.clone()).is_ok());
+    drop(release);
+    let _ = join(&worker);
+}
